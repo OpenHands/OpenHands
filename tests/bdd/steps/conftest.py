@@ -5,9 +5,9 @@ Imports all step implementations so pytest-bdd can discover them.
 
 from __future__ import annotations
 
-# Import all step modules to register steps with pytest-bdd
-from tests.bdd.steps import agent_steps  # noqa: F401
-from tests.bdd.steps import common_steps  # noqa: F401
-from tests.bdd.steps import frontend_steps  # noqa: F401
-
-__all__ = ['agent_steps', 'common_steps', 'frontend_steps']
+# Import all step modules and their fixtures directly into namespace
+# Wildcard imports ensure pytest-bdd step fixtures are discoverable
+from tests.bdd.steps.agent_steps import *  # noqa: F401, F403
+from tests.bdd.steps.common_steps import *  # noqa: F401, F403
+from tests.bdd.steps.frontend_steps import *  # noqa: F401, F403
+from tests.bdd.steps.skills_steps import *  # noqa: F401, F403

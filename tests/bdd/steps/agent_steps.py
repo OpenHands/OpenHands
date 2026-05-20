@@ -15,13 +15,12 @@ from pytest_bdd import given, then, when
 
 from tests.bdd.mocks.llm_mock import LLMMock
 
-
 # ============================================================================
 # Given Steps
 # ============================================================================
 
 
-@given("the LLM is configured with default responses")
+@given('the LLM is configured with default responses')
 def llm_configured_defaults(mock_llm: LLMMock, agent_context: Any) -> None:
     """Configure LLM with default response patterns.
 
@@ -35,7 +34,7 @@ def llm_configured_defaults(mock_llm: LLMMock, agent_context: Any) -> None:
     mock_llm.reset()
 
 
-@given("the LLM is configured to return a <response_type> action")
+@given('the LLM is configured to return a <response_type> action')
 def llm_configured_action(
     mock_llm: LLMMock, response_type: str, agent_context: Any
 ) -> None:
@@ -48,7 +47,7 @@ def llm_configured_action(
     """
     agent_context.llm = mock_llm
     mock_llm.configure_response(
-        trigger="test",
+        trigger='test',
         action=response_type,
     )
 
@@ -58,7 +57,7 @@ def llm_configured_action(
 # ============================================================================
 
 
-@when("the user sends a message")
+@when('the user sends a message')
 def user_sends_message(agent_context: Any) -> None:
     """Simulate user sending a message to agent.
 
@@ -68,10 +67,10 @@ def user_sends_message(agent_context: Any) -> None:
     if not agent_context.llm:
         raise RuntimeError("LLM not configured. Use 'Given' step first.")
 
-    message = "test message"  # Simple message for now
+    message = 'test message'  # Simple message for now
 
     # Add user message to conversation
-    user_msg = {"role": "user", "content": message}
+    user_msg = {'role': 'user', 'content': message}
     agent_context.messages.append(user_msg)
 
     # Call LLM (synchronous)
@@ -81,12 +80,11 @@ def user_sends_message(agent_context: Any) -> None:
 
     # Add assistant response
     assistant_msg = {
-        "role": "assistant",
-        "content": str(response),
-        "action": response.get("action"),
+        'role': 'assistant',
+        'content': str(response),
+        'action': response.get('action'),
     }
     agent_context.messages.append(assistant_msg)
-
 
 
 # ============================================================================
@@ -94,62 +92,64 @@ def user_sends_message(agent_context: Any) -> None:
 # ============================================================================
 
 
-@then("the agent receives the message")
+@then('the agent receives the message')
 def agent_receives_message(agent_context: Any) -> None:
     """Verify agent received the message.
 
     Args:
         agent_context: Agent context
     """
-    assert len(agent_context.messages) > 0, "Agent should have received message"
-    assert (
-        agent_context.messages[0]["role"] == "user"
-    ), "First message should be from user"
+    assert len(agent_context.messages) > 0, 'Agent should have received message'
+    assert agent_context.messages[0]['role'] == 'user', (
+        'First message should be from user'
+    )
 
 
-@then("the LLM is called with the user message")
+@then('the LLM is called with the user message')
 def llm_called_with_message(agent_context: Any) -> None:
     """Verify LLM was called.
 
     Args:
         agent_context: Agent context
     """
-    assert agent_context.llm is not None, "LLM should be configured"
-    assert agent_context.llm_call_count > 0, "LLM should have been called"
+    assert agent_context.llm is not None, 'LLM should be configured'
+    assert agent_context.llm_call_count > 0, 'LLM should have been called'
 
 
-@then("the agent returns a response with an action")
+@then('the agent returns a response with an action')
 def agent_returns_response_with_action(agent_context: Any) -> None:
     """Verify agent returned response with action.
 
     Args:
         agent_context: Agent context
     """
-    assert agent_context.last_response is not None, "Agent should have returned response"
-    assert (
-        "action" in agent_context.last_response
-    ), "Response should contain action field"
-    assert agent_context.last_response["action"] in [
-        "run",
-        "edit",
-        "think",
-        "ask_followup",
-    ], "Action should be valid type"
+    assert agent_context.last_response is not None, (
+        'Agent should have returned response'
+    )
+    assert 'action' in agent_context.last_response, (
+        'Response should contain action field'
+    )
+    assert agent_context.last_response['action'] in [
+        'run',
+        'edit',
+        'think',
+        'ask_followup',
+    ], 'Action should be valid type'
 
 
-@then("the agent returns a response")
+@then('the agent returns a response')
 def agent_returns_response(agent_context: Any) -> None:
     """Verify agent returned any response.
 
     Args:
         agent_context: Agent context
     """
-    assert agent_context.last_response is not None, "Agent should have returned response"
+    assert agent_context.last_response is not None, (
+        'Agent should have returned response'
+    )
 
 
-
-
-@then("the LLM has processed (\\d+) calls")
+@then('the LLM has processed (\\d+) calls')
 def llm_processed_n_calls(count: str, agent_context: Any) -> None:
     """Verify LLM was called expected number of times.
 
@@ -159,24 +159,23 @@ def llm_processed_n_calls(count: str, agent_context: Any) -> None:
     """
     count_int = int(count)
     assert agent_context.llm_call_count == count_int, (
-        f"Expected {count_int} LLM calls, "
-        f"but got {agent_context.llm_call_count}"
+        f'Expected {count_int} LLM calls, but got {agent_context.llm_call_count}'
     )
 
 
-@then("the conversation history is preserved in memory")
+@then('the conversation history is preserved in memory')
 def conversation_history_preserved(agent_context: Any) -> None:
     """Verify conversation history is preserved.
 
     Args:
         agent_context: Agent context
     """
-    assert agent_context.llm is not None, "LLM should be configured"
+    assert agent_context.llm is not None, 'LLM should be configured'
     memory = agent_context.llm.get_memory()
-    assert len(memory.get_history()) > 0, "Memory should contain conversation history"
+    assert len(memory.get_history()) > 0, 'Memory should contain conversation history'
 
 
-@then("the LLM has been called twice")
+@then('the LLM has been called twice')
 def llm_called_twice(agent_context: Any) -> None:
     """Verify LLM was called twice.
 
@@ -184,5 +183,5 @@ def llm_called_twice(agent_context: Any) -> None:
         agent_context: Agent context
     """
     assert agent_context.llm_call_count == 2, (
-        f"Expected 2 calls, got {agent_context.llm_call_count}"
+        f'Expected 2 calls, got {agent_context.llm_call_count}'
     )

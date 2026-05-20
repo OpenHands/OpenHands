@@ -118,6 +118,11 @@ class AppConversationServiceBase(AppConversationService, ABC):
         Returns:
             List of merged Skill objects from all sources, or empty list on failure
         """
+        # Temporary: Allow disabling skills entirely for testing with zero context noise
+        if os.getenv('OPENHANDS_SKILLS_ENABLED', 'true').lower() not in ('true', '1'):
+            _logger.info('Skills loading disabled by OPENHANDS_SKILLS_ENABLED env var')
+            return []
+
         try:
             _logger.debug('Loading skills for V1 conversation via agent-server')
 
@@ -131,17 +136,19 @@ class AppConversationServiceBase(AppConversationService, ABC):
             # Build sandbox config (exposed URLs)
             sandbox_config = build_sandbox_config(sandbox)
 
-            # Single API call to agent-server for ALL skills
+            # Single API call to agent-server for project skills only
+            # Only load project skills (.agents/skills/, .openhands/microagents/)
+            # to ensure zero preexisting context noise from global skills ecosystem
             all_skills = await load_skills_from_agent_server(
                 agent_server_url=agent_server_url,
                 session_api_key=sandbox.session_api_key,
                 project_dir=project_dir,
                 org_config=org_config,
                 sandbox_config=sandbox_config,
-                load_public=True,
-                load_user=True,
+                load_public=False,
+                load_user=False,
                 load_project=True,
-                load_org=True,
+                load_org=False,
             )
 
             _logger.info(

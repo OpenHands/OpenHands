@@ -1,0 +1,62 @@
+# Workflow that runs BDD tests
+name: Run BDD Tests
+
+# The jobs in this workflow are required, so they must run at all times
+# * Always run on "main"
+# * Always run on PRs
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "tests/bdd/**"
+      - "openhands/**"
+      - ".github/workflows/bdd-tests.yml"
+  pull_request:
+    paths:
+      - "tests/bdd/**"
+      - "openhands/**"
+      - ".github/workflows/bdd-tests.yml"
+
+# If triggered by a PR, it will be in the same group. However, each commit on main will be in its own unique group
+concurrency:
+  group: ${{ github.workflow }}-${{ (github.head_ref && github.ref) || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  # Run BDD tests on Linux
+  test-bdd-on-linux:
+    name: BDD Tests on Linux
+    runs-on: ubuntu-24.04
+    env:
+      INSTALL_DOCKER: "0" # Set to '0' to skip Docker installation
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tmux
+        run: sudo apt-get update && sudo apt-get install -y tmux
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install poetry via pipx
+        run: pipx install poetry
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "poetry"
+      - name: Install Python dependencies using Poetry
+        run: |
+          poetry install --with dev,test,runtime
+          poetry run pip install pytest-bdd
+      - name: Build Environment
+        run: make build
+      - name: Run BDD Tests
+        run: PYTHONPATH=".:$PYTHONPATH" poetry run pytest tests/bdd/ -v --tb=short
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"

@@ -12,10 +12,10 @@ from pytest_bdd import scenario
 from tests.bdd.steps.agent_steps import *  # noqa: F401, F403
 
 # Get the path to the feature file
-feature_file = Path(__file__).parent / "agent_execution.feature"
+feature_file = Path(__file__).parent / 'agent_execution.feature'
 
 
-@scenario(str(feature_file), "User sends a message and agent responds")
+@scenario(str(feature_file), 'User sends a message and agent responds')
 def test_user_sends_message_agent_responds():
     """Test user sends message and agent responds."""
     pass
