@@ -15,7 +15,7 @@ These are the procedures and guidelines on how issues are triaged in this repo b
 * Use **good first issue** only when all of the following are true:
   * The work is narrow in scope and should be solved as a single issue rather than a multi-step project.
   * The bug, request, or expected outcome is already clear enough that a contributor should not need major discovery work before starting.
-  * The likely fix stays within a well-bounded area of the repo and does not require deep architecture knowledge, cross-repo coordination, enterprise-only context, migrations, security-sensitive changes, or infrastructure work.
+  * The likely fix stays within a well-bounded area of the repo and does not require deep architecture knowledge, cross-repo coordination, enterprise-only context, migrations, or infrastructure work. Exclude enterprise/ directory from these.
   * The validation path is straightforward: the PR author should be able to give clear **How to Test** steps, and if the change is user-facing, screenshots or video evidence should be practical to provide.
   * A reviewer should be able to evaluate the change with the normal PR review workflow, without special credentials, paid services, or hard-to-reproduce environments.
 * Avoid **good first issue** for broad design discussions, umbrella tracking issues, items missing reproduction steps or acceptance criteria, and changes that are likely to require significant maintainer guidance.
