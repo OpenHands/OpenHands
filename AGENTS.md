@@ -44,6 +44,12 @@ then re-run the command to ensure it passes. Common issues include:
 - Be especially careful with `git reset --hard` after staging files, as it will remove accidentally staged files
 - When remote has new changes, use `git fetch upstream && git rebase upstream/<branch>` on the same branch
 
+## GitHub Actions
+
+- Pin external third-party actions to a full 40-character commit SHA, with the version tag in a trailing comment (e.g. `uses: owner/repo@<sha> # v1.2.3`). Do not use mutable tags (`@v1`) or branches for third-party actions.
+- GitHub-authored (`actions/*`, `github/*`) and first-party (`OpenHands/*`) actions are currently exempt.
+- Dependabot's `github-actions` ecosystem bumps the pinned SHA and the trailing comment under the configured cooldown, so pinning does not block security or version updates.
+
 ## Lockfile Regeneration (Preserve Original Tool Versions)
 
 When regenerating lockfiles (poetry.lock, uv.lock, etc.), you MUST use the same tool version that originally generated the lockfile to avoid unnecessary diff noise. Each lockfile contains a version header indicating which tool version was used.
