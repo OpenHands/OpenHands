@@ -119,37 +119,47 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
 
         # Mirror the GitHub resolver pattern: the job runs as the user who
         # @-mentioned us, not the webhook installer. Look up the mentioner
-        # in Keycloak by their BBDC slug; the installer keycloak_user_id is
-        # carried alongside so the permission check and webhook lifecycle
-        # calls can keep using the installer's elevated token.
+        # in Keycloak by their numeric BBDC user id; the installer
+        # keycloak_user_id is carried alongside so the permission check and
+        # webhook lifecycle calls can keep using the installer's elevated
+        # token.
+        #
+        # NB: Keycloak's `bitbucket_data_center_id` attribute is populated by
+        # the SSO id-mapper from the BBDC OIDC `sub` claim, which is the
+        # numeric user id -- NOT the slug/username. So we must look up by
+        # `actor['id']` (numeric), not by the slug; looking up by slug never
+        # matches and silently falls back to the installer. The slug is kept
+        # only for human-readable logging.
         payload = message.message.get('payload') or {}
         actor = payload.get('actor') or {}
         mentioner_slug = extract_actor_slug(actor)
+        mentioner_idp_id = str(actor.get('id') or '')
         mentioner_keycloak_id: str | None = None
-        if mentioner_slug:
+        if mentioner_idp_id:
             try:
                 mentioner_keycloak_id = (
                     await self.token_manager.get_user_id_from_idp_user_id(
-                        mentioner_slug, ProviderType.BITBUCKET_DATA_CENTER
+                        mentioner_idp_id, ProviderType.BITBUCKET_DATA_CENTER
                     )
                 )
             except Exception as e:
                 logger.warning(
                     f'[Bitbucket DC] Keycloak lookup for mentioner '
-                    f'{mentioner_slug!r} failed: {e}'
+                    f'{mentioner_slug!r} (id {mentioner_idp_id}) failed: {e}'
                 )
 
         if not mentioner_keycloak_id:
             logger.info(
-                f'[Bitbucket DC] Mentioner {mentioner_slug!r} has no OHE '
-                f'account; falling back to installer for this job'
+                f'[Bitbucket DC] Mentioner {mentioner_slug!r} (id '
+                f'{mentioner_idp_id}) has no OHE account; falling back to '
+                f'installer for this job'
             )
             mentioner_keycloak_id = installer_user_id
         elif mentioner_keycloak_id != installer_user_id:
             logger.info(
                 f'[Bitbucket DC] Running job as mentioner {mentioner_slug!r} '
-                f'(keycloak {mentioner_keycloak_id}) instead of installer '
-                f'({installer_user_id})'
+                f'(id {mentioner_idp_id}, keycloak {mentioner_keycloak_id}) '
+                f'instead of installer ({installer_user_id})'
             )
 
         bitbucket_view = await BitbucketDCFactory.create_bitbucket_dc_view_from_payload(
