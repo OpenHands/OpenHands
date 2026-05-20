@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, delete, or_, select, update
 from storage.bitbucket_dc_webhook import BitbucketDCWebhook
 from storage.database import a_session_maker
 
@@ -138,6 +138,22 @@ class BitbucketDCWebhookStore:
                         webhook_id=webhook_id,
                         last_synced=datetime.now(timezone.utc),
                     )
+                )
+                result = await session.execute(stmt)
+                return result.rowcount > 0
+
+    async def delete_webhook_by_repo(self, *, project_key: str, repo_slug: str) -> bool:
+        """Remove the enrollment row for ``(project_key, repo_slug)``.
+
+        Returns ``True`` when a row was deleted, ``False`` if none existed
+        — uninstall is idempotent at the route layer so the caller treats
+        both as success.
+        """
+        async with a_session_maker() as session:
+            async with session.begin():
+                stmt = delete(BitbucketDCWebhook).where(
+                    BitbucketDCWebhook.project_key == project_key,
+                    BitbucketDCWebhook.repo_slug == repo_slug,
                 )
                 result = await session.execute(stmt)
                 return result.rowcount > 0

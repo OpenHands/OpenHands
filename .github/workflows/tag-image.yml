@@ -44,11 +44,12 @@ jobs:
         env:
           SRC: ${{ matrix.image }}:sha-${{ github.sha }}
           TAGS: ${{ steps.meta.outputs.tags }}
+          COMMIT_SHA: ${{ github.sha }}
         shell: bash
         run: |
           set -euo pipefail
           if ! docker buildx imagetools inspect "$SRC" > /dev/null 2>&1; then
-            echo "::error::Source image $SRC does not exist. The Docker workflow for commit ${{ github.sha }} may not have completed successfully. Re-run this workflow once the build finishes."
+            echo "::error::Source image $SRC does not exist. The Docker workflow for commit $COMMIT_SHA may not have completed successfully. Re-run this workflow once the build finishes."
             exit 1
           fi
           args=()
