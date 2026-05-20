@@ -28,6 +28,7 @@ from tests.bdd.mocks.sandbox_mock import MockSandbox
 from tests.bdd.steps import (
     agent_steps,  # noqa: F401
     common_steps,  # noqa: F401
+    context_isolation_steps,  # noqa: F401
     frontend_steps,  # noqa: F401
     skills_steps,  # noqa: F401
 )

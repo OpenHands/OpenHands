@@ -43,25 +43,12 @@ repos:
         entry: ruff format --config dev_config/python/ruff.toml
         types_or: [python, pyi, jupyter]
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.15.0
+  - repo: local
     hooks:
       - id: mypy
-        additional_dependencies:
-          [
-            types-requests,
-            types-setuptools,
-            types-pyyaml,
-            types-toml,
-            types-docker,
-            types-Markdown,
-            pydantic,
-            lxml,
-            "openhands-sdk==1.22.1",
-            "openhands-tools==1.22.1",
-            "sqlalchemy>=2.0",
-          ]
+        name: mypy
+        language: system
         # To see gaps add `--html-report mypy-report/`
-        entry: mypy --config-file dev_config/python/mypy.ini openhands/
-        always_run: true
+        entry: poetry run mypy --config-file dev_config/python/mypy.ini openhands/
+        types: [python]
         pass_filenames: false
