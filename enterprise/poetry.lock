@@ -6521,7 +6521,7 @@ python-docx = "*"
 python-dotenv = "*"
 python-frontmatter = ">=1.1"
 python-json-logger = ">=3.2.1"
-python-multipart = ">=0.0.27"
+python-multipart = ">=0.0.28"
 python-pptx = "*"
 python-socketio = "5.14"
 pythonnet = {version = "*", markers = "sys_platform == \"win32\""}

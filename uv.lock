@@ -3722,7 +3722,7 @@ requires-dist = [
     { name = "python-dotenv" },
     { name = "python-frontmatter", specifier = ">=1.1" },
     { name = "python-json-logger", specifier = ">=3.2.1" },
-    { name = "python-multipart", specifier = ">=0.0.27" },
+    { name = "python-multipart", specifier = ">=0.0.28" },
     { name = "python-pptx" },
     { name = "python-socketio", specifier = "==5.14" },
     { name = "pythonnet", marker = "sys_platform == 'win32'" },
