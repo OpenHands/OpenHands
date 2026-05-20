@@ -279,6 +279,7 @@ pytest-forked = "*"
 pytest-xdist = "*"
 pytest-playwright = "^0.7.0"
 pytest-timeout = "^2.4.0"
+pytest-bdd = "^7.0.0"
 pandas = "*"
 reportlab = "*"
 gevent = ">=24.2.1,<26.0.0"
@@ -308,6 +309,23 @@ lint.select = [ "D" ]
 # ignore warnings for missing docstrings
 lint.ignore = [ "D1" ]
 lint.pydocstyle.convention = "google"
+
+[tool.pytest.ini_options]
+testpaths = [ "tests" ]
+python_files = [ "test_*.py", "*_test.py" ]
+python_classes = [ "Test*" ]
+python_functions = [ "test_*" ]
+asyncio_mode = "auto"
+bdd_strict = true
+markers = [
+  "fast: fast tests with mocked services",
+  "slow: slow tests with real services",
+  "regression: regression tests",
+]
+addopts = [
+  "--strict-markers",
+  "--tb=short",
+]
 
 [tool.coverage.run]
 concurrency = [ "gevent" ]

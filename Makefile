@@ -252,6 +252,23 @@ test-frontend:
 test:
 	@$(MAKE) -s test-frontend
 
+# BDD tests (behavior-driven testing with pytest-bdd)
+test-bdd:
+	@echo "$(YELLOW)Running BDD tests...$(RESET)"
+	@poetry run pytest tests/bdd --gherkin-terminal-reporter
+
+test-bdd-fast:
+	@echo "$(YELLOW)Running fast BDD tests (mocked services only)...$(RESET)"
+	@poetry run pytest tests/bdd -m fast --gherkin-terminal-reporter
+
+test-bdd-headed:
+	@echo "$(YELLOW)Running BDD tests with browser visible...$(RESET)"
+	@poetry run pytest tests/bdd --headed --gherkin-terminal-reporter
+
+test-bdd-watch:
+	@echo "$(YELLOW)Running BDD tests in watch mode...$(RESET)"
+	@poetry run ptw tests/bdd
+
 build-frontend:
 	@echo "$(YELLOW)Building frontend...$(RESET)"
 	@cd frontend && npm run prepare && npm run build
