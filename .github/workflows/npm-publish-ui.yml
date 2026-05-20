@@ -81,9 +81,11 @@ jobs:
       - name: Check if package already exists on npm
         id: npm-check
         working-directory: ./openhands-ui
+        env:
+          CURRENT_VERSION: ${{ needs.check-version.outputs.current-version }}
         run: |
           PACKAGE_NAME=$(jq -r .name package.json)
-          VERSION="${{ needs.check-version.outputs.current-version }}"
+          VERSION="$CURRENT_VERSION"
 
           # Check if this version already exists on npm
           if npm view "$PACKAGE_NAME@$VERSION" version 2>/dev/null; then
@@ -96,13 +98,17 @@ jobs:
 
       - name: Setup npm authentication
         if: steps.npm-check.outputs.already-exists == 'false'
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
 
       - name: Publish to npm
         if: steps.npm-check.outputs.already-exists == 'false'
         working-directory: ./openhands-ui
+        env:
+          CURRENT_VERSION: ${{ needs.check-version.outputs.current-version }}
         run: |
           # The prepublishOnly script will run automatically and build the package
           npm publish
-          echo "✅ Successfully published @openhands/ui@${{ needs.check-version.outputs.current-version }} to npm"
+          echo "✅ Successfully published @openhands/ui@${CURRENT_VERSION} to npm"
