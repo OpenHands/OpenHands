@@ -19,6 +19,8 @@ jobs:
   check-version:
     name: Check if version has changed
     runs-on: ubuntu-22.04
+    # Disabled for fork - only run on official OpenHands repository
+    if: github.repository == 'OpenHands/OpenHands'
     defaults:
       run:
         shell: bash

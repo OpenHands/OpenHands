@@ -24,7 +24,9 @@ concurrency:
 jobs:
   build_app:
     name: App
-    if: github.event.pull_request.head.repo.fork != true
+    if: |
+      github.repository == 'OpenHands/OpenHands'
+      && github.event.pull_request.head.repo.fork != true
     uses: ./.github/workflows/_build-image.yml
     with:
       image: ghcr.io/openhands/openhands

@@ -13,6 +13,8 @@ on:
 jobs:
   retag:
     runs-on: ubuntu-22.04
+    # Disabled for fork - only run on official OpenHands repository
+    if: github.repository == 'OpenHands/OpenHands'
     permissions:
       packages: write
     strategy:

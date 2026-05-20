@@ -18,10 +18,11 @@ on:
 jobs:
   release:
     runs-on: ubuntu-22.04
-    # Run when manually dispatched for "app server" OR for tag pushes that don't contain '-cli' and don't start with 'cloud-'
+    # Disabled for fork - only run on official OpenHands repository
     if: |
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.reason == 'app server')
-      || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-cli') && !startsWith(github.ref, 'refs/tags/cloud-'))
+      github.repository == 'OpenHands/OpenHands'
+      && ((github.event_name == 'workflow_dispatch' && github.event.inputs.reason == 'app server')
+      || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-cli') && !startsWith(github.ref, 'refs/tags/cloud-')))
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
