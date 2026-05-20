@@ -172,17 +172,8 @@ class SaasSettingsStore(SettingsStore):
         return Settings(**kwargs)
 
     async def store(self, item: Settings):
-        logger.info(
-            f'[MCP:DEBUG] SaasSettingsStore.store called: user_id={self.user_id}, '
-            f'effective_org_id={self.effective_org_id}'
-        )
-        logger.info(
-            f'[MCP:DEBUG] item.agent_settings.mcp_config={item.agent_settings.mcp_config if item else None}'
-        )
-
         async with a_session_maker() as session:
             if not item:
-                logger.warning('[MCP:DEBUG] SaasSettingsStore.store: item is None, returning')
                 return None
             result = await session.execute(
                 select(User)
@@ -192,7 +183,6 @@ class SaasSettingsStore(SettingsStore):
             user = result.scalars().first()
 
             if not user:
-                logger.warning(f'[MCP:DEBUG] User not found, checking for migration: {self.user_id}')
                 # Check if we need to migrate from user_settings
                 user_settings = None
                 async with a_session_maker() as new_session:
@@ -218,7 +208,6 @@ class SaasSettingsStore(SettingsStore):
                     return None
 
             org_id = self._resolve_org_id(user)
-            logger.info(f'[MCP:DEBUG] Resolved org_id={org_id}')
 
             org_member: OrgMember | None = None
             for om in user.org_members:
@@ -226,9 +215,7 @@ class SaasSettingsStore(SettingsStore):
                     org_member = om
                     break
             if not org_member:
-                logger.error(f'[MCP:DEBUG] org_member not found for org_id={org_id}')
                 return None
-            logger.info(f'[MCP:DEBUG] Found org_member for org_id={org_id}')
 
             result = await session.execute(select(Org).filter(Org.id == org_id))
             org = result.scalars().first()
@@ -253,10 +240,6 @@ class SaasSettingsStore(SettingsStore):
                 )
 
             effective_agent_settings_diff = self._get_persisted_agent_settings(item)
-            logger.info(
-                f'[MCP:DEBUG] effective_agent_settings_diff mcp_config='
-                f'{effective_agent_settings_diff.get("mcp_config")}'
-            )
 
             # Deep merge org settings with the diff
             merged = deep_merge(
@@ -273,8 +256,6 @@ class SaasSettingsStore(SettingsStore):
 
             # Single assignment so SQLAlchemy tracks the change
             org.agent_settings = merged
-
-            logger.info(f'[MCP:DEBUG] After deep_merge, org.agent_settings mcp_config={org.agent_settings.get("mcp_config")}')
 
             effective_conversation_diff = item.conversation_settings.model_dump(
                 mode='json'

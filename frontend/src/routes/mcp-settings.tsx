@@ -100,20 +100,14 @@ function MCPSettingsScreen() {
   }, [settings?.search_api_key]);
 
   const handleAddServer = (serverConfig: MCPServerConfig) => {
-    console.log("[MCP:Page] handleAddServer called", serverConfig);
     addMcpServer(serverConfig, {
       onSuccess: () => {
-        console.log("[MCP:Page] handleAddServer SUCCESS");
         setView("list");
-      },
-      onError: (error) => {
-        console.error("[MCP:Page] handleAddServer ERROR:", error);
       },
     });
   };
 
   const handleEditServer = (serverConfig: MCPServerConfig) => {
-    console.log("[MCP:Page] handleEditServer called", serverConfig);
     updateMcpServer(
       {
         serverId: serverConfig.id,
@@ -121,25 +115,16 @@ function MCPSettingsScreen() {
       },
       {
         onSuccess: () => {
-          console.log("[MCP:Page] handleEditServer SUCCESS");
           setView("list");
-        },
-        onError: (error) => {
-          console.error("[MCP:Page] handleEditServer ERROR:", error);
         },
       },
     );
   };
 
   const handleDeleteServer = (serverId: string) => {
-    console.log("[MCP:Page] handleDeleteServer called", serverId);
     deleteMcpServer(serverId, {
       onSuccess: () => {
-        console.log("[MCP:Page] handleDeleteServer SUCCESS");
         setConfirmationModalIsVisible(false);
-      },
-      onError: (error) => {
-        console.error("[MCP:Page] handleDeleteServer ERROR:", error);
       },
     });
   };

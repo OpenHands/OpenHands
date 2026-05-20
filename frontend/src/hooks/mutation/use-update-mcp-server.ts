@@ -35,20 +35,12 @@ export function useUpdateMcpServer() {
       serverId: string;
       server: MCPServerConfig;
     }): Promise<void> => {
-      console.log("[MCP:UPDATE] mutationFn called", {
-        serverId,
-        server,
-        organizationId,
-      });
-
       // Fetch fresh settings at mutation time to avoid stale closure issues
       const settings = await SettingsService.getSettings();
-      console.log("[MCP:UPDATE] Fetched fresh settings:", !!settings);
 
       const currentConfig = parseMcpConfig(
         settings?.agent_settings?.mcp_config,
       );
-      console.log("[MCP:UPDATE] Current config:", currentConfig);
 
       const newConfig: MCPConfig = {
         sse_servers: [...currentConfig.sse_servers],
@@ -57,7 +49,6 @@ export function useUpdateMcpServer() {
       };
       const [serverType, indexStr] = serverId.split("-");
       const index = parseInt(indexStr, 10);
-      console.log("[MCP:UPDATE] Parsed serverId:", { serverType, index });
 
       if (serverType === "sse") {
         const sseServer: MCPSSEServer = {
@@ -85,21 +76,13 @@ export function useUpdateMcpServer() {
       const payload = {
         agent_settings_diff: { mcp_config: toSdkMcpConfig(newConfig) },
       };
-      console.log("[MCP:UPDATE] Calling saveSettings with:", payload);
 
       await SettingsService.saveSettings(payload);
-      console.log("[MCP:UPDATE] saveSettings completed successfully");
     },
     onSuccess: () => {
-      console.log("[MCP:UPDATE] onSuccess - invalidating queries", {
-        organizationId,
-      });
       queryClient.invalidateQueries({
         queryKey: SETTINGS_QUERY_KEYS.personal(organizationId),
       });
-    },
-    onError: (error) => {
-      console.error("[MCP:UPDATE] onError:", error);
     },
   });
 }

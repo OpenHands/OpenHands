@@ -11,19 +11,12 @@ export function useDeleteMcpServer() {
 
   return useMutation({
     mutationFn: async (serverId: string): Promise<void> => {
-      console.log("[MCP:DELETE] mutationFn called", {
-        serverId,
-        organizationId,
-      });
-
       // Fetch fresh settings at mutation time to avoid stale closure issues
       const settings = await SettingsService.getSettings();
-      console.log("[MCP:DELETE] Fetched fresh settings:", !!settings);
 
       const currentConfig = parseMcpConfig(
         settings?.agent_settings?.mcp_config,
       );
-      console.log("[MCP:DELETE] Current config:", currentConfig);
 
       const newConfig: MCPConfig = {
         sse_servers: [...currentConfig.sse_servers],
@@ -32,7 +25,6 @@ export function useDeleteMcpServer() {
       };
       const [serverType, indexStr] = serverId.split("-");
       const index = parseInt(indexStr, 10);
-      console.log("[MCP:DELETE] Parsed serverId:", { serverType, index });
 
       if (serverType === "sse") {
         newConfig.sse_servers.splice(index, 1);
@@ -45,21 +37,13 @@ export function useDeleteMcpServer() {
       const payload = {
         agent_settings_diff: { mcp_config: toSdkMcpConfig(newConfig) },
       };
-      console.log("[MCP:DELETE] Calling saveSettings with:", payload);
 
       await SettingsService.saveSettings(payload);
-      console.log("[MCP:DELETE] saveSettings completed successfully");
     },
     onSuccess: () => {
-      console.log("[MCP:DELETE] onSuccess - invalidating queries", {
-        organizationId,
-      });
       queryClient.invalidateQueries({
         queryKey: SETTINGS_QUERY_KEYS.personal(organizationId),
       });
-    },
-    onError: (error) => {
-      console.error("[MCP:DELETE] onError:", error);
     },
   });
 }
