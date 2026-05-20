@@ -1,15 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { useTranslation } from "react-i18next";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { I18nKey } from "#/i18n/declaration";
-import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
+import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import { useBatchAppConversations } from "./use-batch-app-conversations";
 import { useBatchSandboxes } from "./use-batch-sandboxes";
 
 interface VSCodeUrlResult {
   url: string | null;
-  error: string | null;
+  error: I18nKey | null;
 }
 
 /**
@@ -18,7 +17,6 @@ interface VSCodeUrlResult {
  * - V1: Gets the VSCode URL from sandbox exposed_urls
  */
 export const useUnifiedVSCodeUrl = () => {
-  const { t } = useTranslation();
   const { conversationId } = useConversationId();
   const runtimeIsReady = useRuntimeIsReady({ allowAgentError: true });
 
@@ -42,7 +40,7 @@ export const useUnifiedVSCodeUrl = () => {
       if (!sandbox) {
         return {
           url: null,
-          error: t(I18nKey.VSCODE$URL_NOT_AVAILABLE),
+          error: I18nKey.VSCODE$URL_NOT_AVAILABLE,
         };
       }
 
@@ -53,7 +51,7 @@ export const useUnifiedVSCodeUrl = () => {
       if (!vscodeUrl) {
         return {
           url: null,
-          error: t(I18nKey.VSCODE$URL_NOT_AVAILABLE),
+          error: I18nKey.VSCODE$URL_NOT_AVAILABLE,
         };
       }
 
