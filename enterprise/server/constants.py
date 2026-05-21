@@ -60,9 +60,8 @@ PERSONAL_WORKSPACE_VERSION_TO_MODEL = {
     2: 'claude-3-7-sonnet-20250219',
     3: 'claude-sonnet-4-20250514',
     4: 'claude-sonnet-4-20250514',
-    # Minimax is now the default as it gives results close to claude in terms of quality
-    # but at a much lower price
     5: 'minimax-m2.5',
+    6: 'minimax-m2.7',
 }
 
 LITELLM_DEFAULT_MODEL = os.getenv('LITELLM_DEFAULT_MODEL')

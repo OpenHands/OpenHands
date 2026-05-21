@@ -31,17 +31,15 @@ repos:
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.11.8
+    rev: v0.12.5
     hooks:
-      # Run the linter.
+      # Run the linter. Config is auto-discovered from pyproject.toml.
       - id: ruff
-        entry: ruff check --config dev_config/python/ruff.toml
         types_or: [python, pyi, jupyter]
         args: [--fix, --unsafe-fixes]
         exclude: ^(enterprise/)
-      # Run the formatter.
+      # Run the formatter. Config is auto-discovered from pyproject.toml.
       - id: ruff-format
-        entry: ruff format --config dev_config/python/ruff.toml
         types_or: [python, pyi, jupyter]
         exclude: ^(enterprise/)
 

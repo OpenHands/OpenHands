@@ -17,6 +17,7 @@ from integrations.utils import (
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
     get_session_expired_message,
+    get_user_not_found_message,
 )
 from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
@@ -139,6 +140,34 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
                 f'{project_key}/{repo_slug} PR#{pr_id} comment#{comment_id}: {e}'
             )
 
+    async def _send_user_not_found_message(
+        self,
+        message: Message,
+        installer_user_id: str,
+        mentioner_slug: str | None,
+    ) -> None:
+        """Reply to the triggering comment asking an unenrolled mentioner to
+        sign up, mirroring ``GithubManager._send_user_not_found_message``.
+
+        The mentioner has no OHE account, so there is no token to post as
+        them; the reply goes out under the installer's BBDC token (the
+        installer has write access -- the closest analog to GitHub's
+        installation token). Best-effort: a failure here must not raise out
+        of ``receive_message``.
+        """
+        try:
+            view = await BitbucketDCFactory.create_bitbucket_dc_view_from_payload(
+                message,
+                keycloak_user_id=installer_user_id,
+                installer_keycloak_user_id=installer_user_id,
+            )
+            await self.send_message(get_user_not_found_message(mentioner_slug), view)
+        except Exception as e:
+            logger.warning(
+                f'[Bitbucket DC] Failed to send user-not-found message to '
+                f'{mentioner_slug!r}: {e}'
+            )
+
     async def receive_message(self, message: Message) -> None:
         self._confirm_incoming_source_type(message)
         if not self.is_job_requested(message):
@@ -182,6 +211,7 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
         mentioner_slug = extract_actor_slug(actor)
         mentioner_idp_id = str(actor.get('id') or '')
         mentioner_keycloak_id: str | None = None
+        lookup_failed = False
         if mentioner_idp_id:
             try:
                 mentioner_keycloak_id = (
@@ -190,19 +220,39 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
                     )
                 )
             except Exception as e:
+                lookup_failed = True
                 logger.warning(
                     f'[Bitbucket DC] Keycloak lookup for mentioner '
                     f'{mentioner_slug!r} (id {mentioner_idp_id}) failed: {e}'
                 )
 
+        # A transient Keycloak error leaves us unsure whether the mentioner is
+        # enrolled. Drop the event rather than guess -- we must neither
+        # silently run as the installer nor wrongly tell an enrolled user to
+        # sign up.
+        if lookup_failed:
+            logger.info(
+                f'[Bitbucket DC] Dropping event for {mentioner_slug!r}: Keycloak '
+                f'lookup failed, enrollment status unknown'
+            )
+            return
+
+        # Mirror the GitHub manager: a mentioner with no OHE account is NOT run
+        # as the installer. Refuse the job and reply asking them to sign up, so
+        # every job runs as -- and is billed to -- the actual requester, with
+        # correct git attribution.
         if not mentioner_keycloak_id:
             logger.info(
                 f'[Bitbucket DC] Mentioner {mentioner_slug!r} (id '
-                f'{mentioner_idp_id}) has no OHE account; falling back to '
-                f'installer for this job'
+                f'{mentioner_idp_id}) has no OHE account; asking them to sign '
+                f'up instead of starting a job'
             )
-            mentioner_keycloak_id = installer_user_id
-        elif mentioner_keycloak_id != installer_user_id:
+            await self._send_user_not_found_message(
+                message, installer_user_id, mentioner_slug
+            )
+            return
+
+        if mentioner_keycloak_id != installer_user_id:
             logger.info(
                 f'[Bitbucket DC] Running job as mentioner {mentioner_slug!r} '
                 f'(id {mentioner_idp_id}, keycloak {mentioner_keycloak_id}) '
