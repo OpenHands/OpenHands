@@ -21,8 +21,7 @@ from openhands.sdk.utils.models import DiscriminatedUnionMixin
 # ``live_status_app_conversation_service`` (the 1.22.1 image silently drops the
 # unknown field). Bump back to a tagged release (e.g. 1.23.1) once a release
 # containing #3242 is published.
-AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:9b4f61a-python'
-
+AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:1.22.1-python'
 
 class SandboxSpecService(ABC):
     """Service for managing Sandbox specs.
