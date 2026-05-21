@@ -3,7 +3,7 @@ from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, SecretStr, field_validator
 from server.auth.org_context import EFFECTIVE_ORG_ID
 from server.auth.saas_user_auth import SaasUserAuth
 from storage.api_key import ApiKey
@@ -51,7 +51,7 @@ async def store_byor_key_in_db(user_id: str, org_id: UUID, key: str) -> None:
             break
     if not org_member:
         return None
-    org_member.llm_api_key_for_byor = key
+    org_member.llm_api_key_for_byor = SecretStr(key)
     await OrgMemberStore.update_org_member(org_member)
 
 
@@ -312,7 +312,11 @@ async def get_current_api_key(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail='This API key was created before organization support. Please regenerate your API key to use this endpoint.',
         )
-
+    if saas_user_auth.api_key_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='This endpoint requires API key authentication.',
+        )
     return CurrentApiKeyResponse(
         id=saas_user_auth.api_key_id,
         name=saas_user_auth.api_key_name,

@@ -270,6 +270,66 @@ describe("useNewConversationCommand", () => {
     });
   });
 
+  it("does not pass the ACP display label as an LLM model", async () => {
+    // ACP conversations store a human-readable label in llm_model (e.g. "ACP: claude-agent-acp")
+    // rather than a real model identifier. The new-conversation command must not forward this
+    // label as a model parameter — doing so would break LLM routing on the new conversation.
+    // conversation_url is null here because the test only exercises the model-parameter path;
+    // the ACP agent server URL is irrelevant to this assertion.
+    vi.mocked(V1ConversationService.batchGetAppConversations).mockResolvedValue([
+      {
+        id: "conv-123",
+        title: "ACP Conversation",
+        sandbox_id: "sandbox-456",
+        sandbox_status: "RUNNING",
+        execution_status: "IDLE",
+        conversation_url: null,
+        session_api_key: null,
+        selected_repository: null,
+        selected_branch: null,
+        git_provider: null,
+        trigger: null,
+        pr_number: [],
+        agent_kind: "acp",
+        llm_model: "ACP: claude-agent-acp",
+        metrics: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        sub_conversation_ids: [],
+        public: false,
+      } as never,
+    ]);
+
+    const readyTask = makeStartTask();
+    const createSpy = vi
+      .spyOn(V1ConversationService, "createConversation")
+      .mockResolvedValue(readyTask as never);
+    vi.spyOn(V1ConversationService, "getStartTask").mockResolvedValue(
+      readyTask as never,
+    );
+
+    const { result } = renderHook(() => useNewConversationCommand(), { wrapper });
+
+    await result.current.mutateAsync();
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "sandbox-456",
+        undefined,
+      );
+    });
+  });
+
   it("shows a loading toast immediately and dismisses it on success", async () => {
     const readyTask = makeStartTask();
 

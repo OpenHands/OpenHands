@@ -1,8 +1,7 @@
-import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { createRoutesStub } from "react-router";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SettingsForm } from "#/components/shared/modals/settings/settings-form";
 import { DEFAULT_SETTINGS } from "#/services/settings";
@@ -21,12 +20,21 @@ describe("SettingsForm", () => {
     },
   ]);
 
+  beforeEach(() => {
+    vi.clearAllMocks();
+    saveSettingsSpy.mockResolvedValue(true);
+  });
+
   it("should save the user settings and close the modal when the form is submitted", async () => {
-    const user = userEvent.setup();
     renderWithProviders(<RouteStub />);
 
-    const saveButton = screen.getByRole("button", { name: /save/i });
-    await user.click(saveButton);
+    await waitFor(() =>
+      expect(screen.getByTestId("llm-model-input")).toHaveValue(
+        "claude-opus-4-5-20251101",
+      ),
+    );
+
+    fireEvent.submit(screen.getByTestId("settings-form"));
 
     await waitFor(() =>
       expect(saveSettingsSpy).toHaveBeenCalledWith(
@@ -39,5 +47,6 @@ describe("SettingsForm", () => {
         }),
       ),
     );
+    await waitFor(() => expect(onCloseMock).toHaveBeenCalled());
   });
 });

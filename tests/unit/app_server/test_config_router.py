@@ -125,6 +125,14 @@ class TestToProviders:
             if found_unverified and p.verified:
                 pytest.fail('Verified provider found after unverified provider')
 
+    def test_openhands_provider_appears_first(self):
+        """The ``openhands`` managed provider must always be first in the list."""
+        providers = _to_providers(get_supported_llm_models())
+
+        assert providers, 'expected at least one provider'
+        assert providers[0].name == 'openhands'
+        assert providers[0].verified is True
+
     def test_contains_verified_and_unverified(self):
         providers = _to_providers(get_supported_llm_models())
 

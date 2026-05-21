@@ -53,8 +53,11 @@ def _pr_comment_view(parent_id: int | None = 42) -> BitbucketDCPRComment:
         repo_slug='myrepo',
         full_repo_name='PROJ/myrepo',
         is_public_repo=False,
+        # ``user_info.keycloak_user_id`` is the @-mentioning user, set by
+        # ``receive_message`` after the Keycloak lookup. The installer's
+        # id is carried separately on the view.
         user_info=UserData(
-            user_id='alice', username='Alice', keycloak_user_id='kc-installer'
+            user_id='alice', username='Alice', keycloak_user_id='kc-alice'
         ),
         raw_payload=_comment_message(),
         conversation_id='',
@@ -64,6 +67,7 @@ def _pr_comment_view(parent_id: int | None = 42) -> BitbucketDCPRComment:
         description='',
         previous_comments=[],
         branch_name='feature/x',
+        installer_keycloak_user_id='kc-installer',
         comment_body='Hey @openhands fix',
         parent_comment_id=parent_id,
     )
@@ -78,7 +82,7 @@ def _inline_view() -> BitbucketDCInlinePRComment:
         full_repo_name='PROJ/myrepo',
         is_public_repo=False,
         user_info=UserData(
-            user_id='alice', username='Alice', keycloak_user_id='kc-installer'
+            user_id='alice', username='Alice', keycloak_user_id='kc-alice'
         ),
         raw_payload=_comment_message(),
         conversation_id='',
@@ -88,6 +92,7 @@ def _inline_view() -> BitbucketDCInlinePRComment:
         description='',
         previous_comments=[],
         branch_name='feature/x',
+        installer_keycloak_user_id='kc-installer',
         comment_body='@openhands rename',
         parent_comment_id=None,
         file_location='src/x.py',
@@ -98,17 +103,90 @@ def _inline_view() -> BitbucketDCInlinePRComment:
 
 
 @pytest.mark.asyncio
-async def test_receive_message_dispatches_when_commenter_has_write_access():
-    manager = BitbucketDCManager(AsyncMock())
+async def test_receive_message_runs_job_as_mentioner_when_linked_in_keycloak():
+    """When the @-mentioning user has an OHE account, the view's
+    ``user_info.keycloak_user_id`` is the mentioner and the installer's
+    id is carried alongside on ``installer_keycloak_user_id``.
+    """
+    token_manager = AsyncMock()
+    token_manager.get_user_id_from_idp_user_id = AsyncMock(return_value='kc-alice')
+    manager = BitbucketDCManager(token_manager)
+
+    captured: dict = {}
+
+    async def fake_start_job(view):
+        captured['view'] = view
 
     with patch.object(
         manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
     ), patch.object(
         manager, '_commenter_has_write_access', return_value=True
-    ), patch.object(manager, 'start_job', new=AsyncMock()) as mock_start:
+    ), patch.object(manager, 'start_job', new=fake_start_job):
         await manager.receive_message(_comment_message())
 
-    mock_start.assert_awaited_once()
+    view = captured['view']
+    assert view.user_info.keycloak_user_id == 'kc-alice'
+    assert view.installer_keycloak_user_id == 'kc-installer'
+    # Regression guard for the slug-vs-numeric-id bug: the mentioner must be
+    # resolved by their NUMERIC BBDC id (actor['id'] == 1001), which is what
+    # Keycloak's `bitbucket_data_center_id` attribute stores (the OIDC `sub`
+    # claim) -- NOT the slug 'alice'. Looking up by slug never matched and
+    # silently fell back to the webhook installer.
+    token_manager.get_user_id_from_idp_user_id.assert_awaited_once()
+    assert token_manager.get_user_id_from_idp_user_id.await_args.args[0] == '1001'
+
+
+@pytest.mark.asyncio
+async def test_receive_message_falls_back_to_installer_when_mentioner_has_no_account():
+    """A mentioner with no OHE account leaves the view running as the
+    installer, so the resolver still works for unenrolled BBDC users.
+    """
+    token_manager = AsyncMock()
+    token_manager.get_user_id_from_idp_user_id = AsyncMock(return_value=None)
+    manager = BitbucketDCManager(token_manager)
+
+    captured: dict = {}
+
+    async def fake_start_job(view):
+        captured['view'] = view
+
+    with patch.object(
+        manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
+    ), patch.object(
+        manager, '_commenter_has_write_access', return_value=True
+    ), patch.object(manager, 'start_job', new=fake_start_job):
+        await manager.receive_message(_comment_message())
+
+    view = captured['view']
+    assert view.user_info.keycloak_user_id == 'kc-installer'
+    assert view.installer_keycloak_user_id == 'kc-installer'
+
+
+@pytest.mark.asyncio
+async def test_receive_message_falls_back_to_installer_when_keycloak_lookup_raises():
+    """Transient Keycloak errors must not block the resolver — fall
+    back to the installer rather than dropping the event.
+    """
+    token_manager = AsyncMock()
+    token_manager.get_user_id_from_idp_user_id = AsyncMock(
+        side_effect=RuntimeError('keycloak unreachable')
+    )
+    manager = BitbucketDCManager(token_manager)
+
+    captured: dict = {}
+
+    async def fake_start_job(view):
+        captured['view'] = view
+
+    with patch.object(
+        manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
+    ), patch.object(
+        manager, '_commenter_has_write_access', return_value=True
+    ), patch.object(manager, 'start_job', new=fake_start_job):
+        await manager.receive_message(_comment_message())
+
+    view = captured['view']
+    assert view.user_info.keycloak_user_id == 'kc-installer'
 
 
 @pytest.mark.asyncio
@@ -177,3 +255,20 @@ def test_confirm_incoming_source_type_raises_on_wrong_source():
         manager._confirm_incoming_source_type(
             Message(source=SourceType.BITBUCKET, message={})
         )
+
+
+@pytest.mark.asyncio
+async def test_send_message_uses_view_user_info_keycloak_id():
+    """send_message constructs the BBDC service with the view's
+    user_info.keycloak_user_id (the mentioner) rather than the
+    installer, so replies post under the mentioner's BBDC account.
+    """
+    manager = BitbucketDCManager(AsyncMock())
+
+    with patch(
+        'integrations.bitbucket_data_center.bitbucket_dc_service.SaaSBitbucketDCService'
+    ) as service_cls:
+        service_cls.return_value = AsyncMock()
+        await manager.send_message('Done', _pr_comment_view())
+
+    service_cls.assert_called_once_with(external_auth_id='kc-alice')

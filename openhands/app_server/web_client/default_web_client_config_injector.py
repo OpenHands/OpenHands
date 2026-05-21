@@ -9,9 +9,11 @@ from openhands.app_server.web_client.web_client_config_injector import (
     WebClientConfigInjector,
 )
 from openhands.app_server.web_client.web_client_models import (
+    ACPProviderConfig,
     WebClientConfig,
     WebClientFeatureFlags,
 )
+from openhands.sdk.settings import ACP_PROVIDERS
 
 
 def _get_recaptcha_site_key() -> str | None:
@@ -81,6 +83,9 @@ def _get_providers_configured() -> list[ProviderType]:
     if os.getenv('BITBUCKET_APP_CLIENT_ID', '').strip():
         providers.append(ProviderType.BITBUCKET)
 
+    if os.getenv('BITBUCKET_DATA_CENTER_CLIENT_ID', '').strip():
+        providers.append(ProviderType.BITBUCKET_DATA_CENTER)
+
     if os.getenv('ENABLE_ENTERPRISE_SSO', '').strip():
         providers.append(ProviderType.ENTERPRISE_SSO)
 
@@ -112,8 +117,8 @@ def _get_feature_flags() -> WebClientFeatureFlags:
 
     Reads ENABLE_BILLING, HIDE_LLM_SETTINGS, ENABLE_JIRA, ENABLE_JIRA_DC,
     ENABLE_LINEAR, HIDE_USERS_PAGE, HIDE_BILLING_PAGE, HIDE_INTEGRATIONS_PAGE,
-    and OH_ENABLE_ONBOARDING from environment. Each flag is True only if the
-    corresponding env var is exactly 'true', otherwise False.
+    ENABLE_ACP, and OH_ENABLE_ONBOARDING from environment. Each flag is True
+    only if the corresponding env var is exactly 'true', otherwise False.
     """
     return WebClientFeatureFlags(
         enable_billing=os.getenv('ENABLE_BILLING', 'false') == 'true',
@@ -124,6 +129,7 @@ def _get_feature_flags() -> WebClientFeatureFlags:
         hide_users_page=os.getenv('HIDE_USERS_PAGE', 'false') == 'true',
         hide_billing_page=os.getenv('HIDE_BILLING_PAGE', 'false') == 'true',
         hide_integrations_page=os.getenv('HIDE_INTEGRATIONS_PAGE', 'false') == 'true',
+        enable_acp=os.getenv('ENABLE_ACP', 'false') == 'true',
         enable_onboarding=os.getenv('OH_ENABLE_ONBOARDING', 'false') == 'true',
     )
 
@@ -158,6 +164,19 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
         }
     )
     slack_enabled: bool = Field(default_factory=_get_slack_enabled)
+    acp_providers: list[ACPProviderConfig] = Field(
+        default_factory=lambda: [
+            ACPProviderConfig(
+                key=provider.key,
+                display_name=provider.display_name,
+                # SDK exposes ``default_command`` as ``tuple[str, ...]`` (frozen
+                # registry record); the API contract uses ``list[str]`` for
+                # JSON-friendliness.
+                default_command=list(provider.default_command),
+            )
+            for provider in ACP_PROVIDERS.values()
+        ]
+    )
 
     async def get_web_client_config(self) -> WebClientConfig:
         from openhands.app_server.config import get_global_config
@@ -178,5 +197,6 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
             gitlab_enabled=self.gitlab_enabled,
             provider_default_hosts=self.provider_default_hosts,
             slack_enabled=self.slack_enabled,
+            acp_providers=self.acp_providers,
         )
         return result
