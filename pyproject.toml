@@ -304,10 +304,42 @@ ignore = [ "E501" ]
 skip-string-normalization = true
 
 [tool.ruff]
-lint.select = [ "D" ]
-# ignore warnings for missing docstrings
-lint.ignore = [ "D1" ]
-lint.pydocstyle.convention = "google"
+exclude = [ "enterprise/" ]
+format.quote-style = "single"
+lint.select = [
+  "ASYNC",
+  "B",
+  "E",
+  "F",
+  "I",
+  "Q",
+  "UP006",
+  "UP007",
+  "UP008",
+  "W",
+]
+lint.ignore = [
+  "ASYNC109",
+  "ASYNC110",
+  "ASYNC220",
+  "ASYNC221",
+  "ASYNC230",
+  "ASYNC251",
+  "B003",
+  "B007",
+  "B009",
+  "B010",
+  "B018",
+  "B904",
+  "E501",
+]
+lint.flake8-bugbear.extend-immutable-calls = [
+  "Depends",
+  "fastapi.Depends",
+  "fastapi.params.Depends",
+]
+lint.flake8-quotes.docstring-quotes = "double"
+lint.flake8-quotes.inline-quotes = "single"
 
 [tool.coverage.run]
 concurrency = [ "gevent" ]

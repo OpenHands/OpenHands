@@ -296,7 +296,7 @@ describe("ConversationName", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("should render the OpenHands brand when an llm_model is set", () => {
+  it("should render the raw llm_model when set", () => {
     useActiveConversationMock.mockReturnValue({
       data: {
         conversation_id: "test-conversation-id",
@@ -310,8 +310,7 @@ describe("ConversationName", () => {
 
     const model = screen.getByTestId("conversation-name-llm-model");
     expect(model).toBeInTheDocument();
-    // Visible chip is the harness brand; raw model is preserved on hover.
-    expect(model).toHaveTextContent("OpenHands");
+    expect(model).toHaveTextContent("openai/gpt-4o");
     expect(model).toHaveAttribute("title", "openai/gpt-4o");
     expect(model.querySelector("svg")).toBeInTheDocument();
   });
