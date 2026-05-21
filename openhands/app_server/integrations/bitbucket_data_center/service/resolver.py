@@ -141,6 +141,36 @@ class BitbucketDCResolverMixin(BitbucketDCMixinBase):
 
         await self._make_request(url, params=payload, method=RequestMethod.POST)
 
+    async def add_comment_reaction(
+        self,
+        owner: str,
+        repo_slug: str,
+        pr_id: int,
+        comment_id: int,
+        emoticon: str,
+    ) -> None:
+        """Post a reaction emoticon on a Bitbucket Data Center PR comment.
+
+        BBDC comment reactions live in the *comment-likes* plugin, NOT the
+        core ``/rest/api/1.0`` API. The call is::
+
+            PUT /rest/comment-likes/latest/projects/{owner}/repos/{repo}
+                /pull-requests/{pr}/comments/{id}/reactions/{emoticon}
+
+        where ``emoticon`` is the bare shortcut name (e.g. ``eyes``, ``+1``,
+        ``heart``) -- no surrounding colons (``:eyes:`` returns 400 "No such
+        emoticon"). Callers should treat failures as non-fatal: older BBDC
+        versions return 404 on this endpoint and a missing reaction must not
+        block event processing.
+        """
+        server_url = self.BASE_URL.rsplit('/rest/api/1.0', 1)[0]
+        url = (
+            f'{server_url}/rest/comment-likes/latest/projects/{owner}'
+            f'/repos/{repo_slug}/pull-requests/{pr_id}/comments/{comment_id}'
+            f'/reactions/{emoticon}'
+        )
+        await self._make_request(url, method=RequestMethod.PUT)
+
     async def user_has_write_access(self, owner: str, repo_slug: str) -> bool:
         """Self-permission analog of :meth:`user_has_write_access_for`.
 

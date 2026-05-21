@@ -81,8 +81,8 @@ class ResolverUserContext(UserContext):
             converted_secrets = {}
             for key, custom_secret in secrets.custom_secrets.items():
                 # Extract the secret value from CustomSecret and convert to StaticSecret
-                secret_value = custom_secret.secret.get_secret_value()
-                converted_secrets[key] = StaticSecret(value=secret_value)
+                secret_source: SecretSource = StaticSecret(value=custom_secret.secret)
+                converted_secrets[key] = secret_source
             return converted_secrets
         return {}
 
