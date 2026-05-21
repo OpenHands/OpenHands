@@ -15,6 +15,7 @@ from openhands.sdk.utils.models import DiscriminatedUnionMixin
 # Typically this will be the same as the values from the pyproject.toml
 AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:1.22.1-python'
 
+
 class SandboxSpecService(ABC):
     """Service for managing Sandbox specs.
 
