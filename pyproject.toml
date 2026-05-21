@@ -217,6 +217,7 @@ python-pptx = "*"
 pylatexenc = "*"
 python-docx = "*"
 bashlex = "^0.18"
+binaryornot = ">=0.5.0,<1"
 
 # Explicitly pinned packages for latest versions
 pypdf = "^6.10.2"
