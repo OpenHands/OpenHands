@@ -137,35 +137,36 @@ async def test_receive_message_runs_job_as_mentioner_when_linked_in_keycloak():
 
 
 @pytest.mark.asyncio
-async def test_receive_message_falls_back_to_installer_when_mentioner_has_no_account():
-    """A mentioner with no OHE account leaves the view running as the
-    installer, so the resolver still works for unenrolled BBDC users.
+async def test_receive_message_asks_unenrolled_mentioner_to_sign_up():
+    """A mentioner with no OHE account is NOT run as the installer. We mirror
+    the GitHub manager: refuse the job and reply asking them to sign up, so
+    every job runs as (and is billed to) the actual requester.
     """
     token_manager = AsyncMock()
     token_manager.get_user_id_from_idp_user_id = AsyncMock(return_value=None)
     manager = BitbucketDCManager(token_manager)
 
-    captured: dict = {}
-
-    async def fake_start_job(view):
-        captured['view'] = view
-
     with patch.object(
         manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
     ), patch.object(
         manager, '_commenter_has_write_access', return_value=True
-    ), patch.object(manager, 'start_job', new=fake_start_job):
+    ), patch.object(manager, 'start_job', new=AsyncMock()) as mock_start, patch.object(
+        manager, '_send_user_not_found_message', new=AsyncMock()
+    ) as mock_not_found:
         await manager.receive_message(_comment_message())
 
-    view = captured['view']
-    assert view.user_info.keycloak_user_id == 'kc-installer'
-    assert view.installer_keycloak_user_id == 'kc-installer'
+    mock_start.assert_not_called()
+    mock_not_found.assert_awaited_once()
+    # Posted under the installer's token, mentioning the actual commenter slug.
+    assert mock_not_found.await_args.args[1] == 'kc-installer'
+    assert mock_not_found.await_args.args[2] == 'alice'
 
 
 @pytest.mark.asyncio
-async def test_receive_message_falls_back_to_installer_when_keycloak_lookup_raises():
-    """Transient Keycloak errors must not block the resolver — fall
-    back to the installer rather than dropping the event.
+async def test_receive_message_drops_event_when_keycloak_lookup_raises():
+    """A transient Keycloak error leaves enrollment status unknown. We drop
+    the event rather than guess — neither silently running as the installer
+    nor wrongly telling a (possibly enrolled) user to sign up.
     """
     token_manager = AsyncMock()
     token_manager.get_user_id_from_idp_user_id = AsyncMock(
@@ -173,20 +174,47 @@ async def test_receive_message_falls_back_to_installer_when_keycloak_lookup_rais
     )
     manager = BitbucketDCManager(token_manager)
 
-    captured: dict = {}
-
-    async def fake_start_job(view):
-        captured['view'] = view
-
     with patch.object(
         manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
     ), patch.object(
         manager, '_commenter_has_write_access', return_value=True
-    ), patch.object(manager, 'start_job', new=fake_start_job):
+    ), patch.object(manager, 'start_job', new=AsyncMock()) as mock_start, patch.object(
+        manager, '_send_user_not_found_message', new=AsyncMock()
+    ) as mock_not_found:
         await manager.receive_message(_comment_message())
 
-    view = captured['view']
-    assert view.user_info.keycloak_user_id == 'kc-installer'
+    mock_start.assert_not_called()
+    mock_not_found.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_send_user_not_found_message_replies_as_installer():
+    """The sign-up reply is built from the payload with the installer as the
+    posting identity and carries the user-not-found copy.
+    """
+    manager = BitbucketDCManager(AsyncMock())
+    sentinel_view = object()
+
+    with patch(
+        'integrations.bitbucket_data_center.bitbucket_dc_manager.BitbucketDCFactory.create_bitbucket_dc_view_from_payload',
+        new=AsyncMock(return_value=sentinel_view),
+    ) as mock_factory, patch.object(
+        manager, 'send_message', new=AsyncMock()
+    ) as mock_send:
+        await manager._send_user_not_found_message(
+            _comment_message(), 'kc-installer', 'alice'
+        )
+
+    mock_factory.assert_awaited_once()
+    assert mock_factory.await_args.kwargs['keycloak_user_id'] == 'kc-installer'
+    assert (
+        mock_factory.await_args.kwargs['installer_keycloak_user_id'] == 'kc-installer'
+    )
+    mock_send.assert_awaited_once()
+    body, view = mock_send.await_args.args
+    assert view is sentinel_view
+    assert 'sign up' in body.lower()
+    assert '@alice' in body
 
 
 @pytest.mark.asyncio
