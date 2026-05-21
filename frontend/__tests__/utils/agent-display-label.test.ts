@@ -13,6 +13,11 @@ const PROVIDERS: ACPProviderConfig[] = [
     display_name: "Codex",
     default_command: ["npx", "-y", "@openai/codex-acp"],
   },
+  {
+    key: "gemini-cli",
+    display_name: "Gemini CLI",
+    default_command: ["npx", "-y", "@google/gemini-cli-acp"],
+  },
 ];
 
 describe("resolveAgentChip", () => {
@@ -42,22 +47,29 @@ describe("resolveAgentChip", () => {
     });
   });
 
-  describe("ACP branch", () => {
-    it("uses provider brand as text when llm_model is missing", () => {
-      const chip = resolveAgentChip(
-        "acp",
-        null,
-        { acp_server: "claude-code" },
-        PROVIDERS,
-      );
-      expect(chip).toEqual({
-        kind: "acp",
-        text: "Claude Code",
-        tooltip: "Claude Code",
-      });
-    });
+  describe("ACP branch — known providers map to brand kinds", () => {
+    it.each([
+      ["claude-code", "acp-claude-code", "Claude Code"],
+      ["codex", "acp-codex", "Codex"],
+      ["gemini-cli", "acp-gemini-cli", "Gemini CLI"],
+    ])(
+      "provider key %s → kind %s, brand text %s (no model)",
+      (providerKey, expectedKind, expectedText) => {
+        const chip = resolveAgentChip(
+          "acp",
+          null,
+          { acp_server: providerKey },
+          PROVIDERS,
+        );
+        expect(chip).toEqual({
+          kind: expectedKind,
+          text: expectedText,
+          tooltip: expectedText,
+        });
+      },
+    );
 
-    it("uses prettified llm_model as text and composes a brand+model tooltip", () => {
+    it("uses prettified llm_model as text with brand+model tooltip", () => {
       const chip = resolveAgentChip(
         "acp",
         "anthropic/claude-opus-4-1",
@@ -65,30 +77,33 @@ describe("resolveAgentChip", () => {
         PROVIDERS,
       );
       expect(chip).toEqual({
-        kind: "acp",
+        kind: "acp-claude-code",
         text: "Claude Opus 4.1",
         tooltip: "Claude Code · anthropic/claude-opus-4-1",
       });
     });
 
-    it("falls back to plain 'ACP' when the provider key is unknown", () => {
+    it("falls back to acp-generic + 'ACP' when the provider key is unknown", () => {
       const chip = resolveAgentChip(
         "acp",
         null,
-        { acp_server: "unknown-thing" },
+        { acp_server: "some-custom-thing" },
         PROVIDERS,
       );
       expect(chip).toEqual({
-        kind: "acp",
+        kind: "acp-generic",
         text: "ACP",
         tooltip: "ACP",
       });
     });
 
-    it("falls back to 'ACP' when the provider registry hasn't loaded yet", () => {
+    it("uses the brand icon from acp_server even when the provider registry hasn't loaded yet (text falls back to 'ACP')", () => {
       const chip = resolveAgentChip("acp", null, { acp_server: "claude-code" });
+      // The acp_server key is canonical, so we can still pick the right brand
+      // mark; the display_name is unavailable without the registry so the text
+      // falls back to the generic "ACP" label.
+      expect(chip?.kind).toBe("acp-claude-code");
       expect(chip?.text).toBe("ACP");
-      expect(chip?.tooltip).toBe("ACP");
     });
   });
 });

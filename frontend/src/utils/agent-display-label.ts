@@ -11,7 +11,17 @@ import { formatLlmModel } from "./format-llm-model";
  */
 export const ACP_SERVER_TAG = "acp_server";
 
-export type AgentChipKind = "openhands" | "acp";
+/**
+ * Discriminator for the chip icon. Known ACP providers get a dedicated kind so
+ * the icon picker can render the right brand mark; unknown providers fall back
+ * to ``acp-generic``.
+ */
+export type AgentChipKind =
+  | "openhands"
+  | "acp-claude-code"
+  | "acp-codex"
+  | "acp-gemini-cli"
+  | "acp-generic";
 
 export interface AgentChip {
   /** Which harness the conversation runs on — used to pick the chip icon. */
@@ -22,25 +32,45 @@ export interface AgentChip {
   tooltip: string;
 }
 
-function resolveAcpProviderName(
+/**
+ * Map a known ACP provider key to its icon kind. Keys come from the SDK
+ * registry returned by ``/api/v1/web-client/config``; keep this list in sync
+ * with what we ship brand marks for.
+ */
+function acpKindFor(providerKey: string | undefined): AgentChipKind {
+  switch (providerKey) {
+    case "claude-code":
+      return "acp-claude-code";
+    case "codex":
+      return "acp-codex";
+    case "gemini-cli":
+      return "acp-gemini-cli";
+    default:
+      return "acp-generic";
+  }
+}
+
+function resolveAcpProvider(
   tags: ConversationTags | undefined,
   acpProviders: ACPProviderConfig[] | undefined,
-): string {
-  const acpServer = tags?.[ACP_SERVER_TAG];
-  if (acpServer && acpProviders) {
-    const provider = acpProviders.find((p) => p.key === acpServer);
-    if (provider) return provider.display_name;
+): { key: string | undefined; name: string } {
+  const key = tags?.[ACP_SERVER_TAG];
+  const keyStr = typeof key === "string" ? key : undefined;
+  if (keyStr && acpProviders) {
+    const provider = acpProviders.find((p) => p.key === keyStr);
+    if (provider) return { key: keyStr, name: provider.display_name };
   }
-  return "ACP";
+  return { key: keyStr, name: "ACP" };
 }
 
 /**
  * Resolve the icon, label, and tooltip for the conversation chip.
  *
- * The chip carries two signals: the icon encodes the harness ("openhands" vs
- * "acp"); the text encodes the LLM model when known. For ACP conversations
- * where the underlying model isn't exposed, the text falls back to the
- * provider brand ("Claude Code", "Codex", "Gemini CLI", …, or "ACP").
+ * The chip carries two signals: the icon is a brand mark for the harness
+ * (OpenHands logo, Claude/OpenAI/Gemini mark), and the text is the prettified
+ * LLM model when known. For ACP conversations where the underlying model
+ * isn't exposed, the text falls back to the provider brand ("Claude Code",
+ * "Codex", "Gemini CLI", …, or "ACP").
  *
  * Returns ``null`` when the conversation has neither a model nor an ACP
  * discriminator — in that case the chip is hidden.
@@ -52,19 +82,16 @@ export function resolveAgentChip(
   acpProviders?: ACPProviderConfig[],
 ): AgentChip | null {
   if (agentKind === "acp") {
-    const providerName = resolveAcpProviderName(tags, acpProviders);
+    const { key, name } = resolveAcpProvider(tags, acpProviders);
+    const kind = acpKindFor(key);
     if (llmModel) {
       return {
-        kind: "acp",
+        kind,
         text: formatLlmModel(llmModel),
-        tooltip: `${providerName} · ${llmModel}`,
+        tooltip: `${name} · ${llmModel}`,
       };
     }
-    return {
-      kind: "acp",
-      text: providerName,
-      tooltip: providerName,
-    };
+    return { kind, text: name, tooltip: name };
   }
   if (llmModel) {
     return {
