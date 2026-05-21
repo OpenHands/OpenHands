@@ -20,6 +20,10 @@ class UserContext(ABC):
         """Get the user id"""
 
     @abstractmethod
+    async def get_user_email(self) -> str | None:
+        """Get the email for the current user, if available."""
+
+    @abstractmethod
     async def get_user_info(self) -> UserInfo:
         """Get the user info."""
 

@@ -26,6 +26,9 @@ class ResolverUserContext(UserContext):
     async def get_user_id(self) -> str | None:
         return await self.saas_user_auth.get_user_id()
 
+    async def get_user_email(self) -> str | None:
+        return await self.saas_user_auth.get_user_email()
+
     async def get_user_info(self) -> UserInfo:
         user_settings = await self.saas_user_auth.get_user_settings()
         user_id = await self.saas_user_auth.get_user_id()
