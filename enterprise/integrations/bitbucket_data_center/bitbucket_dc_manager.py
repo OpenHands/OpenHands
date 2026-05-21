@@ -22,6 +22,7 @@ from integrations.utils import (
 from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
 from pydantic import SecretStr
+from server.auth.constants import BITBUCKET_DATA_CENTER_BOT_TOKEN
 from server.auth.token_manager import TokenManager
 from storage.bitbucket_dc_webhook_store import BitbucketDCWebhookStore
 
@@ -93,6 +94,30 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
             )
             return False
 
+    def _posting_service(self, fallback_external_auth_id: str):
+        """Build the Bitbucket DC service used to POST comments/reactions.
+
+        When a bot service-account token is configured
+        (``BITBUCKET_DATA_CENTER_BOT_TOKEN``), every outbound comment and
+        reaction is posted as that bot -- mirroring the GitHub App's
+        ``openhands[bot]`` identity -- instead of as the @-mentioning user or
+        the webhook installer. Otherwise we fall back to the per-user/installer
+        OAuth token (``fallback_external_auth_id``).
+
+        This affects only who *posts*. The resolver job itself always runs with
+        the invoking user's own token (see ``start_job``); the bot token is
+        never used to create conversations or touch the repo.
+        """
+        from integrations.bitbucket_data_center.bitbucket_dc_service import (
+            SaaSBitbucketDCService,
+        )
+
+        if BITBUCKET_DATA_CENTER_BOT_TOKEN:
+            return SaaSBitbucketDCService(
+                token=SecretStr(BITBUCKET_DATA_CENTER_BOT_TOKEN)
+            )
+        return SaaSBitbucketDCService(external_auth_id=fallback_external_auth_id)
+
     async def _add_eyes_reaction(
         self,
         message: Message,
@@ -121,12 +146,8 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
         if comment_id is None or pr_id is None:
             return
 
-        from integrations.bitbucket_data_center.bitbucket_dc_service import (
-            SaaSBitbucketDCService,
-        )
-
         try:
-            service = SaaSBitbucketDCService(external_auth_id=reacting_user_id)
+            service = self._posting_service(reacting_user_id)
             await service.add_comment_reaction(
                 owner=project_key,
                 repo_slug=repo_slug,
@@ -287,12 +308,8 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
     async def send_message(
         self, message: str, bitbucket_view: ResolverViewInterface
     ) -> None:
-        from integrations.bitbucket_data_center.bitbucket_dc_service import (
-            SaaSBitbucketDCService,
-        )
-
-        bitbucket_service = SaaSBitbucketDCService(
-            external_auth_id=bitbucket_view.user_info.keycloak_user_id
+        bitbucket_service = self._posting_service(
+            bitbucket_view.user_info.keycloak_user_id
         )
 
         if isinstance(bitbucket_view, BitbucketDCInlinePRComment):
