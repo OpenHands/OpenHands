@@ -274,7 +274,7 @@ class OrgStore:
             merged_settings['agent_kind'] = 'openhands'
             return OpenHandsAgentSettings.model_validate(merged_settings)
 
-        base_settings = _load_persisted_conversation_settings(current_settings)
+        base_settings = _load_persisted_conversation_settings(current_settings)  # type: ignore[assignment]
         merged_settings = deep_merge(
             base_settings.model_dump(mode='json'), settings_diff
         )

@@ -564,7 +564,7 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
         )
         saas_user_auth = SaasUserAuth(
             user_id=validation_result.user_id,
-            refresh_token=SecretStr(offline_token),
+            refresh_token=SecretStr(offline_token or ''),
             auth_type=AuthType.BEARER,
             api_key_org_id=validation_result.org_id,
             api_key_id=validation_result.key_id,
@@ -641,6 +641,6 @@ async def get_user_auth_from_keycloak_id(keycloak_user_id: str) -> UserAuth:
 
     user_auth = SaasUserAuth(
         user_id=keycloak_user_id,
-        refresh_token=SecretStr(offline_token),
+        refresh_token=SecretStr(offline_token or ''),
     )
     return user_auth
