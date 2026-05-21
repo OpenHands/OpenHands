@@ -296,7 +296,7 @@ describe("ConversationName", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("should render the raw llm_model when set", () => {
+  it("renders prettified model text and raw model in the tooltip", () => {
     useActiveConversationMock.mockReturnValue({
       data: {
         conversation_id: "test-conversation-id",
@@ -310,7 +310,7 @@ describe("ConversationName", () => {
 
     const model = screen.getByTestId("conversation-name-llm-model");
     expect(model).toBeInTheDocument();
-    expect(model).toHaveTextContent("openai/gpt-4o");
+    expect(model).toHaveTextContent("GPT-4o");
     expect(model).toHaveAttribute("title", "openai/gpt-4o");
     expect(model.querySelector("svg")).toBeInTheDocument();
   });
@@ -359,6 +359,40 @@ describe("ConversationName", () => {
 
     const model = screen.getByTestId("conversation-name-llm-model");
     expect(model).toHaveTextContent("Claude Code");
+  });
+
+  it("renders the underlying model for an ACP conversation that exposes one", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        title: "Test Conversation",
+        status: "RUNNING",
+        agent_kind: "acp",
+        tags: { acp_server: "claude-code" },
+        llm_model: "anthropic/claude-opus-4-1",
+      } as unknown as Conversation,
+    });
+    useConfigMock.mockReturnValue({
+      data: {
+        app_mode: "oss",
+        acp_providers: [
+          {
+            key: "claude-code",
+            display_name: "Claude Code",
+            default_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useConfigMock>);
+
+    renderConversationNameWithRouter();
+
+    const model = screen.getByTestId("conversation-name-llm-model");
+    expect(model).toHaveTextContent("Claude Opus 4.1");
+    expect(model).toHaveAttribute(
+      "title",
+      "Claude Code · anthropic/claude-opus-4-1",
+    );
   });
 
   it("should not render the llm model when not available", () => {
