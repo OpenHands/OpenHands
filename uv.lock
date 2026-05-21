@@ -3696,7 +3696,7 @@ requires-dist = [
     { name = "pg8000", specifier = ">=1.31.5" },
     { name = "pillow", specifier = ">=12.1.1" },
     { name = "playwright", specifier = ">=1.55" },
-    { name = "poetry", specifier = ">=2.3.3" },
+    { name = "poetry", specifier = ">=2.3.4,<2.4.0" },
     { name = "prompt-toolkit", specifier = ">=3.0.50" },
     { name = "protobuf", specifier = ">=5.29.6,<6" },
     { name = "psutil" },

@@ -224,7 +224,7 @@ class LiteLlmManager:
                 try:
                     await LiteLlmManager._delete_key_by_alias(client, key_alias)
                 except httpx.HTTPStatusError as ex:
-                    if ex.status_code == 404:
+                    if ex.response and ex.response.status_code == 404:
                         logger.debug(f'Key "{key_alias}" did not exist - continuing')
                     else:
                         raise
@@ -1635,8 +1635,9 @@ class LiteLlmManager:
     ) -> Callable[..., Awaitable[Any]]:
         @functools.wraps(internal_fn)
         async def wrapper(*args, **kwargs):
+            headers = {'x-goog-api-key': LITE_LLM_API_KEY} if LITE_LLM_API_KEY else {}
             async with httpx.AsyncClient(
-                headers={'x-goog-api-key': LITE_LLM_API_KEY},
+                headers=headers,
                 timeout=httpx.Timeout(30.0),
             ) as client:
                 return await internal_fn(client, *args, **kwargs)

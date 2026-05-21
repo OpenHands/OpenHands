@@ -59,20 +59,22 @@ class SaaSGitLabService(GitLabService):
             offline_token = await self.token_manager.load_offline_token(
                 self.external_auth_id
             )
-            gitlab_token = SecretStr(
+            gitlab_token_str: str | None = (
                 await self.token_manager.get_idp_token_from_offline_token(
                     offline_token, ProviderType.GITLAB
                 )
+                if offline_token
+                else None
             )
+            gitlab_token = SecretStr(gitlab_token_str) if gitlab_token_str else None
             logger.info(
-                f'Got GitLab token {gitlab_token.get_secret_value()} from external auth user ID: {self.external_auth_id}'
+                f'Got GitLab token {gitlab_token} from external auth user ID: {self.external_auth_id}'
             )
         elif self.user_id:
-            gitlab_token = SecretStr(
-                await self.token_manager.get_idp_token_from_idp_user_id(
-                    self.user_id, ProviderType.GITLAB
-                )
+            gitlab_token_str = await self.token_manager.get_idp_token_from_idp_user_id(
+                self.user_id, ProviderType.GITLAB
             )
+            gitlab_token = SecretStr(gitlab_token_str) if gitlab_token_str else None
             logger.debug(
                 f'Got Gitlab token {gitlab_token} from user ID: {self.user_id}'
             )

@@ -127,6 +127,13 @@ async def test_receive_message_runs_job_as_mentioner_when_linked_in_keycloak():
     view = captured['view']
     assert view.user_info.keycloak_user_id == 'kc-alice'
     assert view.installer_keycloak_user_id == 'kc-installer'
+    # Regression guard for the slug-vs-numeric-id bug: the mentioner must be
+    # resolved by their NUMERIC BBDC id (actor['id'] == 1001), which is what
+    # Keycloak's `bitbucket_data_center_id` attribute stores (the OIDC `sub`
+    # claim) -- NOT the slug 'alice'. Looking up by slug never matched and
+    # silently fell back to the webhook installer.
+    token_manager.get_user_id_from_idp_user_id.assert_awaited_once()
+    assert token_manager.get_user_id_from_idp_user_id.await_args.args[0] == '1001'
 
 
 @pytest.mark.asyncio

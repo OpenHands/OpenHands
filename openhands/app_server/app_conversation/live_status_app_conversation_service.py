@@ -329,6 +329,19 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             body_json = start_conversation_request.model_dump(
                 mode='json', context={'expose_secrets': True}
             )
+            # Inject ``user_id`` into the start-conversation body so the
+            # agent-server can call ``Laminar.set_trace_user_id()`` and tag
+            # traces with the authenticated user. The currently pinned
+            # ``openhands-sdk`` release does not yet expose ``user_id`` on
+            # ``StartConversationRequest`` (added in software-agent-sdk#3242),
+            # so passing ``user_id=user.id`` to ``create_request(...)`` is
+            # silently dropped by pydantic. The agent-server reads the field
+            # directly from the request body, so injecting it here works
+            # regardless of whether the local SDK model knows about it.
+            # Remove this once OpenHands pins to an SDK release that exposes
+            # ``user_id`` on ``StartConversationRequest``.
+            if user_id:
+                body_json['user_id'] = user_id
             headers = (
                 {'X-Session-API-Key': sandbox.session_api_key}
                 if sandbox.session_api_key
@@ -1397,7 +1410,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Pass agent explicitly — it has server-only overrides (system
         # prompts, LLM metadata, skills) applied after create_agent().
-        request = conv_settings.create_request(StartConversationRequest, agent=agent)
+        # ``user_id`` is forwarded so the agent-server can attach it to
+        # observability spans (see software-agent-sdk#3242). It is dropped
+        # silently by pydantic on SDK versions that don't yet expose the
+        # field; the start-conversation POST also injects it directly into
+        # the JSON body as a forward-compatible fallback.
+        request = conv_settings.create_request(
+            StartConversationRequest, agent=agent, user_id=user.id
+        )
 
         # --- skills (require remote workspace) ------------------------------
         if remote_workspace:
@@ -1535,7 +1555,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 'plugins': sdk_plugins,
             }
         )
-        return conv_settings.create_request(StartConversationRequest, agent=acp_agent)
+        # ``user_id`` is forwarded for observability; see the LLM path above
+        # for behavior on SDK versions that don't yet expose the field.
+        return conv_settings.create_request(
+            StartConversationRequest, agent=acp_agent, user_id=user.id
+        )
 
     async def _process_pending_messages(
         self,
