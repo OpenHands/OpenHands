@@ -1257,6 +1257,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 precedence.
         """
         user = await self.user_context.get_user_info()
+        # Prefer the user's email as the user identifier we expose to LLM
+        # tracing (LiteLLM metadata.trace_user_id -> Laminar) and to the
+        # agent-server's StartConversationRequest. Falls back to the
+        # internal user id when no email is available (e.g. OSS mode).
+        laminar_user_id = await self.user_context.get_user_email() or user.id
 
         # Route ACP agent settings to the ACP-specific builder
         if isinstance(user.agent_settings, ACPAgentSettings):
@@ -1361,8 +1366,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             }
         )
         agent = configured_agent_settings.create_agent()
+        # Pass the email-preferred id so LiteLLM ``metadata.trace_user_id``
+        # (which Laminar reads via the LiteLLM proxy) carries the email
+        # rather than the pseudo-anonymous internal id.
         agent = self._apply_server_agent_overrides(
-            agent, agent_type, mcp_config, conversation_id, user.id
+            agent, agent_type, mcp_config, conversation_id, laminar_user_id
         )
 
         # --- hooks (require remote workspace; must precede request build) -----
@@ -1416,14 +1424,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Pass agent explicitly — it has server-only overrides (system
         # prompts, LLM metadata, skills) applied after create_agent().
         # ``user_id`` is forwarded so the agent-server can attach it to
-        # observability spans (see software-agent-sdk#3242). We prefer the
-        # user's email so Laminar traces are immediately attributable, and
-        # fall back to the internal user id when no email is available.
-        # The kwarg is dropped silently by pydantic on SDK versions that
-        # don't yet expose the field; the start-conversation POST also
-        # injects it directly into the JSON body as a forward-compatible
-        # fallback.
-        laminar_user_id = await self.user_context.get_user_email() or user.id
+        # observability spans (see software-agent-sdk#3242). ``laminar_user_id``
+        # was computed near the top of this method (email when available,
+        # falling back to the internal id). The kwarg is dropped silently
+        # by pydantic on SDK versions that don't yet expose the field; the
+        # start-conversation POST also injects it directly into the JSON
+        # body as a forward-compatible fallback.
         request = conv_settings.create_request(
             StartConversationRequest, agent=agent, user_id=laminar_user_id
         )
