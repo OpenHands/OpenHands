@@ -10,8 +10,9 @@ These are the procedures and guidelines on how issues are triaged in this repo b
 * **Critical**: Affecting all users or potential security issues.
 
 ## Difficulty
-* Issues good for newcomers may be tagged with **good first issue**.
-* There is currently no workflow that applies this label automatically. The existing `welcome-good-first-issue` workflow only posts a welcome comment after a maintainer adds the label.
+* Issues good for newcomers may be tagged with **good first issue** by maintainers or by the automated triage workflow when the issue clearly meets the criteria below.
+* The `welcome-good-first-issue` workflow only posts a welcome comment after the label is present; it does not decide whether the label should be applied.
+* The automated triage workflow should be conservative and should not auto-apply **good first issue** to issues that look like duplicates or overlapping-scope reports.
 * Use **good first issue** only when all of the following are true:
   * The work is narrow in scope and should be solved as a single issue rather than a multi-step project.
   * The bug, request, or expected outcome is already clear enough that a contributor should not need major discovery work before starting.
