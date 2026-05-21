@@ -4590,19 +4590,19 @@ files = [
 
 [[package]]
 name = "jwcrypto"
-version = "1.5.6"
+version = "1.5.7"
 description = "Implementation of JOSE Web standards"
 optional = false
-python-versions = ">= 3.8"
+python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "jwcrypto-1.5.6-py3-none-any.whl", hash = "sha256:150d2b0ebbdb8f40b77f543fb44ffd2baeff48788be71f67f03566692fd55789"},
-    {file = "jwcrypto-1.5.6.tar.gz", hash = "sha256:771a87762a0c081ae6166958a954f80848820b2ab066937dc8b8379d65b1b039"},
+    {file = "jwcrypto-1.5.7-py3-none-any.whl", hash = "sha256:729463fefe28b6de5cf1ebfda3e94f1a1b41d2799148ef98a01cb9678ebe2bb0"},
+    {file = "jwcrypto-1.5.7.tar.gz", hash = "sha256:70204d7cca406eda8c82352e3c41ba2d946610dafd19e54403f0a1f4f18633c6"},
 ]
 
 [package.dependencies]
 cryptography = ">=3.4"
-typing-extensions = ">=4.5.0"
+typing_extensions = ">=4.5.0"
 
 [[package]]
 name = "keyring"
