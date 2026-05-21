@@ -147,3 +147,31 @@ async def test_update_webhook_id_updates_existing_row(webhook_store, sample_webh
     )
     assert webhook is not None
     assert webhook.webhook_id == '84'
+
+
+@pytest.mark.asyncio
+async def test_delete_webhook_by_repo_removes_existing_row(
+    webhook_store, sample_webhook
+):
+    deleted = await webhook_store.delete_webhook_by_repo(
+        project_key='PROJ',
+        repo_slug='myrepo',
+    )
+
+    assert deleted is True
+    webhook = await webhook_store.get_webhook_by_repo(
+        project_key='PROJ',
+        repo_slug='myrepo',
+    )
+    assert webhook is None
+
+
+@pytest.mark.asyncio
+async def test_delete_webhook_by_repo_returns_false_when_row_absent(webhook_store):
+    """Uninstall is idempotent at the route layer — store reports honestly."""
+    deleted = await webhook_store.delete_webhook_by_repo(
+        project_key='PROJ',
+        repo_slug='does-not-exist',
+    )
+
+    assert deleted is False

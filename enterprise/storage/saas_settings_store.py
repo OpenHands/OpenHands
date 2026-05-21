@@ -277,7 +277,7 @@ class SaasSettingsStore(SettingsStore):
                 else None
             )
             current_member_llm_api_key_raw = (
-                current_member_llm_api_key.get_secret_value()
+                current_member_llm_api_key.get_secret_value()  # type: ignore[union-attr]
                 if current_member_llm_api_key
                 else None
             )
@@ -289,7 +289,7 @@ class SaasSettingsStore(SettingsStore):
                     agent_settings_diff=effective_agent_settings_diff,
                     conversation_settings_diff=effective_conversation_diff,
                     llm_api_key=(
-                        current_member_llm_api_key_raw
+                        current_member_llm_api_key_raw  # type: ignore[arg-type]
                         if not uses_managed_llm_key
                         else None
                     ),
@@ -298,11 +298,11 @@ class SaasSettingsStore(SettingsStore):
 
             if uses_managed_llm_key and current_member_llm_api_key is not None:
                 # Managed/proxy key — store on this member but mark as org-managed
-                org_member.llm_api_key = current_member_llm_api_key
+                org_member.llm_api_key = current_member_llm_api_key  # type: ignore[assignment]
                 org_member.has_custom_llm_api_key = False
             elif current_member_llm_api_key_raw is not None:
                 # BYOR: member supplied their own (non-managed) API key
-                org_member.llm_api_key = current_member_llm_api_key
+                org_member.llm_api_key = current_member_llm_api_key  # type: ignore[assignment]
                 org_member.has_custom_llm_api_key = True
             elif org_default_llm_api_key_raw is not None:
                 # No member key, falling back to org default
@@ -343,7 +343,7 @@ class SaasSettingsStore(SettingsStore):
 
         # First, check if our current key is valid
         if llm_api_key and not await LiteLlmManager.verify_existing_key(
-            llm_api_key.get_secret_value(),
+            llm_api_key.get_secret_value(),  # type: ignore[union-attr]
             self.user_id,
             org_id,
             openhands_type=openhands_type,

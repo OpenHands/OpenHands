@@ -26,6 +26,11 @@ from server.auth.constants import (
     RECAPTCHA_SITE_KEY,
     ROLE_CHECK_ENABLED,
 )
+from server.auth.cookie_chunking import (
+    delete_chunked_cookie,
+    read_chunked_cookie,
+    set_chunked_cookie,
+)
 from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.recaptcha_service import recaptcha_service
 from server.auth.saas_user_auth import SaasUserAuth
@@ -105,25 +110,20 @@ def set_response_cookie(
         cookie_data, expires_in=timedelta(weeks=1)
     )
 
-    # Set secure cookie with signed token
-    domain = get_cookie_domain()
-    if domain:
-        response.set_cookie(
-            key='keycloak_auth',
-            value=signed_token,
-            domain=domain,
-            httponly=True,
-            secure=secure,
-            samesite=get_cookie_samesite(),
-        )
-    else:
-        response.set_cookie(
-            key='keycloak_auth',
-            value=signed_token,
-            httponly=True,
-            secure=secure,
-            samesite=get_cookie_samesite(),
-        )
+    # Set secure cookie with signed token. The value can exceed the
+    # browser's 4096-byte single-cookie cap for users with large Keycloak
+    # claim sets, so write it through the chunked-cookie helper, which
+    # splits oversized values across sibling cookies and stays
+    # byte-identical for values that fit in one cookie.
+    set_chunked_cookie(
+        response,
+        'keycloak_auth',
+        signed_token,
+        domain=get_cookie_domain(),
+        secure=secure,
+        httponly=True,
+        samesite=get_cookie_samesite(),
+    )
 
 
 def _extract_oauth_state(state: str | None) -> tuple[str, str | None, str | None]:
@@ -677,11 +677,12 @@ async def authenticate(request: Request):
             content={'error': 'User is not authenticated'},
         )
 
-        # Delete the auth cookie if it exists
-        keycloak_auth_cookie = request.cookies.get('keycloak_auth')
+        # Delete the auth cookie (and any sibling chunks) if it exists
+        keycloak_auth_cookie = read_chunked_cookie(request, 'keycloak_auth')
         if keycloak_auth_cookie:
-            response.delete_cookie(
-                key='keycloak_auth',
+            delete_chunked_cookie(
+                response,
+                'keycloak_auth',
                 domain=get_cookie_domain(),
                 samesite=get_cookie_samesite(),
             )
@@ -916,9 +917,10 @@ async def logout(request: Request):
         content={'message': 'User logged out'},
     )
 
-    # Always delete the cookie regardless of what happens
-    response.delete_cookie(
-        key='keycloak_auth',
+    # Always delete the cookie (and any sibling chunks) regardless of what happens
+    delete_chunked_cookie(
+        response,
+        'keycloak_auth',
         domain=get_cookie_domain(),
         samesite=get_cookie_samesite(),
     )
