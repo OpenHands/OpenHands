@@ -13,15 +13,7 @@ from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 # The version of the agent server to use for deployments.
 # Typically this will be the same as the values from the pyproject.toml
-# Pinned to the agent-server built from software-agent-sdk@9b4f61a — the merge
-# commit of OpenHands/software-agent-sdk#3242, which adds ``user_id`` to
-# ``StartConversationRequest`` and calls ``Laminar.set_trace_user_id()`` from
-# ``RootSpan``. This is required for the Laminar trace user attribute to pick
-# up the value injected into the start-conversation request body by
-# ``live_status_app_conversation_service`` (the 1.22.1 image silently drops the
-# unknown field). Bump back to a tagged release (e.g. 1.23.1) once a release
-# containing #3242 is published.
-AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:1.22.1-python'
+AGENT_SER
 
 class SandboxSpecService(ABC):
     """Service for managing Sandbox specs.
