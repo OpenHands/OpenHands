@@ -314,12 +314,14 @@ def test_posting_service_uses_bot_token_when_set():
     ), patch(
         'integrations.bitbucket_data_center.bitbucket_dc_service.SaaSBitbucketDCService'
     ) as service_cls:
-        manager._posting_service('kc-alice')
+        svc = manager._posting_service('kc-alice')
 
-    service_cls.assert_called_once()
-    kwargs = service_cls.call_args.kwargs
-    assert 'external_auth_id' not in kwargs
-    assert kwargs['token'].get_secret_value() == 'bot-pat-123'
+    # Built with no per-user auth; the raw bot token is set directly so the
+    # service sends Bearer. NOT via external_auth_id, and NOT via the token=
+    # constructor arg (which would downgrade it to x-token-auth HTTP Basic,
+    # rejected by Bitbucket Data Center).
+    assert 'external_auth_id' not in service_cls.call_args.kwargs
+    assert svc.token.get_secret_value() == 'bot-pat-123'
 
 
 def test_posting_service_falls_back_to_user_token_when_bot_unset():

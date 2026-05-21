@@ -113,9 +113,14 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
         )
 
         if BITBUCKET_DATA_CENTER_BOT_TOKEN:
-            return SaaSBitbucketDCService(
-                token=SecretStr(BITBUCKET_DATA_CENTER_BOT_TOKEN)
-            )
+            # BBDC HTTP access tokens authenticate via Bearer. The service's
+            # ``token=`` constructor arg rewrites a colon-less token to
+            # ``x-token-auth:<token>`` (a Bitbucket *Cloud* convention) and
+            # sends it as HTTP Basic, which Data Center rejects with 401. Set
+            # the raw token directly so ``_get_headers`` uses Bearer.
+            service = SaaSBitbucketDCService()
+            service.token = SecretStr(BITBUCKET_DATA_CENTER_BOT_TOKEN)
+            return service
         return SaaSBitbucketDCService(external_auth_id=fallback_external_auth_id)
 
     async def _add_eyes_reaction(
