@@ -526,6 +526,50 @@ async def test_jira_dc_events_forwards_to_automations(
 
 
 @pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.automation_event_service')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+@patch('server.routes.integration.jira_dc.redis_client', new_callable=MagicMock)
+async def test_jira_dc_events_forwards_issue_created_to_automations(
+    mock_redis, mock_manager, mock_automation_service, mock_request
+):
+    org_id = uuid.UUID('00000000-0000-0000-0000-000000000123')
+    payload = {
+        'webhookEvent': 'jira:issue_created',
+        'issue': {'key': 'PROJ-123'},
+    }
+    mock_workspace = MagicMock()
+    mock_workspace.org_id = org_id
+    mock_workspace.name = 'jira.company.com'
+    mock_manager.validate_request_context.return_value = (
+        True,
+        'sig123',
+        payload,
+        mock_workspace,
+    )
+    mock_redis.exists.return_value = False
+
+    with (
+        patch('server.routes.integration.jira_dc.JIRA_DC_WEBHOOKS_ENABLED', True),
+        patch(
+            'server.routes.integration.jira_dc.AUTOMATION_EVENT_FORWARDING_ENABLED',
+            True,
+        ),
+    ):
+        background_tasks = MagicMock()
+        response = await jira_dc_events(mock_request, background_tasks)
+
+    assert response.status_code == 200
+    background_tasks.add_task.assert_any_call(
+        mock_automation_service.forward_jira_dc_event,
+        org_id=org_id,
+        payload=payload,
+        workspace_name='jira.company.com',
+        delivery_id='sig123',
+    )
+    assert background_tasks.add_task.call_count == 2
+
+
+@pytest.mark.asyncio
 @patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
 @patch('server.routes.integration.jira_dc.redis_client', new_callable=MagicMock)
 async def test_jira_dc_events_general_exception(mock_redis, mock_manager, mock_request):

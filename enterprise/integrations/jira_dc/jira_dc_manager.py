@@ -50,8 +50,39 @@ from openhands.app_server.utils.logger import openhands_logger as logger
 JIRA_DC_REACTION_EMOJI_ID = '1f44d'
 
 # Events the OpenHands webhook subscribes to, used when auto-enrolling the
-# webhook in Jira. Mirrors what parse_webhook handles.
-JIRA_DC_WEBHOOK_EVENTS = ['comment_created', 'jira:issue_updated']
+# webhook in Jira. The resolver only creates jobs for a narrower subset in
+# parse_webhook, but automations can subscribe to these broader issue/comment
+# lifecycle events.
+JIRA_DC_WEBHOOK_EVENTS = [
+    'jira:issue_created',
+    'jira:issue_updated',
+    'jira:issue_deleted',
+    'comment_created',
+    'comment_updated',
+    'comment_deleted',
+]
+
+
+def _extract_workspace_url(payload: Dict) -> str:
+    """Return a Jira URL whose host identifies the configured workspace."""
+    paths = (
+        ('comment', 'author', 'self'),
+        ('user', 'self'),
+        ('issue', 'self'),
+        ('comment', 'self'),
+    )
+
+    for path in paths:
+        value: object = payload
+        for key in path:
+            if not isinstance(value, dict):
+                break
+            value = value.get(key)
+        else:
+            if isinstance(value, str) and value:
+                return value
+
+    return ''
 
 
 class JiraDcManager(Manager[JiraDcViewInterface]):
@@ -138,14 +169,8 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         body = await request.body()
         payload = await request.json()
         workspace_name = ''
-        selfUrl = ''
 
-        if payload.get('webhookEvent') == 'comment_created':
-            selfUrl = payload.get('comment', {}).get('author', {}).get('self')
-        elif payload.get('webhookEvent') == 'jira:issue_updated':
-            selfUrl = payload.get('user', {}).get('self')
-
-        parsedUrl = urlparse(selfUrl)
+        parsedUrl = urlparse(_extract_workspace_url(payload))
         if parsedUrl.hostname:
             workspace_name = parsedUrl.hostname
 
