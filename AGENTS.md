@@ -279,6 +279,9 @@ Each integration follows a consistent pattern with service classes, storage mode
 ## Template for Github Pull Request
 
 If you are starting a pull request (PR), please follow the template in `.github/pull_request_template.md`.
+- The PR template now starts with a `HUMAN:` section, the human-tested checkbox, and an `AGENT:` section.
+- `.github/workflows/pr-readiness-confirm.yml` checks non-draft PRs for non-empty text between `HUMAN:` and the human-tested checkbox; if present it adds a 👍 reaction, and if absent it posts a reminder comment.
+
 
 ## Implementation Details
 
