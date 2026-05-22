@@ -17,14 +17,19 @@ jobs:
 
 
       - name: Fetch base branch
-        run: git fetch origin ${{ github.event.pull_request.base.ref }}
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: git fetch origin "$BASE_REF"
 
       - name: Check if base branch is ancestor of PR
         id: check_up_to_date
         shell: bash
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          BASE="origin/${{ github.event.pull_request.base.ref }}"
-          HEAD="${{ github.event.pull_request.head.sha }}"
+          BASE="origin/${BASE_REF}"
+          HEAD="$HEAD_SHA"
           if git merge-base --is-ancestor "$BASE" "$HEAD"; then
             echo "We're up to date with base $BASE"
             exit 0

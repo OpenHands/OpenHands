@@ -27,6 +27,7 @@ export type ProviderToken = {
 };
 
 export type MCPSSEServer = {
+  name?: string;
   url: string;
   api_key?: string;
 };
@@ -39,6 +40,7 @@ export type MCPStdioServer = {
 };
 
 export type MCPSHTTPServer = {
+  name?: string;
   url: string;
   api_key?: string;
   timeout?: number;

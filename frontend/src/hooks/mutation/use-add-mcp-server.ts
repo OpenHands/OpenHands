@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSettings } from "#/hooks/query/use-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import {
   MCPSHTTPServer,
@@ -26,14 +25,16 @@ interface MCPServerConfig {
 
 export function useAddMcpServer() {
   const queryClient = useQueryClient();
-  const { data: settings } = useSettings();
   const { organizationId } = useSelectedOrganizationId();
 
   return useMutation({
     mutationFn: async (server: MCPServerConfig): Promise<void> => {
-      if (!settings) return;
+      // Fetch fresh settings at mutation time to avoid stale closure issues
+      const settings = await SettingsService.getSettings();
 
-      const currentConfig = parseMcpConfig(settings.agent_settings?.mcp_config);
+      const currentConfig = parseMcpConfig(
+        settings?.agent_settings?.mcp_config,
+      );
 
       const newConfig: MCPConfig = {
         sse_servers: [...currentConfig.sse_servers],
@@ -64,9 +65,11 @@ export function useAddMcpServer() {
         newConfig.shttp_servers.push(shttpServer);
       }
 
-      await SettingsService.saveSettings({
+      const payload = {
         agent_settings_diff: { mcp_config: toSdkMcpConfig(newConfig) },
-      });
+      };
+
+      await SettingsService.saveSettings(payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({

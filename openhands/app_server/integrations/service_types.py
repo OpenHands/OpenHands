@@ -201,6 +201,8 @@ class ResourceNotFoundError(ValueError):
 class RequestMethod(Enum):
     POST = 'post'
     GET = 'get'
+    PUT = 'put'
+    DELETE = 'delete'
 
 
 class BaseGitService(ABC):
