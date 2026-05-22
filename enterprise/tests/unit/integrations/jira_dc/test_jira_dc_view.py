@@ -9,6 +9,7 @@ from integrations.jira_dc.jira_dc_view import (
     JiraDcFactory,
     JiraDcNewConversationView,
 )
+
 from openhands.app_server.integrations.service_types import ProviderType, Repository
 
 
