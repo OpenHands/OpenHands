@@ -154,7 +154,7 @@ def extract_label_names(issue: dict[str, Any]) -> list[str]:
             candidate = ''
         if candidate:
             label_names.append(candidate)
-    return sorted(set(label_names), key=str.lower)
+    return sorted(set(label_names), key=lambda label: (label.lower(), label))
 
 
 def build_prompt(repository: str, issue: dict[str, Any]) -> str:

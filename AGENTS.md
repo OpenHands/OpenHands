@@ -500,6 +500,6 @@ Called by `workspace.get_llm()` in the SDK to retrieve LLM config with the API k
 
 ### Issue Triage Automation
 
-- `.github/workflows/issue-duplicate-checker.yml` now has a second job that auto-applies `good first issue` after the duplicate check completes.
+- `.github/workflows/issue-opened.yml` has a second issue-opened job that auto-applies `good first issue` after the duplicate check completes.
 - The duplicate check is used only as a veto/guardrail for `good first issue` automation: duplicate or overlapping-scope issues should not be auto-labeled.
 - The OpenHands classifier logic for newcomer suitability lives in `scripts/issue_good_first_issue_check_openhands.py`, with focused unit coverage in `tests/unit/test_issue_good_first_issue_check_openhands.py`.

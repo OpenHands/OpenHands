@@ -1,5 +1,5 @@
 ---
-name: Issue Duplicate Check via OpenHands Cloud
+name: Issue Opened Automation
 
 on:
     issues:
@@ -687,6 +687,7 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
                   CLOSE_AFTER_DAYS: ${{ inputs.close_after_days || '3' }}
+                  REPOSITORY: ${{ github.repository }}
               run: |
                   python scripts/auto_close_duplicate_issues.py \
                     --repository "$REPOSITORY" \
