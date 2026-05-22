@@ -17,10 +17,12 @@ from integrations.utils import (
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
     get_session_expired_message,
+    get_user_not_found_message,
 )
 from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
 from pydantic import SecretStr
+from server.auth.constants import BITBUCKET_DATA_CENTER_BOT_TOKEN
 from server.auth.token_manager import TokenManager
 from storage.bitbucket_dc_webhook_store import BitbucketDCWebhookStore
 
@@ -92,6 +94,106 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
             )
             return False
 
+    def _posting_service(self, fallback_external_auth_id: str):
+        """Build the Bitbucket DC service used to POST comments/reactions.
+
+        When a bot service-account token is configured
+        (``BITBUCKET_DATA_CENTER_BOT_TOKEN``), every outbound comment and
+        reaction is posted as that bot -- mirroring the GitHub App's
+        ``openhands[bot]`` identity -- instead of as the @-mentioning user or
+        the webhook installer. Otherwise we fall back to the per-user/installer
+        OAuth token (``fallback_external_auth_id``).
+
+        This affects only who *posts*. The resolver job itself always runs with
+        the invoking user's own token (see ``start_job``); the bot token is
+        never used to create conversations or touch the repo.
+        """
+        from integrations.bitbucket_data_center.bitbucket_dc_service import (
+            SaaSBitbucketDCService,
+        )
+
+        if BITBUCKET_DATA_CENTER_BOT_TOKEN:
+            # BBDC HTTP access tokens authenticate via Bearer. The service's
+            # ``token=`` constructor arg rewrites a colon-less token to
+            # ``x-token-auth:<token>`` (a Bitbucket *Cloud* convention) and
+            # sends it as HTTP Basic, which Data Center rejects with 401. Set
+            # the raw token directly so ``_get_headers`` uses Bearer.
+            service = SaaSBitbucketDCService()
+            service.token = SecretStr(BITBUCKET_DATA_CENTER_BOT_TOKEN)
+            return service
+        return SaaSBitbucketDCService(external_auth_id=fallback_external_auth_id)
+
+    async def _add_eyes_reaction(
+        self,
+        message: Message,
+        reacting_user_id: str,
+        project_key: str,
+        repo_slug: str,
+    ) -> None:
+        """Best-effort 👀 acknowledgement on the triggering PR comment.
+
+        Mirrors ``GithubManager._add_reaction``: posted once we've decided
+        the request will be acted on (permission check passed, mentioner
+        resolved), before view construction or conversation creation. Posted
+        as the resolved invoking user (``reacting_user_id`` -- the mentioner's
+        keycloak id, or the installer when the mentioner has no OHE account)
+        so the reaction is attributed to whoever triggered the job.
+
+        Any failure here is logged at INFO and swallowed -- older BBDC
+        installs return 404/400 on the reactions endpoint, and a missing
+        acknowledgement must never block conversation creation.
+        """
+        payload = message.message.get('payload') or {}
+        comment = payload.get('comment') or {}
+        pull_request = payload.get('pullRequest') or {}
+        comment_id = comment.get('id')
+        pr_id = pull_request.get('id')
+        if comment_id is None or pr_id is None:
+            return
+
+        try:
+            service = self._posting_service(reacting_user_id)
+            await service.add_comment_reaction(
+                owner=project_key,
+                repo_slug=repo_slug,
+                pr_id=int(pr_id),
+                comment_id=int(comment_id),
+                emoticon='eyes',
+            )
+        except Exception as e:
+            logger.info(
+                f'[Bitbucket DC] Could not add eyes reaction on '
+                f'{project_key}/{repo_slug} PR#{pr_id} comment#{comment_id}: {e}'
+            )
+
+    async def _send_user_not_found_message(
+        self,
+        message: Message,
+        installer_user_id: str,
+        mentioner_slug: str | None,
+    ) -> None:
+        """Reply to the triggering comment asking an unenrolled mentioner to
+        sign up, mirroring ``GithubManager._send_user_not_found_message``.
+
+        The mentioner has no OHE account, so there is no token to post as
+        them; the reply goes out under the installer's BBDC token (the
+        installer has write access -- the closest analog to GitHub's
+        installation token). Best-effort: a failure here must not raise out
+        of ``receive_message``.
+        """
+        try:
+            view = await BitbucketDCFactory.create_bitbucket_dc_view_from_payload(
+                message,
+                keycloak_user_id=installer_user_id,
+                installer_keycloak_user_id=installer_user_id,
+            )
+            await self.send_message(get_user_not_found_message(mentioner_slug), view)
+        except Exception as e:
+            logger.warning(
+                f'[Bitbucket DC] Failed to send user-not-found message to '
+                f'{mentioner_slug!r}: {e}'
+            )
+
     async def receive_message(self, message: Message) -> None:
         self._confirm_incoming_source_type(message)
         if not self.is_job_requested(message):
@@ -117,8 +219,84 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
             )
             return
 
+        # Mirror the GitHub resolver pattern: the job runs as the user who
+        # @-mentioned us, not the webhook installer. Look up the mentioner
+        # in Keycloak by their numeric BBDC user id; the installer
+        # keycloak_user_id is carried alongside so the permission check and
+        # webhook lifecycle calls can keep using the installer's elevated
+        # token.
+        #
+        # NB: Keycloak's `bitbucket_data_center_id` attribute is populated by
+        # the SSO id-mapper from the BBDC OIDC `sub` claim, which is the
+        # numeric user id -- NOT the slug/username. So we must look up by
+        # `actor['id']` (numeric), not by the slug; looking up by slug never
+        # matches and silently falls back to the installer. The slug is kept
+        # only for human-readable logging.
+        payload = message.message.get('payload') or {}
+        actor = payload.get('actor') or {}
+        mentioner_slug = extract_actor_slug(actor)
+        mentioner_idp_id = str(actor.get('id') or '')
+        mentioner_keycloak_id: str | None = None
+        lookup_failed = False
+        if mentioner_idp_id:
+            try:
+                mentioner_keycloak_id = (
+                    await self.token_manager.get_user_id_from_idp_user_id(
+                        mentioner_idp_id, ProviderType.BITBUCKET_DATA_CENTER
+                    )
+                )
+            except Exception as e:
+                lookup_failed = True
+                logger.warning(
+                    f'[Bitbucket DC] Keycloak lookup for mentioner '
+                    f'{mentioner_slug!r} (id {mentioner_idp_id}) failed: {e}'
+                )
+
+        # A transient Keycloak error leaves us unsure whether the mentioner is
+        # enrolled. Drop the event rather than guess -- we must neither
+        # silently run as the installer nor wrongly tell an enrolled user to
+        # sign up.
+        if lookup_failed:
+            logger.info(
+                f'[Bitbucket DC] Dropping event for {mentioner_slug!r}: Keycloak '
+                f'lookup failed, enrollment status unknown'
+            )
+            return
+
+        # Mirror the GitHub manager: a mentioner with no OHE account is NOT run
+        # as the installer. Refuse the job and reply asking them to sign up, so
+        # every job runs as -- and is billed to -- the actual requester, with
+        # correct git attribution.
+        if not mentioner_keycloak_id:
+            logger.info(
+                f'[Bitbucket DC] Mentioner {mentioner_slug!r} (id '
+                f'{mentioner_idp_id}) has no OHE account; asking them to sign '
+                f'up instead of starting a job'
+            )
+            await self._send_user_not_found_message(
+                message, installer_user_id, mentioner_slug
+            )
+            return
+
+        if mentioner_keycloak_id != installer_user_id:
+            logger.info(
+                f'[Bitbucket DC] Running job as mentioner {mentioner_slug!r} '
+                f'(id {mentioner_idp_id}, keycloak {mentioner_keycloak_id}) '
+                f'instead of installer ({installer_user_id})'
+            )
+
+        # Acknowledge receipt with a 👀 reaction on the triggering comment,
+        # mirroring the GitHub manager. Posted as the resolved invoking user.
+        # Best-effort: failures (e.g. legacy BBDC without the reactions
+        # endpoint) must not block conversation creation.
+        await self._add_eyes_reaction(
+            message, mentioner_keycloak_id, project_key, repo_slug
+        )
+
         bitbucket_view = await BitbucketDCFactory.create_bitbucket_dc_view_from_payload(
-            message, installer_user_id
+            message,
+            keycloak_user_id=mentioner_keycloak_id,
+            installer_keycloak_user_id=installer_user_id,
         )
         logger.info(
             f'[Bitbucket DC] Creating job for {bitbucket_view.user_info.username} '
@@ -135,12 +313,9 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
     async def send_message(
         self, message: str, bitbucket_view: ResolverViewInterface
     ) -> None:
-        from integrations.bitbucket_data_center.bitbucket_dc_service import (
-            SaaSBitbucketDCService,
+        bitbucket_service = self._posting_service(
+            bitbucket_view.user_info.keycloak_user_id
         )
-
-        keycloak_user_id = bitbucket_view.user_info.keycloak_user_id
-        bitbucket_service = SaaSBitbucketDCService(external_auth_id=keycloak_user_id)
 
         if isinstance(bitbucket_view, BitbucketDCInlinePRComment):
             await bitbucket_service.reply_to_pr_comment(

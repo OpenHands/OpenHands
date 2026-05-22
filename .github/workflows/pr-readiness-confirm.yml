@@ -43,7 +43,7 @@ jobs:
     steps:
       - name: Check for existing confirmation comment
         id: check
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const marker = '<!-- pr-readiness-confirm -->';
@@ -57,7 +57,7 @@ jobs:
 
       - name: Post confirmation request
         if: steps.check.outputs.exists != 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const marker = '<!-- pr-readiness-confirm -->';
@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Find and convert stale unconfirmed PRs
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const STALE_DAYS = 7;

@@ -940,3 +940,112 @@ async def test_llm_profiles_are_encrypted_at_rest(
         ).scalar_one()
     assert user.llm_profiles is not None
     assert user.llm_profiles['profiles']['work']['api_key'] == 'super-secret-byok'
+
+
+@pytest.mark.asyncio
+async def test_store_replaces_mcp_config_on_delete(
+    session_maker, async_session_maker, org_with_multiple_members_fixture
+):
+    """When a server is deleted, mcp_config should be replaced wholesale,
+    not merged (which would resurrect deleted servers).
+
+    This tests the fix for APP-1862: MCP server settings cannot be updated
+    or deleted because deep_merge was resurrecting deleted servers.
+    """
+    from sqlalchemy import select
+    from storage.org import Org
+    from storage.org_member import OrgMember
+
+    fixture = org_with_multiple_members_fixture
+    org_id = fixture['org_id']
+    admin_user_id = str(fixture['admin_user_id'])
+    member1_user_id = str(fixture['member1_user_id'])
+
+    store = SaasSettingsStore(admin_user_id)
+
+    # Step 1: Save 3 MCP servers
+    initial_mcp_config = {
+        'mcpServers': {
+            'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+            'server2': {'url': 'https://server2.com', 'transport': 'sse'},
+            'server3': {'url': 'https://server3.com', 'transport': 'sse'},
+        },
+    }
+    initial_settings = DataSettings()
+    initial_settings.update(
+        {
+            'agent_settings_diff': {
+                'llm': {
+                    'model': 'test-model',
+                    'base_url': 'http://test-url.com',
+                    'api_key': 'test-key',
+                },
+                'mcp_config': initial_mcp_config,
+            },
+        }
+    )
+
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await store.store(initial_settings)
+
+    # Verify 3 servers are saved
+    with session_maker() as session:
+        org = session.execute(select(Org).where(Org.id == org_id)).scalars().first()
+        assert org is not None
+        assert len(org.agent_settings.get('mcp_config', {}).get('mcpServers', {})) == 3
+
+    # Step 2: Delete one server (save with only 2 servers)
+    updated_mcp_config = {
+        'mcpServers': {
+            'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+            'server2': {'url': 'https://server2.com', 'transport': 'sse'},
+            # server3 is deleted
+        },
+    }
+    updated_settings = DataSettings()
+    updated_settings.update(
+        {
+            'agent_settings_diff': {
+                'llm': {
+                    'model': 'test-model',
+                    'base_url': 'http://test-url.com',
+                    'api_key': 'test-key',
+                },
+                'mcp_config': updated_mcp_config,
+            },
+        }
+    )
+
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await store.store(updated_settings)
+
+    # Step 3: Verify only 2 servers remain (server3 was not resurrected)
+    with session_maker() as session:
+        org = session.execute(select(Org).where(Org.id == org_id)).scalars().first()
+        assert org is not None
+        mcp_servers = org.agent_settings.get('mcp_config', {}).get('mcpServers', {})
+        assert (
+            len(mcp_servers) == 2
+        ), f'Expected 2 servers, got {len(mcp_servers)}: {mcp_servers}'
+        assert 'server1' in mcp_servers
+        assert 'server2' in mcp_servers
+        assert (
+            'server3' not in mcp_servers
+        ), 'Deleted server was resurrected by deep_merge'
+
+        # Also verify member diffs have 2 servers
+        members = {
+            str(m.user_id): m
+            for m in session.execute(
+                select(OrgMember).where(OrgMember.org_id == org_id)
+            )
+            .scalars()
+            .all()
+        }
+        admin_mcp = members[admin_user_id].agent_settings_diff.get('mcp_config', {})
+        assert len(admin_mcp.get('mcpServers', {})) == 2
+        assert 'server3' not in admin_mcp.get('mcpServers', {})
+
+        member1_mcp = members[member1_user_id].agent_settings_diff.get('mcp_config', {})
+        assert len(member1_mcp.get('mcpServers', {})) == 2
+        assert 'server3' not in member1_mcp.get('mcpServers', {})

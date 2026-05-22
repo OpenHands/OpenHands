@@ -199,8 +199,8 @@ class OrgResponse(BaseModel):
         return cls(
             id=str(org.id),
             name=org.name,
-            contact_name=org.contact_name,
-            contact_email=org.contact_email,
+            contact_name=org.contact_name,  # type: ignore[arg-type]
+            contact_email=org.contact_email,  # type: ignore[arg-type]
             conversation_expiration=org.conversation_expiration,
             remote_runtime_resource_factor=org.remote_runtime_resource_factor,
             billing_margin=org.billing_margin,
@@ -386,7 +386,7 @@ class OrgUpdate(BaseModel):
         member_settings = OrgMemberSettingsUpdate(
             agent_settings_diff=self.agent_settings_diff,
             conversation_settings_diff=self.conversation_settings_diff,
-            llm_api_key=self.llm_api_key or None,
+            llm_api_key=SecretStr(self.llm_api_key) if self.llm_api_key else None,
         )
         return member_settings if member_settings.has_updates() else None
 

@@ -3,6 +3,7 @@ import {
   BitbucketDCResourcesResponse,
   BitbucketDCWebhookEnrollmentResult,
   BitbucketDCWebhookIdUpdateResult,
+  BitbucketDCWebhookInstallationResult,
   BitbucketDCResourceIdentifier,
   GitLabResourcesResponse,
   UpdateBitbucketDCWebhookIdRequest,
@@ -70,6 +71,9 @@ export const integrationService = {
 
   /**
    * Record the numeric Bitbucket Data Center webhook id after manual creation.
+   * @deprecated Manual flow superseded by reinstallBitbucketDCWebhook, which
+   *   auto-creates the webhook on BBDC and records the assigned id in one step.
+   *   Kept for backward compatibility with older clients.
    */
   updateBitbucketDCWebhookId: async ({
     resource,
@@ -85,6 +89,39 @@ export const integrationService = {
     const { data } = await openHands.patch<BitbucketDCWebhookIdUpdateResult>(
       "/integration/bitbucket-dc/webhook-id",
       requestBody,
+    );
+    return data;
+  },
+
+  /**
+   * Install or reinstall the webhook on a Bitbucket Data Center repository
+   * via BBDC's REST API. Rotates the shared secret, idempotently creates or
+   * updates the webhook on BBDC, and persists the result. Requires the
+   * caller's BBDC OAuth token to have REPO_ADMIN scope.
+   */
+  reinstallBitbucketDCWebhook: async ({
+    resource,
+  }: {
+    resource: BitbucketDCResourceIdentifier;
+  }): Promise<BitbucketDCWebhookInstallationResult> => {
+    const { data } = await openHands.post<BitbucketDCWebhookInstallationResult>(
+      "/integration/bitbucket-dc/reinstall-webhook",
+      { resource },
+    );
+    return data;
+  },
+
+  /**
+   * Delete the webhook on Bitbucket Data Center and clear the local enrollment.
+   */
+  uninstallBitbucketDCWebhook: async ({
+    resource,
+  }: {
+    resource: BitbucketDCResourceIdentifier;
+  }): Promise<BitbucketDCWebhookInstallationResult> => {
+    const { data } = await openHands.post<BitbucketDCWebhookInstallationResult>(
+      "/integration/bitbucket-dc/uninstall-webhook",
+      { resource },
     );
     return data;
   },

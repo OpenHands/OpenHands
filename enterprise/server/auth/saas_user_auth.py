@@ -19,6 +19,7 @@ from server.auth.authorization import (
     get_user_org_role,
 )
 from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
+from server.auth.cookie_chunking import read_chunked_cookie
 from server.auth.token_manager import TokenManager
 from server.logger import logger
 from server.rate_limit import RateLimiter, create_redis_rate_limiter
@@ -563,7 +564,7 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
         )
         saas_user_auth = SaasUserAuth(
             user_id=validation_result.user_id,
-            refresh_token=SecretStr(offline_token),
+            refresh_token=SecretStr(offline_token or ''),
             auth_type=AuthType.BEARER,
             api_key_org_id=validation_result.org_id,
             api_key_id=validation_result.key_id,
@@ -577,7 +578,7 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
 
 async def saas_user_auth_from_cookie(request: Request) -> SaasUserAuth | None:
     try:
-        signed_token = request.cookies.get('keycloak_auth')
+        signed_token = read_chunked_cookie(request, 'keycloak_auth')
         if not signed_token:
             return None
         return await saas_user_auth_from_signed_token(signed_token)
@@ -640,6 +641,6 @@ async def get_user_auth_from_keycloak_id(keycloak_user_id: str) -> UserAuth:
 
     user_auth = SaasUserAuth(
         user_id=keycloak_user_id,
-        refresh_token=SecretStr(offline_token),
+        refresh_token=SecretStr(offline_token or ''),
     )
     return user_auth
