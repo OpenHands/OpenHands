@@ -27,6 +27,7 @@ from openhands.app_server.sandbox.remote_sandbox_spec_service import (
 )
 from openhands.app_server.sandbox.sandbox_spec_service import (
     AUTO_FORWARD_PREFIXES,
+    AUTO_FORWARD_VARIABLES,
     get_agent_server_env,
 )
 
@@ -295,6 +296,33 @@ class TestLLMAutoForwarding:
             assert 'Llm_Timeout' not in result
 
 
+class TestExactAutoForwarding:
+    """Test cases for exact auto-forwarded environment variables."""
+
+    def test_auto_forward_variables_contains_insecure_git_access(self):
+        assert 'ALLOW_INSECURE_GIT_ACCESS' in AUTO_FORWARD_VARIABLES
+
+    def test_allow_insecure_git_access_auto_forwarded(self):
+        env_vars = {
+            'ALLOW_INSECURE_GIT_ACCESS': 'true',
+            'OTHER_VAR': 'should_not_be_included',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+            assert result == {'ALLOW_INSECURE_GIT_ACCESS': 'true'}
+
+    def test_explicit_override_takes_precedence_over_exact_forward(self):
+        env_vars = {
+            'ALLOW_INSECURE_GIT_ACCESS': 'false',
+            'OH_AGENT_SERVER_ENV': '{"ALLOW_INSECURE_GIT_ACCESS": "true"}',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+            assert result['ALLOW_INSECURE_GIT_ACCESS'] == 'true'
+
+
 class TestLMNRAutoForwarding:
     """Test cases for automatic forwarding of LMNR_* environment variables."""
 
@@ -359,6 +387,19 @@ class TestLMNRAutoForwarding:
 
 class TestDockerSandboxSpecEnvironmentOverride:
     """Test environment variable override integration in Docker sandbox specs."""
+
+    def test_docker_specs_include_insecure_git_access_env(self):
+        """Test that the insecure git access flag reaches Docker sandbox specs."""
+        env_vars = {
+            'ALLOW_INSECURE_GIT_ACCESS': 'true',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            specs = get_default_docker_sandbox_specs()
+
+            assert len(specs) == 1
+            spec = specs[0]
+            assert spec.initial_env['ALLOW_INSECURE_GIT_ACCESS'] == 'true'
 
     def test_docker_specs_include_agent_server_env(self):
         """Test that Docker sandbox specs include agent server environment variables."""
