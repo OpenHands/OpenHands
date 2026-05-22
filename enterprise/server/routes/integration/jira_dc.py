@@ -520,7 +520,7 @@ async def create_jira_dc_workspace(
                 )
                 # None when the admin left the PAT blank on edit → the store
                 # preserves the existing encrypted token.
-                encrypted_svc_acc_api_key = (
+                updated_encrypted_svc_acc_api_key = (
                     token_manager.encrypt_text(provided_api_key)
                     if provided_api_key
                     else None
@@ -532,7 +532,7 @@ async def create_jira_dc_workspace(
                     org_id=effective_org_id,
                     encrypted_webhook_secret=encrypted_webhook_secret,
                     svc_acc_email=workspace_data.svc_acc_email,
-                    encrypted_svc_acc_api_key=encrypted_svc_acc_api_key,
+                    encrypted_svc_acc_api_key=updated_encrypted_svc_acc_api_key,
                     status='active' if workspace_data.is_active else 'inactive',
                 )
 
@@ -732,7 +732,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
             # Empty session PAT (admin edited without changing it) → None so the
             # store preserves the existing encrypted token.
             session_api_key = integration_session.get('svc_acc_api_key')
-            encrypted_svc_acc_api_key = (
+            updated_encrypted_svc_acc_api_key = (
                 token_manager.encrypt_text(session_api_key) if session_api_key else None
             )
 
@@ -742,7 +742,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
                 org_id=org_id,
                 encrypted_webhook_secret=encrypted_webhook_secret,
                 svc_acc_email=integration_session['svc_acc_email'],
-                encrypted_svc_acc_api_key=encrypted_svc_acc_api_key,
+                encrypted_svc_acc_api_key=updated_encrypted_svc_acc_api_key,
                 status='active' if integration_session['is_active'] else 'inactive',
             )
 
