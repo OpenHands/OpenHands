@@ -1,0 +1,153 @@
+name: 'Test: Ota contract matrix'
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'ota.yaml'
+      - '.github/workflows/test-ota-contract-matrix.yml'
+  push:
+    paths:
+      - 'ota.yaml'
+      - '.github/workflows/test-ota-contract-matrix.yml'
+
+concurrency:
+  group: ota-contract-matrix-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  OTA_NO_UPDATE_CHECK: '1'
+  INSTALL_DOCKER: '0'
+  RUNTIME: local
+
+jobs:
+  native:
+    name: Ota Contract Matrix (Native - ${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu-bash
+            os: ubuntu-latest
+            full_proof: true
+          - name: macos-bash
+            os: macos-latest
+            full_proof: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install Poetry
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install poetry==1.8.5
+          poetry --version
+
+      - name: Install netcat on Ubuntu
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y netcat-openbsd
+
+      - name: Setup ota
+        uses: ota-run/setup@4ec459ee7956050be33e5c30f7e070f1f155c023 # v1
+        with:
+          ota-version: 1.6.15
+
+      - name: Verify ota install
+        shell: bash
+        run: ota --version
+
+      - name: Validate contract
+        shell: bash
+        run: |
+          ota validate --json . > ota-validate.json
+          ota validate .
+
+      - name: List app workflow tasks
+        shell: bash
+        run: ota tasks --workflow app .
+
+      - name: List backend workflow tasks
+        shell: bash
+        run: ota tasks --workflow backend .
+
+      - name: List frontend workflow tasks
+        shell: bash
+        run: ota tasks --workflow frontend .
+
+      - name: Export execution topology
+        shell: bash
+        run: |
+          ota execution topology --json . > ota-execution-topology.json
+          cat ota-execution-topology.json
+
+      - name: Doctor app workflow + annotations
+        id: doctor_app
+        timeout-minutes: 10
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          ota doctor --workflow app --json . > ota-doctor-app.json
+          doctor_status=$?
+          set -e
+          ota annotations --mode doctor --format github --input ota-doctor-app.json
+          exit $doctor_status
+
+      - name: Dry-run app workflow
+        shell: bash
+        run: ota up --workflow app --native --dry-run .
+
+      - name: Dry-run backend workflow
+        shell: bash
+        run: ota up --workflow backend --native --dry-run .
+
+      - name: Dry-run frontend workflow
+        shell: bash
+        run: ota up --workflow frontend --native --dry-run .
+
+      - name: Proof app workflow
+        if: matrix.full_proof
+        timeout-minutes: 90
+        continue-on-error: true
+        shell: bash
+        run: |
+          ota clean . || true
+          ota proof runtime --workflow app --json . > ota-proof-app.json
+          cat ota-proof-app.json
+          ota clean . || true
+
+      - name: Upload failure artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-contract-matrix-${{ matrix.name }}
+          include-hidden-files: true
+          path: |
+            ota-validate.json
+            ota-execution-topology.json
+            ota-doctor-app.json
+            ota-proof-app.json
+            .ota/
+          retention-days: 7

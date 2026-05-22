@@ -218,6 +218,9 @@ test_results*
 /_test_files_tmp/
 
 # production
+.ota/state/
+.ota/receipts/
+.ota/proof/
 frontend/build
 frontend/dist
 
