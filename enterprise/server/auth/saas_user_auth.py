@@ -100,6 +100,10 @@ class SaasUserAuth(UserAuth):
     def set_effective_org_id_override(self, org_id: UUID | None) -> None:
         """Set a trusted server-side org override and clear org-scoped caches."""
         self.effective_org_id_override = org_id
+        self._clear_org_scoped_caches()
+
+    def _clear_org_scoped_caches(self) -> None:
+        """Clear cached data that depends on the effective organization."""
         self._effective_org_id = None
         self._effective_org_id_resolved = False
         self.settings_store = None
@@ -112,6 +116,56 @@ class SaasUserAuth(UserAuth):
         self._role = None
         self._permissions = None
         self._org_info_loaded = False
+
+    async def _resolve_and_verify_override_org(self) -> UUID | None:
+        """Verify and return the trusted resolver org override, if present."""
+        if self.effective_org_id_override is None:
+            return None
+
+        # Import locally to avoid a circular import via authorization.py.
+        from fastapi import status
+        from storage.org_member_store import OrgMemberStore
+
+        override_org_id = self.effective_org_id_override
+        if self.api_key_org_id is not None and self.api_key_org_id != override_org_id:
+            logger.warning(
+                'effective_org_id_override_api_key_mismatch',
+                extra={
+                    'user_id': self.user_id,
+                    'api_key_org_id': str(self.api_key_org_id),
+                    'effective_org_id_override': str(override_org_id),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='API key is not authorized for this organization',
+            )
+        try:
+            user_uuid = UUID(self.user_id)
+        except ValueError as exc:
+            logger.error(
+                'effective_org_id_override_invalid_user_id',
+                extra={'user_id': self.user_id},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='User is not a member of the requested organization',
+            ) from exc
+
+        member = await OrgMemberStore.get_org_member(override_org_id, user_uuid)
+        if member is None:
+            logger.warning(
+                'effective_org_id_override_not_a_member',
+                extra={
+                    'user_id': self.user_id,
+                    'effective_org_id_override': str(override_org_id),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='User is not a member of the requested organization',
+            )
+        return override_org_id
 
     async def get_effective_org_id(self) -> UUID | None:
         """Resolve the effective organization ID for this request.
@@ -137,58 +191,12 @@ class SaasUserAuth(UserAuth):
         if self._effective_org_id_resolved:
             return self._effective_org_id
 
-        # Import locally to avoid a circular import via authorization.py.
         from fastapi import status
         from storage.org_member_store import OrgMemberStore
 
-        if self.effective_org_id_override is not None:
-            if (
-                self.api_key_org_id is not None
-                and self.api_key_org_id != self.effective_org_id_override
-            ):
-                logger.warning(
-                    'effective_org_id_override_api_key_mismatch',
-                    extra={
-                        'user_id': self.user_id,
-                        'api_key_org_id': str(self.api_key_org_id),
-                        'effective_org_id_override': str(
-                            self.effective_org_id_override
-                        ),
-                    },
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail='API key is not authorized for this organization',
-                )
-            try:
-                user_uuid = UUID(self.user_id)
-            except ValueError as exc:
-                logger.error(
-                    'effective_org_id_override_invalid_user_id',
-                    extra={'user_id': self.user_id},
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail='User is not a member of the requested organization',
-                ) from exc
-            member = await OrgMemberStore.get_org_member(
-                self.effective_org_id_override, user_uuid
-            )
-            if member is None:
-                logger.warning(
-                    'effective_org_id_override_not_a_member',
-                    extra={
-                        'user_id': self.user_id,
-                        'effective_org_id_override': str(
-                            self.effective_org_id_override
-                        ),
-                    },
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail='User is not a member of the requested organization',
-                )
-            self._effective_org_id = self.effective_org_id_override
+        override_org_id = await self._resolve_and_verify_override_org()
+        if override_org_id is not None:
+            self._effective_org_id = override_org_id
             self._effective_org_id_resolved = True
             return self._effective_org_id
 
