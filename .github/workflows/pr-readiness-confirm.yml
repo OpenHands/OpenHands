@@ -43,16 +43,29 @@ jobs:
         with:
           script: |
             const reminderMarker = '<!-- pr-human-context-required -->';
+            const humanTestedCheckboxText = 'A human has tested these changes.';
             const pr = context.payload.pull_request;
             const issueNumber = pr.number;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const body = pr.body || '';
 
+            const escapeRegex = (text) =>
+              text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const humanSectionPattern = new RegExp(
+              `(?:^|\\n)HUMAN:\\s*\\n([\\s\\S]*?)(?=\\n(?:- )?\\[[ xX]\\] ${escapeRegex(humanTestedCheckboxText)})`
+            );
+            const warnOnly = async (label, operation) => {
+              try {
+                return await operation();
+              } catch (error) {
+                core.warning(`${label}: ${error.message}`);
+                return null;
+              }
+            };
+
             const extractHumanSection = (text) => {
-              const match = text.match(
-                /(?:^|\n)HUMAN:\s*\n([\s\S]*?)(?=\n(?:- )?\[[ xX]\] A human has tested these changes\.)/
-              );
+              const match = text.match(humanSectionPattern);
               if (!match) {
                 return '';
               }
@@ -64,32 +77,41 @@ jobs:
               .split(/\r?\n/)
               .some((line) => line.trim().length > 0);
 
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner,
-              repo,
-              issue_number: issueNumber,
-            });
+            const comments = await warnOnly('Failed to list PR comments', () =>
+              github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number: issueNumber,
+              })
+            );
+            if (!comments) {
+              return;
+            }
             const existingReminder = comments.find((comment) =>
               comment.body.includes(reminderMarker)
             );
 
             if (hasHumanText) {
               if (existingReminder) {
-                await github.rest.issues.deleteComment({
-                  owner,
-                  repo,
-                  comment_id: existingReminder.id,
-                });
+                await warnOnly('Failed to delete HUMAN reminder comment', () =>
+                  github.rest.issues.deleteComment({
+                    owner,
+                    repo,
+                    comment_id: existingReminder.id,
+                  })
+                );
               }
 
-              const reactions = await github.paginate(
-                github.rest.reactions.listForIssue,
-                {
+              const reactions = await warnOnly('Failed to list PR reactions', () =>
+                github.paginate(github.rest.reactions.listForIssue, {
                   owner,
                   repo,
                   issue_number: issueNumber,
-                }
+                })
               );
+              if (!reactions) {
+                return;
+              }
               const botAlreadyReacted = reactions.some(
                 (reaction) =>
                   reaction.user?.login === 'github-actions[bot]' &&
@@ -97,31 +119,35 @@ jobs:
               );
 
               if (!botAlreadyReacted) {
-                await github.rest.reactions.createForIssue({
-                  owner,
-                  repo,
-                  issue_number: issueNumber,
-                  content: '+1',
-                });
+                await warnOnly('Failed to add HUMAN thumbs up reaction', () =>
+                  github.rest.reactions.createForIssue({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    content: '+1',
+                  })
+                );
               }
 
               return;
             }
 
             if (!existingReminder) {
-              await github.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number: issueNumber,
-                body: [
-                  reminderMarker,
-                  '👋 Thanks for opening this PR!',
-                  '',
-                  'Before review, please add a short note in the `HUMAN:` section at the top of the PR description telling maintainers, in your own words, what this PR does.',
-                  '',
-                  'Please put that note between `HUMAN:` and the `- [ ] A human has tested these changes.` checkbox.',
-                ].join('\n'),
-              });
+              await warnOnly('Failed to create HUMAN reminder comment', () =>
+                github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  body: [
+                    reminderMarker,
+                    '👋 Thanks for opening this PR!',
+                    '',
+                    'Before review, please add a short note in the `HUMAN:` section at the top of the PR description telling maintainers, in your own words, what this PR does.',
+                    '',
+                    `Please put that note between \`HUMAN:\` and the \`- [ ] ${humanTestedCheckboxText}\` checkbox.`,
+                  ].join('\n'),
+                })
+              );
             }
 
   # ── Post a confirmation request when a PR becomes ready for review ──
