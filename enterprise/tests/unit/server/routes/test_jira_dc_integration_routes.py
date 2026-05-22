@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import parse_qs, urlparse
@@ -37,6 +38,7 @@ def mock_jira_dc_manager():
     manager = MagicMock()
     manager.integration_store = AsyncMock()
     manager.validate_request = AsyncMock()
+    manager.validate_request_context = AsyncMock()
     return manager
 
 
@@ -58,6 +60,9 @@ def mock_user_auth():
     auth = AsyncMock(spec=SaasUserAuth)
     auth.get_user_id.return_value = 'test_user_id'
     auth.get_user_email.return_value = 'test@example.com'
+    auth.get_effective_org_id.return_value = uuid.UUID(
+        '00000000-0000-0000-0000-000000000123'
+    )
     return auth
 
 
@@ -66,7 +71,7 @@ def mock_user_auth():
 @patch('server.routes.integration.jira_dc.redis_client', new_callable=MagicMock)
 async def test_jira_dc_events_invalid_signature(mock_redis, mock_manager, mock_request):
     with patch('server.routes.integration.jira_dc.JIRA_DC_WEBHOOKS_ENABLED', True):
-        mock_manager.validate_request.return_value = (False, None, None)
+        mock_manager.validate_request_context.return_value = (False, None, None, None)
         with pytest.raises(HTTPException) as exc_info:
             await jira_dc_events(mock_request, MagicMock())
         assert exc_info.value.status_code == 403
@@ -78,7 +83,12 @@ async def test_jira_dc_events_invalid_signature(mock_redis, mock_manager, mock_r
 @patch('server.routes.integration.jira_dc.redis_client')
 async def test_jira_dc_events_duplicate_request(mock_redis, mock_manager, mock_request):
     with patch('server.routes.integration.jira_dc.JIRA_DC_WEBHOOKS_ENABLED', True):
-        mock_manager.validate_request.return_value = (True, 'sig123', 'payload')
+        mock_manager.validate_request_context.return_value = (
+            True,
+            'sig123',
+            'payload',
+            MagicMock(),
+        )
         mock_redis.exists.return_value = True
         response = await jira_dc_events(mock_request, MagicMock())
         assert response.status_code == 200
@@ -322,6 +332,7 @@ async def test_get_current_workspace_link_found(
         svc_acc_email='svc@test.com',
     )
     mock_workspace.name = 'test-space'
+    mock_workspace.svc_acc_email = 'svc@test.com'
     mock_workspace.created_at = mock_workspace_created_at
     mock_workspace.updated_at = mock_workspace_updated_at
 
@@ -452,10 +463,14 @@ async def test_jira_dc_events_processing_success(
     mock_redis, mock_manager, mock_request
 ):
     with patch('server.routes.integration.jira_dc.JIRA_DC_WEBHOOKS_ENABLED', True):
-        mock_manager.validate_request.return_value = (
+        mock_workspace = MagicMock()
+        mock_workspace.org_id = uuid.UUID('00000000-0000-0000-0000-000000000123')
+        mock_workspace.name = 'jira.company.com'
+        mock_manager.validate_request_context.return_value = (
             True,
             'sig123',
             {'test': 'payload'},
+            mock_workspace,
         )
         mock_redis.exists.return_value = False
 
@@ -470,11 +485,54 @@ async def test_jira_dc_events_processing_success(
 
 
 @pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.automation_event_service')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+@patch('server.routes.integration.jira_dc.redis_client', new_callable=MagicMock)
+async def test_jira_dc_events_forwards_to_automations(
+    mock_redis, mock_manager, mock_automation_service, mock_request
+):
+    org_id = uuid.UUID('00000000-0000-0000-0000-000000000123')
+    payload = {'webhookEvent': 'comment_created'}
+    mock_workspace = MagicMock()
+    mock_workspace.org_id = org_id
+    mock_workspace.name = 'jira.company.com'
+    mock_manager.validate_request_context.return_value = (
+        True,
+        'sig123',
+        payload,
+        mock_workspace,
+    )
+    mock_redis.exists.return_value = False
+
+    with (
+        patch('server.routes.integration.jira_dc.JIRA_DC_WEBHOOKS_ENABLED', True),
+        patch(
+            'server.routes.integration.jira_dc.AUTOMATION_EVENT_FORWARDING_ENABLED',
+            True,
+        ),
+    ):
+        background_tasks = MagicMock()
+        response = await jira_dc_events(mock_request, background_tasks)
+
+    assert response.status_code == 200
+    background_tasks.add_task.assert_any_call(
+        mock_automation_service.forward_jira_dc_event,
+        org_id=org_id,
+        payload=payload,
+        workspace_name='jira.company.com',
+        delivery_id='sig123',
+    )
+    assert background_tasks.add_task.call_count == 2
+
+
+@pytest.mark.asyncio
 @patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
 @patch('server.routes.integration.jira_dc.redis_client', new_callable=MagicMock)
 async def test_jira_dc_events_general_exception(mock_redis, mock_manager, mock_request):
     with patch('server.routes.integration.jira_dc.JIRA_DC_WEBHOOKS_ENABLED', True):
-        mock_manager.validate_request.side_effect = Exception('Unexpected error')
+        mock_manager.validate_request_context.side_effect = Exception(
+            'Unexpected error'
+        )
 
         response = await jira_dc_events(mock_request, MagicMock())
 
@@ -1030,6 +1088,7 @@ async def test_get_current_workspace_link_not_editable(
     )
     # Fix the name attribute to be a string instead of MagicMock
     mock_workspace.name = 'test-space'
+    mock_workspace.svc_acc_email = 'svc@test.com'
 
     mock_manager.integration_store.get_user_by_active_workspace.return_value = mock_user
     mock_manager.integration_store.get_workspace_by_id.return_value = mock_workspace

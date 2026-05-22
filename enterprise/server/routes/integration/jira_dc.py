@@ -5,6 +5,7 @@ import secrets
 import uuid
 from typing import cast
 from urllib.parse import urlencode, urlparse
+from uuid import UUID
 
 import requests
 from fastapi import (
@@ -19,6 +20,7 @@ from integrations.jira_dc.jira_dc_manager import JiraDcManager
 from integrations.models import Message, SourceType
 from pydantic import BaseModel, Field, field_validator
 from server.auth.constants import (
+    AUTOMATION_EVENT_FORWARDING_ENABLED,
     JIRA_DC_BASE_URL,
     JIRA_DC_CLIENT_ID,
     JIRA_DC_CLIENT_SECRET,
@@ -27,6 +29,7 @@ from server.auth.constants import (
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
 from server.constants import WEB_HOST
+from server.services.automation_event_service import AutomationEventService
 from storage.redis import get_redis_client
 
 from openhands.app_server.user_auth.user_auth import get_user_auth
@@ -155,6 +158,7 @@ class JiraDcValidateWorkspaceResponse(BaseModel):
 jira_dc_integration_router = APIRouter(prefix='/integration/jira-dc')
 token_manager = TokenManager()
 jira_dc_manager = JiraDcManager(token_manager)
+automation_event_service = AutomationEventService(token_manager)
 redis_client = get_redis_client()
 
 
@@ -262,9 +266,12 @@ async def jira_dc_events(
         )
 
     try:
-        signature_valid, signature, payload = await jira_dc_manager.validate_request(
-            request
-        )
+        (
+            signature_valid,
+            signature,
+            payload,
+            workspace,
+        ) = await jira_dc_manager.validate_request_context(request)
 
         if not signature_valid:
             logger.warning('[Jira DC] Invalid webhook signature')
@@ -278,6 +285,21 @@ async def jira_dc_events(
             return JSONResponse({'success': True})
         else:
             redis_client.setex(key, 120, 1)
+
+        if AUTOMATION_EVENT_FORWARDING_ENABLED and payload and workspace:
+            if workspace.org_id:
+                background_tasks.add_task(
+                    automation_event_service.forward_jira_dc_event,
+                    org_id=workspace.org_id,
+                    payload=payload,
+                    workspace_name=workspace.name,
+                    delivery_id=signature,
+                )
+            else:
+                logger.warning(
+                    '[Jira DC] Workspace %s has no org_id; skipping automation forwarding',
+                    workspace.id,
+                )
 
         # Process the webhook
         message_payload = {'payload': payload}
@@ -373,6 +395,7 @@ async def create_jira_dc_workspace(
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
         user_email = await user_auth.get_user_email()
+        effective_org_id = await user_auth.get_effective_org_id()
 
         if not user_id:
             raise HTTPException(
@@ -412,6 +435,7 @@ async def create_jira_dc_workspace(
             integration_session = {
                 'operation_type': 'workspace_integration',
                 'keycloak_user_id': user_id,
+                'org_id': str(effective_org_id) if effective_org_id else None,
                 'user_email': user_email,
                 'target_workspace': workspace_data.workspace_name,
                 'webhook_secret': resolved_webhook_secret,
@@ -471,6 +495,7 @@ async def create_jira_dc_workspace(
                 workspace = await jira_dc_manager.integration_store.create_workspace(
                     name=workspace_data.workspace_name,
                     admin_user_id=user_id,
+                    org_id=effective_org_id,
                     encrypted_webhook_secret=encrypted_webhook_secret,
                     svc_acc_email=workspace_data.svc_acc_email,
                     encrypted_svc_acc_api_key=encrypted_new_svc_acc_api_key,
@@ -504,6 +529,7 @@ async def create_jira_dc_workspace(
                 # Update workspace details
                 await jira_dc_manager.integration_store.update_workspace(
                     id=workspace.id,
+                    org_id=effective_org_id,
                     encrypted_webhook_secret=encrypted_webhook_secret,
                     svc_acc_email=workspace_data.svc_acc_email,
                     encrypted_svc_acc_api_key=encrypted_svc_acc_api_key,
@@ -671,6 +697,8 @@ async def jira_dc_callback(request: Request, code: str, state: str):
         workspace = await jira_dc_manager.integration_store.get_workspace_by_name(
             target_workspace
         )
+        session_org_id = integration_session.get('org_id')
+        org_id = UUID(session_org_id) if session_org_id else None
         if not workspace:
             # Create new workspace if it doesn't exist
             encrypted_webhook_secret = token_manager.encrypt_text(
@@ -683,6 +711,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
             await jira_dc_manager.integration_store.create_workspace(
                 name=target_workspace,
                 admin_user_id=integration_session['keycloak_user_id'],
+                org_id=org_id,
                 encrypted_webhook_secret=encrypted_webhook_secret,
                 svc_acc_email=integration_session['svc_acc_email'],
                 encrypted_svc_acc_api_key=encrypted_new_svc_acc_api_key,
@@ -710,6 +739,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
             # Update workspace details
             await jira_dc_manager.integration_store.update_workspace(
                 id=workspace.id,
+                org_id=org_id,
                 encrypted_webhook_secret=encrypted_webhook_secret,
                 svc_acc_email=integration_session['svc_acc_email'],
                 encrypted_svc_acc_api_key=encrypted_svc_acc_api_key,

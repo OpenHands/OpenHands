@@ -124,18 +124,26 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         self, request: Request
     ) -> Tuple[bool, Optional[str], Optional[Dict]]:
         """Verify Jira DC webhook signature."""
+        signature_valid, signature, payload, _ = await self.validate_request_context(
+            request
+        )
+        return signature_valid, signature, payload
+
+    async def validate_request_context(
+        self, request: Request
+    ) -> Tuple[bool, Optional[str], Optional[Dict], Optional[JiraDcWorkspace]]:
+        """Verify Jira DC webhook signature and return the matched workspace."""
         signature_header = request.headers.get('x-hub-signature')
         signature = signature_header.split('=')[1] if signature_header else None
         body = await request.body()
         payload = await request.json()
         workspace_name = ''
+        selfUrl = ''
 
         if payload.get('webhookEvent') == 'comment_created':
             selfUrl = payload.get('comment', {}).get('author', {}).get('self')
         elif payload.get('webhookEvent') == 'jira:issue_updated':
             selfUrl = payload.get('user', {}).get('self')
-        else:
-            workspace_name = ''
 
         parsedUrl = urlparse(selfUrl)
         if parsedUrl.hostname:
@@ -143,30 +151,30 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
 
         if not workspace_name:
             logger.warning('[Jira DC] No workspace name found in webhook payload')
-            return False, None, None
+            return False, None, None, None
 
         if not signature:
             logger.warning('[Jira DC] No signature found in webhook headers')
-            return False, None, None
+            return False, None, None, None
 
         workspace = await self.integration_store.get_workspace_by_name(workspace_name)
 
         if not workspace:
             logger.warning('[Jira DC] Could not identify workspace for webhook')
-            return False, None, None
+            return False, None, None, None
 
         if workspace.status != 'active':
             logger.warning(f'[Jira DC] Workspace {workspace.id} is not active')
-            return False, None, None
+            return False, None, None, None
 
         webhook_secret = self.token_manager.decrypt_text(workspace.webhook_secret)
         digest = hmac.new(webhook_secret.encode(), body, hashlib.sha256).hexdigest()
 
         if hmac.compare_digest(signature, digest):
             logger.info('[Jira DC] Webhook signature verified successfully')
-            return True, signature, payload
+            return True, signature, payload, workspace
 
-        return False, None, None
+        return False, None, None, None
 
     def parse_webhook(self, payload: Dict) -> JobContext | None:
         event_type = payload.get('webhookEvent')
