@@ -81,7 +81,7 @@ jobs:
       - name: Checkout ota source
         uses: actions/checkout@v6
         with:
-          repository: ota-run/ota
+          repository: bobaikato/ota
           ref: 22cd336c5ac7bc424fd82e33285dca892cc28d4a
           path: .ota-source
           persist-credentials: false
