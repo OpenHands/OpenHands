@@ -92,6 +92,37 @@ def github_user_payload():
     }
 
 
+@pytest.fixture
+def bitbucket_dc_pr_payload():
+    """Create a sample Bitbucket DC PR webhook payload."""
+    return {
+        'eventKey': 'pr:opened',
+        'pullRequest': {
+            'id': 1,
+            'toRef': {
+                'repository': {
+                    'slug': 'myrepo',
+                    'project': {'key': 'PROJ'},
+                }
+            },
+        },
+        'actor': {'name': 'testuser'},
+    }
+
+
+@pytest.fixture
+def bitbucket_dc_repo_payload():
+    """Create a sample Bitbucket DC repo-level webhook payload."""
+    return {
+        'eventKey': 'repo:refs_changed',
+        'repository': {
+            'slug': 'myrepo',
+            'project': {'key': 'PROJ'},
+        },
+        'changes': [{'refId': 'refs/heads/main'}],
+    }
+
+
 def create_service(mock_token_manager):
     """Helper to create a service with mocked constants."""
     with patch.dict('os.environ', {}, clear=False):
@@ -504,6 +535,54 @@ class TestForwardEvent:
             mock_logger.warning.assert_called()
             assert 'not claimed' in str(mock_logger.warning.call_args)
 
+    @pytest.mark.asyncio
+    async def test_forward_bitbucket_dc_project_event_success(
+        self, mock_token_manager, bitbucket_dc_pr_payload, mock_org_git_claim
+    ):
+        """
+        GIVEN: A Bitbucket DC event from a claimed project
+        WHEN: forward_event is called
+        THEN: The project key is used as the git org for routing
+        """
+        from server.services.automation_event_service import AutomationEventService
+
+        mock_redis = AsyncMock()
+        mock_redis.get = AsyncMock(return_value=None)
+        mock_redis.setex = AsyncMock()
+
+        with (
+            patch(
+                'server.services.automation_event_service.resolve_org_for_repo',
+                new_callable=AsyncMock,
+                return_value=mock_org_git_claim.org_id,
+            ) as mock_resolver,
+            patch(REDIS_PATCH, return_value=mock_redis),
+            patch.object(
+                AutomationEventService,
+                '_send_to_automation_service',
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            service = AutomationEventService(mock_token_manager)
+            await service.forward_event(
+                provider=ProviderType.BITBUCKET_DATA_CENTER,
+                payload=bitbucket_dc_pr_payload,
+                installation_id='PROJ/myrepo',
+            )
+
+            mock_resolver.assert_awaited_once_with(
+                provider='bitbucket_data_center',
+                full_repo_name='proj/',
+            )
+            mock_send.assert_called_once()
+            call_args = mock_send.call_args
+            assert call_args[0][0] == ProviderType.BITBUCKET_DATA_CENTER
+            assert call_args[0][1] == mock_org_git_claim.org_id
+
+            payload = call_args[0][2]
+            assert payload['organization']['git_org'] == 'PROJ'
+            assert payload['payload'] == bitbucket_dc_pr_payload
+
 
 class TestExtractOwnerInfo:
     """Tests for _extract_owner_info method."""
@@ -539,6 +618,40 @@ class TestExtractOwnerInfo:
         assert git_org == 'testuser'
         assert owner_type == 'User'
         assert owner_id == 12345
+
+    def test_extract_bitbucket_dc_pr_owner_info(
+        self, mock_token_manager, bitbucket_dc_pr_payload
+    ):
+        """
+        GIVEN: A Bitbucket DC PR payload
+        WHEN: _extract_owner_info is called
+        THEN: The target repository project key is used as the org
+        """
+        service = create_service(mock_token_manager)
+        git_org, owner_type, owner_id = service._extract_owner_info(
+            ProviderType.BITBUCKET_DATA_CENTER, bitbucket_dc_pr_payload
+        )
+
+        assert git_org == 'PROJ'
+        assert owner_type == 'Project'
+        assert owner_id is None
+
+    def test_extract_bitbucket_dc_repo_owner_info(
+        self, mock_token_manager, bitbucket_dc_repo_payload
+    ):
+        """
+        GIVEN: A Bitbucket DC repository payload
+        WHEN: _extract_owner_info is called
+        THEN: The repository project key is used as the org
+        """
+        service = create_service(mock_token_manager)
+        git_org, owner_type, owner_id = service._extract_owner_info(
+            ProviderType.BITBUCKET_DATA_CENTER, bitbucket_dc_repo_payload
+        )
+
+        assert git_org == 'PROJ'
+        assert owner_type == 'Project'
+        assert owner_id is None
 
 
 class TestBuildEventPayload:

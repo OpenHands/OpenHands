@@ -247,9 +247,25 @@ class AutomationEventService:
             repo = payload.get('repository', {})
             owner = repo.get('owner', {})
             return owner.get('login'), owner.get('type'), owner.get('id')
+        if provider == ProviderType.BITBUCKET_DATA_CENTER:
+            repo = self._extract_bitbucket_data_center_repository(payload)
+            project = repo.get('project') or {}
+            return project.get('key'), 'Project', None
 
         logger.warning(f'Unsupported provider ({provider.value})')
         return None, None, None
+
+    def _extract_bitbucket_data_center_repository(
+        self,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Extract the target repository from a Bitbucket Data Center payload."""
+        pull_request = payload.get('pullRequest') or {}
+        return (
+            (pull_request.get('toRef') or {}).get('repository')
+            or payload.get('repository')
+            or {}
+        )
 
     def _build_event_payload(
         self,
