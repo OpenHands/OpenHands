@@ -1208,7 +1208,7 @@ async def test_unlink_workspace_non_admin(
     content = json.loads(response.body)
     assert content['success'] is True
     mock_manager.integration_store.update_user_integration_status.assert_called_once_with(
-        user_id, 'inactive'
+        user_id, 10, 'inactive'
     )
 
 
@@ -1380,7 +1380,7 @@ async def test_handle_workspace_link_creation_reactivate_existing_link(mock_mana
     await _handle_workspace_link_creation('user1', 'jira_user_123', 'test-workspace')
 
     mock_manager.integration_store.update_user_integration_status.assert_called_once_with(
-        'user1', 'active'
+        'user1', 1, 'active'
     )
     mock_manager.integration_store.create_workspace_link.assert_not_called()
 
