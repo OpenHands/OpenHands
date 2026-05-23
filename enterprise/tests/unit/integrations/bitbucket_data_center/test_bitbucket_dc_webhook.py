@@ -45,6 +45,27 @@ def _pr_comment_body() -> bytes:
     ).encode()
 
 
+def test_bitbucket_dc_webhook_events_cover_automation_sources():
+    assert {
+        'repo:refs_changed',
+        'repo:comment:added',
+        'repo:comment:edited',
+        'repo:comment:deleted',
+        'pr:opened',
+        'pr:from_ref_updated',
+        'pr:modified',
+        'pr:reviewer:approved',
+        'pr:reviewer:unapproved',
+        'pr:reviewer:needs_work',
+        'pr:merged',
+        'pr:declined',
+        'pr:deleted',
+        'pr:comment:added',
+        'pr:comment:edited',
+        'pr:comment:deleted',
+    }.issubset(set(BITBUCKET_DC_WEBHOOK_EVENTS))
+
+
 @pytest.mark.asyncio
 @patch('server.routes.integration.bitbucket_dc.IS_LOCAL_DEPLOYMENT', False)
 @patch('server.routes.integration.bitbucket_dc.webhook_store')
