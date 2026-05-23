@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          python -m pip install poetry==1.8.5
+          python -m pip install poetry==2.3.4
           poetry --version
 
       - name: Install netcat on Ubuntu
