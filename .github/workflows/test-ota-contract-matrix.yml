@@ -82,7 +82,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: ota-run/ota
-          ref: bd3937b575787d5b03c083adb870b248cba62dc4
+          ref: 22cd336c5ac7bc424fd82e33285dca892cc28d4a
           path: .ota-source
           persist-credentials: false
 
