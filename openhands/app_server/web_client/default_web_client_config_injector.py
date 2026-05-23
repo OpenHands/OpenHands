@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime
 from urllib.parse import urlparse
 
@@ -130,6 +131,54 @@ def _get_jira_dc_oauth_host() -> str | None:
     return urlparse(base_url).hostname or None
 
 
+_JIRA_DC_SERVICE_ACCOUNT_EMAIL_RE = re.compile(
+    r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+)
+
+
+def _get_jira_dc_service_account_env() -> tuple[str, str]:
+    """Return optional env-managed Jira DC service-account credentials."""
+    return (
+        os.getenv('JIRA_DC_SERVICE_ACCOUNT_EMAIL', '').strip(),
+        os.getenv('JIRA_DC_SERVICE_ACCOUNT_PAT', '').strip(),
+    )
+
+
+def _get_jira_dc_service_account_config_error() -> str | None:
+    """Return a web-client-safe service-account config error, if any."""
+    email, api_key = _get_jira_dc_service_account_env()
+
+    if bool(email) != bool(api_key):
+        return (
+            'Set both JIRA_DC_SERVICE_ACCOUNT_EMAIL and '
+            'JIRA_DC_SERVICE_ACCOUNT_PAT, or clear both.'
+        )
+
+    if email and not _JIRA_DC_SERVICE_ACCOUNT_EMAIL_RE.match(email):
+        return 'JIRA_DC_SERVICE_ACCOUNT_EMAIL must be a valid email address.'
+
+    if api_key and any(char.isspace() for char in api_key):
+        return 'JIRA_DC_SERVICE_ACCOUNT_PAT cannot contain whitespace.'
+
+    return None
+
+
+def _is_jira_dc_service_account_managed() -> bool:
+    """Return whether Jira DC service-account credentials are env-managed."""
+    email, api_key = _get_jira_dc_service_account_env()
+    return (
+        bool(email and api_key) and _get_jira_dc_service_account_config_error() is None
+    )
+
+
+def _get_jira_dc_service_account_email() -> str | None:
+    """Return the env-managed service-account email when fully configured."""
+    if not _is_jira_dc_service_account_managed():
+        return None
+    email, _ = _get_jira_dc_service_account_env()
+    return email
+
+
 def _get_feature_flags() -> WebClientFeatureFlags:
     """Get feature flags from environment variables.
 
@@ -183,6 +232,15 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
     )
     slack_enabled: bool = Field(default_factory=_get_slack_enabled)
     jira_dc_oauth_host: str | None = Field(default_factory=_get_jira_dc_oauth_host)
+    jira_dc_service_account_managed: bool = Field(
+        default_factory=_is_jira_dc_service_account_managed
+    )
+    jira_dc_service_account_email: str | None = Field(
+        default_factory=_get_jira_dc_service_account_email
+    )
+    jira_dc_service_account_config_error: str | None = Field(
+        default_factory=_get_jira_dc_service_account_config_error
+    )
     acp_providers: list[ACPProviderConfig] = Field(
         default_factory=lambda: [
             ACPProviderConfig(
@@ -217,6 +275,11 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
             provider_default_hosts=self.provider_default_hosts,
             slack_enabled=self.slack_enabled,
             jira_dc_oauth_host=self.jira_dc_oauth_host,
+            jira_dc_service_account_managed=self.jira_dc_service_account_managed,
+            jira_dc_service_account_email=self.jira_dc_service_account_email,
+            jira_dc_service_account_config_error=(
+                self.jira_dc_service_account_config_error
+            ),
             acp_providers=self.acp_providers,
         )
         return result

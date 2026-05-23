@@ -17,6 +17,10 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse, RedirectResponse
 from integrations.jira_dc.jira_dc_manager import JiraDcManager
+from integrations.jira_dc.jira_dc_service_account import (
+    get_jira_dc_managed_service_account,
+    get_jira_dc_service_account_config_error,
+)
 from integrations.models import Message, SourceType
 from pydantic import BaseModel, Field, field_validator
 from server.auth.constants import (
@@ -59,7 +63,7 @@ class JiraDcWorkspaceCreate(BaseModel):
             'auto-enroll mode it is left blank and generated here.'
         ),
     )
-    svc_acc_email: str = Field(..., description='Service account email')
+    svc_acc_email: str | None = Field(default=None, description='Service account email')
     svc_acc_api_key: str | None = Field(
         default=None,
         description=(
@@ -92,6 +96,8 @@ class JiraDcWorkspaceCreate(BaseModel):
     @field_validator('svc_acc_email')
     @classmethod
     def validate_svc_acc_email(cls, v):
+        if v is None or v == '':
+            return v
         email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         if not re.match(email_pattern, v):
             raise ValueError('svc_acc_email must be a valid email address')
@@ -386,12 +392,37 @@ def _resolve_webhook_secret(
     return secrets.token_urlsafe(32)
 
 
+def _resolve_submitted_service_account(
+    workspace_data: JiraDcWorkspaceCreate,
+) -> tuple[str, str]:
+    """Resolve service-account values to persist for this workspace request."""
+    managed_service_account = get_jira_dc_managed_service_account()
+    if managed_service_account:
+        return managed_service_account.email, managed_service_account.api_key
+
+    svc_acc_email = (workspace_data.svc_acc_email or '').strip()
+    if not svc_acc_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='A service account email is required when configuring Jira DC in OpenHands.',
+        )
+
+    return svc_acc_email, (workspace_data.svc_acc_api_key or '').strip()
+
+
 @jira_dc_integration_router.post('/workspaces')
 async def create_jira_dc_workspace(
     request: Request, workspace_data: JiraDcWorkspaceCreate
 ):
     """Create a new Jira DC workspace registration."""
     try:
+        service_account_config_error = get_jira_dc_service_account_config_error()
+        if service_account_config_error:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=service_account_config_error,
+            )
+
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
         user_email = await user_auth.get_user_email()
@@ -409,7 +440,9 @@ async def create_jira_dc_workspace(
                 workspace_data.workspace_name
             )
         )
-        provided_api_key = (workspace_data.svc_acc_api_key or '').strip()
+        svc_acc_email, provided_api_key = _resolve_submitted_service_account(
+            workspace_data
+        )
         # The service-account PAT is required to create a NEW workspace, but is
         # optional when editing one (blank = keep the stored token), so admins
         # never have to re-paste it just to change other fields.
@@ -439,7 +472,7 @@ async def create_jira_dc_workspace(
                 'user_email': user_email,
                 'target_workspace': workspace_data.workspace_name,
                 'webhook_secret': resolved_webhook_secret,
-                'svc_acc_email': workspace_data.svc_acc_email,
+                'svc_acc_email': svc_acc_email,
                 # Empty when editing without changing the PAT; the callback then
                 # keeps the workspace's stored token instead of overwriting it.
                 'svc_acc_api_key': provided_api_key,
@@ -497,7 +530,7 @@ async def create_jira_dc_workspace(
                     admin_user_id=user_id,
                     org_id=effective_org_id,
                     encrypted_webhook_secret=encrypted_webhook_secret,
-                    svc_acc_email=workspace_data.svc_acc_email,
+                    svc_acc_email=svc_acc_email,
                     encrypted_svc_acc_api_key=encrypted_new_svc_acc_api_key,
                     status='active' if workspace_data.is_active else 'inactive',
                 )
@@ -531,7 +564,7 @@ async def create_jira_dc_workspace(
                     id=workspace.id,
                     org_id=effective_org_id,
                     encrypted_webhook_secret=encrypted_webhook_secret,
-                    svc_acc_email=workspace_data.svc_acc_email,
+                    svc_acc_email=svc_acc_email,
                     encrypted_svc_acc_api_key=updated_encrypted_svc_acc_api_key,
                     status='active' if workspace_data.is_active else 'inactive',
                 )

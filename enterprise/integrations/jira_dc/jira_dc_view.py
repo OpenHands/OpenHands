@@ -5,7 +5,7 @@ Views are responsible for:
 - Creating conversations using V1 app conversation system
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 from integrations.jira_dc.jira_dc_types import (
@@ -50,9 +50,6 @@ class JiraDcNewConversationView(JiraDcViewInterface):
     jira_dc_workspace: JiraDcWorkspace
     selected_repo: str | None
     conversation_id: str
-
-    # Decrypted API key (set by manager)
-    _decrypted_api_key: str = field(default='', repr=False)
 
     # Resolved org ID for V1 conversations
     resolved_org_id: UUID | None = None
@@ -164,7 +161,6 @@ class JiraDcNewConversationView(JiraDcViewInterface):
             issue_key=self.job_context.issue_key,
             workspace_name=self.jira_dc_workspace.name,
             base_api_url=self.job_context.base_api_url,
-            svc_acc_api_key=self._decrypted_api_key,
         )
 
     async def _get_git_provider(self) -> ProviderType | None:

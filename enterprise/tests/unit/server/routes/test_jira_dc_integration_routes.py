@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from fastapi import HTTPException, Request, status
 from fastapi.responses import RedirectResponse
+from integrations.jira_dc.jira_dc_service_account import JiraDcServiceAccount
 from pydantic import ValidationError
 from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.integration.jira_dc import (
@@ -622,6 +623,58 @@ async def test_create_jira_dc_workspace_oauth_disabled_new_workspace(
         assert content['authorizationUrl'] == ''
         mock_manager.integration_store.create_workspace.assert_called_once()
         mock_handle_link.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.get_user_auth')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+@patch('server.routes.integration.jira_dc.JIRA_DC_ENABLE_OAUTH', False)
+@patch(
+    'server.routes.integration.jira_dc._handle_workspace_link_creation',
+    new_callable=AsyncMock,
+)
+@patch('server.routes.integration.jira_dc.get_jira_dc_service_account_config_error')
+@patch('server.routes.integration.jira_dc.get_jira_dc_managed_service_account')
+async def test_create_jira_dc_workspace_uses_managed_service_account(
+    mock_get_managed_service_account,
+    mock_get_service_account_error,
+    mock_handle_link,
+    mock_manager,
+    mock_get_auth,
+    mock_request,
+    mock_user_auth,
+):
+    mock_get_auth.return_value = mock_user_auth
+    mock_get_service_account_error.return_value = None
+    mock_get_managed_service_account.return_value = JiraDcServiceAccount(
+        email='managed@test.com',
+        api_key='managed-pat',
+        managed_by_env=True,
+    )
+    mock_manager.integration_store.get_workspace_by_name.return_value = None
+    mock_workspace = MagicMock()
+    mock_workspace.name = 'test-workspace'
+    mock_manager.integration_store.create_workspace.return_value = mock_workspace
+
+    workspace_data = JiraDcWorkspaceCreate(
+        workspace_name='test-workspace',
+        webhook_secret='secret',
+        is_active=True,
+    )
+
+    with patch('server.routes.integration.jira_dc.token_manager') as mock_token_manager:
+        mock_token_manager.encrypt_text.side_effect = lambda x: f'enc_{x}'
+
+        response = await create_jira_dc_workspace(mock_request, workspace_data)
+        content = json.loads(response.body)
+
+    assert response.status_code == 200
+    assert content['success'] is True
+    mock_manager.integration_store.create_workspace.assert_called_once()
+    create_kwargs = mock_manager.integration_store.create_workspace.call_args.kwargs
+    assert create_kwargs['svc_acc_email'] == 'managed@test.com'
+    assert create_kwargs['encrypted_svc_acc_api_key'] == 'enc_managed-pat'
+    mock_handle_link.assert_called_once()
 
 
 @pytest.mark.asyncio

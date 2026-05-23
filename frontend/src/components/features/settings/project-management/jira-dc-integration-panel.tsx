@@ -33,6 +33,12 @@ export function JiraDcIntegrationPanel() {
   const { data: config } = useConfig();
   // OAuth installs already know the host; pre-fill + lock it.
   const jiraDcOAuthHost = config?.jira_dc_oauth_host ?? null;
+  const serviceAccountManaged =
+    config?.jira_dc_service_account_managed ?? false;
+  const managedServiceAccountEmail =
+    config?.jira_dc_service_account_email ?? "";
+  const serviceAccountConfigError =
+    config?.jira_dc_service_account_config_error ?? null;
 
   const { data: integrationData } = useIntegrationStatus("jira-dc");
   const existingWorkspace = integrationData?.workspace;
@@ -69,12 +75,19 @@ export function JiraDcIntegrationPanel() {
   const seedForm = React.useCallback(() => {
     if (existingWorkspace) {
       setWorkspace(existingWorkspace.name);
-      setServiceAccountEmail(existingWorkspace.svc_acc_email ?? "");
+      setServiceAccountEmail(
+        serviceAccountManaged
+          ? managedServiceAccountEmail
+          : (existingWorkspace.svc_acc_email ?? ""),
+      );
       setHasSavedApiKey(true);
       setIsActive(existingWorkspace.status === "active");
     } else {
       setWorkspace(jiraDcOAuthHost ?? "");
-      setHasSavedApiKey(false);
+      setServiceAccountEmail(
+        serviceAccountManaged ? managedServiceAccountEmail : "",
+      );
+      setHasSavedApiKey(serviceAccountManaged);
       setIsActive(true);
     }
     setServiceAccountApiKey("");
@@ -82,7 +95,12 @@ export function JiraDcIntegrationPanel() {
     setManualMode(false);
     setEmailError(null);
     setApiKeyError(null);
-  }, [existingWorkspace, jiraDcOAuthHost]);
+  }, [
+    existingWorkspace,
+    jiraDcOAuthHost,
+    managedServiceAccountEmail,
+    serviceAccountManaged,
+  ]);
 
   React.useEffect(() => {
     seedForm();
@@ -133,8 +151,10 @@ export function JiraDcIntegrationPanel() {
     configureMutation.mutate({
       workspace,
       webhookSecret: manualMode ? manualSecret : "",
-      serviceAccountEmail,
-      serviceAccountApiKey,
+      serviceAccountEmail: serviceAccountManaged
+        ? managedServiceAccountEmail
+        : serviceAccountEmail,
+      serviceAccountApiKey: serviceAccountManaged ? "" : serviceAccountApiKey,
       adminApiKey: manualMode ? "" : adminApiKey.trim(),
       isActive,
     });
@@ -152,7 +172,9 @@ export function JiraDcIntegrationPanel() {
     configureMutation.mutate({
       workspace,
       webhookSecret: "",
-      serviceAccountEmail,
+      serviceAccountEmail: serviceAccountManaged
+        ? managedServiceAccountEmail
+        : serviceAccountEmail,
       serviceAccountApiKey: "",
       adminApiKey: "",
       isActive,
@@ -161,15 +183,18 @@ export function JiraDcIntegrationPanel() {
 
   // PAT required to create a new workspace; optional on edit (blank keeps the
   // stored token). Auto mode on a new workspace needs the one-time admin PAT.
-  const apiKeyRequired = !existingWorkspace;
+  const apiKeyRequired = !existingWorkspace && !serviceAccountManaged;
+  const serviceAccountEmailSatisfied =
+    serviceAccountManaged || serviceAccountEmail.trim() !== "";
   const webhookSatisfied =
     !!existingWorkspace || manualMode || adminApiKey.trim() !== "";
   const isSubmitDisabled =
     !workspace.trim() ||
-    !serviceAccountEmail.trim() ||
+    !serviceAccountEmailSatisfied ||
     (apiKeyRequired && !serviceAccountApiKey.trim()) ||
     emailError !== null ||
     apiKeyError !== null ||
+    serviceAccountConfigError !== null ||
     !webhookSatisfied ||
     isBusy;
 
@@ -242,8 +267,19 @@ export function JiraDcIntegrationPanel() {
                 </td>
                 <td className="px-4 py-3">
                   <Typography.Text className="text-sm text-gray-300 break-all">
-                    {existingWorkspace.svc_acc_email || "—"}
+                    {serviceAccountManaged
+                      ? managedServiceAccountEmail ||
+                        existingWorkspace.svc_acc_email ||
+                        "—"
+                      : existingWorkspace.svc_acc_email || "—"}
                   </Typography.Text>
+                  {serviceAccountManaged && (
+                    <Typography.Text className="block text-xs text-tertiary-alt mt-1">
+                      {t(
+                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_MANAGED_BADGE,
+                      )}
+                    </Typography.Text>
+                  )}
                 </td>
                 <td className="px-4 py-3">{statusBadge()}</td>
                 <td className="px-4 py-3">
@@ -431,41 +467,68 @@ export function JiraDcIntegrationPanel() {
                     )}
                   </p>
                 </div>
-                <div>
-                  <SettingsInput
-                    testId="jira-dc-svc-email-input"
-                    label={t(
-                      I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_EMAIL_LABEL,
+                {serviceAccountConfigError && (
+                  <p className="text-red-500 text-sm">
+                    {t(
+                      I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_CONFIG_ERROR,
+                      { error: serviceAccountConfigError },
                     )}
-                    placeholder={t(
-                      I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_EMAIL_PLACEHOLDER,
-                    )}
-                    value={serviceAccountEmail}
-                    onChange={handleEmailChange}
-                    className="w-full"
-                    type="email"
-                  />
-                  {emailError && (
-                    <p className="text-red-500 text-sm mt-2">{emailError}</p>
-                  )}
-                </div>
-                <div>
-                  <SettingsInput
-                    testId="jira-dc-svc-pat-input"
-                    label={t(
-                      I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_API_LABEL,
-                    )}
-                    placeholder={t(apiKeyPlaceholderKey)}
-                    value={serviceAccountApiKey}
-                    onChange={handleApiKeyChange}
-                    className="w-full"
-                    type="password"
-                    showOptionalTag={hasSavedApiKey}
-                  />
-                  {apiKeyError && (
-                    <p className="text-red-500 text-sm mt-2">{apiKeyError}</p>
-                  )}
-                </div>
+                  </p>
+                )}
+                {serviceAccountManaged ? (
+                  <div className="rounded border border-neutral-700 px-3 py-2">
+                    <Typography.Text className="text-sm text-white break-all">
+                      {managedServiceAccountEmail}
+                    </Typography.Text>
+                    <p className="text-xs text-tertiary-alt mt-1">
+                      {t(
+                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_MANAGED_HELP,
+                      )}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <SettingsInput
+                        testId="jira-dc-svc-email-input"
+                        label={t(
+                          I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_EMAIL_LABEL,
+                        )}
+                        placeholder={t(
+                          I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_EMAIL_PLACEHOLDER,
+                        )}
+                        value={serviceAccountEmail}
+                        onChange={handleEmailChange}
+                        className="w-full"
+                        type="email"
+                      />
+                      {emailError && (
+                        <p className="text-red-500 text-sm mt-2">
+                          {emailError}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <SettingsInput
+                        testId="jira-dc-svc-pat-input"
+                        label={t(
+                          I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_API_LABEL,
+                        )}
+                        placeholder={t(apiKeyPlaceholderKey)}
+                        value={serviceAccountApiKey}
+                        onChange={handleApiKeyChange}
+                        className="w-full"
+                        type="password"
+                        showOptionalTag={hasSavedApiKey}
+                      />
+                      {apiKeyError && (
+                        <p className="text-red-500 text-sm mt-2">
+                          {apiKeyError}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
