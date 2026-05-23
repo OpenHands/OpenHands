@@ -8,6 +8,9 @@ execution:
   contexts:
     host:
       backend: native
+      only_on:
+        - linux
+        - macos
     host-dev:
       extends: host
       requirements:

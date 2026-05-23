@@ -35,9 +35,15 @@ jobs:
           - name: ubuntu-bash
             os: ubuntu-latest
             full_proof: true
+            unsupported_host: false
           - name: macos-bash
             os: macos-latest
             full_proof: false
+            unsupported_host: false
+          - name: windows-bash
+            os: windows-latest
+            full_proof: false
+            unsupported_host: true
 
     steps:
       - name: Checkout
@@ -126,16 +132,53 @@ jobs:
           exit $doctor_status
 
       - name: Dry-run app workflow
+        if: ${{ !matrix.unsupported_host }}
         shell: bash
         run: ota up --workflow app --native --dry-run .
 
       - name: Dry-run backend workflow
+        if: ${{ !matrix.unsupported_host }}
         shell: bash
         run: ota up --workflow backend --native --dry-run .
 
       - name: Dry-run frontend workflow
+        if: ${{ !matrix.unsupported_host }}
         shell: bash
         run: ota up --workflow frontend --native --dry-run .
+
+      - name: Assert unsupported host diagnosis
+        if: ${{ matrix.unsupported_host }}
+        shell: bash
+        run: |
+          if [ "${{ steps.doctor_app.outcome }}" != "failure" ]; then
+            echo "expected ota doctor to fail on unsupported native Windows host"
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          with open("ota-doctor-app.json", "r", encoding="utf-8") as fh:
+              report = json.load(fh)
+          findings = report.get("findings", [])
+          assert any(
+              finding.get("summary", "").startswith("Unsupported host platform for context:")
+              for finding in findings
+          ), findings
+          PY
+
+      - name: Dry-run app workflow reports unsupported host
+        if: ${{ matrix.unsupported_host }}
+        shell: bash
+        run: |
+          set +e
+          ota up --workflow app --native --dry-run . > ota-up-app.txt 2>&1
+          status=$?
+          set -e
+          cat ota-up-app.txt
+          if [ "$status" -eq 0 ]; then
+            echo "expected ota up --dry-run to fail on unsupported native Windows host"
+            exit 1
+          fi
+          grep -F "Unsupported host platform for context" ota-up-app.txt
 
       - name: Proof app workflow
         if: matrix.full_proof
