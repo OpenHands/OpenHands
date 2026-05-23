@@ -38,11 +38,6 @@ checks:
     severity: error
     run: sh -c "command -v nc >/dev/null"
     timeout: 10000
-  - name: docker-installed
-    kind: precondition
-    severity: error
-    run: docker --version
-    timeout: 10000
 surfaces:
   backend:
     kind: http
@@ -262,9 +257,6 @@ tasks:
       you want to run OpenHands without installing host dependencies.
     category: dev
     run: make docker-run
-    requirements:
-      checks:
-        - docker-installed
     runtime:
       kind: service
       surfaces:
@@ -284,9 +276,6 @@ tasks:
       continues inside the container.
     category: setup
     run: make docker-dev
-    requirements:
-      checks:
-        - docker-installed
     safe_for_agent: false
 workflows:
   default: app
