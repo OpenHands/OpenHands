@@ -108,6 +108,18 @@ jobs:
         shell: bash
         run: ota tasks --workflow frontend .
 
+      - name: List app:docker workflow tasks
+        shell: bash
+        run: ota tasks --workflow app:docker .
+
+      - name: List container-dev workflow tasks
+        shell: bash
+        run: ota tasks --workflow container-dev .
+
+      - name: List ui-package workflow tasks
+        shell: bash
+        run: ota tasks --workflow ui-package .
+
       - name: Export execution topology
         shell: bash
         run: |
@@ -177,6 +189,36 @@ jobs:
           fi
           grep -F "Unsupported host platform for context" ota-up-app.txt
 
+      - name: Dry-run app:docker workflow reports unsupported host
+        if: ${{ matrix.unsupported_host }}
+        shell: bash
+        run: |
+          set +e
+          ota up --workflow app:docker --native --dry-run . > ota-up-app-docker.txt 2>&1
+          status=$?
+          set -e
+          cat ota-up-app-docker.txt
+          if [ "$status" -eq 0 ]; then
+            echo "expected ota up --dry-run to fail on unsupported native Windows host"
+            exit 1
+          fi
+          grep -F "Unsupported host platform for context" ota-up-app-docker.txt
+
+      - name: Dry-run ui-package workflow reports unsupported host
+        if: ${{ matrix.unsupported_host }}
+        shell: bash
+        run: |
+          set +e
+          ota up --workflow ui-package --native --dry-run . > ota-up-ui-package.txt 2>&1
+          status=$?
+          set -e
+          cat ota-up-ui-package.txt
+          if [ "$status" -eq 0 ]; then
+            echo "expected ota up --dry-run to fail on unsupported native Windows host"
+            exit 1
+          fi
+          grep -F "Unsupported host platform for context" ota-up-ui-package.txt
+
       - name: Proof app workflow
         if: matrix.full_proof
         timeout-minutes: 90
@@ -198,5 +240,128 @@ jobs:
             ota-execution-topology.json
             ota-doctor-app.json
             ota-proof-app.json
+            ota-up-app-docker.txt
+            ota-up-ui-package.txt
+            .ota/
+          retention-days: 7
+
+  docker-smoke-ubuntu:
+    name: Ota Contract Matrix (Docker Smoke - ubuntu-bash)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install ota from source
+        uses: ota-run/ota/.github/actions/install-ota-from-source@ec0f901e84f37a27728853c495abde575e1b24e9
+        with:
+          repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
+          ref: ${{ github.event.inputs.ota_ref || 'ec0f901e84f37a27728853c495abde575e1b24e9' }}
+
+      - name: Verify Docker
+        shell: bash
+        run: |
+          docker --version
+          docker info
+
+      - name: Validate contract
+        shell: bash
+        run: |
+          ota validate --json . > ota-validate-docker.json
+          ota validate .
+
+      - name: List app:docker workflow tasks
+        shell: bash
+        run: ota tasks --workflow app:docker .
+
+      - name: List container-dev workflow tasks
+        shell: bash
+        run: ota tasks --workflow container-dev .
+
+      - name: Export execution topology
+        shell: bash
+        run: |
+          ota execution topology --json . > ota-execution-topology-docker.json
+          cat ota-execution-topology-docker.json
+
+      - name: Dry-run app:docker workflow
+        shell: bash
+        run: ota up --workflow app:docker --native --dry-run .
+
+      - name: Dry-run container-dev workflow
+        shell: bash
+        run: ota up --workflow container-dev --native --dry-run .
+
+      - name: Upload Docker smoke failure artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-contract-matrix-docker-smoke-ubuntu-bash
+          include-hidden-files: true
+          path: |
+            ota-validate-docker.json
+            ota-execution-topology-docker.json
+            .ota/
+          retention-days: 7
+
+  ui-package-ubuntu:
+    name: Ota Contract Matrix (UI Package - ubuntu-bash)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: openhands-ui/.bun-version
+
+      - name: Install ota from source
+        uses: ota-run/ota/.github/actions/install-ota-from-source@ec0f901e84f37a27728853c495abde575e1b24e9
+        with:
+          repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
+          ref: ${{ github.event.inputs.ota_ref || 'ec0f901e84f37a27728853c495abde575e1b24e9' }}
+
+      - name: Verify Bun
+        shell: bash
+        run: bun --version
+
+      - name: Validate contract
+        shell: bash
+        run: |
+          ota validate --json . > ota-validate-ui-package.json
+          ota validate .
+
+      - name: List ui-package workflow tasks
+        shell: bash
+        run: ota tasks --workflow ui-package .
+
+      - name: Export execution topology
+        shell: bash
+        run: |
+          ota execution topology --json . > ota-execution-topology-ui-package.json
+          cat ota-execution-topology-ui-package.json
+
+      - name: Dry-run ui-package workflow
+        shell: bash
+        run: ota up --workflow ui-package --native --dry-run .
+
+      - name: Upload UI package failure artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-contract-matrix-ui-package-ubuntu-bash
+          include-hidden-files: true
+          path: |
+            ota-validate-ui-package.json
+            ota-execution-topology-ui-package.json
             .ota/
           retention-days: 7

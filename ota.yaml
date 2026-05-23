@@ -1,7 +1,7 @@
 version: 1
 project:
   name: OpenHands
-  description: OpenHands local GUI contributor readiness slice focused on the documented self-development path, excluding Docker/devcontainer, enterprise, and release/package workflows
+  description: OpenHands contributor readiness slice covering the documented local GUI path, the supported Docker runtime path, the community-maintained Docker/devcontainer entry path, and the openhands-ui package build surface; enterprise and release/publish workflows remain out of scope
   type: application
 execution:
   default_context: host
@@ -20,16 +20,28 @@ execution:
         tools:
           poetry: ">=2.3.4,<2.4.0"
           npm: ">=10.5.0"
-tools:
-  poetry:
-    version: ">=2.3.4,<2.4.0"
-  npm:
-    version: ">=10.5.0"
+    docker-host:
+      extends: host
+      requirements:
+        tools:
+          docker: "*"
+    host-ui:
+      extends: host
+      requirements:
+        runtimes:
+          node: ">=22.0.0"
+        tools:
+          bun: ">=1.2.17"
 checks:
   - name: netcat-installed
     kind: precondition
     severity: error
     run: sh -c "command -v nc >/dev/null"
+    timeout: 10000
+  - name: docker-installed
+    kind: precondition
+    severity: error
+    run: docker --version
     timeout: 10000
 surfaces:
   backend:
@@ -80,6 +92,27 @@ tasks:
     env:
       INSTALL_DOCKER: "0"
     run: make build
+    safe_for_agent: true
+  build:frontend:
+    context: host-dev
+    description: Build the frontend assets only
+    notes: |
+      This maps directly to the repo's dedicated frontend asset build target.
+    category: setup
+    env:
+      INSTALL_DOCKER: "0"
+    run: make build-frontend
+    depends_on:
+      - build
+    safe_for_agent: true
+  build:ui:
+    context: host-ui
+    description: Build the `openhands-ui` package with the repo's CI path
+    notes: |
+      This follows the dedicated `openhands-ui` build workflow by using Bun inside the package directory.
+      It is separate from the main frontend app under `frontend/`.
+    category: setup
+    run: sh -c 'cd openhands-ui && bun install --frozen-lockfile && bun run build'
     safe_for_agent: true
   lint:backend:
     context: host-dev
@@ -221,6 +254,40 @@ tasks:
       surfaces:
         - frontend
     safe_for_agent: false
+  dev:docker-run:
+    context: docker-host
+    description: Run the documented Dockerized OpenHands runtime
+    notes: |
+      This maps directly to `make docker-run`, the repo's supported container runtime path when
+      you want to run OpenHands without installing host dependencies.
+    category: dev
+    run: make docker-run
+    requirements:
+      checks:
+        - docker-installed
+    runtime:
+      kind: service
+      surfaces:
+        backend: {}
+        frontend:
+          project:
+            host:
+              primary: true
+    safe_for_agent: false
+  env:docker-dev:
+    context: docker-host
+    description: Enter the community-maintained Docker development environment
+    notes: |
+      This maps directly to `make docker-dev` / `./containers/dev/dev.sh`.
+      The repo documents this as a community-maintained development-container path. It drops you
+      into the containerized development environment, after which the normal local build/run flow
+      continues inside the container.
+    category: setup
+    run: make docker-dev
+    requirements:
+      checks:
+        - docker-installed
+    safe_for_agent: false
 workflows:
   default: app
   app:
@@ -230,7 +297,8 @@ workflows:
       This uses the documented self-development path under `Development.md`:
       `INSTALL_DOCKER=0`, `RUNTIME=local`, then `make build && make run`.
       Prefer this when you want the full local GUI loop with explicit readiness on backend and frontend.
-      This contract slice intentionally excludes Docker/devcontainer, enterprise, and release/package workflows.
+      Use `app:docker` when you want the supported container runtime path instead of host dependencies.
+      Use `container-dev` when you want to enter the repo's community-maintained Docker development environment.
     setup:
       task: build
     run:
@@ -268,12 +336,44 @@ workflows:
       surfaces: [frontend]
     exposes:
       - surface: frontend
+  app:docker:
+    intent: packaged_runtime
+    description: Supported Docker runtime workflow for running OpenHands without host dependency setup
+    notes: |
+      This maps directly to the documented `make docker-run` path in `Development.md`.
+      Prefer this when you want the repo's supported container runtime instead of the host-native GUI loop.
+    run:
+      task: dev:docker-run
+    readiness:
+      surfaces: [backend, frontend]
+    exposes:
+      - surface: backend
+      - surface: frontend
+  container-dev:
+    intent: container_development
+    description: Community-maintained Docker/devcontainer entry workflow
+    notes: |
+      This workflow enters the repo's Docker development environment through `make docker-dev`.
+      The repo documents this path as community-maintained rather than officially supported.
+      Once inside the container, continue with the normal OpenHands build/run workflow there.
+    run:
+      task: env:docker-dev
+  ui-package:
+    intent: package_build
+    description: Build the `openhands-ui` package using the repo's dedicated Bun-based workflow
+    notes: |
+      This models the standalone `openhands-ui` package build path that the repo validates in CI.
+      It is separate from the main `frontend/` application workflow.
+    run:
+      task: build:ui
 
 agent:
   entrypoint: build
   default_task: lint
   safe_tasks:
     - build
+    - build:frontend
+    - build:ui
     - lint:backend
     - lint:frontend
     - lint
@@ -288,9 +388,13 @@ agent:
   writable_paths:
     - openhands
     - frontend
+    - openhands-ui
+    - containers
+    - .devcontainer
     - tests
     - scripts
     - Makefile
+    - docker-compose.yml
     - pyproject.toml
     - poetry.lock
     - Development.md
@@ -310,5 +414,8 @@ agent:
     Native Windows development is not a supported host path in the repo docs.
     The default Ota workflow intentionally starts from the documented self-development loop in `Development.md`
     rather than inventing a parallel bootstrap path.
-    This current contract covers the local GUI contributor slice only, not Docker/devcontainer, enterprise,
-    or package/release workflows.
+    Although the repo carries `uv.lock`, this contract intentionally keeps Python ownership on the
+    documented Python + Poetry contributor flow rather than adopting `toolchains.python` prematurely.
+    This contract now also covers the supported Docker runtime path, the community-maintained Docker/devcontainer
+    entry path, and the standalone `openhands-ui` package build surface.
+    It still intentionally leaves enterprise and publish/release workflows out of scope.
