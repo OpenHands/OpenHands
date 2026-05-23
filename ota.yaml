@@ -1,7 +1,7 @@
 version: 1
 project:
   name: OpenHands
-  description: OpenHands contributor readiness slice covering the documented local GUI path, the supported Docker runtime path, the community-maintained Docker/devcontainer entry path, and the openhands-ui package build surface; enterprise and release/publish workflows remain out of scope
+  description: OpenHands contributor readiness slice covering the documented local GUI path, the supported Docker runtime path, an Ota-managed packaged container runtime, the community-maintained Docker/devcontainer entry path, and the openhands-ui package build surface; enterprise and release/publish workflows remain out of scope
   type: application
 execution:
   default_context: host
@@ -59,6 +59,25 @@ surfaces:
   frontend:
     kind: http
     port: 3001
+    path: /
+    readiness:
+      kind: http
+      method: GET
+      path: /
+      headers:
+        Accept: text/html
+      success:
+        status:
+          - 200
+      body:
+        contains: "<!DOCTYPE html>"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+  packaged-web:
+    kind: http
+    port: 3000
     path: /
     readiness:
       kind: http
@@ -266,6 +285,50 @@ tasks:
             host:
               primary: true
     safe_for_agent: false
+  dev:container:
+    context: docker-host
+    description: Run the packaged OpenHands image through Ota-managed container launch
+    notes: |
+      This uses the published `ghcr.io/openhands/openhands:latest` image directly through Ota's
+      structured `launch.kind: container` path. Unlike `app:docker`, which follows the repo's
+      `make docker-run` wrapper flow, this models the packaged runtime as a first-class Ota
+      container service.
+    category: dev
+    launch:
+      kind: container
+      image: ghcr.io/openhands/openhands:latest
+      engine: docker
+    runtime:
+      kind: service
+      surfaces:
+        backend:
+          bind:
+            address: 0.0.0.0
+            port:
+              mode: fixed
+              value: 3000
+          project:
+            host:
+              address: 127.0.0.1
+              port:
+                mode: fixed
+                value: 3000
+              path: /health
+        packaged-web:
+          bind:
+            address: 0.0.0.0
+            port:
+              mode: fixed
+              value: 3000
+          project:
+            host:
+              address: 127.0.0.1
+              port:
+                mode: fixed
+                value: 3000
+              path: /
+              primary: true
+    safe_for_agent: false
   env:docker-dev:
     context: docker-host
     description: Enter the community-maintained Docker development environment
@@ -330,7 +393,9 @@ workflows:
     description: Supported Docker runtime workflow for running OpenHands without host dependency setup
     notes: |
       This maps directly to the documented `make docker-run` path in `Development.md`.
-      Prefer this when you want the repo's supported container runtime instead of the host-native GUI loop.
+      Prefer this when you want the repo's supported container runtime wrapper instead of the
+      host-native GUI loop. Use `app:container` when you want the Ota-managed packaged container
+      path rather than the repo's Makefile wrapper.
     run:
       task: dev:docker-run
     readiness:
@@ -338,6 +403,20 @@ workflows:
     exposes:
       - surface: backend
       - surface: frontend
+  app:container:
+    intent: packaged_runtime
+    description: Ota-managed packaged container runtime for OpenHands
+    notes: |
+      This launches the published `ghcr.io/openhands/openhands:latest` image through Ota's
+      structured container launch path. It adds a real Ota-managed container runtime surface
+      without replacing the repo's documented `make docker-run` wrapper workflow.
+    run:
+      task: dev:container
+    readiness:
+      surfaces: [backend, packaged-web]
+    exposes:
+      - surface: backend
+      - surface: packaged-web
   container-dev:
     intent: container_development
     description: Community-maintained Docker/devcontainer entry workflow
@@ -405,6 +484,7 @@ agent:
     rather than inventing a parallel bootstrap path.
     Although the repo carries `uv.lock`, this contract intentionally keeps Python ownership on the
     documented Python + Poetry contributor flow rather than adopting `toolchains.python` prematurely.
-    This contract now also covers the supported Docker runtime path, the community-maintained Docker/devcontainer
-    entry path, and the standalone `openhands-ui` package build surface.
+    This contract now also covers the supported Docker runtime path, an Ota-managed packaged container runtime,
+    the community-maintained Docker/devcontainer entry path, and the standalone `openhands-ui` package build
+    surface.
     It still intentionally leaves enterprise and publish/release workflows out of scope.
