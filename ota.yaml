@@ -161,6 +161,7 @@ tasks:
       This is optional for the web UI path, which can configure the model in the Settings UI
       after startup. It is useful for headless or CLI-oriented local runs.
     category: setup
+    internal: true
     run: make setup-config-basic
     safe_for_agent: false
   dev:
@@ -251,8 +252,7 @@ workflows:
     run:
       task: dev:backend
     readiness:
-      surfaces:
-        - backend
+      surfaces: [backend]
     exposes:
       - surface: backend
   frontend:
@@ -265,8 +265,7 @@ workflows:
     run:
       task: dev:frontend
     readiness:
-      surfaces:
-        - frontend
+      surfaces: [frontend]
     exposes:
       - surface: frontend
 
