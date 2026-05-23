@@ -1,22 +1,27 @@
 version: 1
 project:
   name: OpenHands
-  description: OpenHands local GUI readiness slice focused on the documented self-development path
+  description: OpenHands local GUI contributor readiness slice focused on the documented self-development path, excluding Docker/devcontainer, enterprise, and release/package workflows
   type: application
 execution:
   default_context: host
   contexts:
     host:
       backend: native
+    host-dev:
+      extends: host
       requirements:
         runtimes:
           python: ">=3.12,<3.14"
-          node: ">=22"
+          node: "^22.12.0"
+        tools:
+          poetry: ">=1.8"
+          npm: ">=10.5.0"
 tools:
   poetry:
     version: ">=1.8"
   npm:
-    version: "*"
+    version: ">=10.5.0"
 checks:
   - name: netcat-installed
     kind: precondition
@@ -62,7 +67,7 @@ surfaces:
       start_period: 15s
 tasks:
   build:
-    context: host
+    context: host-dev
     description: Build and bootstrap the local OpenHands development environment
     notes: |
       This follows the documented self-development quick start in `Development.md`:
@@ -72,42 +77,79 @@ tasks:
     env:
       INSTALL_DOCKER: "0"
     run: make build
-    requirements:
-      tools:
-        npm: "*"
-        poetry: ">=1.8"
+    safe_for_agent: true
+  lint:backend:
+    context: host-dev
+    description: Run the backend lint and formatting surface
+    notes: |
+      This maps directly to the documented backend pre-commit validation flow.
+    category: test
+    env:
+      INSTALL_DOCKER: "0"
+    run: make lint-backend
+    depends_on:
+      - build
+    safe_for_agent: true
+  lint:frontend:
+    context: host-dev
+    description: Run the frontend lint and typecheck surface
+    notes: |
+      This maps directly to the documented frontend lint path.
+    category: test
+    env:
+      INSTALL_DOCKER: "0"
+    run: make lint-frontend
+    depends_on:
+      - build
     safe_for_agent: true
   lint:
-    context: host
-    description: Run the repository lint surface
+    context: host-dev
+    description: Run the repository aggregate lint surface
     notes: |
-      This runs the documented frontend lint and backend pre-commit checks.
+      This is the documented aggregate lint entrypoint and covers both backend and frontend checks.
     category: test
     env:
       INSTALL_DOCKER: "0"
     run: make lint
     depends_on:
       - build
-    requirements:
-      tools:
-        npm: "*"
-        poetry: ">=1.8"
     safe_for_agent: true
-  test:
-    context: host
-    description: Run the repository default test target
+  test:frontend:
+    context: host-dev
+    description: Run the frontend test suite
     notes: |
-      The current top-level `make test` target runs the frontend test suite.
-      Keep this aligned with upstream repo truth rather than inventing a parallel test command.
+      This maps directly to the current top-level `make test` target, which runs frontend tests.
     category: test
     env:
       INSTALL_DOCKER: "0"
     run: make test
     depends_on:
       - build
-    requirements:
-      tools:
-        npm: "*"
+    safe_for_agent: true
+  test:backend:
+    context: host-dev
+    description: Run the backend Python unit tests
+    notes: |
+      This follows the documented backend unit test path in `Development.md`.
+    category: test
+    env:
+      INSTALL_DOCKER: "0"
+    run: poetry run pytest ./tests/unit/test_*.py
+    depends_on:
+      - build
+    safe_for_agent: true
+  test:
+    context: host-dev
+    description: Run the documented frontend and backend test surfaces
+    notes: |
+      OpenHands documents frontend tests through `make test` and backend tests through pytest.
+      This aggregate task composes those two documented test surfaces.
+    category: test
+    env:
+      INSTALL_DOCKER: "0"
+    run: sh -c 'make test && poetry run pytest ./tests/unit/test_*.py'
+    depends_on:
+      - build
     safe_for_agent: true
   setup:config-basic:
     context: host
@@ -117,9 +159,9 @@ tasks:
       after startup. It is useful for headless or CLI-oriented local runs.
     category: setup
     run: make setup-config-basic
-    safe_for_agent: true
+    safe_for_agent: false
   dev:
-    context: host
+    context: host-dev
     description: Run the full local OpenHands GUI development loop
     notes: |
       This follows the documented "Running OpenHands with OpenHands" path in `Development.md`:
@@ -133,9 +175,6 @@ tasks:
     depends_on:
       - build
     requirements:
-      tools:
-        npm: "*"
-        poetry: ">=1.8"
       checks:
         - netcat-installed
     runtime:
@@ -148,7 +187,7 @@ tasks:
               primary: true
     safe_for_agent: false
   dev:backend:
-    context: host
+    context: host-dev
     description: Run the backend API server only
     notes: |
       This maps directly to the documented split backend path on port 3000.
@@ -158,16 +197,13 @@ tasks:
     run: make start-backend
     depends_on:
       - build
-    requirements:
-      tools:
-        poetry: ">=1.8"
     runtime:
       kind: service
       surfaces:
         - backend
     safe_for_agent: false
   dev:frontend:
-    context: host
+    context: host-dev
     description: Run the frontend development server only
     notes: |
       This maps directly to the documented split frontend path on port 3001.
@@ -176,9 +212,6 @@ tasks:
     run: make start-frontend
     depends_on:
       - build
-    requirements:
-      tools:
-        npm: "*"
     runtime:
       kind: service
       surfaces:
@@ -193,6 +226,7 @@ workflows:
       This uses the documented self-development path under `Development.md`:
       `INSTALL_DOCKER=0`, `RUNTIME=local`, then `make build && make run`.
       Prefer this when you want the full local GUI loop with explicit readiness on backend and frontend.
+      This contract slice intentionally excludes Docker/devcontainer, enterprise, and release/package workflows.
     setup:
       task: build
     run:
@@ -238,12 +272,17 @@ agent:
   default_task: lint
   safe_tasks:
     - build
+    - lint:backend
+    - lint:frontend
     - lint
+    - test:backend
+    - test:frontend
     - test
-    - setup:config-basic
   verify_after_changes:
-    - lint
-    - test
+    - lint:backend
+    - lint:frontend
+    - test:backend
+    - test:frontend
   writable_paths:
     - openhands
     - frontend
@@ -269,3 +308,5 @@ agent:
     Native Windows development is not a supported host path in the repo docs.
     The default Ota workflow intentionally starts from the documented self-development loop in `Development.md`
     rather than inventing a parallel bootstrap path.
+    This current contract covers the local GUI contributor slice only, not Docker/devcontainer, enterprise,
+    or package/release workflows.
