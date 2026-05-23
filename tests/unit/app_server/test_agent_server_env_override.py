@@ -194,6 +194,19 @@ class TestLLMAutoForwarding:
         """Test that LLM_ is in the auto-forward prefixes."""
         assert 'LLM_' in AUTO_FORWARD_PREFIXES
 
+    def test_allow_insecure_git_access_auto_forwarded(self):
+        """Test that ALLOW_INSECURE_GIT_ACCESS is automatically forwarded."""
+        env_vars = {
+            'ALLOW_INSECURE_GIT_ACCESS': 'true',
+            'OTHER_VAR': 'should_not_be_included',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+
+        assert result['ALLOW_INSECURE_GIT_ACCESS'] == 'true'
+        assert 'OTHER_VAR' not in result
+
     def test_llm_timeout_auto_forwarded(self):
         """Test that LLM_TIMEOUT is automatically forwarded."""
         env_vars = {

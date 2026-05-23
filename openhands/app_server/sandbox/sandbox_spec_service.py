@@ -2,6 +2,7 @@ import asyncio
 import os
 from abc import ABC, abstractmethod
 
+
 from openhands.agent_server import env_parser
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_spec_models import (
@@ -73,6 +74,10 @@ def get_agent_server_image() -> str:
 # These are typically configuration variables that affect the agent's behavior
 AUTO_FORWARD_PREFIXES = ('LLM_', 'LMNR_')
 
+# Exact environment variables that should be auto-forwarded to agent-server.
+# These are OpenHands runtime flags that do not share a common prefix.
+AUTO_FORWARD_EXACT_VARS = ('ALLOW_INSECURE_GIT_ACCESS',)
+
 
 def get_agent_server_env() -> dict[str, str]:
     """Get environment variables to be injected into agent server sandbox environments.
@@ -80,7 +85,8 @@ def get_agent_server_env() -> dict[str, str]:
     This function combines two sources of environment variables:
 
     1. **Auto-forwarded variables**: Environment variables with certain prefixes
-       (e.g., LLM_*, LMNR_*) are automatically forwarded to the agent-server container.
+       (e.g., LLM_*, LMNR_*) and selected exact OpenHands runtime flags
+       are automatically forwarded to the agent-server container.
        This ensures that LLM configuration like timeouts and retry settings
        work correctly in the two-container V1 architecture, as well as
        Laminar monitoring/analytics configuration.
@@ -97,6 +103,7 @@ def get_agent_server_env() -> dict[str, str]:
         # Auto-forwarding (no action needed):
         export LLM_TIMEOUT=3600
         export LLM_NUM_RETRIES=10
+        export ALLOW_INSECURE_GIT_ACCESS=true
         # These will automatically be available in the agent-server
 
         # Auto-forwarding for Laminar:
@@ -122,7 +129,9 @@ def get_agent_server_env() -> dict[str, str]:
 
     # Step 1: Auto-forward environment variables with recognized prefixes
     for key, value in os.environ.items():
-        if any(key.startswith(prefix) for prefix in AUTO_FORWARD_PREFIXES):
+        if key in AUTO_FORWARD_EXACT_VARS or any(
+            key.startswith(prefix) for prefix in AUTO_FORWARD_PREFIXES
+        ):
             result[key] = value
 
     # Step 2: Apply explicit overrides from OH_AGENT_SERVER_ENV
