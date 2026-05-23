@@ -607,7 +607,7 @@ class OrgAppSettingsUpdate(BaseModel):
         return v
 
 
-VALID_GIT_PROVIDERS = {'github', 'gitlab', 'bitbucket'}
+VALID_GIT_PROVIDERS = {'github', 'gitlab', 'bitbucket', 'bitbucket_data_center'}
 
 
 class GitOrgClaimRequest(BaseModel):
