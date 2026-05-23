@@ -2,6 +2,15 @@ name: 'Test: Ota contract matrix'
 
 on:
   workflow_dispatch:
+    inputs:
+      ota_repository:
+        description: Ota source repository to build for this matrix run
+        required: false
+        default: ota-run/ota
+      ota_ref:
+        description: Ota branch, tag, or commit to build for this matrix run
+        required: false
+        default: ec0f901e84f37a27728853c495abde575e1b24e9
   pull_request:
     paths:
       - 'ota.yaml'
@@ -61,9 +70,6 @@ jobs:
         with:
           node-version: 22
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
       - name: Install Poetry
         shell: bash
         run: |
@@ -78,21 +84,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y netcat-openbsd
 
-      - name: Checkout ota source
-        uses: actions/checkout@v6
+      - name: Install ota from source
+        uses: ota-run/ota/.github/actions/install-ota-from-source@ec0f901e84f37a27728853c495abde575e1b24e9
         with:
-          repository: bobaikato/ota
-          ref: 22cd336c80dae380b215bb8a353ce5728d3ea89f
-          path: .ota-source
-          persist-credentials: false
-
-      - name: Build ota from source
-        shell: bash
-        run: cargo install --path .ota-source --locked --force
-
-      - name: Verify ota install
-        shell: bash
-        run: ota --version
+          repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
+          ref: ${{ github.event.inputs.ota_ref || 'ec0f901e84f37a27728853c495abde575e1b24e9' }}
 
       - name: Validate contract
         shell: bash
