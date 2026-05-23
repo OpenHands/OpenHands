@@ -55,6 +55,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Install Poetry
         shell: bash
         run: |
@@ -69,10 +72,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y netcat-openbsd
 
-      - name: Setup ota
-        uses: ota-run/setup@4ec459ee7956050be33e5c30f7e070f1f155c023 # v1
+      - name: Checkout ota source
+        uses: actions/checkout@v6
         with:
-          ota-version: 1.6.15
+          repository: ota-run/ota
+          ref: bd3937b575787d5b03c083adb870b248cba62dc4
+          path: .ota-source
+          persist-credentials: false
+
+      - name: Build ota from source
+        shell: bash
+        run: cargo install --path .ota-source --locked --force
 
       - name: Verify ota install
         shell: bash
