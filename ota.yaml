@@ -1,7 +1,7 @@
 version: 1
 project:
   name: OpenHands
-  description: OpenHands contributor readiness slice covering the documented local GUI path, the supported Docker runtime path, an Ota-managed packaged container runtime, the community-maintained Docker/devcontainer entry path, and the openhands-ui package build surface; enterprise and release/publish workflows remain out of scope
+  description: OpenHands contributor readiness slice covering the documented local GUI path, the supported Docker runtime path, an Ota-managed packaged container runtime, and the openhands-ui package build surface; enterprise, release/publish, and devcontainer workflows remain out of scope
   type: application
 execution:
   default_context: host
@@ -329,17 +329,6 @@ tasks:
               path: /
               primary: true
     safe_for_agent: false
-  env:docker-dev:
-    context: docker-host
-    description: Enter the community-maintained Docker development environment
-    notes: |
-      This maps directly to `make docker-dev` / `./containers/dev/dev.sh`.
-      The repo documents this as a community-maintained development-container path. It drops you
-      into the containerized development environment, after which the normal local build/run flow
-      continues inside the container.
-    category: setup
-    run: make docker-dev
-    safe_for_agent: false
 workflows:
   default: app
   app:
@@ -350,7 +339,6 @@ workflows:
       `INSTALL_DOCKER=0`, `RUNTIME=local`, then `make build && make run`.
       Prefer this when you want the full local GUI loop with explicit readiness on backend and frontend.
       Use `app:docker` when you want the supported container runtime path instead of host dependencies.
-      Use `container-dev` when you want to enter the repo's community-maintained Docker development environment.
     setup:
       task: build
     run:
@@ -417,15 +405,6 @@ workflows:
     exposes:
       - surface: backend
       - surface: packaged-web
-  container-dev:
-    intent: container_development
-    description: Community-maintained Docker/devcontainer entry workflow
-    notes: |
-      This workflow enters the repo's Docker development environment through `make docker-dev`.
-      The repo documents this path as community-maintained rather than officially supported.
-      Once inside the container, continue with the normal OpenHands build/run workflow there.
-    run:
-      task: env:docker-dev
   ui-package:
     intent: package_build
     description: Build the `openhands-ui` package using the repo's dedicated Bun-based workflow
@@ -434,7 +413,6 @@ workflows:
       It is separate from the main `frontend/` application workflow.
     run:
       task: build:ui
-
 agent:
   entrypoint: build
   default_task: lint
@@ -458,7 +436,6 @@ agent:
     - frontend
     - openhands-ui
     - containers
-    - .devcontainer
     - tests
     - scripts
     - Makefile
@@ -485,6 +462,5 @@ agent:
     Although the repo carries `uv.lock`, this contract intentionally keeps Python ownership on the
     documented Python + Poetry contributor flow rather than adopting `toolchains.python` prematurely.
     This contract now also covers the supported Docker runtime path, an Ota-managed packaged container runtime,
-    the community-maintained Docker/devcontainer entry path, and the standalone `openhands-ui` package build
-    surface.
-    It still intentionally leaves enterprise and publish/release workflows out of scope.
+    and the standalone `openhands-ui` package build surface.
+    It intentionally leaves enterprise, release/publish, and devcontainer workflows out of scope.

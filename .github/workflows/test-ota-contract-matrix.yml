@@ -116,10 +116,6 @@ jobs:
         shell: bash
         run: ota tasks --workflow app:container .
 
-      - name: List container-dev workflow tasks
-        shell: bash
-        run: ota tasks --workflow container-dev .
-
       - name: List ui-package workflow tasks
         shell: bash
         run: ota tasks --workflow ui-package .
@@ -302,10 +298,6 @@ jobs:
         shell: bash
         run: ota tasks --workflow app:container .
 
-      - name: List container-dev workflow tasks
-        shell: bash
-        run: ota tasks --workflow container-dev .
-
       - name: Export execution topology
         shell: bash
         run: |
@@ -319,10 +311,6 @@ jobs:
       - name: Dry-run app:container workflow
         shell: bash
         run: ota up --workflow app:container --native --dry-run .
-
-      - name: Dry-run container-dev workflow
-        shell: bash
-        run: ota up --workflow container-dev --native --dry-run .
 
       - name: Upload Docker smoke failure artifacts
         if: ${{ failure() }}
