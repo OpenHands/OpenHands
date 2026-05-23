@@ -56,17 +56,17 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
         if not isinstance(event, ConversationStateUpdateEvent):
             return None
 
-        if event.key != "execution_status":
+        if event.key != 'execution_status':
             return None
 
-        _logger.info("[Jira DC] Callback agent state was %s", event)
+        _logger.info('[Jira DC] Callback agent state was %s', event)
 
         # Only request summary when execution has finished successfully
-        if event.value != "finished":
+        if event.value != 'finished':
             return None
 
         _logger.info(
-            "[Jira DC] Should request summary: %s", self.should_request_summary
+            '[Jira DC] Should request summary: %s', self.should_request_summary
         )
 
         if not self.should_request_summary:
@@ -75,11 +75,11 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
         self.should_request_summary = False
 
         try:
-            _logger.info(f"[Jira DC] Requesting summary {conversation_id}")
+            _logger.info(f'[Jira DC] Requesting summary {conversation_id}')
             summary = await self._request_summary(conversation_id)
             _logger.info(
-                f"[Jira DC] Posting summary {conversation_id}",
-                extra={"summary": summary},
+                f'[Jira DC] Posting summary {conversation_id}',
+                extra={'summary': summary},
             )
             await self._post_summary_to_jira_dc(summary)
 
@@ -91,7 +91,7 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
                 detail=summary,
             )
         except Exception as e:
-            _logger.exception(f"[Jira DC] Failed to post summary: {e}", stack_info=True)
+            _logger.exception(f'[Jira DC] Failed to post summary: {e}', stack_info=True)
             return EventCallbackResult(
                 status=EventCallbackResultStatus.ERROR,
                 event_callback_id=callback.id,
@@ -137,9 +137,9 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
                 app_conversation_info.sandbox_id,
             )
 
-            assert sandbox.session_api_key is not None, (
-                f"No session API key for sandbox: {sandbox.id}"
-            )
+            assert (
+                sandbox.session_api_key is not None
+            ), f'No session API key for sandbox: {sandbox.id}'
 
             # 3. URL + instruction
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)
@@ -171,7 +171,7 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
             f"{agent_server_url.rstrip('/')}"
             f"/api/conversations/{conversation_id}/ask_agent"
         )
-        headers = {"X-Session-API-Key": session_api_key}
+        headers = {'X-Session-API-Key': session_api_key}
         payload = send_message_request.model_dump()
 
         try:
@@ -187,34 +187,34 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
             return agent_response.response
 
         except httpx.HTTPStatusError as e:
-            error_detail = f"HTTP {e.response.status_code} error"
+            error_detail = f'HTTP {e.response.status_code} error'
             try:
                 error_body = e.response.text
                 if error_body:
-                    error_detail += f": {error_body}"
+                    error_detail += f': {error_body}'
             except Exception:
                 pass
 
             _logger.exception(
-                "[Jira DC] HTTP error sending message to %s: %s. "
-                "Request payload: %s. Response headers: %s",
+                '[Jira DC] HTTP error sending message to %s: %s. '
+                'Request payload: %s. Response headers: %s',
                 url,
                 error_detail,
                 payload,
                 dict(e.response.headers),
                 stack_info=True,
             )
-            raise Exception(f"Failed to send message to agent server: {error_detail}")
+            raise Exception(f'Failed to send message to agent server: {error_detail}')
 
         except httpx.TimeoutException:
-            error_detail = f"Request timeout after 30 seconds to {url}"
+            error_detail = f'Request timeout after 30 seconds to {url}'
             _logger.exception(
-                "[Jira DC] Timeout error: %s. Request payload: %s",
+                '[Jira DC] Timeout error: %s. Request payload: %s',
                 error_detail,
                 payload,
                 stack_info=True,
             )
-            raise Exception(f"Failed to send message to agent server: {error_detail}")
+            raise Exception(f'Failed to send message to agent server: {error_detail}')
 
     async def _post_summary_to_jira_dc(self, summary: str):
         """Post the summary back to the Jira DC issue."""
@@ -225,7 +225,7 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
                 self.base_api_url,
             ]
         ):
-            _logger.warning("[Jira DC] Missing required data for posting summary")
+            _logger.warning('[Jira DC] Missing required data for posting summary')
             return
 
         workspace = await JiraDcIntegrationStore.get_instance().get_workspace_by_name(
@@ -233,7 +233,7 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
         )
         if not workspace:
             _logger.warning(
-                "[Jira DC] Workspace %s not found for posting summary",
+                '[Jira DC] Workspace %s not found for posting summary',
                 self.workspace_name,
             )
             return
@@ -241,13 +241,13 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
         service_account = resolve_jira_dc_service_account(workspace, TokenManager())
 
         # Add a comment to the Jira DC issue with the summary
-        comment_url = f"{self.base_api_url}/rest/api/2/issue/{self.issue_key}/comment"
+        comment_url = f'{self.base_api_url}/rest/api/2/issue/{self.issue_key}/comment'
 
-        message = f"OpenHands resolved this issue:\n\n{summary}"
+        message = f'OpenHands resolved this issue:\n\n{summary}'
         # Convert standard Markdown to Jira Wiki Markup for proper rendering
-        comment_body = {"body": markdown_to_jira_markup(message)}
+        comment_body = {'body': markdown_to_jira_markup(message)}
 
-        headers = {"Authorization": f"Bearer {service_account.api_key}"}
+        headers = {'Authorization': f'Bearer {service_account.api_key}'}
 
         async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.post(
@@ -256,4 +256,4 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
                 json=comment_body,
             )
             response.raise_for_status()
-            _logger.info(f"[Jira DC] Posted summary to {self.issue_key}")
+            _logger.info(f'[Jira DC] Posted summary to {self.issue_key}')
