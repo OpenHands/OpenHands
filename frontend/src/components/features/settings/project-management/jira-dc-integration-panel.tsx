@@ -167,21 +167,23 @@ export function JiraDcIntegrationPanel() {
     unlinkMutation.mutate(trimmedAdminApiKey);
   };
 
-  // Active/paused lives on the Remove screen (a softer alternative to removal),
-  // not the edit form. Persists just the status via the normal configure path
-  // (blank PAT/secret = keep stored).
-  const storedActive = existingWorkspace?.status === "active";
-  const applyActiveChange = () => {
-    configureMutation.mutate({
-      workspace,
-      webhookSecret: "",
-      serviceAccountEmail: serviceAccountManaged
-        ? managedServiceAccountEmail
-        : serviceAccountEmail,
-      serviceAccountApiKey: "",
-      adminApiKey: "",
-      isActive,
-    });
+  const handleActiveToggle = (nextActive: boolean) => {
+    setIsActive(nextActive);
+    configureMutation.mutate(
+      {
+        workspace,
+        webhookSecret: "",
+        serviceAccountEmail: serviceAccountManaged
+          ? managedServiceAccountEmail
+          : serviceAccountEmail,
+        serviceAccountApiKey: "",
+        adminApiKey: "",
+        isActive: nextActive,
+      },
+      {
+        onError: () => setIsActive(!nextActive),
+      },
+    );
   };
 
   // PAT required to create a new workspace; optional on edit (blank keeps the
@@ -322,7 +324,13 @@ export function JiraDcIntegrationPanel() {
   );
 
   const webhookSection = (
-    <div className="flex flex-col gap-3 border-t border-neutral-800 pt-4">
+    <div
+      className={cn(
+        "flex flex-col gap-3",
+        showServerAndServiceAccountSection &&
+          "border-t border-neutral-800 pt-4",
+      )}
+    >
       <div>
         {sectionLabel(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_SECTION_LABEL)}
         <p className="text-xs text-tertiary-alt mt-1">
@@ -521,7 +529,7 @@ export function JiraDcIntegrationPanel() {
 
       {modalView === "edit" && (
         <ModalBackdrop onClose={closeModal}>
-          <ModalBody className="items-start w-[520px] max-h-[85vh] overflow-y-auto">
+          <ModalBody className="items-start w-[520px] max-h-[85vh] overflow-y-auto gap-4">
             <BaseModalTitle
               title={t(I18nKey.PROJECT_MANAGEMENT$CONFIGURE_MODAL_TITLE, {
                 platform: t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_PLATFORM_NAME),
@@ -584,8 +592,9 @@ export function JiraDcIntegrationPanel() {
                 <div className="flex flex-col gap-1">
                   <SettingsSwitch
                     testId="active-toggle"
-                    onToggle={setIsActive}
+                    onToggle={handleActiveToggle}
                     isToggled={isActive}
+                    isDisabled={isBusy}
                   >
                     {t(
                       I18nKey.PROJECT_MANAGEMENT$JIRA_DC_EVENT_RESPONSES_TOGGLE_LABEL,
@@ -595,33 +604,12 @@ export function JiraDcIntegrationPanel() {
                     {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_PAUSE_HELP)}
                   </p>
                 </div>
-                {isActive !== storedActive && (
-                  <BrandButton
-                    variant="primary"
-                    onClick={applyActiveChange}
-                    testId="jira-dc-apply-active-button"
-                    type="button"
-                    isDisabled={isBusy}
-                    className="w-fit"
-                  >
-                    {t(
-                      isActive
-                        ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_RESUME_BUTTON_LABEL
-                        : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_PAUSE_BUTTON_LABEL,
-                    )}
-                  </BrandButton>
-                )}
               </div>
 
               <div className="flex flex-col gap-3 border-t border-neutral-800 pt-4">
                 {sectionLabel(
                   I18nKey.PROJECT_MANAGEMENT$REMOVE_INTEGRATION_BUTTON_LABEL,
                 )}
-                <p className="text-sm text-tertiary-alt">
-                  {t(
-                    I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_WITH_REVOKE_CONFIRM,
-                  )}
-                </p>
                 <SettingsInput
                   testId="remove-admin-api-key-input"
                   label={t(
