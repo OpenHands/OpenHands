@@ -266,14 +266,17 @@ export function JiraDcIntegrationPanel() {
         </p>
       )}
       {serviceAccountManaged ? (
-        <div className="rounded border border-neutral-700 px-3 py-2">
-          <Typography.Text className="block text-xs text-tertiary-alt">
-            {t(I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_EMAIL_LABEL)}
-          </Typography.Text>
-          <Typography.Text className="block text-sm text-white break-all mt-1">
-            {managedServiceAccountEmail || "—"}
-          </Typography.Text>
-        </div>
+        <SettingsInput
+          testId="jira-dc-svc-email-input"
+          label={t(I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_EMAIL_LABEL)}
+          placeholder={t(
+            I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_EMAIL_PLACEHOLDER,
+          )}
+          value={managedServiceAccountEmail || "—"}
+          className="w-full"
+          type="email"
+          isDisabled
+        />
       ) : (
         <>
           <div>
