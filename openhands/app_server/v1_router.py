@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter
 
 from openhands.app_server.app_conversation import app_conversation_router
@@ -35,3 +37,16 @@ router.include_router(webhook_router.router)
 router.include_router(web_client_router.router)
 router.include_router(git_router)
 router.include_router(config_router)
+
+# WebSocket gateway support (optional, enabled via environment variable)
+WEBSOCKET_GATEWAY_ENABLED = os.getenv('ENABLE_WEBSOCKET_GATEWAY', 'false').lower() in (
+    'true',
+    '1',
+)
+
+if WEBSOCKET_GATEWAY_ENABLED:
+    from openhands.app_server.websocket_router import router as websocket_router
+
+    # Create a separate router for WebSocket endpoints (no prefix, mounted at /ws)
+    websocket_routes = APIRouter()
+    websocket_routes.include_router(websocket_router)

@@ -83,6 +83,15 @@ export function buildWebSocketUrl(
     return null;
   }
 
+  // Check if centralized WebSocket gateway is enabled via environment variable
+  const useGateway = import.meta.env.VITE_ENABLE_WEBSOCKET_GATEWAY === "true";
+
+  if (useGateway && conversationUrl) {
+    // Use relative URL for the centralized gateway endpoint
+    // The browser will automatically resolve this to wss://<current-host>/ws/events/<id>
+    return `/ws/events/${conversationId}`;
+  }
+
   const baseHost = extractBaseHost(conversationUrl);
   const pathPrefix = extractPathPrefix(conversationUrl);
 
