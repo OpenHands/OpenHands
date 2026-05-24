@@ -69,6 +69,7 @@ class JiraDcNewConversationView(JiraDcViewInterface):
             issue_title=self.job_context.issue_title,
             issue_description=self.job_context.issue_description,
             user_message=self.job_context.user_msg or '',
+            previous_comments=self.job_context.previous_comments,
         )
 
         return instructions, user_msg
@@ -231,6 +232,7 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
             user_message=self.job_context.user_msg or '',
             issue_title=self.job_context.issue_title,
             issue_description=self.job_context.issue_description,
+            previous_comments=self.job_context.previous_comments,
         )
 
         return '', user_msg
@@ -309,7 +311,7 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
             )
 
             url = (
-                f"{agent_server_url.rstrip('/')}"
+                f'{agent_server_url.rstrip("/")}'
                 f'/api/conversations/{self.conversation_id}/messages'
             )
             headers = {'X-Session-API-Key': sandbox.session_api_key}
@@ -351,23 +353,20 @@ class JiraDcFactory:
         jira_dc_user: JiraDcUser,
         jira_dc_workspace: JiraDcWorkspace,
     ) -> JiraDcViewInterface:
-        """Create appropriate Jira DC view based on the payload."""
+        """Create a Jira DC view for the payload.
+
+        Always starts a NEW conversation (and a fresh runtime/sandbox) per mention,
+        matching the GitHub and Bitbucket Data Center integrations. JDC previously
+        reused the existing conversation for (issue, user) via
+        ``get_user_conversations_by_issue_id`` + ``JiraDcExistingConversationView``,
+        but that path sends the message into a possibly-recycled sandbox and gets a
+        404 ("Sorry, there was an unexpected error starting the job."). Creating a
+        fresh conversation each time sidesteps the stale-sandbox failure entirely.
+        ``JiraDcExistingConversationView`` is intentionally kept for a future,
+        robust conversation-continuity feature (resume-then-send).
+        """
         if not jira_dc_user or not saas_user_auth or not jira_dc_workspace:
             raise StartingConvoException('User not authenticated with Jira integration')
-
-        conversation = await integration_store.get_user_conversations_by_issue_id(
-            job_context.issue_id, jira_dc_user.id
-        )
-
-        if conversation:
-            return JiraDcExistingConversationView(
-                job_context=job_context,
-                saas_user_auth=saas_user_auth,
-                jira_dc_user=jira_dc_user,
-                jira_dc_workspace=jira_dc_workspace,
-                selected_repo=None,
-                conversation_id=conversation.conversation_id,
-            )
 
         return JiraDcNewConversationView(
             job_context=job_context,
