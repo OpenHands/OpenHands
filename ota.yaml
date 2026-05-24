@@ -106,7 +106,8 @@ tasks:
     env:
       INSTALL_DOCKER: "0"
     run: make build
-    safe_for_agent: true
+    effects:
+      network: true
   build:frontend:
     context: host-dev
     description: Build the frontend assets only
@@ -127,7 +128,8 @@ tasks:
       It is separate from the main frontend app under `frontend/`.
     category: setup
     run: sh -c 'cd openhands-ui && bun install --frozen-lockfile && bun run build'
-    safe_for_agent: true
+    effects:
+      network: true
   lint:backend:
     context: host-dev
     description: Run the backend lint and formatting surface
@@ -276,6 +278,9 @@ tasks:
       you want to run OpenHands without installing host dependencies.
     category: dev
     run: make docker-run
+    effects:
+      external_state:
+        - docker
     runtime:
       kind: service
       surfaces:
@@ -294,6 +299,9 @@ tasks:
       `make docker-run` wrapper flow, this models the packaged runtime as a first-class Ota
       container service.
     category: dev
+    effects:
+      external_state:
+        - docker
     launch:
       kind: container
       image: ghcr.io/openhands/openhands:latest
@@ -414,12 +422,11 @@ workflows:
     run:
       task: build:ui
 agent:
+  posture: readiness_strict
   entrypoint: build
   default_task: lint
   safe_tasks:
-    - build
     - build:frontend
-    - build:ui
     - lint:backend
     - lint:frontend
     - lint
@@ -439,16 +446,19 @@ agent:
     - tests
     - scripts
     - Makefile
-    - docker-compose.yml
     - pyproject.toml
-    - poetry.lock
     - Development.md
     - CONTRIBUTING.md
-    - ota.yaml
   protected_paths:
     - enterprise
     - .github/workflows
     - config.toml
+    - docker-compose.yml
+    - poetry.lock
+    - uv.lock
+    - frontend/package-lock.json
+    - openhands-ui/bun.lock
+    - ota.yaml
   bootstrap:
     ota:
       note: Install ota when missing so contributors and agents can run the declared readiness workflows in this contract.
