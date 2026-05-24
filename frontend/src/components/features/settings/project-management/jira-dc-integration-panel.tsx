@@ -555,70 +555,88 @@ export function JiraDcIntegrationPanel() {
                 I18nKey.PROJECT_MANAGEMENT$REMOVE_INTEGRATION_BUTTON_LABEL,
               )}
             />
-            {/* Pause option: deactivate without removing. */}
-            <div className="w-full flex flex-col gap-1 border-b border-neutral-800 pb-4">
-              <SettingsSwitch
-                testId="active-toggle"
-                onToggle={setIsActive}
-                isToggled={isActive}
-              >
-                {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_LABEL)}
-              </SettingsSwitch>
-              <p className="text-xs text-tertiary-alt">
-                {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_HELP)}
-              </p>
-              {isActive !== storedActive && (
-                <BrandButton
-                  variant="primary"
-                  onClick={applyActiveChange}
-                  testId="jira-dc-apply-active-button"
-                  type="button"
-                  isDisabled={isBusy}
-                  className="mt-1 w-fit"
-                >
-                  {t(I18nKey.PROJECT_MANAGEMENT$UPDATE_BUTTON_LABEL)}
-                </BrandButton>
-              )}
-            </div>
-            <p className="text-sm text-tertiary-alt">
-              {t(
-                removeAdminApiKey.trim()
-                  ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_WITH_REVOKE_CONFIRM
-                  : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_WITHOUT_REVOKE_CONFIRM,
-              )}
-            </p>
-            <SettingsInput
-              testId="remove-admin-api-key-input"
-              label={t(
-                I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_ADMIN_TOKEN_LABEL,
-              )}
-              placeholder={t(
-                I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_PLACEHOLDER,
-              )}
-              value={removeAdminApiKey}
-              onChange={setRemoveAdminApiKey}
-              className="w-full"
-              type="password"
-              showOptionalTag
-            />
-            <div className="flex items-center gap-2 w-full">
-              <BrandButton
-                variant="danger"
-                onClick={confirmRemove}
-                testId="confirm-remove-integration-button"
-                type="button"
-                isDisabled={isBusy}
-              >
-                {t(I18nKey.PROJECT_MANAGEMENT$REMOVE_INTEGRATION_BUTTON_LABEL)}
-              </BrandButton>
-              <BrandButton
-                variant="secondary"
-                onClick={closeModal}
-                testId="cancel-remove-integration-button"
-                type="button"
-              >
-                {t(I18nKey.FEEDBACK$CANCEL_LABEL)}
-              </BrandButton>
+            <div className="flex flex-col gap-4 w-full">
+              <div className="flex flex-col gap-3">
+                {sectionLabel(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_COL_STATUS)}
+                <div className="flex flex-col gap-1">
+                  <SettingsSwitch
+                    testId="active-toggle"
+                    onToggle={setIsActive}
+                    isToggled={isActive}
+                  >
+                    {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_LABEL)}
+                  </SettingsSwitch>
+                  <p className="text-xs text-tertiary-alt">
+                    {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_HELP)}
+                  </p>
+                </div>
+                {isActive !== storedActive && (
+                  <BrandButton
+                    variant="primary"
+                    onClick={applyActiveChange}
+                    testId="jira-dc-apply-active-button"
+                    type="button"
+                    isDisabled={isBusy}
+                    className="w-fit"
+                  >
+                    {t(I18nKey.PROJECT_MANAGEMENT$UPDATE_BUTTON_LABEL)}
+                  </BrandButton>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-neutral-800 pt-4">
+                {sectionLabel(
+                  I18nKey.PROJECT_MANAGEMENT$REMOVE_INTEGRATION_BUTTON_LABEL,
+                )}
+                <p className="text-sm text-tertiary-alt">
+                  {t(
+                    removeAdminApiKey.trim()
+                      ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_WITH_REVOKE_CONFIRM
+                      : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_WITHOUT_REVOKE_CONFIRM,
+                  )}
+                </p>
+                <SettingsInput
+                  testId="remove-admin-api-key-input"
+                  label={t(
+                    I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_ADMIN_TOKEN_LABEL,
+                  )}
+                  placeholder={t(
+                    I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_PLACEHOLDER,
+                  )}
+                  value={removeAdminApiKey}
+                  onChange={setRemoveAdminApiKey}
+                  className="w-full"
+                  type="password"
+                  description={
+                    <p className="text-xs text-tertiary-alt">
+                      {t(
+                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_ADMIN_TOKEN_HELP,
+                      )}
+                    </p>
+                  }
+                />
+                <div className="flex items-center gap-2 w-full">
+                  <BrandButton
+                    variant="danger"
+                    onClick={confirmRemove}
+                    testId="confirm-remove-integration-button"
+                    type="button"
+                    isDisabled={isBusy}
+                  >
+                    {t(
+                      I18nKey.PROJECT_MANAGEMENT$REMOVE_INTEGRATION_BUTTON_LABEL,
+                    )}
+                  </BrandButton>
+                  <BrandButton
+                    variant="secondary"
+                    onClick={closeModal}
+                    testId="cancel-remove-integration-button"
+                    type="button"
+                  >
+                    {t(I18nKey.FEEDBACK$CANCEL_LABEL)}
+                  </BrandButton>
+                </div>
+              </div>
             </div>
           </ModalBody>
         </ModalBackdrop>

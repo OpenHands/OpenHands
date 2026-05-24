@@ -787,31 +787,30 @@ export function ConfigureModal({
               </p>
               {showRemoveConfirm ? (
                 <>
-                  {/* Optional admin PAT scoped to the Remove flow: supplying it
-                      also revokes the Jira webhook. Separate from the install
-                      PAT in the webhook section so each field has one job. */}
+                  {/* Admin PAT scoped to the Remove flow: supplying it also
+                      revokes the Jira webhook. Separate from the install PAT in
+                      the webhook section so each field has one job. */}
                   {isJiraDc && (
-                    <div>
-                      <SettingsInput
-                        testId="remove-admin-api-key-input"
-                        label={t(
-                          I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_ADMIN_TOKEN_LABEL,
-                        )}
-                        placeholder={t(
-                          I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_PLACEHOLDER,
-                        )}
-                        value={removeAdminApiKey}
-                        onChange={setRemoveAdminApiKey}
-                        className="w-full"
-                        type="password"
-                        showOptionalTag
-                      />
-                      <p className="text-xs text-tertiary-alt mt-1">
-                        {t(
-                          I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_ADMIN_TOKEN_HELP,
-                        )}
-                      </p>
-                    </div>
+                    <SettingsInput
+                      testId="remove-admin-api-key-input"
+                      label={t(
+                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_ADMIN_TOKEN_LABEL,
+                      )}
+                      placeholder={t(
+                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_PLACEHOLDER,
+                      )}
+                      value={removeAdminApiKey}
+                      onChange={setRemoveAdminApiKey}
+                      className="w-full"
+                      type="password"
+                      description={
+                        <p className="text-xs text-tertiary-alt">
+                          {t(
+                            I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_ADMIN_TOKEN_HELP,
+                          )}
+                        </p>
+                      }
+                    />
                   )}
                   <div className="grid grid-cols-2 gap-2">
                     <BrandButton
