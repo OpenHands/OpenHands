@@ -452,6 +452,13 @@ export function JiraDcIntegrationPanel() {
                         "—"
                       : existingWorkspace.svc_acc_email || "—"}
                   </Typography.Text>
+                  {serviceAccountManaged && (
+                    <Typography.Text className="block text-xs text-tertiary-alt mt-1">
+                      {t(
+                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_MANAGED_BADGE,
+                      )}
+                    </Typography.Text>
+                  )}
                 </td>
                 <td className="px-4 py-3">{statusBadge()}</td>
                 <td className="px-4 py-3">
