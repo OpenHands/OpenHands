@@ -186,8 +186,7 @@ export function JiraDcIntegrationPanel() {
   const apiKeyRequired = !existingWorkspace && !serviceAccountManaged;
   const serviceAccountEmailSatisfied =
     serviceAccountManaged || serviceAccountEmail.trim() !== "";
-  const webhookSatisfied =
-    !!existingWorkspace || manualMode || adminApiKey.trim() !== "";
+  const webhookSatisfied = manualMode || adminApiKey.trim() !== "";
   const isSubmitDisabled =
     !workspace.trim() ||
     !serviceAccountEmailSatisfied ||
@@ -343,7 +342,6 @@ export function JiraDcIntegrationPanel() {
             onChange={setAdminApiKey}
             className="w-full"
             type="password"
-            showOptionalTag={!!existingWorkspace}
           />
           <p className="text-xs text-tertiary-alt mt-1">
             {t(
