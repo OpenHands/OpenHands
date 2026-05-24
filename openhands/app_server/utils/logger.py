@@ -356,6 +356,9 @@ def json_log_handler(
 # Set up logging
 logging.basicConfig(level=logging.ERROR)
 
+# Silence noisy websockets keepalive ping/pong logs
+logging.getLogger('websockets.client').setLevel(logging.WARNING)
+
 
 def log_uncaught_exceptions(
     ex_cls: type[BaseException], ex: BaseException, tb: TracebackType | None
