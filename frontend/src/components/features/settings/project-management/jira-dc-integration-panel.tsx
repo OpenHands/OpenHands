@@ -23,8 +23,8 @@ type ModalView = "edit" | "remove" | null;
  * On-page Jira Data Center integration. The resting state is a compact table
  * row that mirrors the GitLab / Bitbucket webhook managers above it on the same
  * page (server / service account / status / action). Configuring or editing
- * opens a pop-out modal with a single-column, sequential form (Server ->
- * Service account -> Webhook). The modal is height-capped + scrollable
+ * opens a pop-out modal with a single-column, sequential form (Server and
+ * service account -> Webhook). The modal is height-capped + scrollable
  * so it never overflows the viewport. Jira DC is single-server, so there's
  * exactly one connection / service account / webhook to manage.
  */
@@ -227,14 +227,18 @@ export function JiraDcIntegrationPanel() {
   const colHead =
     "px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider";
 
-  const serviceAccountSection = (
-    <div className="flex flex-col gap-3 border-t border-neutral-800 pt-4">
+  const serverAndServiceAccountSection = (
+    <div className="flex flex-col gap-3">
       <div>
         {sectionLabel(
-          I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_SECTION_LABEL,
+          I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVER_SERVICE_ACCOUNT_SECTION_LABEL,
         )}
         <p className="text-xs text-tertiary-alt mt-1">
-          {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_SECTION_HELP)}
+          {t(
+            serviceAccountManaged
+              ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_MANAGED_HELP
+              : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_SECTION_HELP,
+          )}
         </p>
       </div>
       {serviceAccountConfigError && (
@@ -242,6 +246,23 @@ export function JiraDcIntegrationPanel() {
           {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_CONFIG_ERROR, {
             error: serviceAccountConfigError,
           })}
+        </p>
+      )}
+      <SettingsInput
+        testId="jira-dc-host-input"
+        label={t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_HOST_LABEL)}
+        placeholder={t(
+          I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WORKSPACE_NAME_PLACEHOLDER,
+        )}
+        value={workspace}
+        onChange={setWorkspace}
+        className="w-full"
+        type="text"
+        isDisabled={hostLocked}
+      />
+      {!hostLocked && (
+        <p className="text-xs text-tertiary-alt">
+          {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_HOST_HELP)}
         </p>
       )}
       {serviceAccountManaged ? (
@@ -252,9 +273,6 @@ export function JiraDcIntegrationPanel() {
           <Typography.Text className="block text-sm text-white break-all mt-1">
             {managedServiceAccountEmail || "—"}
           </Typography.Text>
-          <p className="text-xs text-tertiary-alt mt-2">
-            {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_MANAGED_HELP)}
-          </p>
         </div>
       ) : (
         <>
@@ -342,14 +360,16 @@ export function JiraDcIntegrationPanel() {
             onChange={setAdminApiKey}
             className="w-full"
             type="password"
+            description={
+              <p className="text-xs text-tertiary-alt">
+                {t(
+                  existingWorkspace
+                    ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_EXISTING_ADMIN_TOKEN_HELP
+                    : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_HELP,
+                )}
+              </p>
+            }
           />
-          <p className="text-xs text-tertiary-alt mt-1">
-            {t(
-              existingWorkspace
-                ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_EXISTING_ADMIN_TOKEN_HELP
-                : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_HELP,
-            )}
-          </p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -494,31 +514,7 @@ export function JiraDcIntegrationPanel() {
               })}
             />
             <div className="flex flex-col gap-4 w-full">
-              {/* Server */}
-              <div className="flex flex-col gap-2">
-                {sectionLabel(
-                  I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVER_SECTION_LABEL,
-                )}
-                <SettingsInput
-                  testId="jira-dc-host-input"
-                  label={t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_HOST_LABEL)}
-                  placeholder={t(
-                    I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WORKSPACE_NAME_PLACEHOLDER,
-                  )}
-                  value={workspace}
-                  onChange={setWorkspace}
-                  className="w-full"
-                  type="text"
-                  isDisabled={hostLocked}
-                />
-                {!hostLocked && (
-                  <p className="text-xs text-tertiary-alt">
-                    {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_HOST_HELP)}
-                  </p>
-                )}
-              </div>
-
-              {serviceAccountSection}
+              {serverAndServiceAccountSection}
               {webhookSection}
             </div>
 
@@ -556,7 +552,7 @@ export function JiraDcIntegrationPanel() {
                 I18nKey.PROJECT_MANAGEMENT$REMOVE_INTEGRATION_BUTTON_LABEL,
               )}
             />
-            {/* Pause option — deactivate without removing. */}
+            {/* Pause option: deactivate without removing. */}
             <div className="w-full flex flex-col gap-1 border-b border-neutral-800 pb-4">
               <SettingsSwitch
                 testId="active-toggle"
