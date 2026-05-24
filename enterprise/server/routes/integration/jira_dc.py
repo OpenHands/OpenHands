@@ -49,6 +49,7 @@ JIRA_DC_SCOPES = 'WRITE'
 JIRA_DC_AUTH_URL = f'{JIRA_DC_BASE_URL}/rest/oauth2/latest/authorize'
 JIRA_DC_TOKEN_URL = f'{JIRA_DC_BASE_URL}/rest/oauth2/latest/token'
 JIRA_DC_USER_INFO_URL = f'{JIRA_DC_BASE_URL}/rest/api/2/myself'
+JIRA_DC_OAUTH_STATE_TTL_SECONDS = 600
 
 
 # Request/Response models
@@ -129,6 +130,23 @@ class JiraDcLinkCreate(BaseModel):
         if not re.match(r'^[a-zA-Z0-9_.-]+$', v):
             raise ValueError(
                 'workspace can only contain alphanumeric characters, hyphens, underscores, and periods'
+            )
+        return v
+
+
+class JiraDcWorkspaceStatusUpdate(BaseModel):
+    workspace_name: str = Field(..., description='Workspace display name')
+    is_active: bool = Field(
+        ...,
+        description='Indicates if the workspace integration should be active',
+    )
+
+    @field_validator('workspace_name')
+    @classmethod
+    def validate_workspace_name(cls, v):
+        if not re.match(r'^[a-zA-Z0-9_.-]+$', v):
+            raise ValueError(
+                'workspace_name can only contain alphanumeric characters, hyphens, underscores, and periods'
             )
         return v
 
@@ -483,7 +501,7 @@ async def create_jira_dc_workspace(
 
             created = redis_client.setex(
                 state,
-                60,
+                JIRA_DC_OAUTH_STATE_TTL_SECONDS,
                 json.dumps(integration_session),
             )
 
@@ -598,6 +616,42 @@ async def create_jira_dc_workspace(
         )
 
 
+@jira_dc_integration_router.post('/workspaces/status')
+async def update_jira_dc_workspace_status(
+    request: Request, workspace_data: JiraDcWorkspaceStatusUpdate
+):
+    """Update Jira DC workspace active state without starting OAuth."""
+    try:
+        user_auth = cast(SaasUserAuth, await get_user_auth(request))
+        user_id = await user_auth.get_user_id()
+
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='User ID not found',
+            )
+
+        workspace = await _validate_workspace_update_permissions(
+            user_id, workspace_data.workspace_name
+        )
+        workspace_status = 'active' if workspace_data.is_active else 'inactive'
+        await jira_dc_manager.integration_store.update_workspace(
+            id=workspace.id,
+            status=workspace_status,
+        )
+
+        return JSONResponse({'success': True, 'status': workspace_status})
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f'Error updating Jira DC workspace status: {e}')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update workspace status',
+        )
+
+
 @jira_dc_integration_router.post('/workspaces/link')
 async def create_workspace_link(request: Request, link_data: JiraDcLinkCreate):
     """Register a user mapping to a Jira DC workspace."""
@@ -628,7 +682,7 @@ async def create_workspace_link(request: Request, link_data: JiraDcLinkCreate):
 
             created = redis_client.setex(
                 state,
-                60,
+                JIRA_DC_OAUTH_STATE_TTL_SECONDS,
                 json.dumps(integration_session),
             )
 

@@ -13,6 +13,7 @@ import { useConfig } from "#/hooks/query/use-config";
 import { useIntegrationStatus } from "#/hooks/query/use-integration-status";
 import { useConfigureIntegration } from "#/hooks/mutation/use-configure-integration";
 import { useUnlinkIntegration } from "#/hooks/mutation/use-unlink-integration";
+import { useUpdateJiraDcWorkspaceStatus } from "#/hooks/mutation/use-update-jira-dc-workspace-status";
 import { CopyableValue, generateWebhookSecret } from "./configure-modal";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -52,7 +53,13 @@ export function JiraDcIntegrationPanel() {
   const unlinkMutation = useUnlinkIntegration("jira-dc", {
     onSettled: () => {},
   });
-  const isBusy = configureMutation.isPending || unlinkMutation.isPending;
+  const statusMutation = useUpdateJiraDcWorkspaceStatus({
+    onSettled: () => {},
+  });
+  const isBusy =
+    configureMutation.isPending ||
+    unlinkMutation.isPending ||
+    statusMutation.isPending;
 
   const eventsUrl =
     typeof window !== "undefined"
@@ -169,15 +176,10 @@ export function JiraDcIntegrationPanel() {
 
   const handleActiveToggle = (nextActive: boolean) => {
     setIsActive(nextActive);
-    configureMutation.mutate(
+    statusMutation.mutate(
       {
-        workspace,
-        webhookSecret: "",
-        serviceAccountEmail: serviceAccountManaged
-          ? managedServiceAccountEmail
-          : serviceAccountEmail,
-        serviceAccountApiKey: "",
-        adminApiKey: "",
+        workspace:
+          workspace || existingWorkspace?.name || jiraDcOAuthHost || "",
         isActive: nextActive,
       },
       {
