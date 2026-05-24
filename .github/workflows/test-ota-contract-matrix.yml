@@ -10,7 +10,7 @@ on:
       ota_ref:
         description: Ota branch, tag, or commit to build for this matrix run
         required: false
-        default: ec0f901e84f37a27728853c495abde575e1b24e9
+        default: a64c8db69d50c902f9066cdd1403eb9447828c4a
   pull_request:
     paths:
       - 'ota.yaml'
@@ -85,10 +85,10 @@ jobs:
           sudo apt-get install -y netcat-openbsd
 
       - name: Install ota from source
-        uses: ota-run/ota/.github/actions/install-ota-from-source@ec0f901e84f37a27728853c495abde575e1b24e9
+        uses: ota-run/ota/.github/actions/install-ota-from-source@a64c8db69d50c902f9066cdd1403eb9447828c4a
         with:
           repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
-          ref: ${{ github.event.inputs.ota_ref || 'ec0f901e84f37a27728853c495abde575e1b24e9' }}
+          ref: ${{ github.event.inputs.ota_ref || 'a64c8db69d50c902f9066cdd1403eb9447828c4a' }}
 
       - name: Validate contract
         shell: bash
@@ -273,10 +273,10 @@ jobs:
           persist-credentials: false
 
       - name: Install ota from source
-        uses: ota-run/ota/.github/actions/install-ota-from-source@ec0f901e84f37a27728853c495abde575e1b24e9
+        uses: ota-run/ota/.github/actions/install-ota-from-source@a64c8db69d50c902f9066cdd1403eb9447828c4a
         with:
           repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
-          ref: ${{ github.event.inputs.ota_ref || 'ec0f901e84f37a27728853c495abde575e1b24e9' }}
+          ref: ${{ github.event.inputs.ota_ref || 'a64c8db69d50c902f9066cdd1403eb9447828c4a' }}
 
       - name: Verify Docker
         shell: bash
@@ -336,10 +336,10 @@ jobs:
           persist-credentials: false
 
       - name: Install ota from source
-        uses: ota-run/ota/.github/actions/install-ota-from-source@ec0f901e84f37a27728853c495abde575e1b24e9
+        uses: ota-run/ota/.github/actions/install-ota-from-source@a64c8db69d50c902f9066cdd1403eb9447828c4a
         with:
           repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
-          ref: ${{ github.event.inputs.ota_ref || 'ec0f901e84f37a27728853c495abde575e1b24e9' }}
+          ref: ${{ github.event.inputs.ota_ref || 'a64c8db69d50c902f9066cdd1403eb9447828c4a' }}
 
       - name: Verify Docker
         shell: bash
@@ -391,10 +391,10 @@ jobs:
           bun-version-file: openhands-ui/.bun-version
 
       - name: Install ota from source
-        uses: ota-run/ota/.github/actions/install-ota-from-source@ec0f901e84f37a27728853c495abde575e1b24e9
+        uses: ota-run/ota/.github/actions/install-ota-from-source@a64c8db69d50c902f9066cdd1403eb9447828c4a
         with:
           repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
-          ref: ${{ github.event.inputs.ota_ref || 'ec0f901e84f37a27728853c495abde575e1b24e9' }}
+          ref: ${{ github.event.inputs.ota_ref || 'a64c8db69d50c902f9066cdd1403eb9447828c4a' }}
 
       - name: Verify Bun
         shell: bash
