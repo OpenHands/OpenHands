@@ -173,6 +173,23 @@ describe("Form submission", () => {
     expect(submit).toBeDisabled();
   });
 
+  it("should not enable submit when typing in the language field without selecting", async () => {
+    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+    getSettingsSpy.mockResolvedValue(MOCK_DEFAULT_USER_SETTINGS);
+
+    renderAppSettingsScreen();
+
+    const submit = await screen.findByTestId("submit-button");
+    const language = await screen.findByTestId("language-input");
+
+    expect(submit).toBeDisabled();
+
+    await userEvent.click(language);
+    await userEvent.type(language, "Fre");
+
+    expect(submit).toBeDisabled();
+  });
+
   it("should call handleCaptureConsents with true when the analytics switch is toggled", async () => {
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
     getSettingsSpy.mockResolvedValue(MOCK_DEFAULT_USER_SETTINGS);
