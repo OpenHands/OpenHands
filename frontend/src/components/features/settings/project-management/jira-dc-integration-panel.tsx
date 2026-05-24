@@ -23,8 +23,9 @@ type ModalView = "edit" | "remove" | null;
  * On-page Jira Data Center integration. The resting state is a compact table
  * row that mirrors the GitLab / Bitbucket webhook managers above it on the same
  * page (server / service account / status / action). Configuring or editing
- * opens a pop-out modal with a single-column, sequential form (Server and
- * service account -> Webhook). The modal is height-capped + scrollable
+ * opens a pop-out modal with a single-column, sequential form. KOTS-managed
+ * installs only expose webhook setup in that modal; unmanaged installs also
+ * collect server and service-account details. The modal is height-capped + scrollable
  * so it never overflows the viewport. Jira DC is single-server, so there's
  * exactly one connection / service account / webhook to manage.
  */
@@ -226,6 +227,7 @@ export function JiraDcIntegrationPanel() {
 
   const colHead =
     "px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider";
+  const showServerAndServiceAccountSection = !serviceAccountManaged;
 
   const serverAndServiceAccountSection = (
     <div className="flex flex-col gap-3">
@@ -434,6 +436,13 @@ export function JiraDcIntegrationPanel() {
                   <Typography.Text className="text-sm text-white break-all">
                     {existingWorkspace.name}
                   </Typography.Text>
+                  {serviceAccountManaged && (
+                    <Typography.Text className="block text-xs text-tertiary-alt mt-1">
+                      {t(
+                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_MANAGED_BADGE,
+                      )}
+                    </Typography.Text>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <Typography.Text className="text-sm text-gray-300 break-all">
@@ -443,13 +452,6 @@ export function JiraDcIntegrationPanel() {
                         "—"
                       : existingWorkspace.svc_acc_email || "—"}
                   </Typography.Text>
-                  {serviceAccountManaged && (
-                    <Typography.Text className="block text-xs text-tertiary-alt mt-1">
-                      {t(
-                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_MANAGED_BADGE,
-                      )}
-                    </Typography.Text>
-                  )}
                 </td>
                 <td className="px-4 py-3">{statusBadge()}</td>
                 <td className="px-4 py-3">
@@ -517,7 +519,19 @@ export function JiraDcIntegrationPanel() {
               })}
             />
             <div className="flex flex-col gap-4 w-full">
-              {serverAndServiceAccountSection}
+              {showServerAndServiceAccountSection &&
+                serverAndServiceAccountSection}
+              {!showServerAndServiceAccountSection &&
+                serviceAccountConfigError && (
+                  <p className="text-red-500 text-sm">
+                    {t(
+                      I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_CONFIG_ERROR,
+                      {
+                        error: serviceAccountConfigError,
+                      },
+                    )}
+                  </p>
+                )}
               {webhookSection}
             </div>
 
