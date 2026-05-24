@@ -24,7 +24,7 @@ type ModalView = "edit" | "remove" | null;
  * row that mirrors the GitLab / Bitbucket webhook managers above it on the same
  * page (server / service account / status / action). Configuring or editing
  * opens a pop-out modal with a single-column, sequential form (Server ->
- * Webhook -> Service account -> Active). The modal is height-capped + scrollable
+ * Service account -> Webhook). The modal is height-capped + scrollable
  * so it never overflows the viewport. Jira DC is single-server, so there's
  * exactly one connection / service account / webhook to manage.
  */
@@ -228,6 +228,155 @@ export function JiraDcIntegrationPanel() {
   const colHead =
     "px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider";
 
+  const serviceAccountSection = (
+    <div className="flex flex-col gap-3 border-t border-neutral-800 pt-4">
+      <div>
+        {sectionLabel(
+          I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_SECTION_LABEL,
+        )}
+        <p className="text-xs text-tertiary-alt mt-1">
+          {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_SECTION_HELP)}
+        </p>
+      </div>
+      {serviceAccountConfigError && (
+        <p className="text-red-500 text-sm">
+          {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_CONFIG_ERROR, {
+            error: serviceAccountConfigError,
+          })}
+        </p>
+      )}
+      {serviceAccountManaged ? (
+        <div className="rounded border border-neutral-700 px-3 py-2">
+          <Typography.Text className="block text-xs text-tertiary-alt">
+            {t(I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_EMAIL_LABEL)}
+          </Typography.Text>
+          <Typography.Text className="block text-sm text-white break-all mt-1">
+            {managedServiceAccountEmail || "—"}
+          </Typography.Text>
+          <p className="text-xs text-tertiary-alt mt-2">
+            {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_MANAGED_HELP)}
+          </p>
+        </div>
+      ) : (
+        <>
+          <div>
+            <SettingsInput
+              testId="jira-dc-svc-email-input"
+              label={t(I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_EMAIL_LABEL)}
+              placeholder={t(
+                I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_EMAIL_PLACEHOLDER,
+              )}
+              value={serviceAccountEmail}
+              onChange={handleEmailChange}
+              className="w-full"
+              type="email"
+            />
+            {emailError && (
+              <p className="text-red-500 text-sm mt-2">{emailError}</p>
+            )}
+          </div>
+          <div>
+            <SettingsInput
+              testId="jira-dc-svc-pat-input"
+              label={t(
+                I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_API_LABEL,
+              )}
+              placeholder={t(apiKeyPlaceholderKey)}
+              value={serviceAccountApiKey}
+              onChange={handleApiKeyChange}
+              className="w-full"
+              type="password"
+              showOptionalTag={hasSavedApiKey}
+            />
+            {apiKeyError && (
+              <p className="text-red-500 text-sm mt-2">{apiKeyError}</p>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const webhookSection = (
+    <div className="flex flex-col gap-3 border-t border-neutral-800 pt-4">
+      <div>
+        {sectionLabel(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_SECTION_LABEL)}
+        <p className="text-xs text-tertiary-alt mt-1">
+          {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_SECTION_HELP)}
+        </p>
+      </div>
+      <div className="flex w-fit overflow-hidden rounded-sm border border-[#717888] text-sm">
+        <button
+          type="button"
+          data-testid="webhook-mode-auto"
+          onClick={() => setManualMode(false)}
+          className={`px-3 py-1.5 ${
+            !manualMode
+              ? "bg-[#717888] text-white"
+              : "bg-transparent text-tertiary-alt"
+          }`}
+        >
+          {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_MODE_AUTO)}
+        </button>
+        <button
+          type="button"
+          data-testid="webhook-mode-manual"
+          onClick={enableManualMode}
+          className={`px-3 py-1.5 ${
+            manualMode
+              ? "bg-[#717888] text-white"
+              : "bg-transparent text-tertiary-alt"
+          }`}
+        >
+          {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_MODE_MANUAL)}
+        </button>
+      </div>
+      {!manualMode ? (
+        <div>
+          <SettingsInput
+            testId="admin-api-key-input"
+            label={t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_LABEL)}
+            placeholder={t(
+              I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_PLACEHOLDER,
+            )}
+            value={adminApiKey}
+            onChange={setAdminApiKey}
+            className="w-full"
+            type="password"
+            showOptionalTag={!!existingWorkspace}
+          />
+          <p className="text-xs text-tertiary-alt mt-1">
+            {t(
+              existingWorkspace
+                ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_EXISTING_ADMIN_TOKEN_HELP
+                : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_HELP,
+            )}
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-xs text-tertiary-alt">
+            {t(
+              existingWorkspace
+                ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_MANUAL_UPDATE_INSTRUCTIONS
+                : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_MANUAL_INSTRUCTIONS,
+            )}
+          </p>
+          <CopyableValue
+            testId="webhook-url-value"
+            label={t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_URL_LABEL)}
+            value={eventsUrl}
+          />
+          <CopyableValue
+            testId="webhook-secret-value"
+            label={t(I18nKey.PROJECT_MANAGEMENT$WEBHOOK_SECRET_LABEL)}
+            value={manualSecret}
+          />
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-4" data-testid="jira-dc-panel">
       <Typography.H3 className="text-lg font-medium text-white">
@@ -371,165 +520,8 @@ export function JiraDcIntegrationPanel() {
                 )}
               </div>
 
-              {/* Webhook (inbound) */}
-              <div className="flex flex-col gap-3 border-t border-neutral-800 pt-4">
-                <div>
-                  {sectionLabel(
-                    I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_SECTION_LABEL,
-                  )}
-                  <p className="text-xs text-tertiary-alt mt-1">
-                    {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_SECTION_HELP)}
-                  </p>
-                </div>
-                <div className="flex w-fit overflow-hidden rounded-sm border border-[#717888] text-sm">
-                  <button
-                    type="button"
-                    data-testid="webhook-mode-auto"
-                    onClick={() => setManualMode(false)}
-                    className={`px-3 py-1.5 ${
-                      !manualMode
-                        ? "bg-[#717888] text-white"
-                        : "bg-transparent text-tertiary-alt"
-                    }`}
-                  >
-                    {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_MODE_AUTO)}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="webhook-mode-manual"
-                    onClick={enableManualMode}
-                    className={`px-3 py-1.5 ${
-                      manualMode
-                        ? "bg-[#717888] text-white"
-                        : "bg-transparent text-tertiary-alt"
-                    }`}
-                  >
-                    {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_MODE_MANUAL)}
-                  </button>
-                </div>
-                {!manualMode ? (
-                  <div>
-                    <SettingsInput
-                      testId="admin-api-key-input"
-                      label={t(
-                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_LABEL,
-                      )}
-                      placeholder={t(
-                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_PLACEHOLDER,
-                      )}
-                      value={adminApiKey}
-                      onChange={setAdminApiKey}
-                      className="w-full"
-                      type="password"
-                    />
-                    <p className="text-xs text-tertiary-alt mt-1">
-                      {t(
-                        existingWorkspace
-                          ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_EXISTING_ADMIN_TOKEN_HELP
-                          : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_HELP,
-                      )}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-3">
-                    <p className="text-xs text-tertiary-alt">
-                      {t(
-                        existingWorkspace
-                          ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_MANUAL_UPDATE_INSTRUCTIONS
-                          : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_MANUAL_INSTRUCTIONS,
-                      )}
-                    </p>
-                    <CopyableValue
-                      testId="webhook-url-value"
-                      label={t(
-                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_URL_LABEL,
-                      )}
-                      value={eventsUrl}
-                    />
-                    <CopyableValue
-                      testId="webhook-secret-value"
-                      label={t(I18nKey.PROJECT_MANAGEMENT$WEBHOOK_SECRET_LABEL)}
-                      value={manualSecret}
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Service account (outbound) */}
-              <div className="flex flex-col gap-3 border-t border-neutral-800 pt-4">
-                <div>
-                  {sectionLabel(
-                    I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_SECTION_LABEL,
-                  )}
-                  <p className="text-xs text-tertiary-alt mt-1">
-                    {t(
-                      I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_SECTION_HELP,
-                    )}
-                  </p>
-                </div>
-                {serviceAccountConfigError && (
-                  <p className="text-red-500 text-sm">
-                    {t(
-                      I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_CONFIG_ERROR,
-                      { error: serviceAccountConfigError },
-                    )}
-                  </p>
-                )}
-                {serviceAccountManaged ? (
-                  <div className="rounded border border-neutral-700 px-3 py-2">
-                    <Typography.Text className="text-sm text-white break-all">
-                      {managedServiceAccountEmail}
-                    </Typography.Text>
-                    <p className="text-xs text-tertiary-alt mt-1">
-                      {t(
-                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_MANAGED_HELP,
-                      )}
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <SettingsInput
-                        testId="jira-dc-svc-email-input"
-                        label={t(
-                          I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_EMAIL_LABEL,
-                        )}
-                        placeholder={t(
-                          I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_EMAIL_PLACEHOLDER,
-                        )}
-                        value={serviceAccountEmail}
-                        onChange={handleEmailChange}
-                        className="w-full"
-                        type="email"
-                      />
-                      {emailError && (
-                        <p className="text-red-500 text-sm mt-2">
-                          {emailError}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <SettingsInput
-                        testId="jira-dc-svc-pat-input"
-                        label={t(
-                          I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_API_LABEL,
-                        )}
-                        placeholder={t(apiKeyPlaceholderKey)}
-                        value={serviceAccountApiKey}
-                        onChange={handleApiKeyChange}
-                        className="w-full"
-                        type="password"
-                        showOptionalTag={hasSavedApiKey}
-                      />
-                      {apiKeyError && (
-                        <p className="text-red-500 text-sm mt-2">
-                          {apiKeyError}
-                        </p>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
+              {serviceAccountSection}
+              {webhookSection}
             </div>
 
             <div className="flex items-center gap-3 w-full">
