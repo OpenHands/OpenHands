@@ -162,7 +162,9 @@ export function JiraDcIntegrationPanel() {
   };
 
   const confirmRemove = () => {
-    unlinkMutation.mutate(removeAdminApiKey.trim() || undefined);
+    const trimmedAdminApiKey = removeAdminApiKey.trim();
+    if (!trimmedAdminApiKey) return;
+    unlinkMutation.mutate(trimmedAdminApiKey);
   };
 
   // Active/paused lives on the Remove screen (a softer alternative to removal),
@@ -483,7 +485,7 @@ export function JiraDcIntegrationPanel() {
                         isDisabled={isBusy}
                       >
                         {t(
-                          I18nKey.PROJECT_MANAGEMENT$REMOVE_INTEGRATION_BUTTON_LABEL,
+                          I18nKey.PROJECT_MANAGEMENT$JIRA_DC_DISABLE_BUTTON_LABEL,
                         )}
                       </BrandButton>
                     </div>
@@ -572,23 +574,25 @@ export function JiraDcIntegrationPanel() {
         <ModalBackdrop onClose={closeModal}>
           <ModalBody className="items-start w-[460px]">
             <BaseModalTitle
-              title={t(
-                I18nKey.PROJECT_MANAGEMENT$REMOVE_INTEGRATION_BUTTON_LABEL,
-              )}
+              title={t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_DISABLE_MODAL_TITLE)}
             />
             <div className="flex flex-col gap-4 w-full">
               <div className="flex flex-col gap-3">
-                {sectionLabel(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_COL_STATUS)}
+                {sectionLabel(
+                  I18nKey.PROJECT_MANAGEMENT$JIRA_DC_PAUSE_SECTION_LABEL,
+                )}
                 <div className="flex flex-col gap-1">
                   <SettingsSwitch
                     testId="active-toggle"
                     onToggle={setIsActive}
                     isToggled={isActive}
                   >
-                    {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_LABEL)}
+                    {t(
+                      I18nKey.PROJECT_MANAGEMENT$JIRA_DC_EVENT_RESPONSES_TOGGLE_LABEL,
+                    )}
                   </SettingsSwitch>
                   <p className="text-xs text-tertiary-alt">
-                    {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_HELP)}
+                    {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_PAUSE_HELP)}
                   </p>
                 </div>
                 {isActive !== storedActive && (
@@ -600,7 +604,11 @@ export function JiraDcIntegrationPanel() {
                     isDisabled={isBusy}
                     className="w-fit"
                   >
-                    {t(I18nKey.PROJECT_MANAGEMENT$UPDATE_BUTTON_LABEL)}
+                    {t(
+                      isActive
+                        ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_RESUME_BUTTON_LABEL
+                        : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_PAUSE_BUTTON_LABEL,
+                    )}
                   </BrandButton>
                 )}
               </div>
@@ -611,9 +619,7 @@ export function JiraDcIntegrationPanel() {
                 )}
                 <p className="text-sm text-tertiary-alt">
                   {t(
-                    removeAdminApiKey.trim()
-                      ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_WITH_REVOKE_CONFIRM
-                      : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_WITHOUT_REVOKE_CONFIRM,
+                    I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_WITH_REVOKE_CONFIRM,
                   )}
                 </p>
                 <SettingsInput
@@ -631,7 +637,7 @@ export function JiraDcIntegrationPanel() {
                   description={
                     <p className="text-xs text-tertiary-alt">
                       {t(
-                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_ADMIN_TOKEN_HELP,
+                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_ADMIN_TOKEN_REQUIRED_HELP,
                       )}
                     </p>
                   }
@@ -642,7 +648,7 @@ export function JiraDcIntegrationPanel() {
                     onClick={confirmRemove}
                     testId="confirm-remove-integration-button"
                     type="button"
-                    isDisabled={isBusy}
+                    isDisabled={isBusy || !removeAdminApiKey.trim()}
                   >
                     {t(
                       I18nKey.PROJECT_MANAGEMENT$REMOVE_INTEGRATION_BUTTON_LABEL,
