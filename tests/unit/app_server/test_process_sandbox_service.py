@@ -90,12 +90,31 @@ class TestProcessSandboxService:
         """Test waiting for server to be ready - success case."""
         # Mock successful response
         mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {'status': 'ok'}
+        mock_response.is_success = True
         process_sandbox_service.httpx_client.get.return_value = mock_response
 
         result = await process_sandbox_service._wait_for_server_ready(9000, timeout=1)
         assert result is True
+        process_sandbox_service.httpx_client.get.assert_awaited_once_with(
+            'http://127.0.0.1:9000/alive', timeout=5.0
+        )
+
+    @pytest.mark.asyncio
+    async def test_wait_for_server_ready_uses_configured_health_check_path(
+        self, process_sandbox_service
+    ):
+        """Test waiting for server readiness uses the configured health check."""
+        process_sandbox_service.health_check_path = '/health'
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        process_sandbox_service.httpx_client.get.return_value = mock_response
+
+        result = await process_sandbox_service._wait_for_server_ready(9000, timeout=1)
+
+        assert result is True
+        process_sandbox_service.httpx_client.get.assert_awaited_once_with(
+            'http://127.0.0.1:9000/health', timeout=5.0
+        )
 
     @pytest.mark.asyncio
     async def test_wait_for_server_ready_timeout(self, process_sandbox_service):
@@ -208,7 +227,7 @@ class TestProcessSandboxService:
 
             # Mock successful health check response
             mock_response = MagicMock()
-            mock_response.status_code = 200
+            mock_response.is_success = True
             process_sandbox_service.httpx_client.get.return_value = mock_response
 
             # Execute with custom sandbox_id
@@ -287,6 +306,42 @@ class TestProcessSandboxService:
         assert status == SandboxStatus.MISSING
 
     @pytest.mark.asyncio
+    async def test_process_to_sandbox_info_success_uses_loopback_url(
+        self, process_sandbox_service
+    ):
+        """Test process sandbox info keeps child process URLs on loopback."""
+        with patch.object(
+            process_sandbox_service,
+            '_get_process_status',
+            return_value=SandboxStatus.RUNNING,
+        ):
+            mock_response = MagicMock()
+            mock_response.is_success = True
+            process_sandbox_service.httpx_client.get.return_value = mock_response
+
+            process_info = ProcessInfo(
+                pid=1234,
+                port=9000,
+                user_id='test-user-id',
+                working_dir='/tmp/test',
+                session_api_key='test-key',
+                created_at=datetime.now(),
+                sandbox_spec_id='test-spec',
+            )
+
+            sandbox_info = await process_sandbox_service._process_to_sandbox_info(
+                'test-sandbox', process_info
+            )
+
+            assert sandbox_info.status == SandboxStatus.RUNNING
+            assert sandbox_info.session_api_key == 'test-key'
+            assert sandbox_info.exposed_urls is not None
+            assert sandbox_info.exposed_urls[0].url == 'http://127.0.0.1:9000'
+            process_sandbox_service.httpx_client.get.assert_awaited_once_with(
+                'http://127.0.0.1:9000/alive', timeout=5.0
+            )
+
+    @pytest.mark.asyncio
     async def test_process_to_sandbox_info_error_status(self, process_sandbox_service):
         """Test converting process info to sandbox info when server is not responding."""
         # Mock a process that's running but server is not responding
@@ -297,7 +352,7 @@ class TestProcessSandboxService:
         ):
             # Mock httpx client to return error response
             mock_response = MagicMock()
-            mock_response.status_code = 500
+            mock_response.is_success = False
             process_sandbox_service.httpx_client.get.return_value = mock_response
 
             process_info = ProcessInfo(
@@ -358,7 +413,9 @@ class TestProcessSandboxServiceInjector:
         """Test default configuration values."""
         injector = ProcessSandboxServiceInjector()
 
-        assert injector.base_working_dir == '/tmp/openhands-sandboxes'
+        assert injector.base_working_dir == os.path.join(
+            tempfile.gettempdir(), 'openhands-sandboxes'
+        )
         assert injector.base_port == 8000
         assert injector.health_check_path == '/alive'
         assert injector.agent_server_module == 'openhands.agent_server'

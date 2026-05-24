@@ -38,9 +38,6 @@ from openhands.app_server.sandbox.sandbox_service import (
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
 from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.utils.docker_utils import (
-    replace_localhost_hostname_for_docker,
-)
 
 _logger = logging.getLogger(__name__)
 
@@ -106,6 +103,10 @@ class ProcessSandboxService(SandboxService):
         os.makedirs(sandbox_dir, exist_ok=True)
         return sandbox_dir
 
+    def _agent_server_url(self, port: int) -> str:
+        """Return the loopback URL for the child agent server process."""
+        return f'http://127.0.0.1:{port}'
+
     async def _start_agent_process(
         self,
         sandbox_id: str,
@@ -162,14 +163,10 @@ class ProcessSandboxService(SandboxService):
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
-                url = replace_localhost_hostname_for_docker(
-                    f'http://localhost:{port}/alive'
-                )
+                url = f'{self._agent_server_url(port)}{self.health_check_path}'
                 response = await self.httpx_client.get(url, timeout=5.0)
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get('status') == 'ok':
-                        return True
+                if response.is_success:
+                    return True
             except Exception:
                 pass
             await asyncio.sleep(1)
@@ -204,15 +201,16 @@ class ProcessSandboxService(SandboxService):
         if status == SandboxStatus.RUNNING:
             # Check if server is actually responding
             try:
-                url = replace_localhost_hostname_for_docker(
-                    f'http://localhost:{process_info.port}{self.health_check_path}'
+                url = (
+                    f'{self._agent_server_url(process_info.port)}'
+                    f'{self.health_check_path}'
                 )
                 response = await self.httpx_client.get(url, timeout=5.0)
-                if response.status_code == 200:
+                if response.is_success:
                     exposed_urls = [
                         ExposedUrl(
                             name=AGENT_SERVER,
-                            url=f'http://localhost:{process_info.port}',
+                            url=self._agent_server_url(process_info.port),
                             port=process_info.port,
                         ),
                     ]
