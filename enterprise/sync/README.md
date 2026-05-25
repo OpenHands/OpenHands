@@ -17,7 +17,9 @@ The service is configured using environment variables:
 |----------|-------------|---------|
 | `RESEND_API_KEY` | Resend API key | (required) |
 | `RESEND_AUDIENCE_ID` | Resend audience ID | (required) |
-| `KEYCLOAK_REALM` | Keycloak realm | `all-hands` |
+| `KEYCLOAK_SERVER_URL` | URL of the Keycloak server | (required) |
+| `KEYCLOAK_REALM_NAME` | Keycloak realm name | (required) |
+| `KEYCLOAK_ADMIN_PASSWORD` | Keycloak admin password | (required) |
 | `BATCH_SIZE` | Number of users to process in each batch | `100` |
 | `MAX_RETRIES` | Maximum number of retries for API calls | `3` |
 | `INITIAL_BACKOFF_SECONDS` | Initial backoff time for retries | `1` |
