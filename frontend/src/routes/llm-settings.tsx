@@ -122,9 +122,13 @@ export function LlmSettingsScreen({
   >("u2m");
   const [databricksWorkspaceUrl, setDatabricksWorkspaceUrl] =
     React.useState("");
-  // Local state for credential fields so the user can type into them
+  // Local state for credential fields so the user can type into them.
+  // Secrets start empty — we never pre-fill from the server (write-only).
+  // Client IDs are public identifiers, pre-filled from saved settings.
   const [u2mClientIdValue, setU2mClientIdValue] = React.useState("");
+  const [u2mClientSecretValue, setU2mClientSecretValue] = React.useState("");
   const [m2mClientIdValue, setM2mClientIdValue] = React.useState("");
+  const [m2mClientSecretValue, setM2mClientSecretValue] = React.useState("");
   const [redirectUriValue, setRedirectUriValue] = React.useState("");
   const [databricksDirty, setDatabricksDirty] = React.useState(false);
   const saveSettingsMutation = useSaveSettings();
@@ -309,6 +313,15 @@ export function LlmSettingsScreen({
       const showOpenHandsApiKeyHelp = modelValue.startsWith("openhands/");
 
       const renderApiKeyInput = (testId: string, helpTestId: string) => {
+        // Databricks uses OAuth (U2M or M2M) — suppress the generic API-key
+        // field entirely. Credentials are entered in the dedicated Databricks
+        // auth section rendered below the SdkSectionPage.
+        if (
+          activeProvider === "databricks" ||
+          modelValue.startsWith("databricks/")
+        ) {
+          return null;
+        }
         if (shouldUseOpenHandsKey) {
           return null;
         }
@@ -687,11 +700,16 @@ export function LlmSettingsScreen({
                 type="password"
                 name="databricks-u2m-client-secret-input"
                 className="w-full"
-                value=""
+                value={u2mClientSecretValue}
                 placeholder={
-                  settings?.databricks_u2m_client_secret_set ? "••••••••" : ""
+                  settings?.databricks_u2m_client_secret_set
+                    ? "Enter new secret to replace stored value"
+                    : ""
                 }
-                onChange={() => setDatabricksDirty(true)}
+                onChange={(val) => {
+                  setU2mClientSecretValue(val);
+                  setDatabricksDirty(true);
+                }}
               />
               <SettingsInput
                 testId="databricks-u2m-redirect-uri-input"
@@ -710,7 +728,10 @@ export function LlmSettingsScreen({
                 isActive
                 u2mHost={databricksWorkspaceUrl || settings?.llm_base_url || ""}
                 u2mClientId={u2mClientIdValue || null}
-                u2mClientSecret={settings?.databricks_u2m_client_secret ?? null}
+                u2mClientSecret={
+                  u2mClientSecretValue ||
+                  (settings?.databricks_u2m_client_secret ?? null)
+                }
                 u2mRedirectUri={redirectUriValue || suggestedRedirectUri}
               />
             </div>
@@ -735,11 +756,16 @@ export function LlmSettingsScreen({
                 type="password"
                 name="databricks-client-secret-input"
                 className="w-full"
-                value=""
+                value={m2mClientSecretValue}
                 placeholder={
-                  settings?.databricks_client_secret_set ? "••••••••" : ""
+                  settings?.databricks_client_secret_set
+                    ? "Enter new secret to replace stored value"
+                    : ""
                 }
-                onChange={() => setDatabricksDirty(true)}
+                onChange={(val) => {
+                  setM2mClientSecretValue(val);
+                  setDatabricksDirty(true);
+                }}
               />
             </div>
           )}
