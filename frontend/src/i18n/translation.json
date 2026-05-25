@@ -26977,5 +26977,39 @@
     "ca": "Uses the workspace URL entered above. Save first if you changed it.",
     "tr": "Uses the workspace URL entered above. Save first if you changed it.",
     "uk": "Uses the workspace URL entered above. Save first if you changed it."
+  },
+  "SETTINGS$DATABRICKS_MODELS_NEW_PROFILE_HINT": {
+    "en": "Showing curated Databricks models. Save your credentials above and click Refresh Models to see all models available on your workspace.",
+    "ja": "Showing curated Databricks models. Save your credentials above and click Refresh Models to see all models available on your workspace.",
+    "zh-CN": "Showing curated Databricks models. Save your credentials above and click Refresh Models to see all models available on your workspace.",
+    "zh-TW": "Showing curated Databricks models. Save your credentials above and click Refresh Models to see all models available on your workspace.",
+    "ko-KR": "Showing curated Databricks models. Save your credentials above and click Refresh Models to see all models available on your workspace.",
+    "no": "Showing curated Databricks models. Save your credentials above and click Refresh Models to see all models available on your workspace.",
+    "ar": "Showing curated Databricks models. Save your credentials above and click Refresh Models to see all models available on your workspace.",
+    "de": "Showing curated Databricks models. Save your credentials above and click Refresh Models to see all models available on your workspace.",
+    "fr": "Showing curated Databricks models. Save your credentials above and click Refresh Models to see all models available on your workspace.",
+    "it": "Showing curated Databricks models. Save your credentials above and click Refresh Models to see all models available on your workspace.",
+    "pt": "Showing curated Databricks models. Save your credentials above and click Refresh Models to see all models available on your workspace.",
+    "es": "Showing curated Databricks models. Save your credentials above and click Refresh Models to see all models available on your workspace.",
+    "ca": "Showing curated Databricks models. Save your credentials above and click Refresh Models to see all models available on your workspace.",
+    "tr": "Showing curated Databricks models. Save your credentials above and click Refresh Models to see all models available on your workspace.",
+    "uk": "Showing curated Databricks models. Save your credentials above and click Refresh Models to see all models available on your workspace."
+  },
+  "SETTINGS$DATABRICKS_MODELS_DISCOVERY_FAILED_HINT": {
+    "en": "Could not discover models from your workspace — showing curated defaults. Verify your credentials and workspace URL above, then click Refresh Models.",
+    "ja": "Could not discover models from your workspace — showing curated defaults. Verify your credentials and workspace URL above, then click Refresh Models.",
+    "zh-CN": "Could not discover models from your workspace — showing curated defaults. Verify your credentials and workspace URL above, then click Refresh Models.",
+    "zh-TW": "Could not discover models from your workspace — showing curated defaults. Verify your credentials and workspace URL above, then click Refresh Models.",
+    "ko-KR": "Could not discover models from your workspace — showing curated defaults. Verify your credentials and workspace URL above, then click Refresh Models.",
+    "no": "Could not discover models from your workspace — showing curated defaults. Verify your credentials and workspace URL above, then click Refresh Models.",
+    "ar": "Could not discover models from your workspace — showing curated defaults. Verify your credentials and workspace URL above, then click Refresh Models.",
+    "de": "Could not discover models from your workspace — showing curated defaults. Verify your credentials and workspace URL above, then click Refresh Models.",
+    "fr": "Could not discover models from your workspace — showing curated defaults. Verify your credentials and workspace URL above, then click Refresh Models.",
+    "it": "Could not discover models from your workspace — showing curated defaults. Verify your credentials and workspace URL above, then click Refresh Models.",
+    "pt": "Could not discover models from your workspace — showing curated defaults. Verify your credentials and workspace URL above, then click Refresh Models.",
+    "es": "Could not discover models from your workspace — showing curated defaults. Verify your credentials and workspace URL above, then click Refresh Models.",
+    "ca": "Could not discover models from your workspace — showing curated defaults. Verify your credentials and workspace URL above, then click Refresh Models.",
+    "tr": "Could not discover models from your workspace — showing curated defaults. Verify your credentials and workspace URL above, then click Refresh Models.",
+    "uk": "Could not discover models from your workspace — showing curated defaults. Verify your credentials and workspace URL above, then click Refresh Models."
   }
 }

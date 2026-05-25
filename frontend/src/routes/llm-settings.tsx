@@ -122,6 +122,9 @@ export function LlmSettingsScreen({
   >("u2m");
   const [databricksWorkspaceUrl, setDatabricksWorkspaceUrl] =
     React.useState("");
+  // Local state for credential fields so the user can type into them
+  const [u2mClientIdValue, setU2mClientIdValue] = React.useState("");
+  const [m2mClientIdValue, setM2mClientIdValue] = React.useState("");
   const [redirectUriValue, setRedirectUriValue] = React.useState("");
   const [databricksDirty, setDatabricksDirty] = React.useState(false);
   const saveSettingsMutation = useSaveSettings();
@@ -144,6 +147,8 @@ export function LlmSettingsScreen({
   React.useEffect(() => {
     if (!settings) return;
     setDatabricksAuthMode(settings.databricks_client_id ? "m2m" : "u2m");
+    setU2mClientIdValue(settings.databricks_u2m_client_id ?? "");
+    setM2mClientIdValue(settings.databricks_client_id ?? "");
     if (settings.databricks_u2m_redirect_uri !== undefined) {
       setRedirectUriValue(settings.databricks_u2m_redirect_uri ?? "");
     }
@@ -666,12 +671,15 @@ export function LlmSettingsScreen({
               <SettingsInput
                 testId="databricks-u2m-client-id-input"
                 label={t(I18nKey.SETTINGS$DATABRICKS_U2M_CLIENT_ID)}
-                type="password"
+                type="text"
                 name="databricks-u2m-client-id-input"
                 className="w-full"
-                value={settings?.databricks_u2m_client_id ?? ""}
+                value={u2mClientIdValue}
                 placeholder="2b073bc9-..."
-                onChange={() => setDatabricksDirty(true)}
+                onChange={(val) => {
+                  setU2mClientIdValue(val);
+                  setDatabricksDirty(true);
+                }}
               />
               <SettingsInput
                 testId="databricks-u2m-client-secret-input"
@@ -700,8 +708,8 @@ export function LlmSettingsScreen({
               />
               <DatabricksSignInButton
                 isActive
-                u2mHost={settings?.llm_base_url ?? ""}
-                u2mClientId={settings?.databricks_u2m_client_id ?? null}
+                u2mHost={databricksWorkspaceUrl || settings?.llm_base_url || ""}
+                u2mClientId={u2mClientIdValue || null}
                 u2mClientSecret={settings?.databricks_u2m_client_secret ?? null}
                 u2mRedirectUri={redirectUriValue || suggestedRedirectUri}
               />
@@ -711,12 +719,15 @@ export function LlmSettingsScreen({
               <SettingsInput
                 testId="databricks-client-id-input"
                 label={t(I18nKey.SETTINGS$DATABRICKS_CLIENT_ID)}
-                type="password"
+                type="text"
                 name="databricks-client-id-input"
                 className="w-full"
-                value={settings?.databricks_client_id ?? ""}
+                value={m2mClientIdValue}
                 placeholder="Service principal client ID"
-                onChange={() => setDatabricksDirty(true)}
+                onChange={(val) => {
+                  setM2mClientIdValue(val);
+                  setDatabricksDirty(true);
+                }}
               />
               <SettingsInput
                 testId="databricks-client-secret-input"
@@ -734,27 +745,41 @@ export function LlmSettingsScreen({
           )}
 
           {/* Refresh Models */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={isDatabricksModelsFetching}
-              className="px-3 py-1 text-sm rounded bg-gray-700 hover:bg-gray-600 text-gray-200 disabled:opacity-50"
-              onClick={() => {
-                refetchDatabricksModels();
-              }}
-            >
-              {isDatabricksModelsFetching
-                ? "…"
-                : t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP5_BUTTON)}
-            </button>
-            {databricksModelsData?.source === "curated+discovered" ? (
-              <span
-                className="text-xs text-green-400"
-                data-count={databricksModelsData.entries?.length ?? 0}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={isDatabricksModelsFetching}
+                className="px-3 py-1 text-sm rounded bg-gray-700 hover:bg-gray-600 text-gray-200 disabled:opacity-50"
+                onClick={() => {
+                  refetchDatabricksModels();
+                }}
               >
-                {t(I18nKey.SETTINGS$DATABRICKS_REFRESH_MODELS_HINT)}
-              </span>
-            ) : null}
+                {isDatabricksModelsFetching
+                  ? "…"
+                  : t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP5_BUTTON)}
+              </button>
+              {databricksModelsData?.source === "curated+discovered" && (
+                <span
+                  className="text-xs text-green-400"
+                  data-count={databricksModelsData.entries?.length ?? 0}
+                >
+                  {t(I18nKey.SETTINGS$DATABRICKS_REFRESH_MODELS_HINT)}
+                </span>
+              )}
+            </div>
+            {/* Contextual hint below the button */}
+            {!isDatabricksModelsFetching &&
+              databricksModelsData?.source !== "curated+discovered" && (
+                <p className="text-xs text-yellow-400">
+                  {!settings?.databricks_client_secret_set &&
+                  !settings?.databricks_u2m_client_id
+                    ? t(I18nKey.SETTINGS$DATABRICKS_MODELS_NEW_PROFILE_HINT)
+                    : t(
+                        I18nKey.SETTINGS$DATABRICKS_MODELS_DISCOVERY_FAILED_HINT,
+                      )}
+                </p>
+              )}
           </div>
 
           {databricksDirty ? (
