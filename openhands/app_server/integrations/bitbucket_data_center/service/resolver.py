@@ -33,7 +33,12 @@ class BitbucketDCResolverMixin(BitbucketDCMixinBase):
         return title, body
 
     async def get_pr_comments(
-        self, owner: str, repo_slug: str, pr_id: int, max_comments: int = 10
+        self,
+        owner: str,
+        repo_slug: str,
+        pr_id: int,
+        max_comments: int = 10,
+        exclude_comment_id: int | str | None = None,
     ) -> list[Comment]:
         """Get comments for a pull request.
 
@@ -45,6 +50,8 @@ class BitbucketDCResolverMixin(BitbucketDCMixinBase):
             repo_slug: Repository slug
             pr_id: Pull request ID
             max_comments: Maximum number of comments to retrieve
+            exclude_comment_id: Comment id to omit from the returned context,
+                usually the triggering @openhands comment.
 
         Returns:
             List of Comment objects ordered by creation date
@@ -69,14 +76,22 @@ class BitbucketDCResolverMixin(BitbucketDCMixinBase):
                 break
             params = {'limit': 100, 'start': next_start}
 
-        return self._process_raw_comments(all_raw, max_comments)
+        return self._process_raw_comments(all_raw, max_comments, exclude_comment_id)
 
     def _process_raw_comments(
-        self, comments: list, max_comments: int = 10
+        self,
+        comments: list,
+        max_comments: int = 10,
+        exclude_comment_id: int | str | None = None,
     ) -> list[Comment]:
         """Convert raw Bitbucket DC comment dicts to Comment objects."""
         all_comments: list[Comment] = []
         for comment_data in comments:
+            if exclude_comment_id is not None and str(comment_data.get('id')) == str(
+                exclude_comment_id
+            ):
+                continue
+
             # Bitbucket DC activities use epoch milliseconds for createdDate/updatedDate
             created_ms = comment_data.get('createdDate')
             updated_ms = comment_data.get('updatedDate')

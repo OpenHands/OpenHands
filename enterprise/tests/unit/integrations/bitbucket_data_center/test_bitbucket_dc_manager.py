@@ -68,6 +68,7 @@ def _pr_comment_view(parent_id: int | None = 42) -> BitbucketDCPRComment:
         previous_comments=[],
         branch_name='feature/x',
         installer_keycloak_user_id='kc-installer',
+        comment_id=99,
         comment_body='Hey @openhands fix',
         parent_comment_id=parent_id,
     )
@@ -93,6 +94,7 @@ def _inline_view() -> BitbucketDCInlinePRComment:
         previous_comments=[],
         branch_name='feature/x',
         installer_keycloak_user_id='kc-installer',
+        comment_id=99,
         comment_body='@openhands rename',
         parent_comment_id=None,
         file_location='src/x.py',
@@ -104,9 +106,11 @@ def _inline_view() -> BitbucketDCInlinePRComment:
 
 @pytest.mark.asyncio
 async def test_receive_message_runs_job_as_mentioner_when_linked_in_keycloak():
-    """When the @-mentioning user has an OHE account, the view's
-    ``user_info.keycloak_user_id`` is the mentioner and the installer's
-    id is carried alongside on ``installer_keycloak_user_id``.
+    """Use the linked mentioner as the resolver user.
+
+    When the @-mentioning user has an OHE account, the view's
+    ``user_info.keycloak_user_id`` is the mentioner and the installer's id is
+    carried alongside on ``installer_keycloak_user_id``.
     """
     token_manager = AsyncMock()
     token_manager.get_user_id_from_idp_user_id = AsyncMock(return_value='kc-alice')
@@ -138,9 +142,11 @@ async def test_receive_message_runs_job_as_mentioner_when_linked_in_keycloak():
 
 @pytest.mark.asyncio
 async def test_receive_message_asks_unenrolled_mentioner_to_sign_up():
-    """A mentioner with no OHE account is NOT run as the installer. We mirror
-    the GitHub manager: refuse the job and reply asking them to sign up, so
-    every job runs as (and is billed to) the actual requester.
+    """Ask unenrolled mentioners to sign up.
+
+    A mentioner with no OHE account is not run as the installer. We mirror the
+    GitHub manager: refuse the job and reply asking them to sign up, so every
+    job runs as (and is billed to) the actual requester.
     """
     token_manager = AsyncMock()
     token_manager.get_user_id_from_idp_user_id = AsyncMock(return_value=None)
@@ -164,9 +170,11 @@ async def test_receive_message_asks_unenrolled_mentioner_to_sign_up():
 
 @pytest.mark.asyncio
 async def test_receive_message_drops_event_when_keycloak_lookup_raises():
-    """A transient Keycloak error leaves enrollment status unknown. We drop
-    the event rather than guess — neither silently running as the installer
-    nor wrongly telling a (possibly enrolled) user to sign up.
+    """Drop events when mentioner lookup fails.
+
+    A transient Keycloak error leaves enrollment status unknown. We drop the
+    event rather than guess: neither silently running as the installer nor
+    wrongly telling a possibly enrolled user to sign up.
     """
     token_manager = AsyncMock()
     token_manager.get_user_id_from_idp_user_id = AsyncMock(
@@ -189,7 +197,9 @@ async def test_receive_message_drops_event_when_keycloak_lookup_raises():
 
 @pytest.mark.asyncio
 async def test_send_user_not_found_message_replies_as_installer():
-    """The sign-up reply is built from the payload with the installer as the
+    """Post the sign-up reply as the installer.
+
+    The sign-up reply is built from the payload with the installer as the
     posting identity and carries the user-not-found copy.
     """
     manager = BitbucketDCManager(AsyncMock())
@@ -287,9 +297,11 @@ def test_confirm_incoming_source_type_raises_on_wrong_source():
 
 @pytest.mark.asyncio
 async def test_send_message_uses_view_user_info_keycloak_id():
-    """send_message constructs the BBDC service with the view's
-    user_info.keycloak_user_id (the mentioner) rather than the
-    installer, so replies post under the mentioner's BBDC account.
+    """Post replies with the view user auth id.
+
+    send_message constructs the BBDC service with the view's
+    ``user_info.keycloak_user_id`` (the mentioner) rather than the installer,
+    so replies post under the mentioner's BBDC account.
     """
     manager = BitbucketDCManager(AsyncMock())
 
@@ -303,8 +315,10 @@ async def test_send_message_uses_view_user_info_keycloak_id():
 
 
 def test_posting_service_uses_bot_token_when_set():
-    """With BITBUCKET_DATA_CENTER_BOT_TOKEN set, the posting service auths as
-    the bot (token=...) and does NOT fall back to the per-user token.
+    """Use the bot token when it is configured.
+
+    With ``BITBUCKET_DATA_CENTER_BOT_TOKEN`` set, the posting service auths as
+    the bot and does not fall back to the per-user token.
     """
     manager = BitbucketDCManager(AsyncMock())
 
@@ -325,8 +339,10 @@ def test_posting_service_uses_bot_token_when_set():
 
 
 def test_posting_service_falls_back_to_user_token_when_bot_unset():
-    """Without a bot token, the posting service uses the per-user/installer
-    OAuth token (current behavior).
+    """Use the per-user token when no bot token is configured.
+
+    Without a bot token, the posting service uses the per-user/installer OAuth
+    token.
     """
     manager = BitbucketDCManager(AsyncMock())
 
