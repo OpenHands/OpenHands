@@ -38,7 +38,7 @@ from fastapi import APIRouter, Query, Request
 from openhands.app_server.auth.databricks_routes import _get_u2m_tokens
 from openhands.app_server.config import depends_user_context
 from openhands.app_server.user.user_context import UserContext
-from openhands.server.dependencies import get_dependencies
+from openhands.app_server.utils.dependencies import get_dependencies
 
 _logger = logging.getLogger(__name__)
 

@@ -60,7 +60,7 @@ def _build_app(
     from openhands.app_server.auth.databricks_models_routes import (
         user_dependency,
     )
-    from openhands.server.dependencies import check_session_api_key
+    from openhands.app_server.utils.dependencies import check_session_api_key
 
     application = FastAPI()
     application.add_middleware(
