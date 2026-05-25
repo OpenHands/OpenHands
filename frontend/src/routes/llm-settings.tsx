@@ -145,7 +145,9 @@ export function LlmSettingsScreen({
   const suggestedRedirectUri = React.useMemo(() => {
     if (typeof window === "undefined") return "";
     const { protocol, hostname, port } = window.location;
-    return `${protocol}//${hostname}${port ? `:${port}` : ""}/auth/databricks/callback`;
+    // Use the same short /callback path as the CLI so users only need to
+    // change the port (8080 → this port) in their existing Databricks OAuth app.
+    return `${protocol}//${hostname}${port ? `:${port}` : ""}/callback`;
   }, []);
 
   React.useEffect(() => {
@@ -651,6 +653,71 @@ export function LlmSettingsScreen({
             {t(I18nKey.SETTINGS$DATABRICKS_SETUP_GUIDE_TITLE)}
           </div>
 
+          {/* Numbered setup checklist */}
+          <ol className="flex flex-col gap-1.5 text-xs text-gray-400 list-none pl-0">
+            {databricksAuthMode === "u2m" && (
+              <li className="flex gap-2">
+                <span className="shrink-0 w-4 h-4 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px] font-bold">1</span>
+                <span>
+                  {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_INTRO)}&nbsp;
+                  <span className="text-gray-200 font-medium">{t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_FIELD_NAME)}</span>&nbsp;
+                  {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_MATCH)}&nbsp;
+                  {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_NEW_APP)}&nbsp;
+                  {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_COPY_TEXT)}&nbsp;
+                  <span className="text-blue-400">{t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_LOCATION)}</span>.&nbsp;
+                  {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_EXISTING)}&nbsp;
+                  {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_EXISTING_ACTION)}
+                </span>
+              </li>
+            )}
+            <li className="flex gap-2">
+              <span className="shrink-0 w-4 h-4 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px] font-bold">
+                {databricksAuthMode === "u2m" ? "2" : "1"}
+              </span>
+              <span>{t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP2)}</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="shrink-0 w-4 h-4 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px] font-bold">
+                {databricksAuthMode === "u2m" ? "3" : "2"}
+              </span>
+              <span>
+                <span className="text-gray-200 font-medium">{t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP3_LABEL)}</span>&nbsp;
+                {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP3_SUFFIX)}
+              </span>
+            </li>
+            {databricksAuthMode === "u2m" && (
+              <li className="flex gap-2">
+                <span className="shrink-0 w-4 h-4 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px] font-bold">4</span>
+                <span>
+                  {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP4_LABEL)}&nbsp;
+                  {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP4_INTRO)}&nbsp;
+                  <span className="text-gray-200 font-medium">{t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP4_BUTTON)}</span>&nbsp;
+                  {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP4_SUFFIX)}
+                </span>
+              </li>
+            )}
+            <li className="flex gap-2">
+              <span className="shrink-0 w-4 h-4 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px] font-bold">
+                {databricksAuthMode === "u2m" ? "5" : "3"}
+              </span>
+              <span>
+                {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP5_INTRO)}&nbsp;
+                <span className="text-gray-200 font-medium">{t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP5_BUTTON)}</span>&nbsp;
+                {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP5_SUFFIX)}
+              </span>
+            </li>
+            <li className="flex gap-2">
+              <span className="shrink-0 w-4 h-4 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px] font-bold">
+                {databricksAuthMode === "u2m" ? "6" : "4"}
+              </span>
+              <span>
+                {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP6_INTRO)}&nbsp;
+                <span className="text-gray-200 font-medium">{t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP6_LABEL)}</span>&nbsp;
+                {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP6_SUFFIX)}
+              </span>
+            </li>
+          </ol>
+
           {/* Databricks Workspace URL — always shown at the top */}
           <SettingsInput
             testId="databricks-workspace-url-input"
@@ -688,7 +755,7 @@ export function LlmSettingsScreen({
             <div className="flex flex-col gap-3">
               <div className="text-xs text-gray-400">
                 {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_LABEL)}&nbsp;
-                <span className="font-mono text-gray-200">
+                <span className="font-mono bg-gray-800 px-1 py-0.5 rounded select-all text-gray-200">
                   {suggestedRedirectUri}
                 </span>
               </div>

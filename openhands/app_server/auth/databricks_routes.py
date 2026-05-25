@@ -20,10 +20,12 @@ primarily used for local interactive sessions.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import secrets
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -51,6 +53,65 @@ _SESSION_ID_KEY = 'databricks_u2m_session_id'
 # Tokens are stored here as well as in _TOKEN_STORE so the conversation service
 # can read them without importing private helpers from this module.
 _SESSION_TOKENS_KEY = 'databricks_u2m_tokens'
+
+# Bridge servers: port -> asyncio.Server
+# When the user's registered redirect URI is on a port other than the main
+# server port (e.g. the CLI-default http://localhost:8080/callback), we spin
+# up a lightweight TCP server on that port — exactly like the CLI's
+# databricks_pkce.py does.  The bridge server just 302-redirects the browser
+# back to the main server's /auth/databricks/callback so the full token
+# exchange happens there with the correct session cookie.
+_BRIDGE_SERVERS: dict[int, asyncio.AbstractServer] = {}
+
+
+async def _start_bridge_server(port: int, main_callback_url: str) -> None:
+    """Start a TCP bridge server that forwards OAuth callbacks to the main server.
+
+    Listens on ``http://127.0.0.1:<port>`` for any request (regardless of
+    path) and immediately returns a ``302`` to ``main_callback_url`` with the
+    original query string preserved.  This mirrors the CLI's
+    ``databricks_pkce.run_browser_pkce_flow`` approach of starting a local
+    server on the configured callback port.
+
+    The bridge is kept alive for the lifetime of the backend process; it
+    handles concurrent sign-ins and requires no cleanup per request.
+
+    Args:
+        port: Local port to listen on (extracted from the user's redirect URI).
+        main_callback_url: Full URL to redirect to, e.g.
+            ``http://localhost:3002/auth/databricks/callback``.
+
+    Raises:
+        OSError: If the port is already bound by another process.
+    """
+    if port in _BRIDGE_SERVERS:
+        return  # already running for this port
+
+    async def _handle(
+        reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        try:
+            raw = await asyncio.wait_for(reader.read(4096), timeout=5.0)
+            first_line = raw.decode(errors='replace').split('\r\n')[0]
+            # e.g. "GET /callback?code=X&state=Y HTTP/1.1"
+            req_path = first_line.split(' ')[1] if ' ' in first_line else '/'
+            qs = urlparse(req_path).query
+            target = f'{main_callback_url}{"?" + qs if qs else ""}'
+            response = (
+                b'HTTP/1.1 302 Found\r\n'
+                + f'Location: {target}\r\n'.encode()
+                + b'Content-Length: 0\r\nConnection: close\r\n\r\n'
+            )
+            writer.write(response)
+            await writer.drain()
+        except Exception:
+            pass
+        finally:
+            writer.close()
+
+    server = await asyncio.start_server(_handle, '127.0.0.1', port)
+    _BRIDGE_SERVERS[port] = server
+    _logger.info('databricks_u2m_bridge_started', extra={'port': port})
 
 
 def _get_u2m_tokens(request: Request) -> Optional[dict]:
@@ -107,6 +168,10 @@ class _PrepareRequest(BaseModel):
     client_secret: Optional[str] = None
     host: Optional[str] = None
     redirect_uri: Optional[str] = None
+    # Browser-facing origin (e.g. "http://localhost:3002") sent by the frontend
+    # so the bridge server knows where to redirect after capturing the callback.
+    # Required when redirect_uri is on a different port than the main server.
+    origin: Optional[str] = None
 
 
 def _is_masked_secret(value: Optional[str]) -> bool:
@@ -246,6 +311,54 @@ async def prepare_u2m(
         request.session[_SESSION_REDIRECT_URI_KEY] = body.redirect_uri.strip()
     elif _SESSION_REDIRECT_URI_KEY in request.session:
         del request.session[_SESSION_REDIRECT_URI_KEY]
+
+    # If the configured redirect URI is on a port other than the main server
+    # port, start a bridge server on that port — exactly as the CLI's
+    # databricks_pkce.py does.  The bridge forwards the browser's callback
+    # (code + state) to the main server's /auth/databricks/callback endpoint.
+    if body.redirect_uri:
+        parsed_uri = urlparse(body.redirect_uri.strip())
+        redirect_port = parsed_uri.port
+        redirect_host = (parsed_uri.hostname or '').lower()
+        main_port = int(os.environ.get('PORT', '3000'))
+
+        # Determine the browser-facing origin for the bridge redirect.
+        # Prefer the explicit origin from the frontend (window.location.origin)
+        # because Vite rewrites the Host header when proxying, so request.base_url
+        # may reflect the internal backend port rather than the browser-facing port.
+        if body.origin:
+            origin = body.origin.rstrip('/')
+        else:
+            bu = request.base_url
+            origin = f'{bu.scheme}://{bu.hostname}{":" + str(bu.port) if bu.port else ""}'
+        # Parse the browser-facing port so we can compare against redirect_port.
+        browser_port = urlparse(origin).port or (443 if origin.startswith('https') else 80)
+
+        if redirect_port and redirect_host in ('localhost', '127.0.0.1'):
+            main_callback_url = f'{origin}/auth/databricks/callback'
+
+            # Start a bridge only when:
+            #   • redirect port differs from both the backend port and the
+            #     browser-facing port (already reachable via existing routes), AND
+            #   • we haven't already started one on this port.
+            needs_bridge = (
+                redirect_port != main_port
+                and redirect_port != browser_port
+                and redirect_port not in _BRIDGE_SERVERS
+            )
+            if needs_bridge:
+                try:
+                    await _start_bridge_server(redirect_port, main_callback_url)
+                except OSError as exc:
+                    raise HTTPException(
+                        status_code=503,
+                        detail=(
+                            f'Cannot start OAuth callback bridge on port {redirect_port}: {exc}. '
+                            'Either free that port or register a different redirect URI '
+                            f'(e.g. http://localhost:{main_port}/callback).'
+                        ),
+                    )
+
     return JSONResponse({'redirect_url': '/auth/databricks/initiate'})
 
 

@@ -12,7 +12,7 @@ from fastapi import (
     FastAPI,
     Request,
 )
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from openhands.app_server import v1_router
@@ -76,6 +76,20 @@ app.include_router(v1_router.router)
 # registered with Databricks stay stable across deployments.
 app.include_router(databricks_router)
 app.include_router(health_router)
+
+
+@app.get('/callback')
+async def oauth_callback_alias(request: Request) -> RedirectResponse:
+    """Alias for /auth/databricks/callback using the same short /callback path as the CLI.
+
+    Allows the Databricks OAuth app to use ``http://localhost:<port>/callback``
+    (matching the CLI's registered redirect URI format) rather than the longer
+    ``/auth/databricks/callback`` path.  Just change the port from 8080 → the
+    web-app port (3000 direct, or 3002 via Vite proxy).
+    """
+    qs = request.url.query
+    target = f'/auth/databricks/callback{"?" + qs if qs else ""}'
+    return RedirectResponse(url=target, status_code=302)
 
 # Middleware and static file setup (merged from listen.py)
 if os.getenv('SERVE_FRONTEND', 'true').lower() == 'true':

@@ -7,7 +7,8 @@ from unittest.mock import patch
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse
 from fastapi.testclient import TestClient
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -16,12 +17,19 @@ from openhands.app_server.auth.databricks_routes import databricks_router
 
 @pytest.fixture
 def app() -> FastAPI:
-    """Minimal FastAPI app with session + Databricks router."""
+    """Minimal FastAPI app with session + Databricks router + /callback alias."""
     application = FastAPI()
     application.add_middleware(
         SessionMiddleware, secret_key='test-secret-key-for-databricks-oauth'
     )
     application.include_router(databricks_router)
+
+    @application.get('/callback')
+    async def oauth_callback_alias(request: Request) -> RedirectResponse:
+        qs = request.url.query
+        target = f'/auth/databricks/callback{"?" + qs if qs else ""}'
+        return RedirectResponse(url=target, status_code=302)
+
     return application
 
 
@@ -209,3 +217,119 @@ def test_logout_clears_session(client: TestClient) -> None:
             r3 = client.post('/auth/databricks/logout')
     assert r3.status_code == 200
     assert r3.json()['status'] == 'logged_out'
+
+
+def test_callback_alias_redirects_to_full_path(client: TestClient) -> None:
+    """/callback?... should redirect to /auth/databricks/callback?... (alias for CLI compat)."""
+    r = client.get(
+        '/callback?code=testcode&state=teststate&iss=https://example.com',
+        follow_redirects=False,
+    )
+    assert r.status_code == 302
+    loc = r.headers['location']
+    assert loc.startswith('/auth/databricks/callback')
+    assert 'code=testcode' in loc
+    assert 'state=teststate' in loc
+
+
+def test_callback_alias_without_query_string(client: TestClient) -> None:
+    """/callback with no query params should redirect cleanly."""
+    r = client.get('/callback', follow_redirects=False)
+    assert r.status_code == 302
+    assert r.headers['location'] == '/auth/databricks/callback'
+
+
+# ---------------------------------------------------------------------------
+# Bridge server unit tests (asyncio-level, no HTTP stack needed)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_bridge_server_starts_and_forwards() -> None:
+    """Bridge server 302-redirects any request to the supplied main_callback_url."""
+    import asyncio
+
+    from openhands.app_server.auth.databricks_routes import (
+        _BRIDGE_SERVERS,
+        _start_bridge_server,
+    )
+
+    port = 18991  # unlikely to be in use during tests
+    main_url = 'http://localhost:3002/auth/databricks/callback'
+
+    # Clean up if a previous test left a server running on this port.
+    _BRIDGE_SERVERS.pop(port, None)
+
+    await _start_bridge_server(port, main_url)
+    assert port in _BRIDGE_SERVERS
+
+    # Open a raw TCP connection and send a minimal HTTP GET.
+    reader, writer = await asyncio.open_connection('127.0.0.1', port)
+    writer.write(b'GET /callback?code=abc&state=xyz HTTP/1.1\r\nHost: localhost\r\n\r\n')
+    await writer.drain()
+    response_bytes = await asyncio.wait_for(reader.read(4096), timeout=3.0)
+    writer.close()
+
+    response_text = response_bytes.decode()
+    assert '302' in response_text
+    assert 'Location:' in response_text
+    assert 'code=abc' in response_text
+    assert 'state=xyz' in response_text
+    assert main_url.split('?')[0] in response_text
+
+    # Cleanup
+    _BRIDGE_SERVERS[port].close()
+    await _BRIDGE_SERVERS[port].wait_closed()
+    _BRIDGE_SERVERS.pop(port, None)
+
+
+@pytest.mark.asyncio
+async def test_bridge_server_idempotent() -> None:
+    """Calling _start_bridge_server twice on the same port is a no-op."""
+    import asyncio
+
+    from openhands.app_server.auth.databricks_routes import (
+        _BRIDGE_SERVERS,
+        _start_bridge_server,
+    )
+
+    port = 18992
+    _BRIDGE_SERVERS.pop(port, None)
+
+    await _start_bridge_server(port, 'http://localhost:3002/auth/databricks/callback')
+    server_ref = _BRIDGE_SERVERS[port]
+    await _start_bridge_server(port, 'http://localhost:3002/auth/databricks/callback')
+    # Must still be the same server object — second call is a no-op.
+    assert _BRIDGE_SERVERS[port] is server_ref
+
+    _BRIDGE_SERVERS[port].close()
+    await _BRIDGE_SERVERS[port].wait_closed()
+    _BRIDGE_SERVERS.pop(port, None)
+
+
+def test_prepare_with_same_port_redirect_uri_does_not_start_bridge(
+    client: TestClient,
+) -> None:
+    """When redirect_uri port == main server port, no bridge is needed."""
+    from openhands.app_server.auth.databricks_routes import _BRIDGE_SERVERS
+
+    # Use the same port as the default main server (3000) — no bridge needed.
+    env = {
+        'DATABRICKS_HOST': 'https://adb-123.azuredatabricks.net',
+        'DATABRICKS_U2M_CLIENT_ID': 'cid',
+        'PORT': '3000',
+    }
+    before = set(_BRIDGE_SERVERS.keys())
+    with patch.dict(os.environ, env, clear=False):
+        r = client.post(
+            '/auth/databricks/prepare',
+            json={
+                'client_id': 'cid',
+                'host': 'https://adb-123.azuredatabricks.net',
+                'redirect_uri': 'http://localhost:3000/callback',
+                'origin': 'http://localhost:3000',
+            },
+        )
+    assert r.status_code == 200
+    # No new bridge servers should have been started.
+    assert set(_BRIDGE_SERVERS.keys()) == before

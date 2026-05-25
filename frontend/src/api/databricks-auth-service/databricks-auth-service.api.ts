@@ -63,6 +63,12 @@ class DatabricksAuthService {
         host,
         client_secret: clientSecret || null,
         redirect_uri: redirectUri || null,
+        // Send the browser-facing origin so the backend bridge server knows
+        // where to redirect the OAuth callback.  Needed when the redirect URI
+        // is on a different port (e.g. http://localhost:8080/callback) and the
+        // backend starts a bridge server there that must redirect back here.
+        origin:
+          typeof window !== "undefined" ? window.location.origin : undefined,
       },
     );
     return data.redirect_url;
