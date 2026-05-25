@@ -963,6 +963,8 @@ async def batch_get_app_conversation_start_tasks(
     return start_tasks
 
 
+_MAX_FILE_PATH_LENGTH = 4096
+
 @router.get('/{conversation_id}/file')
 async def read_conversation_file(
     conversation_id: UUID,
@@ -987,6 +989,16 @@ async def read_conversation_file(
     Returns:
         The content of the file or an empty string if the file doesn't exist
     """
+    if not file_path or len(file_path) > _MAX_FILE_PATH_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Invalid file path: must be non-empty and under 4096 characters',
+        )
+    if '..' in file_path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Invalid file path: path traversal with ".." is not allowed',
+        )
     # Get the conversation info
     conversation = await app_conversation_service.get_app_conversation(conversation_id)
     if not conversation:
@@ -1032,27 +1044,40 @@ async def read_conversation_file(
             temp_file_path = temp_file.name
 
         # Download the file from remote system
-        result = await remote_workspace.file_download(
-            source_path=file_path,
-            destination_path=temp_file_path,
+        result = await asyncio.wait_for(
+            remote_workspace.file_download(
+                source_path=file_path,
+                destination_path=temp_file_path,
+            ),
+            timeout=30.0,
         )
 
         if result.success:
             # Read the content from the temporary file
             with open(temp_file_path, 'rb') as f:
                 content = f.read()
-            # Decode bytes to string
-            return content.decode('utf-8')
+            try:
+                return content.decode('utf-8')
+            except UnicodeDecodeError:
+                logging.getLogger(__name__).warning(
+                    'File %s is not valid UTF-8 and cannot be returned as text',
+                    file_path,
+                )
+                return ''
+    except asyncio.TimeoutError:
+        logging.getLogger(__name__).warning(
+            'Timed out downloading file %s from sandbox', file_path
+        )
     except Exception:
-        # If there's any error reading the file, return empty string
-        pass
+        logging.getLogger(__name__).exception(
+            'Unexpected error reading file %s from sandbox', file_path
+        )
     finally:
         # Clean up the temporary file
         if temp_file_path:
             try:
                 os.unlink(temp_file_path)
-            except Exception:
-                # Ignore errors during cleanup
+            except OSError:
                 pass
 
     return ''

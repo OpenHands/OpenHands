@@ -63,7 +63,8 @@ def init_tavily_proxy() -> None:
         # Create a client that connects to Tavily's HTTP MCP endpoint
         proxy_client = Client(
             transport=StreamableHttpTransport(
-                url=f'https://mcp.tavily.com/mcp/?tavilyApiKey={tavily_api_key}'
+                url=f'https://mcp.tavily.com/mcp/?tavilyApiKey={tavily_api_key}',
+                timeout=30.0,
             )
         )
         proxy_server = create_proxy(proxy_client)
