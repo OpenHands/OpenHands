@@ -228,7 +228,12 @@ export function JiraDcIntegrationPanel() {
   const confirmRemove = () => {
     const trimmedAdminApiKey = removeAdminApiKey.trim();
     if (!trimmedAdminApiKey) return;
-    unlinkMutation.mutate(trimmedAdminApiKey);
+    unlinkMutation.mutate(trimmedAdminApiKey, {
+      onSuccess: () => {
+        setRemoveAdminApiKey("");
+        setModalView(null);
+      },
+    });
   };
 
   const handleActiveToggle = (nextActive: boolean) => {
