@@ -126,8 +126,14 @@ export function LlmSettingsScreen({
   const [databricksDirty, setDatabricksDirty] = React.useState(false);
   const saveSettingsMutation = useSaveSettings();
 
-  const { isFetching: isDatabricksModelsFetching, data: databricksModelsData } =
-    useDatabricksModels({ enabled: !!isDatabricks });
+  const {
+    isFetching: isDatabricksModelsFetching,
+    data: databricksModelsData,
+    refetch: refetchDatabricksModels,
+  } = useDatabricksModels({
+    enabled: !!isDatabricks,
+    host: databricksWorkspaceUrl || undefined,
+  });
 
   const suggestedRedirectUri = React.useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -734,7 +740,7 @@ export function LlmSettingsScreen({
               disabled={isDatabricksModelsFetching}
               className="px-3 py-1 text-sm rounded bg-gray-700 hover:bg-gray-600 text-gray-200 disabled:opacity-50"
               onClick={() => {
-                /* useDatabricksModels auto-fetches */
+                refetchDatabricksModels();
               }}
             >
               {isDatabricksModelsFetching
