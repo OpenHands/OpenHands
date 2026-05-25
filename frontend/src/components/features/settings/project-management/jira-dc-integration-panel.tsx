@@ -16,7 +16,7 @@ import { useUnlinkIntegration } from "#/hooks/mutation/use-unlink-integration";
 import { useUpdateJiraDcWorkspaceStatus } from "#/hooks/mutation/use-update-jira-dc-workspace-status";
 import { CopyableValue, generateWebhookSecret } from "./configure-modal";
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_RE = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 type ModalView = "edit" | "remove" | null;
 
