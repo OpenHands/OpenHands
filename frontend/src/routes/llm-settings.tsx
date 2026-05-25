@@ -120,6 +120,8 @@ export function LlmSettingsScreen({
   const [databricksAuthMode, setDatabricksAuthMode] = React.useState<
     "m2m" | "u2m"
   >("u2m");
+  const [databricksWorkspaceUrl, setDatabricksWorkspaceUrl] =
+    React.useState("");
   const [redirectUriValue, setRedirectUriValue] = React.useState("");
   const [databricksDirty, setDatabricksDirty] = React.useState(false);
   const saveSettingsMutation = useSaveSettings();
@@ -139,15 +141,21 @@ export function LlmSettingsScreen({
     if (settings.databricks_u2m_redirect_uri !== undefined) {
       setRedirectUriValue(settings.databricks_u2m_redirect_uri ?? "");
     }
+    if (settings.llm_base_url !== undefined) {
+      setDatabricksWorkspaceUrl(settings.llm_base_url ?? "");
+    }
   }, [
     settings?.databricks_client_id,
     settings?.databricks_u2m_client_id,
     settings?.databricks_u2m_redirect_uri,
+    settings?.llm_base_url,
   ]);
 
   const handleSaveDatabricksSettings = React.useCallback(
     async (formData: FormData) => {
       const payload: Record<string, unknown> = {
+        llm_base_url:
+          formData.get("databricks-workspace-url-input")?.toString() || null,
         databricks_client_id:
           formData.get("databricks-client-id-input")?.toString() || null,
         databricks_client_secret:
@@ -607,6 +615,21 @@ export function LlmSettingsScreen({
           <div className="text-sm font-semibold text-gray-200">
             {t(I18nKey.SETTINGS$DATABRICKS_SETUP_GUIDE_TITLE)}
           </div>
+
+          {/* Databricks Workspace URL — always shown at the top */}
+          <SettingsInput
+            testId="databricks-workspace-url-input"
+            label={t(I18nKey.SETTINGS$DATABRICKS_WORKSPACE_HOST)}
+            type="text"
+            className="w-full"
+            name="databricks-workspace-url-input"
+            value={databricksWorkspaceUrl}
+            placeholder="https://adb-xxxx.azuredatabricks.net"
+            onChange={(value) => {
+              setDatabricksWorkspaceUrl(value);
+              setDatabricksDirty(true);
+            }}
+          />
 
           {/* Auth mode selector */}
           <div className="flex gap-3">
