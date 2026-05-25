@@ -383,6 +383,7 @@ async def on_conversation_update(
             await event_callback_service.save_event_callback(
                 EventCallback(
                     conversation_id=conversation_info.id,
+                    event_kind=SetTitleCallbackProcessor.get_event_kind(),
                     processor=SetTitleCallbackProcessor(),
                 )
             )

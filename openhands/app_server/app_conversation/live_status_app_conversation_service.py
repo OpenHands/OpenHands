@@ -415,6 +415,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 await self.event_callback_service.save_event_callback(
                     EventCallback(
                         conversation_id=info.id,
+                        event_kind=processor.get_event_kind(),
                         processor=processor,
                     )
                 )

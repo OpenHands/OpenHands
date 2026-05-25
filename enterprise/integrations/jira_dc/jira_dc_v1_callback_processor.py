@@ -5,6 +5,7 @@ summaries back to Jira DC issues when the agent finishes work.
 """
 
 import logging
+from typing import ClassVar
 from uuid import UUID
 
 import httpx
@@ -15,6 +16,7 @@ from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
+    EventKind,
 )
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
@@ -34,6 +36,8 @@ _logger = logging.getLogger(__name__)
 
 class JiraDcV1CallbackProcessor(EventCallbackProcessor):
     """Callback processor for Jira Data Center V1 integrations."""
+
+    event_kind: ClassVar[EventKind] = 'ConversationStateUpdateEvent'
 
     should_request_summary: bool = Field(default=True)
     issue_key: str
