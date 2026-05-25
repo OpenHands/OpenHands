@@ -156,6 +156,7 @@ class JiraDcWorkspaceResponse(BaseModel):
     name: str
     status: str
     editable: bool
+    events_url: str
     # Service-account email is non-secret and is returned so the configure form
     # can pre-fill it when editing. The service-account PAT is never returned.
     svc_acc_email: str | None = None
@@ -184,6 +185,10 @@ token_manager = TokenManager()
 jira_dc_manager = JiraDcManager(token_manager)
 automation_event_service = AutomationEventService(token_manager)
 redis_client = get_redis_client()
+
+
+def _jira_dc_events_url(workspace_id: int) -> str:
+    return f'https://{WEB_HOST}/integration/jira-dc/connections/{workspace_id}/events'
 
 
 async def _handle_workspace_link_creation(
@@ -276,10 +281,10 @@ async def _validate_workspace_update_permissions(user_id: str, target_workspace:
     return workspace
 
 
-@jira_dc_integration_router.post('/events')
-async def jira_dc_events(
+async def _process_jira_dc_event(
     request: Request,
     background_tasks: BackgroundTasks,
+    workspace_id: int | None = None,
 ):
     """Handle Jira DC webhook events."""
     # Check if Jira DC webhooks are enabled
@@ -295,14 +300,22 @@ async def jira_dc_events(
             signature,
             payload,
             workspace,
-        ) = await jira_dc_manager.validate_request_context(request)
+        ) = await jira_dc_manager.validate_request_context(
+            request,
+            workspace_id=workspace_id,
+        )
 
         if not signature_valid:
             logger.warning('[Jira DC] Invalid webhook signature')
             raise HTTPException(status_code=403, detail='Invalid webhook signature!')
 
         # Check for duplicate requests using Redis
-        key = f'jira_dc:{signature}'
+        key_workspace_id = workspace.id if workspace else workspace_id
+        key = (
+            f'jira_dc:{key_workspace_id}:{signature}'
+            if key_workspace_id
+            else f'jira_dc:{signature}'
+        )
         keyExists = redis_client.exists(key)
         if keyExists:
             logger.info(f'Received duplicate Jira DC webhook event: {signature}')
@@ -317,6 +330,7 @@ async def jira_dc_events(
                     org_id=workspace.org_id,
                     payload=payload,
                     workspace_name=workspace.name,
+                    connection_id=workspace.id,
                     delivery_id=signature,
                 )
             else:
@@ -343,8 +357,25 @@ async def jira_dc_events(
         )
 
 
+@jira_dc_integration_router.post('/connections/{workspace_id}/events')
+async def jira_dc_connection_events(
+    workspace_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+):
+    """Handle Jira DC webhook events for a specific workspace connection."""
+    return await _process_jira_dc_event(
+        request,
+        background_tasks,
+        workspace_id=workspace_id,
+    )
+
+
 async def _maybe_register_webhook(
-    admin_api_key: str | None, base_api_url: str, webhook_secret: str
+    admin_api_key: str | None,
+    base_api_url: str,
+    webhook_secret: str,
+    workspace_id: int,
 ) -> bool:
     """Best-effort auto-enrollment of the OpenHands webhook in Jira.
 
@@ -356,11 +387,10 @@ async def _maybe_register_webhook(
     if not admin_api_key:
         return False
     try:
-        events_url = f'https://{WEB_HOST}/integration/jira-dc/events'
         await jira_dc_manager.register_webhook(
             base_api_url=base_api_url,
             admin_api_key=admin_api_key,
-            events_url=events_url,
+            events_url=_jira_dc_events_url(workspace_id),
             secret=webhook_secret,
         )
         logger.info('[Jira DC] Auto-enrolled webhook during workspace configure')
@@ -370,7 +400,9 @@ async def _maybe_register_webhook(
         return False
 
 
-async def _maybe_delete_webhook(admin_api_key: str | None, base_api_url: str) -> bool:
+async def _maybe_delete_webhook(
+    admin_api_key: str | None, base_api_url: str, workspace_id: int
+) -> bool:
     """Best-effort removal of the OpenHands webhook from Jira during teardown.
 
     Symmetric with :func:`_maybe_register_webhook`. When an admin PAT is
@@ -382,11 +414,10 @@ async def _maybe_delete_webhook(admin_api_key: str | None, base_api_url: str) ->
     if not admin_api_key:
         return False
     try:
-        events_url = f'https://{WEB_HOST}/integration/jira-dc/events'
         return await jira_dc_manager.delete_webhook(
             base_api_url=base_api_url,
             admin_api_key=admin_api_key,
-            events_url=events_url,
+            events_url=_jira_dc_events_url(workspace_id),
         )
     except Exception as e:
         logger.warning(f'[Jira DC] Webhook removal failed: {e}')
@@ -578,7 +609,7 @@ async def create_jira_dc_workspace(
                 )
 
                 # Update workspace details
-                await jira_dc_manager.integration_store.update_workspace(
+                workspace = await jira_dc_manager.integration_store.update_workspace(
                     id=workspace.id,
                     org_id=effective_org_id,
                     encrypted_webhook_secret=encrypted_webhook_secret,
@@ -595,6 +626,7 @@ async def create_jira_dc_workspace(
                 workspace_data.admin_api_key,
                 f'https://{workspace_data.workspace_name}',
                 resolved_webhook_secret,
+                workspace.id,
             )
             return JSONResponse(
                 content={
@@ -602,7 +634,7 @@ async def create_jira_dc_workspace(
                     'redirect': False,
                     'authorizationUrl': '',
                     'webhookEnrolled': webhook_enrolled,
-                    'eventsUrl': f'https://{WEB_HOST}/integration/jira-dc/events',
+                    'eventsUrl': _jira_dc_events_url(workspace.id),
                 }
             )
 
@@ -795,7 +827,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
                 integration_session['svc_acc_api_key']
             )
 
-            await jira_dc_manager.integration_store.create_workspace(
+            workspace = await jira_dc_manager.integration_store.create_workspace(
                 name=target_workspace,
                 admin_user_id=integration_session['keycloak_user_id'],
                 org_id=org_id,
@@ -824,7 +856,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
             )
 
             # Update workspace details
-            await jira_dc_manager.integration_store.update_workspace(
+            workspace = await jira_dc_manager.integration_store.update_workspace(
                 id=workspace.id,
                 org_id=org_id,
                 encrypted_webhook_secret=encrypted_webhook_secret,
@@ -841,6 +873,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
             integration_session.get('admin_api_key'),
             JIRA_DC_BASE_URL,
             integration_session['webhook_secret'],
+            workspace.id,
         )
         return RedirectResponse(
             url='/settings/integrations',
@@ -903,6 +936,7 @@ async def get_current_workspace_link(request: Request):
                 name=workspace.name,
                 status=workspace.status,
                 editable=workspace.admin_user_id == user.keycloak_user_id,
+                events_url=_jira_dc_events_url(workspace.id),
                 svc_acc_email=workspace.svc_acc_email,
                 created_at=workspace.created_at.isoformat(),
                 updated_at=workspace.updated_at.isoformat(),
@@ -975,7 +1009,9 @@ async def unlink_workspace(request: Request):
                 if JIRA_DC_ENABLE_OAUTH
                 else f'https://{workspace.name}'
             )
-            webhook_removed = await _maybe_delete_webhook(admin_api_key, base_api_url)
+            webhook_removed = await _maybe_delete_webhook(
+                admin_api_key, base_api_url, workspace.id
+            )
             await jira_dc_manager.integration_store.deactivate_workspace(
                 workspace_id=workspace.id,
             )

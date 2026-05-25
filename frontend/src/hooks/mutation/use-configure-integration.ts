@@ -15,6 +15,8 @@ interface ConfigureIntegrationData {
   // Jira DC only: one-time admin PAT to auto-install the webhook. Never stored.
   adminApiKey?: string;
   isActive: boolean;
+  reloadOnSuccess?: boolean;
+  invalidateOnSuccess?: boolean;
 }
 
 export function useConfigureIntegration(
@@ -64,7 +66,7 @@ export function useConfigureIntegration(
           } else {
             throw new Error("Could not get authorization URL from the server.");
           }
-        } else {
+        } else if (data.reloadOnSuccess !== false) {
           window.location.reload();
         }
       } else {
@@ -73,10 +75,12 @@ export function useConfigureIntegration(
 
       return response.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["integration-status", platform],
-      });
+    onSuccess: (_data, variables) => {
+      if (variables.invalidateOnSuccess !== false) {
+        queryClient.invalidateQueries({
+          queryKey: ["integration-status", platform],
+        });
+      }
     },
     onError: (error) => {
       const errorMessage = retrieveAxiosErrorMessage(error);

@@ -17985,6 +17985,23 @@
     "tr": "Webhook'u manuel olarak ayarla",
     "uk": "Налаштувати webhook вручну"
   },
+  "PROJECT_MANAGEMENT$JIRA_DC_MANUAL_PREPARE_INSTRUCTIONS": {
+    "en": "Generate webhook details to save this configuration and create a connection-specific webhook URL and signing secret.",
+    "ja": "Webhook の詳細を生成して、この設定を保存し、接続固有の Webhook URL と署名シークレットを作成します。",
+    "zh-CN": "生成 webhook 详细信息以保存此配置，并创建特定于连接的 webhook URL 和签名密钥。",
+    "zh-TW": "產生 webhook 詳細資訊以儲存此設定，並建立連線專屬的 webhook URL 和簽署密鑰。",
+    "ko-KR": "Webhook 세부 정보를 생성하여 이 구성을 저장하고 연결별 webhook URL 및 서명 비밀을 만드세요.",
+    "no": "Generer webhook-detaljer for å lagre denne konfigurasjonen og opprette en tilkoblingsspesifikk webhook-URL og signeringshemmelighet.",
+    "ar": "أنشئ تفاصيل الـ webhook لحفظ هذا الإعداد وإنشاء عنوان URL خاص بالاتصال وسر توقيع.",
+    "de": "Generieren Sie Webhook-Details, um diese Konfiguration zu speichern und eine verbindungsspezifische Webhook-URL sowie ein Signaturgeheimnis zu erstellen.",
+    "fr": "Générez les détails du webhook pour enregistrer cette configuration et créer une URL de webhook propre à la connexion ainsi qu’un secret de signature.",
+    "it": "Genera i dettagli del webhook per salvare questa configurazione e creare un URL webhook specifico della connessione e un segreto di firma.",
+    "pt": "Gere os detalhes do webhook para salvar esta configuração e criar uma URL de webhook específica da conexão e um segredo de assinatura.",
+    "es": "Genera los detalles del webhook para guardar esta configuración y crear una URL de webhook específica de la conexión y un secreto de firma.",
+    "ca": "Genera els detalls del webhook per desar aquesta configuració i crear una URL de webhook específica de la connexió i un secret de signatura.",
+    "tr": "Bu yapılandırmayı kaydetmek ve bağlantıya özgü bir webhook URL'si ile imzalama sırrı oluşturmak için webhook ayrıntılarını oluşturun.",
+    "uk": "Згенеруйте дані webhook, щоб зберегти цю конфігурацію та створити URL webhook і секрет підпису для цього підключення."
+  },
   "PROJECT_MANAGEMENT$JIRA_DC_MANUAL_INSTRUCTIONS": {
     "en": "Create a global Jira webhook with these values, then click Connect. Subscribe to comment_created and jira:issue_updated.",
     "ja": "これらの値でJiraのグローバルWebhookを作成し、[接続]をクリックします。comment_created と jira:issue_updated を購読してください。",
@@ -18001,6 +18018,23 @@
     "ca": "Crea un webhook global de Jira amb aquests valors i fes clic a Connecta. Subscriu-te a comment_created i jira:issue_updated.",
     "tr": "Bu değerlerle genel bir Jira webhook'u oluşturun, ardından Bağlan'a tıklayın. comment_created ve jira:issue_updated olaylarına abone olun.",
     "uk": "Створіть глобальний webhook Jira з цими значеннями, а потім натисніть Підключити. Підпишіться на comment_created і jira:issue_updated."
+  },
+  "PROJECT_MANAGEMENT$JIRA_DC_GENERATE_WEBHOOK_DETAILS_BUTTON": {
+    "en": "Generate webhook details",
+    "ja": "Webhook の詳細を生成",
+    "zh-CN": "生成 webhook 详细信息",
+    "zh-TW": "產生 webhook 詳細資訊",
+    "ko-KR": "Webhook 세부 정보 생성",
+    "no": "Generer webhook-detaljer",
+    "ar": "إنشاء تفاصيل الـ webhook",
+    "de": "Webhook-Details generieren",
+    "fr": "Générer les détails du webhook",
+    "it": "Genera dettagli webhook",
+    "pt": "Gerar detalhes do webhook",
+    "es": "Generar detalles del webhook",
+    "ca": "Genera els detalls del webhook",
+    "tr": "Webhook ayrıntılarını oluştur",
+    "uk": "Згенерувати дані webhook"
   },
   "PROJECT_MANAGEMENT$JIRA_DC_MANUAL_UPDATE_INSTRUCTIONS": {
     "en": "Update the global Jira webhook with these values, then click Update. This rotates the signing secret stored in OpenHands.",

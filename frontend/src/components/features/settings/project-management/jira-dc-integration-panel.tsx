@@ -20,6 +20,22 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type ModalView = "edit" | "remove" | null;
 
+function buildJiraDcEventsUrl(workspaceId?: number, serverEventsUrl?: string) {
+  if (serverEventsUrl) {
+    return serverEventsUrl;
+  }
+
+  if (!workspaceId) {
+    return "";
+  }
+
+  const path = `/integration/jira-dc/connections/${workspaceId}/events`;
+
+  return typeof window !== "undefined"
+    ? `${window.location.origin}${path}`
+    : path;
+}
+
 /**
  * On-page Jira Data Center integration. The resting state is a compact table
  * row that mirrors the GitLab / Bitbucket webhook managers above it on the same
@@ -61,10 +77,10 @@ export function JiraDcIntegrationPanel() {
     unlinkMutation.isPending ||
     statusMutation.isPending;
 
-  const eventsUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/integration/jira-dc/events`
-      : "/integration/jira-dc/events";
+  const eventsUrl = buildJiraDcEventsUrl(
+    existingWorkspace?.id,
+    existingWorkspace?.events_url,
+  );
 
   const [modalView, setModalView] = useState<ModalView>(null);
   const [workspace, setWorkspace] = useState("");
@@ -73,6 +89,8 @@ export function JiraDcIntegrationPanel() {
   const [adminApiKey, setAdminApiKey] = useState("");
   const [manualMode, setManualMode] = useState(false);
   const [manualSecret, setManualSecret] = useState("");
+  const [manualEventsUrl, setManualEventsUrl] = useState("");
+  const [manualSetupSaved, setManualSetupSaved] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [hasSavedApiKey, setHasSavedApiKey] = useState(false);
   const [removeAdminApiKey, setRemoveAdminApiKey] = useState("");
@@ -103,6 +121,8 @@ export function JiraDcIntegrationPanel() {
     setManualMode(false);
     setEmailError(null);
     setApiKeyError(null);
+    setManualEventsUrl("");
+    setManualSetupSaved(false);
   }, [
     existingWorkspace,
     jiraDcOAuthHost,
@@ -124,12 +144,19 @@ export function JiraDcIntegrationPanel() {
     setModalView("remove");
   };
   const closeModal = () => {
+    if (manualSetupSaved) {
+      window.location.reload();
+      return;
+    }
     seedForm();
     setRemoveAdminApiKey("");
     setModalView(null);
   };
 
   const handleEmailChange = (value: string) => {
+    if (!existingWorkspace) {
+      setManualEventsUrl("");
+    }
     setServiceAccountEmail(value);
     setEmailError(
       value && !EMAIL_RE.test(value)
@@ -139,6 +166,9 @@ export function JiraDcIntegrationPanel() {
   };
 
   const handleApiKeyChange = (value: string) => {
+    if (!existingWorkspace) {
+      setManualEventsUrl("");
+    }
     setServiceAccountApiKey(value);
     setApiKeyError(
       /\s/.test(value)
@@ -153,19 +183,44 @@ export function JiraDcIntegrationPanel() {
     setManualMode(true);
   };
 
+  const handleWorkspaceChange = (value: string) => {
+    if (!existingWorkspace) {
+      setManualEventsUrl("");
+    }
+    setWorkspace(value);
+  };
+
   const handleSubmit = () => {
+    if (manualMode && !existingWorkspace && manualEventsUrl) {
+      window.location.reload();
+      return;
+    }
+
     // Manual mode sends the generated secret the admin is copying into Jira;
     // auto mode sends a blank secret (server-generated) + the one-time admin PAT.
-    configureMutation.mutate({
-      workspace,
-      webhookSecret: manualMode ? manualSecret : "",
-      serviceAccountEmail: serviceAccountManaged
-        ? managedServiceAccountEmail
-        : serviceAccountEmail,
-      serviceAccountApiKey: serviceAccountManaged ? "" : serviceAccountApiKey,
-      adminApiKey: manualMode ? "" : adminApiKey.trim(),
-      isActive,
-    });
+    configureMutation.mutate(
+      {
+        workspace,
+        webhookSecret: manualMode ? manualSecret : "",
+        serviceAccountEmail: serviceAccountManaged
+          ? managedServiceAccountEmail
+          : serviceAccountEmail,
+        serviceAccountApiKey: serviceAccountManaged ? "" : serviceAccountApiKey,
+        adminApiKey: manualMode ? "" : adminApiKey.trim(),
+        isActive,
+        reloadOnSuccess: !(manualMode && !existingWorkspace),
+        invalidateOnSuccess: !(manualMode && !existingWorkspace),
+      },
+      {
+        onSuccess: (data) => {
+          if (manualMode && !existingWorkspace && data.eventsUrl) {
+            setManualEventsUrl(data.eventsUrl);
+            setManualSetupSaved(true);
+            setHasSavedApiKey(true);
+          }
+        },
+      },
+    );
   };
 
   const confirmRemove = () => {
@@ -194,6 +249,28 @@ export function JiraDcIntegrationPanel() {
   const serviceAccountEmailSatisfied =
     serviceAccountManaged || serviceAccountEmail.trim() !== "";
   const webhookSatisfied = manualMode || adminApiKey.trim() !== "";
+  const effectiveManualEventsUrl = manualEventsUrl || eventsUrl;
+  const generatedFirstManualSetup =
+    manualMode && !existingWorkspace && !!manualEventsUrl;
+  let submitButtonLabel = t(I18nKey.PROJECT_MANAGEMENT$CONNECT_BUTTON_LABEL);
+  if (manualMode && !existingWorkspace && !manualEventsUrl) {
+    submitButtonLabel = t(
+      I18nKey.PROJECT_MANAGEMENT$JIRA_DC_GENERATE_WEBHOOK_DETAILS_BUTTON,
+    );
+  } else if (generatedFirstManualSetup) {
+    submitButtonLabel = t(I18nKey.ENTERPRISE$DONE_BUTTON);
+  } else if (existingWorkspace) {
+    submitButtonLabel = t(I18nKey.PROJECT_MANAGEMENT$UPDATE_BUTTON_LABEL);
+  }
+  let manualInstructionKey =
+    I18nKey.PROJECT_MANAGEMENT$JIRA_DC_MANUAL_PREPARE_INSTRUCTIONS;
+  if (effectiveManualEventsUrl && existingWorkspace) {
+    manualInstructionKey =
+      I18nKey.PROJECT_MANAGEMENT$JIRA_DC_MANUAL_UPDATE_INSTRUCTIONS;
+  } else if (effectiveManualEventsUrl) {
+    manualInstructionKey =
+      I18nKey.PROJECT_MANAGEMENT$JIRA_DC_MANUAL_INSTRUCTIONS;
+  }
   const isSubmitDisabled =
     !workspace.trim() ||
     !serviceAccountEmailSatisfied ||
@@ -263,7 +340,7 @@ export function JiraDcIntegrationPanel() {
           I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WORKSPACE_NAME_PLACEHOLDER,
         )}
         value={workspace}
-        onChange={setWorkspace}
+        onChange={handleWorkspaceChange}
         className="w-full"
         type="text"
         isDisabled={hostLocked}
@@ -390,23 +467,21 @@ export function JiraDcIntegrationPanel() {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          <p className="text-xs text-tertiary-alt">
-            {t(
-              existingWorkspace
-                ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_MANUAL_UPDATE_INSTRUCTIONS
-                : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_MANUAL_INSTRUCTIONS,
-            )}
-          </p>
-          <CopyableValue
-            testId="webhook-url-value"
-            label={t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_URL_LABEL)}
-            value={eventsUrl}
-          />
-          <CopyableValue
-            testId="webhook-secret-value"
-            label={t(I18nKey.PROJECT_MANAGEMENT$WEBHOOK_SECRET_LABEL)}
-            value={manualSecret}
-          />
+          <p className="text-xs text-tertiary-alt">{t(manualInstructionKey)}</p>
+          {effectiveManualEventsUrl && (
+            <>
+              <CopyableValue
+                testId="webhook-url-value"
+                label={t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_URL_LABEL)}
+                value={effectiveManualEventsUrl}
+              />
+              <CopyableValue
+                testId="webhook-secret-value"
+                label={t(I18nKey.PROJECT_MANAGEMENT$WEBHOOK_SECRET_LABEL)}
+                value={manualSecret}
+              />
+            </>
+          )}
         </div>
       )}
     </div>
@@ -562,19 +637,19 @@ export function JiraDcIntegrationPanel() {
                 type="button"
                 isDisabled={isSubmitDisabled}
               >
-                {existingWorkspace
-                  ? t(I18nKey.PROJECT_MANAGEMENT$UPDATE_BUTTON_LABEL)
-                  : t(I18nKey.PROJECT_MANAGEMENT$CONNECT_BUTTON_LABEL)}
+                {submitButtonLabel}
               </BrandButton>
-              <BrandButton
-                variant="secondary"
-                onClick={closeModal}
-                testId="jira-dc-cancel-button"
-                type="button"
-                isDisabled={isBusy}
-              >
-                {t(I18nKey.FEEDBACK$CANCEL_LABEL)}
-              </BrandButton>
+              {!generatedFirstManualSetup && (
+                <BrandButton
+                  variant="secondary"
+                  onClick={closeModal}
+                  testId="jira-dc-cancel-button"
+                  type="button"
+                  isDisabled={isBusy}
+                >
+                  {t(I18nKey.FEEDBACK$CANCEL_LABEL)}
+                </BrandButton>
+              )}
             </div>
           </ModalBody>
         </ModalBackdrop>

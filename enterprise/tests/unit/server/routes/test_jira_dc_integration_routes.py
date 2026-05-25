@@ -19,7 +19,7 @@ from server.routes.integration.jira_dc import (
     create_workspace_link,
     get_current_workspace_link,
     jira_dc_callback,
-    jira_dc_events,
+    jira_dc_connection_events,
     unlink_workspace,
     validate_workspace_integration,
 )
@@ -74,7 +74,7 @@ async def test_jira_dc_events_invalid_signature(mock_redis, mock_manager, mock_r
     with patch('server.routes.integration.jira_dc.JIRA_DC_WEBHOOKS_ENABLED', True):
         mock_manager.validate_request_context.return_value = (False, None, None, None)
         with pytest.raises(HTTPException) as exc_info:
-            await jira_dc_events(mock_request, MagicMock())
+            await jira_dc_connection_events(10, mock_request, MagicMock())
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail == 'Invalid webhook signature!'
 
@@ -84,14 +84,16 @@ async def test_jira_dc_events_invalid_signature(mock_redis, mock_manager, mock_r
 @patch('server.routes.integration.jira_dc.redis_client')
 async def test_jira_dc_events_duplicate_request(mock_redis, mock_manager, mock_request):
     with patch('server.routes.integration.jira_dc.JIRA_DC_WEBHOOKS_ENABLED', True):
+        mock_workspace = MagicMock()
+        mock_workspace.id = 10
         mock_manager.validate_request_context.return_value = (
             True,
             'sig123',
             'payload',
-            MagicMock(),
+            mock_workspace,
         )
         mock_redis.exists.return_value = True
-        response = await jira_dc_events(mock_request, MagicMock())
+        response = await jira_dc_connection_events(10, mock_request, MagicMock())
         assert response.status_code == 200
         body = json.loads(response.body)
         assert body['success'] is True
@@ -230,6 +232,8 @@ async def test_jira_dc_callback_workspace_integration_new_workspace(
 
     mock_get.side_effect = mock_get_side_effect
     mock_manager.integration_store.get_workspace_by_name.return_value = None
+    mock_workspace = MagicMock(id=1)
+    mock_manager.integration_store.create_workspace.return_value = mock_workspace
 
     with patch('server.routes.integration.jira_dc.token_manager') as mock_token_manager:
         with patch(
@@ -343,6 +347,9 @@ async def test_get_current_workspace_link_found(
     response = await get_current_workspace_link(mock_request)
     assert response.workspace.name == 'test-space'
     assert response.workspace.editable is True
+    assert response.workspace.events_url.endswith(
+        '/integration/jira-dc/connections/10/events'
+    )
 
 
 @pytest.mark.asyncio
@@ -465,6 +472,7 @@ async def test_jira_dc_events_processing_success(
 ):
     with patch('server.routes.integration.jira_dc.JIRA_DC_WEBHOOKS_ENABLED', True):
         mock_workspace = MagicMock()
+        mock_workspace.id = 10
         mock_workspace.org_id = uuid.UUID('00000000-0000-0000-0000-000000000123')
         mock_workspace.name = 'jira.company.com'
         mock_manager.validate_request_context.return_value = (
@@ -476,13 +484,44 @@ async def test_jira_dc_events_processing_success(
         mock_redis.exists.return_value = False
 
         background_tasks = MagicMock()
-        response = await jira_dc_events(mock_request, background_tasks)
+        response = await jira_dc_connection_events(10, mock_request, background_tasks)
 
         assert response.status_code == 200
         body = json.loads(response.body)
         assert body['success'] is True
-        mock_redis.setex.assert_called_once_with('jira_dc:sig123', 120, 1)
+        mock_redis.setex.assert_called_once_with('jira_dc:10:sig123', 120, 1)
         background_tasks.add_task.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+@patch('server.routes.integration.jira_dc.redis_client', new_callable=MagicMock)
+async def test_jira_dc_connection_events_validates_workspace_id(
+    mock_redis, mock_manager, mock_request
+):
+    with patch('server.routes.integration.jira_dc.JIRA_DC_WEBHOOKS_ENABLED', True):
+        mock_workspace = MagicMock()
+        mock_workspace.id = 42
+        mock_workspace.org_id = None
+        mock_workspace.name = 'jira.company.com'
+        mock_manager.validate_request_context.return_value = (
+            True,
+            'sig123',
+            {'test': 'payload'},
+            mock_workspace,
+        )
+        mock_redis.exists.return_value = False
+
+        response = await jira_dc_connection_events(42, mock_request, MagicMock())
+
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert body['success'] is True
+        mock_manager.validate_request_context.assert_awaited_once_with(
+            mock_request,
+            workspace_id=42,
+        )
+        mock_redis.setex.assert_called_once_with('jira_dc:42:sig123', 120, 1)
 
 
 @pytest.mark.asyncio
@@ -495,6 +534,7 @@ async def test_jira_dc_events_forwards_to_automations(
     org_id = uuid.UUID('00000000-0000-0000-0000-000000000123')
     payload = {'webhookEvent': 'comment_created'}
     mock_workspace = MagicMock()
+    mock_workspace.id = 10
     mock_workspace.org_id = org_id
     mock_workspace.name = 'jira.company.com'
     mock_manager.validate_request_context.return_value = (
@@ -513,7 +553,7 @@ async def test_jira_dc_events_forwards_to_automations(
         ),
     ):
         background_tasks = MagicMock()
-        response = await jira_dc_events(mock_request, background_tasks)
+        response = await jira_dc_connection_events(10, mock_request, background_tasks)
 
     assert response.status_code == 200
     background_tasks.add_task.assert_any_call(
@@ -521,6 +561,7 @@ async def test_jira_dc_events_forwards_to_automations(
         org_id=org_id,
         payload=payload,
         workspace_name='jira.company.com',
+        connection_id=10,
         delivery_id='sig123',
     )
     assert background_tasks.add_task.call_count == 2
@@ -539,6 +580,7 @@ async def test_jira_dc_events_forwards_issue_created_to_automations(
         'issue': {'key': 'PROJ-123'},
     }
     mock_workspace = MagicMock()
+    mock_workspace.id = 10
     mock_workspace.org_id = org_id
     mock_workspace.name = 'jira.company.com'
     mock_manager.validate_request_context.return_value = (
@@ -557,7 +599,7 @@ async def test_jira_dc_events_forwards_issue_created_to_automations(
         ),
     ):
         background_tasks = MagicMock()
-        response = await jira_dc_events(mock_request, background_tasks)
+        response = await jira_dc_connection_events(10, mock_request, background_tasks)
 
     assert response.status_code == 200
     background_tasks.add_task.assert_any_call(
@@ -565,6 +607,7 @@ async def test_jira_dc_events_forwards_issue_created_to_automations(
         org_id=org_id,
         payload=payload,
         workspace_name='jira.company.com',
+        connection_id=10,
         delivery_id='sig123',
     )
     assert background_tasks.add_task.call_count == 2
@@ -579,7 +622,7 @@ async def test_jira_dc_events_general_exception(mock_redis, mock_manager, mock_r
             'Unexpected error'
         )
 
-        response = await jira_dc_events(mock_request, MagicMock())
+        response = await jira_dc_connection_events(10, mock_request, MagicMock())
 
         assert response.status_code == 500
         body = json.loads(response.body)
@@ -601,6 +644,8 @@ async def test_create_jira_dc_workspace_oauth_disabled_new_workspace(
     mock_get_auth.return_value = mock_user_auth
     mock_manager.integration_store.get_workspace_by_name.return_value = None
     mock_workspace = MagicMock(name='test-workspace')
+    mock_workspace.id = 10
+    mock_workspace.name = 'test-workspace'
     mock_manager.integration_store.create_workspace.return_value = mock_workspace
 
     workspace_data = JiraDcWorkspaceCreate(
@@ -621,6 +666,9 @@ async def test_create_jira_dc_workspace_oauth_disabled_new_workspace(
         assert content['success'] is True
         assert content['redirect'] is False
         assert content['authorizationUrl'] == ''
+        assert content['eventsUrl'].endswith(
+            '/integration/jira-dc/connections/10/events'
+        )
         mock_manager.integration_store.create_workspace.assert_called_once()
         mock_handle_link.assert_called_once()
 
@@ -653,6 +701,7 @@ async def test_create_jira_dc_workspace_uses_managed_service_account(
     )
     mock_manager.integration_store.get_workspace_by_name.return_value = None
     mock_workspace = MagicMock()
+    mock_workspace.id = 10
     mock_workspace.name = 'test-workspace'
     mock_manager.integration_store.create_workspace.return_value = mock_workspace
 
@@ -699,8 +748,11 @@ async def test_create_jira_dc_workspace_oauth_disabled_existing_workspace(
 ):
     mock_get_auth.return_value = mock_user_auth
     mock_workspace = MagicMock(id=1, name='test-workspace')
+    mock_workspace.id = 1
+    mock_workspace.name = 'test-workspace'
     mock_manager.integration_store.get_workspace_by_name.return_value = mock_workspace
     mock_validate.return_value = mock_workspace
+    mock_manager.integration_store.update_workspace.return_value = mock_workspace
 
     workspace_data = JiraDcWorkspaceCreate(
         workspace_name='test-workspace',
@@ -749,6 +801,7 @@ async def test_create_jira_dc_workspace_preserves_secret_when_omitted_on_update(
     )
     mock_manager.integration_store.get_workspace_by_name.return_value = mock_workspace
     mock_validate.return_value = mock_workspace
+    mock_manager.integration_store.update_workspace.return_value = mock_workspace
 
     workspace_data = JiraDcWorkspaceCreate(
         workspace_name='test-workspace',
@@ -1054,6 +1107,7 @@ async def test_jira_dc_callback_workspace_integration_existing_workspace(
     # Mock existing workspace
     mock_workspace = MagicMock(id=1)
     mock_manager.integration_store.get_workspace_by_name.return_value = mock_workspace
+    mock_manager.integration_store.update_workspace.return_value = mock_workspace
 
     with patch('server.routes.integration.jira_dc.token_manager') as mock_token_manager:
         with patch(

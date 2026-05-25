@@ -163,28 +163,45 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         return signature_valid, signature, payload
 
     async def validate_request_context(
-        self, request: Request
+        self, request: Request, workspace_id: int | None = None
     ) -> Tuple[bool, Optional[str], Optional[Dict], Optional[JiraDcWorkspace]]:
         """Verify Jira DC webhook signature and return the matched workspace."""
         signature_header = request.headers.get('x-hub-signature')
         signature = signature_header.split('=')[1] if signature_header else None
         body = await request.body()
         payload = await request.json()
-        workspace_name = ''
-
-        parsedUrl = urlparse(_extract_workspace_url(payload))
-        if parsedUrl.hostname:
-            workspace_name = parsedUrl.hostname
-
-        if not workspace_name:
-            logger.warning('[Jira DC] No workspace name found in webhook payload')
-            return False, None, None, None
 
         if not signature:
             logger.warning('[Jira DC] No signature found in webhook headers')
             return False, None, None, None
 
-        workspace = await self.integration_store.get_workspace_by_name(workspace_name)
+        if workspace_id is not None:
+            workspace = await self.integration_store.get_workspace_by_id(workspace_id)
+            parsed_url = urlparse(_extract_workspace_url(payload))
+            if (
+                workspace
+                and parsed_url.hostname
+                and parsed_url.hostname.lower() != workspace.name.lower()
+            ):
+                logger.warning(
+                    '[Jira DC] Webhook payload host %s does not match connection %s (%s)',
+                    parsed_url.hostname,
+                    workspace.id,
+                    workspace.name,
+                )
+        else:
+            workspace_name = ''
+            parsed_url = urlparse(_extract_workspace_url(payload))
+            if parsed_url.hostname:
+                workspace_name = parsed_url.hostname
+
+            if not workspace_name:
+                logger.warning('[Jira DC] No workspace name found in webhook payload')
+                return False, None, None, None
+
+            workspace = await self.integration_store.get_workspace_by_name(
+                workspace_name
+            )
 
         if not workspace:
             logger.warning('[Jira DC] Could not identify workspace for webhook')
