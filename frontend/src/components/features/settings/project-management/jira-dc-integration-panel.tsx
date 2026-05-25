@@ -61,7 +61,9 @@ export function JiraDcIntegrationPanel() {
   const { data: integrationData } = useIntegrationStatus("jira-dc");
   const existingWorkspace = integrationData?.workspace;
   const isWorkspaceEditable = existingWorkspace?.editable ?? false;
-  const isActiveIntegration = integrationData?.status === "active";
+  const isActiveIntegration = existingWorkspace
+    ? existingWorkspace.status === "active"
+    : integrationData?.status === "active";
 
   const configureMutation = useConfigureIntegration("jira-dc", {
     onSettled: () => {},
@@ -287,10 +289,10 @@ export function JiraDcIntegrationPanel() {
     ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SVC_ACC_API_SAVED_PLACEHOLDER
     : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SVC_ACC_API_PLACEHOLDER;
 
-  const statusBadge = () => {
+  const statusBadge = (active = isActiveIntegration) => {
     let label: string;
     let classes: string;
-    if (isActiveIntegration) {
+    if (active) {
       label = t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_LABEL);
       classes = "bg-green-500/20 text-green-400";
     } else {
@@ -663,9 +665,12 @@ export function JiraDcIntegrationPanel() {
             />
             <div className="flex flex-col gap-4 w-full">
               <div className="flex flex-col gap-3">
-                {sectionLabel(
-                  I18nKey.PROJECT_MANAGEMENT$JIRA_DC_PAUSE_SECTION_LABEL,
-                )}
+                <div className="flex items-center gap-2">
+                  {sectionLabel(
+                    I18nKey.PROJECT_MANAGEMENT$JIRA_DC_PAUSE_SECTION_LABEL,
+                  )}
+                  {statusBadge(isActive)}
+                </div>
                 <div className="flex flex-col gap-1">
                   <SettingsSwitch
                     testId="active-toggle"
@@ -725,7 +730,7 @@ export function JiraDcIntegrationPanel() {
                     testId="cancel-remove-integration-button"
                     type="button"
                   >
-                    {t(I18nKey.FEEDBACK$CANCEL_LABEL)}
+                    {t(I18nKey.SETTINGS_FORM$CLOSE_LABEL)}
                   </BrandButton>
                 </div>
               </div>
