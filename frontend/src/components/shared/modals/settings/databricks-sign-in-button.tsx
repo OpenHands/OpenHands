@@ -7,6 +7,10 @@ import {
   useDatabricksLogout,
 } from "#/hooks/query/use-databricks-auth-status";
 import { cn } from "#/utils/utils";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+
+/** Origin used for OAuth popups — must match the XHR origin so session cookies align. */
+const getOAuthOrigin = () => window.location.origin;
 
 interface DatabricksSignInButtonProps {
   /**
@@ -121,7 +125,13 @@ export function DatabricksSignInButton({
   }
 
   const handleSignIn = async () => {
+    const backendOrigin = getOAuthOrigin();
+
     if (u2mClientId?.trim()) {
+      // Open a blank tab SYNCHRONOUSLY (inside the user-gesture tick) so
+      // browsers don't treat it as a popup and block it.  We redirect the
+      // tab to the real OAuth URL once the /prepare response arrives.
+      const popup = window.open("about:blank", "_blank");
       setIsPreparing(true);
       try {
         const initiateRelativePath = await DatabricksAuthService.prepare(
@@ -130,28 +140,31 @@ export function DatabricksSignInButton({
           u2mClientSecret || null,
           u2mRedirectUri?.trim() || null,
         );
-        // Open the OAuth flow in a new tab so the user keeps the settings
-        // page open. We target the backend (port 3000) directly rather than
-        // going through the Vite proxy, so /auth/* cookies are set on the
-        // correct origin (3000). The OAuth callback may come back to port 8080
-        // (CLI shim) which then client-side redirects back to port 3000 —
-        // keeping the session cookie valid throughout.
-        const backendOrigin =
-          window.location.port === "3001"
-            ? `${window.location.protocol}//${window.location.hostname}:3000`
-            : window.location.origin;
-        window.open(`${backendOrigin}${initiateRelativePath}`, "_blank");
+        const initiateUrl = `${backendOrigin}${initiateRelativePath}`;
+        if (popup) {
+          popup.location.href = initiateUrl;
+        } else {
+          // Fallback: popup was blocked after all — try a plain open.
+          window.open(initiateUrl, "_blank");
+        }
         startPolling();
+      } catch {
+        popup?.close();
+        displayErrorToast(
+          t("SETTINGS$DATABRICKS_SIGN_IN_FAILED", {
+            defaultValue:
+              "Could not start Databricks sign-in. Check your Client ID, workspace URL, and redirect URI, then try again.",
+          }),
+        );
       } finally {
         setIsPreparing(false);
       }
     } else {
-      // Env-var path — open initiate URL in a new tab.
-      const origin =
-        window.location.port === "3001"
-          ? `${window.location.protocol}//${window.location.hostname}:3000`
-          : window.location.origin;
-      window.open(`${origin}${DatabricksAuthService.INITIATE_URL}`, "_blank");
+      // Env-var path — open initiate URL directly (no async before open).
+      window.open(
+        `${backendOrigin}${DatabricksAuthService.INITIATE_URL}`,
+        "_blank",
+      );
       startPolling();
     }
   };

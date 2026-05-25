@@ -4,14 +4,24 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { DatabricksSignInButton } from "#/components/shared/modals/settings/databricks-sign-in-button";
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    // Default-value fallback mirrors the i18next behaviour used by the
-    // component so we assert against the English copy without maintaining a
-    // duplicate translation map here.
-    t: (key: string, opts?: { defaultValue?: string }) =>
-      opts?.defaultValue ?? key,
-  }),
+vi.mock("react-i18next", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-i18next")>();
+  return {
+    ...actual,
+    useTranslation: () => ({
+      // Default-value fallback mirrors the i18next behaviour used by the
+      // component so we assert against the English copy without maintaining a
+      // duplicate translation map here.
+      t: (key: string, opts?: { defaultValue?: string }) =>
+        opts?.defaultValue ?? key,
+    }),
+  };
+});
+
+// Prevent custom-toast-handlers from pulling in the full i18n init chain.
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displayErrorToast: vi.fn(),
+  displaySuccessToast: vi.fn(),
 }));
 
 const statusMock = vi.fn();
@@ -101,12 +111,14 @@ describe("DatabricksSignInButton", () => {
     expect(btn).toHaveTextContent(/sign in with databricks/i);
   });
 
-  it("navigates to the initiate URL on click", async () => {
+  it("opens a new tab to the initiate URL on click (env-var path)", async () => {
     statusMock.mockResolvedValue({
       configured: true,
       authenticated: false,
       host: null,
     });
+
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
 
     const user = userEvent.setup();
     renderWithClient(<DatabricksSignInButton isActive />);
@@ -114,7 +126,12 @@ describe("DatabricksSignInButton", () => {
     const btn = await screen.findByTestId("databricks-sign-in-button");
     await user.click(btn);
 
-    expect(window.location.href).toBe("/auth/databricks/initiate");
+    // Env-var path: no client_id → window.open with the initiate URL in a new tab.
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining("/auth/databricks/initiate"),
+      "_blank",
+    );
+    openSpy.mockRestore();
   });
 
   it("shows the signed-in host and Sign-out button when authenticated", async () => {

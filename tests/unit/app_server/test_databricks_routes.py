@@ -106,7 +106,15 @@ def test_callback_exchanges_code_and_stores_session(client: TestClient) -> None:
                 f'/auth/databricks/callback?code=auth-code&state={state}',
             )
             assert r2.status_code == 200
-            assert r2.json()['status'] == 'authenticated'
+            # The callback returns an HTMLResponse (a self-closing popup page)
+            # rather than JSON — assert the content-type and that the HTML
+            # confirms success so the frontend status poll can take over.
+            assert 'text/html' in r2.headers['content-type']
+            assert (
+                'authenticated' in r2.text.lower()
+                or 'success' in r2.text.lower()
+                or 'signed' in r2.text.lower()
+            )
             mock_post.assert_called_once()
 
 

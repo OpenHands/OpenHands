@@ -66,15 +66,15 @@ export function ModelSelector({
   );
 
   React.useEffect(() => {
-    if (currentModel) {
-      const { provider, model } = extractModelAndProvider(currentModel);
-
+    if (!currentModel) return;
+    const { provider, model } = extractModelAndProvider(currentModel);
+    if (provider) {
       setLitellmId(currentModel);
-      setSelectedProvider(provider || null);
-      setSelectedModel(model);
-      onDefaultValuesChanged?.(provider || null, model);
+      setSelectedProvider(provider);
+      setSelectedModel(model || null);
+      onDefaultValuesChanged?.(provider, model || null);
     }
-  }, [currentModel]);
+  }, [currentModel, onDefaultValuesChanged]);
 
   const handleChangeProvider = (provider: string) => {
     setSelectedProvider(provider);

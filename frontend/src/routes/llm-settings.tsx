@@ -227,10 +227,17 @@ export function LlmSettingsScreen({
 
   const isSaasMode = config?.app_mode === "saas";
 
+  const lastSyncedSettingsModelRef = React.useRef<string | null>(null);
+
   React.useEffect(() => {
-    if (settings?.llm_model) {
-      const { provider } = extractModelAndProvider(settings.llm_model);
-      setSelectedProvider(provider || null);
+    if (!settings?.llm_model) return;
+    // Only sync provider when the persisted model actually changed — not on
+    // every settings refetch (e.g. after saving Databricks OAuth fields).
+    if (lastSyncedSettingsModelRef.current === settings.llm_model) return;
+    lastSyncedSettingsModelRef.current = settings.llm_model;
+    const { provider } = extractModelAndProvider(settings.llm_model);
+    if (provider) {
+      setSelectedProvider(provider);
     }
   }, [settings?.llm_model]);
 
@@ -396,6 +403,10 @@ export function LlmSettingsScreen({
                   const nextModel = buildModelId(provider, model);
                   if (nextModel) {
                     onChange("llm.model", nextModel);
+                  } else if (provider === "databricks") {
+                    // Keep the Databricks provider visible while the user picks
+                    // a model and configures OAuth credentials.
+                    onChange("llm.model", "databricks/");
                   }
                 }}
                 wrapperClassName="!flex-col !gap-6"

@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from openhands.app_server import v1_router
+from openhands.app_server.auth.databricks_routes import databricks_router
 from openhands.app_server.config import get_app_lifespan_service
 from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.mcp.mcp_router import init_tavily_proxy, mcp_server
@@ -71,6 +72,9 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
 
 
 app.include_router(v1_router.router)
+# OAuth routes live at /auth/databricks/* (not under /api/v1) so redirect URIs
+# registered with Databricks stay stable across deployments.
+app.include_router(databricks_router)
 app.include_router(health_router)
 
 # Middleware and static file setup (merged from listen.py)
