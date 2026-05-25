@@ -582,15 +582,22 @@ export function JiraDcIntegrationPanel() {
                       </BrandButton>
                     </div>
                   ) : (
-                    <BrandButton
-                      variant="secondary"
-                      onClick={() => unlinkMutation.mutate(undefined)}
-                      testId="jira-dc-disconnect-button"
-                      type="button"
-                      isDisabled={isBusy}
-                    >
-                      {t(I18nKey.PROJECT_MANAGEMENT$DISCONNECT_BUTTON_LABEL)}
-                    </BrandButton>
+                    <div className="flex flex-col items-start gap-2">
+                      <BrandButton
+                        variant="secondary"
+                        onClick={() => unlinkMutation.mutate(undefined)}
+                        testId="jira-dc-disconnect-button"
+                        type="button"
+                        isDisabled={isBusy}
+                      >
+                        {t(I18nKey.PROJECT_MANAGEMENT$DISCONNECT_BUTTON_LABEL)}
+                      </BrandButton>
+                      <Typography.Text className="text-xs text-tertiary-alt max-w-56">
+                        {t(
+                          I18nKey.PROJECT_MANAGEMENT$JIRA_DC_INTEGRATION_OWNER_HELP,
+                        )}
+                      </Typography.Text>
+                    </div>
                   )}
                 </td>
               </tr>

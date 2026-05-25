@@ -58,6 +58,11 @@ export function useConfigureIntegration(
       );
 
       const { success, redirect, authorizationUrl } = response.data;
+      const webhookInstallFailed = Boolean(
+        platform === "jira-dc" &&
+        data.adminApiKey?.trim() &&
+        response.data.webhookEnrolled === false,
+      );
 
       if (success) {
         if (redirect) {
@@ -66,6 +71,10 @@ export function useConfigureIntegration(
           } else {
             throw new Error("Could not get authorization URL from the server.");
           }
+        } else if (webhookInstallFailed) {
+          displayErrorToast(
+            t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_INSTALL_FAILED),
+          );
         } else if (data.reloadOnSuccess !== false) {
           window.location.reload();
         }

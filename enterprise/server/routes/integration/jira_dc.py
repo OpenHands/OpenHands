@@ -869,14 +869,18 @@ async def jira_dc_callback(request: Request, code: str, state: str):
                 user_id, jira_dc_user_id, target_workspace
             )
 
-        await _maybe_register_webhook(
+        webhook_enrolled = await _maybe_register_webhook(
             integration_session.get('admin_api_key'),
             JIRA_DC_BASE_URL,
             integration_session['webhook_secret'],
             workspace.id,
         )
+        redirect_url = '/settings/integrations'
+        if integration_session.get('admin_api_key') and not webhook_enrolled:
+            redirect_url += '?jira_dc_webhook=install_failed'
+
         return RedirectResponse(
-            url='/settings/integrations',
+            url=redirect_url,
             status_code=status.HTTP_302_FOUND,
         )
     elif integration_session.get('operation_type') == 'workspace_link':
@@ -955,14 +959,14 @@ async def get_current_workspace_link(request: Request):
 
 @jira_dc_integration_router.post('/workspaces/unlink')
 async def unlink_workspace(request: Request):
-    """Unlink from Jira DC and, for workspace admins, optionally revoke the hook.
+    """Unlink from Jira DC and, for integration owners, optionally revoke the hook.
 
-    A non-admin user is only detached from the workspace (their personal link
-    goes inactive) -- never touching Jira. The workspace admin instead tears the
-    whole integration down: the workspace is deactivated and, when an admin PAT
-    is supplied in the request body, the Jira webhook is deleted too (best
-    effort, mirroring auto-enrollment). Deactivation never fails if the Jira-side
-    cleanup did; the admin can always remove the webhook by hand.
+    A non-owner user is only detached from the workspace (their personal link
+    goes inactive) -- never touching Jira. The integration owner instead tears
+    the whole integration down: the workspace is deactivated and, when a Jira
+    admin PAT is supplied in the request body, the Jira webhook is deleted too
+    (best effort, mirroring auto-enrollment). Deactivation never fails if the
+    Jira-side cleanup did; the owner can always remove the webhook by hand.
     """
     try:
         user_auth = cast(SaasUserAuth, await get_user_auth(request))

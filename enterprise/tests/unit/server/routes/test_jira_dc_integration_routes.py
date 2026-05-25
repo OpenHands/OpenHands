@@ -264,7 +264,7 @@ async def test_jira_dc_callback_workspace_integration_new_workspace(
     'server.routes.integration.jira_dc._maybe_register_webhook',
     new_callable=AsyncMock,
 )
-async def test_jira_dc_callback_continues_after_webhook_install_failure(
+async def test_jira_dc_callback_redirects_with_webhook_install_failure(
     mock_register_webhook,
     mock_handle_link,
     mock_manager,
@@ -310,7 +310,9 @@ async def test_jira_dc_callback_continues_after_webhook_install_failure(
 
     assert isinstance(response, RedirectResponse)
     assert response.status_code == status.HTTP_302_FOUND
-    assert response.headers['location'] == '/settings/integrations'
+    assert response.headers['location'] == (
+        '/settings/integrations?jira_dc_webhook=install_failed'
+    )
     mock_register_webhook.assert_awaited_once_with(
         'bad-admin-pat', 'https://test.atlassian.net', 'secret', 1
     )
