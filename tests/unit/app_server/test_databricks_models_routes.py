@@ -174,10 +174,10 @@ def test_returns_curated_when_discovery_fails(curated_qnames: set[str]) -> None:
 
     assert resp.status_code == 200
     body = resp.json()
-    # Credentials were resolved → source='curated+discovered' is claimed…
-    assert body['source'] == 'curated+discovered'
+    # Discovery failed → source stays 'curated' (not 'curated+discovered').
+    assert body['source'] == 'curated'
     assert body['host'] == _HOST
-    # …but the only entries are the curated ones (discovery swallowed).
+    # Only the curated entries are returned.
     assert {e['qualified_name'] for e in body['entries']} == curated_qnames
     for e in body['entries']:
         assert e['source'] == 'curated'
@@ -223,7 +223,8 @@ def test_merges_discovered_on_top_of_curated(curated_qnames: set[str]) -> None:
     overlap = by_qn['databricks/databricks-claude-sonnet-4-5']
     assert overlap['source'] == 'curated+discovered'
     assert overlap['family'] == 'anthropic'
-    assert overlap['recommended'] is True
+    # sonnet-4-5 is curated but not the recommended pick (sonnet-4-6 is).
+    assert overlap['recommended'] is False
     assert overlap['endpoint_type'] == 'FOUNDATION_MODEL_API'
 
     llama = by_qn['databricks/databricks-meta-llama-4-maverick']
