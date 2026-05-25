@@ -1,8 +1,9 @@
 import os
 import re
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
+import httpx
 from fastmcp import Client, FastMCP
 from fastmcp.client.transports import StreamableHttpTransport
 from fastmcp.exceptions import ToolError
@@ -61,10 +62,23 @@ def init_tavily_proxy() -> None:
 
     try:
         # Create a client that connects to Tavily's HTTP MCP endpoint
+        def _tavily_http_client_factory(
+            headers: dict[str, str] | None = None,
+            timeout: httpx.Timeout | None = None,
+            auth: httpx.Auth | None = None,
+            **kwargs: Any,
+        ) -> httpx.AsyncClient:
+            return httpx.AsyncClient(
+                headers=headers or {},
+                timeout=httpx.Timeout(30.0),
+                follow_redirects=True,
+                auth=auth,
+            )
+
         proxy_client = Client(
             transport=StreamableHttpTransport(
                 url=f'https://mcp.tavily.com/mcp/?tavilyApiKey={tavily_api_key}',
-                timeout=30.0,
+                httpx_client_factory=_tavily_http_client_factory,
             )
         )
         proxy_server = create_proxy(proxy_client)

@@ -238,10 +238,13 @@ class TestInitTavilyProxy:
             # Call the function
             init_tavily_proxy()
 
-            # Verify transport was created with correct URL
-            mock_transport.assert_called_once_with(
-                url='https://mcp.tavily.com/mcp/?tavilyApiKey=test-tavily-key'
+            # Verify transport was created with correct URL and a client factory for timeout
+            call_kwargs = mock_transport.call_args.kwargs
+            assert (
+                call_kwargs['url']
+                == 'https://mcp.tavily.com/mcp/?tavilyApiKey=test-tavily-key'
             )
+            assert callable(call_kwargs['httpx_client_factory'])
 
             # Verify client was created with the transport
             mock_client.assert_called_once_with(transport=mock_transport_instance)
