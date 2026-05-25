@@ -15,6 +15,8 @@ from openhands.app_server.integrations.bitbucket_data_center.bitbucket_dc_servic
 )
 from openhands.app_server.integrations.service_types import RequestMethod
 
+WEBHOOK_EVENTS = ['repo:refs_changed', 'pr:opened', 'pr:comment:added']
+
 
 def _make_service() -> BitbucketDCService:
     """Build a service rooted at a known base_domain so URL assertions are stable."""
@@ -34,7 +36,7 @@ async def test_create_repository_webhook_posts_bbdc_payload():
         name='OpenHands Resolver',
         webhook_url='https://app.example.com/integration/bitbucket-dc/events',
         webhook_secret='secret-123',
-        events=['pr:comment:added', 'pr:comment:edited'],
+        events=WEBHOOK_EVENTS,
     )
 
     # BBDC returns numeric ids; we normalize to str to match the storage column.
@@ -45,7 +47,7 @@ async def test_create_repository_webhook_posts_bbdc_payload():
             'name': 'OpenHands Resolver',
             'url': 'https://app.example.com/integration/bitbucket-dc/events',
             'active': True,
-            'events': ['pr:comment:added', 'pr:comment:edited'],
+            'events': WEBHOOK_EVENTS,
             # The shared secret is nested under ``configuration`` for BBDC —
             # this is the field Cloud puts at the top level.
             'configuration': {'secret': 'secret-123'},
@@ -68,7 +70,7 @@ async def test_update_repository_webhook_puts_full_payload():
         name='OpenHands Resolver',
         webhook_url='https://app.example.com/integration/bitbucket-dc/events',
         webhook_secret='rotated',
-        events=['pr:comment:added', 'pr:comment:edited'],
+        events=WEBHOOK_EVENTS,
     )
 
     assert webhook_id == '7'
@@ -78,7 +80,7 @@ async def test_update_repository_webhook_puts_full_payload():
             'name': 'OpenHands Resolver',
             'url': 'https://app.example.com/integration/bitbucket-dc/events',
             'active': True,
-            'events': ['pr:comment:added', 'pr:comment:edited'],
+            'events': WEBHOOK_EVENTS,
             'configuration': {'secret': 'rotated'},
         },
         method=RequestMethod.PUT,

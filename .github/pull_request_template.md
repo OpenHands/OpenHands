@@ -2,7 +2,12 @@
 
 <!-- AI/LLM agents: be concise and specific. Do not check the box below. -->
 
+HUMAN:
+
+
 - [ ] A human has tested these changes.
+
+AGENT:
 
 ---
 

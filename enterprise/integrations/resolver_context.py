@@ -22,6 +22,13 @@ class ResolverUserContext(UserContext):
         self.saas_user_auth = saas_user_auth
         self.resolver_org_id = resolver_org_id
         self._provider_handler: ProviderHandler | None = None
+        # SaasUserAuth supports this resolver override; other UserAuth
+        # implementations may not, so keep the call defensive.
+        set_effective_org_id_override = getattr(
+            type(self.saas_user_auth), 'set_effective_org_id_override', None
+        )
+        if resolver_org_id is not None and callable(set_effective_org_id_override):
+            set_effective_org_id_override(self.saas_user_auth, resolver_org_id)
 
     async def get_user_id(self) -> str | None:
         return await self.saas_user_auth.get_user_id()

@@ -5,7 +5,15 @@ import hmac
 import json
 import secrets
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    status,
+)
 from fastapi.responses import JSONResponse
 from integrations.bitbucket_data_center.bitbucket_dc_manager import BitbucketDCManager
 from integrations.bitbucket_data_center.bitbucket_dc_service import (
@@ -15,11 +23,14 @@ from integrations.models import Message, SourceType
 from integrations.utils import HOST_URL, IS_LOCAL_DEPLOYMENT
 from pydantic import BaseModel
 from server.auth.authorization import Permission, require_permission
+from server.auth.constants import AUTOMATION_EVENT_FORWARDING_ENABLED
 from server.auth.token_manager import TokenManager
+from server.services.automation_event_service import AutomationEventService
 from storage.bitbucket_dc_webhook_store import BitbucketDCWebhookStore
 from storage.redis import get_redis_client_async
 
 from openhands.app_server.config_api.config_models import AppMode
+from openhands.app_server.integrations.provider import ProviderType
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 bitbucket_dc_integration_router = APIRouter(prefix='/integration')
@@ -27,9 +38,27 @@ bitbucket_dc_integration_router = APIRouter(prefix='/integration')
 webhook_store = BitbucketDCWebhookStore()
 token_manager = TokenManager()
 bitbucket_dc_manager = BitbucketDCManager(token_manager)
+automation_event_service = AutomationEventService(token_manager)
 
 BITBUCKET_DC_WEBHOOK_NAME = 'OpenHands Resolver'
-BITBUCKET_DC_WEBHOOK_EVENTS = ['pr:comment:added', 'pr:comment:edited']
+BITBUCKET_DC_WEBHOOK_EVENTS = [
+    'repo:refs_changed',
+    'repo:comment:added',
+    'repo:comment:edited',
+    'repo:comment:deleted',
+    'pr:opened',
+    'pr:from_ref_updated',
+    'pr:modified',
+    'pr:reviewer:approved',
+    'pr:reviewer:unapproved',
+    'pr:reviewer:needs_work',
+    'pr:merged',
+    'pr:declined',
+    'pr:deleted',
+    'pr:comment:added',
+    'pr:comment:edited',
+    'pr:comment:deleted',
+]
 BITBUCKET_DC_WEBHOOK_URL = f'{HOST_URL}/integration/bitbucket-dc/events'
 
 
@@ -182,6 +211,22 @@ def _extract_repo_identity(payload_data: dict) -> tuple[str, str]:
     )
     project = repository.get('project') or {}
     return project.get('key') or '', repository.get('slug') or ''
+
+
+def _normalize_bitbucket_dc_event_payload(
+    payload_data: dict,
+    event_key: str | None,
+) -> dict:
+    """Ensure automation parsing can identify the Bitbucket DC event key.
+
+    Bitbucket DC sends the event key both in ``X-Event-Key`` and, for normal
+    deliveries, in the JSON payload. Some tests and proxies only preserve the
+    header, so normalize the payload before forwarding it internally.
+    """
+    if event_key and not payload_data.get('eventKey'):
+        payload_data = dict(payload_data)
+        payload_data['eventKey'] = event_key
+    return payload_data
 
 
 async def verify_bitbucket_dc_signature(
@@ -528,6 +573,7 @@ async def uninstall_bitbucket_dc_webhook(
 @bitbucket_dc_integration_router.post('/bitbucket-dc/events')
 async def bitbucket_dc_events(
     request: Request,
+    background_tasks: BackgroundTasks,
     x_hub_signature: str | None = Header(None),
     x_event_key: str | None = Header(None),
     x_request_id: str | None = Header(None),
@@ -544,6 +590,8 @@ async def bitbucket_dc_events(
                 status_code=200,
                 content={'message': 'Bitbucket DC ping acknowledged.'},
             )
+
+        payload_data = _normalize_bitbucket_dc_event_payload(payload_data, x_event_key)
 
         project_key, repo_slug = _extract_repo_identity(payload_data)
         await verify_bitbucket_dc_signature(
@@ -571,12 +619,21 @@ async def bitbucket_dc_events(
                 content={'message': 'Duplicate Bitbucket DC event ignored.'},
             )
 
+        installation_id = f'{project_key}/{repo_slug}'
+        if AUTOMATION_EVENT_FORWARDING_ENABLED:
+            background_tasks.add_task(
+                automation_event_service.forward_event,
+                provider=ProviderType.BITBUCKET_DATA_CENTER,
+                payload=payload_data,
+                installation_id=installation_id,
+            )
+
         message = Message(
             source=SourceType.BITBUCKET_DATA_CENTER,
             message={
                 'payload': payload_data,
                 'event_key': x_event_key,
-                'installation_id': f'{project_key}/{repo_slug}',
+                'installation_id': installation_id,
             },
         )
         await bitbucket_dc_manager.receive_message(message)
