@@ -1367,23 +1367,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 plan_path = self._compute_plan_path(project_dir, git_provider)
             tools = get_planning_tools(plan_path=plan_path)
         else:
-            register_builtins_agents(cli_mode=False)
-            try:
-                tools = get_default_tools(
-                    enable_browser=True,
-                    enable_sub_agents=user.agent_settings.enable_sub_agents,
-                )
-            except TypeError:
-                # SDK < local branch: enable_sub_agents not yet available.
-                tools = get_default_tools(enable_browser=True)
-                if user.agent_settings.enable_sub_agents:
-                    try:
-                        from openhands.sdk.tool.spec import Tool
-                        from openhands.tools.task import TaskToolSet
-
-                        tools.append(Tool(name=TaskToolSet.name))
-                    except ImportError:
-                        pass
+            register_builtins_agents(enable_browser=True)
+            tools = get_default_tools(
+                enable_browser=True,
+                enable_sub_agents=user.agent_settings.enable_sub_agents,
+            )
             if user.agent_settings.enable_sub_agents:
                 agent_definitions = list(get_registered_agent_definitions())
 
