@@ -26,9 +26,7 @@ export const useDeleteConversation = () => {
       if (context?.previousData) {
         restoreConversationsCache(queryClient, context.previousData);
       }
-    },
-    onSettled: async () => {
-      await queryClient.invalidateQueries({
+      queryClient.invalidateQueries({
         queryKey: ["user", "conversations"],
       });
     },
