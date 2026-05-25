@@ -156,6 +156,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     openhands_provider_base_url: str | None
     access_token_hard_timeout: timedelta | None
     app_mode: str | None = None
+    # Session OAuth tokens from POST /auth/databricks/callback (browser U2M flow).
+    # Populated when the user signed in via the web UI before starting the conversation.
+    databricks_u2m_token_data: dict | None = None
 
     async def _get_sandbox_grouping_strategy(self) -> SandboxGroupingStrategy:
         """Get the sandbox grouping strategy from user settings."""
@@ -925,7 +928,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             llm_model: Optional specific model to use, falls back to user default
 
         Returns:
-            Configured LLM instance
+            Configured LLM instance — DatabricksLLM when the model is databricks/*.
         """
         model: str = (
             llm_model
@@ -938,6 +941,32 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             user.agent_settings.llm.base_url,
             provider_base_url=self.openhands_provider_base_url,
         )
+
+        if model.startswith('databricks/'):
+            try:
+                from openhands.sdk.llm.providers.databricks.llm import DatabricksLLM
+
+                extras: dict = {}
+                if self.databricks_u2m_token_data:
+                    extras['stored_u2m_tokens'] = self.databricks_u2m_token_data
+                return DatabricksLLM(
+                    model=model,
+                    databricks_host=base_url,
+                    databricks_client_id=getattr(user, 'databricks_client_id', None),
+                    databricks_client_secret=getattr(
+                        user, 'databricks_client_secret', None
+                    ),
+                    databricks_u2m_client_id=getattr(
+                        user, 'databricks_u2m_client_id', None
+                    ),
+                    databricks_u2m_client_secret=getattr(
+                        user, 'databricks_u2m_client_secret', None
+                    ),
+                    usage_id='agent',
+                    **extras,
+                )
+            except Exception:
+                pass  # fall through to standard LLM
 
         return LLM(
             model=model,
@@ -2076,6 +2105,16 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 # If server_config is not available (e.g., in tests), continue without it
                 pass
 
+            # Extract Databricks U2M tokens from the HTTP session (set by /auth/databricks/callback).
+            databricks_u2m_token_data = None
+            if request is not None:
+                try:
+                    databricks_u2m_token_data = request.session.get(
+                        'databricks_u2m_tokens'
+                    )
+                except Exception:
+                    pass
+
             yield LiveStatusAppConversationService(
                 init_git_in_empty_workspace=self.init_git_in_empty_workspace,
                 user_context=user_context,
@@ -2095,4 +2134,5 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 openhands_provider_base_url=config.openhands_provider_base_url,
                 access_token_hard_timeout=access_token_hard_timeout,
                 app_mode=app_mode,
+                databricks_u2m_token_data=databricks_u2m_token_data,
             )

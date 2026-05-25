@@ -122,6 +122,19 @@ class Settings(BaseModel):
     disabled_skills: list[str] | None = None
     search_api_key: SecretStr | None = None
     sandbox_api_key: SecretStr | None = None
+    # Databricks-specific fields — only used when agent_settings.llm.model starts with
+    # "databricks/". Kept at top-level (same tier as search_api_key) because they are
+    # provider credentials, not LLM hyperparameters.
+    # M2M (service-principal / OAuth Client Credentials) credentials:
+    databricks_client_id: str | None = None
+    databricks_client_secret: SecretStr | None = None
+    # U2M (browser / PKCE) OAuth app credentials — uses a SEPARATE custom OAuth app
+    # registered in Databricks Account Console → App connections.
+    databricks_u2m_client_id: str | None = None
+    databricks_u2m_client_secret: SecretStr | None = None
+    # Optional redirect URI; must exactly match what is registered in the OAuth app.
+    # Defaults to http://localhost:8080/callback inside the SDK when left None.
+    databricks_u2m_redirect_uri: str | None = None
     max_budget_per_task: float | None = None
     email: str | None = None
     email_verified: bool | None = None
@@ -274,7 +287,11 @@ class Settings(BaseModel):
 
     # ── Serialization ───────────────────────────────────────────────
 
-    @field_serializer('search_api_key')
+    @field_serializer(
+        'search_api_key',
+        'databricks_client_secret',
+        'databricks_u2m_client_secret',
+    )
     def api_key_serializer(self, api_key: SecretStr | None, info: SerializationInfo):
         if api_key is None:
             return None
@@ -453,6 +470,8 @@ class GETSettingsModel(Settings):
     )
     llm_api_key_set: bool
     search_api_key_set: bool = False
+    databricks_client_secret_set: bool = False
+    databricks_u2m_client_secret_set: bool = False
 
     model_config = ConfigDict(use_enum_values=True)
 

@@ -47,11 +47,38 @@ export const extractSettings = (
     agentSettings.llm = llm as Record<string, SettingsValue>;
   if (agent) agentSettings.agent = agent;
 
+  // Databricks-specific fields (only present when Databricks provider is selected)
+  const databricksClientId =
+    formData.get("databricks-client-id-input")?.toString() || undefined;
+  const databricksClientSecret =
+    formData.get("databricks-client-secret-input")?.toString() || undefined;
+  const databricksU2mClientId =
+    formData.get("databricks-u2m-client-id-input")?.toString() || undefined;
+  const databricksU2mClientSecret =
+    formData.get("databricks-u2m-client-secret-input")?.toString() || undefined;
+  const databricksU2mRedirectUri =
+    formData.get("databricks-u2m-redirect-uri-input")?.toString() || undefined;
+
   return {
     ...(Object.keys(agentSettings).length > 0
       ? { agent_settings_diff: agentSettings }
       : {}),
     ...(language ? { language } : {}),
+    ...(databricksClientId !== undefined
+      ? { databricks_client_id: databricksClientId }
+      : {}),
+    ...(databricksClientSecret !== undefined
+      ? { databricks_client_secret: databricksClientSecret }
+      : {}),
+    ...(databricksU2mClientId !== undefined
+      ? { databricks_u2m_client_id: databricksU2mClientId }
+      : {}),
+    ...(databricksU2mClientSecret !== undefined
+      ? { databricks_u2m_client_secret: databricksU2mClientSecret }
+      : {}),
+    ...(databricksU2mRedirectUri !== undefined
+      ? { databricks_u2m_redirect_uri: databricksU2mRedirectUri }
+      : {}),
   };
 };
 

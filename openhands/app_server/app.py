@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import os
 import warnings
 
@@ -12,6 +13,7 @@ from fastapi import (
     Request,
 )
 from fastapi.responses import JSONResponse
+from starlette.middleware.sessions import SessionMiddleware
 
 from openhands.app_server import v1_router
 from openhands.app_server.config import get_app_lifespan_service
@@ -83,4 +85,32 @@ app.add_middleware(CacheControlMiddleware)
 app.add_middleware(
     RateLimitMiddleware,
     rate_limiter=InMemoryRateLimiter(requests=10, seconds=1),
+)
+
+# Signed cookie sessions — required for Databricks U2M OAuth (PKCE state + token cache).
+_session_secret = os.environ.get('OPENHANDS_SESSION_SECRET') or os.environ.get(
+    'JWT_SECRET'
+)
+_is_local_runtime = os.environ.get('RUNTIME', '').lower() == 'local'
+if not _session_secret:
+    if not _is_local_runtime:
+        raise RuntimeError(
+            'OPENHANDS_SESSION_SECRET (or JWT_SECRET) must be set in production. '
+            'Generate with: python -c "import secrets; print(secrets.token_hex(32))" '
+            'and export before starting the server. '
+            'To allow the insecure dev fallback, set RUNTIME=local.'
+        )
+    logging.getLogger(__name__).warning(
+        'OPENHANDS_SESSION_SECRET and JWT_SECRET are unset; using an insecure dev-only '
+        'session secret for OAuth. This is only allowed when RUNTIME=local. '
+        'Set OPENHANDS_SESSION_SECRET before deploying to production.'
+    )
+    _session_secret = 'openhands-databricks-u2m-dev-insecure-do-not-use'
+_https_only = not _is_local_runtime
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=_session_secret,
+    same_site='lax',
+    https_only=_https_only,
+    max_age=3600,
 )

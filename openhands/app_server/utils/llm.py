@@ -289,6 +289,16 @@ def get_supported_llm_models(
 
     openhands_models = get_openhands_models(verified_models)
 
+    # Append Databricks FMAPI endpoints when DATABRICKS_HOST+TOKEN are set.
+    try:
+        from openhands.sdk.llm.providers.databricks.discovery import (
+            list_models_from_env,
+        )
+
+        model_list = model_list + list_models_from_env()
+    except Exception as e:
+        logger.debug('Databricks model discovery skipped: %s', e)
+
     # Assign canonical provider prefixes to bare LiteLLM names, then dedupe.
     all_models = (
         openhands_models + CLARIFAI_MODELS + [_assign_provider(m) for m in model_list]

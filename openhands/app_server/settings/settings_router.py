@@ -140,6 +140,9 @@ async def load_settings(
             llm_api_key_set=settings.llm_api_key_is_set,
             search_api_key_set=settings.search_api_key is not None
             and bool(settings.search_api_key),
+            databricks_client_secret_set=settings.databricks_client_secret is not None,
+            databricks_u2m_client_secret_set=settings.databricks_u2m_client_secret
+            is not None,
             provider_tokens_set=provider_tokens_set,
         )
 
@@ -168,6 +171,10 @@ async def load_settings(
         resp_llm.api_key = None
         settings_with_token_data.search_api_key = None
         settings_with_token_data.sandbox_api_key = None
+        # Never echo Databricks secrets back to the browser.
+        # The *_set booleans below already tell the UI whether a secret is configured.
+        settings_with_token_data.databricks_client_secret = None
+        settings_with_token_data.databricks_u2m_client_secret = None
         return settings_with_token_data
     except Exception as e:
         logger.warning(f'Invalid token: {e}')

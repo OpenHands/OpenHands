@@ -132,6 +132,14 @@ export type Settings = {
   enable_solvability_analysis: boolean;
   user_consents_to_analytics: boolean | null;
   search_api_key?: string;
+  // Databricks-specific fields (only used when llm_model starts with "databricks/")
+  databricks_client_id?: string | null;
+  databricks_client_secret?: string | null;
+  databricks_client_secret_set?: boolean;
+  databricks_u2m_client_id?: string | null;
+  databricks_u2m_client_secret?: string | null;
+  databricks_u2m_client_secret_set?: boolean;
+  databricks_u2m_redirect_uri?: string | null;
   is_new_user?: boolean;
   mcp_config?: MCPConfig;
   disabled_skills?: string[];
