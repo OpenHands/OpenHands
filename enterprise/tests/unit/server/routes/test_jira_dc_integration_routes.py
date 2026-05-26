@@ -20,7 +20,6 @@ from server.routes.integration.jira_dc import (
     get_current_workspace_link,
     jira_dc_callback,
     jira_dc_connection_events,
-    jira_dc_events,
     unlink_workspace,
     validate_workspace_integration,
 )
@@ -78,32 +77,6 @@ async def test_jira_dc_events_invalid_signature(mock_redis, mock_manager, mock_r
             await jira_dc_connection_events(10, mock_request, MagicMock())
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail == 'Invalid webhook signature!'
-
-
-@pytest.mark.asyncio
-@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
-@patch('server.routes.integration.jira_dc.redis_client')
-async def test_jira_dc_legacy_events_use_payload_workspace_lookup(
-    mock_redis, mock_manager, mock_request
-):
-    with patch('server.routes.integration.jira_dc.JIRA_DC_WEBHOOKS_ENABLED', True):
-        mock_workspace = MagicMock()
-        mock_workspace.id = 10
-        mock_workspace.org_id = None
-        mock_manager.validate_request_context.return_value = (
-            True,
-            'sig123',
-            {'webhookEvent': 'comment_created'},
-            mock_workspace,
-        )
-        mock_redis.exists.return_value = False
-
-        response = await jira_dc_events(mock_request, MagicMock())
-
-        assert response.status_code == 200
-        mock_manager.validate_request_context.assert_awaited_once_with(
-            mock_request, workspace_id=None
-        )
 
 
 @pytest.mark.asyncio

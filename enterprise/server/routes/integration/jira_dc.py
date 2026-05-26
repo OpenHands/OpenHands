@@ -357,15 +357,6 @@ async def _process_jira_dc_event(
         )
 
 
-@jira_dc_integration_router.post('/events')
-async def jira_dc_events(
-    request: Request,
-    background_tasks: BackgroundTasks,
-):
-    """Handle Jira DC webhook events using payload-derived workspace lookup."""
-    return await _process_jira_dc_event(request, background_tasks)
-
-
 @jira_dc_integration_router.post('/connections/{workspace_id}/events')
 async def jira_dc_connection_events(
     workspace_id: int,
