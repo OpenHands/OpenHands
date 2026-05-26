@@ -17,6 +17,10 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse, RedirectResponse
 from integrations.jira_dc.jira_dc_manager import JiraDcManager
+from integrations.jira_dc.jira_dc_service_account import (
+    get_jira_dc_managed_service_account,
+    get_jira_dc_service_account_config_error,
+)
 from integrations.models import Message, SourceType
 from pydantic import BaseModel, Field, field_validator
 from server.auth.constants import (
@@ -45,6 +49,7 @@ JIRA_DC_SCOPES = 'WRITE'
 JIRA_DC_AUTH_URL = f'{JIRA_DC_BASE_URL}/rest/oauth2/latest/authorize'
 JIRA_DC_TOKEN_URL = f'{JIRA_DC_BASE_URL}/rest/oauth2/latest/token'
 JIRA_DC_USER_INFO_URL = f'{JIRA_DC_BASE_URL}/rest/api/2/myself'
+JIRA_DC_OAUTH_STATE_TTL_SECONDS = 600
 
 
 # Request/Response models
@@ -59,7 +64,7 @@ class JiraDcWorkspaceCreate(BaseModel):
             'auto-enroll mode it is left blank and generated here.'
         ),
     )
-    svc_acc_email: str = Field(..., description='Service account email')
+    svc_acc_email: str | None = Field(default=None, description='Service account email')
     svc_acc_api_key: str | None = Field(
         default=None,
         description=(
@@ -92,6 +97,8 @@ class JiraDcWorkspaceCreate(BaseModel):
     @field_validator('svc_acc_email')
     @classmethod
     def validate_svc_acc_email(cls, v):
+        if v is None or v == '':
+            return v
         email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         if not re.match(email_pattern, v):
             raise ValueError('svc_acc_email must be a valid email address')
@@ -127,11 +134,29 @@ class JiraDcLinkCreate(BaseModel):
         return v
 
 
+class JiraDcWorkspaceStatusUpdate(BaseModel):
+    workspace_name: str = Field(..., description='Workspace display name')
+    is_active: bool = Field(
+        ...,
+        description='Indicates if the workspace integration should be active',
+    )
+
+    @field_validator('workspace_name')
+    @classmethod
+    def validate_workspace_name(cls, v):
+        if not re.match(r'^[a-zA-Z0-9_.-]+$', v):
+            raise ValueError(
+                'workspace_name can only contain alphanumeric characters, hyphens, underscores, and periods'
+            )
+        return v
+
+
 class JiraDcWorkspaceResponse(BaseModel):
     id: int
     name: str
     status: str
     editable: bool
+    events_url: str
     # Service-account email is non-secret and is returned so the configure form
     # can pre-fill it when editing. The service-account PAT is never returned.
     svc_acc_email: str | None = None
@@ -162,8 +187,15 @@ automation_event_service = AutomationEventService(token_manager)
 redis_client = get_redis_client()
 
 
+def _jira_dc_events_url(workspace_id: int) -> str:
+    return f'https://{WEB_HOST}/integration/jira-dc/connections/{workspace_id}/events'
+
+
 async def _handle_workspace_link_creation(
-    user_id: str, jira_dc_user_id: str, target_workspace: str
+    user_id: str,
+    jira_dc_user_id: str,
+    target_workspace: str,
+    require_active_workspace: bool = True,
 ):
     """Handle the creation or reactivation of a workspace link for a user."""
     # Verify workspace exists and is active
@@ -176,7 +208,7 @@ async def _handle_workspace_link_creation(
             detail=f'Workspace "{target_workspace}" not found',
         )
 
-    if workspace.status.lower() != 'active':
+    if require_active_workspace and workspace.status.lower() != 'active':
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f'Workspace "{target_workspace}" is not active',
@@ -210,7 +242,7 @@ async def _handle_workspace_link_creation(
     if existing_link:
         # Reactivate previous link to this workspace
         await jira_dc_manager.integration_store.update_user_integration_status(
-            user_id, 'active'
+            user_id, workspace.id, 'active'
         )
     else:
         # Create new workspace link
@@ -252,10 +284,10 @@ async def _validate_workspace_update_permissions(user_id: str, target_workspace:
     return workspace
 
 
-@jira_dc_integration_router.post('/events')
-async def jira_dc_events(
+async def _process_jira_dc_event(
     request: Request,
     background_tasks: BackgroundTasks,
+    workspace_id: int | None = None,
 ):
     """Handle Jira DC webhook events."""
     # Check if Jira DC webhooks are enabled
@@ -271,14 +303,22 @@ async def jira_dc_events(
             signature,
             payload,
             workspace,
-        ) = await jira_dc_manager.validate_request_context(request)
+        ) = await jira_dc_manager.validate_request_context(
+            request,
+            workspace_id=workspace_id,
+        )
 
         if not signature_valid:
             logger.warning('[Jira DC] Invalid webhook signature')
             raise HTTPException(status_code=403, detail='Invalid webhook signature!')
 
         # Check for duplicate requests using Redis
-        key = f'jira_dc:{signature}'
+        key_workspace_id = workspace.id if workspace else workspace_id
+        key = (
+            f'jira_dc:{key_workspace_id}:{signature}'
+            if key_workspace_id
+            else f'jira_dc:{signature}'
+        )
         keyExists = redis_client.exists(key)
         if keyExists:
             logger.info(f'Received duplicate Jira DC webhook event: {signature}')
@@ -293,6 +333,7 @@ async def jira_dc_events(
                     org_id=workspace.org_id,
                     payload=payload,
                     workspace_name=workspace.name,
+                    connection_id=workspace.id,
                     delivery_id=signature,
                 )
             else:
@@ -319,8 +360,25 @@ async def jira_dc_events(
         )
 
 
+@jira_dc_integration_router.post('/connections/{workspace_id}/events')
+async def jira_dc_connection_events(
+    workspace_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+):
+    """Handle Jira DC webhook events for a specific workspace connection."""
+    return await _process_jira_dc_event(
+        request,
+        background_tasks,
+        workspace_id=workspace_id,
+    )
+
+
 async def _maybe_register_webhook(
-    admin_api_key: str | None, base_api_url: str, webhook_secret: str
+    admin_api_key: str | None,
+    base_api_url: str,
+    webhook_secret: str,
+    workspace_id: int,
 ) -> bool:
     """Best-effort auto-enrollment of the OpenHands webhook in Jira.
 
@@ -332,11 +390,10 @@ async def _maybe_register_webhook(
     if not admin_api_key:
         return False
     try:
-        events_url = f'https://{WEB_HOST}/integration/jira-dc/events'
         await jira_dc_manager.register_webhook(
             base_api_url=base_api_url,
             admin_api_key=admin_api_key,
-            events_url=events_url,
+            events_url=_jira_dc_events_url(workspace_id),
             secret=webhook_secret,
         )
         logger.info('[Jira DC] Auto-enrolled webhook during workspace configure')
@@ -346,7 +403,9 @@ async def _maybe_register_webhook(
         return False
 
 
-async def _maybe_delete_webhook(admin_api_key: str | None, base_api_url: str) -> bool:
+async def _maybe_delete_webhook(
+    admin_api_key: str | None, base_api_url: str, workspace_id: int
+) -> bool:
     """Best-effort removal of the OpenHands webhook from Jira during teardown.
 
     Symmetric with :func:`_maybe_register_webhook`. When an admin PAT is
@@ -358,11 +417,10 @@ async def _maybe_delete_webhook(admin_api_key: str | None, base_api_url: str) ->
     if not admin_api_key:
         return False
     try:
-        events_url = f'https://{WEB_HOST}/integration/jira-dc/events'
         return await jira_dc_manager.delete_webhook(
             base_api_url=base_api_url,
             admin_api_key=admin_api_key,
-            events_url=events_url,
+            events_url=_jira_dc_events_url(workspace_id),
         )
     except Exception as e:
         logger.warning(f'[Jira DC] Webhook removal failed: {e}')
@@ -386,12 +444,37 @@ def _resolve_webhook_secret(
     return secrets.token_urlsafe(32)
 
 
+def _resolve_submitted_service_account(
+    workspace_data: JiraDcWorkspaceCreate,
+) -> tuple[str, str]:
+    """Resolve service-account values to persist for this workspace request."""
+    managed_service_account = get_jira_dc_managed_service_account()
+    if managed_service_account:
+        return managed_service_account.email, managed_service_account.api_key
+
+    svc_acc_email = (workspace_data.svc_acc_email or '').strip()
+    if not svc_acc_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='A service account email is required when configuring Jira DC in OpenHands.',
+        )
+
+    return svc_acc_email, (workspace_data.svc_acc_api_key or '').strip()
+
+
 @jira_dc_integration_router.post('/workspaces')
 async def create_jira_dc_workspace(
     request: Request, workspace_data: JiraDcWorkspaceCreate
 ):
     """Create a new Jira DC workspace registration."""
     try:
+        service_account_config_error = get_jira_dc_service_account_config_error()
+        if service_account_config_error:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=service_account_config_error,
+            )
+
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
         user_email = await user_auth.get_user_email()
@@ -409,7 +492,9 @@ async def create_jira_dc_workspace(
                 workspace_data.workspace_name
             )
         )
-        provided_api_key = (workspace_data.svc_acc_api_key or '').strip()
+        svc_acc_email, provided_api_key = _resolve_submitted_service_account(
+            workspace_data
+        )
         # The service-account PAT is required to create a NEW workspace, but is
         # optional when editing one (blank = keep the stored token), so admins
         # never have to re-paste it just to change other fields.
@@ -439,7 +524,7 @@ async def create_jira_dc_workspace(
                 'user_email': user_email,
                 'target_workspace': workspace_data.workspace_name,
                 'webhook_secret': resolved_webhook_secret,
-                'svc_acc_email': workspace_data.svc_acc_email,
+                'svc_acc_email': svc_acc_email,
                 # Empty when editing without changing the PAT; the callback then
                 # keeps the workspace's stored token instead of overwriting it.
                 'svc_acc_api_key': provided_api_key,
@@ -450,7 +535,7 @@ async def create_jira_dc_workspace(
 
             created = redis_client.setex(
                 state,
-                60,
+                JIRA_DC_OAUTH_STATE_TTL_SECONDS,
                 json.dumps(integration_session),
             )
 
@@ -497,15 +582,23 @@ async def create_jira_dc_workspace(
                     admin_user_id=user_id,
                     org_id=effective_org_id,
                     encrypted_webhook_secret=encrypted_webhook_secret,
-                    svc_acc_email=workspace_data.svc_acc_email,
+                    svc_acc_email=svc_acc_email,
                     encrypted_svc_acc_api_key=encrypted_new_svc_acc_api_key,
                     status='active' if workspace_data.is_active else 'inactive',
                 )
 
                 # Create a workspace link for the user (admin automatically gets linked)
-                await _handle_workspace_link_creation(
-                    user_id, 'unavailable', workspace.name
-                )
+                if workspace_data.is_active:
+                    await _handle_workspace_link_creation(
+                        user_id, 'unavailable', workspace.name
+                    )
+                else:
+                    await _handle_workspace_link_creation(
+                        user_id,
+                        'unavailable',
+                        workspace.name,
+                        require_active_workspace=False,
+                    )
             else:
                 # Workspace exists - validate user can update it
                 await _validate_workspace_update_permissions(
@@ -527,31 +620,46 @@ async def create_jira_dc_workspace(
                 )
 
                 # Update workspace details
-                await jira_dc_manager.integration_store.update_workspace(
+                workspace = await jira_dc_manager.integration_store.update_workspace(
                     id=workspace.id,
                     org_id=effective_org_id,
                     encrypted_webhook_secret=encrypted_webhook_secret,
-                    svc_acc_email=workspace_data.svc_acc_email,
+                    svc_acc_email=svc_acc_email,
                     encrypted_svc_acc_api_key=updated_encrypted_svc_acc_api_key,
                     status='active' if workspace_data.is_active else 'inactive',
                 )
 
-                await _handle_workspace_link_creation(
-                    user_id, 'unavailable', workspace.name
-                )
+                if workspace_data.is_active:
+                    await _handle_workspace_link_creation(
+                        user_id, 'unavailable', workspace.name
+                    )
+                else:
+                    await _handle_workspace_link_creation(
+                        user_id,
+                        'unavailable',
+                        workspace.name,
+                        require_active_workspace=False,
+                    )
 
             webhook_enrolled = await _maybe_register_webhook(
                 workspace_data.admin_api_key,
                 f'https://{workspace_data.workspace_name}',
                 resolved_webhook_secret,
+                workspace.id,
             )
+            if workspace_data.admin_api_key and not webhook_enrolled:
+                await jira_dc_manager.integration_store.update_workspace(
+                    id=workspace.id,
+                    status='inactive',
+                )
+
             return JSONResponse(
                 content={
                     'success': True,
                     'redirect': False,
                     'authorizationUrl': '',
                     'webhookEnrolled': webhook_enrolled,
-                    'eventsUrl': f'https://{WEB_HOST}/integration/jira-dc/events',
+                    'eventsUrl': _jira_dc_events_url(workspace.id),
                 }
             )
 
@@ -562,6 +670,42 @@ async def create_jira_dc_workspace(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to create workspace',
+        )
+
+
+@jira_dc_integration_router.post('/workspaces/status')
+async def update_jira_dc_workspace_status(
+    request: Request, workspace_data: JiraDcWorkspaceStatusUpdate
+):
+    """Update Jira DC workspace active state without starting OAuth."""
+    try:
+        user_auth = cast(SaasUserAuth, await get_user_auth(request))
+        user_id = await user_auth.get_user_id()
+
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='User ID not found',
+            )
+
+        workspace = await _validate_workspace_update_permissions(
+            user_id, workspace_data.workspace_name
+        )
+        workspace_status = 'active' if workspace_data.is_active else 'inactive'
+        await jira_dc_manager.integration_store.update_workspace(
+            id=workspace.id,
+            status=workspace_status,
+        )
+
+        return JSONResponse({'success': True, 'status': workspace_status})
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f'Error updating Jira DC workspace status: {e}')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update workspace status',
         )
 
 
@@ -595,7 +739,7 @@ async def create_workspace_link(request: Request, link_data: JiraDcLinkCreate):
 
             created = redis_client.setex(
                 state,
-                60,
+                JIRA_DC_OAUTH_STATE_TTL_SECONDS,
                 json.dumps(integration_session),
             )
 
@@ -708,7 +852,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
                 integration_session['svc_acc_api_key']
             )
 
-            await jira_dc_manager.integration_store.create_workspace(
+            workspace = await jira_dc_manager.integration_store.create_workspace(
                 name=target_workspace,
                 admin_user_id=integration_session['keycloak_user_id'],
                 org_id=org_id,
@@ -719,9 +863,17 @@ async def jira_dc_callback(request: Request, code: str, state: str):
             )
 
             # Create a workspace link for the user (admin automatically gets linked)
-            await _handle_workspace_link_creation(
-                user_id, jira_dc_user_id, target_workspace
-            )
+            if integration_session['is_active']:
+                await _handle_workspace_link_creation(
+                    user_id, jira_dc_user_id, target_workspace
+                )
+            else:
+                await _handle_workspace_link_creation(
+                    user_id,
+                    jira_dc_user_id,
+                    target_workspace,
+                    require_active_workspace=False,
+                )
         else:
             # Workspace exists - validate user can update it
             await _validate_workspace_update_permissions(user_id, target_workspace)
@@ -737,7 +889,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
             )
 
             # Update workspace details
-            await jira_dc_manager.integration_store.update_workspace(
+            workspace = await jira_dc_manager.integration_store.update_workspace(
                 id=workspace.id,
                 org_id=org_id,
                 encrypted_webhook_secret=encrypted_webhook_secret,
@@ -746,17 +898,38 @@ async def jira_dc_callback(request: Request, code: str, state: str):
                 status='active' if integration_session['is_active'] else 'inactive',
             )
 
-            await _handle_workspace_link_creation(
-                user_id, jira_dc_user_id, target_workspace
-            )
+            if integration_session['is_active']:
+                await _handle_workspace_link_creation(
+                    user_id, jira_dc_user_id, target_workspace
+                )
+            else:
+                await _handle_workspace_link_creation(
+                    user_id,
+                    jira_dc_user_id,
+                    target_workspace,
+                    require_active_workspace=False,
+                )
 
-        await _maybe_register_webhook(
+        webhook_enrolled = await _maybe_register_webhook(
             integration_session.get('admin_api_key'),
             JIRA_DC_BASE_URL,
             integration_session['webhook_secret'],
+            workspace.id,
         )
+        if integration_session.get('admin_api_key') and not webhook_enrolled:
+            await jira_dc_manager.integration_store.update_workspace(
+                id=workspace.id,
+                status='inactive',
+            )
+
+        redirect_url = '/settings/integrations'
+        if integration_session.get('admin_api_key') and not webhook_enrolled:
+            redirect_url += '?jira_dc_webhook=install_failed'
+        elif integration_session.get('admin_api_key') and webhook_enrolled:
+            redirect_url += '?jira_dc_webhook=installed'
+
         return RedirectResponse(
-            url='/settings/integrations',
+            url=redirect_url,
             status_code=status.HTTP_302_FOUND,
         )
     elif integration_session.get('operation_type') == 'workspace_link':
@@ -816,6 +989,7 @@ async def get_current_workspace_link(request: Request):
                 name=workspace.name,
                 status=workspace.status,
                 editable=workspace.admin_user_id == user.keycloak_user_id,
+                events_url=_jira_dc_events_url(workspace.id),
                 svc_acc_email=workspace.svc_acc_email,
                 created_at=workspace.created_at.isoformat(),
                 updated_at=workspace.updated_at.isoformat(),
@@ -834,14 +1008,14 @@ async def get_current_workspace_link(request: Request):
 
 @jira_dc_integration_router.post('/workspaces/unlink')
 async def unlink_workspace(request: Request):
-    """Unlink from Jira DC and, for workspace admins, optionally revoke the hook.
+    """Unlink from Jira DC and, for integration owners, optionally revoke the hook.
 
-    A non-admin user is only detached from the workspace (their personal link
-    goes inactive) -- never touching Jira. The workspace admin instead tears the
-    whole integration down: the workspace is deactivated and, when an admin PAT
-    is supplied in the request body, the Jira webhook is deleted too (best
-    effort, mirroring auto-enrollment). Deactivation never fails if the Jira-side
-    cleanup did; the admin can always remove the webhook by hand.
+    A non-owner user is only detached from the workspace (their personal link
+    goes inactive) -- never touching Jira. The integration owner instead tears
+    the whole integration down: the workspace is deactivated and, when a Jira
+    admin PAT is supplied in the request body, the Jira webhook is deleted too
+    (best effort, mirroring auto-enrollment). Deactivation never fails if the
+    Jira-side cleanup did; the owner can always remove the webhook by hand.
     """
     try:
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
@@ -888,13 +1062,15 @@ async def unlink_workspace(request: Request):
                 if JIRA_DC_ENABLE_OAUTH
                 else f'https://{workspace.name}'
             )
-            webhook_removed = await _maybe_delete_webhook(admin_api_key, base_api_url)
+            webhook_removed = await _maybe_delete_webhook(
+                admin_api_key, base_api_url, workspace.id
+            )
             await jira_dc_manager.integration_store.deactivate_workspace(
                 workspace_id=workspace.id,
             )
         else:
             await jira_dc_manager.integration_store.update_user_integration_status(
-                user_id, 'inactive'
+                user_id, user.jira_dc_workspace_id, 'inactive'
             )
 
         return JSONResponse({'success': True, 'webhookRemoved': webhook_removed})

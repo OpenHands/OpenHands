@@ -239,6 +239,48 @@ class TestGetFeatureFlags:
             assert result.enable_linear is True
 
 
+class TestGetJiraDcServiceAccountConfig:
+    """Test cases for Jira DC service-account web-client config helpers."""
+
+    def test_managed_when_email_and_pat_are_set(self):
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_jira_dc_service_account_config_error,
+            _get_jira_dc_service_account_email,
+            _is_jira_dc_service_account_managed,
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                'JIRA_DC_SERVICE_ACCOUNT_EMAIL': 'service@example.com',
+                'JIRA_DC_SERVICE_ACCOUNT_PAT': 'pat',
+            },
+        ):
+            assert _is_jira_dc_service_account_managed() is True
+            assert _get_jira_dc_service_account_email() == 'service@example.com'
+            assert _get_jira_dc_service_account_config_error() is None
+
+    def test_config_error_when_partially_configured(self):
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_jira_dc_service_account_config_error,
+            _get_jira_dc_service_account_email,
+            _is_jira_dc_service_account_managed,
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                'JIRA_DC_SERVICE_ACCOUNT_EMAIL': 'service@example.com',
+                'JIRA_DC_SERVICE_ACCOUNT_PAT': '',
+            },
+        ):
+            assert _is_jira_dc_service_account_managed() is False
+            assert _get_jira_dc_service_account_email() is None
+            assert 'partially configured' in (
+                _get_jira_dc_service_account_config_error() or ''
+            )
+
+
 class TestGetMaintenanceStartTime:
     """Test cases for _get_maintenance_start_time helper function."""
 
