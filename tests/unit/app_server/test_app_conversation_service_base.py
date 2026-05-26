@@ -768,7 +768,11 @@ async def test_clone_or_init_git_repo_quotes_selected_branch_before_checkout(
 ):
     user_info = MockUserInfo()
     service, mock_user_context = _create_service_with_mock_user_context(
-        user_info, bind_methods=('clone_or_init_git_repo',)
+        user_info,
+        bind_methods=(
+            'clone_or_init_git_repo',
+            '_get_azure_devops_bearer_token_for_git',
+        ),
     )
     service.init_git_in_empty_workspace = True
     mock_user_context.get_authenticated_git_url = AsyncMock(
