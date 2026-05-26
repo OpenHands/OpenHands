@@ -406,6 +406,11 @@ class ProviderHandler:
         """Map ProviderType value to the environment variable name in the runtime"""
         return f'{provider.value}_token'.lower()
 
+    @staticmethod
+    def _looks_like_jwt(token_value: str) -> bool:
+        parts = token_value.split('.')
+        return len(parts) == 3 and all(parts)
+
     async def verify_repo_provider(
         self,
         repository: str,
@@ -587,7 +592,10 @@ class ProviderHandler:
                         url_creds = f'x-token-auth:{quote(token_value, safe="")}'
                     remote_url = f'{protocol}://{url_creds}@{domain}/{scm_path}'
                 elif provider == ProviderType.AZURE_DEVOPS:
-                    # Azure DevOps uses PAT with Basic auth
+                    # Entra OAuth tokens work with Azure Repos through a Bearer
+                    # header. Return a clean remote URL here; callers that need
+                    # to run git commands should add the header out-of-band.
+                    # PATs still use Basic auth for OSS/manual-token flows.
                     # Format: https://{anything}:{PAT}@dev.azure.com/{org}/{project}/_git/{repo}
                     # The username can be anything (it's ignored), but cannot be empty
                     # We use the org name as the username for clarity
@@ -623,12 +631,17 @@ class ProviderHandler:
                             f'[Azure DevOps] URL-encoded parts - org: {org_encoded}, project: {project_encoded}, repo: {repo_encoded}'
                         )
                         # Use org name as username (it's ignored by Azure DevOps but required for git)
-                        remote_url = f'https://{org}:***@{clean_domain}/{org_encoded}/{project_encoded}/_git/{repo_encoded}'
-                        logger.info(
-                            f'[Azure DevOps] Constructed git URL (token masked): {remote_url}'
-                        )
-                        # Set the actual URL with token
-                        remote_url = f'https://{org}:{token_value}@{clean_domain}/{org_encoded}/{project_encoded}/_git/{repo_encoded}'
+                        if self._looks_like_jwt(token_value):
+                            remote_url = f'https://{clean_domain}/{org_encoded}/{project_encoded}/_git/{repo_encoded}'
+                            logger.info(
+                                f'[Azure DevOps] Constructed OAuth git URL: {remote_url}'
+                            )
+                        else:
+                            remote_url = f'https://{org}:***@{clean_domain}/{org_encoded}/{project_encoded}/_git/{repo_encoded}'
+                            logger.info(
+                                f'[Azure DevOps] Constructed PAT git URL (token masked): {remote_url}'
+                            )
+                            remote_url = f'https://{org}:{quote(token_value, safe="")}@{clean_domain}/{org_encoded}/{project_encoded}/_git/{repo_encoded}'
                     else:
                         # Fallback if format is unexpected
                         logger.warning(

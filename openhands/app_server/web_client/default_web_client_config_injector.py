@@ -90,6 +90,9 @@ def _get_providers_configured() -> list[ProviderType]:
     if os.getenv('BITBUCKET_DATA_CENTER_CLIENT_ID', '').strip():
         providers.append(ProviderType.BITBUCKET_DATA_CENTER)
 
+    if os.getenv('AZURE_DEVOPS_CLIENT_ID', '').strip():
+        providers.append(ProviderType.AZURE_DEVOPS)
+
     if os.getenv('ENABLE_ENTERPRISE_SSO', '').strip():
         providers.append(ProviderType.ENTERPRISE_SSO)
 

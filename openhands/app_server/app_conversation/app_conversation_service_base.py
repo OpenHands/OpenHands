@@ -26,6 +26,7 @@ from openhands.app_server.app_conversation.skill_loader import (
     build_sandbox_config,
     load_skills_from_agent_server,
 )
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.git import ensure_valid_git_branch_name
@@ -46,6 +47,11 @@ from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWor
 _logger = logging.getLogger(__name__)
 PRE_COMMIT_HOOK = '.git/hooks/pre-commit'
 PRE_COMMIT_LOCAL = '.git/hooks/pre-commit.local'
+
+
+def _looks_like_jwt(token_value: str) -> bool:
+    parts = token_value.split('.')
+    return len(parts) == 3 and all(parts)
 
 
 def get_project_dir(
@@ -355,14 +361,40 @@ class AppConversationServiceBase(AppConversationService, ABC):
         dir_name = request.selected_repository.split('/')[-1]
         quoted_remote_repo_url = shlex.quote(remote_repo_url)
         quoted_dir_name = shlex.quote(dir_name)
+        git_dir = Path(workspace.working_dir) / dir_name
+        azure_devops_bearer_token = await self._get_azure_devops_bearer_token_for_git(
+            request.git_provider,
+            remote_repo_url,
+        )
 
         # Clone the repo - this is the slow part!
-        clone_command = f'git clone {quoted_remote_repo_url} {quoted_dir_name}'
+        if azure_devops_bearer_token:
+            auth_header = shlex.quote(
+                f'Authorization: Bearer {azure_devops_bearer_token}'
+            )
+            clone_command = (
+                f'git -c http.extraheader={auth_header} clone '
+                f'{quoted_remote_repo_url} {quoted_dir_name}'
+            )
+        else:
+            clone_command = f'git clone {quoted_remote_repo_url} {quoted_dir_name}'
         result = await workspace.execute_command(
             clone_command, workspace.working_dir, 120
         )
         if result.exit_code:
             _logger.warning(f'Git clone failed: {result.stderr}')
+        elif azure_devops_bearer_token:
+            org = request.selected_repository.split('/')[0]
+            auth_header = shlex.quote(
+                f'Authorization: Bearer {azure_devops_bearer_token}'
+            )
+            config_key = shlex.quote(f'http.https://dev.azure.com/{org}/.extraheader')
+            config_command = f'git config --local {config_key} {auth_header}'
+            config_result = await workspace.execute_command(config_command, git_dir)
+            if config_result.exit_code:
+                _logger.warning(
+                    f'Azure DevOps git auth config failed: {config_result.stderr}'
+                )
 
         # Checkout the appropriate branch
         if request.selected_branch:
@@ -375,10 +407,29 @@ class AppConversationServiceBase(AppConversationService, ABC):
             checkout_command = (
                 f'git checkout -b {shlex.quote(openhands_workspace_branch)}'
             )
-        git_dir = Path(workspace.working_dir) / dir_name
         result = await workspace.execute_command(checkout_command, git_dir)
         if result.exit_code:
             _logger.warning(f'Git checkout failed: {result.stderr}')
+
+    async def _get_azure_devops_bearer_token_for_git(
+        self,
+        git_provider: ProviderType | None,
+        remote_repo_url: str,
+    ) -> str | None:
+        if (
+            git_provider != ProviderType.AZURE_DEVOPS
+            and 'dev.azure.com' not in remote_repo_url
+        ):
+            return None
+
+        try:
+            token = await self.user_context.get_latest_token(ProviderType.AZURE_DEVOPS)
+        except Exception as exc:
+            _logger.warning(f'Failed to get Azure DevOps token for git: {exc}')
+            return None
+        if token and _looks_like_jwt(token):
+            return token
+        return None
 
     async def maybe_run_setup_script(
         self,

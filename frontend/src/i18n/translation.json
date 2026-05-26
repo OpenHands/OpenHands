@@ -5014,6 +5014,23 @@
     "uk": "Azure DevOps",
     "ca": "Azure DevOps"
   },
+  "AZURE_DEVOPS$NOT_CONNECTED": {
+    "en": "Azure DevOps not connected",
+    "ja": "Azure DevOps が接続されていません",
+    "zh-CN": "Azure DevOps 未连接",
+    "zh-TW": "Azure DevOps 未連接",
+    "ko-KR": "Azure DevOps가 연결되지 않음",
+    "no": "Azure DevOps ikke tilkoblet",
+    "it": "Azure DevOps non connesso",
+    "pt": "Azure DevOps não conectado",
+    "es": "Azure DevOps no conectado",
+    "ar": "Azure DevOps غير متصل",
+    "fr": "Azure DevOps non connecté",
+    "tr": "Azure DevOps bağlı değil",
+    "de": "Azure DevOps nicht verbunden",
+    "uk": "Azure DevOps не підключено",
+    "ca": "Azure DevOps no connectat"
+  },
   "SETTINGS$SLACK": {
     "en": "Slack",
     "ja": "Slack",

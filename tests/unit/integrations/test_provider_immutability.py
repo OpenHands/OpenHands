@@ -210,6 +210,52 @@ def test_get_provider_env_key():
 
 
 @pytest.mark.asyncio
+async def test_azure_devops_oauth_git_url_omits_token():
+    jwt_token = 'header.payload.signature'
+    tokens = MappingProxyType(
+        {
+            ProviderType.AZURE_DEVOPS: ProviderToken(
+                token=SecretStr(jwt_token),
+                host='alonaking',
+            )
+        }
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+
+    with patch.object(handler, 'verify_repo_provider') as mock_verify:
+        mock_verify.return_value.git_provider = ProviderType.AZURE_DEVOPS
+        mock_verify.return_value.full_name = 'alonaking/project/repo'
+
+        remote_url = await handler.get_authenticated_git_url('alonaking/project/repo')
+
+    assert remote_url == 'https://dev.azure.com/alonaking/project/_git/repo'
+    assert jwt_token not in remote_url
+
+
+@pytest.mark.asyncio
+async def test_azure_devops_pat_git_url_uses_basic_auth():
+    tokens = MappingProxyType(
+        {
+            ProviderType.AZURE_DEVOPS: ProviderToken(
+                token=SecretStr('pat-token'),
+                host='alonaking',
+            )
+        }
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+
+    with patch.object(handler, 'verify_repo_provider') as mock_verify:
+        mock_verify.return_value.git_provider = ProviderType.AZURE_DEVOPS
+        mock_verify.return_value.full_name = 'alonaking/project/repo'
+
+        remote_url = await handler.get_authenticated_git_url('alonaking/project/repo')
+
+    assert remote_url == (
+        'https://alonaking:pat-token@dev.azure.com/alonaking/project/_git/repo'
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_github_organizations_delegates_to_service():
     """Test that get_github_organizations calls get_organizations_from_installations on the GitHub service."""
     tokens = MappingProxyType(
