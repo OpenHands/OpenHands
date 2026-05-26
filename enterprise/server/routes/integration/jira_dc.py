@@ -210,7 +210,7 @@ async def _handle_workspace_link_creation(
     if existing_link:
         # Reactivate previous link to this workspace
         await jira_dc_manager.integration_store.update_user_integration_status(
-            user_id, 'active'
+            user_id, workspace.id, 'active'
         )
     else:
         # Create new workspace link
@@ -894,7 +894,7 @@ async def unlink_workspace(request: Request):
             )
         else:
             await jira_dc_manager.integration_store.update_user_integration_status(
-                user_id, 'inactive'
+                user_id, user.jira_dc_workspace_id, 'inactive'
             )
 
         return JSONResponse({'success': True, 'webhookRemoved': webhook_removed})
