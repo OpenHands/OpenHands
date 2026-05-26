@@ -53,12 +53,14 @@ GitProvider = Literal[
 
 
 class CreatePrButtonClickedEvent(BaseModel):
-    """``create_pr_button_clicked``: Pull Request button click in chat UI.
+    """``create pr button clicked``: Pull Request button click in chat UI.
 
-    Drives PostHog surveys (e.g. NPS) keyed off the PR action.
+    Drives PostHog surveys (e.g. NPS) keyed off the PR action. The event
+    name uses the lowercase-with-spaces convention shared by every other
+    PostHog event in ``openhands/analytics/analytics_constants.py``.
     """
 
-    event_type: Literal['create_pr_button_clicked']
+    event_type: Literal['create pr button clicked']
     git_provider: GitProvider | None = None
 
 

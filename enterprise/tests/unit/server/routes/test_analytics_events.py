@@ -45,7 +45,7 @@ async def test_returns_ok_and_forwards_event_on_happy_path():
     ):
         result = await track_frontend_event(
             body=CreatePrButtonClickedEvent(
-                event_type='create_pr_button_clicked',
+                event_type='create pr button clicked',
                 git_provider='github',
             ),
             user_id='user-123',
@@ -54,7 +54,7 @@ async def test_returns_ok_and_forwards_event_on_happy_path():
     assert result.status == 'ok'
     mock_analytics.capture.assert_called_once_with(
         ctx=mock_ctx,
-        event='create_pr_button_clicked',
+        event='create pr button clicked',
         properties={'git_provider': 'github'},
     )
 
@@ -76,7 +76,7 @@ async def test_skips_tracking_when_unauthenticated():
     ):
         result = await track_frontend_event(
             body=CreatePrButtonClickedEvent(
-                event_type='create_pr_button_clicked',
+                event_type='create pr button clicked',
                 git_provider='gitlab',
             ),
             user_id=None,
@@ -102,7 +102,7 @@ async def test_skips_tracking_when_analytics_disabled():
     ):
         result = await track_frontend_event(
             body=CreatePrButtonClickedEvent(
-                event_type='create_pr_button_clicked',
+                event_type='create pr button clicked',
                 git_provider='github',
             ),
             user_id='user-123',
@@ -131,7 +131,7 @@ async def test_swallows_analytics_exceptions():
     ):
         result = await track_frontend_event(
             body=CreatePrButtonClickedEvent(
-                event_type='create_pr_button_clicked',
+                event_type='create pr button clicked',
                 git_provider='github',
             ),
             user_id='user-123',
@@ -159,7 +159,7 @@ async def test_accepts_missing_git_provider():
     ):
         result = await track_frontend_event(
             body=CreatePrButtonClickedEvent(
-                event_type='create_pr_button_clicked',
+                event_type='create pr button clicked',
             ),
             user_id='user-123',
         )
@@ -167,7 +167,7 @@ async def test_accepts_missing_git_provider():
     assert result.status == 'ok'
     mock_analytics.capture.assert_called_once()
     kwargs = mock_analytics.capture.call_args.kwargs
-    assert kwargs['event'] == 'create_pr_button_clicked'
+    assert kwargs['event'] == 'create pr button clicked'
     assert kwargs['properties'] == {'git_provider': None}
 
 
@@ -186,7 +186,7 @@ def test_payload_rejects_unknown_git_provider():
     with pytest.raises(ValidationError):
         CreatePrButtonClickedEvent.model_validate(
             {
-                'event_type': 'create_pr_button_clicked',
+                'event_type': 'create pr button clicked',
                 'git_provider': 'attacker-provided',
             }
         )
@@ -205,6 +205,6 @@ def test_payload_accepts_all_known_git_providers():
         'enterprise_sso',
     ):
         evt = CreatePrButtonClickedEvent(
-            event_type='create_pr_button_clicked', git_provider=provider
+            event_type='create pr button clicked', git_provider=provider
         )
         assert evt.git_provider == provider

@@ -22,7 +22,7 @@ describe("useTrackCreatePrButtonClicked", () => {
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
 
-  it("posts a create_pr_button_clicked event with the given provider", async () => {
+  it('posts a "create pr button clicked" event with the given provider', async () => {
     const spy = vi
       .spyOn(analyticsEventsService, "trackEvent")
       .mockResolvedValue({ status: "ok" });
@@ -35,7 +35,7 @@ describe("useTrackCreatePrButtonClicked", () => {
 
     await waitFor(() => {
       expect(spy).toHaveBeenCalledWith({
-        event_type: "create_pr_button_clicked",
+        event_type: "create pr button clicked",
         git_provider: "github",
       });
     });
@@ -54,7 +54,7 @@ describe("useTrackCreatePrButtonClicked", () => {
 
     await waitFor(() => {
       expect(spy).toHaveBeenCalledWith({
-        event_type: "create_pr_button_clicked",
+        event_type: "create pr button clicked",
         git_provider: null,
       });
     });
