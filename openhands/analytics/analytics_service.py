@@ -22,7 +22,6 @@ from openhands.analytics.analytics_constants import (
     CONVERSATION_DELETED,
     CONVERSATION_ERRORED,
     CONVERSATION_FINISHED,
-    CREATE_PR_BUTTON_CLICKED,
     CREDIT_LIMIT_REACHED,
     CREDIT_PURCHASED,
     GIT_PROVIDER_CONNECTED,
@@ -457,28 +456,6 @@ class AnalyticsService:
                 'successful_count': successful_count,
                 'failed_count': failed_count,
                 'role': role,
-            },
-            session_id=session_id,
-        )
-
-    def track_create_pr_button_clicked(
-        self,
-        ctx: AnalyticsContext,
-        *,
-        git_provider: str | None = None,
-        session_id: str | None = None,
-    ) -> None:
-        """Track 'create pr button clicked' event.
-
-        Fired when a user clicks the "Pull Request" button in the conversation
-        UI to ask the agent to push their changes and open a pull request.
-        Drives downstream PostHog surveys (e.g. NPS) that key off this action.
-        """
-        self.capture(
-            ctx=ctx,
-            event=CREATE_PR_BUTTON_CLICKED,
-            properties={
-                'git_provider': git_provider,
             },
             session_id=session_id,
         )

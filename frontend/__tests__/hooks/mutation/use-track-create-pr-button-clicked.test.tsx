@@ -22,9 +22,9 @@ describe("useTrackCreatePrButtonClicked", () => {
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
 
-  it("calls trackCreatePrButtonClicked with the given provider", async () => {
+  it("posts a create_pr_button_clicked event with the given provider", async () => {
     const spy = vi
-      .spyOn(analyticsEventsService, "trackCreatePrButtonClicked")
+      .spyOn(analyticsEventsService, "trackEvent")
       .mockResolvedValue({ status: "ok" });
 
     const { result } = renderHook(() => useTrackCreatePrButtonClicked(), {
@@ -34,15 +34,36 @@ describe("useTrackCreatePrButtonClicked", () => {
     result.current.mutate("github");
 
     await waitFor(() => {
-      expect(spy).toHaveBeenCalledWith("github");
+      expect(spy).toHaveBeenCalledWith({
+        event_type: "create_pr_button_clicked",
+        git_provider: "github",
+      });
+    });
+  });
+
+  it("forwards a null provider unchanged", async () => {
+    const spy = vi
+      .spyOn(analyticsEventsService, "trackEvent")
+      .mockResolvedValue({ status: "ok" });
+
+    const { result } = renderHook(() => useTrackCreatePrButtonClicked(), {
+      wrapper,
+    });
+
+    result.current.mutate(null);
+
+    await waitFor(() => {
+      expect(spy).toHaveBeenCalledWith({
+        event_type: "create_pr_button_clicked",
+        git_provider: null,
+      });
     });
   });
 
   it("swallows errors so they never bubble up to the click handler", async () => {
-    vi.spyOn(
-      analyticsEventsService,
-      "trackCreatePrButtonClicked",
-    ).mockRejectedValue(new Error("network down"));
+    vi.spyOn(analyticsEventsService, "trackEvent").mockRejectedValue(
+      new Error("network down"),
+    );
 
     const { result } = renderHook(() => useTrackCreatePrButtonClicked(), {
       wrapper,

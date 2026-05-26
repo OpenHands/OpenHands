@@ -15,7 +15,6 @@ from openhands.analytics.analytics_constants import (
     CONVERSATION_DELETED,
     CONVERSATION_ERRORED,
     CONVERSATION_FINISHED,
-    CREATE_PR_BUTTON_CLICKED,
     CREDIT_LIMIT_REACHED,
     CREDIT_PURCHASED,
     GIT_PROVIDER_CONNECTED,
@@ -850,29 +849,6 @@ class TestTypedEventMethods:
         assert props['successful_count'] == 4
         assert props['failed_count'] == 1
         assert props['role'] == 'member'
-
-    def test_track_create_pr_button_clicked(self, saas_service):
-        """track_create_pr_button_clicked calls capture with CREATE_PR_BUTTON_CLICKED and correct properties."""
-        service, mock_client = saas_service
-        ctx = make_ctx(user_id='user-1', org_id='org-123')
-        service.track_create_pr_button_clicked(
-            ctx=ctx,
-            git_provider='github',
-        )
-        mock_client.capture.assert_called_once()
-        _, kwargs = mock_client.capture.call_args
-        assert kwargs['event'] == CREATE_PR_BUTTON_CLICKED
-        assert kwargs['properties']['git_provider'] == 'github'
-
-    def test_track_create_pr_button_clicked_without_provider(self, saas_service):
-        """git_provider may be omitted (e.g. user not connected to a provider)."""
-        service, mock_client = saas_service
-        ctx = make_ctx(user_id='user-1')
-        service.track_create_pr_button_clicked(ctx=ctx)
-        mock_client.capture.assert_called_once()
-        _, kwargs = mock_client.capture.call_args
-        assert kwargs['event'] == CREATE_PR_BUTTON_CLICKED
-        assert kwargs['properties']['git_provider'] is None
 
     def test_typed_method_consent_false_is_noop(self, saas_service):
         """A typed method with consented=False results in no capture call."""
