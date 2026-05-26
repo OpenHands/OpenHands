@@ -15,6 +15,8 @@ import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { Provider } from "#/types/settings";
 import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
+import { agentDisplayLabel } from "#/utils/agent-display-label";
+import { useConfig } from "#/hooks/query/use-config";
 import { ConversationCard } from "./conversation-card/conversation-card";
 import { StartTaskCard } from "./start-task-card/start-task-card";
 import { ConversationCardSkeleton } from "./conversation-card/conversation-card-skeleton";
@@ -28,6 +30,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
   const { conversationId: currentConversationId } = useParams();
   const ref = useClickOutsideElement<HTMLDivElement>(onClose);
   const navigate = useNavigate();
+  const { data: config } = useConfig();
 
   const [confirmDeleteModalVisible, setConfirmDeleteModalVisible] =
     React.useState(false);
@@ -201,7 +204,12 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
             onContextMenuToggle={(isOpen) =>
               setOpenContextMenuId(isOpen ? conversation.id : null)
             }
-            llmModel={conversation.llm_model}
+            llmModel={agentDisplayLabel(
+              conversation.agent_kind,
+              conversation.llm_model,
+              conversation.tags,
+              config?.acp_providers,
+            )}
           />
         </NavLink>
       ))}

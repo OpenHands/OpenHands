@@ -66,8 +66,10 @@ async def search_user_installations(
     # Get provider tokens from user context
     provider_tokens = await user_context.get_provider_tokens()
     if not provider_tokens:
+        # User is authenticated but has no git provider connected
+        # Return 403 Forbidden (not 401) to avoid triggering frontend logout
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail='Git provider token required (such as GitHub).',
         )
 
@@ -133,7 +135,7 @@ async def search_repositories(
     provider_tokens = await user_context.get_provider_tokens()
     if not provider_tokens:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,  # 403 not 401 to avoid frontend logout
             detail='Git provider token required (such as GitHub).',
         )
 
@@ -224,7 +226,7 @@ async def search_branches(
     provider_tokens = await user_context.get_provider_tokens()
     if not provider_tokens:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,  # 403 not 401 to avoid frontend logout
             detail='Git provider token required (such as GitHub).',
         )
 
@@ -296,7 +298,7 @@ async def search_suggested_tasks(
     provider_tokens = await user_context.get_provider_tokens()
     if not provider_tokens:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,  # 403 not 401 to avoid frontend logout
             detail='Git provider token required (such as GitHub).',
         )
 

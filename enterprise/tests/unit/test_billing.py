@@ -187,7 +187,10 @@ async def test_create_checkout_session_stripe_error(
         patch('server.routes.billing.validate_billing_enabled'),
     ):
         await create_checkout_session(
-            CreateCheckoutSessionRequest(amount=25), mock_checkout_request, 'mock_user'
+            CreateCheckoutSessionRequest(amount=25),
+            mock_checkout_request,
+            'mock_user',
+            test_org.id,
         )
 
 
@@ -214,7 +217,10 @@ async def test_create_checkout_session_success(
         patch('server.routes.billing.validate_billing_enabled'),
     ):
         result = await create_checkout_session(
-            CreateCheckoutSessionRequest(amount=25), mock_checkout_request, 'mock_user'
+            CreateCheckoutSessionRequest(amount=25),
+            mock_checkout_request,
+            'mock_user',
+            test_org.id,
         )
 
         assert isinstance(result, CreateBillingSessionResponse)
@@ -552,28 +558,34 @@ async def test_cancel_callback_success(async_session_maker, test_org, test_user)
 @pytest.mark.asyncio
 async def test_has_payment_method_with_payment_method():
     """Test has_payment_method returns True when user has a payment method."""
+    effective_org_id = uuid.uuid4()
     mock_has_payment_method = AsyncMock(return_value=True)
     with patch(
         'server.routes.billing.stripe_service.has_payment_method_by_user_id',
         mock_has_payment_method,
     ):
-        result = await has_payment_method('mock_user')
+        result = await has_payment_method('mock_user', effective_org_id)
         assert result is True
-    mock_has_payment_method.assert_called_once_with('mock_user')
+    mock_has_payment_method.assert_called_once_with(
+        'mock_user', org_id=effective_org_id
+    )
 
 
 @pytest.mark.asyncio
 async def test_has_payment_method_without_payment_method():
     """Test has_payment_method returns False when user has no payment method."""
+    effective_org_id = uuid.uuid4()
     mock_has_payment_method = AsyncMock(return_value=False)
     with patch(
         'server.routes.billing.stripe_service.has_payment_method_by_user_id',
         mock_has_payment_method,
     ):
         mock_has_payment_method.return_value = False
-        result = await has_payment_method('mock_user')
+        result = await has_payment_method('mock_user', effective_org_id)
         assert result is False
-    mock_has_payment_method.assert_called_once_with('mock_user')
+    mock_has_payment_method.assert_called_once_with(
+        'mock_user', org_id=effective_org_id
+    )
 
 
 @pytest.mark.asyncio
@@ -589,6 +601,7 @@ async def test_create_customer_setup_session_success():
     )
     mock_request._url = URL('http://test.com/')
 
+    effective_org_id = uuid.uuid4()
     mock_customer_info = {'customer_id': 'mock-customer-id', 'org_id': 'mock-org-id'}
     mock_session = MagicMock()
     mock_session.url = 'https://checkout.stripe.com/test-session'
@@ -602,7 +615,9 @@ async def test_create_customer_setup_session_success():
         patch('stripe.checkout.Session.create_async', mock_create),
         patch('server.routes.billing.validate_billing_enabled'),
     ):
-        result = await create_customer_setup_session(mock_request, 'mock_user')
+        result = await create_customer_setup_session(
+            mock_request, 'mock_user', effective_org_id
+        )
 
         assert isinstance(result, billing.CreateBillingSessionResponse)
         assert result.redirect_url == 'https://checkout.stripe.com/test-session'

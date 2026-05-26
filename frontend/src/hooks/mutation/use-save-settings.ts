@@ -3,6 +3,7 @@ import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { Settings, SettingsScope, SettingsValue } from "#/types/settings";
+import { SETTINGS_QUERY_KEYS } from "../query/query-keys";
 
 type SettingsUpdate = Partial<Settings> & Record<string, unknown>;
 
@@ -79,11 +80,11 @@ export const useSaveSettings = (scope: SettingsScope = "personal") => {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ["settings", scope, organizationId],
+        queryKey: SETTINGS_QUERY_KEYS.byScope(scope, organizationId),
       });
       if (scope === "org") {
         await queryClient.invalidateQueries({
-          queryKey: ["settings", "personal", organizationId],
+          queryKey: SETTINGS_QUERY_KEYS.personal(organizationId),
         });
       }
     },

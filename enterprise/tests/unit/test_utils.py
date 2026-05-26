@@ -165,6 +165,28 @@ def test_infer_repo_from_message():
         ('Repos: a/b, c/d, e/f, g/h, i/j', ['a/b', 'c/d', 'e/f', 'g/h', 'i/j']),
         # Mixed with false positives that should be filtered
         ('Check user/repo and avoid 1.0/2.0 and file.txt', ['user/repo']),
+        # Self-hosted GitLab / GitHub Enterprise (generic host, standard layout)
+        (
+            'Deploy https://gitlab.mycorp.com/team/project.git',
+            ['team/project'],
+        ),
+        ('Repo at https://github.mycorp.com/org/service', ['org/service']),
+        # Bitbucket Data Center browse / PR URLs -> <KEY>/<slug>
+        (
+            'See https://bitbucket.mycorp.com/projects/PROJ/repos/my-repo/browse',
+            ['PROJ/my-repo'],
+        ),
+        (
+            'Fix https://bitbucket.mycorp.com/projects/PROJ/repos/my-repo/pull-requests/42',
+            ['PROJ/my-repo'],
+        ),
+        # Bitbucket Data Center clone (scm) URLs, incl. personal (~user) + port
+        (
+            'Clone https://bitbucket.mycorp.com/scm/PROJ/my-repo.git',
+            ['PROJ/my-repo'],
+        ),
+        ('https://bitbucket.mycorp.com/scm/~jdoe/tool.git', ['~jdoe/tool']),
+        ('https://git.internal:7990/scm/TEAM/app.git', ['TEAM/app']),
     ]
 
     for message, expected in test_cases:

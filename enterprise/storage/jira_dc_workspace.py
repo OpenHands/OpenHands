@@ -1,6 +1,7 @@
 from datetime import datetime
+from uuid import UUID
 
-from sqlalchemy import DateTime, String, text
+from sqlalchemy import DateTime, ForeignKey, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 
@@ -10,6 +11,9 @@ class JiraDcWorkspace(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
+    org_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey('org.id', ondelete='SET NULL'), nullable=True
+    )
     admin_user_id: Mapped[str] = mapped_column(String, nullable=False)
     webhook_secret: Mapped[str] = mapped_column(String, nullable=False)
     svc_acc_email: Mapped[str] = mapped_column(String, nullable=False)

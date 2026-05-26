@@ -386,7 +386,7 @@ class OrgInvitationService:
         # continue to flow through automatically.
         llm_api_key_secret = settings.agent_settings.llm.api_key
         llm_api_key = (
-            llm_api_key_secret.get_secret_value() if llm_api_key_secret else ''
+            llm_api_key_secret.get_secret_value() if llm_api_key_secret else ''  # type: ignore[union-attr]
         )
 
         await OrgMemberStore.add_user_to_org(

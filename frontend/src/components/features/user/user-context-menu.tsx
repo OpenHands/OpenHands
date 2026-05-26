@@ -135,6 +135,8 @@ export function UserContextMenu({
                   key={renderedItem.item.to}
                   item={renderedItem.item}
                   onClick={onClose}
+                  disabled={renderedItem.disabled}
+                  disabledAgentName={renderedItem.disabledAgentName}
                 />
               );
             })}

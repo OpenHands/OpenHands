@@ -116,7 +116,7 @@ async def get_current_user_git_organizations(
     provider_tokens = await user_context.get_provider_tokens()
     if not provider_tokens:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,  # 403 not 401 to avoid frontend logout
             detail='Git provider token required.',
         )
 
@@ -133,6 +133,8 @@ async def get_current_user_git_organizations(
         orgs = await client.get_gitlab_groups()
     elif provider == ProviderType.BITBUCKET:
         orgs = await client.get_bitbucket_workspaces()
+    elif provider == ProviderType.BITBUCKET_DATA_CENTER:
+        orgs = await client.get_bitbucket_dc_projects()
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
