@@ -124,6 +124,7 @@ class TestLiveStatusAppConversationService:
         self.mock_user_context = Mock(spec=UserContext)
         self.mock_user_auth = Mock()
         self.mock_user_context.user_auth = self.mock_user_auth
+        self.mock_user_context.get_user_email = AsyncMock(return_value=None)
         self.mock_jwt_service = Mock()
         self.mock_sandbox_service = Mock()
         self.mock_sandbox_spec_service = Mock()
@@ -2165,6 +2166,7 @@ class TestPluginHandling:
         self.mock_user_context = Mock(spec=UserContext)
         self.mock_user_auth = Mock()
         self.mock_user_context.user_auth = self.mock_user_auth
+        self.mock_user_context.get_user_email = AsyncMock(return_value=None)
         self.mock_jwt_service = Mock()
         self.mock_sandbox_service = Mock()
         self.mock_sandbox_spec_service = Mock()
@@ -3212,6 +3214,7 @@ class TestBuildAcpStartConversationRequestSecrets:
     def _call_build(self, service, user, tmp_path):
         """Wire user_context and call _build_acp_start_conversation_request."""
         service.user_context.get_user_info = AsyncMock(return_value=user)
+        service.user_context.get_user_email = AsyncMock(return_value=None)
         sandbox = Mock(spec=SandboxInfo)
         return service._build_acp_start_conversation_request(
             sandbox=sandbox,
