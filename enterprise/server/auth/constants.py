@@ -28,6 +28,8 @@ AZURE_DEVOPS_SCOPE = os.getenv(
 ).strip()
 AZURE_DEVOPS_TOKEN_URL = (
     f'https://login.microsoftonline.com/{AZURE_DEVOPS_TENANT_ID}/oauth2/v2.0/token'
+    if AZURE_DEVOPS_TENANT_ID
+    else ''
 )
 ENABLE_ENTERPRISE_SSO = os.getenv('ENABLE_ENTERPRISE_SSO', '').strip()
 ENABLE_JIRA = os.environ.get('ENABLE_JIRA', 'false') == 'true'

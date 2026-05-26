@@ -818,6 +818,24 @@ class TestProviderTokensInEndpoints:
         assert result[gh_key] == 'ghp_test123'
         assert result[gl_key] == 'glpat-test456'
 
+    async def test_get_provider_tokens_as_env_vars_prefers_latest_token(self):
+        """Provider env vars resolve through the provider service at call time."""
+        mock_user_auth = AsyncMock()
+        mock_user_auth.get_provider_tokens = AsyncMock(
+            return_value={
+                ProviderType.AZURE_DEVOPS: ProviderToken(
+                    token=SecretStr('stale-token')
+                ),
+            }
+        )
+        ctx = AuthUserContext(user_auth=mock_user_auth)
+        ctx.get_latest_token = AsyncMock(return_value='fresh-token')  # type: ignore[method-assign]
+
+        result = await ctx.get_provider_tokens(as_env_vars=True)
+
+        azure_key = ProviderHandler.get_provider_env_key(ProviderType.AZURE_DEVOPS)
+        assert result[azure_key] == 'fresh-token'
+
     async def test_empty_provider_tokens_excluded(self):
         """Provider tokens with empty token values are excluded."""
         mock_user_auth = AsyncMock()

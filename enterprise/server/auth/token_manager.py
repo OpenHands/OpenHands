@@ -319,8 +319,9 @@ class TokenManager:
         refresh_token_expires_at: int,
     ) -> dict[str, str | int] | None:
         current_time = int(time.time())
-        # expire access_token four hours before actual expiration
-        # This ensures tokens are refreshed on resume to have at least 4 hours validity
+        # Refresh access tokens before expiration to ensure validity on resume.
+        # Azure DevOps uses a shorter buffer because Entra access tokens are
+        # short-lived; other providers keep the existing 4-hour buffer.
         access_token_refresh_buffer_seconds = (
             300 if identity_provider == ProviderType.AZURE_DEVOPS else 14400
         )
