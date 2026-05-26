@@ -44,13 +44,21 @@ function GitSettingsScreen() {
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("jira_dc_webhook") !== "install_failed") {
+    const jiraDcWebhookStatus = params.get("jira_dc_webhook");
+    if (!jiraDcWebhookStatus) {
       return;
     }
 
-    displayErrorToast(
-      t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_INSTALL_FAILED),
-    );
+    if (jiraDcWebhookStatus === "install_failed") {
+      displayErrorToast(
+        t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_INSTALL_FAILED),
+      );
+    } else if (jiraDcWebhookStatus === "installed") {
+      displaySuccessToast(
+        t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_SETUP_SAVED),
+      );
+    }
+
     params.delete("jira_dc_webhook");
     const query = params.toString();
     window.history.replaceState(

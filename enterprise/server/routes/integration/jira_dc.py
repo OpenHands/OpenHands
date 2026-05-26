@@ -192,7 +192,10 @@ def _jira_dc_events_url(workspace_id: int) -> str:
 
 
 async def _handle_workspace_link_creation(
-    user_id: str, jira_dc_user_id: str, target_workspace: str
+    user_id: str,
+    jira_dc_user_id: str,
+    target_workspace: str,
+    require_active_workspace: bool = True,
 ):
     """Handle the creation or reactivation of a workspace link for a user."""
     # Verify workspace exists and is active
@@ -205,7 +208,7 @@ async def _handle_workspace_link_creation(
             detail=f'Workspace "{target_workspace}" not found',
         )
 
-    if workspace.status.lower() != 'active':
+    if require_active_workspace and workspace.status.lower() != 'active':
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f'Workspace "{target_workspace}" is not active',
@@ -585,9 +588,17 @@ async def create_jira_dc_workspace(
                 )
 
                 # Create a workspace link for the user (admin automatically gets linked)
-                await _handle_workspace_link_creation(
-                    user_id, 'unavailable', workspace.name
-                )
+                if workspace_data.is_active:
+                    await _handle_workspace_link_creation(
+                        user_id, 'unavailable', workspace.name
+                    )
+                else:
+                    await _handle_workspace_link_creation(
+                        user_id,
+                        'unavailable',
+                        workspace.name,
+                        require_active_workspace=False,
+                    )
             else:
                 # Workspace exists - validate user can update it
                 await _validate_workspace_update_permissions(
@@ -618,9 +629,17 @@ async def create_jira_dc_workspace(
                     status='active' if workspace_data.is_active else 'inactive',
                 )
 
-                await _handle_workspace_link_creation(
-                    user_id, 'unavailable', workspace.name
-                )
+                if workspace_data.is_active:
+                    await _handle_workspace_link_creation(
+                        user_id, 'unavailable', workspace.name
+                    )
+                else:
+                    await _handle_workspace_link_creation(
+                        user_id,
+                        'unavailable',
+                        workspace.name,
+                        require_active_workspace=False,
+                    )
 
             webhook_enrolled = await _maybe_register_webhook(
                 workspace_data.admin_api_key,
@@ -628,6 +647,12 @@ async def create_jira_dc_workspace(
                 resolved_webhook_secret,
                 workspace.id,
             )
+            if workspace_data.admin_api_key and not webhook_enrolled:
+                await jira_dc_manager.integration_store.update_workspace(
+                    id=workspace.id,
+                    status='inactive',
+                )
+
             return JSONResponse(
                 content={
                     'success': True,
@@ -838,9 +863,17 @@ async def jira_dc_callback(request: Request, code: str, state: str):
             )
 
             # Create a workspace link for the user (admin automatically gets linked)
-            await _handle_workspace_link_creation(
-                user_id, jira_dc_user_id, target_workspace
-            )
+            if integration_session['is_active']:
+                await _handle_workspace_link_creation(
+                    user_id, jira_dc_user_id, target_workspace
+                )
+            else:
+                await _handle_workspace_link_creation(
+                    user_id,
+                    jira_dc_user_id,
+                    target_workspace,
+                    require_active_workspace=False,
+                )
         else:
             # Workspace exists - validate user can update it
             await _validate_workspace_update_permissions(user_id, target_workspace)
@@ -865,9 +898,17 @@ async def jira_dc_callback(request: Request, code: str, state: str):
                 status='active' if integration_session['is_active'] else 'inactive',
             )
 
-            await _handle_workspace_link_creation(
-                user_id, jira_dc_user_id, target_workspace
-            )
+            if integration_session['is_active']:
+                await _handle_workspace_link_creation(
+                    user_id, jira_dc_user_id, target_workspace
+                )
+            else:
+                await _handle_workspace_link_creation(
+                    user_id,
+                    jira_dc_user_id,
+                    target_workspace,
+                    require_active_workspace=False,
+                )
 
         webhook_enrolled = await _maybe_register_webhook(
             integration_session.get('admin_api_key'),
@@ -875,9 +916,17 @@ async def jira_dc_callback(request: Request, code: str, state: str):
             integration_session['webhook_secret'],
             workspace.id,
         )
+        if integration_session.get('admin_api_key') and not webhook_enrolled:
+            await jira_dc_manager.integration_store.update_workspace(
+                id=workspace.id,
+                status='inactive',
+            )
+
         redirect_url = '/settings/integrations'
         if integration_session.get('admin_api_key') and not webhook_enrolled:
             redirect_url += '?jira_dc_webhook=install_failed'
+        elif integration_session.get('admin_api_key') and webhook_enrolled:
+            redirect_url += '?jira_dc_webhook=installed'
 
         return RedirectResponse(
             url=redirect_url,

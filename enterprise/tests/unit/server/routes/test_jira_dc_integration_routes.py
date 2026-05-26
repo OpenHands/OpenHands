@@ -784,6 +784,53 @@ async def test_create_jira_dc_workspace_oauth_disabled_new_workspace(
     'server.routes.integration.jira_dc._handle_workspace_link_creation',
     new_callable=AsyncMock,
 )
+async def test_create_jira_dc_workspace_manual_setup_starts_inactive(
+    mock_handle_link, mock_manager, mock_get_auth, mock_request, mock_user_auth
+):
+    mock_get_auth.return_value = mock_user_auth
+    mock_manager.integration_store.get_workspace_by_name.return_value = None
+    mock_workspace = MagicMock(name='test-workspace')
+    mock_workspace.id = 10
+    mock_workspace.name = 'test-workspace'
+    mock_manager.integration_store.create_workspace.return_value = mock_workspace
+
+    workspace_data = JiraDcWorkspaceCreate(
+        workspace_name='test-workspace',
+        webhook_secret='secret',
+        svc_acc_email='svc@test.com',
+        svc_acc_api_key='key',
+        is_active=False,
+    )
+
+    with patch('server.routes.integration.jira_dc.token_manager') as mock_token_manager:
+        mock_token_manager.encrypt_text.side_effect = lambda x: f'enc_{x}'
+
+        response = await create_jira_dc_workspace(mock_request, workspace_data)
+
+    content = json.loads(response.body)
+    assert response.status_code == 200
+    assert content['success'] is True
+    assert content['webhookEnrolled'] is False
+    assert content['eventsUrl'].endswith('/integration/jira-dc/connections/10/events')
+
+    create_kwargs = mock_manager.integration_store.create_workspace.call_args.kwargs
+    assert create_kwargs['status'] == 'inactive'
+    mock_handle_link.assert_awaited_once_with(
+        'test_user_id',
+        'unavailable',
+        'test-workspace',
+        require_active_workspace=False,
+    )
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.get_user_auth')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+@patch('server.routes.integration.jira_dc.JIRA_DC_ENABLE_OAUTH', False)
+@patch(
+    'server.routes.integration.jira_dc._handle_workspace_link_creation',
+    new_callable=AsyncMock,
+)
 @patch(
     'server.routes.integration.jira_dc._maybe_register_webhook',
     new_callable=AsyncMock,
@@ -825,6 +872,10 @@ async def test_create_jira_dc_workspace_reports_webhook_install_failure(
         'bad-admin-pat', 'https://test-workspace', 'secret', 10
     )
     mock_handle_link.assert_called_once()
+    mock_manager.integration_store.update_workspace.assert_awaited_once_with(
+        id=10,
+        status='inactive',
+    )
 
 
 @pytest.mark.asyncio
