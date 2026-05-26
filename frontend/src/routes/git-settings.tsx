@@ -42,6 +42,34 @@ function GitSettingsScreen() {
 
   const { data: config } = useConfig();
 
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const jiraDcWebhookStatus = params.get("jira_dc_webhook");
+    if (!jiraDcWebhookStatus) {
+      return;
+    }
+
+    if (jiraDcWebhookStatus === "install_failed") {
+      displayErrorToast(
+        t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_INSTALL_FAILED),
+      );
+    } else if (jiraDcWebhookStatus === "installed") {
+      displaySuccessToast(
+        t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_SETUP_SAVED),
+      );
+    }
+
+    params.delete("jira_dc_webhook");
+    const query = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}${
+        window.location.hash
+      }`,
+    );
+  }, [t]);
+
   const [githubTokenInputHasValue, setGithubTokenInputHasValue] =
     React.useState(false);
   const [gitlabTokenInputHasValue, setGitlabTokenInputHasValue] =

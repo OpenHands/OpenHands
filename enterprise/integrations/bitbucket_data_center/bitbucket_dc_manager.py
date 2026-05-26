@@ -22,6 +22,7 @@ from integrations.utils import (
 from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
 from pydantic import SecretStr
+from server.auth.constants import BITBUCKET_DATA_CENTER_BOT_TOKEN
 from server.auth.token_manager import TokenManager
 from storage.bitbucket_dc_webhook_store import BitbucketDCWebhookStore
 
@@ -67,9 +68,11 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
     async def _commenter_has_write_access(
         self, message: Message, installer_user_id: str
     ) -> bool:
-        """Use the installer's Bitbucket DC token to check whether the
-        commenter has ``REPO_WRITE``/``REPO_ADMIN`` permission on the PR's
-        repository — mirrors the Cloud manager's installer-scoped check.
+        """Check commenter permissions using the installer's Bitbucket DC token.
+
+        The check confirms whether the commenter has ``REPO_WRITE`` or
+        ``REPO_ADMIN`` permission on the PR's repository, mirroring the Cloud
+        manager's installer-scoped check.
         """
         from integrations.bitbucket_data_center.bitbucket_dc_service import (
             SaaSBitbucketDCService,
@@ -92,6 +95,35 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
                 f'{project_key}/{repo_slug}: {e}'
             )
             return False
+
+    def _posting_service(self, fallback_external_auth_id: str):
+        """Build the Bitbucket DC service used to POST comments/reactions.
+
+        When a bot service-account token is configured
+        (``BITBUCKET_DATA_CENTER_BOT_TOKEN``), every outbound comment and
+        reaction is posted as that bot -- mirroring the GitHub App's
+        ``openhands[bot]`` identity -- instead of as the @-mentioning user or
+        the webhook installer. Otherwise we fall back to the per-user/installer
+        OAuth token (``fallback_external_auth_id``).
+
+        This affects only who *posts*. The resolver job itself always runs with
+        the invoking user's own token (see ``start_job``); the bot token is
+        never used to create conversations or touch the repo.
+        """
+        from integrations.bitbucket_data_center.bitbucket_dc_service import (
+            SaaSBitbucketDCService,
+        )
+
+        if BITBUCKET_DATA_CENTER_BOT_TOKEN:
+            # BBDC HTTP access tokens authenticate via Bearer. The service's
+            # ``token=`` constructor arg rewrites a colon-less token to
+            # ``x-token-auth:<token>`` (a Bitbucket *Cloud* convention) and
+            # sends it as HTTP Basic, which Data Center rejects with 401. Set
+            # the raw token directly so ``_get_headers`` uses Bearer.
+            service = SaaSBitbucketDCService()
+            service.token = SecretStr(BITBUCKET_DATA_CENTER_BOT_TOKEN)
+            return service
+        return SaaSBitbucketDCService(external_auth_id=fallback_external_auth_id)
 
     async def _add_eyes_reaction(
         self,
@@ -121,12 +153,8 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
         if comment_id is None or pr_id is None:
             return
 
-        from integrations.bitbucket_data_center.bitbucket_dc_service import (
-            SaaSBitbucketDCService,
-        )
-
         try:
-            service = SaaSBitbucketDCService(external_auth_id=reacting_user_id)
+            service = self._posting_service(reacting_user_id)
             await service.add_comment_reaction(
                 owner=project_key,
                 repo_slug=repo_slug,
@@ -146,8 +174,7 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
         installer_user_id: str,
         mentioner_slug: str | None,
     ) -> None:
-        """Reply to the triggering comment asking an unenrolled mentioner to
-        sign up, mirroring ``GithubManager._send_user_not_found_message``.
+        """Ask an unenrolled mentioner to sign up in a PR reply.
 
         The mentioner has no OHE account, so there is no token to post as
         them; the reply goes out under the installer's BBDC token (the
@@ -174,9 +201,11 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
             return
 
         project_key, repo_slug = self._extract_repo_identity(message)
-        installer_user_id = await self.webhook_store.get_webhook_user_id(
-            project_key=project_key, repo_slug=repo_slug
-        )
+        installer_user_id = message.message.get('installer_user_id')
+        if not installer_user_id:
+            installer_user_id = await self.webhook_store.get_webhook_user_id(
+                project_key=project_key, repo_slug=repo_slug
+            )
         if not installer_user_id:
             logger.warning(
                 f'[Bitbucket DC] No installer recorded for '
@@ -287,12 +316,8 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
     async def send_message(
         self, message: str, bitbucket_view: ResolverViewInterface
     ) -> None:
-        from integrations.bitbucket_data_center.bitbucket_dc_service import (
-            SaaSBitbucketDCService,
-        )
-
-        bitbucket_service = SaaSBitbucketDCService(
-            external_auth_id=bitbucket_view.user_info.keycloak_user_id
+        bitbucket_service = self._posting_service(
+            bitbucket_view.user_info.keycloak_user_id
         )
 
         if isinstance(bitbucket_view, BitbucketDCInlinePRComment):

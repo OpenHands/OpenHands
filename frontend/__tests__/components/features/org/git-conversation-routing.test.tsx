@@ -54,12 +54,12 @@ describe("GitConversationRouting", () => {
   it("should render organizations from API data", () => {
     renderWithProviders(<GitConversationRouting />);
 
-    expect(
-      screen.getByTestId("org-row-github:openhands"),
-    ).toHaveTextContent("github/OpenHands");
-    expect(
-      screen.getByTestId("org-row-github:acmeco"),
-    ).toHaveTextContent("github/AcmeCo");
+    expect(screen.getByTestId("org-row-github:openhands")).toHaveTextContent(
+      "GitHub/OpenHands",
+    );
+    expect(screen.getByTestId("org-row-github:acmeco")).toHaveTextContent(
+      "GitHub/AcmeCo",
+    );
   });
 
   it("should show claimed org with 'Claimed' label", () => {
@@ -72,9 +72,9 @@ describe("GitConversationRouting", () => {
   it("should show unclaimed orgs with 'Claim' label", () => {
     renderWithProviders(<GitConversationRouting />);
 
-    expect(
-      screen.getByTestId("claim-button-github:acmeco"),
-    ).toHaveTextContent("ORG$CLAIM");
+    expect(screen.getByTestId("claim-button-github:acmeco")).toHaveTextContent(
+      "ORG$CLAIM",
+    );
   });
 
   it("should call claim mutation when clicking claim on unclaimed org", async () => {
@@ -100,5 +100,4 @@ describe("GitConversationRouting", () => {
       expect.objectContaining({ onSettled: expect.any(Function) }),
     );
   });
-
 });

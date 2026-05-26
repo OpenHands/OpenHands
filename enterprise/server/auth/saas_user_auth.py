@@ -80,6 +80,9 @@ class SaasUserAuth(UserAuth):
     # Per-request `X-Org-Id` header (raw, unvalidated); see
     # `enterprise/server/auth/org_context.py` for resolution rules.
     _x_org_id_header: str | None = None
+    # Trusted server-side override used by background resolver contexts after
+    # they have already resolved and membership-checked the target org.
+    effective_org_id_override: UUID | None = None
     # Cached result of `get_effective_org_id()`. The `_resolved` flag is
     # needed to distinguish "not yet computed" from "computed and None".
     _effective_org_id: UUID | None = None
@@ -94,18 +97,89 @@ class SaasUserAuth(UserAuth):
         """
         return self.api_key_org_id
 
+    def set_effective_org_id_override(self, org_id: UUID | None) -> None:
+        """Set a trusted server-side org override and clear org-scoped caches."""
+        self.effective_org_id_override = org_id
+        self._clear_org_scoped_caches()
+
+    def _clear_org_scoped_caches(self) -> None:
+        """Clear cached data that depends on the effective organization."""
+        self._effective_org_id = None
+        self._effective_org_id_resolved = False
+        self.settings_store = None
+        self.secrets_store = None
+        self._settings = None
+        self._secrets = None
+        self.provider_tokens = None
+        self._org_id = None
+        self._org_name = None
+        self._role = None
+        self._permissions = None
+        self._org_info_loaded = False
+
+    async def _resolve_and_verify_override_org(self) -> UUID | None:
+        """Verify and return the trusted resolver org override, if present."""
+        if self.effective_org_id_override is None:
+            return None
+
+        # Import locally to avoid a circular import via authorization.py.
+        from fastapi import status
+        from storage.org_member_store import OrgMemberStore
+
+        override_org_id = self.effective_org_id_override
+        if self.api_key_org_id is not None and self.api_key_org_id != override_org_id:
+            logger.warning(
+                'effective_org_id_override_api_key_mismatch',
+                extra={
+                    'user_id': self.user_id,
+                    'api_key_org_id': str(self.api_key_org_id),
+                    'effective_org_id_override': str(override_org_id),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='API key is not authorized for this organization',
+            )
+        try:
+            user_uuid = UUID(self.user_id)
+        except ValueError as exc:
+            logger.error(
+                'effective_org_id_override_invalid_user_id',
+                extra={'user_id': self.user_id},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='User is not a member of the requested organization',
+            ) from exc
+
+        member = await OrgMemberStore.get_org_member(override_org_id, user_uuid)
+        if member is None:
+            logger.warning(
+                'effective_org_id_override_not_a_member',
+                extra={
+                    'user_id': self.user_id,
+                    'effective_org_id_override': str(override_org_id),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='User is not a member of the requested organization',
+            )
+        return override_org_id
+
     async def get_effective_org_id(self) -> UUID | None:
         """Resolve the effective organization ID for this request.
 
         Precedence (highest first):
 
-        1. ``api_key_org_id`` — if the request is authenticated with an
+        1. ``effective_org_id_override`` — trusted server-side resolver context.
+        2. ``api_key_org_id`` — if the request is authenticated with an
            org-bound API key, that org wins. If the caller also sent an
            ``X-Org-Id`` header that disagrees, raise 403.
-        2. ``X-Org-Id`` header — explicit, per-request override. The
+        3. ``X-Org-Id`` header — explicit, per-request override. The
            authenticated user must be a member of that org or we raise
            403. Malformed UUIDs raise 400.
-        3. ``user.current_org_id`` — server-side default.
+        4. ``user.current_org_id`` — server-side default.
 
         The resolved value is cached on the auth instance for the rest
         of the request, so callers can invoke this freely.
@@ -117,9 +191,14 @@ class SaasUserAuth(UserAuth):
         if self._effective_org_id_resolved:
             return self._effective_org_id
 
-        # Import locally to avoid a circular import via authorization.py.
         from fastapi import status
         from storage.org_member_store import OrgMemberStore
+
+        override_org_id = await self._resolve_and_verify_override_org()
+        if override_org_id is not None:
+            self._effective_org_id = override_org_id
+            self._effective_org_id_resolved = True
+            return self._effective_org_id
 
         header_value = self._x_org_id_header
         requested: UUID | None = None

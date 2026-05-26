@@ -20,6 +20,20 @@ class UserContext(ABC):
         """Get the user id"""
 
     @abstractmethod
+    async def get_user_email(self) -> str | None:
+        """Get the email for the current user, if available.
+
+        Returns the user's email address for attribution in observability
+        traces (e.g. Laminar). In SaaS/enterprise mode this is typically
+        the Keycloak email; in OSS mode or for admin-scoped contexts this
+        returns ``None`` so callers can fall back to the internal user id.
+
+        Note: this value is considered PII and may be forwarded to
+        third-party observability services. Treat it accordingly when
+        adding new callers.
+        """
+
+    @abstractmethod
     async def get_user_info(self) -> UserInfo:
         """Get the user info."""
 

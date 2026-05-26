@@ -348,7 +348,7 @@ class TestGitOrgClaimRequestValidation:
         """Each supported provider is accepted and normalized to lowercase."""
         from server.routes.org_models import GitOrgClaimRequest
 
-        for provider in ['github', 'GitLab', 'BITBUCKET']:
+        for provider in ['github', 'GitLab', 'BITBUCKET', 'BITBUCKET_DATA_CENTER']:
             req = GitOrgClaimRequest(provider=provider, git_organization='test-org')
             assert req.provider == provider.lower().strip()
 

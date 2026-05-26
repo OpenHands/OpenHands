@@ -54,3 +54,13 @@ class WebClientConfig(DiscriminatedUnionMixin):
     provider_default_hosts: dict[str, str] = Field(default_factory=dict)
     slack_enabled: bool = False
     acp_providers: list[ACPProviderConfig] = Field(default_factory=list)
+    # Hostname of the Jira Data Center server when DC OAuth is configured, so the
+    # configure form can pre-fill and lock the host field (the OAuth callback only
+    # accepts this exact host). None in email-match mode / when DC isn't configured.
+    jira_dc_oauth_host: str | None = None
+    # Optional OpenHands Enterprise/KOTS-managed Jira DC service account. When
+    # configured, the frontend hides the in-app service-account secret entry and
+    # the backend always prefers the env credentials at runtime.
+    jira_dc_service_account_managed: bool = False
+    jira_dc_service_account_email: str | None = None
+    jira_dc_service_account_config_error: str | None = None

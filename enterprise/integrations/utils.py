@@ -63,6 +63,26 @@ def get_user_not_found_message(username: str | None = None) -> str:
     return f"It looks like you haven't created an OpenHands account yet. Please sign up at [OpenHands Cloud]({HOST_URL}) and try again."
 
 
+def get_account_not_linked_message(username: str | None = None) -> str:
+    """Get a message when a user has an OpenHands account but hasn't linked it.
+
+    Used by workspace-linking integrations (e.g. Jira Data Center) when the user
+    has a Keycloak account but hasn't linked their platform identity to the
+    workspace yet, so the resolver can't act on their behalf. This is distinct
+    from get_user_not_found_message, which is for users with no account at all.
+
+    Args:
+        username: Optional username to mention in the message. If provided, the
+                  message is prefixed with @username; otherwise it is generic.
+
+    Returns:
+        A formatted account-not-linked message.
+    """
+    if username:
+        return f"@{username} you have an OpenHands account but haven't linked it to this workspace yet. Please link it at [OpenHands Cloud]({HOST_URL}) under Settings > Integrations and try again."
+    return f"You have an OpenHands account but haven't linked it to this workspace yet. Please link it at [OpenHands Cloud]({HOST_URL}) under Settings > Integrations and try again."
+
+
 OPENHANDS_RESOLVER_TEMPLATES_DIR = (
     os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
     or 'openhands/app_server/integrations/templates/resolver/'
@@ -121,14 +141,39 @@ def has_exact_mention(text: str, mention: str) -> bool:
 
 
 def infer_repo_from_message(user_msg: str) -> list[str]:
-    """
-    Extract all repository names in the format 'owner/repo' from various Git provider URLs
-    and direct mentions in text. Supports GitHub, GitLab, and BitBucket.
+    """Extract repository names as 'owner/repo' from URLs and direct mentions.
+
+    Supports cloud and self-hosted Git providers: GitHub / GitHub Enterprise,
+    GitLab (incl. self-hosted), Bitbucket Cloud, and Bitbucket Data Center.
+    Bitbucket Data Center URLs use a distinct layout
+    (``/projects/<KEY>/repos/<slug>`` and ``/scm/<KEY>/<slug>``) that maps to
+    the ``<KEY>/<slug>`` full name; every other provider uses the standard
+    ``<host>/<owner>/<repo>`` layout, so the host is matched generically rather
+    than against a cloud allowlist. Over-broad matches are harmless: callers
+    only act on inferred names that resolve to a repo the user can access.
     """
     normalized_msg = re.sub(r'\s+', ' ', user_msg.strip())
 
+    # Bitbucket Data Center web (browse/PR) URLs: /projects/<KEY>/repos/<slug>
+    # and personal /users/<name>/repos/<slug>. Matched before the generic
+    # pattern so the <KEY>/<slug> full name is captured rather than the literal
+    # 'projects'/'users' path segment.
+    bitbucket_dc_web_pattern = (
+        r'https?://[a-zA-Z0-9.-]+(?::\d+)?/(?:projects|users)/'
+        r'([a-zA-Z0-9_~.-]+)/repos/([a-zA-Z0-9_.-]+)'
+    )
+    # Bitbucket Data Center clone URLs: /scm/<KEY>/<slug>(.git).
+    bitbucket_dc_scm_pattern = (
+        r'https?://[a-zA-Z0-9.-]+(?::\d+)?/scm/'
+        r'([a-zA-Z0-9_~.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?(?=[/?#\s]|$)'
+    )
+
+    # Generic Git host (cloud or self-hosted): github.com, a GitHub Enterprise
+    # host, self-hosted GitLab, etc. The negative lookahead defers the
+    # Bitbucket Data Center layouts above to their dedicated patterns.
     git_url_pattern = (
-        r'https?://(?:github\.com|gitlab\.com|bitbucket\.org)/'
+        r'https?://[a-zA-Z0-9.-]+(?::\d+)?/'
+        r'(?!projects/|scm/|users/)'
         r'([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?'
         r'(?:[/?#].*?)?(?=\s|$|[^\w.-])'
     )
@@ -143,7 +188,14 @@ def infer_repo_from_message(user_msg: str) -> list[str]:
     # Use dict to preserve ordering
     matches: dict[str, bool] = {}
 
-    # Git URLs first (highest priority)
+    # Bitbucket Data Center URLs first (most specific layout)
+    for owner, repo in re.findall(bitbucket_dc_web_pattern, normalized_msg):
+        matches[f'{owner}/{repo}'] = True
+    for owner, repo in re.findall(bitbucket_dc_scm_pattern, normalized_msg):
+        repo = re.sub(r'\.git$', '', repo)
+        matches[f'{owner}/{repo}'] = True
+
+    # Generic Git URLs next (highest priority among the standard layout)
     for owner, repo in re.findall(git_url_pattern, normalized_msg):
         repo = re.sub(r'\.git$', '', repo)
         matches[f'{owner}/{repo}'] = True

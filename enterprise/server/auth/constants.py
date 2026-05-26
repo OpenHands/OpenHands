@@ -31,6 +31,8 @@ JIRA_DC_CLIENT_ID = os.getenv('JIRA_DC_CLIENT_ID', '').strip()
 JIRA_DC_CLIENT_SECRET = os.getenv('JIRA_DC_CLIENT_SECRET', '').strip()
 JIRA_DC_BASE_URL = os.getenv('JIRA_DC_BASE_URL', '').strip()
 JIRA_DC_ENABLE_OAUTH = os.getenv('JIRA_DC_ENABLE_OAUTH', '1') in ('1', 'true')
+JIRA_DC_SERVICE_ACCOUNT_EMAIL = os.getenv('JIRA_DC_SERVICE_ACCOUNT_EMAIL', '').strip()
+JIRA_DC_SERVICE_ACCOUNT_PAT = os.getenv('JIRA_DC_SERVICE_ACCOUNT_PAT', '').strip()
 AUTH_URL = os.getenv('AUTH_URL', '').rstrip('/')
 ROLE_CHECK_ENABLED = os.getenv('ROLE_CHECK_ENABLED', 'false').lower() in (
     '1',
@@ -49,6 +51,15 @@ BITBUCKET_DATA_CENTER_CLIENT_SECRET = os.getenv(
     'BITBUCKET_DATA_CENTER_CLIENT_SECRET', ''
 ).strip()
 BITBUCKET_DATA_CENTER_HOST = os.getenv('BITBUCKET_DATA_CENTER_HOST', '').strip()
+# Optional HTTP access token for a dedicated bot service account. When set,
+# OpenHands posts all Bitbucket Data Center comments/reactions as this bot
+# (mirroring the GitHub App's openhands[bot] identity) instead of as the
+# per-repo webhook installer or the @-mentioning user. Only the posting
+# identity changes -- the resolver job still runs with the invoking user's
+# own token.
+BITBUCKET_DATA_CENTER_BOT_TOKEN = os.getenv(
+    'BITBUCKET_DATA_CENTER_BOT_TOKEN', ''
+).strip()
 BITBUCKET_DATA_CENTER_TOKEN_URL = (
     f'https://{BITBUCKET_DATA_CENTER_HOST}/rest/oauth2/latest/token'
 )
