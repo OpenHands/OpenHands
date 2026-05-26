@@ -417,10 +417,14 @@ class AppConversationServiceBase(AppConversationService, ABC):
         if pre_commit_command_result.exit_code:
             return
 
-        # Check if there's an existing pre-commit hook
-        with tempfile.TemporaryFile(mode='w+t') as temp_file:
+        # Check if there's an existing pre-commit hook.
+        # NamedTemporaryFile gives file_download a real filesystem path to
+        # write into; TemporaryFile only gives an fd-backed object whose
+        # str() is not a valid path and would silently cause the download to
+        # fail, leaving the hook check unreachable.
+        with tempfile.NamedTemporaryFile(mode='w+t', suffix='.hook', delete=True) as temp_file:
             download_result = await workspace.file_download(
-                PRE_COMMIT_HOOK, str(temp_file)
+                PRE_COMMIT_HOOK, temp_file.name
             )
             if download_result.success:
                 _logger.info('Preserving existing pre-commit hook')
