@@ -99,6 +99,7 @@ dependencies = [
   "termcolor",
   "toml",
   "tornado>=6.5",
+  "tree-sitter-language-pack>=0.7.3",
   "types-toml",
   "urllib3>=2.7.0",
   "uvicorn",
@@ -188,6 +189,7 @@ dirhash = "*"
 tornado = ">=6.5"
 python-dotenv = "*"
 rapidfuzz = "^3.9.0"
+tree-sitter-language-pack = "^0.7.3"
 whatthepatch = "^1.0.6"
 protobuf = ">=5.29.6,<6.0.0"                       # Updated to fix CVE-2026-0994
 opentelemetry-api = "^1.33.1"
