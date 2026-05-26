@@ -5,13 +5,15 @@ from urllib.parse import urlparse
 
 import httpx
 from fastapi import Request
+from integrations.jira_dc.jira_dc_service_account import (
+    resolve_jira_dc_service_account,
+)
 from integrations.jira_dc.jira_dc_types import (
     JiraDcViewInterface,
 )
 from integrations.jira_dc.jira_dc_view import (
     JiraDcExistingConversationView,
     JiraDcFactory,
-    JiraDcNewConversationView,
 )
 from integrations.manager import Manager
 from integrations.models import JobContext, Message
@@ -65,6 +67,13 @@ JIRA_DC_WEBHOOK_EVENTS = [
 
 def _extract_workspace_url(payload: Dict) -> str:
     """Return a Jira URL whose host identifies the configured workspace."""
+    for url in _extract_workspace_urls(payload):
+        return url
+    return ''
+
+
+def _extract_workspace_urls(payload: Dict) -> list[str]:
+    """Return Jira URLs whose hosts identify the configured workspace."""
     paths = (
         ('comment', 'author', 'self'),
         ('user', 'self'),
@@ -72,6 +81,7 @@ def _extract_workspace_url(payload: Dict) -> str:
         ('comment', 'self'),
     )
 
+    urls = []
     for path in paths:
         value: object = payload
         for key in path:
@@ -80,9 +90,18 @@ def _extract_workspace_url(payload: Dict) -> str:
             value = value.get(key)
         else:
             if isinstance(value, str) and value:
-                return value
+                urls.append(value)
 
-    return ''
+    return urls
+
+
+def _extract_workspace_hosts(payload: Dict) -> set[str]:
+    """Return hostnames from Jira URLs embedded in a webhook payload."""
+    return {
+        parsed.hostname.lower()
+        for parsed in (urlparse(url) for url in _extract_workspace_urls(payload))
+        if parsed.hostname
+    }
 
 
 class JiraDcManager(Manager[JiraDcViewInterface]):
@@ -161,28 +180,49 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         return signature_valid, signature, payload
 
     async def validate_request_context(
-        self, request: Request
+        self, request: Request, workspace_id: int | None = None
     ) -> Tuple[bool, Optional[str], Optional[Dict], Optional[JiraDcWorkspace]]:
         """Verify Jira DC webhook signature and return the matched workspace."""
         signature_header = request.headers.get('x-hub-signature')
         signature = signature_header.split('=')[1] if signature_header else None
         body = await request.body()
         payload = await request.json()
-        workspace_name = ''
-
-        parsedUrl = urlparse(_extract_workspace_url(payload))
-        if parsedUrl.hostname:
-            workspace_name = parsedUrl.hostname
-
-        if not workspace_name:
-            logger.warning('[Jira DC] No workspace name found in webhook payload')
-            return False, None, None, None
 
         if not signature:
             logger.warning('[Jira DC] No signature found in webhook headers')
             return False, None, None, None
 
-        workspace = await self.integration_store.get_workspace_by_name(workspace_name)
+        if workspace_id is not None:
+            workspace = await self.integration_store.get_workspace_by_id(workspace_id)
+            payload_hosts = _extract_workspace_hosts(payload)
+            if not payload_hosts:
+                logger.warning(
+                    '[Jira DC] No workspace host found in connection-scoped webhook payload'
+                )
+                return False, None, None, None
+            if workspace and any(
+                host != workspace.name.lower() for host in payload_hosts
+            ):
+                logger.warning(
+                    '[Jira DC] Webhook payload hosts %s do not match connection %s (%s)',
+                    sorted(payload_hosts),
+                    workspace.id,
+                    workspace.name,
+                )
+                return False, None, None, None
+        else:
+            workspace_name = ''
+            parsed_url = urlparse(_extract_workspace_url(payload))
+            if parsed_url.hostname:
+                workspace_name = parsed_url.hostname
+
+            if not workspace_name:
+                logger.warning('[Jira DC] No workspace name found in webhook payload')
+                return False, None, None, None
+
+            workspace = await self.integration_store.get_workspace_by_name(
+                workspace_name
+            )
 
         if not workspace:
             logger.warning('[Jira DC] Could not identify workspace for webhook')
@@ -301,8 +341,18 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             )
             return
 
+        try:
+            service_account = resolve_jira_dc_service_account(
+                workspace, self.token_manager
+            )
+        except Exception as e:
+            logger.error(
+                f'[Jira DC] Service account configuration is invalid: {str(e)}'
+            )
+            return
+
         # Prevent any recursive triggers from the service account
-        if job_context.user_email == workspace.svc_acc_email:
+        if job_context.user_email == service_account.email:
             return
 
         if workspace.status != 'active':
@@ -336,14 +386,15 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
 
         # Get issue details
         try:
-            api_key = self.token_manager.decrypt_text(workspace.svc_acc_api_key)
             issue_title, issue_description = await self.get_issue_details(
-                job_context, api_key
+                job_context, service_account.api_key
             )
             job_context.issue_title = issue_title
             job_context.issue_description = issue_description
             job_context.previous_comments = await self.get_issue_comments(
-                job_context, api_key, bot_email=workspace.svc_acc_email
+                job_context,
+                service_account.api_key,
+                bot_email=service_account.email,
             )
         except Exception as e:
             logger.error(f'[Jira DC] Failed to get issue context: {str(e)}')
@@ -420,13 +471,6 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
                 f'issue {jira_dc_view.job_context.issue_key}',
             )
 
-            # Set decrypted API key for new conversations (needed for V1 callback processor)
-            if isinstance(jira_dc_view, JiraDcNewConversationView):
-                api_key = self.token_manager.decrypt_text(
-                    jira_dc_view.jira_dc_workspace.svc_acc_api_key
-                )
-                jira_dc_view._decrypted_api_key = api_key
-
             # Create conversation using V1 app conversation system
             # The callback processor is registered automatically by the view
             conversation_id = await jira_dc_view.create_or_update_conversation(
@@ -460,14 +504,14 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
 
         # Send response comment
         try:
-            api_key = self.token_manager.decrypt_text(
-                jira_dc_view.jira_dc_workspace.svc_acc_api_key
+            service_account = resolve_jira_dc_service_account(
+                jira_dc_view.jira_dc_workspace, self.token_manager
             )
             await self.send_message(
                 msg_info,
                 issue_key=jira_dc_view.job_context.issue_key,
                 base_api_url=jira_dc_view.job_context.base_api_url,
-                svc_acc_api_key=api_key,
+                svc_acc_api_key=service_account.api_key,
             )
         except Exception as e:
             logger.error(f'[Jira] Failed to send response message: {str(e)}')
@@ -636,11 +680,13 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         if not job_context.comment_id:
             return
         try:
-            api_key = self.token_manager.decrypt_text(workspace.svc_acc_api_key)
+            service_account = resolve_jira_dc_service_account(
+                workspace, self.token_manager
+            )
             await self.add_reaction(
                 comment_id=job_context.comment_id,
                 base_api_url=job_context.base_api_url,
-                svc_acc_api_key=api_key,
+                svc_acc_api_key=service_account.api_key,
             )
             logger.info(
                 f'[Jira DC] Reacted to comment {job_context.comment_id} on issue {job_context.issue_key}'
@@ -772,12 +818,14 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             return
 
         try:
-            api_key = self.token_manager.decrypt_text(workspace.svc_acc_api_key)
+            service_account = resolve_jira_dc_service_account(
+                workspace, self.token_manager
+            )
             await self.send_message(
                 error_msg,
                 issue_key=job_context.issue_key,
                 base_api_url=job_context.base_api_url,
-                svc_acc_api_key=api_key,
+                svc_acc_api_key=service_account.api_key,
             )
         except Exception as e:
             logger.error(f'[Jira DC] Failed to send error comment: {str(e)}')
@@ -790,15 +838,15 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
                 'Please add it to your issue description or send a followup comment.'
             )
 
-            api_key = self.token_manager.decrypt_text(
-                jira_dc_view.jira_dc_workspace.svc_acc_api_key
+            service_account = resolve_jira_dc_service_account(
+                jira_dc_view.jira_dc_workspace, self.token_manager
             )
 
             await self.send_message(
                 comment_msg,
                 issue_key=jira_dc_view.job_context.issue_key,
                 base_api_url=jira_dc_view.job_context.base_api_url,
-                svc_acc_api_key=api_key,
+                svc_acc_api_key=service_account.api_key,
             )
 
             logger.info(

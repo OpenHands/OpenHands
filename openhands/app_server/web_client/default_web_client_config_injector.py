@@ -4,6 +4,9 @@ from urllib.parse import urlparse
 
 from pydantic import Field
 
+from openhands.app_server.integrations.jira_dc.config import (
+    get_jira_dc_service_account_env_config,
+)
 from openhands.app_server.integrations.provider import ProviderHandler
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.web_client.web_client_config_injector import (
@@ -130,6 +133,24 @@ def _get_jira_dc_oauth_host() -> str | None:
     return urlparse(base_url).hostname or None
 
 
+def _get_jira_dc_service_account_config_error() -> str | None:
+    """Return a web-client-safe service-account config error, if any."""
+    return get_jira_dc_service_account_env_config().error
+
+
+def _is_jira_dc_service_account_managed() -> bool:
+    """Return whether Jira DC service-account credentials are env-managed."""
+    return get_jira_dc_service_account_env_config().is_managed
+
+
+def _get_jira_dc_service_account_email() -> str | None:
+    """Return the env-managed service-account email when fully configured."""
+    config = get_jira_dc_service_account_env_config()
+    if not config.is_managed:
+        return None
+    return config.email
+
+
 def _get_feature_flags() -> WebClientFeatureFlags:
     """Get feature flags from environment variables.
 
@@ -183,6 +204,15 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
     )
     slack_enabled: bool = Field(default_factory=_get_slack_enabled)
     jira_dc_oauth_host: str | None = Field(default_factory=_get_jira_dc_oauth_host)
+    jira_dc_service_account_managed: bool = Field(
+        default_factory=_is_jira_dc_service_account_managed
+    )
+    jira_dc_service_account_email: str | None = Field(
+        default_factory=_get_jira_dc_service_account_email
+    )
+    jira_dc_service_account_config_error: str | None = Field(
+        default_factory=_get_jira_dc_service_account_config_error
+    )
     acp_providers: list[ACPProviderConfig] = Field(
         default_factory=lambda: [
             ACPProviderConfig(
@@ -217,6 +247,11 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
             provider_default_hosts=self.provider_default_hosts,
             slack_enabled=self.slack_enabled,
             jira_dc_oauth_host=self.jira_dc_oauth_host,
+            jira_dc_service_account_managed=self.jira_dc_service_account_managed,
+            jira_dc_service_account_email=self.jira_dc_service_account_email,
+            jira_dc_service_account_config_error=(
+                self.jira_dc_service_account_config_error
+            ),
             acp_providers=self.acp_providers,
         )
         return result
