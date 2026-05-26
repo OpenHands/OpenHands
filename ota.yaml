@@ -465,12 +465,12 @@ agent:
       sh: curl -fsSL https://dist.ota.run/install.sh | OTA_VERSION=v1.6.15 sh
       powershell: $env:OTA_VERSION='v1.6.15'; irm https://dist.ota.run/install.ps1 | iex
   notes: |
-    OpenHands documents local contributor setup for macOS, Linux, and WSL.
-    Native Windows development is not a supported host path in the repo docs.
-    The default Ota workflow intentionally starts from the documented self-development loop in `Development.md`
-    rather than inventing a parallel bootstrap path.
-    Although the repo carries `uv.lock`, this contract intentionally keeps Python ownership on the
-    documented Python + Poetry contributor flow rather than adopting `toolchains.python` prematurely.
-    This contract now also covers the supported Docker runtime path, an Ota-managed packaged container runtime,
-    and the standalone `openhands-ui` package build surface.
-    It intentionally leaves enterprise, release/publish, and devcontainer workflows out of scope.
+    Use `ota tasks --use .` to list runnable tasks and review the agent-safe surface before execution.
+    Use `ota up --workflow app --native .` for the canonical local GUI development loop.
+    Use `ota up --workflow backend --native .` or `ota up --workflow frontend --native .`
+    for focused service loops.
+    Use `ota up --workflow app:docker --native .` for the documented Docker runtime wrapper.
+    Use `ota up --workflow app:container --container .` for the Ota-managed packaged container path.
+    Use `ota up --workflow ui-package --native .` when validating the standalone `openhands-ui` build.
+    Use `ota run lint --native .` and `ota run test --native .` for bounded verification.
+    Enterprise, release/publish, and devcontainer workflows remain intentionally out of scope.
