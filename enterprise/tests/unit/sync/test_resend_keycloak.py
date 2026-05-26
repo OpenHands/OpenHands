@@ -11,14 +11,13 @@ from tenacity import RetryError
 # that reads them at import time
 os.environ['RESEND_API_KEY'] = 'test_api_key'
 os.environ['RESEND_AUDIENCE_ID'] = 'test_audience_id'
-os.environ['KEYCLOAK_SERVER_URL'] = 'http://localhost:8080'
-os.environ['KEYCLOAK_REALM_NAME'] = 'test_realm'
-os.environ['KEYCLOAK_ADMIN_PASSWORD'] = 'test_password'
 
 from enterprise.sync.resend_keycloak import (  # noqa: E402
+    ResendUser,
     add_contact_to_resend,
     is_valid_email,
     send_welcome_email,
+    sync_users_to_resend,
 )
 
 
@@ -265,3 +264,48 @@ class TestAddContactToResend:
 
         assert result == {'id': 'contact_123'}
         assert mock_create.call_count == 2
+
+
+class TestSyncUsersToResend:
+    @patch('enterprise.sync.resend_keycloak.time.sleep')
+    @patch('enterprise.sync.resend_keycloak.send_welcome_email')
+    @patch('enterprise.sync.resend_keycloak.add_contact_to_resend')
+    @patch('enterprise.sync.resend_keycloak.get_local_users')
+    @patch('enterprise.sync.resend_keycloak.get_total_local_users')
+    @patch('enterprise.sync.resend_keycloak._backfill_existing_resend_contacts')
+    @patch('enterprise.sync.resend_keycloak._get_resend_synced_user_store')
+    def test_sync_reads_local_users_and_skips_synced_or_invalid_emails(
+        self,
+        mock_get_store: MagicMock,
+        mock_backfill: MagicMock,
+        mock_get_total: MagicMock,
+        mock_get_local_users: MagicMock,
+        mock_add_contact: MagicMock,
+        mock_send_welcome: MagicMock,
+        mock_sleep: MagicMock,
+    ) -> None:
+        store = MagicMock()
+        store.get_synced_emails_for_audience.return_value = {'already@example.com'}
+        mock_get_store.return_value = store
+        mock_backfill.return_value = 1
+        mock_get_total.return_value = 3
+        mock_get_local_users.return_value = [
+            ResendUser(id='user-1', email='already@example.com'),
+            ResendUser(id='user-2', email='bad!email@example.com'),
+            ResendUser(id='user-3', email='new@example.com'),
+        ]
+
+        sync_users_to_resend()
+
+        mock_get_total.assert_called_once_with()
+        mock_get_local_users.assert_called_once()
+        store.mark_user_synced.assert_called_once_with(
+            email='new@example.com',
+            audience_id='test_audience_id',
+            keycloak_user_id='user-3',
+        )
+        mock_add_contact.assert_called_once_with(
+            'test_audience_id', 'new@example.com', None, None
+        )
+        mock_send_welcome.assert_called_once_with('new@example.com', None, None)
+        assert mock_sleep.call_count == 2
