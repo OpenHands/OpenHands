@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from resend.exceptions import ResendError
+from sqlalchemy import String, create_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from tenacity import RetryError
 
 # Set required environment variables before importing the module
@@ -14,7 +16,10 @@ os.environ['RESEND_AUDIENCE_ID'] = 'test_audience_id'
 
 from enterprise.sync.resend_keycloak import (  # noqa: E402
     ResendUser,
+    _split_display_name,
     add_contact_to_resend,
+    get_local_users,
+    get_total_local_users,
     is_valid_email,
     send_welcome_email,
     sync_users_to_resend,
@@ -133,6 +138,100 @@ class TestIsValidEmail:
         """Test that validation works for uppercase emails."""
         assert is_valid_email('USER@EXAMPLE.COM') is True
         assert is_valid_email('User@Example.Com') is True
+
+
+class TestDisplayNameParsing:
+    def test_split_display_name_handles_full_single_and_blank_names(self) -> None:
+        assert _split_display_name('Ada Lovelace') == ('Ada', 'Lovelace')
+        assert _split_display_name('Prince') == ('Prince', None)
+        assert _split_display_name('  Grace Brewster Hopper  ') == (
+            'Grace',
+            'Brewster Hopper',
+        )
+        assert _split_display_name('') == (None, None)
+        assert _split_display_name(None) == (None, None)
+
+
+class _LocalUserBase(DeclarativeBase):
+    pass
+
+
+class _LocalUser(_LocalUserBase):
+    __tablename__ = 'user'
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    email: Mapped[str | None] = mapped_column(String, nullable=True)
+    git_user_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+def _local_user_session_maker():
+    engine = create_engine('sqlite:///:memory:')
+    _LocalUserBase.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine)
+
+    with session_factory() as session:
+        session.add_all(
+            [
+                _LocalUser(
+                    id='001',
+                    email='ada@example.com',
+                    git_user_name='Ada Lovelace',
+                ),
+                _LocalUser(
+                    id='002',
+                    email=None,
+                    git_user_name='No Email',
+                ),
+                _LocalUser(
+                    id='003',
+                    email='',
+                    git_user_name='Blank Email',
+                ),
+                _LocalUser(
+                    id='004',
+                    email='prince@example.com',
+                    git_user_name='Prince',
+                ),
+            ]
+        )
+        session.commit()
+
+    return session_factory
+
+
+class TestLocalUserQueries:
+    @patch('enterprise.sync.resend_keycloak.User', _LocalUser)
+    @patch('enterprise.sync.resend_keycloak._get_session_maker')
+    def test_get_local_users_reads_real_database_with_names(
+        self, mock_get_session_maker: MagicMock
+    ) -> None:
+        mock_get_session_maker.return_value = _local_user_session_maker()
+
+        users = get_local_users(offset=0, limit=10)
+
+        assert users == [
+            ResendUser(
+                id='001',
+                email='ada@example.com',
+                first_name='Ada',
+                last_name='Lovelace',
+            ),
+            ResendUser(
+                id='004',
+                email='prince@example.com',
+                first_name='Prince',
+                last_name=None,
+            ),
+        ]
+
+    @patch('enterprise.sync.resend_keycloak.User', _LocalUser)
+    @patch('enterprise.sync.resend_keycloak._get_session_maker')
+    def test_get_total_local_users_counts_real_database_emails(
+        self, mock_get_session_maker: MagicMock
+    ) -> None:
+        mock_get_session_maker.return_value = _local_user_session_maker()
+
+        assert get_total_local_users() == 2
 
 
 class TestSendWelcomeEmail:
@@ -292,7 +391,12 @@ class TestSyncUsersToResend:
         mock_get_local_users.return_value = [
             ResendUser(id='user-1', email='already@example.com'),
             ResendUser(id='user-2', email='bad!email@example.com'),
-            ResendUser(id='user-3', email='new@example.com'),
+            ResendUser(
+                id='user-3',
+                email='new@example.com',
+                first_name='Ada',
+                last_name='Lovelace',
+            ),
         ]
 
         sync_users_to_resend()
@@ -302,10 +406,10 @@ class TestSyncUsersToResend:
         store.mark_user_synced.assert_called_once_with(
             email='new@example.com',
             audience_id='test_audience_id',
-            keycloak_user_id='user-3',
+            user_id='user-3',
         )
         mock_add_contact.assert_called_once_with(
-            'test_audience_id', 'new@example.com', None, None
+            'test_audience_id', 'new@example.com', 'Ada', 'Lovelace'
         )
-        mock_send_welcome.assert_called_once_with('new@example.com', None, None)
+        mock_send_welcome.assert_called_once_with('new@example.com', 'Ada', 'Lovelace')
         assert mock_sleep.call_count == 2

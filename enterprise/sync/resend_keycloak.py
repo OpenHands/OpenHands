@@ -48,6 +48,9 @@ RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
 RESEND_AUDIENCE_ID = os.environ.get('RESEND_AUDIENCE_ID', '')
 
 # Sync configuration
+# BATCH_SIZE controls only local DB pagination. Resend API calls remain
+# individually rate-limited by RATE_LIMIT, so increasing this avoids frequent
+# DB count/page queries without creating a 2000-contact API burst.
 BATCH_SIZE = int(os.environ.get('BATCH_SIZE', '2000'))
 MAX_RETRIES = int(os.environ.get('MAX_RETRIES', '3'))
 INITIAL_BACKOFF_SECONDS = float(os.environ.get('INITIAL_BACKOFF_SECONDS', '1'))
@@ -98,19 +101,43 @@ def _valid_user_email_filter():
     return and_(User.email.isnot(None), User.email != '')
 
 
+def _split_display_name(display_name: str | None) -> tuple[str | None, str | None]:
+    """Split a stored display name into Resend first/last name fields."""
+    if not display_name or not display_name.strip():
+        return None, None
+
+    parts = display_name.strip().split(maxsplit=1)
+    first_name = parts[0]
+    last_name = parts[1] if len(parts) > 1 else None
+    return first_name, last_name
+
+
 def get_local_users(offset: int = 0, limit: int = 100) -> list[ResendUser]:
     """Get users with email addresses from the OpenHands database."""
     session_maker = _get_session_maker()
     with session_maker() as session:
         rows = session.execute(
-            select(User.id, User.email)
+            select(User.id, User.email, User.git_user_name)
             .where(_valid_user_email_filter())
             .order_by(User.id)
             .offset(offset)
             .limit(limit)
         ).all()
 
-    return [ResendUser(id=str(row.id), email=row.email) for row in rows if row.email]
+    users = []
+    for row in rows:
+        if not row.email:
+            continue
+        first_name, last_name = _split_display_name(row.git_user_name)
+        users.append(
+            ResendUser(
+                id=str(row.id),
+                email=row.email,
+                first_name=first_name,
+                last_name=last_name,
+            )
+        )
+    return users
 
 
 def get_total_local_users() -> int:
@@ -331,7 +358,7 @@ def _backfill_existing_resend_contacts(
                 synced_user_store.mark_user_synced(
                     email=email,
                     audience_id=audience_id,
-                    keycloak_user_id=None,  # We don't have this info during backfill
+                    user_id=None,  # Backfilled Resend contacts have no local user ID.
                 )
                 backfilled_count += 1
                 logger.debug(f'Backfilled existing Resend contact: {email}')
@@ -428,7 +455,7 @@ def sync_users_to_resend():
                     synced_user_store.mark_user_synced(
                         email=email,
                         audience_id=RESEND_AUDIENCE_ID,
-                        keycloak_user_id=user.id,
+                        user_id=user.id,
                     )
                 except Exception:
                     logger.exception(f'Failed to mark user {email} as synced')

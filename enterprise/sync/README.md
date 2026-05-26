@@ -24,6 +24,13 @@ The service is configured using environment variables:
 | `BACKOFF_FACTOR` | Backoff factor for retries | `2` |
 | `RATE_LIMIT` | Rate limit for API calls (requests per second) | `2` |
 
+
+### Migration from Keycloak-backed sync
+
+This sync no longer reads or counts users through Keycloak. Deployments should remove the old `KEYCLOAK_SERVER_URL`, `KEYCLOAK_REALM_NAME`, and `KEYCLOAK_ADMIN_PASSWORD` wiring for this CronJob and ensure it has the same OpenHands database configuration as the application server. If the database session cannot be created, the job fails before attempting to sync contacts.
+
+Display-name personalization now comes from the local `user.git_user_name` field when present; users without a stored display name continue to receive the generic `Hi there,` greeting.
+
 ## Deployment
 
 The service is deployed as part of the openhands Helm chart. To enable it, set the following in your values.yaml:
