@@ -10,7 +10,6 @@ from fastapi import HTTPException
 from server.routes.integration.bitbucket_dc import (
     BITBUCKET_DC_WEBHOOK_EVENTS,
     bitbucket_dc_connection_events,
-    bitbucket_dc_events,
     enroll_bitbucket_dc_webhook,
     get_bitbucket_dc_resources,
     reinstall_bitbucket_dc_webhook,
@@ -47,6 +46,23 @@ def _pr_comment_body() -> bytes:
     ).encode()
 
 
+def _webhook(
+    *,
+    webhook_id: int = 123,
+    project_key: str = 'PROJ',
+    repo_slug: str = 'myrepo',
+    webhook_secret: str = 'shared-secret',
+    user_id: str = 'kc-installer',
+) -> MagicMock:
+    webhook = MagicMock()
+    webhook.id = webhook_id
+    webhook.project_key = project_key
+    webhook.repo_slug = repo_slug
+    webhook.webhook_secret = webhook_secret
+    webhook.user_id = user_id
+    return webhook
+
+
 def test_bitbucket_dc_webhook_events_cover_automation_sources():
     assert {
         'repo:refs_changed',
@@ -76,14 +92,15 @@ def test_bitbucket_dc_webhook_events_cover_automation_sources():
 async def test_signature_verification_rejects_bad_signature_with_403(
     mock_get_redis_client_async, mock_manager, mock_store
 ):
-    mock_store.get_webhook_secret = AsyncMock(return_value='shared-secret')
+    mock_store.get_webhook_by_id = AsyncMock(return_value=_webhook())
     mock_manager.receive_message = AsyncMock()
     mock_get_redis_client_async.return_value = AsyncMock()
 
     body = _pr_comment_body()
 
     with pytest.raises(HTTPException) as exc:
-        await bitbucket_dc_events(
+        await bitbucket_dc_connection_events(
+            connection_id=123,
             request=_request_with_body(body),
             background_tasks=MagicMock(),
             x_hub_signature='sha256=deadbeef',
@@ -100,26 +117,35 @@ async def test_signature_verification_rejects_bad_signature_with_403(
 @patch('server.routes.integration.bitbucket_dc.webhook_store')
 @patch('server.routes.integration.bitbucket_dc.bitbucket_dc_manager')
 @patch('server.routes.integration.bitbucket_dc.get_redis_client_async')
-async def test_missing_repo_identity_rejected_with_403(
+async def test_connection_event_uses_connection_repository_when_payload_identity_missing(
     mock_get_redis_client_async, mock_manager, mock_store
 ):
-    mock_store.get_webhook_secret = AsyncMock(return_value='shared-secret')
+    mock_store.get_webhook_by_id = AsyncMock(return_value=_webhook())
     mock_manager.receive_message = AsyncMock()
-    mock_get_redis_client_async.return_value = AsyncMock()
+    redis = AsyncMock()
+    redis.set = AsyncMock(return_value=True)
+    mock_get_redis_client_async.return_value = redis
 
-    body = json.dumps({'pullRequest': {'id': 1}}).encode()
+    body = json.dumps(
+        {
+            'pullRequest': {'id': 1},
+            'comment': {'id': 99, 'text': 'Hey @openhands'},
+        }
+    ).encode()
 
-    with pytest.raises(HTTPException) as exc:
-        await bitbucket_dc_events(
-            request=_request_with_body(body),
-            background_tasks=MagicMock(),
-            x_hub_signature=_signed(body),
-            x_event_key='pr:comment:added',
-            x_request_id='req-1',
-        )
+    response = await bitbucket_dc_connection_events(
+        connection_id=123,
+        request=_request_with_body(body),
+        background_tasks=MagicMock(),
+        x_hub_signature=_signed(body),
+        x_event_key='pr:comment:added',
+        x_request_id='req-1',
+    )
 
-    assert exc.value.status_code == 403
-    mock_manager.receive_message.assert_not_called()
+    mock_manager.receive_message.assert_awaited_once()
+    dispatched = mock_manager.receive_message.call_args.args[0]
+    assert dispatched.message['installation_id'] == 'PROJ/myrepo'
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -130,7 +156,7 @@ async def test_missing_repo_identity_rejected_with_403(
 async def test_duplicate_event_returns_200_and_skips_dispatch(
     mock_get_redis_client_async, mock_manager, mock_store
 ):
-    mock_store.get_webhook_secret = AsyncMock(return_value='shared-secret')
+    mock_store.get_webhook_by_id = AsyncMock(return_value=_webhook())
     mock_manager.receive_message = AsyncMock()
     redis = AsyncMock()
     redis.set = AsyncMock(return_value=False)  # duplicate
@@ -138,7 +164,8 @@ async def test_duplicate_event_returns_200_and_skips_dispatch(
 
     body = _pr_comment_body()
 
-    response = await bitbucket_dc_events(
+    response = await bitbucket_dc_connection_events(
+        connection_id=123,
         request=_request_with_body(body),
         background_tasks=MagicMock(),
         x_hub_signature=_signed(body),
@@ -159,7 +186,7 @@ async def test_duplicate_event_returns_200_and_skips_dispatch(
 async def test_valid_pr_comment_event_dispatches_to_manager_and_returns_200(
     mock_get_redis_client_async, mock_manager, mock_store
 ):
-    mock_store.get_webhook_secret = AsyncMock(return_value='shared-secret')
+    mock_store.get_webhook_by_id = AsyncMock(return_value=_webhook())
     mock_manager.receive_message = AsyncMock()
     redis = AsyncMock()
     redis.set = AsyncMock(return_value=True)
@@ -167,7 +194,8 @@ async def test_valid_pr_comment_event_dispatches_to_manager_and_returns_200(
 
     body = _pr_comment_body()
 
-    response = await bitbucket_dc_events(
+    response = await bitbucket_dc_connection_events(
+        connection_id=123,
         request=_request_with_body(body),
         background_tasks=MagicMock(),
         x_hub_signature=_signed(body),
@@ -195,7 +223,7 @@ async def test_valid_event_forwards_to_automations_when_enabled(
     mock_store,
     mock_automation_service,
 ):
-    mock_store.get_webhook_secret = AsyncMock(return_value='shared-secret')
+    mock_store.get_webhook_by_id = AsyncMock(return_value=_webhook())
     mock_manager.receive_message = AsyncMock()
     redis = AsyncMock()
     redis.set = AsyncMock(return_value=True)
@@ -208,7 +236,8 @@ async def test_valid_event_forwards_to_automations_when_enabled(
         'server.routes.integration.bitbucket_dc.AUTOMATION_EVENT_FORWARDING_ENABLED',
         True,
     ):
-        response = await bitbucket_dc_events(
+        response = await bitbucket_dc_connection_events(
+            connection_id=123,
             request=_request_with_body(body),
             background_tasks=background_tasks,
             x_hub_signature=_signed(body),
@@ -234,7 +263,8 @@ async def test_valid_event_forwards_to_automations_when_enabled(
 async def test_diagnostics_ping_returns_200_without_dispatch(mock_manager):
     mock_manager.receive_message = AsyncMock()
 
-    response = await bitbucket_dc_events(
+    response = await bitbucket_dc_connection_events(
+        connection_id=123,
         request=_request_with_body(b'{}'),
         background_tasks=MagicMock(),
         x_hub_signature=None,
@@ -355,9 +385,7 @@ async def test_reinstall_bitbucket_dc_webhook_installs_connection_scoped_url(
 
     service = MagicMock()
     service.user_has_admin_access = AsyncMock(return_value=True)
-    service.check_webhook_exists_on_repository = AsyncMock(
-        side_effect=[(False, None), (False, None)]
-    )
+    service.check_webhook_exists_on_repository = AsyncMock(return_value=(False, None))
     service.create_repository_webhook = AsyncMock(return_value='101')
     mock_service_cls.return_value = service
 
@@ -377,6 +405,11 @@ async def test_reinstall_bitbucket_dc_webhook_installs_connection_scoped_url(
         user_id='kc-installer',
     )
     service.create_repository_webhook.assert_awaited_once()
+    service.check_webhook_exists_on_repository.assert_awaited_once_with(
+        'PROJ',
+        'myrepo',
+        'https://app.all-hands.dev/integration/bitbucket-dc/connections/123/events',
+    )
     create_kwargs = service.create_repository_webhook.await_args.kwargs
     assert create_kwargs['webhook_url'].endswith(
         '/integration/bitbucket-dc/connections/123/events'

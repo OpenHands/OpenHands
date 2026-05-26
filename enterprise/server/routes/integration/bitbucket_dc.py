@@ -59,8 +59,6 @@ BITBUCKET_DC_WEBHOOK_EVENTS = [
     'pr:comment:edited',
     'pr:comment:deleted',
 ]
-BITBUCKET_DC_LEGACY_WEBHOOK_URL = f'{HOST_URL}/integration/bitbucket-dc/events'
-BITBUCKET_DC_WEBHOOK_URL = BITBUCKET_DC_LEGACY_WEBHOOK_URL
 
 
 def bitbucket_dc_webhook_url(connection_id: int) -> str:
@@ -197,23 +195,6 @@ async def _get_or_create_dc_webhook(
             events=BITBUCKET_DC_WEBHOOK_EVENTS,
         )
 
-    (
-        legacy_webhook_exists,
-        legacy_webhook_id,
-    ) = await bitbucket_dc_service.check_webhook_exists_on_repository(
-        project_key, repo_slug, BITBUCKET_DC_LEGACY_WEBHOOK_URL
-    )
-    if legacy_webhook_exists and legacy_webhook_id:
-        return await bitbucket_dc_service.update_repository_webhook(
-            owner=project_key,
-            repo_slug=repo_slug,
-            webhook_id=legacy_webhook_id,
-            name=BITBUCKET_DC_WEBHOOK_NAME,
-            webhook_url=webhook_url,
-            webhook_secret=webhook_secret,
-            events=BITBUCKET_DC_WEBHOOK_EVENTS,
-        )
-
     return await bitbucket_dc_service.create_repository_webhook(
         owner=project_key,
         repo_slug=repo_slug,
@@ -228,19 +209,18 @@ async def _find_existing_dc_webhook_id(
     bitbucket_dc_service: SaaSBitbucketDCService,
     project_key: str,
     repo_slug: str,
-    webhook_urls: list[str],
+    webhook_url: str,
 ) -> str | None:
-    for webhook_url in webhook_urls:
-        if not webhook_url:
-            continue
-        (
-            webhook_exists,
-            webhook_id,
-        ) = await bitbucket_dc_service.check_webhook_exists_on_repository(
-            project_key, repo_slug, webhook_url
-        )
-        if webhook_exists and webhook_id:
-            return webhook_id
+    if not webhook_url:
+        return None
+    (
+        webhook_exists,
+        webhook_id,
+    ) = await bitbucket_dc_service.check_webhook_exists_on_repository(
+        project_key, repo_slug, webhook_url
+    )
+    if webhook_exists and webhook_id:
+        return webhook_id
     return None
 
 
@@ -281,35 +261,21 @@ async def verify_bitbucket_dc_signature(
     *,
     signature_header: str | None,
     body: bytes,
-    project_key: str = '',
-    repo_slug: str = '',
     webhook_secret: str | None = None,
 ) -> None:
-    """Verify ``X-Hub-Signature`` against the per-repository secret.
+    """Verify ``X-Hub-Signature`` against the connection-scoped secret.
 
     Bitbucket Data Center signs each webhook delivery with HMAC-SHA256 of
     the request body using the secret configured on the repository's
-    webhook. The header has the form ``sha256=<hex>``. There is no
-    per-installation UUID header on DC, so we look up the secret by the
-    ``(project_key, repo_slug)`` carried in the payload.
+    webhook. The header has the form ``sha256=<hex>``.
     """
-    if webhook_secret is None and (not project_key or not repo_slug):
-        raise HTTPException(
-            status_code=403,
-            detail='Missing repository identity in payload',
-        )
-
     if IS_LOCAL_DEPLOYMENT:
         webhook_secret = webhook_secret or 'localdeploymentwebhooktesttoken'
-    elif webhook_secret is None:
-        webhook_secret = await webhook_store.get_webhook_secret(
-            project_key=project_key, repo_slug=repo_slug
-        )
 
     if not webhook_secret:
         raise HTTPException(
             status_code=403,
-            detail='No webhook secret found for repository',
+            detail='No webhook secret found for connection',
         )
 
     if IS_LOCAL_DEPLOYMENT and signature_header in (
@@ -590,10 +556,7 @@ async def uninstall_bitbucket_dc_webhook(
             bitbucket_dc_service,
             project_key,
             repo_slug,
-            [
-                bitbucket_dc_webhook_url(webhook.id) if webhook else '',
-                BITBUCKET_DC_LEGACY_WEBHOOK_URL,
-            ],
+            bitbucket_dc_webhook_url(webhook.id) if webhook else '',
         )
         db_id = webhook.webhook_id if webhook else None
         webhook_id = provider_id or db_id
@@ -653,7 +616,7 @@ async def _handle_bitbucket_dc_event(
     x_hub_signature: str | None,
     x_event_key: str | None,
     x_request_id: str | None,
-    connection_id: int | None = None,
+    connection_id: int,
 ):
     try:
         body = await request.body()
@@ -671,40 +634,29 @@ async def _handle_bitbucket_dc_event(
         payload_data = _normalize_bitbucket_dc_event_payload(payload_data, x_event_key)
 
         project_key, repo_slug = _extract_repo_identity(payload_data)
-        installer_user_id: str | None = None
-        if connection_id is not None:
-            webhook = await webhook_store.get_webhook_by_id(connection_id)
-            if not webhook:
-                raise HTTPException(
-                    status_code=403,
-                    detail='No webhook found for connection',
-                )
-            if (
-                project_key
-                and repo_slug
-                and (
-                    webhook.project_key != project_key or webhook.repo_slug != repo_slug
-                )
-            ):
-                raise HTTPException(
-                    status_code=403,
-                    detail='Webhook connection does not match payload repository',
-                )
-            project_key = project_key or webhook.project_key
-            repo_slug = repo_slug or webhook.repo_slug
-            installer_user_id = webhook.user_id
-            await verify_bitbucket_dc_signature(
-                signature_header=x_hub_signature,
-                body=body,
-                webhook_secret=webhook.webhook_secret,
+        webhook = await webhook_store.get_webhook_by_id(connection_id)
+        if not webhook:
+            raise HTTPException(
+                status_code=403,
+                detail='No webhook found for connection',
             )
-        else:
-            await verify_bitbucket_dc_signature(
-                signature_header=x_hub_signature,
-                body=body,
-                project_key=project_key,
-                repo_slug=repo_slug,
+        if (
+            project_key
+            and repo_slug
+            and (webhook.project_key != project_key or webhook.repo_slug != repo_slug)
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail='Webhook connection does not match payload repository',
             )
+        project_key = project_key or webhook.project_key
+        repo_slug = repo_slug or webhook.repo_slug
+        installer_user_id: str | None = webhook.user_id
+        await verify_bitbucket_dc_signature(
+            signature_header=x_hub_signature,
+            body=body,
+            webhook_secret=webhook.webhook_secret,
+        )
 
         pr_id = (payload_data.get('pullRequest') or {}).get('id')
         comment_id = (payload_data.get('comment') or {}).get('id')
@@ -783,21 +735,4 @@ async def bitbucket_dc_connection_events(
         x_event_key=x_event_key,
         x_request_id=x_request_id,
         connection_id=connection_id,
-    )
-
-
-@bitbucket_dc_integration_router.post('/bitbucket-dc/events')
-async def bitbucket_dc_events(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    x_hub_signature: str | None = Header(None),
-    x_event_key: str | None = Header(None),
-    x_request_id: str | None = Header(None),
-):
-    return await _handle_bitbucket_dc_event(
-        request=request,
-        background_tasks=background_tasks,
-        x_hub_signature=x_hub_signature,
-        x_event_key=x_event_key,
-        x_request_id=x_request_id,
     )
