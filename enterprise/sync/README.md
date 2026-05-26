@@ -31,6 +31,8 @@ This sync no longer reads or counts users through Keycloak. Deployments should r
 
 Display-name personalization now comes from the local `user.git_user_name` field when present; users without a stored display name continue to receive the generic `Hi there,` greeting.
 
+**Failure modes:** If the OpenHands database is unavailable, the sync job exits with status code 1 and logs the failure. No contacts are synced until the database connection is restored. Monitor the CronJob logs for database connection errors.
+
 ## Deployment
 
 The service is deployed as part of the openhands Helm chart. To enable it, set the following in your values.yaml:

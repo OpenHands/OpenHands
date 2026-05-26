@@ -2,6 +2,7 @@
 
 import os
 from unittest.mock import MagicMock, patch
+from uuid import UUID
 
 import pytest
 from resend.exceptions import ResendError
@@ -159,7 +160,7 @@ class _LocalUserBase(DeclarativeBase):
 class _LocalUser(_LocalUserBase):
     __tablename__ = 'user'
 
-    id: Mapped[str] = mapped_column(String, primary_key=True)
+    id: Mapped[UUID] = mapped_column(primary_key=True)
     email: Mapped[str | None] = mapped_column(String, nullable=True)
     git_user_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
@@ -173,22 +174,22 @@ def _local_user_session_maker():
         session.add_all(
             [
                 _LocalUser(
-                    id='001',
+                    id=UUID('00000000-0000-0000-0000-000000000001'),
                     email='ada@example.com',
                     git_user_name='Ada Lovelace',
                 ),
                 _LocalUser(
-                    id='002',
+                    id=UUID('00000000-0000-0000-0000-000000000002'),
                     email=None,
                     git_user_name='No Email',
                 ),
                 _LocalUser(
-                    id='003',
+                    id=UUID('00000000-0000-0000-0000-000000000003'),
                     email='',
                     git_user_name='Blank Email',
                 ),
                 _LocalUser(
-                    id='004',
+                    id=UUID('00000000-0000-0000-0000-000000000004'),
                     email='prince@example.com',
                     git_user_name='Prince',
                 ),
@@ -211,13 +212,13 @@ class TestLocalUserQueries:
 
         assert users == [
             ResendUser(
-                id='001',
+                id=UUID('00000000-0000-0000-0000-000000000001'),
                 email='ada@example.com',
                 first_name='Ada',
                 last_name='Lovelace',
             ),
             ResendUser(
-                id='004',
+                id=UUID('00000000-0000-0000-0000-000000000004'),
                 email='prince@example.com',
                 first_name='Prince',
                 last_name=None,

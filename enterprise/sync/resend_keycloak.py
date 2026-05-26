@@ -126,8 +126,6 @@ def get_local_users(offset: int = 0, limit: int = 100) -> list[ResendUser]:
 
     users = []
     for row in rows:
-        if not row.email:
-            continue
         first_name, last_name = _split_display_name(row.git_user_name)
         users.append(
             ResendUser(
