@@ -28,7 +28,7 @@ from openhands.app_server.settings.settings_router import _user_profile_locks
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.sdk.llm import LLM
-from openhands.sdk.settings import AgentSettings
+from openhands.sdk.settings import OpenHandsAgentSettings as AgentSettings
 
 
 @pytest.fixture(autouse=True)

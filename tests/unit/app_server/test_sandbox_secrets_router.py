@@ -36,7 +36,7 @@ from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.user.user_router import get_current_user
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import StaticSecret
-from openhands.sdk.settings import AgentSettings
+from openhands.sdk.settings import OpenHandsAgentSettings as AgentSettings
 
 SANDBOX_ID = 'sb-test-123'
 USER_ID = 'test-user-id'

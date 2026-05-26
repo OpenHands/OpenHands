@@ -86,7 +86,8 @@ class UserSettings(Base):
 
     def to_settings(self):
         from openhands.app_server.settings.settings_models import Settings
-        from openhands.sdk.settings import AgentSettings, ConversationSettings
+        from openhands.sdk.settings import ConversationSettings
+        from openhands.sdk.settings import OpenHandsAgentSettings as AgentSettings
 
         return Settings(
             agent_settings=AgentSettings.model_validate(self.agent_settings or {}),

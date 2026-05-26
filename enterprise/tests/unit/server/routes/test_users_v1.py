@@ -273,7 +273,7 @@ class TestSdkCompatFields:
 
         from openhands.app_server.user.user_models import UserInfo
         from openhands.sdk.llm import LLM
-        from openhands.sdk.settings import AgentSettings
+        from openhands.sdk.settings import OpenHandsAgentSettings as AgentSettings
 
         base_user_info = UserInfo(
             id='user-123',
@@ -307,7 +307,7 @@ class TestSdkCompatFields:
 
         from openhands.app_server.user.user_models import UserInfo
         from openhands.sdk.llm import LLM
-        from openhands.sdk.settings import AgentSettings
+        from openhands.sdk.settings import OpenHandsAgentSettings as AgentSettings
 
         base_user_info = UserInfo(
             id='user-123',
@@ -374,7 +374,7 @@ class TestSdkCompatFields:
 
         from openhands.app_server.user.user_models import UserInfo
         from openhands.sdk.llm import LLM
-        from openhands.sdk.settings import AgentSettings
+        from openhands.sdk.settings import OpenHandsAgentSettings as AgentSettings
 
         base_user_info = UserInfo(
             id='user-123',

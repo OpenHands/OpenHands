@@ -12,8 +12,10 @@ from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import (
     AGENT_SETTINGS_SCHEMA_VERSION,
-    AgentSettings,
     ConversationSettings,
+)
+from openhands.sdk.settings import (
+    OpenHandsAgentSettings as AgentSettings,
 )
 from openhands.sdk.settings.model import CondenserSettings, VerificationSettings
 

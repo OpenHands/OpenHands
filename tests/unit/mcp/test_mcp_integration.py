@@ -9,7 +9,7 @@ from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.sdk.llm import LLM
-from openhands.sdk.settings import AgentSettings
+from openhands.sdk.settings import OpenHandsAgentSettings as AgentSettings
 
 
 @pytest.mark.asyncio

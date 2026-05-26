@@ -45,7 +45,8 @@ from openhands.sdk import Agent, Event
 from openhands.sdk.context.agent_context import AgentContext as _AgentContext
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
-from openhands.sdk.settings import AgentSettings, ConversationSettings
+from openhands.sdk.settings import ConversationSettings
+from openhands.sdk.settings import OpenHandsAgentSettings as AgentSettings
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 # True only on SDK versions that include PR #2984 (secrets acp_compatible=True).

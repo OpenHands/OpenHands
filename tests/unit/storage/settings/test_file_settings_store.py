@@ -9,7 +9,8 @@ from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.sdk.llm import LLM
-from openhands.sdk.settings import AgentSettings, ConversationSettings
+from openhands.sdk.settings import ConversationSettings
+from openhands.sdk.settings import OpenHandsAgentSettings as AgentSettings
 
 
 @pytest.fixture(autouse=True)
