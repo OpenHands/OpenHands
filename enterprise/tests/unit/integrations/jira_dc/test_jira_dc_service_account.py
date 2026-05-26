@@ -1,7 +1,11 @@
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 from integrations.jira_dc.jira_dc_service_account import (
+    JiraDcServiceAccountConfigError,
+    JiraDcServiceAccountResolutionError,
+    get_jira_dc_managed_service_account,
     get_jira_dc_service_account_config_error,
     resolve_jira_dc_service_account,
 )
@@ -11,15 +15,9 @@ def test_resolve_service_account_uses_workspace_credentials(sample_jira_dc_works
     token_manager = MagicMock()
     token_manager.decrypt_text.return_value = 'workspace-pat'
 
-    with (
-        patch(
-            'integrations.jira_dc.jira_dc_service_account.JIRA_DC_SERVICE_ACCOUNT_EMAIL',
-            '',
-        ),
-        patch(
-            'integrations.jira_dc.jira_dc_service_account.JIRA_DC_SERVICE_ACCOUNT_PAT',
-            '',
-        ),
+    with patch.dict(
+        os.environ,
+        {'JIRA_DC_SERVICE_ACCOUNT_EMAIL': '', 'JIRA_DC_SERVICE_ACCOUNT_PAT': ''},
     ):
         service_account = resolve_jira_dc_service_account(
             sample_jira_dc_workspace, token_manager
@@ -34,15 +32,12 @@ def test_resolve_service_account_uses_workspace_credentials(sample_jira_dc_works
 def test_resolve_service_account_prefers_env_credentials(sample_jira_dc_workspace):
     token_manager = MagicMock()
 
-    with (
-        patch(
-            'integrations.jira_dc.jira_dc_service_account.JIRA_DC_SERVICE_ACCOUNT_EMAIL',
-            'managed@company.com',
-        ),
-        patch(
-            'integrations.jira_dc.jira_dc_service_account.JIRA_DC_SERVICE_ACCOUNT_PAT',
-            'managed-pat',
-        ),
+    with patch.dict(
+        os.environ,
+        {
+            'JIRA_DC_SERVICE_ACCOUNT_EMAIL': 'managed@company.com',
+            'JIRA_DC_SERVICE_ACCOUNT_PAT': 'managed-pat',
+        },
     ):
         service_account = resolve_jira_dc_service_account(
             sample_jira_dc_workspace, token_manager
@@ -63,14 +58,37 @@ def test_resolve_service_account_prefers_env_credentials(sample_jira_dc_workspac
     ],
 )
 def test_service_account_env_config_errors(email, api_key, expected_error):
-    with (
-        patch(
-            'integrations.jira_dc.jira_dc_service_account.JIRA_DC_SERVICE_ACCOUNT_EMAIL',
-            email,
-        ),
-        patch(
-            'integrations.jira_dc.jira_dc_service_account.JIRA_DC_SERVICE_ACCOUNT_PAT',
-            api_key,
-        ),
+    with patch.dict(
+        os.environ,
+        {
+            'JIRA_DC_SERVICE_ACCOUNT_EMAIL': email,
+            'JIRA_DC_SERVICE_ACCOUNT_PAT': api_key,
+        },
     ):
         assert expected_error in (get_jira_dc_service_account_config_error() or '')
+
+
+def test_get_managed_service_account_raises_typed_config_error():
+    with patch.dict(
+        os.environ,
+        {
+            'JIRA_DC_SERVICE_ACCOUNT_EMAIL': 'managed@company.com',
+            'JIRA_DC_SERVICE_ACCOUNT_PAT': 'managed pat',
+        },
+    ):
+        with pytest.raises(JiraDcServiceAccountConfigError):
+            get_jira_dc_managed_service_account()
+
+
+def test_resolve_service_account_raises_typed_resolution_error(
+    sample_jira_dc_workspace,
+):
+    token_manager = MagicMock()
+    sample_jira_dc_workspace.svc_acc_api_key = ''
+
+    with patch.dict(
+        os.environ,
+        {'JIRA_DC_SERVICE_ACCOUNT_EMAIL': '', 'JIRA_DC_SERVICE_ACCOUNT_PAT': ''},
+    ):
+        with pytest.raises(JiraDcServiceAccountResolutionError):
+            resolve_jira_dc_service_account(sample_jira_dc_workspace, token_manager)

@@ -1,10 +1,12 @@
 import os
-import re
 from datetime import datetime
 from urllib.parse import urlparse
 
 from pydantic import Field
 
+from openhands.app_server.integrations.jira_dc.config import (
+    get_jira_dc_service_account_env_config,
+)
 from openhands.app_server.integrations.provider import ProviderHandler
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.web_client.web_client_config_injector import (
@@ -131,52 +133,22 @@ def _get_jira_dc_oauth_host() -> str | None:
     return urlparse(base_url).hostname or None
 
 
-_JIRA_DC_SERVICE_ACCOUNT_EMAIL_RE = re.compile(
-    r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-)
-
-
-def _get_jira_dc_service_account_env() -> tuple[str, str]:
-    """Return optional env-managed Jira DC service-account credentials."""
-    return (
-        os.getenv('JIRA_DC_SERVICE_ACCOUNT_EMAIL', '').strip(),
-        os.getenv('JIRA_DC_SERVICE_ACCOUNT_PAT', '').strip(),
-    )
-
-
 def _get_jira_dc_service_account_config_error() -> str | None:
     """Return a web-client-safe service-account config error, if any."""
-    email, api_key = _get_jira_dc_service_account_env()
-
-    if bool(email) != bool(api_key):
-        return (
-            'Set both JIRA_DC_SERVICE_ACCOUNT_EMAIL and '
-            'JIRA_DC_SERVICE_ACCOUNT_PAT, or clear both.'
-        )
-
-    if email and not _JIRA_DC_SERVICE_ACCOUNT_EMAIL_RE.match(email):
-        return 'JIRA_DC_SERVICE_ACCOUNT_EMAIL must be a valid email address.'
-
-    if api_key and any(char.isspace() for char in api_key):
-        return 'JIRA_DC_SERVICE_ACCOUNT_PAT cannot contain whitespace.'
-
-    return None
+    return get_jira_dc_service_account_env_config().error
 
 
 def _is_jira_dc_service_account_managed() -> bool:
     """Return whether Jira DC service-account credentials are env-managed."""
-    email, api_key = _get_jira_dc_service_account_env()
-    return (
-        bool(email and api_key) and _get_jira_dc_service_account_config_error() is None
-    )
+    return get_jira_dc_service_account_env_config().is_managed
 
 
 def _get_jira_dc_service_account_email() -> str | None:
     """Return the env-managed service-account email when fully configured."""
-    if not _is_jira_dc_service_account_managed():
+    config = get_jira_dc_service_account_env_config()
+    if not config.is_managed:
         return None
-    email, _ = _get_jira_dc_service_account_env()
-    return email
+    return config.email
 
 
 def _get_feature_flags() -> WebClientFeatureFlags:

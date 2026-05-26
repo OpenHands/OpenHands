@@ -67,6 +67,13 @@ JIRA_DC_WEBHOOK_EVENTS = [
 
 def _extract_workspace_url(payload: Dict) -> str:
     """Return a Jira URL whose host identifies the configured workspace."""
+    for url in _extract_workspace_urls(payload):
+        return url
+    return ''
+
+
+def _extract_workspace_urls(payload: Dict) -> list[str]:
+    """Return Jira URLs whose hosts identify the configured workspace."""
     paths = (
         ('comment', 'author', 'self'),
         ('user', 'self'),
@@ -74,6 +81,7 @@ def _extract_workspace_url(payload: Dict) -> str:
         ('comment', 'self'),
     )
 
+    urls = []
     for path in paths:
         value: object = payload
         for key in path:
@@ -82,9 +90,18 @@ def _extract_workspace_url(payload: Dict) -> str:
             value = value.get(key)
         else:
             if isinstance(value, str) and value:
-                return value
+                urls.append(value)
 
-    return ''
+    return urls
+
+
+def _extract_workspace_hosts(payload: Dict) -> set[str]:
+    """Return hostnames from Jira URLs embedded in a webhook payload."""
+    return {
+        parsed.hostname.lower()
+        for parsed in (urlparse(url) for url in _extract_workspace_urls(payload))
+        if parsed.hostname
+    }
 
 
 class JiraDcManager(Manager[JiraDcViewInterface]):
@@ -177,18 +194,22 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
 
         if workspace_id is not None:
             workspace = await self.integration_store.get_workspace_by_id(workspace_id)
-            parsed_url = urlparse(_extract_workspace_url(payload))
-            if (
-                workspace
-                and parsed_url.hostname
-                and parsed_url.hostname.lower() != workspace.name.lower()
+            payload_hosts = _extract_workspace_hosts(payload)
+            if not payload_hosts:
+                logger.warning(
+                    '[Jira DC] No workspace host found in connection-scoped webhook payload'
+                )
+                return False, None, None, None
+            if workspace and any(
+                host != workspace.name.lower() for host in payload_hosts
             ):
                 logger.warning(
-                    '[Jira DC] Webhook payload host %s does not match connection %s (%s)',
-                    parsed_url.hostname,
+                    '[Jira DC] Webhook payload hosts %s do not match connection %s (%s)',
+                    sorted(payload_hosts),
                     workspace.id,
                     workspace.name,
                 )
+                return False, None, None, None
         else:
             workspace_name = ''
             parsed_url = urlparse(_extract_workspace_url(payload))
