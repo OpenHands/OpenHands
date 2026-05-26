@@ -12,8 +12,8 @@ NULL`` and ``_load_profiles`` treats that as an empty ``LLMProfiles``. The
 first save through the ``/api/organizations/{org_id}/profiles`` endpoints
 populates the column lazily, so no downtime or follow-up script is required.
 
-Revision ID: 115
-Revises: 114
+Revision ID: 116
+Revises: 115
 Create Date: 2025-05-13
 """
 
@@ -22,8 +22,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = '115'
-down_revision: Union[str, None] = '114'
+revision: str = '116'
+down_revision: Union[str, None] = '115'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
