@@ -836,6 +836,44 @@ class TestProviderTokensInEndpoints:
         azure_key = ProviderHandler.get_provider_env_key(ProviderType.AZURE_DEVOPS)
         assert result[azure_key] == 'fresh-token'
 
+    async def test_get_provider_tokens_as_env_vars_continues_after_refresh_error(
+        self,
+    ):
+        """A provider refresh error does not drop unrelated provider tokens."""
+        mock_user_auth = AsyncMock()
+        mock_user_auth.get_provider_tokens = AsyncMock(
+            return_value={
+                ProviderType.AZURE_DEVOPS: ProviderToken(
+                    token=SecretStr('azure-stored-token')
+                ),
+                ProviderType.GITHUB: ProviderToken(token=SecretStr('ghp_test123')),
+            }
+        )
+        ctx = AuthUserContext(user_auth=mock_user_auth)
+
+        async def get_latest_token(provider_type: ProviderType) -> str | None:
+            if provider_type == ProviderType.AZURE_DEVOPS:
+                raise ValueError('token refresh failed')
+            return None
+
+        ctx.get_latest_token = get_latest_token  # type: ignore[method-assign]
+
+        with patch(
+            'openhands.app_server.user.auth_user_context._logger.warning'
+        ) as mock_warning:
+            result = await ctx.get_provider_tokens(as_env_vars=True)
+
+        azure_key = ProviderHandler.get_provider_env_key(ProviderType.AZURE_DEVOPS)
+        gh_key = ProviderHandler.get_provider_env_key(ProviderType.GITHUB)
+        assert result[azure_key] == 'azure-stored-token'
+        assert result[gh_key] == 'ghp_test123'
+        mock_warning.assert_called_once()
+        assert mock_warning.call_args.args[0] == (
+            'Failed to refresh provider token for %s: %s'
+        )
+        assert mock_warning.call_args.args[1] == 'azure_devops'
+        assert isinstance(mock_warning.call_args.args[2], ValueError)
+
     async def test_empty_provider_tokens_excluded(self):
         """Provider tokens with empty token values are excluded."""
         mock_user_auth = AsyncMock()

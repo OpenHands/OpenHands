@@ -859,6 +859,40 @@ async def test_clone_or_init_git_repo_configures_dynamic_azure_devops_helper(
 
 
 @pytest.mark.asyncio
+async def test_azure_devops_git_credential_helper_logs_without_web_url(
+    mock_workspace,
+):
+    user_info = MockUserInfo()
+    service, _ = _create_service_with_mock_user_context(
+        user_info,
+        bind_methods=('_configure_azure_devops_git_credential_helper',),
+    )
+    service.web_url = None
+    sandbox = SandboxInfo(
+        id='sandbox-123',
+        created_by_user_id='user-123',
+        sandbox_spec_id='spec-123',
+        status=SandboxStatus.RUNNING,
+        session_api_key='session-key',
+    )
+
+    with patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base._logger.debug'
+    ) as mock_debug:
+        await service._configure_azure_devops_git_credential_helper(
+            mock_workspace,
+            Path(mock_workspace.working_dir),
+            'org/project/repo',
+            sandbox,
+        )
+
+    mock_debug.assert_called_once_with(
+        'Azure DevOps git credential helper has no configured web_url; '
+        'it will rely on OH_WEBHOOKS_0_BASE_URL at runtime.'
+    )
+
+
+@pytest.mark.asyncio
 async def test_configure_git_user_settings_both_name_and_email(mock_workspace):
     """Test configuring both git user name and email."""
     user_info = MockUserInfo(

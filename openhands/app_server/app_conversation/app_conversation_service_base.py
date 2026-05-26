@@ -442,6 +442,11 @@ class AppConversationServiceBase(AppConversationService, ABC):
             f'/api/v1/sandboxes/{sandbox.id}/settings/secrets/azure_devops_token'
         )
         web_url = getattr(self, 'web_url', None)
+        if web_url is None:
+            _logger.debug(
+                'Azure DevOps git credential helper has no configured web_url; '
+                'it will rely on OH_WEBHOOKS_0_BASE_URL at runtime.'
+            )
         app_base_url = shlex.quote(web_url if isinstance(web_url, str) else '')
         helper_script = f"""#!/bin/sh
 if [ "$1" != "get" ]; then

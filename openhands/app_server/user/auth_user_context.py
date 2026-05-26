@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, AsyncGenerator
@@ -20,6 +21,7 @@ from openhands.app_server.user_auth.user_auth import UserAuth, get_user_auth
 from openhands.sdk.secret import SecretSource, StaticSecret
 
 USER_AUTH_ATTR = 'user_auth'
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -71,7 +73,15 @@ class AuthUserContext(UserContext):
         if provider_tokens:
             for provider_type, provider_token in provider_tokens.items():
                 env_key = ProviderHandler.get_provider_env_key(provider_type)
-                latest_token = await self.get_latest_token(provider_type)
+                try:
+                    latest_token = await self.get_latest_token(provider_type)
+                except Exception as exc:
+                    _logger.warning(
+                        'Failed to refresh provider token for %s: %s',
+                        provider_type.value,
+                        exc,
+                    )
+                    latest_token = None
                 if latest_token:
                     results[env_key] = latest_token
                 elif provider_token.token:
