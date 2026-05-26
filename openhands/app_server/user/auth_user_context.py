@@ -36,6 +36,9 @@ class AuthUserContext(UserContext):
         user_id = await self.user_auth.get_user_id()
         return user_id
 
+    async def get_user_email(self) -> str | None:
+        return await self.user_auth.get_user_email()
+
     async def get_user_info(self) -> UserInfo:
         user_info = self._user_info
         if user_info is None:

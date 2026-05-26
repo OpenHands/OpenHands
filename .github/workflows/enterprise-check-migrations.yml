@@ -17,14 +17,19 @@ jobs:
 
 
       - name: Fetch base branch
-        run: git fetch origin ${{ github.event.pull_request.base.ref }}
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: git fetch origin "$BASE_REF"
 
       - name: Check if base branch is ancestor of PR
         id: check_up_to_date
         shell: bash
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          BASE="origin/${{ github.event.pull_request.base.ref }}"
-          HEAD="${{ github.event.pull_request.head.sha }}"
+          BASE="origin/${BASE_REF}"
+          HEAD="$HEAD_SHA"
           if git merge-base --is-ancestor "$BASE" "$HEAD"; then
             echo "We're up to date with base $BASE"
             exit 0
@@ -34,7 +39,7 @@ jobs:
           fi
 
       - name: Find Comment
-        uses: peter-evans/find-comment@v4
+        uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4
         id: find-comment
         with:
           issue-number: ${{ github.event.pull_request.number }}
@@ -43,7 +48,7 @@ jobs:
             ⚠️ This PR contains **migrations**
 
       - name: Comment warning on PR
-        uses: peter-evans/create-or-update-comment@v5
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-id: ${{ steps.find-comment.outputs.comment-id }}

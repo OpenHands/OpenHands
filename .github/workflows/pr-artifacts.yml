@@ -23,8 +23,11 @@ jobs:
         steps:
             - name: Check if fork PR
               id: check-fork
+              env:
+                  HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+                  BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
               run: |
-                  if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.event.pull_request.base.repo.full_name }}" ]; then
+                  if [ "$HEAD_REPO" != "$BASE_REPO" ]; then
                     echo "is_fork=true" >> $GITHUB_OUTPUT
                     echo "::notice::Fork PR detected - skipping auto-cleanup (manual removal required)"
                   else

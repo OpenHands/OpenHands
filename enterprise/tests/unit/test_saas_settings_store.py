@@ -575,22 +575,26 @@ async def test_store_keeps_openhands_managed_keys_member_specific(
 
 
 @pytest.mark.asyncio
-async def test_store_saves_mcp_config_in_agent_settings(
+async def test_store_keeps_mcp_config_private_to_acting_member(
     session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
-    """mcp_config now flows through agent_settings / agent_settings_diff,
-    so it is persisted on both the org and all members."""
+    """A member's MCP servers must stay scoped to that member's row.
+
+    After Member 1 saves an mcp_config, no other org member sees those
+    servers on load, and ``org.agent_settings`` carries no mcp_config so
+    new joiners don't inherit them via the org defaults.
+    """
     from sqlalchemy import select
     from storage.org import Org
     from storage.org_member import OrgMember
 
+    # Arrange
     fixture = org_with_multiple_members_fixture
     org_id = fixture['org_id']
     admin_user_id = str(fixture['admin_user_id'])
     member1_user_id = str(fixture['member1_user_id'])
     member2_user_id = str(fixture['member2_user_id'])
 
-    store = SaasSettingsStore(admin_user_id)
     user_mcp_config = {
         'mcpServers': {
             'user1': {'url': 'https://user1-mcp-server.com', 'transport': 'sse'}
@@ -610,14 +614,15 @@ async def test_store_saves_mcp_config_in_agent_settings(
         }
     )
 
+    # Act — Member 1 (admin) saves the mcp_config
+    store = SaasSettingsStore(admin_user_id)
     with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
         await store.store(new_settings)
 
+    # Assert — only the acting member's row carries mcp_config; org and
+    # other members do not.
     with session_maker() as session:
         org = session.execute(select(Org).where(Org.id == org_id)).scalars().first()
-        assert org is not None
-        assert org.agent_settings.get('mcp_config') == user_mcp_config
-
         members = {
             str(m.user_id): m
             for m in session.execute(
@@ -626,18 +631,13 @@ async def test_store_saves_mcp_config_in_agent_settings(
             .scalars()
             .all()
         }
-        assert (
-            members[admin_user_id].agent_settings_diff.get('mcp_config')
-            == user_mcp_config
-        )
-        assert (
-            members[member1_user_id].agent_settings_diff.get('mcp_config')
-            == user_mcp_config
-        )
-        assert (
-            members[member2_user_id].agent_settings_diff.get('mcp_config')
-            == user_mcp_config
-        )
+
+    assert 'mcp_config' not in org.agent_settings
+    assert (
+        members[admin_user_id].agent_settings_diff.get('mcp_config') == user_mcp_config
+    )
+    assert 'mcp_config' not in members[member1_user_id].agent_settings_diff
+    assert 'mcp_config' not in members[member2_user_id].agent_settings_diff
 
 
 @pytest.mark.asyncio
@@ -762,6 +762,60 @@ async def test_store_and_load_mcp_config_via_agent_settings(
         loaded.agent_settings.mcp_config.mcpServers['admin'].url
         == 'https://admin-private-server.com'
     )
+
+
+@pytest.mark.asyncio
+async def test_load_drops_legacy_org_level_mcp_config(
+    session_maker, async_session_maker, org_with_multiple_members_fixture
+):
+    """Legacy org-level mcp_config (from before the fix) must not leak
+    to members on load. Members without their own mcp_config see ``None``
+    even if the org row still carries a stale value in the database.
+    """
+    from sqlalchemy import select
+    from storage.org import Org
+    from storage.user import User
+
+    # Arrange — simulate pre-fix data: org carries an mcp_config that
+    # was broadcast at the org level. member1 has no mcp_config of their
+    # own.
+    fixture = org_with_multiple_members_fixture
+    org_id = fixture['org_id']
+    member1_user_id = str(fixture['member1_user_id'])
+
+    legacy_org_mcp_config = {
+        'mcpServers': {
+            'leaked': {'url': 'https://leaked-server.com', 'transport': 'sse'}
+        },
+    }
+    with session_maker() as session:
+        org = session.execute(select(Org).where(Org.id == org_id)).scalars().first()
+        org.agent_settings = {
+            'agent_kind': 'openhands',
+            'mcp_config': legacy_org_mcp_config,
+        }
+        # Populate the nullable bool defaults that the Settings model
+        # requires non-None when load() rebuilds the Settings object.
+        user = (
+            session.execute(select(User).where(User.id == fixture['member1_user_id']))
+            .scalars()
+            .first()
+        )
+        user.enable_sound_notifications = False
+        session.commit()
+
+    # Act
+    store = SaasSettingsStore(member1_user_id)
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+    ):
+        loaded = await store.load()
+
+    # Assert — legacy org mcp_config is not inherited by member1
+    assert loaded is not None
+    assert loaded.agent_settings.mcp_config is None
 
 
 @pytest.mark.asyncio
@@ -940,3 +994,90 @@ async def test_llm_profiles_are_encrypted_at_rest(
         ).scalar_one()
     assert user.llm_profiles is not None
     assert user.llm_profiles['profiles']['work']['api_key'] == 'super-secret-byok'
+
+
+@pytest.mark.asyncio
+async def test_store_replaces_mcp_config_on_delete(
+    session_maker, async_session_maker, org_with_multiple_members_fixture
+):
+    """Deleting a server from a member's mcp_config sticks on the acting
+    member's row and never touches other members' rows.
+
+    Combines the APP-1862 wholesale-replacement contract (deletes are not
+    resurrected by deep_merge) with the per-member privacy contract.
+    """
+    from sqlalchemy import select
+    from storage.org_member import OrgMember
+
+    # Arrange — Member 1 (admin) starts with 3 MCP servers
+    fixture = org_with_multiple_members_fixture
+    org_id = fixture['org_id']
+    admin_user_id = str(fixture['admin_user_id'])
+    member1_user_id = str(fixture['member1_user_id'])
+
+    store = SaasSettingsStore(admin_user_id)
+    initial_mcp_config = {
+        'mcpServers': {
+            'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+            'server2': {'url': 'https://server2.com', 'transport': 'sse'},
+            'server3': {'url': 'https://server3.com', 'transport': 'sse'},
+        },
+    }
+    initial_settings = DataSettings()
+    initial_settings.update(
+        {
+            'agent_settings_diff': {
+                'llm': {
+                    'model': 'test-model',
+                    'base_url': 'http://test-url.com',
+                    'api_key': 'test-key',
+                },
+                'mcp_config': initial_mcp_config,
+            },
+        }
+    )
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await store.store(initial_settings)
+
+    # Act — re-save with server3 removed
+    updated_mcp_config = {
+        'mcpServers': {
+            'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+            'server2': {'url': 'https://server2.com', 'transport': 'sse'},
+        },
+    }
+    updated_settings = DataSettings()
+    updated_settings.update(
+        {
+            'agent_settings_diff': {
+                'llm': {
+                    'model': 'test-model',
+                    'base_url': 'http://test-url.com',
+                    'api_key': 'test-key',
+                },
+                'mcp_config': updated_mcp_config,
+            },
+        }
+    )
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await store.store(updated_settings)
+
+    # Assert — server3 is gone from the acting member; other members were
+    # never touched by either save.
+    with session_maker() as session:
+        members = {
+            str(m.user_id): m
+            for m in session.execute(
+                select(OrgMember).where(OrgMember.org_id == org_id)
+            )
+            .scalars()
+            .all()
+        }
+
+    admin_servers = (
+        members[admin_user_id]
+        .agent_settings_diff.get('mcp_config', {})
+        .get('mcpServers', {})
+    )
+    assert set(admin_servers.keys()) == {'server1', 'server2'}
+    assert 'mcp_config' not in members[member1_user_id].agent_settings_diff

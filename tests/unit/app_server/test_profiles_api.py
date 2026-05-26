@@ -28,7 +28,7 @@ from openhands.app_server.settings.settings_router import _user_profile_locks
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.sdk.llm import LLM
-from openhands.sdk.settings import AgentSettings
+from openhands.sdk.settings import OpenHandsAgentSettings
 
 
 @pytest.fixture(autouse=True)
@@ -115,7 +115,7 @@ def test_client(settings_store):
 def _base_settings() -> Settings:
     """A Settings instance with an LLM configured so 'snapshot current' works."""
     return Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(
                 model='openai/gpt-4o',
                 api_key=SecretStr('sk-current'),

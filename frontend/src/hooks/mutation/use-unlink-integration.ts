@@ -21,8 +21,14 @@ export function useUnlinkIntegration(
   const { t } = useTranslation();
 
   return useMutation({
-    mutationFn: () =>
-      openHands.post(`/integration/${platform}/workspaces/unlink`),
+    // adminApiKey is Jira DC only: a workspace admin tearing the integration
+    // down may pass a one-time PAT so the Jira webhook is revoked too. Never
+    // stored. Omitted for the non-admin self-disconnect path.
+    mutationFn: (adminApiKey?: string) =>
+      openHands.post(
+        `/integration/${platform}/workspaces/unlink`,
+        adminApiKey ? { admin_api_key: adminApiKey } : {},
+      ),
     onSuccess: () => {
       displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
       queryClient.invalidateQueries({
