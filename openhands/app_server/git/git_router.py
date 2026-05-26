@@ -240,25 +240,26 @@ async def search_branches(
 
     page = 1
     decoded_page_id = decode_page_id(page_id)
+
     if decoded_page_id is not None:
         page = decoded_page_id
 
-    
-        # Get search results - we'll handle pagination ourselves
+    if query:
         branches: list[Branch] = await client.search_branches(
             selected_provider=provider,
             repository=repository,
             query=query,
             per_page=limit + 1,
-            page=page
+            page=page,
         )
     else:
         current_page = await client.get_branches(
             repository=repository,
             specified_provider=provider,
-            page=page,
             per_page=limit + 1,
+            page=page,
         )
+
         branches = current_page.branches
 
     next_page_id = None
