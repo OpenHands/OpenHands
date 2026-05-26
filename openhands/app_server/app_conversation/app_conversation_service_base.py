@@ -425,6 +425,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
             if download_result.success:
                 _logger.info('Preserving existing pre-commit hook')
                 # an existing pre-commit hook exists
+                temp_file.seek(0)
                 if 'This hook was installed by OpenHands' not in temp_file.read():
                     # Move the existing hook to pre-commit.local
                     command = (

@@ -605,9 +605,6 @@ class RemoteSandboxService(SandboxService):
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
             if not stored_sandbox:
                 return False
-            # Deleting the record also removes the session_api_key_hash,
-            # which invalidates any leaked session keys.
-            await self.db_session.delete(stored_sandbox)
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
                 'POST',
@@ -616,6 +613,12 @@ class RemoteSandboxService(SandboxService):
             )
             if response.status_code != 404:
                 response.raise_for_status()
+            # Delete the record only after the remote stop succeeds, so that
+            # a failed API call does not leave the sandbox running without a
+            # DB record (unrecoverable inconsistent state).
+            # Deleting the record also removes the session_api_key_hash,
+            # which invalidates any leaked session keys.
+            await self.db_session.delete(stored_sandbox)
             return True
         except httpx.HTTPError as e:
             _logger.error(f'Error deleting sandbox {sandbox_id}: {e}')
