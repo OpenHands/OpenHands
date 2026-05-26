@@ -212,13 +212,13 @@ class TestLocalUserQueries:
 
         assert users == [
             ResendUser(
-                id=UUID('00000000-0000-0000-0000-000000000001'),
+                id='00000000-0000-0000-0000-000000000001',
                 email='ada@example.com',
                 first_name='Ada',
                 last_name='Lovelace',
             ),
             ResendUser(
-                id=UUID('00000000-0000-0000-0000-000000000004'),
+                id='00000000-0000-0000-0000-000000000004',
                 email='prince@example.com',
                 first_name='Prince',
                 last_name=None,
