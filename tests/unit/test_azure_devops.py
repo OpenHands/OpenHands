@@ -125,3 +125,26 @@ async def test_azure_devops_get_repository_details():
         assert repo.id == 'repo1'
         assert repo.full_name == 'myorg/Project1/Repo1'
         assert repo.git_provider == ProviderType.AZURE_DEVOPS
+
+
+@pytest.mark.parametrize(
+    'token,expected',
+    [
+        ('header.payload.signature', True),
+        ('a.b.c', True),
+        ('pat_token_123', False),
+        ('', False),
+        ('a..c', False),
+        ('a.b', False),
+        ('a.b.c.d', False),
+    ],
+)
+@pytest.mark.asyncio
+async def test_azure_devops_is_oauth_token(token, expected):
+    """Test OAuth JWT vs PAT detection for auth header selection."""
+    service = AzureDevOpsService(
+        user_id='test_user',
+        token=None,
+        base_domain='myorg',
+    )
+    assert service._is_oauth_token(token) is expected
