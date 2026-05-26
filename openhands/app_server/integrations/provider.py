@@ -327,12 +327,13 @@ class ProviderHandler:
         repository: str,
         query: str,
         per_page: int = 30,
+        page: int=1
     ) -> list[Branch]:
         """Search for branches within a repository using the appropriate provider service."""
         if selected_provider:
             service = self.get_service(selected_provider)
             try:
-                return await service.search_branches(repository, query, per_page)
+                return await service.search_branches(repository, query, per_page, page)
             except Exception as e:
                 logger.warning(
                     f'Error searching branches from selected provider {selected_provider}: {e}'
