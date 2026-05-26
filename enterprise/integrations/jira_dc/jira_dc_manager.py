@@ -24,6 +24,7 @@ from integrations.utils import (
     get_account_not_linked_message,
     get_session_expired_message,
     get_user_not_found_message,
+    infer_repo_from_message,
     markdown_to_jira_markup,
 )
 from jinja2 import Environment, FileSystemLoader
@@ -444,6 +445,7 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             )
 
             target_str = f'{jira_dc_view.job_context.issue_description}\n{jira_dc_view.job_context.user_msg}'
+            mentioned_repos = infer_repo_from_message(target_str)
 
             # Try to infer repository from issue description
             match, repos = filter_potential_repos_by_user_msg(target_str, user_repos)
@@ -455,7 +457,17 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
                 return True
             else:
                 # No clear match - send repository selection comment
-                await self._send_repo_selection_comment(jira_dc_view)
+                matched_repos = [
+                    repo
+                    for repo in user_repos
+                    if any(
+                        mentioned_repo.lower() in repo.full_name.lower()
+                        for mentioned_repo in mentioned_repos
+                    )
+                ]
+                await self._send_repo_selection_comment(
+                    jira_dc_view, mentioned_repos, matched_repos
+                )
                 return False
 
         except Exception as e:
@@ -830,13 +842,35 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         except Exception as e:
             logger.error(f'[Jira DC] Failed to send error comment: {str(e)}')
 
-    async def _send_repo_selection_comment(self, jira_dc_view: JiraDcViewInterface):
+    async def _send_repo_selection_comment(
+        self,
+        jira_dc_view: JiraDcViewInterface,
+        mentioned_repos: list[str] | None = None,
+        matched_repos: list[Repository] | None = None,
+    ):
         """Send a comment with repository options for the user to choose."""
         try:
-            comment_msg = (
-                'I need to know which repository to work with. '
-                'Please add it to your issue description or send a followup comment.'
-            )
+            mentioned_repos = mentioned_repos or []
+            matched_repo_names = [repo.full_name for repo in matched_repos or []]
+            if not mentioned_repos:
+                comment_msg = (
+                    'Could not determine which repository to use. '
+                    'Please mention the repository (e.g., owner/repo) in the issue '
+                    'description or comment.'
+                )
+            elif len(matched_repo_names) > 1:
+                comment_msg = (
+                    f'Multiple repositories found: {", ".join(matched_repo_names)}. '
+                    'Please specify exactly one repository in the issue description '
+                    'or comment.'
+                )
+            else:
+                comment_msg = (
+                    f'Could not access any of the mentioned repositories: '
+                    f'{", ".join(mentioned_repos)}. '
+                    'Please ensure your OpenHands account has access to the '
+                    'repository and it exists.'
+                )
 
             service_account = resolve_jira_dc_service_account(
                 jira_dc_view.jira_dc_workspace, self.token_manager

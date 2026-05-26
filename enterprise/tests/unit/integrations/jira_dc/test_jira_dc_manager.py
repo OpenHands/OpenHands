@@ -904,7 +904,7 @@ class TestIsJobRequested:
 
             assert result is False
             jira_dc_manager._send_repo_selection_comment.assert_called_once_with(
-                mock_view
+                mock_view, [], []
             )
 
     @pytest.mark.asyncio
@@ -1448,7 +1448,33 @@ class TestSendRepoSelectionComment:
 
         jira_dc_manager.send_message.assert_called_once()
         call_args = jira_dc_manager.send_message.call_args[0]
-        assert 'which repository to work with' in call_args[0]
+        assert 'Could not determine which repository to use' in call_args[0]
+
+    @pytest.mark.asyncio
+    async def test_send_repo_selection_comment_repo_inaccessible(
+        self, jira_dc_manager, sample_jira_dc_workspace
+    ):
+        """Test repository selection comment when mentioned repos are inaccessible."""
+        mock_view = MagicMock(spec=JiraDcViewInterface)
+        mock_view.jira_dc_workspace = sample_jira_dc_workspace
+        mock_view.job_context = MagicMock()
+        mock_view.job_context.issue_key = 'PROJ-123'
+        mock_view.job_context.base_api_url = 'https://jira.company.com'
+
+        jira_dc_manager.send_message = AsyncMock()
+        jira_dc_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
+
+        await jira_dc_manager._send_repo_selection_comment(
+            mock_view, ['company/repo'], []
+        )
+
+        jira_dc_manager.send_message.assert_called_once()
+        call_args = jira_dc_manager.send_message.call_args[0]
+        assert (
+            'Could not access any of the mentioned repositories: company/repo'
+            in call_args[0]
+        )
+        assert 'OpenHands account has access' in call_args[0]
 
     @pytest.mark.asyncio
     async def test_send_repo_selection_comment_send_fails(
