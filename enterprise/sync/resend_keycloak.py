@@ -110,11 +110,7 @@ def get_local_users(offset: int = 0, limit: int = 100) -> list[ResendUser]:
             .limit(limit)
         ).all()
 
-    return [
-        ResendUser(id=str(row.id), email=row.email)
-        for row in rows
-        if row.email
-    ]
+    return [ResendUser(id=str(row.id), email=row.email) for row in rows if row.email]
 
 
 def get_total_local_users() -> int:
@@ -145,6 +141,7 @@ def is_valid_email(email: Optional[str]) -> bool:
     if not email:
         return False
     return bool(EMAIL_REGEX.match(email))
+
 
 def get_resend_contacts(audience_id: str) -> Dict[str, Dict[str, Any]]:
     """Get contacts from Resend.
