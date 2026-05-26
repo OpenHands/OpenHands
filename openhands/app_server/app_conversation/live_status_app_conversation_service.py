@@ -102,6 +102,7 @@ from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ACPAgentSettings
 from openhands.sdk.subagent import get_registered_agent_definitions
+from openhands.sdk.tool.builtins import SwitchLLMTool
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.utils.redact import (
     redact_api_key_literals,
@@ -1446,6 +1447,36 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             }
         )
         agent = configured_agent_settings.create_agent()
+
+        # TODO: delete this SaaS-only override once the agent-server can resolve
+        # saved profiles itself (e.g. create_agent() honoring the profiles seeded
+        # into the sandbox, or an explicit flag) so has_llm_profiles() works for
+        # SaaS — at which point the SDK's own gating is enough.
+        #
+        # Until then, enable the agent's built-in switch_llm tool ourselves.
+        # AgentSettings.create_agent() gates it on has_llm_profiles(), which
+        # probes the app-server's local filesystem — but in SaaS the profiles
+        # live on the user record (and are seeded into the sandbox before the
+        # conversation starts), so that probe always sees none. Enable the tool
+        # whenever there are at least two valid saved profiles (a switch needs a
+        # target).
+        valid_profile_names = [
+            name
+            for name in user.llm_profiles.profiles
+            if PROFILE_NAME_REGEX.match(name)
+        ]
+        if (
+            len(valid_profile_names) >= 2
+            and SwitchLLMTool.__name__ not in agent.include_default_tools
+        ):
+            agent = agent.model_copy(
+                update={
+                    'include_default_tools': [
+                        *agent.include_default_tools,
+                        SwitchLLMTool.__name__,
+                    ]
+                }
+            )
 
         agent = self._apply_server_agent_overrides(
             agent, agent_type, mcp_config, conversation_id, user.id
