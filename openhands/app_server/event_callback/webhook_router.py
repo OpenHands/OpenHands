@@ -426,6 +426,31 @@ async def on_event(
                     event, conversation_id
                 )
 
+        # Reflect an agent-initiated LLM switch (via the built-in SwitchLLMTool)
+        # on the conversation record. ``switch_profile`` mutates ``state.agent``
+        # inside the sandbox, emitting a key='agent' state update; unlike the
+        # explicit switch_profile route, nothing else persists the new model
+        # here, so the chat header and switch-profile button would otherwise
+        # stay stale until the next full conversation-info webhook (which only
+        # fires on start/pause/interrupt/delete, never mid-run).
+        switched_model: str | None = None
+        for event in events:
+            if (
+                isinstance(event, ConversationStateUpdateEvent)
+                and event.key == 'agent'
+                and isinstance(event.value, dict)
+            ):
+                llm = event.value.get('llm')
+                if isinstance(llm, dict) and llm.get('model'):
+                    switched_model = llm['model']
+        if switched_model and app_conversation_info.llm_model != switched_model:
+            info = await app_conversation_info_service.get_app_conversation_info(
+                conversation_id
+            )
+            if info is not None and info.llm_model != switched_model:
+                info.llm_model = switched_model
+                await app_conversation_info_service.save_app_conversation_info(info)
+
         # Analytics: conversation terminal state detection
         for event in events:
             if not isinstance(event, ConversationStateUpdateEvent):

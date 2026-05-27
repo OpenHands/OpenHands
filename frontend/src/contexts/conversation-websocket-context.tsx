@@ -24,6 +24,7 @@ import {
   isFullStateConversationStateUpdateEvent,
   isAgentStatusConversationStateUpdateEvent,
   isStatsConversationStateUpdateEvent,
+  isAgentConversationStateUpdateEvent,
   isExecuteBashActionEvent,
   isExecuteBashObservationEvent,
   isDisplayableErrorEvent,
@@ -453,6 +454,15 @@ export function ConversationWebSocketProvider({
             }
             if (isStatsConversationStateUpdateEvent(event)) {
               updateMetricsFromStats(event);
+            }
+            // The agent switched its own LLM (via the built-in switch_llm
+            // tool). Refetch the conversation so `llm_model` updates the chat
+            // header and lets the switch-profile button re-resolve the active
+            // profile by model.
+            if (isAgentConversationStateUpdateEvent(event) && conversationId) {
+              queryClient.invalidateQueries({
+                queryKey: ["user", "conversation", conversationId],
+              });
             }
           }
 
