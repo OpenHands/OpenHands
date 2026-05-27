@@ -22,9 +22,6 @@ export type FrontendAnalyticsEvent =
       event_type: "create pr button clicked";
       git_provider: Provider | null;
     };
-  event_type: "create pr button clicked";
-  git_provider: Provider | null;
-};
 
 export const analyticsEventsService = {
   /**
