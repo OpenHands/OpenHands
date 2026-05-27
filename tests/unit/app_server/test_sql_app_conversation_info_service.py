@@ -10,6 +10,7 @@ from typing import AsyncGenerator
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -559,6 +560,35 @@ class TestSQLAppConversationInfoService:
 
         # Verify other fields remain unchanged
         assert retrieved_info.sandbox_id == sample_conversation_info.sandbox_id
+
+    @pytest.mark.asyncio
+    async def test_save_conversation_info_retries_after_integrity_error(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        service: SQLAppConversationInfoService,
+        sample_conversation_info: AppConversationInfo,
+    ):
+        """Duplicate-key races during startup should not drop metadata saves."""
+        original_commit = service.db_session.commit
+        calls = 0
+
+        async def flaky_commit():
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise IntegrityError('insert conversation_metadata', {}, Exception())
+            await original_commit()
+
+        monkeypatch.setattr(service.db_session, 'commit', flaky_commit)
+
+        await service.save_app_conversation_info(sample_conversation_info)
+
+        retrieved_info = await service.get_app_conversation_info(
+            sample_conversation_info.id
+        )
+        assert calls == 2
+        assert retrieved_info is not None
+        assert retrieved_info.title == sample_conversation_info.title
 
     @pytest.mark.asyncio
     async def test_search_with_invalid_page_id(
