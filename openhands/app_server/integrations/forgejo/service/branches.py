@@ -68,7 +68,7 @@ class ForgejoBranchesMixin(ForgejoMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self, repository: str, query: str, per_page: int = 30, page: int=1
     ) -> list[Branch]:  # type: ignore[override]
         all_branches = await self.get_branches(repository)
         lowered = query.lower()

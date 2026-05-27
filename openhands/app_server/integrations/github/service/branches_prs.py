@@ -103,7 +103,7 @@ class GitHubBranchesMixin(GitHubMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self, repository: str, query: str, per_page: int = 30, page: int=1
     ) -> list[Branch]:
         """Search branches by name using GitHub GraphQL with a partial query."""
         # Require a non-empty query

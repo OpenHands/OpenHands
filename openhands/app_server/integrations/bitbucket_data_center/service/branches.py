@@ -72,7 +72,7 @@ class BitbucketDCBranchesMixin(BitbucketDCMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self, repository: str, query: str, per_page: int = 30, page: int=1
     ) -> list[Branch]:
         """Search branches by name using Bitbucket data center API with `q` param."""
         owner, repo = self._extract_owner_and_repo(repository)
