@@ -2,15 +2,6 @@ name: 'Test: Ota contract matrix'
 
 on:
   workflow_dispatch:
-    inputs:
-      ota_repository:
-        description: Ota source repository to build for this matrix run
-        required: false
-        default: bobaikato/ota
-      ota_ref:
-        description: Ota branch, tag, or commit to build for this matrix run
-        required: false
-        default: bobai/gap3-smoke-verdict-contract
   pull_request:
     paths:
       - 'ota.yaml'
@@ -84,11 +75,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y netcat-openbsd
 
-      - name: Install ota from source
-        uses: bobaikato/ota/.github/actions/install-ota-from-source@bobai/gap3-smoke-verdict-contract
+      - name: Install ota
+        uses: ota-run/setup@v1
         with:
-          repository: ${{ github.event.inputs.ota_repository || 'bobaikato/ota' }}
-          ref: ${{ github.event.inputs.ota_ref || 'bobai/gap3-smoke-verdict-contract' }}
+          ota-version: '1.6.17'
 
       - name: Validate contract
         shell: bash
