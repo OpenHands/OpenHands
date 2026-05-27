@@ -62,7 +62,7 @@ class ProviderToken(BaseModel):
             return token_value
         elif isinstance(token_value, dict):
             token_str = token_value.get('token', '')
-            # Override with emtpy string if it was set to None
+            # Override with empty string if it was set to None
             # Cannot pass None to SecretStr
             if token_str is None:
                 token_str = ''  # type: ignore[unreachable]
