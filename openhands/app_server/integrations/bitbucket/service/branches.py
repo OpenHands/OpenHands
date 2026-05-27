@@ -103,7 +103,7 @@ class BitBucketBranchesMixin(BitBucketMixinBase):
             'pagelen': per_page,
             'q': f'name~"{query}"',
             'sort': '-target.date',
-            'page': page
+            'page': page,
         }
         response, _ = await self._make_request(url, params)
 

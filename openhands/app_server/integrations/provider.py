@@ -327,7 +327,7 @@ class ProviderHandler:
         repository: str,
         query: str,
         per_page: int = 30,
-        page: int = 1
+        page: int = 1,
     ) -> list[Branch]:
         """Search for branches within a repository using the appropriate provider service."""
         if selected_provider:
