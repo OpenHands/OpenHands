@@ -678,6 +678,35 @@ class TestLiveStatusAppConversationService:
         assert llm.extended_thinking_budget is None
 
     @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_preserves_user_llm_options(self):
+        self.mock_user.agent_settings = Settings(
+            agent_settings={
+                'llm': {
+                    'model': 'anthropic/claude-opus-4-7',
+                    'api_key': 'test-key',
+                    'base_url': 'https://sdk-llm.example.com',
+                    'drop_params': False,
+                    'extended_thinking_budget': 12345,
+                    'max_output_tokens': 2048,
+                    'reasoning_effort': None,
+                }
+            }
+        ).agent_settings
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, None, self.conversation_id
+        )
+
+        assert llm.model == 'anthropic/claude-opus-4-7'
+        assert llm.base_url == 'https://sdk-llm.example.com'
+        assert llm.drop_params is False
+        assert llm.extended_thinking_budget == 12345
+        assert llm.max_output_tokens == 2048
+        assert llm.reasoning_effort is None
+        assert llm.usage_id == 'agent'
+
+    @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_openhands_model_uses_user_base_url(
         self,
     ):
