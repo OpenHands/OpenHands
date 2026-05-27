@@ -10,6 +10,7 @@ from typing import AsyncGenerator
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -559,6 +560,51 @@ class TestSQLAppConversationInfoService:
 
         # Verify other fields remain unchanged
         assert retrieved_info.sandbox_id == sample_conversation_info.sandbox_id
+
+    @pytest.mark.asyncio
+    async def test_save_retries_after_metadata_insert_race(
+        self,
+        service: SQLAppConversationInfoService,
+        sample_conversation_info: AppConversationInfo,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        original_commit = service.db_session.commit
+        original_rollback = service.db_session.rollback
+        commit_calls = 0
+        rollback_calls = 0
+
+        async def commit_once_with_integrity_error():
+            nonlocal commit_calls
+            commit_calls += 1
+            if commit_calls == 1:
+                raise IntegrityError(
+                    'insert conversation_metadata',
+                    {},
+                    Exception('duplicate key value violates unique constraint'),
+                )
+            await original_commit()
+
+        async def track_rollback():
+            nonlocal rollback_calls
+            rollback_calls += 1
+            await original_rollback()
+
+        monkeypatch.setattr(
+            service.db_session, 'commit', commit_once_with_integrity_error
+        )
+        monkeypatch.setattr(service.db_session, 'rollback', track_rollback)
+
+        saved_info = await service.save_app_conversation_info(sample_conversation_info)
+
+        assert saved_info.id == sample_conversation_info.id
+        assert commit_calls == 2
+        assert rollback_calls == 1
+
+        retrieved_info = await service.get_app_conversation_info(
+            sample_conversation_info.id
+        )
+        assert retrieved_info is not None
+        assert retrieved_info.title == sample_conversation_info.title
 
     @pytest.mark.asyncio
     async def test_search_with_invalid_page_id(
