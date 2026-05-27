@@ -8,6 +8,7 @@ import {
   PlanningFileEditorObservation,
   TerminalObservation,
   BrowserObservation,
+  SwitchLLMObservation,
   BrowserNavigateAction,
 } from "./core";
 import { AgentErrorEvent } from "./core/events/observation-event";
@@ -15,7 +16,6 @@ import { MessageEvent } from "./core/events/message-event";
 import { ActionEvent } from "./core/events/action-event";
 import {
   ConversationStateUpdateEvent,
-  ConversationStateUpdateEventAgent,
   ConversationStateUpdateEventAgentStatus,
   ConversationStateUpdateEventFullState,
   ConversationStateUpdateEventStats,
@@ -188,9 +188,15 @@ export const isStatsConversationStateUpdateEvent = (
   event: ConversationStateUpdateEvent,
 ): event is ConversationStateUpdateEventStats => event.key === "stats";
 
-export const isAgentConversationStateUpdateEvent = (
-  event: ConversationStateUpdateEvent,
-): event is ConversationStateUpdateEventAgent => event.key === "agent";
+/**
+ * Type guard function to check if an observation event is a SwitchLLMObservation
+ * (emitted when the agent switches its LLM via the built-in switch_llm tool).
+ */
+export const isSwitchLLMObservationEvent = (
+  event: OpenHandsEvent,
+): event is ObservationEvent<SwitchLLMObservation> =>
+  isObservationEvent(event) &&
+  event.observation.kind === "SwitchLLMObservation";
 
 /**
  * Type guard function to check if an event is a conversation error event

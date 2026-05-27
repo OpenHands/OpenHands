@@ -76,23 +76,12 @@ interface ConversationStateUpdateEventBase extends BaseEvent {
    * Unique key for this state update event.
    * Can be "full_state" for full state snapshots or field names for partial updates.
    */
-  key: "full_state" | "execution_status" | "stats" | "agent"; // Extend with other keys as needed
+  key: "full_state" | "execution_status" | "stats"; // Extend with other keys as needed
 
   /**
    * Conversation state updates
    */
-  value: ConversationState | V1ExecutionStatus | ConversationStats | AgentState;
-}
-
-/**
- * Partial shape of a serialized agent emitted on a key="agent" state update
- * (e.g. when the agent switches its LLM via the built-in switch_llm tool). Only
- * the active model is consumed by the UI.
- */
-export interface AgentState {
-  llm?: {
-    model?: string;
-  };
+  value: ConversationState | V1ExecutionStatus | ConversationStats;
 }
 
 // Narrowed interfaces for full state update event
@@ -113,18 +102,11 @@ export interface ConversationStateUpdateEventStats extends ConversationStateUpda
   value: ConversationStats;
 }
 
-// Narrowed interface for agent update event (e.g. an LLM switch via switch_llm)
-export interface ConversationStateUpdateEventAgent extends ConversationStateUpdateEventBase {
-  key: "agent";
-  value: AgentState;
-}
-
 // Conversation state update event - contains conversation state updates
 export type ConversationStateUpdateEvent =
   | ConversationStateUpdateEventFullState
   | ConversationStateUpdateEventAgentStatus
-  | ConversationStateUpdateEventStats
-  | ConversationStateUpdateEventAgent;
+  | ConversationStateUpdateEventStats;
 
 // Conversation error event - contains error information
 export interface ConversationErrorEvent extends BaseEvent {
