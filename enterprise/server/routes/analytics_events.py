@@ -75,7 +75,6 @@ class CreatePrButtonClickedEvent(BaseModel):
 # ⚠️ When adding a second event, wrap in:
 # Annotated[CreatePrButtonClickedEvent | NewEvent, Field(discriminator='event_type')]
 FrontendEvent = CreatePrButtonClickedEvent
-FrontendEvent = CreatePrButtonClickedEvent
 
 
 class AnalyticsEventResponse(BaseModel):
