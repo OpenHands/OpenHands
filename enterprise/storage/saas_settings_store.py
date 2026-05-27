@@ -214,10 +214,23 @@ class SaasSettingsStore(SettingsStore):
         # never moved to the org column.
         if org.llm_profiles:
             kwargs['llm_profiles'] = org.llm_profiles
-        # Pre-migration rows read back as None; Settings.llm_profiles is
-        # non-nullable, so let the default_factory take over.
-        if kwargs.get('llm_profiles') is None:
-            kwargs.pop('llm_profiles', None)
+        # When no profiles exist yet, seed a Default profile from the legacy
+        # LLM config so users (and orgs) upgrading from pre-llm_profiles
+        # settings keep their previous LLM as the active profile instead of
+        # landing on an empty profiles UI (mirrors the OSS FileSettingsStore).
+        # Covers both pre-migration rows (llm_profiles is None) and
+        # already-migrated orgs whose profiles map is empty.
+        if not (kwargs.get('llm_profiles') or {}).get('profiles'):
+            legacy_llm = merged_agent_settings.get('llm')
+            if isinstance(legacy_llm, dict) and legacy_llm.get('model'):
+                kwargs['llm_profiles'] = {
+                    'profiles': {'Default': dict(legacy_llm)},
+                    'active': 'Default',
+                }
+            else:
+                # No legacy LLM to seed; drop a None value so the non-nullable
+                # Settings.llm_profiles falls back to its default_factory.
+                kwargs.pop('llm_profiles', None)
 
         return Settings(**kwargs)
 
