@@ -17,7 +17,11 @@ export type AnalyticsEventResponse = {
  *     typed properties.
  *  2. Add the matching Pydantic model on the backend.
  */
-export type FrontendAnalyticsEvent = {
+export type FrontendAnalyticsEvent =
+  | {
+      event_type: "create pr button clicked";
+      git_provider: Provider | null;
+    };
   event_type: "create pr button clicked";
   git_provider: Provider | null;
 };
