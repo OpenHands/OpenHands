@@ -205,6 +205,15 @@ class SaasSettingsStore(SettingsStore):
         # Apply default if sandbox_grouping_strategy is None in the database
         if kwargs.get('sandbox_grouping_strategy') is None:
             kwargs.pop('sandbox_grouping_strategy', None)
+        # Profiles in SaaS live on the org (managed via
+        # /api/organizations/{org_id}/profiles). Surface them through
+        # Settings.llm_profiles so the chat-layer endpoints
+        # (/api/v1/settings/profiles and /switch_profile) see them without
+        # needing a separate code path. Falls back to user.llm_profiles when
+        # the org has none — handles older personal accounts whose profiles
+        # never moved to the org column.
+        if org.llm_profiles:
+            kwargs['llm_profiles'] = org.llm_profiles
         # Pre-migration rows read back as None; Settings.llm_profiles is
         # non-nullable, so let the default_factory take over.
         if kwargs.get('llm_profiles') is None:

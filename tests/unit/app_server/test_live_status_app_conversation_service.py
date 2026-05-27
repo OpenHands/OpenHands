@@ -36,6 +36,7 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
+from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.settings.settings_models import (
     SandboxGroupingStrategy,
     Settings,
@@ -81,6 +82,19 @@ class _TestUserInfo(SimpleNamespace):
     @agent_settings.setter
     def agent_settings(self, value):
         object.__setattr__(self, '_agent_settings_override', value)
+
+    @property
+    def llm_profiles(self) -> LLMProfiles:
+        # Real UserInfo always carries llm_profiles; default to empty unless a
+        # test sets profiles.
+        override = getattr(self, '_llm_profiles_override', None)
+        if override is not None:
+            return override
+        return LLMProfiles(profiles={})
+
+    @llm_profiles.setter
+    def llm_profiles(self, value):
+        object.__setattr__(self, '_llm_profiles_override', value)
 
     @property
     def conversation_settings(self) -> ConversationSettings:
@@ -182,6 +196,61 @@ class TestLiveStatusAppConversationService:
         # Default mock for hooks loading - returns None (no hooks found)
         # Tests that specifically test hooks loading can override this mock
         self.service._load_hooks_from_workspace = AsyncMock(return_value=None)
+
+    @pytest.mark.asyncio
+    async def test_seed_sandbox_profiles_upserts_resolved_keys_and_prunes(self):
+        """Pushes each profile to the sandbox with its key resolved (managed key
+        injected, BYOR key kept), then deletes profiles that no longer exist on
+        the app-server.
+        """
+        user = SimpleNamespace(
+            llm_profiles=LLMProfiles(
+                profiles={
+                    'Managed': LLM(model='litellm_proxy/minimax-m2.7', usage_id='p'),
+                    'BYOR': LLM(
+                        model='anthropic/claude-sonnet-4-6',
+                        api_key='byor-key',
+                        usage_id='p',
+                    ),
+                    # Org names aren't character-restricted; this one must be
+                    # skipped so it can't path-inject the request URL.
+                    '../evil': LLM(model='openai/gpt-4o', usage_id='p'),
+                }
+            ),
+            agent_settings=SimpleNamespace(
+                llm=SimpleNamespace(api_key=SecretStr('managed-key'))
+            ),
+        )
+        self.mock_user_context.get_user_info = AsyncMock(return_value=user)
+
+        ok = Mock(raise_for_status=Mock())
+        listing = Mock(raise_for_status=Mock())
+        listing.json = Mock(
+            return_value={
+                'profiles': [{'name': 'Managed'}, {'name': 'BYOR'}, {'name': 'Gone'}]
+            }
+        )
+        self.mock_httpx_client.post = AsyncMock(return_value=ok)
+        self.mock_httpx_client.get = AsyncMock(return_value=listing)
+        self.mock_httpx_client.delete = AsyncMock(return_value=ok)
+
+        await self.service._seed_sandbox_profiles('http://agent.test', 'sess-key')
+
+        base = 'http://agent.test/api/profiles'
+        pushed = {
+            call.args[0]: call.kwargs['json']['llm']
+            for call in self.mock_httpx_client.post.call_args_list
+        }
+        # Managed profile (no stored key) falls back to the effective key; BYOR
+        # keeps its own.
+        assert pushed[f'{base}/Managed']['api_key'] == 'managed-key'
+        assert pushed[f'{base}/BYOR']['api_key'] == 'byor-key'
+        # The unsafe-named profile is skipped entirely (never POSTed).
+        assert self.mock_httpx_client.post.await_count == 2
+        assert not any('evil' in url for url in pushed)
+        # The profile deleted on the app-server is pruned from the sandbox.
+        self.mock_httpx_client.delete.assert_awaited_once()
+        assert self.mock_httpx_client.delete.await_args.args[0] == f'{base}/Gone'
 
     def test_apply_suggested_task_sets_prompt_and_trigger(self):
         """Test suggested task prompts populate initial message and trigger."""

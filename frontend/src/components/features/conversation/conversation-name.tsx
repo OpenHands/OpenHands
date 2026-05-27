@@ -172,12 +172,12 @@ export function ConversationName() {
 
         {titleMode !== "edit" && agentLabel && (
           <span
-            className="text-xs text-[#A3A3A3] max-w-[150px] flex items-center gap-1 overflow-hidden"
+            className="text-xs text-[#A3A3A3] flex items-center gap-1 whitespace-nowrap"
             title={conversation.llm_model ?? agentLabel}
             data-testid="conversation-name-llm-model"
           >
             <CircuitIcon width={12} height={12} className="shrink-0" />
-            <Typography.Text className="text-xs text-[#A3A3A3] truncate">
+            <Typography.Text className="text-xs text-[#A3A3A3]">
               {agentLabel}
             </Typography.Text>
           </span>

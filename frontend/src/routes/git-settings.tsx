@@ -14,6 +14,7 @@ import { BitbucketDCWebhookManager } from "#/components/features/settings/git-se
 import { AzureDevOpsTokenInput } from "#/components/features/settings/git-settings/azure-devops-token-input";
 import { ForgejoTokenInput } from "#/components/features/settings/git-settings/forgejo-token-input";
 import { ConfigureGitHubRepositoriesAnchor } from "#/components/features/settings/git-settings/configure-github-repositories-anchor";
+import { ConfigureAzureDevOpsAnchor } from "#/components/features/settings/git-settings/configure-azure-devops-anchor";
 import { InstallSlackAppAnchor } from "#/components/features/settings/git-settings/install-slack-app-anchor";
 import DebugStackframeDot from "#/icons/debug-stackframe-dot.svg?react";
 import { I18nKey } from "#/i18n/declaration";
@@ -224,6 +225,8 @@ function GitSettingsScreen() {
   const shouldRenderBitbucketDCSection =
     isSaas &&
     Boolean(config?.providers_configured?.includes("bitbucket_data_center"));
+  const shouldRenderAzureDevOpsSection =
+    isSaas && Boolean(config?.providers_configured?.includes("azure_devops"));
   const shouldRenderSlackSection = isSaas && Boolean(config?.slack_enabled);
   const shouldRenderProjectManagementIntegrations =
     config?.feature_flags?.enable_jira ||
@@ -301,6 +304,33 @@ function GitSettingsScreen() {
                   </Typography.Text>
                 </div>
                 {isBitbucketDCTokenSet && <BitbucketDCWebhookManager />}
+              </div>
+              <div className="w-1/2 border-b border-gray-200" />
+            </>
+          )}
+
+          {shouldRenderAzureDevOpsSection && (
+            <>
+              <div className="mt-6 flex flex-col gap-4 pb-8">
+                <Typography.H3 className="text-xl">
+                  {t(I18nKey.SETTINGS$AZURE_DEVOPS)}
+                </Typography.H3>
+                <div className="flex items-center">
+                  <DebugStackframeDot
+                    className="w-6 h-6 shrink-0"
+                    color={isAzureDevOpsTokenSet ? "#BCFF8C" : "#FF684E"}
+                  />
+                  <Typography.Text
+                    className="text-sm text-gray-400"
+                    testId="azure-devops-status-text"
+                  >
+                    {t(I18nKey.COMMON$STATUS)}:{" "}
+                    {isAzureDevOpsTokenSet
+                      ? t(I18nKey.STATUS$CONNECTED)
+                      : t(I18nKey.AZURE_DEVOPS$NOT_CONNECTED)}
+                  </Typography.Text>
+                </div>
+                <ConfigureAzureDevOpsAnchor />
               </div>
               <div className="w-1/2 border-b border-gray-200" />
             </>

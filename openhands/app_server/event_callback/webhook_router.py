@@ -51,7 +51,8 @@ from openhands.app_server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
 )
 from openhands.sdk import ConversationExecutionStatus, Event
-from openhands.sdk.event import ConversationStateUpdateEvent
+from openhands.sdk.event import ConversationStateUpdateEvent, ObservationEvent
+from openhands.sdk.tool.builtins import SwitchLLMObservation
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
 event_service_dependency = depends_event_service()
@@ -425,6 +426,29 @@ async def on_event(
                 await app_conversation_info_service.process_stats_event(
                     event, conversation_id
                 )
+
+        # Reflect an agent-initiated LLM switch (via the built-in SwitchLLMTool)
+        # on the conversation record. The tool emits a ``SwitchLLMObservation``
+        # carrying the new ``active_model``; unlike the explicit switch_profile
+        # route, nothing else persists it here, so the chat header and
+        # switch-profile button would otherwise stay stale until the next full
+        # conversation-info webhook (which only fires on start/pause/interrupt/
+        # delete, never mid-run). ``active_model`` is only set on success.
+        switched_model: str | None = None
+        for event in events:
+            if (
+                isinstance(event, ObservationEvent)
+                and isinstance(event.observation, SwitchLLMObservation)
+                and event.observation.active_model
+            ):
+                switched_model = event.observation.active_model
+        if switched_model and app_conversation_info.llm_model != switched_model:
+            info = await app_conversation_info_service.get_app_conversation_info(
+                conversation_id
+            )
+            if info is not None and info.llm_model != switched_model:
+                info.llm_model = switched_model
+                await app_conversation_info_service.save_app_conversation_info(info)
 
         # Analytics: conversation terminal state detection
         for event in events:

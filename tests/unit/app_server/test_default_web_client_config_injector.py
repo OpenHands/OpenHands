@@ -360,6 +360,7 @@ class TestGetProvidersConfigured:
                 'GITLAB_APP_CLIENT_ID',
                 'BITBUCKET_APP_CLIENT_ID',
                 'BITBUCKET_DATA_CENTER_CLIENT_ID',
+                'AZURE_DEVOPS_CLIENT_ID',
                 'ENABLE_ENTERPRISE_SSO',
             ]:
                 os.environ.pop(var, None)
@@ -412,6 +413,17 @@ class TestGetProvidersConfigured:
             result = _get_providers_configured()
             assert ProviderType.BITBUCKET_DATA_CENTER in result
 
+    def test_includes_azure_devops_when_client_id_set(self):
+        """When AZURE_DEVOPS_CLIENT_ID is set, include Azure DevOps in providers."""
+        from openhands.app_server.integrations.service_types import ProviderType
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_providers_configured,
+        )
+
+        with patch.dict(os.environ, {'AZURE_DEVOPS_CLIENT_ID': 'some-client-id'}):
+            result = _get_providers_configured()
+            assert ProviderType.AZURE_DEVOPS in result
+
     def test_includes_enterprise_sso_when_enabled(self):
         """When ENABLE_ENTERPRISE_SSO is set, include Enterprise SSO in providers."""
         from openhands.app_server.integrations.service_types import ProviderType
@@ -459,6 +471,7 @@ class TestGetProvidersConfigured:
                 'GITLAB_APP_CLIENT_ID': 'gitlab-id',
                 'BITBUCKET_APP_CLIENT_ID': '',
                 'BITBUCKET_DATA_CENTER_CLIENT_ID': 'bbdc-id',
+                'AZURE_DEVOPS_CLIENT_ID': 'azure-id',
                 'ENABLE_ENTERPRISE_SSO': 'enabled',
             },
         ):
@@ -467,8 +480,9 @@ class TestGetProvidersConfigured:
             assert ProviderType.GITLAB in result
             assert ProviderType.BITBUCKET not in result
             assert ProviderType.BITBUCKET_DATA_CENTER in result
+            assert ProviderType.AZURE_DEVOPS in result
             assert ProviderType.ENTERPRISE_SSO in result
-            assert len(result) == 4
+            assert len(result) == 5
 
 
 class TestGetGithubAppSlug:

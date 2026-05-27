@@ -11,6 +11,7 @@ class SourceType(str, Enum):
     GITLAB = 'gitlab'
     BITBUCKET = 'bitbucket'
     BITBUCKET_DATA_CENTER = 'bitbucket_data_center'
+    AZURE_DEVOPS = 'azure_devops'
     OPENHANDS = 'openhands'
     SLACK = 'slack'
     JIRA = 'jira'
