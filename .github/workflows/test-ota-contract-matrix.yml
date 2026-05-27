@@ -262,11 +262,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install ota from source
-        uses: bobaikato/ota/.github/actions/install-ota-from-source@bobai/gap3-smoke-verdict-contract
+      - name: Install ota
+        uses: ota-run/setup@v1
         with:
-          repository: ${{ github.event.inputs.ota_repository || 'bobaikato/ota' }}
-          ref: ${{ github.event.inputs.ota_ref || 'bobai/gap3-smoke-verdict-contract' }}
+          ota-version: '1.6.17'
 
       - name: Verify Docker
         shell: bash
@@ -325,11 +324,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install ota from source
-        uses: bobaikato/ota/.github/actions/install-ota-from-source@bobai/gap3-smoke-verdict-contract
+      - name: Install ota
+        uses: ota-run/setup@v1
         with:
-          repository: ${{ github.event.inputs.ota_repository || 'bobaikato/ota' }}
-          ref: ${{ github.event.inputs.ota_ref || 'bobai/gap3-smoke-verdict-contract' }}
+          ota-version: '1.6.17'
 
       - name: Verify Docker
         shell: bash
@@ -380,11 +378,10 @@ jobs:
         with:
           bun-version-file: openhands-ui/.bun-version
 
-      - name: Install ota from source
-        uses: bobaikato/ota/.github/actions/install-ota-from-source@bobai/gap3-smoke-verdict-contract
+      - name: Install ota
+        uses: ota-run/setup@v1
         with:
-          repository: ${{ github.event.inputs.ota_repository || 'bobaikato/ota' }}
-          ref: ${{ github.event.inputs.ota_ref || 'bobai/gap3-smoke-verdict-contract' }}
+          ota-version: '1.6.17'
 
       - name: Verify Bun
         shell: bash
