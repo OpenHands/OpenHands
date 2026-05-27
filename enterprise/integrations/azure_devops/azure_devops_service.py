@@ -71,6 +71,8 @@ class SaaSAzureDevOpsService(AzureDevOpsService):
             logger.debug('Got Azure DevOps token via user_id')
         else:
             logger.warning('external_auth_token and user_id not set!')
+        if azure_devops_token:
+            self.token = azure_devops_token
         return azure_devops_token
 
     async def get_installations(self) -> list[str]:

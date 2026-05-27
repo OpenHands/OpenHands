@@ -73,15 +73,16 @@ class AuthUserContext(UserContext):
         if provider_tokens:
             for provider_type, provider_token in provider_tokens.items():
                 env_key = ProviderHandler.get_provider_env_key(provider_type)
-                try:
-                    latest_token = await self.get_latest_token(provider_type)
-                except Exception as exc:
-                    _logger.warning(
-                        'Failed to refresh provider token for %s: %s',
-                        provider_type.value,
-                        exc,
-                    )
-                    latest_token = None
+                latest_token = None
+                if provider_type == ProviderType.AZURE_DEVOPS:
+                    try:
+                        latest_token = await self.get_latest_token(provider_type)
+                    except Exception as exc:
+                        _logger.warning(
+                            'Failed to refresh provider token for %s: %s',
+                            provider_type.value,
+                            exc,
+                        )
                 if latest_token:
                     results[env_key] = latest_token
                 elif provider_token.token:

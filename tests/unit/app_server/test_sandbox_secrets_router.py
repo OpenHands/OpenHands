@@ -811,12 +811,14 @@ class TestProviderTokensInEndpoints:
         )
 
         ctx = AuthUserContext(user_auth=mock_user_auth)
+        ctx.get_latest_token = AsyncMock(return_value='unused-token')  # type: ignore[method-assign]
         result = await ctx.get_provider_tokens(as_env_vars=True)
 
         gh_key = ProviderHandler.get_provider_env_key(ProviderType.GITHUB)
         gl_key = ProviderHandler.get_provider_env_key(ProviderType.GITLAB)
         assert result[gh_key] == 'ghp_test123'
         assert result[gl_key] == 'glpat-test456'
+        ctx.get_latest_token.assert_not_called()  # type: ignore[attr-defined]
 
     async def test_get_provider_tokens_as_env_vars_prefers_latest_token(self):
         """Provider env vars resolve through the provider service at call time."""
@@ -850,8 +852,10 @@ class TestProviderTokensInEndpoints:
             }
         )
         ctx = AuthUserContext(user_auth=mock_user_auth)
+        refresh_calls: list[ProviderType] = []
 
         async def get_latest_token(provider_type: ProviderType) -> str | None:
+            refresh_calls.append(provider_type)
             if provider_type == ProviderType.AZURE_DEVOPS:
                 raise ValueError('token refresh failed')
             return None
@@ -867,6 +871,8 @@ class TestProviderTokensInEndpoints:
         gh_key = ProviderHandler.get_provider_env_key(ProviderType.GITHUB)
         assert result[azure_key] == 'azure-stored-token'
         assert result[gh_key] == 'ghp_test123'
+        assert refresh_calls == [ProviderType.AZURE_DEVOPS]
+        assert mock_warning.call_count == 1
         mock_warning.assert_called_once()
         assert mock_warning.call_args.args[0] == (
             'Failed to refresh provider token for %s: %s'
