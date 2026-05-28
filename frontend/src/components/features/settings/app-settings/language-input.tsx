@@ -20,7 +20,11 @@ export function LanguageInput({
     <SettingsDropdownInput
       testId={name}
       name={name}
-      onInputChange={onChange}
+      onSelectionChange={(key) => {
+        if (key) {
+          onChange(key.toString());
+        }
+      }}
       label={t(I18nKey.SETTINGS$LANGUAGE)}
       items={AvailableLanguages.map((l) => ({
         key: l.value,
