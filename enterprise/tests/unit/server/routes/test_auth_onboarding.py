@@ -16,6 +16,7 @@ from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.auth import (
+    OnboardingSubmission,
     _get_post_auth_redirect,
     _should_redirect_to_onboarding,
     complete_onboarding,
@@ -331,6 +332,182 @@ class TestCompleteOnboardingEndpoint:
             await complete_onboarding(mock_request)
 
         mock_mark_completed.assert_called_once_with(user_id)
+
+    @pytest.mark.asyncio
+    async def test_fires_onboarding_analytics_with_selections(
+        self, mock_request, mock_user
+    ):
+        """On success, the endpoint fires `track_onboarding_completed`
+        with the selections from the request body and a group_identify on
+        the user's current org."""
+        user_id = str(uuid.uuid4())
+        org_id = str(uuid.uuid4())
+        selections = {
+            'role': 'software_engineer',
+            'org_size': 'solo',
+            'use_case': ['new_features', 'fixing_bugs'],
+        }
+
+        mock_user_auth = MagicMock(spec=SaasUserAuth)
+        mock_user_auth.get_user_id = AsyncMock(return_value=user_id)
+
+        mock_analytics = MagicMock()
+        mock_ctx = MagicMock(org_id=org_id)
+
+        with (
+            patch(
+                'server.routes.auth.get_user_auth',
+                new_callable=AsyncMock,
+                return_value=mock_user_auth,
+            ),
+            patch(
+                'server.routes.auth.UserStore.mark_onboarding_completed',
+                new_callable=AsyncMock,
+                return_value=mock_user,
+            ),
+            patch(
+                'server.routes.auth.get_analytics_service',
+                return_value=mock_analytics,
+            ),
+            patch(
+                'server.routes.auth.resolve_analytics_context',
+                new_callable=AsyncMock,
+                return_value=mock_ctx,
+            ),
+        ):
+            result = await complete_onboarding(
+                mock_request, body=OnboardingSubmission(selections=selections)
+            )
+
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == status.HTTP_200_OK
+        mock_analytics.track_onboarding_completed.assert_called_once_with(
+            ctx=mock_ctx,
+            selections=selections,
+        )
+        mock_analytics.group_identify.assert_called_once()
+        gi_kwargs = mock_analytics.group_identify.call_args.kwargs
+        assert gi_kwargs['group_type'] == 'org'
+        assert gi_kwargs['group_key'] == org_id
+        assert 'onboarding_completed_at' in gi_kwargs['properties']
+
+    @pytest.mark.asyncio
+    async def test_skips_group_identify_when_no_org_id(self, mock_request, mock_user):
+        """group_identify must not fire when the user has no current org."""
+        user_id = str(uuid.uuid4())
+        mock_user_auth = MagicMock(spec=SaasUserAuth)
+        mock_user_auth.get_user_id = AsyncMock(return_value=user_id)
+
+        mock_analytics = MagicMock()
+        mock_ctx = MagicMock(org_id=None)
+
+        with (
+            patch(
+                'server.routes.auth.get_user_auth',
+                new_callable=AsyncMock,
+                return_value=mock_user_auth,
+            ),
+            patch(
+                'server.routes.auth.UserStore.mark_onboarding_completed',
+                new_callable=AsyncMock,
+                return_value=mock_user,
+            ),
+            patch(
+                'server.routes.auth.get_analytics_service',
+                return_value=mock_analytics,
+            ),
+            patch(
+                'server.routes.auth.resolve_analytics_context',
+                new_callable=AsyncMock,
+                return_value=mock_ctx,
+            ),
+        ):
+            await complete_onboarding(
+                mock_request, body=OnboardingSubmission(selections={})
+            )
+
+        mock_analytics.track_onboarding_completed.assert_called_once()
+        mock_analytics.group_identify.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_analytics_exception_does_not_break_endpoint(
+        self, mock_request, mock_user
+    ):
+        """Telemetry failures must never block the user from finishing
+        onboarding - the endpoint should still return 200."""
+        user_id = str(uuid.uuid4())
+        mock_user_auth = MagicMock(spec=SaasUserAuth)
+        mock_user_auth.get_user_id = AsyncMock(return_value=user_id)
+
+        mock_analytics = MagicMock()
+        mock_analytics.track_onboarding_completed.side_effect = RuntimeError(
+            'posthog down'
+        )
+
+        with (
+            patch(
+                'server.routes.auth.get_user_auth',
+                new_callable=AsyncMock,
+                return_value=mock_user_auth,
+            ),
+            patch(
+                'server.routes.auth.UserStore.mark_onboarding_completed',
+                new_callable=AsyncMock,
+                return_value=mock_user,
+            ),
+            patch(
+                'server.routes.auth.get_analytics_service',
+                return_value=mock_analytics,
+            ),
+            patch(
+                'server.routes.auth.resolve_analytics_context',
+                new_callable=AsyncMock,
+                return_value=MagicMock(org_id=None),
+            ),
+        ):
+            result = await complete_onboarding(
+                mock_request, body=OnboardingSubmission(selections={})
+            )
+
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == status.HTTP_200_OK
+
+    @pytest.mark.asyncio
+    async def test_no_body_defaults_to_empty_selections(self, mock_request, mock_user):
+        """When called with no body (backwards compat), analytics still
+        fires with an empty selections dict."""
+        user_id = str(uuid.uuid4())
+        mock_user_auth = MagicMock(spec=SaasUserAuth)
+        mock_user_auth.get_user_id = AsyncMock(return_value=user_id)
+
+        mock_analytics = MagicMock()
+
+        with (
+            patch(
+                'server.routes.auth.get_user_auth',
+                new_callable=AsyncMock,
+                return_value=mock_user_auth,
+            ),
+            patch(
+                'server.routes.auth.UserStore.mark_onboarding_completed',
+                new_callable=AsyncMock,
+                return_value=mock_user,
+            ),
+            patch(
+                'server.routes.auth.get_analytics_service',
+                return_value=mock_analytics,
+            ),
+            patch(
+                'server.routes.auth.resolve_analytics_context',
+                new_callable=AsyncMock,
+                return_value=MagicMock(org_id=None),
+            ),
+        ):
+            await complete_onboarding(mock_request)
+
+        mock_analytics.track_onboarding_completed.assert_called_once()
+        kwargs = mock_analytics.track_onboarding_completed.call_args.kwargs
+        assert kwargs['selections'] == {}
 
 
 class TestOnboardingStatusEndpoint:

@@ -18,7 +18,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import JSONResponse, RedirectResponse
-from pydantic import SecretStr
+from pydantic import BaseModel, SecretStr
 from server.auth.constants import (
     KEYCLOAK_CLIENT_ID,
     KEYCLOAK_REALM_NAME,
@@ -58,7 +58,7 @@ from storage.database import a_session_maker
 from storage.user import User
 from storage.user_store import UserStore
 
-from openhands.analytics import get_analytics_service
+from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderHandler,
@@ -879,9 +879,32 @@ async def onboarding_status(request: Request):
     )
 
 
+class OnboardingSubmission(BaseModel):
+    """Payload posted from the onboarding form.
+
+    ``selections`` maps onboarding question_id -> selected option(s), e.g.
+    ``{"role": "software_engineer", "org_size": "solo",
+       "use_case": ["new_features", "fixing_bugs"]}``.
+
+    The field is optional so the endpoint stays backwards-compatible with any
+    client that previously called it with an empty body, but the current
+    frontend always submits a populated mapping.
+    """
+
+    selections: dict[str, str | list[str]] = {}
+
+
 @api_router.post('/complete_onboarding')
-async def complete_onboarding(request: Request):
-    """Mark onboarding as completed for the current user."""
+async def complete_onboarding(
+    request: Request, body: OnboardingSubmission | None = None
+):
+    """Mark onboarding as completed for the current user and fire analytics.
+
+    Persists ``user.onboarding_completed = True`` and emits the
+    ``onboarding completed`` PostHog event (plus an org ``group_identify`` to
+    stamp ``onboarding_completed_at``). Analytics failures are swallowed so
+    they never block the user from leaving the onboarding flow.
+    """
     user_auth = cast(SaasUserAuth, await get_user_auth(request))
     user_id = await user_auth.get_user_id()
 
@@ -902,6 +925,31 @@ async def complete_onboarding(request: Request):
         'User completed onboarding',
         extra={'user_id': user_id},
     )
+
+    # Analytics: 'onboarding completed' event + org group_identify.
+    # Best-effort: never let a tracking failure break the onboarding flow.
+    selections = body.selections if body is not None else {}
+    try:
+        analytics = get_analytics_service()
+        if analytics:
+            ctx = await resolve_analytics_context(user_id)
+            analytics.track_onboarding_completed(
+                ctx=ctx,
+                selections=selections,
+            )
+            if ctx.org_id:
+                analytics.group_identify(
+                    ctx=ctx,
+                    group_type='org',
+                    group_key=ctx.org_id,
+                    properties={
+                        'onboarding_completed_at': datetime.now(
+                            timezone.utc
+                        ).isoformat(),
+                    },
+                )
+    except Exception:
+        logger.exception('analytics:onboarding_completed:failed')
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,

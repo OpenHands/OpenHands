@@ -30,6 +30,7 @@ from server.middleware import (  # noqa: E402
     SetAuthCookieMiddleware,
 )
 from server.rate_limit import setup_rate_limit_handler  # noqa: E402
+from server.routes.analytics_events import analytics_events_router  # noqa: E402
 from server.routes.api_keys import api_router as api_keys_router  # noqa: E402
 from server.routes.auth import api_router, oauth_router  # noqa: E402
 from server.routes.billing import billing_router  # noqa: E402
@@ -170,6 +171,9 @@ if BITBUCKET_DATA_CENTER_HOST:
 
     base_app.include_router(bitbucket_dc_integration_router)
 base_app.include_router(email_router)  # Add routes for email management
+base_app.include_router(
+    analytics_events_router
+)  # Add routes for client-initiated analytics events
 
 
 base_app.add_middleware(
