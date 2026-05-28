@@ -16,6 +16,7 @@ os.environ['RESEND_API_KEY'] = 'test_api_key'
 os.environ['RESEND_AUDIENCE_ID'] = 'test_audience_id'
 
 from enterprise.sync.resend_keycloak import (  # noqa: E402
+    BATCH_SIZE,
     ResendUser,
     _split_display_name,
     add_contact_to_resend,
@@ -403,7 +404,7 @@ class TestSyncUsersToResend:
         sync_users_to_resend()
 
         mock_get_total.assert_called_once_with()
-        mock_get_local_users.assert_called_once()
+        mock_get_local_users.assert_called_once_with(0, BATCH_SIZE)
         store.mark_user_synced.assert_called_once_with(
             email='new@example.com',
             audience_id='test_audience_id',

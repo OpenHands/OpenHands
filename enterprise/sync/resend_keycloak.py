@@ -112,7 +112,7 @@ def _split_display_name(display_name: str | None) -> tuple[str | None, str | Non
     return first_name, last_name
 
 
-def get_local_users(offset: int = 0, limit: int = 100) -> list[ResendUser]:
+def get_local_users(offset: int = 0, limit: int = BATCH_SIZE) -> list[ResendUser]:
     """Get users with email addresses from the OpenHands database."""
     session_maker = _get_session_maker()
     with session_maker() as session:
