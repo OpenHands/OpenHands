@@ -946,6 +946,65 @@ async def test_load_with_null_or_empty_llm_profiles_seeds_default_profile(
 
 
 @pytest.mark.asyncio
+async def test_load_persists_seeded_default_profile_onto_org(
+    async_session_maker, org_with_multiple_members_fixture
+):
+    """The seeded Default profile must be written back to org.llm_profiles.
+
+    The seed is otherwise in-memory only, so the org-profiles management API
+    (which reads org.llm_profiles directly) would still see an empty list.
+    load() backfills it once so the user's last LLM becomes a real stored
+    profile on first use of LLM profiles.
+    """
+    from sqlalchemy import select, update
+    from storage.org import Org
+
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = fixture['admin_user_id']
+    org_id = fixture['org_id']
+    admin_store = SaasSettingsStore(str(admin_user_id))
+
+    seed_settings = _make_settings(
+        model='anthropic/claude-sonnet-4-5-20250929',
+        api_key='seed-key',
+        base_url='https://api.anthropic.com/v1',
+    )
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await admin_store.store(seed_settings)
+
+    # Simulate a pre-migration org: no profiles stored yet.
+    async with async_session_maker() as session:
+        await session.execute(
+            update(Org).where(Org.id == org_id).values(llm_profiles=None)
+        )
+        await session.commit()
+
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+    ):
+        await admin_store.load()
+
+    async with async_session_maker() as session:
+        org = (
+            (await session.execute(select(Org).where(Org.id == org_id)))
+            .scalars()
+            .first()
+        )
+
+    assert org.llm_profiles is not None
+    assert set(org.llm_profiles['profiles'].keys()) == {'Default'}
+    assert org.llm_profiles['active'] == 'Default'
+    persisted_default = org.llm_profiles['profiles']['Default']
+    assert persisted_default['model'] == 'anthropic/claude-sonnet-4-5-20250929'
+    assert persisted_default['base_url'] == 'https://api.anthropic.com/v1'
+    # API key from the legacy config must survive the round-trip so the user
+    # doesn't have to re-enter it after the profiles upgrade.
+    assert persisted_default['api_key'] == 'seed-key'
+
+
+@pytest.mark.asyncio
 async def test_llm_profiles_are_encrypted_at_rest(
     async_session_maker, org_with_multiple_members_fixture
 ):
