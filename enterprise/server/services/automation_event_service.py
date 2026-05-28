@@ -142,6 +142,7 @@ class AutomationEventService:
         org_id: UUID,
         payload: dict[str, Any],
         workspace_name: str,
+        connection_id: int | None = None,
         delivery_id: str | None = None,
     ) -> None:
         """
@@ -159,6 +160,8 @@ class AutomationEventService:
                 },
                 'payload': payload,
             }
+            if connection_id is not None:
+                event_payload['organization']['jira_dc_connection_id'] = connection_id
             await self._send_source_to_automation_service(
                 source='jira_dc',
                 org_id=org_id,

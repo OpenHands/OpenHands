@@ -45,6 +45,7 @@ from server.routes.org_invitations import (  # noqa: E402
 from server.routes.org_invitations import (  # noqa: E402
     invitation_router,
 )
+from server.routes.org_profiles import router as org_profiles_router  # noqa: E402
 from server.routes.orgs import org_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.service import service_router  # noqa: E402
@@ -131,6 +132,9 @@ if BITBUCKET_APP_CLIENT_ID:
 base_app.include_router(api_keys_router)  # Add routes for API key management
 base_app.include_router(service_router)  # Add routes for internal service API
 base_app.include_router(org_router)  # Add routes for organization management
+base_app.include_router(
+    org_profiles_router, prefix='/api/organizations'
+)  # Add routes for org LLM profiles
 base_app.include_router(
     verified_models_router
 )  # Add routes for verified models management

@@ -32,6 +32,16 @@ class BitbucketDCWebhookStore:
             webhook = result.scalars().first()
             return webhook.webhook_secret if webhook else None
 
+    async def get_webhook_by_id(self, webhook_id: int) -> BitbucketDCWebhook | None:
+        async with a_session_maker() as session:
+            query = (
+                select(BitbucketDCWebhook)
+                .where(BitbucketDCWebhook.id == webhook_id)
+                .limit(1)
+            )
+            result = await session.execute(query)
+            return result.scalars().first()
+
     async def get_webhook_user_id(self, project_key: str, repo_slug: str) -> str | None:
         async with a_session_maker() as session:
             query = (
@@ -44,6 +54,45 @@ class BitbucketDCWebhookStore:
             )
             result = await session.execute(query)
             return result.scalar_one_or_none()
+
+    async def ensure_webhook_enrollment(
+        self,
+        *,
+        project_key: str,
+        repo_slug: str,
+        user_id: str,
+    ) -> BitbucketDCWebhook:
+        """Ensure a local row exists so its id can be used in webhook URLs.
+
+        This intentionally does not rotate an existing secret. Automatic
+        reinstall first needs a stable row id to build the provider webhook URL;
+        the active secret is updated only after the Bitbucket-side write
+        succeeds.
+        """
+        async with a_session_maker() as session:
+            async with session.begin():
+                query = (
+                    select(BitbucketDCWebhook)
+                    .where(
+                        BitbucketDCWebhook.project_key == project_key,
+                        BitbucketDCWebhook.repo_slug == repo_slug,
+                    )
+                    .limit(1)
+                )
+                result = await session.execute(query)
+                webhook = result.scalars().first()
+
+                if not webhook:
+                    webhook = BitbucketDCWebhook(
+                        project_key=project_key,
+                        repo_slug=repo_slug,
+                        user_id=user_id,
+                        webhook_secret=None,
+                    )
+                    session.add(webhook)
+
+            await session.refresh(webhook)
+            return webhook
 
     async def get_webhook_by_repo(
         self, project_key: str, repo_slug: str

@@ -19,6 +19,18 @@ GITLAB_APP_CLIENT_SECRET = os.getenv('GITLAB_APP_CLIENT_SECRET', '').strip()
 GITLAB_TOKEN_URL = f'https://{GITLAB_HOST}/oauth/token'
 BITBUCKET_APP_CLIENT_ID = os.getenv('BITBUCKET_APP_CLIENT_ID', '').strip()
 BITBUCKET_APP_CLIENT_SECRET = os.getenv('BITBUCKET_APP_CLIENT_SECRET', '').strip()
+AZURE_DEVOPS_CLIENT_ID = os.getenv('AZURE_DEVOPS_CLIENT_ID', '').strip()
+AZURE_DEVOPS_CLIENT_SECRET = os.getenv('AZURE_DEVOPS_CLIENT_SECRET', '').strip()
+AZURE_DEVOPS_TENANT_ID = os.getenv('AZURE_DEVOPS_TENANT_ID', '').strip()
+AZURE_DEVOPS_ORGANIZATION = os.getenv('AZURE_DEVOPS_ORGANIZATION', '').strip()
+AZURE_DEVOPS_SCOPE = os.getenv(
+    'AZURE_DEVOPS_SCOPE', 'https://app.vssps.visualstudio.com/.default'
+).strip()
+AZURE_DEVOPS_TOKEN_URL = (
+    f'https://login.microsoftonline.com/{AZURE_DEVOPS_TENANT_ID}/oauth2/v2.0/token'
+    if AZURE_DEVOPS_TENANT_ID
+    else ''
+)
 ENABLE_ENTERPRISE_SSO = os.getenv('ENABLE_ENTERPRISE_SSO', '').strip()
 ENABLE_JIRA = os.environ.get('ENABLE_JIRA', 'false') == 'true'
 ENABLE_JIRA_DC = os.environ.get('ENABLE_JIRA_DC', 'false') == 'true'
@@ -31,6 +43,8 @@ JIRA_DC_CLIENT_ID = os.getenv('JIRA_DC_CLIENT_ID', '').strip()
 JIRA_DC_CLIENT_SECRET = os.getenv('JIRA_DC_CLIENT_SECRET', '').strip()
 JIRA_DC_BASE_URL = os.getenv('JIRA_DC_BASE_URL', '').strip()
 JIRA_DC_ENABLE_OAUTH = os.getenv('JIRA_DC_ENABLE_OAUTH', '1') in ('1', 'true')
+JIRA_DC_SERVICE_ACCOUNT_EMAIL = os.getenv('JIRA_DC_SERVICE_ACCOUNT_EMAIL', '').strip()
+JIRA_DC_SERVICE_ACCOUNT_PAT = os.getenv('JIRA_DC_SERVICE_ACCOUNT_PAT', '').strip()
 AUTH_URL = os.getenv('AUTH_URL', '').rstrip('/')
 ROLE_CHECK_ENABLED = os.getenv('ROLE_CHECK_ENABLED', 'false').lower() in (
     '1',

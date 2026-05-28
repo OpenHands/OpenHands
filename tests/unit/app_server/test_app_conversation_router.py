@@ -29,6 +29,7 @@ from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.settings.settings_models import Settings
 from openhands.sdk.llm import LLM
+from openhands.sdk.settings import OpenHandsAgentSettings
 
 
 def _make_mock_app_conversation(
@@ -398,6 +399,28 @@ def _make_settings_with_profile(
     return Settings(llm_profiles=LLMProfiles(profiles={profile_name: llm}))
 
 
+def _make_settings_for_switch(
+    profile_name: str = 'managed',
+    model: str = 'litellm_proxy/minimax-m2.7',
+    profile_api_key: str | None = None,
+    settings_api_key: str | None = 'managed-proxy-key',
+) -> Settings:
+    """Build Settings where the profile and the effective agent settings carry
+    independent keys, so the switch endpoint's api_key fallback can be tested.
+
+    In SaaS the managed profile persists no key (``profile_api_key=None``) while
+    the effective ``agent_settings.llm.api_key`` holds the resolved managed key.
+    """
+    return Settings(
+        agent_settings=OpenHandsAgentSettings(
+            llm=LLM(model=model, api_key=settings_api_key)
+        ),
+        llm_profiles=LLMProfiles(
+            profiles={profile_name: LLM(model=model, api_key=profile_api_key)}
+        ),
+    )
+
+
 def _make_agent_server_context(
     conversation_id, llm_model: str | None = 'openai/old-model'
 ) -> AgentServerContext:
@@ -632,6 +655,83 @@ class TestSwitchConversationProfile:
         post_kwargs = client.post.await_args.kwargs
         assert post_kwargs['json']['llm']['model'] == new_model
         assert post_kwargs['json']['llm']['usage_id'].startswith('profile:gpt-5:')
+
+    async def test_falls_back_to_settings_api_key_when_profile_has_none(self):
+        """SaaS: managed profiles persist no key, so the switch must source the
+        effective ``agent_settings.llm.api_key`` — otherwise the agent server
+        calls the litellm proxy unauthenticated and the request 401s.
+        """
+        conv_id = uuid4()
+        settings = _make_settings_for_switch(
+            profile_name='managed',
+            profile_api_key=None,
+            settings_api_key='managed-proxy-key',
+        )
+        ctx = _make_agent_server_context(conv_id)
+        ok_response = MagicMock()
+        ok_response.status_code = 200
+        ok_response.raise_for_status = MagicMock()
+        client = _make_httpx_client(post_return=ok_response)
+        info_service = MagicMock()
+        info_service.get_app_conversation_info = AsyncMock(return_value=None)
+        info_service.save_app_conversation_info = AsyncMock()
+
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            await switch_conversation_profile(
+                conversation_id=conv_id,
+                request=SwitchProfileRequest(profile_name='managed'),
+                user_settings=settings,
+                app_conversation_service=MagicMock(),
+                app_conversation_info_service=info_service,
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=client,
+            )
+
+        post_kwargs = client.post.await_args.kwargs
+        assert post_kwargs['json']['llm']['api_key'] == 'managed-proxy-key'
+
+    async def test_keeps_profile_api_key_when_profile_has_one(self):
+        """A profile that carries its own key (BYOR / local GUI) is used as-is
+        and never overridden by the settings fallback.
+        """
+        conv_id = uuid4()
+        settings = _make_settings_for_switch(
+            profile_name='managed',
+            profile_api_key='byor-key',
+            settings_api_key='should-not-be-used',
+        )
+        ctx = _make_agent_server_context(conv_id)
+        ok_response = MagicMock()
+        ok_response.status_code = 200
+        ok_response.raise_for_status = MagicMock()
+        client = _make_httpx_client(post_return=ok_response)
+        info_service = MagicMock()
+        info_service.get_app_conversation_info = AsyncMock(return_value=None)
+        info_service.save_app_conversation_info = AsyncMock()
+
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            await switch_conversation_profile(
+                conversation_id=conv_id,
+                request=SwitchProfileRequest(profile_name='managed'),
+                user_settings=settings,
+                app_conversation_service=MagicMock(),
+                app_conversation_info_service=info_service,
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=client,
+            )
+
+        post_kwargs = client.post.await_args.kwargs
+        assert post_kwargs['json']['llm']['api_key'] == 'byor-key'
 
     async def test_success_skips_persist_when_model_unchanged(self):
         """If the conversation already records the new model, save is skipped."""

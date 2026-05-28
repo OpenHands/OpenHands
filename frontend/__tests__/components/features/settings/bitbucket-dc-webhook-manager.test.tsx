@@ -19,8 +19,10 @@ const mockResources: BitbucketDCResource[] = [
     name: "myrepo",
     full_name: "PROJ/myrepo",
     type: "repository",
+    connection_id: null,
     webhook_enrolled: false,
     webhook_id: null,
+    webhook_url: null,
     webhook_secret_set: false,
     installed_by_user_id: null,
     last_synced: null,
@@ -31,8 +33,11 @@ const mockResources: BitbucketDCResource[] = [
     name: "platform",
     full_name: "OPS/platform",
     type: "repository",
+    connection_id: 7,
     webhook_enrolled: true,
     webhook_id: "42",
+    webhook_url:
+      "https://example.com/integration/bitbucket-dc/connections/7/events",
     webhook_secret_set: true,
     installed_by_user_id: "kc-bot",
     last_synced: "2026-01-01T00:00:00",
@@ -99,6 +104,9 @@ describe("BitbucketDCWebhookManager", () => {
         success: true,
         error: null,
         webhook_id: "101",
+        connection_id: 8,
+        webhook_url:
+          "https://example.com/integration/bitbucket-dc/connections/8/events",
       });
 
     renderComponent();
@@ -127,6 +135,9 @@ describe("BitbucketDCWebhookManager", () => {
         success: true,
         error: null,
         webhook_id: "42",
+        connection_id: 7,
+        webhook_url:
+          "https://example.com/integration/bitbucket-dc/connections/7/events",
       });
 
     renderComponent();

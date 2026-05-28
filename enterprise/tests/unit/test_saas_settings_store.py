@@ -886,14 +886,28 @@ async def test_store_and_load_llm_profiles_round_trip(
     assert personal.api_key.get_secret_value() == 'personal-key'
 
 
+@pytest.mark.parametrize(
+    'llm_profiles_value',
+    [
+        pytest.param(None, id='pre-migration: llm_profiles is null'),
+        pytest.param(
+            {'profiles': {}, 'active': None},
+            id='already-migrated: profiles dict is empty',
+        ),
+    ],
+)
 @pytest.mark.asyncio
-async def test_load_with_null_llm_profiles_column_uses_default_factory(
-    async_session_maker, org_with_multiple_members_fixture
+async def test_load_with_null_or_empty_llm_profiles_seeds_default_profile(
+    async_session_maker, org_with_multiple_members_fixture, llm_profiles_value
 ):
-    """Rows predating the user.llm_profiles column read back as None.
-    Settings.llm_profiles is non-nullable (default_factory=LLMProfiles), so
-    load() must drop the None and let the factory produce an empty container
-    rather than crashing validation."""
+    """Seed Default profile from legacy config when no profiles exist.
+
+    Rows predating the llm_profiles column read back as None, and already-
+    migrated orgs may have an empty profiles dict. Rather than presenting an
+    empty profiles UI on upgrade, load() seeds a "Default" profile from the
+    legacy agent_settings.llm config (mirroring the OSS FileSettingsStore
+    behaviour), with that profile marked active.
+    """
     from sqlalchemy import update
     from storage.user import User
 
@@ -911,7 +925,9 @@ async def test_load_with_null_llm_profiles_column_uses_default_factory(
 
     async with async_session_maker() as session:
         await session.execute(
-            update(User).where(User.id == admin_user_id).values(llm_profiles=None)
+            update(User)
+            .where(User.id == admin_user_id)
+            .values(llm_profiles=llm_profiles_value)
         )
         await session.commit()
 
@@ -923,8 +939,10 @@ async def test_load_with_null_llm_profiles_column_uses_default_factory(
         loaded = await admin_store.load()
 
     assert loaded is not None
-    assert loaded.llm_profiles.profiles == {}
-    assert loaded.llm_profiles.active is None
+    assert set(loaded.llm_profiles.profiles.keys()) == {'Default'}
+    assert loaded.llm_profiles.active == 'Default'
+    default = loaded.llm_profiles.require('Default')
+    assert default.model == 'anthropic/claude-sonnet-4-5-20250929'
 
 
 @pytest.mark.asyncio

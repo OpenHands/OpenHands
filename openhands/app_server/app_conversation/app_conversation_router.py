@@ -74,6 +74,7 @@ from openhands.app_server.services.httpx_client_injector import (
     set_httpx_client_keep_open,
 )
 from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.settings.llm_profiles import resolve_profile_llm
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
@@ -83,7 +84,6 @@ from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
-from openhands.app_server.utils.llm import resolve_llm_base_url
 from openhands.sdk.skills import KeywordTrigger, TaskTrigger
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
@@ -627,16 +627,15 @@ async def switch_conversation_profile(
             detail=f"Profile '{request.profile_name}' not found",
         )
 
-    # Mirror the activate_profile fixup so a profile with an empty base_url
-    # picks up the provider default (e.g. the OpenHands LiteLLM proxy).
-    profile_llm = profile_llm.model_copy(
-        update={
-            'base_url': resolve_llm_base_url(
-                model=profile_llm.model,
-                base_url=profile_llm.base_url,
-                managed_proxy_url=LITE_LLM_API_URL,
-            ),
-        }
+    # Resolve the saved profile for the agent server: provider-default base_url,
+    # plus the effective settings key when the profile carries none (managed
+    # profiles persist a masked key, so without this the agent server would hit
+    # the litellm proxy unauthenticated). Locally, profiles carry their own key.
+    settings_llm = getattr(user_settings.agent_settings, 'llm', None)
+    profile_llm = resolve_profile_llm(
+        profile_llm,
+        managed_proxy_url=LITE_LLM_API_URL,
+        fallback_api_key=getattr(settings_llm, 'api_key', None),
     )
 
     # The agent-server's LLM registry is first-write-wins by ``usage_id``:

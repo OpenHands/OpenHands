@@ -1,4 +1,5 @@
 import logging
+from typing import ClassVar
 from uuid import UUID
 
 import httpx
@@ -12,6 +13,7 @@ from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
+    EventKind,
 )
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
@@ -30,6 +32,8 @@ _logger = logging.getLogger(__name__)
 
 class SlackV1CallbackProcessor(EventCallbackProcessor):
     """Callback processor for Slack V1 integrations."""
+
+    event_kind: ClassVar[EventKind] = 'ConversationStateUpdateEvent'
 
     slack_view_data: dict[str, str | None] = Field(default_factory=dict)
 
