@@ -18,7 +18,7 @@ execution:
           python: ">=3.12,<3.14"
           node: "^22.12.0"
         tools:
-          poetry: ">=2.3.4,<2.4.0"
+          poetry: ">=1.8"
           npm: ">=10.5.0"
     docker-host:
       extends: host
@@ -40,7 +40,7 @@ execution:
           python: ">=3.12,<3.14"
           node: "^22.12.0"
         tools:
-          poetry: ">=2.3.4,<2.4.0"
+          poetry: ">=1.8"
           npm: ">=10.5.0"
       attachments:
         isolated_paths:
