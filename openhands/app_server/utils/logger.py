@@ -20,9 +20,6 @@ from openhands.sdk.utils.redact import (
     redact_url_params,
 )
 
-# Defensive: pydub is absent from the poetry-built image but present
-# in uv.lock via openhands-aci, so the filter is a no-op today but matters
-# under the uv-based install path.
 warnings.filterwarnings('ignore', category=SyntaxWarning, module=r'pydub\.utils')
 
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
