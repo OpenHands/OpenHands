@@ -155,6 +155,13 @@ jobs:
         shell: bash
         run: ota up --workflow frontend --native --dry-run .
 
+      - name: Execute native smoke tasks (cross-OS non-Ubuntu)
+        if: ${{ !matrix.full_proof && !matrix.unsupported_host }}
+        timeout-minutes: 45
+        shell: bash
+        run: |
+          ota run lint:frontend --native --stream .
+
       - name: Execute safe verification tasks
         if: ${{ matrix.full_proof }}
         timeout-minutes: 60
