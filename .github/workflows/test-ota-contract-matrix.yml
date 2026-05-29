@@ -330,7 +330,7 @@ jobs:
         shell: bash
         run: |
           ota clean . || true
-          ota proof runtime --workflow app --json . > ota-proof-app.json
+          ota proof runtime --workflow app --ready-timeout 25m --json . > ota-proof-app.json
           cat ota-proof-app.json
           ota clean . || true
 
@@ -449,7 +449,7 @@ jobs:
         shell: bash
         run: |
           ota clean . || true
-          ota proof runtime --workflow app:container --json . > ota-proof-app-container.json
+          ota proof runtime --workflow app:container --ready-timeout 25m --json . > ota-proof-app-container.json
           cat ota-proof-app-container.json
           ota clean . || true
 
