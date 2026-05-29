@@ -177,7 +177,7 @@ jobs:
         with:
           bun-version-file: openhands-ui/.bun-version
 
-      - name: Execute all non-internal tasks (native pressure lane)
+      - name: Dry-run all non-internal tasks (native coverage lane)
         if: ${{ matrix.full_proof }}
         timeout-minutes: 150
         shell: bash
@@ -207,11 +207,11 @@ jobs:
             if [ "$runtime_native" = "true" ]; then
               ota run --native --dry-run --json "$task_name" .
             else
-              ota run --native --stream "$task_name" .
+              ota run --native --dry-run --json "$task_name" .
             fi
           done < ota-non-internal-native.jsonl
 
-      - name: Execute all non-internal tasks (container pressure lane)
+      - name: Dry-run all non-internal tasks (container coverage lane)
         if: ${{ matrix.full_proof }}
         timeout-minutes: 180
         shell: bash
@@ -241,7 +241,7 @@ jobs:
             if [ "$runtime_container" = "true" ]; then
               ota run --container --dry-run --json "$task_name" .
             else
-              ota run --container --stream "$task_name" .
+              ota run --container --dry-run --json "$task_name" .
             fi
           done < ota-non-internal-container.jsonl
 
