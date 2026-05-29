@@ -37,6 +37,10 @@ from openhands.app_server.event_callback.event_callback_service import (
     EventCallbackService,
     EventCallbackServiceInjector,
 )
+from openhands.app_server.external_execution.external_execution_service import (
+    ExternalExecutionService,
+    ExternalExecutionServiceInjector,
+)
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.file_store.local import LocalFileStore
 from openhands.app_server.pending_messages.pending_message_service import (
@@ -217,6 +221,7 @@ class AppServerConfig(OpenHandsModel):
     llm_model: LLMModelServiceInjector | None = None
     event: EventServiceInjector | None = None
     event_callback: EventCallbackServiceInjector | None = None
+    external_execution: ExternalExecutionServiceInjector | None = None
     sandbox: SandboxServiceInjector | None = None
     sandbox_spec: SandboxSpecServiceInjector | None = None
     app_conversation_info: AppConversationInfoServiceInjector | None = None
@@ -261,6 +266,9 @@ def config_from_env() -> AppServerConfig:
     )
     from openhands.app_server.event_callback.sql_event_callback_service import (
         SQLEventCallbackServiceInjector,
+    )
+    from openhands.app_server.external_execution.junglegrid_service import (
+        JungleGridExecutionServiceInjector,
     )
     from openhands.app_server.sandbox.docker_sandbox_service import (
         DockerSandboxServiceInjector,
@@ -330,6 +338,24 @@ def config_from_env() -> AppServerConfig:
 
     if config.event_callback is None:
         config.event_callback = SQLEventCallbackServiceInjector()
+
+    if config.external_execution is None:
+        junglegrid_api_key = os.getenv('JUNGLEGRID_API_KEY') or os.getenv(
+            'JUNGLE_GRID_API_KEY'
+        )
+        junglegrid_base_url = (
+            os.getenv('JUNGLEGRID_API_BASE')
+            or os.getenv('JUNGLEGRID_BASE_URL')
+            or os.getenv('JUNGLE_GRID_API_URL')
+            or 'https://api.junglegrid.dev'
+        ).rstrip('/')
+        if junglegrid_api_key:
+            config.external_execution = JungleGridExecutionServiceInjector(
+                api_key=SecretStr(junglegrid_api_key),
+                base_url=junglegrid_base_url,
+                workspace_id=os.getenv('JUNGLEGRID_WORKSPACE_ID')
+                or os.getenv('JUNGLEGRID_PROJECT_ID'),
+            )
 
     if config.sandbox is None:
         # Legacy fallback
@@ -451,6 +477,15 @@ def get_event_callback_service(
     return injector.context(state, request)
 
 
+def get_external_execution_service(
+    state: InjectorState, request: Request | None = None
+) -> AsyncContextManager[ExternalExecutionService] | None:
+    injector = get_global_config().external_execution
+    if injector is None:
+        return None
+    return injector.context(state, request)
+
+
 def get_sandbox_service(
     state: InjectorState, request: Request | None = None
 ) -> AsyncContextManager[SandboxService]:
@@ -535,6 +570,13 @@ def depends_event_service():
 def depends_event_callback_service():
     injector = get_global_config().event_callback
     assert injector is not None
+    return Depends(injector.depends)
+
+
+def depends_external_execution_service():
+    injector = get_global_config().external_execution
+    if injector is None:
+        return None
     return Depends(injector.depends)
 
 
