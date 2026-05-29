@@ -238,6 +238,10 @@ jobs:
               }
             | select(.supports_container)
           ' ota-tasks-all.json > ota-non-internal-container.jsonl
+          if [ ! -s ota-non-internal-container.jsonl ]; then
+            echo "expected at least one non-internal task with container mode support"
+            exit 1
+          fi
           while IFS= read -r task_line; do
             task_name="$(jq -r '.name' <<<"$task_line")"
             runtime_container="$(jq -r '.runtime_container' <<<"$task_line")"
@@ -405,6 +409,12 @@ jobs:
       - name: Dry-run app:container workflow
         shell: bash
         run: ota up --workflow app:container --native --dry-run .
+
+      - name: Dry-run representative verification tasks in container mode
+        shell: bash
+        run: |
+          ota run lint:frontend --container --dry-run .
+          ota run test:backend --container --dry-run .
 
       - name: Upload Docker smoke failure artifacts
         if: ${{ failure() }}

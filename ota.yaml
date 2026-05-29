@@ -32,6 +32,26 @@ execution:
           node: ">=22.0.0"
         tools:
           bun: ">=1.2.17"
+    app:
+      backend: container
+      lifecycle: ephemeral
+      requirements:
+        runtimes:
+          python: ">=3.12,<3.14"
+          node: "^22.12.0"
+        tools:
+          poetry: ">=2.3.4,<2.4.0"
+          npm: ">=10.5.0"
+      attachments:
+        isolated_paths:
+          - .venv
+          - frontend/node_modules
+          - openhands-ui/node_modules
+      container:
+        image: nikolaik/python-nodejs:python3.12-nodejs22
+        engines:
+          - docker
+          - podman
 checks:
   - name: netcat-installed
     kind: precondition
@@ -106,6 +126,17 @@ tasks:
     env:
       INSTALL_DOCKER: "0"
     run: make build
+    execution:
+      default_mode: native
+      modes:
+        native:
+          context: host-dev
+          run: make build
+        container:
+          context: app
+          env:
+            INSTALL_DOCKER: "0"
+          run: make build
     effects:
       network: true
   build:frontend:
@@ -117,6 +148,17 @@ tasks:
     env:
       INSTALL_DOCKER: "0"
     run: make build-frontend
+    execution:
+      default_mode: native
+      modes:
+        native:
+          context: host-dev
+          run: make build-frontend
+        container:
+          context: app
+          env:
+            INSTALL_DOCKER: "0"
+          run: make build-frontend
     depends_on:
       - build
     safe_for_agent: true
@@ -139,6 +181,17 @@ tasks:
     env:
       INSTALL_DOCKER: "0"
     run: make lint-backend
+    execution:
+      default_mode: native
+      modes:
+        native:
+          context: host-dev
+          run: make lint-backend
+        container:
+          context: app
+          env:
+            INSTALL_DOCKER: "0"
+          run: make lint-backend
     depends_on:
       - build
     safe_for_agent: true
@@ -151,6 +204,17 @@ tasks:
     env:
       INSTALL_DOCKER: "0"
     run: make lint-frontend
+    execution:
+      default_mode: native
+      modes:
+        native:
+          context: host-dev
+          run: make lint-frontend
+        container:
+          context: app
+          env:
+            INSTALL_DOCKER: "0"
+          run: make lint-frontend
     depends_on:
       - build
     safe_for_agent: true
@@ -163,6 +227,17 @@ tasks:
     env:
       INSTALL_DOCKER: "0"
     run: make lint
+    execution:
+      default_mode: native
+      modes:
+        native:
+          context: host-dev
+          run: make lint
+        container:
+          context: app
+          env:
+            INSTALL_DOCKER: "0"
+          run: make lint
     depends_on:
       - build
     safe_for_agent: true
@@ -175,6 +250,17 @@ tasks:
     env:
       INSTALL_DOCKER: "0"
     run: make test
+    execution:
+      default_mode: native
+      modes:
+        native:
+          context: host-dev
+          run: make test
+        container:
+          context: app
+          env:
+            INSTALL_DOCKER: "0"
+          run: make test
     depends_on:
       - build
   test:backend:
@@ -186,6 +272,17 @@ tasks:
     env:
       INSTALL_DOCKER: "0"
     run: poetry run pytest ./tests/unit/test_*.py
+    execution:
+      default_mode: native
+      modes:
+        native:
+          context: host-dev
+          run: poetry run pytest ./tests/unit/test_*.py
+        container:
+          context: app
+          env:
+            INSTALL_DOCKER: "0"
+          run: poetry run pytest ./tests/unit/test_*.py
     depends_on:
       - build
     safe_for_agent: true
@@ -199,6 +296,17 @@ tasks:
     env:
       INSTALL_DOCKER: "0"
     run: sh -c 'make test && poetry run pytest ./tests/unit/test_*.py'
+    execution:
+      default_mode: native
+      modes:
+        native:
+          context: host-dev
+          run: sh -c 'make test && poetry run pytest ./tests/unit/test_*.py'
+        container:
+          context: app
+          env:
+            INSTALL_DOCKER: "0"
+          run: sh -c 'make test && poetry run pytest ./tests/unit/test_*.py'
     depends_on:
       - build
   setup:config-basic:
