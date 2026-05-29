@@ -103,11 +103,14 @@ class GitHubBranchesMixin(GitHubMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self, repository: str, query: str, per_page: int = 30, page: int = 1
     ) -> list[Branch]:
         """Search branches by name using GitHub GraphQL with a partial query."""
         # Require a non-empty query
         if not query:
+            return []
+
+        if page < 1:
             return []
 
         # Clamp per_page to GitHub GraphQL limits
@@ -119,28 +122,44 @@ class GitHubBranchesMixin(GitHubMixinBase):
             return []
         owner, name = parts[-2], parts[-1]
 
-        variables = {
-            'owner': owner,
-            'name': name,
-            'query': query or '',
-            'perPage': per_page,
-        }
-
+        after: str | None = None
+        refs_data: dict | None = None
         try:
-            result = await self.execute_graphql_query(
-                search_branches_graphql_query, variables
-            )
+            for current_page in range(1, page + 1):
+                variables = {
+                    'owner': owner,
+                    'name': name,
+                    'query': query or '',
+                    'perPage': per_page,
+                    'after': after,
+                }
+                result = await self.execute_graphql_query(
+                    search_branches_graphql_query, variables
+                )
+                repo = result.get('data', {}).get('repository')
+                if not repo or not repo.get('refs'):
+                    return []
+
+                refs_data = repo['refs']
+                if refs_data is None:
+                    return []
+                if current_page < page:
+                    page_info = refs_data.get('pageInfo') or {}
+                    if not page_info.get('hasNextPage'):
+                        return []
+                    after = page_info.get('endCursor')
+                    if not after:
+                        return []
         except Exception as e:
             logger.warning(f'Failed to search for branches: {e}')
             # Fallback to empty result on any GraphQL error
             return []
 
-        repo = result.get('data', {}).get('repository')
-        if not repo or not repo.get('refs'):
+        if not refs_data:
             return []
 
         branches: list[Branch] = []
-        for node in repo['refs'].get('nodes', []):
+        for node in refs_data.get('nodes', []):
             bname = node.get('name') or ''
             target = node.get('target') or {}
             typename = target.get('__typename')

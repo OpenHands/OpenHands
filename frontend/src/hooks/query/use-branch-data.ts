@@ -15,20 +15,22 @@ export function useBranchData(
   // Fetch branches with pagination
   const {
     data: branchData,
-    fetchNextPage,
-    hasNextPage,
-    isLoading,
-    isFetchingNextPage,
-    isError,
+    fetchNextPage: fetchNextListPage,
+    hasNextPage: hasNextListPage,
+    isLoading: isListLoading,
+    isFetchingNextPage: isFetchingNextListPage,
+    isError: isListError,
   } = useRepositoryBranchesPaginated(repository, 30, provider);
 
   // Search branches when user types
-  const { data: searchData, isLoading: isSearchLoading } = useSearchBranches(
-    repository,
-    processedSearchInput,
-    30,
-    provider,
-  );
+  const {
+    data: searchData,
+    fetchNextPage: fetchNextSearchPage,
+    hasNextPage: hasNextSearchPage,
+    isLoading: isSearchLoading,
+    isFetchingNextPage: isFetchingNextSearchPage,
+    isError: isSearchError,
+  } = useSearchBranches(repository, processedSearchInput, 30, provider);
 
   // Combine all branches from paginated data - use .items for V1 response
   const allBranches = useMemo(
@@ -63,14 +65,18 @@ export function useBranchData(
       provider,
     );
 
+  const shouldUseSearch = useMemo(
+    () =>
+      Boolean(
+        processedSearchInput &&
+          searchData &&
+          !(selectedBranch && inputValue === selectedBranch.name),
+      ),
+    [processedSearchInput, searchData, selectedBranch, inputValue],
+  );
+
   // Get branches to display with default branch prioritized
   const branches = useMemo(() => {
-    // Don't use search results if input exactly matches selected branch
-    const shouldUseSearch =
-      processedSearchInput &&
-      searchData &&
-      !(selectedBranch && inputValue === selectedBranch.name);
-
     let branchesToUse = shouldUseSearch ? searchData : allBranches;
 
     // If we have a default branch, ensure it's at the top of the list
@@ -105,11 +111,9 @@ export function useBranchData(
 
     return branchesToUse;
   }, [
-    processedSearchInput,
+    shouldUseSearch,
     searchData,
     allBranches,
-    selectedBranch,
-    inputValue,
     defaultBranch,
     defaultBranchInLoaded,
     defaultBranchData,
@@ -118,11 +122,15 @@ export function useBranchData(
   return {
     branches,
     allBranches,
-    fetchNextPage,
-    hasNextPage,
-    isLoading: isLoading || isDefaultBranchLoading,
-    isFetchingNextPage,
-    isError,
+    fetchNextPage: shouldUseSearch ? fetchNextSearchPage : fetchNextListPage,
+    hasNextPage: shouldUseSearch ? hasNextSearchPage : hasNextListPage,
+    isLoading: shouldUseSearch
+      ? isSearchLoading
+      : isListLoading || isDefaultBranchLoading,
+    isFetchingNextPage: shouldUseSearch
+      ? isFetchingNextSearchPage
+      : isFetchingNextListPage,
+    isError: shouldUseSearch ? isSearchError : isListError,
     isSearchLoading,
   };
 }

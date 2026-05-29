@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, InfiniteData } from "@tanstack/react-query";
 import GitService from "#/api/git-service/git-service.api";
-import { Branch } from "#/types/git";
+import { BranchPage } from "#/types/git";
 import { Provider } from "#/types/settings";
 
 export function useSearchBranches(
@@ -9,7 +9,13 @@ export function useSearchBranches(
   perPage: number = 30,
   selectedProvider?: Provider,
 ) {
-  return useQuery<Branch[]>({
+  const result = useInfiniteQuery<
+    BranchPage,
+    Error,
+    InfiniteData<BranchPage>,
+    [string, string | null, ...unknown[]],
+    string | null
+  >({
     queryKey: [
       "repository",
       repository,
@@ -19,19 +25,31 @@ export function useSearchBranches(
       perPage,
       selectedProvider,
     ],
-    queryFn: async () => {
-      if (!repository || !query || !selectedProvider) return [];
-      const response = await GitService.searchRepositoryBranches(
+    queryFn: async ({ pageParam }) => {
+      if (!repository || !query || !selectedProvider) {
+        return {
+          items: [],
+          next_page_id: null,
+        };
+      }
+      return GitService.getRepositoryBranches(
         repository,
         selectedProvider,
         query,
-        undefined, // pageId
+        pageParam ?? undefined,
         perPage,
       );
-      return response.items;
     },
     enabled: !!repository && !!query && !!selectedProvider,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 15,
+    getNextPageParam: (lastPage) =>
+      lastPage.next_page_id ? lastPage.next_page_id : undefined,
+    initialPageParam: null,
   });
+
+  return {
+    ...result,
+    data: result.data?.pages.flatMap((page) => page.items) ?? [],
+  };
 }
