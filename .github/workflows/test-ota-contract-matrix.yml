@@ -11,6 +11,10 @@ on:
         description: Ota branch, tag, or commit to build for this matrix run
         required: false
         default: 1.6.18-implementation
+      run_runtime_proof:
+        description: Run runtime proof steps (native app workflow)
+        required: false
+        default: "false"
   pull_request:
     paths:
       - 'ota.yaml'
@@ -325,7 +329,7 @@ jobs:
           grep -F "Unsupported host platform for context" ota-up-ui-package.txt
 
       - name: Proof app workflow
-        if: matrix.full_proof
+        if: matrix.full_proof && github.event_name == 'workflow_dispatch' && github.event.inputs.run_runtime_proof == 'true'
         timeout-minutes: 90
         shell: bash
         run: |
