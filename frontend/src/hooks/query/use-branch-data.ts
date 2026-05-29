@@ -64,16 +64,15 @@ export function useBranchData(
       30,
       provider,
     );
-
-  const shouldUseSearch = useMemo(
-    () =>
-      Boolean(
-        processedSearchInput &&
-          searchData &&
-          !(selectedBranch && inputValue === selectedBranch.name),
-      ),
-    [processedSearchInput, searchData, selectedBranch, inputValue],
-  );
+    const shouldUseSearch = useMemo(
+      () =>
+        Boolean(
+          processedSearchInput &&
+            searchData &&
+            !(selectedBranch && inputValue === selectedBranch.name),
+        ),
+      [processedSearchInput, searchData, selectedBranch, inputValue],
+    );
 
   // Get branches to display with default branch prioritized
   const branches = useMemo(() => {
