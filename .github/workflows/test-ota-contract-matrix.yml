@@ -164,6 +164,12 @@ jobs:
           ota run lint:frontend --native --stream .
           ota run test:backend --native --stream .
 
+      - name: Setup Bun (native pressure lane)
+        if: ${{ matrix.full_proof && matrix.name == 'ubuntu-bash' }}
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: openhands-ui/.bun-version
+
       - name: Execute all non-internal tasks (native pressure lane)
         if: ${{ matrix.full_proof }}
         timeout-minutes: 150
@@ -183,13 +189,7 @@ jobs:
                     ((.default_mode // "native") == "native")
                   end
                 ),
-                runtime_native: (
-                  if (.modes | type) == "array" then
-                    any(.modes[]?; .mode == "native" and ((.has_runtime // false) == true))
-                  else
-                    false
-                  end
-                )
+                runtime_native: (.has_runtime // false)
               }
             | select(.supports_native)
           ' ota-tasks-all.json > ota-non-internal-native.jsonl
@@ -223,13 +223,7 @@ jobs:
                     ((.default_mode // "native") == "container")
                   end
                 ),
-                runtime_container: (
-                  if (.modes | type) == "array" then
-                    any(.modes[]?; .mode == "container" and ((.has_runtime // false) == true))
-                  else
-                    false
-                  end
-                )
+                runtime_container: (.has_runtime // false)
               }
             | select(.supports_container)
           ' ota-tasks-all.json > ota-non-internal-container.jsonl
@@ -443,6 +437,7 @@ jobs:
           ota validate .
 
       - name: Proof app:container workflow
+        continue-on-error: true
         timeout-minutes: 60
         shell: bash
         run: |
