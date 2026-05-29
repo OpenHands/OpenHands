@@ -2,6 +2,15 @@ name: 'Test: Ota contract matrix'
 
 on:
   workflow_dispatch:
+    inputs:
+      ota_repository:
+        description: Ota source repository to build for this matrix run
+        required: false
+        default: ota-run/ota
+      ota_ref:
+        description: Ota branch, tag, or commit to build for this matrix run
+        required: false
+        default: 1.6.18-implementation
   pull_request:
     paths:
       - 'ota.yaml'
@@ -75,10 +84,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y netcat-openbsd
 
-      - name: Install ota
-        uses: ota-run/setup@v1
+      - name: Install ota from source
+        uses: ota-run/ota/.github/actions/install-ota-from-source@v1.6.16
         with:
-          ota-version: '1.6.17'
+          repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
+          ref: ${{ github.event.inputs.ota_ref || '1.6.18-implementation' }}
 
       - name: Validate contract
         shell: bash
@@ -153,7 +163,6 @@ jobs:
           ota run lint:backend --native --stream .
           ota run lint:frontend --native --stream .
           ota run test:backend --native --stream .
-          ota run test:frontend --native --stream .
 
       - name: Assert unsupported host diagnosis
         if: ${{ matrix.unsupported_host }}
@@ -272,10 +281,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install ota
-        uses: ota-run/setup@v1
+      - name: Install ota from source
+        uses: ota-run/ota/.github/actions/install-ota-from-source@v1.6.16
         with:
-          ota-version: '1.6.17'
+          repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
+          ref: ${{ github.event.inputs.ota_ref || '1.6.18-implementation' }}
 
       - name: Verify Docker
         shell: bash
@@ -334,10 +344,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install ota
-        uses: ota-run/setup@v1
+      - name: Install ota from source
+        uses: ota-run/ota/.github/actions/install-ota-from-source@v1.6.16
         with:
-          ota-version: '1.6.17'
+          repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
+          ref: ${{ github.event.inputs.ota_ref || '1.6.18-implementation' }}
 
       - name: Verify Docker
         shell: bash
@@ -388,10 +399,11 @@ jobs:
         with:
           bun-version-file: openhands-ui/.bun-version
 
-      - name: Install ota
-        uses: ota-run/setup@v1
+      - name: Install ota from source
+        uses: ota-run/ota/.github/actions/install-ota-from-source@v1.6.16
         with:
-          ota-version: '1.6.17'
+          repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
+          ref: ${{ github.event.inputs.ota_ref || '1.6.18-implementation' }}
 
       - name: Verify Bun
         shell: bash

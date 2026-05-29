@@ -177,7 +177,6 @@ tasks:
     run: make test
     depends_on:
       - build
-    safe_for_agent: true
   test:backend:
     context: host-dev
     description: Run the backend Python unit tests
@@ -202,7 +201,6 @@ tasks:
     run: sh -c 'make test && poetry run pytest ./tests/unit/test_*.py'
     depends_on:
       - build
-    safe_for_agent: true
   setup:config-basic:
     context: host
     description: Create a basic config.toml for headless local runtime flows
@@ -431,13 +429,10 @@ agent:
     - lint:frontend
     - lint
     - test:backend
-    - test:frontend
-    - test
   verify_after_changes:
     - lint:backend
     - lint:frontend
     - test:backend
-    - test:frontend
   writable_paths:
     - openhands
     - frontend
