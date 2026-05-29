@@ -164,6 +164,86 @@ jobs:
           ota run lint:frontend --native --stream .
           ota run test:backend --native --stream .
 
+      - name: Execute all non-internal tasks (native pressure lane)
+        if: ${{ matrix.full_proof }}
+        timeout-minutes: 150
+        shell: bash
+        run: |
+          set -euo pipefail
+          ota tasks --json . > ota-tasks-all.json
+          jq -c '
+            .tasks[]
+            | select((.internal // false) == false)
+            | {
+                name: .name,
+                supports_native: (
+                  if (.modes | type) == "array" then
+                    any(.modes[]?; .mode == "native")
+                  else
+                    ((.default_mode // "native") == "native")
+                  end
+                ),
+                runtime_native: (
+                  if (.modes | type) == "array" then
+                    any(.modes[]?; .mode == "native" and ((.has_runtime // false) == true))
+                  else
+                    false
+                  end
+                )
+              }
+            | select(.supports_native)
+          ' ota-tasks-all.json > ota-non-internal-native.jsonl
+          while IFS= read -r task_line; do
+            task_name="$(jq -r '.name' <<<"$task_line")"
+            runtime_native="$(jq -r '.runtime_native' <<<"$task_line")"
+            echo ">>> [native] ${task_name} (runtime=${runtime_native})"
+            if [ "$runtime_native" = "true" ]; then
+              ota run --native --dry-run --json "$task_name" .
+            else
+              ota run --native --stream "$task_name" .
+            fi
+          done < ota-non-internal-native.jsonl
+
+      - name: Execute all non-internal tasks (container pressure lane)
+        if: ${{ matrix.full_proof }}
+        timeout-minutes: 180
+        shell: bash
+        run: |
+          set -euo pipefail
+          ota tasks --json . > ota-tasks-all.json
+          jq -c '
+            .tasks[]
+            | select((.internal // false) == false)
+            | {
+                name: .name,
+                supports_container: (
+                  if (.modes | type) == "array" then
+                    any(.modes[]?; .mode == "container")
+                  else
+                    ((.default_mode // "native") == "container")
+                  end
+                ),
+                runtime_container: (
+                  if (.modes | type) == "array" then
+                    any(.modes[]?; .mode == "container" and ((.has_runtime // false) == true))
+                  else
+                    false
+                  end
+                )
+              }
+            | select(.supports_container)
+          ' ota-tasks-all.json > ota-non-internal-container.jsonl
+          while IFS= read -r task_line; do
+            task_name="$(jq -r '.name' <<<"$task_line")"
+            runtime_container="$(jq -r '.runtime_container' <<<"$task_line")"
+            echo ">>> [container] ${task_name} (runtime=${runtime_container})"
+            if [ "$runtime_container" = "true" ]; then
+              ota run --container --dry-run --json "$task_name" .
+            else
+              ota run --container --stream "$task_name" .
+            fi
+          done < ota-non-internal-container.jsonl
+
       - name: Assert unsupported host diagnosis
         if: ${{ matrix.unsupported_host }}
         shell: bash
