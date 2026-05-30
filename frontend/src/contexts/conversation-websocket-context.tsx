@@ -46,8 +46,8 @@ import type {
   V1AppConversation,
   V1SendMessageRequest,
 } from "#/api/conversation-service/v1-conversation-service.types";
+import type { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
 import EventService from "#/api/event-service/event-service.api";
-import PendingMessageService from "#/api/pending-message-service/pending-message-service.api";
 import { useConversationStore } from "#/stores/conversation-store";
 import { isBudgetOrCreditError, trackError } from "#/utils/error-handler";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
@@ -73,6 +73,12 @@ interface ConversationWebSocketContextType {
   isLoadingHistory: boolean;
 }
 
+type PendingMessageTarget = "main" | "planning";
+
+const shouldClearPendingMessagesForSandboxStatus = (
+  sandboxStatus?: V1SandboxStatus | null,
+) => sandboxStatus === "PAUSED" || sandboxStatus === "MISSING";
+
 const ConversationWebSocketContext = createContext<
   ConversationWebSocketContextType | undefined
 >(undefined);
@@ -82,6 +88,7 @@ export function ConversationWebSocketProvider({
   conversationId,
   conversationUrl,
   sessionApiKey,
+  sandboxStatus,
   subConversations,
   subConversationIds,
 }: {
@@ -89,6 +96,7 @@ export function ConversationWebSocketProvider({
   conversationId?: string;
   conversationUrl?: string | null;
   sessionApiKey?: string | null;
+  sandboxStatus?: V1SandboxStatus | null;
   subConversations?: V1AppConversation[];
   subConversationIds?: string[];
 }) {
@@ -135,6 +143,19 @@ export function ConversationWebSocketProvider({
     path: string;
     conversationId: string;
   } | null>(null);
+  const pendingMainMessagesRef = useRef<V1SendMessageRequest[]>([]);
+  const pendingPlanningMessagesRef = useRef<V1SendMessageRequest[]>([]);
+  const previousMainQueueIdentityRef = useRef({
+    conversationId,
+    conversationUrl,
+  });
+  const previousPlanningQueueIdentityRef = useRef<{
+    conversationId?: string | null;
+    conversationUrl?: string | null;
+  }>({
+    conversationId: subConversations?.[0]?.id ?? subConversationIds?.[0],
+    conversationUrl: subConversations?.[0]?.conversation_url,
+  });
 
   const isPlanFilePath = (path: string | null): boolean =>
     path?.toUpperCase().endsWith("PLAN.MD") ?? false;
@@ -200,14 +221,14 @@ export function ConversationWebSocketProvider({
     return buildWebSocketUrl(conversationId, conversationUrl);
   }, [conversationId, conversationUrl]);
 
+  const planningAgentConversation = subConversations?.[0];
+
   const planningAgentWsUrl = useMemo(() => {
-    if (!subConversations?.length) {
+    if (!planningAgentConversation) {
       return null;
     }
 
     // Currently, there is only one sub-conversation and it uses the planning agent.
-    const planningAgentConversation = subConversations[0];
-
     if (
       !planningAgentConversation?.id ||
       !planningAgentConversation.conversation_url
@@ -219,7 +240,67 @@ export function ConversationWebSocketProvider({
       planningAgentConversation.id,
       planningAgentConversation.conversation_url,
     );
-  }, [subConversations]);
+  }, [planningAgentConversation]);
+
+  const getTargetQueue = useCallback(
+    (target: PendingMessageTarget) =>
+      target === "planning"
+        ? pendingPlanningMessagesRef.current
+        : pendingMainMessagesRef.current,
+    [],
+  );
+
+  const clearPendingMessages = useCallback((target?: PendingMessageTarget) => {
+    if (!target || target === "main") {
+      pendingMainMessagesRef.current = [];
+    }
+    if (!target || target === "planning") {
+      pendingPlanningMessagesRef.current = [];
+    }
+  }, []);
+
+  const enqueuePendingMessage = useCallback(
+    (target: PendingMessageTarget, message: V1SendMessageRequest) => {
+      getTargetQueue(target).push(message);
+    },
+    [getTargetQueue],
+  );
+
+  const flushPendingMessages = useCallback(
+    (socket: WebSocket, target: PendingMessageTarget) => {
+      if (socket.readyState !== WebSocket.OPEN) {
+        return false;
+      }
+
+      const queue = getTargetQueue(target);
+      if (queue.length === 0) {
+        return true;
+      }
+
+      const pendingMessages = queue.splice(0);
+      let nextMessageIndex = 0;
+
+      try {
+        for (
+          ;
+          nextMessageIndex < pendingMessages.length;
+          nextMessageIndex += 1
+        ) {
+          socket.send(JSON.stringify(pendingMessages[nextMessageIndex]));
+        }
+        return true;
+      } catch (error) {
+        queue.unshift(...pendingMessages.slice(nextMessageIndex));
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Failed to send queued messages";
+        setErrorMessage(errorMessage);
+        return false;
+      }
+    },
+    [getTargetQueue, setErrorMessage],
+  );
 
   // Merged connection state - reflects combined status of both connections
   const connectionState = useMemo<V1_WebSocketConnectionState>(() => {
@@ -326,6 +407,63 @@ export function ConversationWebSocketProvider({
     () => isLoadingHistoryMain || isLoadingHistoryPlanning,
     [isLoadingHistoryMain, isLoadingHistoryPlanning],
   );
+
+  useEffect(() => {
+    const previous = previousMainQueueIdentityRef.current;
+    const conversationChanged = previous.conversationId !== conversationId;
+    const previousUrl = previous.conversationUrl;
+    // Preserve messages queued before the socket URL is known; clear once an
+    // established conversation target changes.
+    const urlChangedAfterReady =
+      !!previousUrl &&
+      previousUrl !== conversationUrl &&
+      (!!conversationUrl || conversationUrl === null);
+
+    if (conversationChanged || urlChangedAfterReady) {
+      clearPendingMessages();
+    }
+
+    previousMainQueueIdentityRef.current = { conversationId, conversationUrl };
+  }, [clearPendingMessages, conversationId, conversationUrl]);
+
+  useEffect(() => {
+    const previous = previousPlanningQueueIdentityRef.current;
+    const currentPlanningConversationId =
+      planningAgentConversation?.id ?? subConversationIds?.[0] ?? null;
+    const currentPlanningConversationUrl =
+      planningAgentConversation?.conversation_url ?? null;
+    // Preserve plan-mode messages queued while the sub-conversation is being created.
+    const conversationChanged =
+      !!previous.conversationId &&
+      previous.conversationId !== currentPlanningConversationId;
+    const urlChangedAfterReady =
+      !!previous.conversationUrl &&
+      previous.conversationUrl !== currentPlanningConversationUrl &&
+      (!!currentPlanningConversationUrl ||
+        currentPlanningConversationUrl === null);
+
+    if (conversationChanged || urlChangedAfterReady) {
+      clearPendingMessages("planning");
+    }
+
+    previousPlanningQueueIdentityRef.current = {
+      conversationId: currentPlanningConversationId,
+      conversationUrl: currentPlanningConversationUrl,
+    };
+  }, [clearPendingMessages, planningAgentConversation, subConversationIds]);
+
+  useEffect(
+    () => () => {
+      clearPendingMessages();
+    },
+    [clearPendingMessages],
+  );
+
+  useEffect(() => {
+    if (shouldClearPendingMessagesForSandboxStatus(sandboxStatus)) {
+      clearPendingMessages();
+    }
+  }, [clearPendingMessages, sandboxStatus]);
 
   // Reset hasConnected flags and history loading state when conversation changes
   useEffect(() => {
@@ -632,7 +770,6 @@ export function ConversationWebSocketProvider({
 
           // Handle cache invalidation for ActionEvent
           if (isActionEvent(event)) {
-            const planningAgentConversation = subConversations?.[0];
             const currentConversationId =
               planningAgentConversation?.id || "test-conversation-id"; // TODO: Get from context
             handleActionEventCacheInvalidation(
@@ -675,7 +812,6 @@ export function ConversationWebSocketProvider({
           if (isPlanningFileEditorObservationEvent(event)) {
             const { path } = event.observation;
             if (isPlanFilePath(path)) {
-              const planningAgentConversation = subConversations?.[0];
               const planningConversationId = planningAgentConversation?.id;
 
               if (planningConversationId && path) {
@@ -721,7 +857,7 @@ export function ConversationWebSocketProvider({
       removeErrorMessage,
       removeOptimisticUserMessage,
       queryClient,
-      subConversations,
+      planningAgentConversation,
       conversationId,
       setExecutionStatus,
       appendInput,
@@ -746,10 +882,17 @@ export function ConversationWebSocketProvider({
     return {
       queryParams,
       reconnect: { enabled: true },
-      onOpen: async () => {
+      onOpen: async (event) => {
         setMainConnectionState("OPEN");
         hasConnectedRefMain.current = true; // Mark that we've successfully connected
         removeErrorMessage(); // Clear any previous error messages on successful connection
+        const socket = (event.currentTarget ??
+          event.target) as WebSocket | null;
+        if (shouldClearPendingMessagesForSandboxStatus(sandboxStatus)) {
+          clearPendingMessages();
+        } else if (socket) {
+          flushPendingMessages(socket, "main");
+        }
 
         // Fetch expected event count for history loading detection
         if (conversationId && conversationUrl) {
@@ -787,11 +930,14 @@ export function ConversationWebSocketProvider({
     };
   }, [
     handleMainMessage,
+    flushPendingMessages,
     setErrorMessage,
     removeErrorMessage,
     sessionApiKey,
     conversationId,
     conversationUrl,
+    clearPendingMessages,
+    sandboxStatus,
   ]);
 
   // Separate WebSocket options for planning agent connection
@@ -805,15 +951,20 @@ export function ConversationWebSocketProvider({
       queryParams.session_api_key = sessionApiKey;
     }
 
-    const planningAgentConversation = subConversations?.[0];
-
     return {
       queryParams,
       reconnect: { enabled: true },
-      onOpen: async () => {
+      onOpen: async (event) => {
         setPlanningConnectionState("OPEN");
         hasConnectedRefPlanning.current = true; // Mark that we've successfully connected
         removeErrorMessage(); // Clear any previous error messages on successful connection
+        const socket = (event.currentTarget ??
+          event.target) as WebSocket | null;
+        if (shouldClearPendingMessagesForSandboxStatus(sandboxStatus)) {
+          clearPendingMessages();
+        } else if (socket) {
+          flushPendingMessages(socket, "planning");
+        }
 
         // Fetch expected event count for history loading detection
         if (
@@ -854,10 +1005,13 @@ export function ConversationWebSocketProvider({
     };
   }, [
     handlePlanningMessage,
+    flushPendingMessages,
     setErrorMessage,
     removeErrorMessage,
     sessionApiKey,
-    subConversations,
+    planningAgentConversation,
+    clearPendingMessages,
+    sandboxStatus,
   ]);
 
   // Only attempt WebSocket connection when we have a valid URL
@@ -874,41 +1028,36 @@ export function ConversationWebSocketProvider({
   );
 
   // V1 send message function via WebSocket
-  // Falls back to REST API queue when WebSocket is not connected
   const sendMessage = useCallback(
     async (message: V1SendMessageRequest): Promise<SendMessageResult> => {
+      if (shouldClearPendingMessagesForSandboxStatus(sandboxStatus)) {
+        clearPendingMessages();
+        return { queued: true };
+      }
+
       const currentMode = useConversationStore.getState().conversationMode;
+      const target: PendingMessageTarget =
+        currentMode === "plan" ? "planning" : "main";
       const currentSocket =
-        currentMode === "plan" ? planningAgentSocket : mainSocket;
+        target === "planning" ? planningAgentSocket : mainSocket;
 
       if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
-        // WebSocket not connected - queue message via REST API
-        // Message will be delivered automatically when conversation becomes ready
         if (!conversationId) {
           const error = new Error("No conversation ID available");
           setErrorMessage(error.message);
           throw error;
         }
 
-        try {
-          await PendingMessageService.queueMessage(conversationId, {
-            role: "user",
-            content: message.content,
-          });
-          // Message queued successfully - it will be delivered when ready
-          // Return queued: true so caller knows not to show optimistic UI
-          return { queued: true };
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error
-              ? error.message
-              : "Failed to queue message for delivery";
-          setErrorMessage(errorMessage);
-          throw error;
-        }
+        enqueuePendingMessage(target, message);
+        return { queued: true };
       }
 
       try {
+        if (!flushPendingMessages(currentSocket, target)) {
+          enqueuePendingMessage(target, message);
+          return { queued: true };
+        }
+
         // Send message through WebSocket as JSON
         currentSocket.send(JSON.stringify(message));
         return { queued: false };
@@ -916,10 +1065,20 @@ export function ConversationWebSocketProvider({
         const errorMessage =
           error instanceof Error ? error.message : "Failed to send message";
         setErrorMessage(errorMessage);
-        throw error;
+        enqueuePendingMessage(target, message);
+        return { queued: true };
       }
     },
-    [mainSocket, planningAgentSocket, setErrorMessage, conversationId],
+    [
+      mainSocket,
+      planningAgentSocket,
+      setErrorMessage,
+      conversationId,
+      enqueuePendingMessage,
+      flushPendingMessages,
+      clearPendingMessages,
+      sandboxStatus,
+    ],
   );
 
   // Track main socket state changes

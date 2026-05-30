@@ -22,7 +22,6 @@ import {
   createMockUserMessageEvent,
   createMockConversationErrorEvent,
   createMockServerErrorEvent,
-  createMockAgentErrorEvent,
   createMockBrowserObservationEvent,
   createMockBrowserNavigateActionEvent,
   createMockExecuteBashActionEvent,
@@ -42,6 +41,9 @@ import { conversationWebSocketTestSetup } from "./helpers/msw-websocket-setup";
 import { useEventStore } from "#/stores/use-event-store";
 import { isV1Event } from "#/types/v1/type-guards";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
+import { useConversationStore } from "#/stores/conversation-store";
+import type { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
+import type { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
 
 // Mock useUserConversation to return V1 conversation data
 vi.mock("#/hooks/query/use-user-conversation", () => ({
@@ -58,6 +60,7 @@ vi.mock("#/hooks/query/use-user-conversation", () => ({
 
 // MSW WebSocket mock setup
 const { wsLink, server: mswServer } = conversationWebSocketTestSetup();
+let restoreWebSocketGlobal: (() => void) | null = null;
 
 beforeAll(() => {
   // The global MSW server from vitest.setup.ts is already running
@@ -67,12 +70,15 @@ beforeAll(() => {
 
 beforeEach(() => {
   useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
+  useConversationStore.getState().setConversationMode("code");
 });
 
 afterEach(() => {
   mswServer.resetHandlers();
   // Clean up any React components
   cleanup();
+  restoreWebSocketGlobal?.();
+  restoreWebSocketGlobal = null;
   // Reset stores to prevent state leakage between tests
   useErrorMessageStore.getState().removeErrorMessage();
   useEventStore.getState().clearEvents();
@@ -94,6 +100,7 @@ function renderWithWebSocketContext(
   conversationId = "test-conversation-default",
   conversationUrl = "http://localhost:3000/api/conversations/test-conversation-default",
   sessionApiKey: string | null = null,
+  sandboxStatus: V1SandboxStatus | null = null,
 ) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -113,6 +120,7 @@ function renderWithWebSocketContext(
                 conversationId={conversationId}
                 conversationUrl={conversationUrl}
                 sessionApiKey={sessionApiKey}
+                sandboxStatus={sandboxStatus}
               >
                 {children}
               </ConversationWebSocketProvider>
@@ -122,6 +130,179 @@ function renderWithWebSocketContext(
       </MemoryRouter>
     </QueryClientProvider>,
   );
+}
+
+type CapturedSendMessage = NonNullable<
+  ReturnType<typeof useConversationWebSocket>
+>["sendMessage"];
+
+const createTextMessage = (text: string) => ({
+  role: "user" as const,
+  content: [{ type: "text" as const, text }],
+});
+
+const createMockSubConversation = (
+  id: string,
+  conversationUrl: string,
+): V1AppConversation => ({
+  id,
+  created_by_user_id: "test-user-id",
+  sandbox_id: "test-sandbox-id",
+  selected_repository: null,
+  selected_branch: null,
+  git_provider: null,
+  title: null,
+  trigger: null,
+  pr_number: [],
+  llm_model: null,
+  metrics: null,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  sandbox_status: "RUNNING",
+  execution_status: null,
+  conversation_url: conversationUrl,
+  session_api_key: null,
+  sub_conversation_ids: [],
+});
+
+function SendMessageCapture({
+  onReady,
+}: {
+  onReady: (sendMessage: CapturedSendMessage) => void;
+}) {
+  const context = useConversationWebSocket();
+
+  React.useEffect(() => {
+    if (context?.sendMessage) {
+      onReady(context.sendMessage);
+    }
+  }, [context?.sendMessage, onReady]);
+
+  return (
+    <div>
+      <div data-testid="connection-state">
+        {context?.connectionState || "NOT_AVAILABLE"}
+      </div>
+    </div>
+  );
+}
+
+function setupControlledWebSocket() {
+  const originalWebSocket = globalThis.WebSocket;
+  const sockets: ControlledWebSocket[] = [];
+
+  const eventForSocket = (type: string, socket: ControlledWebSocket) => {
+    const event = new Event(type);
+    Object.defineProperty(event, "target", { value: socket });
+    Object.defineProperty(event, "currentTarget", { value: socket });
+    return event;
+  };
+
+  const closeEventForSocket = (
+    socket: ControlledWebSocket,
+    code: number,
+    reason: string,
+  ) => {
+    const event = eventForSocket("close", socket);
+    Object.defineProperty(event, "code", { value: code });
+    Object.defineProperty(event, "reason", { value: reason });
+    return event as CloseEvent;
+  };
+
+  class ControlledWebSocket {
+    static readonly CONNECTING = 0;
+
+    static readonly OPEN = 1;
+
+    static readonly CLOSING = 2;
+
+    static readonly CLOSED = 3;
+
+    readonly CONNECTING = ControlledWebSocket.CONNECTING;
+
+    readonly OPEN = ControlledWebSocket.OPEN;
+
+    readonly CLOSING = ControlledWebSocket.CLOSING;
+
+    readonly CLOSED = ControlledWebSocket.CLOSED;
+
+    binaryType: BinaryType = "blob";
+
+    bufferedAmount = 0;
+
+    extensions = "";
+
+    onclose: ((event: CloseEvent) => void) | null = null;
+
+    onerror: ((event: Event) => void) | null = null;
+
+    onmessage: ((event: MessageEvent) => void) | null = null;
+
+    onopen: ((event: Event) => void) | null = null;
+
+    protocol = "";
+
+    readyState = ControlledWebSocket.CONNECTING;
+
+    sentMessages: unknown[] = [];
+
+    url: string;
+
+    constructor(url: string | URL) {
+      this.url = String(url);
+      sockets.push(this);
+    }
+
+    addEventListener() {
+      return this.readyState;
+    }
+
+    close(code = 1000, reason = "") {
+      if (this.readyState === ControlledWebSocket.CLOSED) {
+        return;
+      }
+
+      this.readyState = ControlledWebSocket.CLOSED;
+      this.onclose?.(closeEventForSocket(this, code, reason));
+    }
+
+    dispatchEvent() {
+      return this.readyState !== ControlledWebSocket.CLOSED;
+    }
+
+    emitMessage(message: unknown) {
+      const event = new MessageEvent("message", {
+        data: typeof message === "string" ? message : JSON.stringify(message),
+      });
+      Object.defineProperty(event, "target", { value: this });
+      Object.defineProperty(event, "currentTarget", { value: this });
+      this.onmessage?.(event);
+    }
+
+    open() {
+      this.readyState = ControlledWebSocket.OPEN;
+      this.onopen?.(eventForSocket("open", this));
+    }
+
+    removeEventListener() {
+      return this.readyState;
+    }
+
+    send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
+      if (this.readyState !== ControlledWebSocket.OPEN) {
+        throw new Error("WebSocket is not open");
+      }
+
+      this.sentMessages.push(JSON.parse(String(data)));
+    }
+  }
+
+  vi.stubGlobal("WebSocket", ControlledWebSocket);
+  restoreWebSocketGlobal = () => {
+    vi.stubGlobal("WebSocket", originalWebSocket);
+  };
+
+  return { sockets };
 }
 
 describe("Conversation WebSocket Handler", () => {
@@ -503,13 +684,17 @@ describe("Conversation WebSocket Handler", () => {
           server.connect();
 
           // Wait for connection to be established
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          await new Promise((resolve) => {
+            setTimeout(resolve, 100);
+          });
 
           // Send budget error first
           client.send(JSON.stringify(mockBudgetError));
 
           // Wait for budget error to be processed before sending user event
-          await new Promise((resolve) => setTimeout(resolve, 200));
+          await new Promise((resolve) => {
+            setTimeout(resolve, 200);
+          });
 
           // Send user event - it should NOT clear the budget error
           client.send(JSON.stringify(mockUserEvent));
@@ -730,27 +915,15 @@ describe("Conversation WebSocket Handler", () => {
       // are sent and received. Only ConversationErrorEvent sets the error banner,
       // and any non-error event should clear it.
       const conversationId = "test-conversation-error-clear";
+      const { sockets } = setupControlledWebSocket();
 
-      // Set up MSW to mock event count API and send events
+      // Set up MSW to mock event count API. WebSocket delivery is controlled
+      // directly so prior MSW WebSocket handlers cannot leak into this test.
       mswServer.use(
         http.get(
           `http://localhost:3000/api/conversations/${conversationId}/events/count`,
           () => HttpResponse.json(2),
         ),
-        wsLink.addEventListener("connection", ({ client, server }) => {
-          server.connect();
-
-          // Send a ConversationErrorEvent first (this sets the error banner)
-          const mockConversationErrorEvent = createMockConversationErrorEvent();
-          client.send(JSON.stringify(mockConversationErrorEvent));
-
-          // Send a successful (non-error) event immediately after
-          // This simulates the user sending a follow-up message and receiving a response
-          const mockSuccessEvent = createMockMessageEvent({
-            id: "success-event-after-error",
-          });
-          client.send(JSON.stringify(mockSuccessEvent));
-        }),
       );
 
       // Verify error message store is initially empty
@@ -763,11 +936,29 @@ describe("Conversation WebSocket Handler", () => {
         `http://localhost:3000/api/conversations/${conversationId}`,
       );
 
+      await waitFor(() => {
+        expect(sockets).toHaveLength(1);
+      });
+
+      await act(async () => {
+        sockets[0].open();
+      });
+
       // Wait for connection
       await waitFor(() => {
         expect(screen.getByTestId("connection-state")).toHaveTextContent(
           "OPEN",
         );
+      });
+
+      const mockConversationErrorEvent = createMockConversationErrorEvent();
+      const mockSuccessEvent = createMockMessageEvent({
+        id: "success-event-after-error",
+      });
+
+      await act(async () => {
+        sockets[0].emitMessage(mockConversationErrorEvent);
+        sockets[0].emitMessage(mockSuccessEvent);
       });
 
       // Wait for both events to be received and error to be cleared
@@ -946,15 +1137,18 @@ describe("Conversation WebSocket Handler", () => {
         expect(sendMessageFn).not.toBeNull();
       });
 
-      // sendMessage delivers via WebSocket when connected, or falls back to
-      // REST API (PendingMessageService) due to React useCallback timing.
-      // Either path is valid — we just verify it completes without error.
+      let sendError: Error | null = null;
       await act(async () => {
-        await sendMessageFn!({
-          role: "user",
-          content: [{ type: "text", text: "Hello from test" }],
-        });
+        try {
+          await sendMessageFn!({
+            role: "user",
+            content: [{ type: "text", text: "Hello from test" }],
+          });
+        } catch (error) {
+          sendError = error as Error;
+        }
       });
+      expect(sendError).toBeNull();
     });
 
     it("should not throw error when sendMessage is called with WebSocket connected", async () => {
@@ -1033,19 +1227,7 @@ describe("Conversation WebSocket Handler", () => {
     it("should send multiple messages through WebSocket in order", async () => {
       // Arrange
       const conversationId = "test-conversation-multi";
-      const receivedMessages: unknown[] = [];
-
-      // Set up MSW to capture sent messages
-      mswServer.use(
-        wsLink.addEventListener("connection", ({ client, server }) => {
-          server.connect();
-
-          // Capture messages sent from client
-          client.addEventListener("message", (event) => {
-            receivedMessages.push(JSON.parse(event.data as string));
-          });
-        }),
-      );
+      const { sockets } = setupControlledWebSocket();
 
       // Create ref to store sendMessage function
       let sendMessageFn: typeof useConversationWebSocket extends () => infer R
@@ -1079,6 +1261,14 @@ describe("Conversation WebSocket Handler", () => {
         `http://localhost:3000/api/conversations/${conversationId}`,
       );
 
+      await waitFor(() => {
+        expect(sockets).toHaveLength(1);
+      });
+
+      await act(async () => {
+        sockets[0].open();
+      });
+
       // Wait for connection
       await waitFor(() => {
         expect(screen.getByTestId("connection-state")).toHaveTextContent(
@@ -1104,17 +1294,410 @@ describe("Conversation WebSocket Handler", () => {
 
       // Assert - both messages should have been received in order
       await waitFor(() => {
-        expect(receivedMessages.length).toBe(2);
+        expect(sockets[0].sentMessages).toHaveLength(2);
       });
 
-      expect(receivedMessages[0]).toEqual({
+      expect(sockets[0].sentMessages[0]).toEqual({
         role: "user",
         content: [{ type: "text", text: "Message 1" }],
       });
-      expect(receivedMessages[1]).toEqual({
+      expect(sockets[0].sentMessages[1]).toEqual({
         role: "user",
         content: [{ type: "text", text: "Message 2" }],
       });
+    });
+
+    it("should queue messages until the main WebSocket opens", async () => {
+      const conversationId = "test-conversation-queue-before-open";
+      const { sockets } = setupControlledWebSocket();
+      let sendMessageFn: CapturedSendMessage | null = null;
+
+      renderWithWebSocketContext(
+        <SendMessageCapture
+          onReady={(sendMessage) => {
+            sendMessageFn = sendMessage;
+          }}
+        />,
+        conversationId,
+        `http://localhost:3000/api/conversations/${conversationId}`,
+      );
+
+      await waitFor(() => {
+        expect(sendMessageFn).not.toBeNull();
+        expect(sockets).toHaveLength(1);
+      });
+
+      let result: Awaited<ReturnType<CapturedSendMessage>> | null = null;
+      await act(async () => {
+        result = await sendMessageFn!(createTextMessage("Queued message"));
+      });
+
+      expect(result).toEqual({ queued: true });
+      expect(sockets[0].sentMessages).toHaveLength(0);
+
+      await act(async () => {
+        sockets[0].open();
+      });
+
+      await waitFor(() => {
+        expect(sockets[0].sentMessages).toHaveLength(1);
+      });
+      expect(sockets[0].sentMessages[0]).toEqual(
+        createTextMessage("Queued message"),
+      );
+    });
+
+    it("should flush queued messages in FIFO order", async () => {
+      const conversationId = "test-conversation-queue-order";
+      const { sockets } = setupControlledWebSocket();
+      let sendMessageFn: CapturedSendMessage | null = null;
+
+      renderWithWebSocketContext(
+        <SendMessageCapture
+          onReady={(sendMessage) => {
+            sendMessageFn = sendMessage;
+          }}
+        />,
+        conversationId,
+        `http://localhost:3000/api/conversations/${conversationId}`,
+      );
+
+      await waitFor(() => {
+        expect(sendMessageFn).not.toBeNull();
+        expect(sockets).toHaveLength(1);
+      });
+
+      await act(async () => {
+        await sendMessageFn!(createTextMessage("Queued 1"));
+        await sendMessageFn!(createTextMessage("Queued 2"));
+      });
+
+      expect(sockets[0].sentMessages).toHaveLength(0);
+
+      await act(async () => {
+        sockets[0].open();
+      });
+
+      await waitFor(() => {
+        expect(sockets[0].sentMessages).toHaveLength(2);
+      });
+      expect(sockets[0].sentMessages).toEqual([
+        createTextMessage("Queued 1"),
+        createTextMessage("Queued 2"),
+      ]);
+    });
+
+    it("should flush backlog before a newly sent open-socket message", async () => {
+      const conversationId = "test-conversation-backlog-before-current";
+      const { sockets } = setupControlledWebSocket();
+      let sendMessageFn: CapturedSendMessage | null = null;
+
+      renderWithWebSocketContext(
+        <SendMessageCapture
+          onReady={(sendMessage) => {
+            sendMessageFn = sendMessage;
+          }}
+        />,
+        conversationId,
+        `http://localhost:3000/api/conversations/${conversationId}`,
+      );
+
+      await waitFor(() => {
+        expect(sendMessageFn).not.toBeNull();
+        expect(sockets).toHaveLength(1);
+      });
+
+      await act(async () => {
+        await sendMessageFn!(createTextMessage("Backlog"));
+      });
+
+      await act(async () => {
+        sockets[0].open();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent(
+          "OPEN",
+        );
+      });
+
+      await act(async () => {
+        const result = await sendMessageFn!(createTextMessage("Current"));
+        expect(result).toEqual({ queued: false });
+      });
+
+      await waitFor(() => {
+        expect(sockets[0].sentMessages).toHaveLength(2);
+      });
+      expect(sockets[0].sentMessages).toEqual([
+        createTextMessage("Backlog"),
+        createTextMessage("Current"),
+      ]);
+    });
+
+    it("should clear queued messages when the conversation changes", async () => {
+      const firstConversationId = "test-conversation-clear-a";
+      const secondConversationId = "test-conversation-clear-b";
+      const { sockets } = setupControlledWebSocket();
+      let sendMessageFn: CapturedSendMessage | null = null;
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+
+      const renderHarness = (conversationId: string) => (
+        <QueryClientProvider client={queryClient}>
+          <ConversationWebSocketProvider
+            conversationId={conversationId}
+            conversationUrl={`http://localhost:3000/api/conversations/${conversationId}`}
+          >
+            <SendMessageCapture
+              onReady={(sendMessage) => {
+                sendMessageFn = sendMessage;
+              }}
+            />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>
+      );
+
+      const { rerender } = render(renderHarness(firstConversationId));
+
+      await waitFor(() => {
+        expect(sendMessageFn).not.toBeNull();
+        expect(sockets).toHaveLength(1);
+      });
+
+      await act(async () => {
+        await sendMessageFn!(createTextMessage("Conversation A"));
+      });
+
+      rerender(renderHarness(secondConversationId));
+
+      await waitFor(() => {
+        expect(sockets).toHaveLength(2);
+      });
+
+      await act(async () => {
+        sockets[1].open();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent(
+          "OPEN",
+        );
+      });
+      expect(sockets[0].sentMessages).toHaveLength(0);
+      expect(sockets[1].sentMessages).toHaveLength(0);
+    });
+
+    it("should clear queued messages on unmount", async () => {
+      const conversationId = "test-conversation-unmount-clear";
+      const { sockets } = setupControlledWebSocket();
+      let sendMessageFn: CapturedSendMessage | null = null;
+
+      const { unmount } = renderWithWebSocketContext(
+        <SendMessageCapture
+          onReady={(sendMessage) => {
+            sendMessageFn = sendMessage;
+          }}
+        />,
+        conversationId,
+        `http://localhost:3000/api/conversations/${conversationId}`,
+      );
+
+      await waitFor(() => {
+        expect(sendMessageFn).not.toBeNull();
+        expect(sockets).toHaveLength(1);
+      });
+
+      await act(async () => {
+        await sendMessageFn!(createTextMessage("Discard on unmount"));
+      });
+
+      unmount();
+
+      await act(async () => {
+        sockets[0].open();
+      });
+
+      expect(sockets[0].sentMessages).toHaveLength(0);
+    });
+
+    it("should not call the REST pending-message fallback for queued WebSocket sends", async () => {
+      const conversationId = "test-conversation-no-rest-fallback";
+      const { sockets } = setupControlledWebSocket();
+      let pendingMessageRequests = 0;
+      let sendMessageFn: CapturedSendMessage | null = null;
+
+      mswServer.use(
+        http.post(
+          `http://localhost:3000/api/v1/conversations/${conversationId}/pending-messages`,
+          () => {
+            pendingMessageRequests += 1;
+            return HttpResponse.json({ id: "pending-message-id" });
+          },
+        ),
+      );
+
+      renderWithWebSocketContext(
+        <SendMessageCapture
+          onReady={(sendMessage) => {
+            sendMessageFn = sendMessage;
+          }}
+        />,
+        conversationId,
+        `http://localhost:3000/api/conversations/${conversationId}`,
+      );
+
+      await waitFor(() => {
+        expect(sendMessageFn).not.toBeNull();
+        expect(sockets).toHaveLength(1);
+      });
+
+      await act(async () => {
+        await sendMessageFn!(createTextMessage("No REST fallback"));
+      });
+
+      expect(pendingMessageRequests).toBe(0);
+      expect(sockets[0].sentMessages).toHaveLength(0);
+
+      await act(async () => {
+        sockets[0].open();
+      });
+
+      await waitFor(() => {
+        expect(sockets[0].sentMessages).toHaveLength(1);
+      });
+      expect(pendingMessageRequests).toBe(0);
+    });
+
+    it.each(["PAUSED", "MISSING"] as V1SandboxStatus[])(
+      "should clear queued messages when sandbox status is %s",
+      async (sandboxStatus) => {
+        const conversationId = "test-conversation-pause-clear";
+        const { sockets } = setupControlledWebSocket();
+        let sendMessageFn: CapturedSendMessage | null = null;
+        const queryClient = new QueryClient({
+          defaultOptions: {
+            queries: { retry: false },
+            mutations: { retry: false },
+          },
+        });
+
+        const renderHarness = (status: V1SandboxStatus) => (
+          <QueryClientProvider client={queryClient}>
+            <ConversationWebSocketProvider
+              conversationId={conversationId}
+              conversationUrl={`http://localhost:3000/api/conversations/${conversationId}`}
+              sandboxStatus={status}
+            >
+              <SendMessageCapture
+                onReady={(sendMessage) => {
+                  sendMessageFn = sendMessage;
+                }}
+              />
+            </ConversationWebSocketProvider>
+          </QueryClientProvider>
+        );
+
+        const { rerender } = render(renderHarness("RUNNING"));
+
+        await waitFor(() => {
+          expect(sendMessageFn).not.toBeNull();
+          expect(sockets).toHaveLength(1);
+        });
+
+        await act(async () => {
+          await sendMessageFn!(createTextMessage("Discard after stop"));
+        });
+
+        rerender(renderHarness(sandboxStatus));
+
+        await act(async () => {
+          sockets[0].open();
+        });
+
+        await waitFor(() => {
+          expect(screen.getByTestId("connection-state")).toHaveTextContent(
+            "OPEN",
+          );
+        });
+        expect(sockets[0].sentMessages).toHaveLength(0);
+      },
+    );
+
+    it("should isolate main and planning queues", async () => {
+      const conversationId = "test-conversation-planning-main";
+      const planningConversationId = "test-conversation-planning-sub";
+      const { sockets } = setupControlledWebSocket();
+      let sendMessageFn: CapturedSendMessage | null = null;
+
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ConversationWebSocketProvider
+            conversationId={conversationId}
+            conversationUrl={`http://localhost:3000/api/conversations/${conversationId}`}
+            sandboxStatus="RUNNING"
+            subConversationIds={[planningConversationId]}
+            subConversations={[
+              createMockSubConversation(
+                planningConversationId,
+                `http://localhost:3000/api/conversations/${planningConversationId}`,
+              ),
+            ]}
+          >
+            <SendMessageCapture
+              onReady={(sendMessage) => {
+                sendMessageFn = sendMessage;
+              }}
+            />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(sendMessageFn).not.toBeNull();
+        expect(sockets).toHaveLength(2);
+      });
+
+      await act(async () => {
+        useConversationStore.getState().setConversationMode("code");
+        await sendMessageFn!(createTextMessage("Main queued"));
+        useConversationStore.getState().setConversationMode("plan");
+        await sendMessageFn!(createTextMessage("Plan queued"));
+      });
+
+      await act(async () => {
+        sockets[1].open();
+      });
+
+      await waitFor(() => {
+        expect(sockets[1].sentMessages).toHaveLength(1);
+      });
+      expect(sockets[1].sentMessages).toEqual([
+        createTextMessage("Plan queued"),
+      ]);
+      expect(sockets[0].sentMessages).toHaveLength(0);
+
+      await act(async () => {
+        sockets[0].open();
+      });
+
+      await waitFor(() => {
+        expect(sockets[0].sentMessages).toHaveLength(1);
+      });
+      expect(sockets[0].sentMessages).toEqual([
+        createTextMessage("Main queued"),
+      ]);
     });
   });
 
