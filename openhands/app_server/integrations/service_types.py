@@ -175,7 +175,7 @@ class AuthenticationError(ValueError):
 
 
 class UnknownException(ValueError):
-    """Raised when there is an issue with GitHub communcation."""
+    """Raised when there is an issue with GitHub communication."""
 
     pass
 

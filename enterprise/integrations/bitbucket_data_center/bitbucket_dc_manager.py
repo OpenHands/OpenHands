@@ -68,9 +68,11 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
     async def _commenter_has_write_access(
         self, message: Message, installer_user_id: str
     ) -> bool:
-        """Use the installer's Bitbucket DC token to check whether the
-        commenter has ``REPO_WRITE``/``REPO_ADMIN`` permission on the PR's
-        repository — mirrors the Cloud manager's installer-scoped check.
+        """Check commenter permissions using the installer's Bitbucket DC token.
+
+        The check confirms whether the commenter has ``REPO_WRITE`` or
+        ``REPO_ADMIN`` permission on the PR's repository, mirroring the Cloud
+        manager's installer-scoped check.
         """
         from integrations.bitbucket_data_center.bitbucket_dc_service import (
             SaaSBitbucketDCService,
@@ -172,8 +174,7 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
         installer_user_id: str,
         mentioner_slug: str | None,
     ) -> None:
-        """Reply to the triggering comment asking an unenrolled mentioner to
-        sign up, mirroring ``GithubManager._send_user_not_found_message``.
+        """Ask an unenrolled mentioner to sign up in a PR reply.
 
         The mentioner has no OHE account, so there is no token to post as
         them; the reply goes out under the installer's BBDC token (the
@@ -200,9 +201,11 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
             return
 
         project_key, repo_slug = self._extract_repo_identity(message)
-        installer_user_id = await self.webhook_store.get_webhook_user_id(
-            project_key=project_key, repo_slug=repo_slug
-        )
+        installer_user_id = message.message.get('installer_user_id')
+        if not installer_user_id:
+            installer_user_id = await self.webhook_store.get_webhook_user_id(
+                project_key=project_key, repo_slug=repo_slug
+            )
         if not installer_user_id:
             logger.warning(
                 f'[Bitbucket DC] No installer recorded for '

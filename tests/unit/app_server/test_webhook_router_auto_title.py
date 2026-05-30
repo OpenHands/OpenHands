@@ -174,6 +174,7 @@ class TestOnConversationUpdateAutoTitle:
         assert len(saved_callbacks) == 1
         callback = saved_callbacks[0]
         assert callback.conversation_id == conversation_id
+        assert callback.event_kind == 'MessageEvent'
         assert isinstance(callback.processor, SetTitleCallbackProcessor)
 
     @pytest.mark.asyncio

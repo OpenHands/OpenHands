@@ -48,7 +48,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
 
     @model_validator(mode='after')
     def fill_empty_fields(self):
-        """Override any defaults with values from legacy enviroment variables"""
+        """Override any defaults with values from legacy environment variables"""
         if self.host is None:
             self.host = os.getenv('DB_HOST')
         if self.port is None:
