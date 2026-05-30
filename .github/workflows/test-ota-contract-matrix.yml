@@ -10,7 +10,7 @@ on:
       ota_ref:
         description: Ota branch, tag, or commit to build for this matrix run
         required: false
-        default: 1.6.18-implementation
+        default: main
       run_runtime_proof:
         description: Run runtime proof steps (native app workflow)
         required: false
@@ -92,7 +92,7 @@ jobs:
         uses: ota-run/ota/.github/actions/install-ota-from-source@v1.6.18
         with:
           repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
-          ref: ${{ github.event.inputs.ota_ref || '1.6.18-implementation' }}
+          ref: ${{ github.event.inputs.ota_ref || 'main' }}
 
       - name: Validate contract
         shell: bash
@@ -374,7 +374,7 @@ jobs:
         uses: ota-run/ota/.github/actions/install-ota-from-source@v1.6.18
         with:
           repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
-          ref: ${{ github.event.inputs.ota_ref || '1.6.18-implementation' }}
+          ref: ${{ github.event.inputs.ota_ref || 'main' }}
 
       - name: Verify Docker
         shell: bash
@@ -443,7 +443,7 @@ jobs:
         uses: ota-run/ota/.github/actions/install-ota-from-source@v1.6.18
         with:
           repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
-          ref: ${{ github.event.inputs.ota_ref || '1.6.18-implementation' }}
+          ref: ${{ github.event.inputs.ota_ref || 'main' }}
 
       - name: Verify Docker
         shell: bash
@@ -499,7 +499,7 @@ jobs:
         uses: ota-run/ota/.github/actions/install-ota-from-source@v1.6.18
         with:
           repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
-          ref: ${{ github.event.inputs.ota_ref || '1.6.18-implementation' }}
+          ref: ${{ github.event.inputs.ota_ref || 'main' }}
 
       - name: Verify Bun
         shell: bash
