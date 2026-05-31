@@ -74,6 +74,6 @@ class ForgejoBranchesMixin(ForgejoMixinBase):
         lowered = query.lower()
         start = max((page - 1) * per_page, 0)
         end = start + per_page
-        return [
-            branch for branch in all_branches if lowered in branch.name.lower()
-        ][start:end]
+        return [branch for branch in all_branches if lowered in branch.name.lower()][
+            start:end
+        ]
