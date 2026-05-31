@@ -304,7 +304,7 @@ class GitService(Protocol):
         """Get branches for a repository with pagination"""
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self, repository: str, query: str, page: int = 1, per_page: int = 30
     ) -> list[Branch]:
         """Search for branches within a repository"""
 
