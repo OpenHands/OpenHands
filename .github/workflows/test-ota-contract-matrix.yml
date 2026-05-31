@@ -197,10 +197,16 @@ jobs:
                   if (.modes | type) == "array" then
                     any(.modes[]?; .mode == "native")
                   else
-                    ((.default_mode // "native") == "native")
+                    true
                   end
                 ),
-                runtime_native: (.has_runtime // false)
+                runtime_native: (
+                  if (.modes | type) == "array" then
+                    any(.modes[]?; .mode == "native" and ((.has_runtime // false) == true))
+                  else
+                    (.has_runtime // false)
+                  end
+                )
               }
             | select(.supports_native)
           ' ota-tasks-all.json > ota-non-internal-native.jsonl
@@ -214,6 +220,42 @@ jobs:
               ota run --native --dry-run --json "$task_name" .
             fi
           done < ota-non-internal-native.jsonl
+
+      - name: Execute non-internal non-runtime tasks (native coverage lane)
+        if: ${{ matrix.full_proof }}
+        timeout-minutes: 150
+        shell: bash
+        run: |
+          set -euo pipefail
+          ota tasks --json . > ota-tasks-all.json
+          jq -c '
+            .tasks[]
+            | select((.internal // false) == false)
+            | {
+                name: .name,
+                category: (.category // ""),
+                supports_native: (
+                  if (.modes | type) == "array" then
+                    any(.modes[]?; .mode == "native")
+                  else
+                    true
+                  end
+                ),
+                runtime_native: (
+                  if (.modes | type) == "array" then
+                    any(.modes[]?; .mode == "native" and ((.has_runtime // false) == true))
+                  else
+                    (.has_runtime // false)
+                  end
+                )
+              }
+            | select(.supports_native and (.runtime_native | not) and (.category != "dev"))
+          ' ota-tasks-all.json > ota-non-internal-native-exec.jsonl
+          while IFS= read -r task_line; do
+            task_name="$(jq -r '.name' <<<"$task_line")"
+            echo ">>> [native exec] ${task_name}"
+            ota run --native --stream "$task_name" .
+          done < ota-non-internal-native-exec.jsonl
 
       - name: Dry-run all non-internal tasks (container coverage lane)
         if: ${{ matrix.full_proof }}
@@ -234,7 +276,13 @@ jobs:
                     ((.default_mode // "native") == "container")
                   end
                 ),
-                runtime_container: (.has_runtime // false)
+                runtime_container: (
+                  if (.modes | type) == "array" then
+                    any(.modes[]?; .mode == "container" and ((.has_runtime // false) == true))
+                  else
+                    (.has_runtime // false)
+                  end
+                )
               }
             | select(.supports_container)
           ' ota-tasks-all.json > ota-non-internal-container.jsonl
@@ -362,7 +410,7 @@ jobs:
   docker-smoke-ubuntu:
     name: Ota Contract Matrix (Docker Smoke - ubuntu-bash)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 150
 
     steps:
       - name: Checkout
@@ -410,11 +458,44 @@ jobs:
         shell: bash
         run: ota up --workflow app:container --native --dry-run .
 
-      - name: Dry-run representative verification tasks in container mode
+      - name: Execute non-internal non-runtime tasks in container mode
+        timeout-minutes: 120
         shell: bash
         run: |
-          ota run lint:frontend --container --dry-run .
-          ota run test:backend --container --dry-run .
+          set -euo pipefail
+          ota tasks --json . > ota-tasks-all.json
+          jq -c '
+            .tasks[]
+            | select((.internal // false) == false)
+            | {
+                name: .name,
+                category: (.category // ""),
+                supports_container: (
+                  if (.modes | type) == "array" then
+                    any(.modes[]?; .mode == "container")
+                  else
+                    ((.default_mode // "native") == "container")
+                  end
+                ),
+                runtime_container: (
+                  if (.modes | type) == "array" then
+                    any(.modes[]?; .mode == "container" and ((.has_runtime // false) == true))
+                  else
+                    (.has_runtime // false)
+                  end
+                )
+              }
+            | select(.supports_container and (.runtime_container | not) and (.category != "dev"))
+          ' ota-tasks-all.json > ota-non-internal-container-exec.jsonl
+          if [ ! -s ota-non-internal-container-exec.jsonl ]; then
+            echo "expected at least one non-internal non-runtime task with container mode support"
+            exit 1
+          fi
+          while IFS= read -r task_line; do
+            task_name="$(jq -r '.name' <<<"$task_line")"
+            echo ">>> [container exec] ${task_name}"
+            ota run --container --stream "$task_name" .
+          done < ota-non-internal-container-exec.jsonl
 
       - name: Upload Docker smoke failure artifacts
         if: ${{ failure() }}
