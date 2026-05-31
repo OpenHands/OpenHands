@@ -1,7 +1,7 @@
 """Tests for Resend Keycloak sync functionality."""
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 from uuid import UUID
 
 import pytest
@@ -414,4 +414,49 @@ class TestSyncUsersToResend:
             'test_audience_id', 'new@example.com', 'Ada', 'Lovelace'
         )
         mock_send_welcome.assert_called_once_with('new@example.com', 'Ada', 'Lovelace')
+        assert mock_sleep.call_count == 2
+
+    @patch('enterprise.sync.resend_keycloak.time.sleep')
+    @patch('enterprise.sync.resend_keycloak.send_welcome_email')
+    @patch('enterprise.sync.resend_keycloak.add_contact_to_resend')
+    @patch('enterprise.sync.resend_keycloak.get_local_users')
+    @patch('enterprise.sync.resend_keycloak.get_total_local_users')
+    @patch('enterprise.sync.resend_keycloak._backfill_existing_resend_contacts')
+    @patch('enterprise.sync.resend_keycloak._get_resend_synced_user_store')
+    def test_sync_reads_multiple_local_user_batches(
+        self,
+        mock_get_store: MagicMock,
+        mock_backfill: MagicMock,
+        mock_get_total: MagicMock,
+        mock_get_local_users: MagicMock,
+        mock_add_contact: MagicMock,
+        mock_send_welcome: MagicMock,
+        mock_sleep: MagicMock,
+    ) -> None:
+        store = MagicMock()
+        store.get_synced_emails_for_audience.return_value = set()
+        mock_get_store.return_value = store
+        mock_backfill.return_value = 0
+        mock_get_total.return_value = BATCH_SIZE + 1
+        mock_get_local_users.side_effect = [
+            [ResendUser(id='user-1', email='new@example.com')],
+            [],
+        ]
+
+        sync_users_to_resend()
+
+        mock_get_total.assert_called_once_with()
+        mock_get_local_users.assert_has_calls(
+            [call(0, BATCH_SIZE), call(BATCH_SIZE, BATCH_SIZE)]
+        )
+        assert mock_get_local_users.call_count == 2
+        store.mark_user_synced.assert_called_once_with(
+            email='new@example.com',
+            audience_id='test_audience_id',
+            user_id='user-1',
+        )
+        mock_add_contact.assert_called_once_with(
+            'test_audience_id', 'new@example.com', None, None
+        )
+        mock_send_welcome.assert_called_once_with('new@example.com', None, None)
         assert mock_sleep.call_count == 2
