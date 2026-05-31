@@ -13,7 +13,6 @@ from integrations.jira_dc.jira_dc_types import (
     StartingConvoException,
 )
 from integrations.jira_dc.jira_dc_user_token import (
-    JiraDcUserTokenError,
     get_user_jira_dc_token,
 )
 from integrations.jira_dc.jira_dc_v1_callback_processor import JiraDcV1CallbackProcessor
@@ -139,9 +138,7 @@ class JiraDcNewConversationView(JiraDcViewInterface):
             store=integration_store,
         )
         sandbox_secrets['JIRA_DC_TOKEN'] = SecretStr(user_token.access_token)
-        sandbox_secrets['JIRA_DC_BASE_URL'] = SecretStr(
-            self.job_context.base_api_url
-        )
+        sandbox_secrets['JIRA_DC_BASE_URL'] = SecretStr(self.job_context.base_api_url)
 
         # Create the V1 conversation start request
         start_request = AppConversationStartRequest(

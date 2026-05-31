@@ -11,13 +11,13 @@ from integrations.jira_dc.jira_dc_service_account import (
 from integrations.jira_dc.jira_dc_types import (
     JiraDcViewInterface,
 )
+from integrations.jira_dc.jira_dc_user_token import JiraDcUserTokenError
 from integrations.jira_dc.jira_dc_view import (
     JiraDcExistingConversationView,
     JiraDcFactory,
 )
 from integrations.manager import Manager
 from integrations.models import JobContext, Message
-from integrations.jira_dc.jira_dc_user_token import JiraDcUserTokenError
 from integrations.utils import (
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
@@ -512,9 +512,7 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
 
         except JiraDcUserTokenError as e:
             logger.warning(f'[Jira DC] User token unavailable: {str(e)}')
-            msg_info = get_jira_dc_relink_message(
-                jira_dc_view.job_context.display_name
-            )
+            msg_info = get_jira_dc_relink_message(jira_dc_view.job_context.display_name)
 
         except Exception as e:
             logger.error(

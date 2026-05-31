@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
-from integrations.jira_dc.jira_dc_user_token import JiraDcUserTokenError, JiraDcUserToken
+from integrations.jira_dc.jira_dc_user_token import (
+    JiraDcUserToken,
+    JiraDcUserTokenError,
+)
 from integrations.jira_dc.jira_dc_view import (
     JiraDcExistingConversationView,
     JiraDcFactory,
@@ -120,7 +123,10 @@ def _make_start_conversation_patches(user_token=None, token_error=None):
             ),
             patch('integrations.jira_dc.jira_dc_view.TokenManager'),
             patch('integrations.jira_dc.jira_dc_view.integration_store'),
-            patch('integrations.jira_dc.jira_dc_view.resolve_org_for_repo', new=AsyncMock(return_value=None)),
+            patch(
+                'integrations.jira_dc.jira_dc_view.resolve_org_for_repo',
+                new=AsyncMock(return_value=None),
+            ),
             patch('integrations.jira_dc.jira_dc_view.ProviderHandler'),
             patch(
                 'integrations.jira_dc.jira_dc_view.get_app_conversation_service',
@@ -145,6 +151,7 @@ async def test_create_v1_conversation_injects_jira_dc_token(
     new_conversation_view, mock_jinja_env
 ):
     """start_request.secrets must contain JIRA_DC_TOKEN and JIRA_DC_BASE_URL."""
+    new_conversation_view.conversation_id = 'a1b2c3d4e5f64a5b8c9d0e1f2a3b4c5d'
     captured_requests = []
 
     async def _fake_start(req):
