@@ -577,3 +577,6 @@ agent:
     Use `ota up --workflow ui-package --native .` when validating the standalone `openhands-ui` build.
     Use `ota run lint --native .` and `ota run test --native .` for bounded verification.
     Enterprise, release/publish, and devcontainer workflows remain intentionally out of scope.
+metadata:
+  ota:
+    minimum_version: "1.6.18"
