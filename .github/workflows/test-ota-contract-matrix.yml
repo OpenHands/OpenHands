@@ -227,6 +227,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Test-category tasks are executed in the dedicated verification lane above.
+          # This generic non-runtime execution lane stays focused on deterministic non-test surfaces.
           ota tasks --json . > ota-tasks-all.json
           jq -c '
             .tasks[]
@@ -249,7 +251,7 @@ jobs:
                   end
                 )
               }
-            | select(.supports_native and (.runtime_native | not) and (.category != "dev"))
+            | select(.supports_native and (.runtime_native | not) and (.category != "dev") and (.category != "test"))
           ' ota-tasks-all.json > ota-non-internal-native-exec.jsonl
           while IFS= read -r task_line; do
             task_name="$(jq -r '.name' <<<"$task_line")"
@@ -463,6 +465,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Test-category tasks are executed in dedicated verification lanes.
+          # Keep this generic container execution lane on deterministic non-test surfaces.
           ota tasks --json . > ota-tasks-all.json
           jq -c '
             .tasks[]
@@ -485,7 +489,7 @@ jobs:
                   end
                 )
               }
-            | select(.supports_container and (.runtime_container | not) and (.category != "dev"))
+            | select(.supports_container and (.runtime_container | not) and (.category != "dev") and (.category != "test"))
           ' ota-tasks-all.json > ota-non-internal-container-exec.jsonl
           if [ ! -s ota-non-internal-container-exec.jsonl ]; then
             echo "expected at least one non-internal non-runtime task with container mode support"
