@@ -2,6 +2,7 @@ import json
 import os
 import re
 import secrets
+import time
 import uuid
 from typing import cast
 from urllib.parse import urlencode, urlparse
@@ -819,6 +820,17 @@ async def jira_dc_callback(request: Request, code: str, state: str):
 
     token_data = response.json()
     access_token = token_data['access_token']
+    refresh_token: str | None = token_data.get('refresh_token') or None
+    now = int(time.time())
+    expires_in = int(token_data.get('expires_in') or 0)
+    refresh_expires_in = int(
+        token_data.get('refresh_token_expires_in')
+        or token_data.get('refresh_expires_in')
+        or 0
+    )
+    access_token_expires_at = (now + expires_in) if expires_in else 0
+    refresh_token_expires_at = (now + refresh_expires_in) if refresh_expires_in else 0
+
     headers = {'Authorization': f'Bearer {access_token}'}
     target_workspace = integration_session.get('target_workspace')
 
@@ -922,6 +934,17 @@ async def jira_dc_callback(request: Request, code: str, state: str):
                 status='inactive',
             )
 
+        await jira_dc_manager.integration_store.update_user_oauth_tokens(
+            keycloak_user_id=user_id,
+            workspace_id=workspace.id,
+            encrypted_access_token=token_manager.encrypt_text(access_token),
+            encrypted_refresh_token=(
+                token_manager.encrypt_text(refresh_token) if refresh_token else None
+            ),
+            access_token_expires_at=access_token_expires_at,
+            refresh_token_expires_at=refresh_token_expires_at,
+        )
+
         redirect_url = '/settings/integrations'
         if integration_session.get('admin_api_key') and not webhook_enrolled:
             redirect_url += '?jira_dc_webhook=install_failed'
@@ -936,6 +959,22 @@ async def jira_dc_callback(request: Request, code: str, state: str):
         await _handle_workspace_link_creation(
             user_id, jira_dc_user_id, target_workspace
         )
+
+        workspace = await jira_dc_manager.integration_store.get_workspace_by_name(
+            target_workspace
+        )
+        if workspace:
+            await jira_dc_manager.integration_store.update_user_oauth_tokens(
+                keycloak_user_id=user_id,
+                workspace_id=workspace.id,
+                encrypted_access_token=token_manager.encrypt_text(access_token),
+                encrypted_refresh_token=(
+                    token_manager.encrypt_text(refresh_token) if refresh_token else None
+                ),
+                access_token_expires_at=access_token_expires_at,
+                refresh_token_expires_at=refresh_token_expires_at,
+            )
+
         return RedirectResponse(
             url='/settings/integrations', status_code=status.HTTP_302_FOUND
         )

@@ -12,12 +12,18 @@ from integrations.jira_dc.jira_dc_types import (
     JiraDcViewInterface,
     StartingConvoException,
 )
+from integrations.jira_dc.jira_dc_user_token import (
+    JiraDcUserTokenError,
+    get_user_jira_dc_token,
+)
 from integrations.jira_dc.jira_dc_v1_callback_processor import JiraDcV1CallbackProcessor
 from integrations.models import JobContext
 from integrations.resolver_context import ResolverUserContext
 from integrations.resolver_org_router import resolve_org_for_repo
 from integrations.utils import CONVERSATION_URL
 from jinja2 import Environment
+from pydantic import SecretStr
+from server.auth.token_manager import TokenManager
 from storage.jira_dc_conversation import JiraDcConversation
 from storage.jira_dc_integration_store import JiraDcIntegrationStore
 from storage.jira_dc_user import JiraDcUser
@@ -121,6 +127,22 @@ class JiraDcNewConversationView(JiraDcViewInterface):
 
         injector_state = InjectorState()
 
+        # Resolve per-user OAuth token and inject into sandbox environment.
+        # JiraDcUserTokenError is intentionally not caught here — it propagates
+        # to start_job which posts a re-link comment on the Jira issue.
+        sandbox_secrets: dict[str, SecretStr] = {}
+        token_manager = TokenManager()
+        user_token = await get_user_jira_dc_token(
+            keycloak_user_id=self.jira_dc_user.keycloak_user_id,
+            workspace_id=self.jira_dc_workspace.id,
+            token_manager=token_manager,
+            store=integration_store,
+        )
+        sandbox_secrets['JIRA_DC_TOKEN'] = SecretStr(user_token.access_token)
+        sandbox_secrets['JIRA_DC_BASE_URL'] = SecretStr(
+            self.job_context.base_api_url
+        )
+
         # Create the V1 conversation start request
         start_request = AppConversationStartRequest(
             conversation_id=UUID(self.conversation_id),
@@ -132,6 +154,7 @@ class JiraDcNewConversationView(JiraDcViewInterface):
             title=f'Jira DC Issue {self.job_context.issue_key}: {self.job_context.issue_title or "Unknown"}',
             trigger=ConversationTrigger.JIRA,
             processors=[jira_dc_callback_processor],
+            secrets=sandbox_secrets,
         )
 
         # Set up the Jira DC user context for the V1 system

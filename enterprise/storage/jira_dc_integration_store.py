@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from storage.database import a_session_maker
 from storage.jira_dc_conversation import JiraDcConversation
 from storage.jira_dc_user import JiraDcUser
@@ -235,6 +235,59 @@ class JiraDcIntegrationStore:
         logger.info(
             f'[Jira DC] Deactivated all user links for workspace {workspace_id}'
         )
+
+    async def update_user_oauth_tokens(
+        self,
+        *,
+        keycloak_user_id: str,
+        workspace_id: int,
+        encrypted_access_token: str,
+        encrypted_refresh_token: str | None,
+        access_token_expires_at: int,
+        refresh_token_expires_at: int,
+    ) -> None:
+        """Persist updated OAuth tokens on the user's active workspace link."""
+        async with a_session_maker() as session:
+            async with session.begin():
+                await session.execute(
+                    update(JiraDcUser)
+                    .where(
+                        JiraDcUser.keycloak_user_id == keycloak_user_id,
+                        JiraDcUser.jira_dc_workspace_id == workspace_id,
+                        JiraDcUser.status == 'active',
+                    )
+                    .values(
+                        oauth_access_token_encrypted=encrypted_access_token,
+                        oauth_refresh_token_encrypted=encrypted_refresh_token,
+                        oauth_access_token_expires_at=access_token_expires_at,
+                        oauth_refresh_token_expires_at=refresh_token_expires_at,
+                    )
+                )
+
+    async def get_user_oauth_tokens(
+        self,
+        *,
+        keycloak_user_id: str,
+        workspace_id: int,
+    ) -> tuple[str, str | None, int, int] | None:
+        """Return (enc_access, enc_refresh, access_expires_at, refresh_expires_at) or None."""
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(JiraDcUser).where(
+                    JiraDcUser.keycloak_user_id == keycloak_user_id,
+                    JiraDcUser.jira_dc_workspace_id == workspace_id,
+                    JiraDcUser.status == 'active',
+                )
+            )
+            row = result.scalar_one_or_none()
+            if not row or not row.oauth_access_token_encrypted:
+                return None
+            return (
+                row.oauth_access_token_encrypted,
+                row.oauth_refresh_token_encrypted,
+                row.oauth_access_token_expires_at or 0,
+                row.oauth_refresh_token_expires_at or 0,
+            )
 
     async def create_conversation(
         self, jira_dc_conversation: JiraDcConversation

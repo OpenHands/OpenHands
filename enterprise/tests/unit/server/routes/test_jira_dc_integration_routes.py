@@ -1843,3 +1843,157 @@ class TestJiraDcOAuthUrlEncoding:
         assert ' ' not in auth_url
         # Verify redirect_uri is properly encoded
         assert 'redirect_uri=https%3A%2F%2F' in auth_url
+
+
+# ---------------------------------------------------------------------------
+# Token persistence in the OAuth callback
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.redis_client')
+@patch('requests.post')
+@patch('requests.get')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+@patch(
+    'server.routes.integration.jira_dc._handle_workspace_link_creation',
+    new_callable=AsyncMock,
+)
+async def test_callback_workspace_integration_persists_tokens(
+    mock_handle_link, mock_manager, mock_get, mock_post, mock_redis, mock_request
+):
+    """workspace_integration callback must encrypt and store access + refresh tokens."""
+    state = 'test_state'
+    token_data = {
+        'access_token': 'at',
+        'refresh_token': 'rt',
+        'expires_in': 3600,
+        'refresh_token_expires_in': 86400,
+    }
+    session_data = {
+        'operation_type': 'workspace_integration',
+        'keycloak_user_id': 'user1',
+        'target_workspace': 'test.atlassian.net',
+        'webhook_secret': 'secret',
+        'svc_acc_email': 'svc@test.com',
+        'svc_acc_api_key': 'apikey',
+        'is_active': True,
+        'state': state,
+    }
+    mock_redis.get.return_value = json.dumps(session_data)
+    mock_post.return_value = MagicMock(status_code=200, json=lambda: token_data)
+    mock_get.return_value = MagicMock(
+        status_code=200, json=lambda: {'key': 'jira_user_1'}, text=''
+    )
+    mock_workspace = MagicMock(id=5)
+    mock_manager.integration_store.get_workspace_by_name.return_value = None
+    mock_manager.integration_store.create_workspace.return_value = mock_workspace
+
+    with patch('server.routes.integration.jira_dc.token_manager') as mock_tm:
+        with patch(
+            'server.routes.integration.jira_dc.JIRA_DC_BASE_URL',
+            'https://test.atlassian.net',
+        ):
+            mock_tm.encrypt_text.side_effect = lambda v: f'enc({v})'
+            await jira_dc_callback(mock_request, 'code', state)
+
+    mock_manager.integration_store.update_user_oauth_tokens.assert_awaited_once()
+    kwargs = mock_manager.integration_store.update_user_oauth_tokens.call_args.kwargs
+    assert kwargs['keycloak_user_id'] == 'user1'
+    assert kwargs['workspace_id'] == 5
+    assert kwargs['encrypted_access_token'] == 'enc(at)'
+    assert kwargs['encrypted_refresh_token'] == 'enc(rt)'
+    assert kwargs['access_token_expires_at'] > 0
+    assert kwargs['refresh_token_expires_at'] > 0
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.redis_client')
+@patch('requests.post')
+@patch('requests.get')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+@patch(
+    'server.routes.integration.jira_dc._handle_workspace_link_creation',
+    new_callable=AsyncMock,
+)
+async def test_callback_workspace_integration_null_refresh_token_tolerated(
+    mock_handle_link, mock_manager, mock_get, mock_post, mock_redis, mock_request
+):
+    """Missing refresh_token in IdP response must be stored as NULL, not raise."""
+    state = 'test_state'
+    token_data = {'access_token': 'at'}  # no refresh_token, no expires_in
+    session_data = {
+        'operation_type': 'workspace_integration',
+        'keycloak_user_id': 'user1',
+        'target_workspace': 'test.atlassian.net',
+        'webhook_secret': 'secret',
+        'svc_acc_email': 'svc@test.com',
+        'svc_acc_api_key': 'apikey',
+        'is_active': True,
+        'state': state,
+    }
+    mock_redis.get.return_value = json.dumps(session_data)
+    mock_post.return_value = MagicMock(status_code=200, json=lambda: token_data)
+    mock_get.return_value = MagicMock(
+        status_code=200, json=lambda: {'key': 'jira_user_1'}, text=''
+    )
+    mock_workspace = MagicMock(id=7)
+    mock_manager.integration_store.get_workspace_by_name.return_value = None
+    mock_manager.integration_store.create_workspace.return_value = mock_workspace
+
+    with patch('server.routes.integration.jira_dc.token_manager') as mock_tm:
+        with patch(
+            'server.routes.integration.jira_dc.JIRA_DC_BASE_URL',
+            'https://test.atlassian.net',
+        ):
+            mock_tm.encrypt_text.side_effect = lambda v: f'enc({v})'
+            await jira_dc_callback(mock_request, 'code', state)
+
+    kwargs = mock_manager.integration_store.update_user_oauth_tokens.call_args.kwargs
+    assert kwargs['encrypted_refresh_token'] is None
+    assert kwargs['access_token_expires_at'] == 0
+    assert kwargs['refresh_token_expires_at'] == 0
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.redis_client')
+@patch('requests.post')
+@patch('requests.get')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+@patch(
+    'server.routes.integration.jira_dc._handle_workspace_link_creation',
+    new_callable=AsyncMock,
+)
+async def test_callback_workspace_link_persists_tokens(
+    mock_handle_link, mock_manager, mock_get, mock_post, mock_redis, mock_request
+):
+    """workspace_link callback must also persist tokens."""
+    state = 'test_state'
+    token_data = {'access_token': 'at', 'refresh_token': 'rt', 'expires_in': 1800}
+    session_data = {
+        'operation_type': 'workspace_link',
+        'keycloak_user_id': 'user2',
+        'target_workspace': 'test.atlassian.net',
+        'state': state,
+    }
+    mock_redis.get.return_value = json.dumps(session_data)
+    mock_post.return_value = MagicMock(status_code=200, json=lambda: token_data)
+    mock_get.return_value = MagicMock(
+        status_code=200, json=lambda: {'key': 'jira_user_2'}, text=''
+    )
+    mock_workspace = MagicMock(id=9)
+    mock_manager.integration_store.get_workspace_by_name.return_value = mock_workspace
+
+    with patch('server.routes.integration.jira_dc.token_manager') as mock_tm:
+        with patch(
+            'server.routes.integration.jira_dc.JIRA_DC_BASE_URL',
+            'https://test.atlassian.net',
+        ):
+            mock_tm.encrypt_text.side_effect = lambda v: f'enc({v})'
+            await jira_dc_callback(mock_request, 'code', state)
+
+    mock_manager.integration_store.update_user_oauth_tokens.assert_awaited_once()
+    kwargs = mock_manager.integration_store.update_user_oauth_tokens.call_args.kwargs
+    assert kwargs['keycloak_user_id'] == 'user2'
+    assert kwargs['workspace_id'] == 9
+    assert kwargs['encrypted_access_token'] == 'enc(at)'
