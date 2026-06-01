@@ -720,7 +720,10 @@ def _extract_login_inner_return_to(relative_url: str) -> str | None:
     inner = parse_qs(parsed.query).get('returnTo')
     if not inner:
         return None
-    return inner[0]
+    value = inner[0]
+    if not value.startswith('/'):
+        return None
+    return value
 
 
 def _build_onboarding_redirect(original_url: str, web_url: str) -> str:
