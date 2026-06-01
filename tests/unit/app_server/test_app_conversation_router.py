@@ -4,6 +4,7 @@ This module tests the batch_get_app_conversations endpoint,
 focusing on UUID string parsing, validation, and error handling.
 """
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -1025,3 +1026,59 @@ class TestGitProxyEndpoints:
 
         assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
         assert 'reach agent server' in exc_info.value.detail.lower()
+
+    async def test_returns_502_when_runtime_returns_non_json(self):
+        """A 200 OK whose body fails to decode (``json.JSONDecodeError``) is
+        folded into a 502 rather than escaping as an unhandled 500."""
+        # Arrange
+        conv_id = uuid4()
+        ctx = _make_agent_server_context(conv_id)
+        bad_response = MagicMock()
+        bad_response.raise_for_status = MagicMock()
+        bad_response.json = MagicMock(
+            side_effect=json.JSONDecodeError('Expecting value', '<html>', 0),
+        )
+        client = _make_get_httpx_client(get_return=bad_response)
+
+        # Act + Assert
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_conversation_git_changes(
+                    conversation_id=conv_id,
+                    path='/workspace/project',
+                    ref=None,
+                    app_conversation_service=MagicMock(),
+                    sandbox_service=MagicMock(),
+                    sandbox_spec_service=MagicMock(),
+                    httpx_client=client,
+                )
+
+        assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
+        assert 'unexpected response' in exc_info.value.detail.lower()
+
+    async def test_diff_returns_409_when_sandbox_paused(self):
+        """Confirms ``/git/diff`` shares the same error wiring as ``/changes``:
+        a paused sandbox (helper ``None``) surfaces as 409 Conflict."""
+        # Act + Assert
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=None),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_conversation_git_diff(
+                    conversation_id=uuid4(),
+                    path='/workspace/project/file.py',
+                    ref=None,
+                    app_conversation_service=MagicMock(),
+                    sandbox_service=MagicMock(),
+                    sandbox_spec_service=MagicMock(),
+                    httpx_client=_make_get_httpx_client(),
+                )
+
+        assert exc_info.value.status_code == status.HTTP_409_CONFLICT
+        assert 'paused' in exc_info.value.detail.lower()

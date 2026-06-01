@@ -9,7 +9,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, AsyncGenerator, Literal
+from typing import Annotated, Any, AsyncGenerator, Literal
 from uuid import UUID
 
 import httpx
@@ -1066,7 +1066,7 @@ async def _proxy_git_runtime_call(
     sandbox_service: SandboxService,
     sandbox_spec_service: SandboxSpecService,
     httpx_client: httpx.AsyncClient,
-):
+) -> Any:
     """Resolve the conversation's runtime and proxy a GET to ``runtime_path``.
 
     Browsers can't reach runtime sandboxes directly (no CORS for non-localhost
@@ -1115,6 +1115,12 @@ async def _proxy_git_runtime_call(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f'Agent server error: {e.response.status_code}',
+        )
+    except (json.JSONDecodeError, httpx.DecodingError) as e:
+        logger.error('Agent server returned non-JSON during %s: %s', runtime_path, e)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Agent server returned unexpected response.',
         )
     except httpx.RequestError as e:
         logger.error('Failed to reach agent server during %s: %s', runtime_path, e)
