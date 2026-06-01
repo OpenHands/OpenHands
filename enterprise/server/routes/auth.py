@@ -760,8 +760,9 @@ def _build_onboarding_redirect(original_url: str, web_url: str) -> str:
     # Compute the path-and-query portion of the original URL. We try
     # to strip the deployment origin first so we end up with a
     # relative path; if the URL points at a different host we fall
-    # back to the URL as-is and let the frontend handle absolute URLs
-    # defensively.
+    # back to the URL as-is. The ``OnboardingForm`` component's
+    # ``sanitizeReturnTo`` helper rejects absolute/protocol-relative
+    # URLs before use, so any unexpected absolute value here is safe.
     relative = original_url
     if web_url and original_url.startswith(web_url):
         relative = original_url[len(web_url) :] or '/'

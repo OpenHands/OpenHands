@@ -27,6 +27,27 @@ import { queryClient } from "#/query-client-config";
 import OptionService from "#/api/option-service/option-service.api";
 
 /**
+ * Sanitize a raw ``returnTo`` value, returning a safe same-origin path.
+ *
+ * Absolute URLs and protocol-relative URLs fall back to ``"/"`` to
+ * prevent open-redirect attacks. Relative paths that don't start with
+ * ``"/"`` are prepended with one.
+ */
+export function sanitizeReturnTo(raw: string | null): string {
+  if (!raw) return "/";
+  // Same-origin paths only — reject protocol-bearing or
+  // protocol-relative targets.
+  if (
+    raw.startsWith("http://") ||
+    raw.startsWith("https://") ||
+    raw.startsWith("//")
+  ) {
+    return "/";
+  }
+  return raw.startsWith("/") ? raw : `/${raw}`;
+}
+
+/**
  * Compute a safe redirect target from the URL's ``returnTo`` query
  * parameter, defaulting to ``"/"``.
  *
@@ -37,19 +58,7 @@ import OptionService from "#/api/option-service/option-service.api";
  */
 function safeReturnToFromRequest(request: Request): string {
   const url = new URL(request.url);
-  const raw = url.searchParams.get("returnTo");
-  if (!raw) return "/";
-  // Same-origin paths only. ``/foo`` and ``/foo?bar`` are fine; any
-  // protocol-bearing or protocol-relative target is treated as unsafe
-  // and falls back to ``"/"``.
-  if (
-    raw.startsWith("http://") ||
-    raw.startsWith("https://") ||
-    raw.startsWith("//")
-  ) {
-    return "/";
-  }
-  return raw.startsWith("/") ? raw : `/${raw}`;
+  return sanitizeReturnTo(url.searchParams.get("returnTo"));
 }
 
 export const clientLoader = async ({ request }: { request: Request }) => {
@@ -127,9 +136,10 @@ function OnboardingForm() {
   const config = loaderData?.config;
   const [searchParams] = useSearchParams();
   // ``OnboardingGuard`` forwards the user's originally requested URL
-  // here so we can restore it after they finish the form. Default to
-  // ``/`` to preserve the previous behavior when no returnTo is set.
-  const returnTo = searchParams.get("returnTo") || "/";
+  // here so we can restore it after they finish the form. Sanitize to
+  // prevent open-redirect attacks — absolute/protocol-relative URLs
+  // fall back to ``"/"``.
+  const returnTo = sanitizeReturnTo(searchParams.get("returnTo"));
   const { data: onboardingStatus, isLoading: isOnboardingStatusLoading } =
     useOnboardingStatus();
   const { mutate: submitOnboarding } = useSubmitOnboarding();
@@ -139,17 +149,9 @@ function OnboardingForm() {
     if (onboardingStatus?.should_complete_onboarding === false) {
       // Honor returnTo if the user already completed onboarding so a
       // stale ``/onboarding`` link still respects their deep-link
-      // destination. The backend's
-      // ``_build_onboarding_redirect`` always sends a relative path,
-      // but defensively handle absolute URLs (matching the same
-      // pattern in ``useSubmitOnboarding``) so a hand-crafted link
-      // like ``/onboarding?returnTo=https%3A%2F%2F...`` doesn't end
-      // up navigated as an SPA path.
-      if (returnTo.startsWith("http://") || returnTo.startsWith("https://")) {
-        window.location.href = returnTo;
-      } else {
-        navigate(returnTo, { replace: true });
-      }
+      // destination. ``returnTo`` is already sanitized above so it is
+      // always a safe same-origin path.
+      navigate(returnTo, { replace: true });
     }
   }, [
     onboardingStatus?.should_complete_onboarding,

@@ -5,7 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "i18next";
-import OnboardingForm, { clientLoader } from "#/routes/onboarding-form";
+import OnboardingForm, {
+  clientLoader,
+  sanitizeReturnTo,
+} from "#/routes/onboarding-form";
 import AuthService from "#/api/auth-service/auth-service.api";
 import { onboardingService } from "#/api/onboarding-service/onboarding-service.api";
 
@@ -510,6 +513,38 @@ describe("OnboardingForm - redirect when already onboarded", () => {
     expect(mockNavigate).not.toHaveBeenCalledWith("/", { replace: true });
   });
 
+  it("should reject absolute URL returnTo and redirect to / when onboarding is already complete", async () => {
+    // Security: a hand-crafted ``?returnTo=https://evil.example`` must
+    // never turn the component redirect into an open-redirect vector.
+    vi.spyOn(onboardingService, "getStatus").mockResolvedValue({
+      should_complete_onboarding: false,
+    });
+
+    await renderOnboardingForm(
+      `/?returnTo=${encodeURIComponent("https://evil.example.com/pwn")}`,
+    );
+
+    await vi.waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/", { replace: true });
+    });
+  });
+
+  it("should reject protocol-relative returnTo and redirect to / when onboarding is already complete", async () => {
+    // Security: protocol-relative URLs (``//evil.example.com``) are
+    // also open-redirect vectors and must be rejected.
+    vi.spyOn(onboardingService, "getStatus").mockResolvedValue({
+      should_complete_onboarding: false,
+    });
+
+    await renderOnboardingForm(
+      `/?returnTo=${encodeURIComponent("//evil.example.com/pwn")}`,
+    );
+
+    await vi.waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/", { replace: true });
+    });
+  });
+
   it("should forward returnTo to submitOnboarding so the post-submit redirect respects it", async () => {
     // Regression: ``OnboardingGuard`` saves the originally requested
     // URL as ``?returnTo=...``. ``OnboardingForm`` must thread that
@@ -768,5 +803,41 @@ describe("onboarding-form clientLoader", () => {
       );
       expect(result).toEqual({ config: fetchedConfig });
     });
+  });
+});
+
+describe("sanitizeReturnTo", () => {
+  it("should return / for null", () => {
+    expect(sanitizeReturnTo(null)).toBe("/");
+  });
+
+  it("should return / for empty string", () => {
+    expect(sanitizeReturnTo("")).toBe("/");
+  });
+
+  it("should allow same-origin absolute paths", () => {
+    expect(sanitizeReturnTo("/conversations/abc")).toBe("/conversations/abc");
+  });
+
+  it("should allow paths with query strings", () => {
+    expect(sanitizeReturnTo("/conversations/abc?foo=bar")).toBe(
+      "/conversations/abc?foo=bar",
+    );
+  });
+
+  it("should prepend / to relative paths that lack one", () => {
+    expect(sanitizeReturnTo("conversations/abc")).toBe("/conversations/abc");
+  });
+
+  it("should reject http:// URLs and fall back to /", () => {
+    expect(sanitizeReturnTo("http://evil.example.com/pwn")).toBe("/");
+  });
+
+  it("should reject https:// URLs and fall back to /", () => {
+    expect(sanitizeReturnTo("https://evil.example.com/pwn")).toBe("/");
+  });
+
+  it("should reject protocol-relative URLs and fall back to /", () => {
+    expect(sanitizeReturnTo("//evil.example.com/pwn")).toBe("/");
   });
 });
