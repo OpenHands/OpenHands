@@ -98,17 +98,17 @@ class SQLSharedConversationInfoService(SharedConversationInfoService):
 
         # Rebuild token usage
         token_usage = TokenUsage(
-            prompt_tokens=stored.prompt_tokens,
-            completion_tokens=stored.completion_tokens,
-            cache_read_tokens=stored.cache_read_tokens,
-            cache_write_tokens=stored.cache_write_tokens,
-            context_window=stored.context_window,
-            per_turn_token=stored.per_turn_token,
+            prompt_tokens=stored.prompt_tokens,  # type: ignore[arg-type]
+            completion_tokens=stored.completion_tokens,  # type: ignore[arg-type]
+            cache_read_tokens=stored.cache_read_tokens,  # type: ignore[arg-type]
+            cache_write_tokens=stored.cache_write_tokens,  # type: ignore[arg-type]
+            context_window=stored.context_window,  # type: ignore[arg-type]
+            per_turn_token=stored.per_turn_token,  # type: ignore[arg-type]
         )
 
         # Rebuild metrics object
         metrics = MetricsSnapshot(
-            accumulated_cost=stored.accumulated_cost,
+            accumulated_cost=stored.accumulated_cost,  # type: ignore[arg-type]
             max_budget_per_task=stored.max_budget_per_task,
             accumulated_token_usage=token_usage,
         )
@@ -127,14 +127,14 @@ class SQLSharedConversationInfoService(SharedConversationInfoService):
         return SharedConversation(
             id=UUID(stored.conversation_id),
             created_by_user_id=created_by_user_id,
-            sandbox_id=stored.sandbox_id,
+            sandbox_id=stored.sandbox_id,  # type: ignore[arg-type]
             selected_repository=stored.selected_repository,
             selected_branch=stored.selected_branch,
             git_provider=(
                 ProviderType(stored.git_provider) if stored.git_provider else None
             ),
             title=stored.title,
-            pr_number=stored.pr_number,
+            pr_number=stored.pr_number,  # type: ignore[arg-type]
             llm_model=stored.llm_model,
             metrics=metrics,
             parent_conversation_id=(

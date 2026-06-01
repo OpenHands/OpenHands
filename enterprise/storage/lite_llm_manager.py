@@ -15,6 +15,10 @@ from server.constants import (
     LITE_LLM_TEAM_ID,
     ORG_SETTINGS_VERSION,
     get_default_litellm_model,
+    get_default_llm_api_key,
+    get_default_llm_base_url,
+    get_default_llm_model,
+    should_use_direct_llm_defaults,
 )
 from server.logger import logger
 from storage.user_settings import UserSettings
@@ -113,6 +117,24 @@ class LiteLlmManager:
             'SettingsStore:update_settings_with_litellm_default:start',
             extra={'org_id': org_id, 'user_id': keycloak_user_id},
         )
+        if should_use_direct_llm_defaults():
+            llm_settings: dict[str, Any] = {
+                'model': get_default_llm_model(),
+                'base_url': get_default_llm_base_url(),
+            }
+            default_api_key = get_default_llm_api_key()
+            if default_api_key:
+                llm_settings['api_key'] = default_api_key
+            oss_settings.update(
+                {
+                    'agent_settings_diff': {
+                        'agent': 'CodeActAgent',
+                        'llm': llm_settings,
+                    }
+                }
+            )
+            return oss_settings
+
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return None
@@ -202,7 +224,7 @@ class LiteLlmManager:
                 try:
                     await LiteLlmManager._delete_key_by_alias(client, key_alias)
                 except httpx.HTTPStatusError as ex:
-                    if ex.status_code == 404:
+                    if ex.response and ex.response.status_code == 404:
                         logger.debug(f'Key "{key_alias}" did not exist - continuing')
                     else:
                         raise
@@ -622,7 +644,7 @@ class LiteLlmManager:
             json=json_data,
         )
 
-        # Team failed to create in litellm - this is an unforseen error state...
+        # Team failed to create in litellm - this is an unforeseen error state...
         if not response.is_success:
             if (
                 response.status_code == 400
@@ -685,7 +707,7 @@ class LiteLlmManager:
             json=json_data,
         )
 
-        # Team failed to update in litellm - this is an unforseen error state...
+        # Team failed to update in litellm - this is an unforeseen error state...
         if not response.is_success:
             logger.error(
                 'error_updating_litellm_team',
@@ -780,7 +802,7 @@ class LiteLlmManager:
                 },
             )
 
-            # User failed to create in litellm - this is an unforseen error state...
+            # User failed to create in litellm - this is an unforeseen error state...
             if not response.is_success:
                 if (
                     response.status_code in (400, 409)
@@ -1066,7 +1088,7 @@ class LiteLlmManager:
             json=json_data,
         )
 
-        # Failed to add user to team - this is an unforseen error state...
+        # Failed to add user to team - this is an unforeseen error state...
         if not response.is_success:
             if (
                 response.status_code == 400
@@ -1161,7 +1183,7 @@ class LiteLlmManager:
             json=json_data,
         )
 
-        # Failed to update user in team - this is an unforseen error state...
+        # Failed to update user in team - this is an unforeseen error state...
         if not response.is_success:
             logger.error(
                 'error_updating_litellm_user_in_team',
@@ -1242,7 +1264,7 @@ class LiteLlmManager:
             f'{LITE_LLM_API_URL}/key/generate',
             json=json_data,
         )
-        # Failed to generate user key for team - this is an unforseen error state...
+        # Failed to generate user key for team - this is an unforeseen error state...
         if not response.is_success:
             logger.error(
                 'error_generate_user_team_key',
@@ -1613,8 +1635,9 @@ class LiteLlmManager:
     ) -> Callable[..., Awaitable[Any]]:
         @functools.wraps(internal_fn)
         async def wrapper(*args, **kwargs):
+            headers = {'x-goog-api-key': LITE_LLM_API_KEY} if LITE_LLM_API_KEY else {}
             async with httpx.AsyncClient(
-                headers={'x-goog-api-key': LITE_LLM_API_KEY},
+                headers=headers,
                 timeout=httpx.Timeout(30.0),
             ) as client:
                 return await internal_fn(client, *args, **kwargs)

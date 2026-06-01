@@ -10,6 +10,7 @@ interface SettingsInputProps {
   value?: string;
   placeholder?: string;
   showOptionalTag?: boolean;
+  description?: React.ReactNode;
   isDisabled?: boolean;
   startContent?: React.ReactNode;
   className?: string;
@@ -31,6 +32,7 @@ export function SettingsInput({
   value,
   placeholder,
   showOptionalTag,
+  description,
   isDisabled,
   startContent,
   className,
@@ -49,6 +51,7 @@ export function SettingsInput({
         <span className={cn("text-sm", labelClassName)}>{label}</span>
         {showOptionalTag && <OptionalTag />}
       </div>
+      {description}
       <input
         data-testid={testId}
         onChange={(e) => onChange && onChange(e.target.value)}

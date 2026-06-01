@@ -79,6 +79,22 @@ async def test_get_webhook_secret_returns_none_when_repo_not_registered(webhook_
 
 
 @pytest.mark.asyncio
+async def test_get_webhook_by_id_returns_matching_row(webhook_store, sample_webhook):
+    webhook = await webhook_store.get_webhook_by_id(sample_webhook.id)
+
+    assert webhook is not None
+    assert webhook.project_key == 'PROJ'
+    assert webhook.repo_slug == 'myrepo'
+
+
+@pytest.mark.asyncio
+async def test_get_webhook_by_id_returns_none_when_absent(webhook_store):
+    webhook = await webhook_store.get_webhook_by_id(999)
+
+    assert webhook is None
+
+
+@pytest.mark.asyncio
 async def test_get_webhook_user_id_returns_installer_keycloak_id(
     webhook_store, sample_webhook
 ):
@@ -86,3 +102,122 @@ async def test_get_webhook_user_id_returns_installer_keycloak_id(
         project_key='PROJ', repo_slug='myrepo'
     )
     assert user_id == 'kc-installer'
+
+
+@pytest.mark.asyncio
+async def test_get_webhooks_by_repos_returns_matching_webhooks(
+    webhook_store, sample_webhook
+):
+    webhook_map = await webhook_store.get_webhooks_by_repos(
+        [('PROJ', 'myrepo'), ('OTHER', 'nope')]
+    )
+
+    assert list(webhook_map.keys()) == [('PROJ', 'myrepo')]
+    assert webhook_map[('PROJ', 'myrepo')].webhook_secret == 'shared-secret'
+
+
+@pytest.mark.asyncio
+async def test_ensure_webhook_enrollment_creates_placeholder_row(webhook_store):
+    webhook = await webhook_store.ensure_webhook_enrollment(
+        project_key='PROJ',
+        repo_slug='newrepo',
+        user_id='kc-user',
+    )
+
+    assert webhook.id is not None
+    assert webhook.project_key == 'PROJ'
+    assert webhook.repo_slug == 'newrepo'
+    assert webhook.user_id == 'kc-user'
+    assert webhook.webhook_secret is None
+
+
+@pytest.mark.asyncio
+async def test_ensure_webhook_enrollment_preserves_existing_secret(
+    webhook_store, sample_webhook
+):
+    webhook = await webhook_store.ensure_webhook_enrollment(
+        project_key='PROJ',
+        repo_slug='myrepo',
+        user_id='kc-new-user',
+    )
+
+    assert webhook.id == sample_webhook.id
+    assert webhook.user_id == 'kc-installer'
+    assert webhook.webhook_secret == 'shared-secret'
+
+
+@pytest.mark.asyncio
+async def test_upsert_webhook_enrollment_creates_row(webhook_store):
+    webhook = await webhook_store.upsert_webhook_enrollment(
+        project_key='PROJ',
+        repo_slug='newrepo',
+        user_id='kc-user',
+        webhook_secret='new-secret',
+    )
+
+    assert webhook.project_key == 'PROJ'
+    assert webhook.repo_slug == 'newrepo'
+    assert webhook.user_id == 'kc-user'
+    assert webhook.webhook_secret == 'new-secret'
+
+
+@pytest.mark.asyncio
+async def test_upsert_webhook_enrollment_updates_existing_row(
+    webhook_store, sample_webhook
+):
+    webhook = await webhook_store.upsert_webhook_enrollment(
+        project_key='PROJ',
+        repo_slug='myrepo',
+        user_id='kc-new-installer',
+        webhook_secret='rotated-secret',
+    )
+
+    assert webhook.id == sample_webhook.id
+    assert webhook.user_id == 'kc-new-installer'
+    assert webhook.webhook_secret == 'rotated-secret'
+    assert webhook.webhook_id == '42'
+
+
+@pytest.mark.asyncio
+async def test_update_webhook_id_updates_existing_row(webhook_store, sample_webhook):
+    updated = await webhook_store.update_webhook_id(
+        project_key='PROJ',
+        repo_slug='myrepo',
+        webhook_id='84',
+    )
+
+    assert updated is True
+    webhook = await webhook_store.get_webhook_by_repo(
+        project_key='PROJ',
+        repo_slug='myrepo',
+    )
+    assert webhook is not None
+    assert webhook.webhook_id == '84'
+
+
+@pytest.mark.asyncio
+async def test_delete_webhook_by_repo_removes_existing_row(
+    webhook_store, sample_webhook
+):
+    deleted = await webhook_store.delete_webhook_by_repo(
+        project_key='PROJ',
+        repo_slug='myrepo',
+    )
+
+    assert deleted is True
+    webhook = await webhook_store.get_webhook_by_repo(
+        project_key='PROJ',
+        repo_slug='myrepo',
+    )
+    assert webhook is None
+
+
+@pytest.mark.asyncio
+async def test_delete_webhook_by_repo_returns_false_when_row_absent(webhook_store):
+    """Uninstall is idempotent at the route layer — store reports honestly."""
+    deleted = await webhook_store.delete_webhook_by_repo(
+        project_key='PROJ',
+        repo_slug='does-not-exist',
+    )
+
+    assert deleted is False

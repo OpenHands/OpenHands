@@ -8,6 +8,7 @@ import jwt
 import requests  # type: ignore
 from fastapi import HTTPException
 from server.auth.constants import (
+    AZURE_DEVOPS_CLIENT_ID,
     BITBUCKET_APP_CLIENT_ID,
     BITBUCKET_DATA_CENTER_CLIENT_ID,
     ENABLE_ENTERPRISE_SSO,
@@ -80,7 +81,7 @@ class SaaSServerConfig(ServerConfig):
         self._get_app_slug()
 
     def _get_app_slug(self):
-        """Retrieves the GitHub App slug using the GitHub API's /app endpoint by generating a JWT for the app
+        """Retrieves the GitHub App slug using the GitHub API's /app endpoint by generating a JWT for the app.
 
         Raises:
             HTTPException: If the request to the GitHub API fails.
@@ -151,6 +152,9 @@ class SaaSServerConfig(ServerConfig):
 
         if BITBUCKET_DATA_CENTER_CLIENT_ID:
             providers_configured.append(ProviderType.BITBUCKET_DATA_CENTER)
+
+        if AZURE_DEVOPS_CLIENT_ID:
+            providers_configured.append(ProviderType.AZURE_DEVOPS)
 
         config: dict[str, typing.Any] = {
             'APP_MODE': self.app_mode,

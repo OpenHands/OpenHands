@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID
 
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
@@ -21,15 +22,66 @@ from storage.user import User
 from storage.user_settings import UserSettings
 from storage.user_store import UserStore
 
+from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
-from openhands.app_server.utils.jsonpatch_compat import deep_merge
+from openhands.app_server.utils.jsonpatch_compat import (
+    WHOLESALE_REPLACEMENT_KEYS,
+    deep_merge,
+    deep_merge_with_wholesale_keys,
+)
 from openhands.app_server.utils.llm import is_openhands_model
+
+# Agent-settings keys that are private to each org member and must never
+# be written to org-level defaults or broadcast across the org. Today this
+# covers ``mcp_config`` (per-user MCP server set) and ``acp_env`` (per-user
+# ACP environment variables) — both are dict-of-items collections that
+# represent one member's personal configuration, not org-wide defaults.
+MEMBER_PRIVATE_AGENT_KEYS: frozenset[str] = WHOLESALE_REPLACEMENT_KEYS
+
+
+def _split_member_private_keys(
+    agent_settings_diff: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Split an agent_settings dump into (shared, private) halves.
+
+    The shared half is safe to write to ``org.agent_settings`` and to
+    broadcast through ``update_all_members_settings_async``. The private
+    half must be applied only to the acting member's row.
+    """
+    private = {
+        key: agent_settings_diff[key]
+        for key in MEMBER_PRIVATE_AGENT_KEYS
+        if key in agent_settings_diff
+    }
+    shared = {
+        key: value
+        for key, value in agent_settings_diff.items()
+        if key not in MEMBER_PRIVATE_AGENT_KEYS
+    }
+    return shared, private
 
 
 @dataclass
 class SaasSettingsStore(SettingsStore):
     user_id: str
+    # When set, overrides the user's `current_org_id` for both `load()` and
+    # `store()`. Used to honor a request's effective org (api_key_org_id >
+    # X-Org-Id header > user.current_org_id) so an API key minted for org A
+    # used by a user whose `current_org_id` later switched to B still
+    # reads/writes settings under org A.
+    effective_org_id: UUID | None = None
+
+    def _resolve_org_id(self, user: User) -> UUID:
+        """Return the effective org id for this request, or the user's
+        current org id as a fallback. The caller still needs to verify
+        that the user is a member of the returned org (handled in load/
+        store by the existing org_members lookup).
+
+        `user.current_org_id` is non-nullable on the ORM model, so the
+        result is always a UUID.
+        """
+        return self.effective_org_id or user.current_org_id
 
     async def _get_user_settings_by_keycloak_id_async(
         self, keycloak_user_id: str, session=None
@@ -84,7 +136,7 @@ class SaasSettingsStore(SettingsStore):
             logger.error(f'User not found for ID {self.user_id}')
             return None
 
-        org_id = user.current_org_id
+        org_id = self._resolve_org_id(user)
         org_member: OrgMember | None = None
         for om in user.org_members:
             if om.org_id == org_id:
@@ -118,8 +170,16 @@ class SaasSettingsStore(SettingsStore):
                 if (normalized := c.name.lstrip('_')) in Settings.model_fields
             },
         }
+        # Drop member-private keys from the org dump before merging so
+        # legacy values written by older code paths (when mcp_config /
+        # acp_env were broadcast at the org level) can no longer leak
+        # one member's private config to another. Each member's own
+        # ``agent_settings_diff`` still supplies their personal values.
+        org_agent_settings_dump = org_agent_settings.model_dump(mode='json')
+        for private_key in MEMBER_PRIVATE_AGENT_KEYS:
+            org_agent_settings_dump.pop(private_key, None)
         merged_agent_settings = deep_merge(
-            org_agent_settings.model_dump(mode='json'),
+            org_agent_settings_dump,
             member_agent_settings_diff,
         )
         effective_llm_api_key = self._get_effective_llm_api_key(org, org_member)
@@ -146,12 +206,86 @@ class SaasSettingsStore(SettingsStore):
         # Apply default if sandbox_grouping_strategy is None in the database
         if kwargs.get('sandbox_grouping_strategy') is None:
             kwargs.pop('sandbox_grouping_strategy', None)
-        # Pre-migration rows read back as None; Settings.llm_profiles is
-        # non-nullable, so let the default_factory take over.
-        if kwargs.get('llm_profiles') is None:
-            kwargs.pop('llm_profiles', None)
+        # Profiles in SaaS live on the org (managed via
+        # /api/organizations/{org_id}/profiles). Surface them through
+        # Settings.llm_profiles so the chat-layer endpoints
+        # (/api/v1/settings/profiles and /switch_profile) see them without
+        # needing a separate code path. Falls back to user.llm_profiles when
+        # the org has none — handles older personal accounts whose profiles
+        # never moved to the org column.
+        if org.llm_profiles:
+            kwargs['llm_profiles'] = org.llm_profiles
+        # When no profiles exist yet, seed a Default profile from the legacy
+        # LLM config so users (and orgs) upgrading from pre-llm_profiles
+        # settings keep their previous LLM as the active profile instead of
+        # landing on an empty profiles UI (mirrors the OSS FileSettingsStore).
+        # Covers both pre-migration rows (llm_profiles is None) and
+        # already-migrated orgs whose profiles map is empty.
+        seeded_default = False
+        if not (kwargs.get('llm_profiles') or {}).get('profiles'):
+            legacy_llm = merged_agent_settings.get('llm')
+            if isinstance(legacy_llm, dict) and legacy_llm.get('model'):
+                kwargs['llm_profiles'] = {
+                    'profiles': {'Default': dict(legacy_llm)},
+                    'active': 'Default',
+                }
+                seeded_default = True
+            else:
+                # No legacy LLM to seed; drop a None value so the non-nullable
+                # Settings.llm_profiles falls back to its default_factory.
+                kwargs.pop('llm_profiles', None)
 
-        return Settings(**kwargs)
+        settings = Settings(**kwargs)
+
+        # The seed above is in-memory only. Persist it onto the org row so the
+        # legacy LLM becomes a real stored profile — otherwise the profiles
+        # management API (server/routes/org_profiles.py, which reads
+        # org.llm_profiles directly) would still see an empty list and the
+        # user's previous model would never land "inside the profiles".
+        # Persist is best-effort: a transient DB failure here must not block
+        # returning settings the caller already has in memory.
+        if seeded_default:
+            try:
+                await self._persist_seeded_default_profile(
+                    org_id, settings.llm_profiles
+                )
+            except Exception:
+                logger.warning(
+                    'Failed to persist seeded Default profile for org %s',
+                    org_id,
+                    exc_info=True,
+                )
+
+        return settings
+
+    async def _persist_seeded_default_profile(
+        self, org_id: UUID, llm_profiles: LLMProfiles
+    ) -> None:
+        """Backfill the seeded ``Default`` profile onto ``org.llm_profiles``.
+
+        Runs once per org during the pre-llm_profiles → llm_profiles upgrade:
+        ``load()`` seeds the profile in memory, and this writes it back so it
+        becomes a real stored profile that the org-profiles management API can
+        list and mutate. Re-checks emptiness under a row lock so a concurrent
+        ``load()`` doesn't double-seed and so a profile a member just created
+        through the management API is never clobbered.
+        """
+        serialized = llm_profiles.model_dump(
+            mode='json', context={'expose_secrets': True}
+        )
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(Org).filter(Org.id == org_id).with_for_update()
+            )
+            org = result.scalars().first()
+            if org is None:
+                return
+            # Only seed while the column is still empty — another request may
+            # have populated it between this load() and acquiring the lock.
+            if (org.llm_profiles or {}).get('profiles'):
+                return
+            org.llm_profiles = serialized
+            await session.commit()
 
     async def store(self, item: Settings):
         async with a_session_maker() as session:
@@ -189,7 +323,7 @@ class SaasSettingsStore(SettingsStore):
                     logger.error(f'User not found for ID {self.user_id}')
                     return None
 
-            org_id = user.current_org_id
+            org_id = self._resolve_org_id(user)
 
             org_member: OrgMember | None = None
             for om in user.org_members:
@@ -222,9 +356,29 @@ class SaasSettingsStore(SettingsStore):
                 )
 
             effective_agent_settings_diff = self._get_persisted_agent_settings(item)
-            org.agent_settings = deep_merge(
-                OrgStore.get_agent_settings_from_org(org).model_dump(mode='json'),
-                effective_agent_settings_diff,
+
+            # Keep mcp_config / acp_env scoped to the acting member only.
+            # ``shared_agent_settings_diff`` is the slice safe for org-wide
+            # state; ``private_agent_settings_diff`` is applied below to the
+            # acting member's row only so other members don't inherit one
+            # user's MCP servers (or ACP env vars).
+            shared_agent_settings_diff, private_agent_settings_diff = (
+                _split_member_private_keys(effective_agent_settings_diff)
+            )
+
+            # Strip any pre-existing private keys from the org dump before
+            # merging, so legacy values written by older code paths are
+            # cleaned up on the next save and stop leaking to other members.
+            org_agent_settings_dump = OrgStore.get_agent_settings_from_org(
+                org
+            ).model_dump(mode='json')
+            for private_key in MEMBER_PRIVATE_AGENT_KEYS:
+                org_agent_settings_dump.pop(private_key, None)
+
+            # Single assignment so SQLAlchemy tracks the change
+            org.agent_settings = deep_merge_with_wholesale_keys(
+                org_agent_settings_dump,
+                shared_agent_settings_diff,
             )
 
             effective_conversation_diff = item.conversation_settings.model_dump(
@@ -259,7 +413,7 @@ class SaasSettingsStore(SettingsStore):
                 else None
             )
             current_member_llm_api_key_raw = (
-                current_member_llm_api_key.get_secret_value()
+                current_member_llm_api_key.get_secret_value()  # type: ignore[union-attr]
                 if current_member_llm_api_key
                 else None
             )
@@ -268,23 +422,32 @@ class SaasSettingsStore(SettingsStore):
                 session,
                 org_id,
                 OrgMemberSettingsUpdate(
-                    agent_settings_diff=effective_agent_settings_diff,
+                    agent_settings_diff=shared_agent_settings_diff,
                     conversation_settings_diff=effective_conversation_diff,
                     llm_api_key=(
-                        current_member_llm_api_key_raw
+                        current_member_llm_api_key_raw  # type: ignore[arg-type]
                         if not uses_managed_llm_key
                         else None
                     ),
                 ),
             )
 
+            # Member-private keys (mcp_config, acp_env) live only on the
+            # acting member's row. Use the wholesale-replacement semantics
+            # so deletes stick (APP-1862).
+            if private_agent_settings_diff:
+                org_member.agent_settings_diff = deep_merge_with_wholesale_keys(
+                    dict(org_member.agent_settings_diff),
+                    private_agent_settings_diff,
+                )
+
             if uses_managed_llm_key and current_member_llm_api_key is not None:
                 # Managed/proxy key — store on this member but mark as org-managed
-                org_member.llm_api_key = current_member_llm_api_key
+                org_member.llm_api_key = current_member_llm_api_key  # type: ignore[assignment]
                 org_member.has_custom_llm_api_key = False
             elif current_member_llm_api_key_raw is not None:
                 # BYOR: member supplied their own (non-managed) API key
-                org_member.llm_api_key = current_member_llm_api_key
+                org_member.llm_api_key = current_member_llm_api_key  # type: ignore[assignment]
                 org_member.has_custom_llm_api_key = True
             elif org_default_llm_api_key_raw is not None:
                 # No member key, falling back to org default
@@ -293,16 +456,24 @@ class SaasSettingsStore(SettingsStore):
             await session.commit()
 
     @classmethod
-    async def get_instance(
+    async def get_instance(  # type: ignore[override]
         cls,
-        user_id: str,  # type: ignore[override]
+        user_id: str,
+        effective_org_id: UUID | None = None,
     ) -> SaasSettingsStore:
         """Get a SaasSettingsStore instance for the given user.
+
+        Args:
+            user_id: Keycloak user id.
+            effective_org_id: Optional org id resolved from the request
+                (see SaasUserAuth.get_effective_org_id). When None the
+                store falls back to ``user.current_org_id`` to preserve
+                legacy behavior for background / non-request callers.
 
         TODO: This method should be replaced with dependency injection.
         """
         logger.debug(f'saas_settings_store.get_instance::{user_id}')
-        return SaasSettingsStore(user_id)
+        return SaasSettingsStore(user_id, effective_org_id=effective_org_id)
 
     async def _ensure_api_key(
         self, item: Settings, org_id: str, openhands_type: bool = False
@@ -317,7 +488,7 @@ class SaasSettingsStore(SettingsStore):
 
         # First, check if our current key is valid
         if llm_api_key and not await LiteLlmManager.verify_existing_key(
-            llm_api_key.get_secret_value(),
+            llm_api_key.get_secret_value(),  # type: ignore[union-attr]
             self.user_id,
             org_id,
             openhands_type=openhands_type,

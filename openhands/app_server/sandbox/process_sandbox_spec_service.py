@@ -24,11 +24,14 @@ def get_default_sandbox_specs():
             id=get_agent_server_image(),
             command=['python', '-m', 'openhands.agent_server'],
             initial_env={
+                # Keep tmux sockets on a short path; macOS default temp dirs can
+                # exceed Unix socket path limits once libtmux appends tmux-UID.
+                'TMUX_TMPDIR': '/tmp/openhands-tmux',
                 # VSCode disabled for now
                 'OH_ENABLE_VS_CODE': '0',
                 **get_agent_server_env(),
             },
-            working_dir='',
+            working_dir='.',
         )
     ]
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional
+from uuid import UUID
 
 from sqlalchemy import select
 from storage.database import a_session_maker
@@ -18,17 +19,18 @@ class JiraDcIntegrationStore:
         self,
         name: str,
         admin_user_id: str,
+        org_id: UUID | None,
         encrypted_webhook_secret: str,
         svc_acc_email: str,
         encrypted_svc_acc_api_key: str,
         status: str = 'active',
     ) -> JiraDcWorkspace:
         """Create a new Jira DC workspace with encrypted sensitive data."""
-
         async with a_session_maker() as session:
             workspace = JiraDcWorkspace(
                 name=name.lower(),
                 admin_user_id=admin_user_id,
+                org_id=org_id,
                 webhook_secret=encrypted_webhook_secret,
                 svc_acc_email=svc_acc_email,
                 svc_acc_api_key=encrypted_svc_acc_api_key,
@@ -43,6 +45,7 @@ class JiraDcIntegrationStore:
     async def update_workspace(
         self,
         id: int,
+        org_id: UUID | None = None,
         encrypted_webhook_secret: Optional[str] = None,
         svc_acc_email: Optional[str] = None,
         encrypted_svc_acc_api_key: Optional[str] = None,
@@ -61,6 +64,9 @@ class JiraDcIntegrationStore:
 
             if encrypted_webhook_secret is not None:
                 workspace.webhook_secret = encrypted_webhook_secret
+
+            if org_id is not None:
+                workspace.org_id = org_id
 
             if svc_acc_email is not None:
                 workspace.svc_acc_email = svc_acc_email
@@ -85,7 +91,6 @@ class JiraDcIntegrationStore:
         status: str = 'active',
     ) -> JiraDcUser:
         """Create a new Jira DC workspace link."""
-
         jira_dc_user = JiraDcUser(
             keycloak_user_id=keycloak_user_id,
             jira_dc_user_id=jira_dc_user_id,
@@ -127,7 +132,6 @@ class JiraDcIntegrationStore:
         self, keycloak_user_id: str
     ) -> Optional[JiraDcUser]:
         """Retrieve user by Keycloak user ID."""
-
         async with a_session_maker() as session:
             result = await session.execute(
                 select(JiraDcUser).where(
@@ -179,21 +183,22 @@ class JiraDcIntegrationStore:
             return result.scalar_one_or_none()
 
     async def update_user_integration_status(
-        self, keycloak_user_id: str, status: str
+        self, keycloak_user_id: str, jira_dc_workspace_id: int, status: str
     ) -> JiraDcUser:
         """Update the status of a Jira DC user mapping."""
-
         async with a_session_maker() as session:
             result = await session.execute(
                 select(JiraDcUser).where(
-                    JiraDcUser.keycloak_user_id == keycloak_user_id
+                    JiraDcUser.keycloak_user_id == keycloak_user_id,
+                    JiraDcUser.jira_dc_workspace_id == jira_dc_workspace_id,
                 )
             )
             user = result.scalar_one_or_none()
 
             if not user:
                 raise ValueError(
-                    f"User with keycloak_user_id '{keycloak_user_id}' not found"
+                    f"User with keycloak_user_id '{keycloak_user_id}' and "
+                    f"jira_dc_workspace_id '{jira_dc_workspace_id}' not found"
                 )
 
             user.status = status

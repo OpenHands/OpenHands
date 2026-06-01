@@ -871,7 +871,12 @@ async def test_authenticate_failure():
     with patch('server.routes.auth.get_access_token') as mock_get_token:
         mock_get_token.side_effect = AuthError()
 
-        result = await authenticate(MagicMock())
+        # request.cookies is a real Mapping[str, str] in production; give the
+        # mock a concrete dict so the cookie-clearing path (which now
+        # reassembles chunked cookies) reads strings rather than MagicMocks.
+        request = MagicMock()
+        request.cookies = {'keycloak_auth': 'some-token'}
+        result = await authenticate(request)
 
         assert isinstance(result, JSONResponse)
         assert result.status_code == status.HTTP_401_UNAUTHORIZED

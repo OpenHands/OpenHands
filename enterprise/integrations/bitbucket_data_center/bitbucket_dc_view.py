@@ -69,7 +69,7 @@ class BitbucketDCPR(ResolverViewInterface):
     repo_slug: str
     full_repo_name: str  # f"{project_key}/{repo_slug}"
     is_public_repo: bool
-    user_info: UserData
+    user_info: UserData  # keycloak_user_id here is the @-mentioning user
     raw_payload: Message
     conversation_id: str
     should_extract: bool
@@ -78,6 +78,11 @@ class BitbucketDCPR(ResolverViewInterface):
     description: str
     previous_comments: list[Comment]
     branch_name: str | None
+    # Webhook installer's keycloak_user_id. We run the conversation,
+    # token exchanges, and reply path as the mentioner (``user_info``),
+    # but keep this around for the things only the installer can do:
+    # the per-commenter permission check and webhook lifecycle calls.
+    installer_keycloak_user_id: str
 
     def _get_branch_name(self) -> str | None:
         return self.branch_name
@@ -87,7 +92,10 @@ class BitbucketDCPR(ResolverViewInterface):
             external_auth_id=self.user_info.keycloak_user_id
         )
         self.previous_comments = await bitbucket_service.get_pr_comments(
-            self.project_key, self.repo_slug, self.issue_number
+            self.project_key,
+            self.repo_slug,
+            self.issue_number,
+            exclude_comment_id=getattr(self, 'comment_id', None),
         )
         (
             self.title,
@@ -158,7 +166,7 @@ class BitbucketDCPR(ResolverViewInterface):
         title = f'Bitbucket DC PR #{self.issue_number}: {self.title}'
         start_request = AppConversationStartRequest(
             conversation_id=conversation_id,
-            system_message_suffix=conversation_instructions,
+            system_message_suffix=conversation_instructions or None,
             initial_message=initial_message,
             selected_repository=self.full_repo_name,
             selected_branch=self._get_branch_name(),
@@ -190,28 +198,25 @@ class BitbucketDCPR(ResolverViewInterface):
 
 @dataclass
 class BitbucketDCPRComment(BitbucketDCPR):
+    comment_id: int | None
     comment_body: str
     parent_comment_id: int | None
 
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         await self._load_resolver_context()
 
-        user_instructions_template = jinja_env.get_template('pr_update_prompt.j2')
+        user_instructions_template = jinja_env.get_template(
+            'pr_update_initial_message.j2'
+        )
         user_instructions = user_instructions_template.render(
-            pr_comment=self.comment_body
-        )
-
-        conversation_instructions_template = jinja_env.get_template(
-            'pr_update_conversation_instructions.j2'
-        )
-        conversation_instructions = conversation_instructions_template.render(
             pr_number=self.issue_number,
             branch_name=self.branch_name or '',
             pr_title=self.title,
             pr_body=self.description,
             comments=self.previous_comments,
+            pr_comment=self.comment_body,
         )
-        return user_instructions, conversation_instructions
+        return user_instructions, ''
 
 
 @dataclass
@@ -224,24 +229,20 @@ class BitbucketDCInlinePRComment(BitbucketDCPRComment):
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         await self._load_resolver_context()
 
-        user_instructions_template = jinja_env.get_template('pr_update_prompt.j2')
+        user_instructions_template = jinja_env.get_template(
+            'pr_update_initial_message.j2'
+        )
         user_instructions = user_instructions_template.render(
-            pr_comment=self.comment_body
-        )
-
-        conversation_instructions_template = jinja_env.get_template(
-            'pr_update_conversation_instructions.j2'
-        )
-        conversation_instructions = conversation_instructions_template.render(
             pr_number=self.issue_number,
             branch_name=self.branch_name or '',
             pr_title=self.title,
             pr_body=self.description,
             comments=self.previous_comments,
+            pr_comment=self.comment_body,
             file_location=self.file_location,
             line_number=self.line_number,
         )
-        return user_instructions, conversation_instructions
+        return user_instructions, ''
 
 
 BitbucketDCViewType = BitbucketDCInlinePRComment | BitbucketDCPRComment | BitbucketDCPR
@@ -280,14 +281,19 @@ class BitbucketDCFactory:
 
     @staticmethod
     async def create_bitbucket_dc_view_from_payload(
-        message: Message, keycloak_user_id: str
+        message: Message,
+        keycloak_user_id: str,
+        installer_keycloak_user_id: str | None = None,
     ) -> BitbucketDCViewType:
         """Build a view from a Bitbucket DC webhook payload.
 
-        ``keycloak_user_id`` is the OpenHands user that **installed** the
-        webhook (looked up by ``(project_key, repo_slug)`` from the
-        ``bitbucket_dc_webhook`` table by the manager). The resolver acts
-        on Bitbucket DC as the installer.
+        ``keycloak_user_id`` is the OpenHands user the resolver runs the
+        job as — the @-mentioning user when they have an OHE account, or
+        the webhook installer as a fallback. ``installer_keycloak_user_id``
+        is the user that installed the webhook (looked up from the
+        ``bitbucket_dc_webhook`` table); when omitted it defaults to
+        ``keycloak_user_id`` for backward compatibility with older
+        callers/tests that pass a single id.
         """
         payload = cast(dict, message.message['payload'])
         installation_id = cast(str, message.message.get('installation_id') or '')
@@ -329,6 +335,7 @@ class BitbucketDCFactory:
         )
 
         comment = payload.get('comment') or {}
+        comment_id = comment.get('id')
         comment_body = comment.get('text') or ''
         parent_comment_id = (comment.get('parent') or {}).get('id')
 
@@ -352,6 +359,7 @@ class BitbucketDCFactory:
             description='',
             previous_comments=[],
             branch_name=branch_name,
+            installer_keycloak_user_id=(installer_keycloak_user_id or keycloak_user_id),
         )
 
         if BitbucketDCFactory.is_pr_comment(message, inline=True):
@@ -361,6 +369,7 @@ class BitbucketDCFactory:
             )
             return BitbucketDCInlinePRComment(
                 **common_kwargs,
+                comment_id=comment_id,
                 comment_body=comment_body,
                 parent_comment_id=parent_comment_id,
                 file_location=anchor.get('path') or '',
@@ -376,6 +385,7 @@ class BitbucketDCFactory:
             )
             return BitbucketDCPRComment(
                 **common_kwargs,
+                comment_id=comment_id,
                 comment_body=comment_body,
                 parent_comment_id=parent_comment_id,
             )

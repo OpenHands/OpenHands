@@ -2,6 +2,19 @@ import { ConversationStatus } from "#/types/conversation-status";
 import { RuntimeStatus } from "#/types/runtime-status";
 import { Provider } from "#/types/settings";
 
+/** Backend ``AppConversationInfo.agent_kind`` discriminator. */
+export type AgentKind = "openhands" | "acp";
+
+/**
+ * Conversation tags. The backend stamps ``acp_server`` (the ACP provider
+ * discriminator key) at conversation-create time; other keys carry automation
+ * context, skills used, etc., and are open-ended.
+ */
+export interface ConversationTags {
+  acp_server?: string;
+  [key: string]: string | undefined;
+}
+
 export interface ErrorResponse {
   error: string;
 }
@@ -81,6 +94,8 @@ export interface Conversation {
   public?: boolean;
   sandbox_id?: string | null;
   llm_model?: string | null;
+  agent_kind?: AgentKind;
+  tags?: ConversationTags;
 }
 
 export interface ResultSet<T> {

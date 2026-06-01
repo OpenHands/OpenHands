@@ -4,6 +4,7 @@ This module tests the batch_get_app_conversations endpoint,
 focusing on UUID string parsing, validation, and error handling.
 """
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -22,6 +23,8 @@ from openhands.app_server.app_conversation.app_conversation_router import (
     AgentServerContext,
     batch_get_app_conversations,
     count_app_conversations,
+    get_conversation_git_changes,
+    get_conversation_git_diff,
     search_app_conversations,
     switch_conversation_profile,
 )
@@ -29,6 +32,7 @@ from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.settings.settings_models import Settings
 from openhands.sdk.llm import LLM
+from openhands.sdk.settings import OpenHandsAgentSettings
 
 
 def _make_mock_app_conversation(
@@ -398,6 +402,28 @@ def _make_settings_with_profile(
     return Settings(llm_profiles=LLMProfiles(profiles={profile_name: llm}))
 
 
+def _make_settings_for_switch(
+    profile_name: str = 'managed',
+    model: str = 'litellm_proxy/minimax-m2.7',
+    profile_api_key: str | None = None,
+    settings_api_key: str | None = 'managed-proxy-key',
+) -> Settings:
+    """Build Settings where the profile and the effective agent settings carry
+    independent keys, so the switch endpoint's api_key fallback can be tested.
+
+    In SaaS the managed profile persists no key (``profile_api_key=None``) while
+    the effective ``agent_settings.llm.api_key`` holds the resolved managed key.
+    """
+    return Settings(
+        agent_settings=OpenHandsAgentSettings(
+            llm=LLM(model=model, api_key=settings_api_key)
+        ),
+        llm_profiles=LLMProfiles(
+            profiles={profile_name: LLM(model=model, api_key=profile_api_key)}
+        ),
+    )
+
+
 def _make_agent_server_context(
     conversation_id, llm_model: str | None = 'openai/old-model'
 ) -> AgentServerContext:
@@ -633,6 +659,83 @@ class TestSwitchConversationProfile:
         assert post_kwargs['json']['llm']['model'] == new_model
         assert post_kwargs['json']['llm']['usage_id'].startswith('profile:gpt-5:')
 
+    async def test_falls_back_to_settings_api_key_when_profile_has_none(self):
+        """SaaS: managed profiles persist no key, so the switch must source the
+        effective ``agent_settings.llm.api_key`` — otherwise the agent server
+        calls the litellm proxy unauthenticated and the request 401s.
+        """
+        conv_id = uuid4()
+        settings = _make_settings_for_switch(
+            profile_name='managed',
+            profile_api_key=None,
+            settings_api_key='managed-proxy-key',
+        )
+        ctx = _make_agent_server_context(conv_id)
+        ok_response = MagicMock()
+        ok_response.status_code = 200
+        ok_response.raise_for_status = MagicMock()
+        client = _make_httpx_client(post_return=ok_response)
+        info_service = MagicMock()
+        info_service.get_app_conversation_info = AsyncMock(return_value=None)
+        info_service.save_app_conversation_info = AsyncMock()
+
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            await switch_conversation_profile(
+                conversation_id=conv_id,
+                request=SwitchProfileRequest(profile_name='managed'),
+                user_settings=settings,
+                app_conversation_service=MagicMock(),
+                app_conversation_info_service=info_service,
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=client,
+            )
+
+        post_kwargs = client.post.await_args.kwargs
+        assert post_kwargs['json']['llm']['api_key'] == 'managed-proxy-key'
+
+    async def test_keeps_profile_api_key_when_profile_has_one(self):
+        """A profile that carries its own key (BYOR / local GUI) is used as-is
+        and never overridden by the settings fallback.
+        """
+        conv_id = uuid4()
+        settings = _make_settings_for_switch(
+            profile_name='managed',
+            profile_api_key='byor-key',
+            settings_api_key='should-not-be-used',
+        )
+        ctx = _make_agent_server_context(conv_id)
+        ok_response = MagicMock()
+        ok_response.status_code = 200
+        ok_response.raise_for_status = MagicMock()
+        client = _make_httpx_client(post_return=ok_response)
+        info_service = MagicMock()
+        info_service.get_app_conversation_info = AsyncMock(return_value=None)
+        info_service.save_app_conversation_info = AsyncMock()
+
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            await switch_conversation_profile(
+                conversation_id=conv_id,
+                request=SwitchProfileRequest(profile_name='managed'),
+                user_settings=settings,
+                app_conversation_service=MagicMock(),
+                app_conversation_info_service=info_service,
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=client,
+            )
+
+        post_kwargs = client.post.await_args.kwargs
+        assert post_kwargs['json']['llm']['api_key'] == 'byor-key'
+
     async def test_success_skips_persist_when_model_unchanged(self):
         """If the conversation already records the new model, save is skipped."""
         conv_id = uuid4()
@@ -708,3 +811,274 @@ class TestSwitchConversationProfile:
                 sandbox_spec_service=MagicMock(),
                 httpx_client=client,
             )
+
+
+def _make_get_httpx_client(get_return=None, get_side_effect=None) -> AsyncMock:
+    client = AsyncMock(spec=httpx.AsyncClient)
+    if get_side_effect is not None:
+        client.get = AsyncMock(side_effect=get_side_effect)
+    else:
+        response = get_return or MagicMock()
+        client.get = AsyncMock(return_value=response)
+    return client
+
+
+@pytest.mark.asyncio
+class TestGitProxyEndpoints:
+    """Test suite for /git/changes and /git/diff runtime proxy endpoints.
+
+    These endpoints exist so the browser can avoid hitting the runtime
+    sandbox URL directly (which fails CORS for non-localhost origins).
+    They resolve the conversation's runtime via ``_get_agent_server_context``
+    and forward the GET server-side using the sandbox's session API key.
+    """
+
+    async def test_changes_forwards_path_ref_and_session_key_to_runtime(self):
+        """Happy path: GET /git/changes calls runtime /api/git/changes with
+        the right URL, params, X-Session-API-Key header, and returns the
+        upstream JSON unchanged."""
+        # Arrange
+        conv_id = uuid4()
+        ctx = _make_agent_server_context(conv_id)
+        upstream_payload = [
+            {'status': 'UPDATED', 'path': 'src/foo.py'},
+            {'status': 'ADDED', 'path': 'src/bar.py'},
+        ]
+        upstream_response = MagicMock()
+        upstream_response.raise_for_status = MagicMock()
+        upstream_response.json = MagicMock(return_value=upstream_payload)
+        client = _make_get_httpx_client(get_return=upstream_response)
+
+        # Act
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            result = await get_conversation_git_changes(
+                conversation_id=conv_id,
+                path='/workspace/project',
+                ref='HEAD',
+                app_conversation_service=MagicMock(),
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=client,
+            )
+
+        # Assert
+        assert result == upstream_payload
+        client.get.assert_awaited_once_with(
+            'http://agent.test/api/git/changes',
+            params={'path': '/workspace/project', 'ref': 'HEAD'},
+            headers={'X-Session-API-Key': 'sess-key'},
+            timeout=30.0,
+        )
+
+    async def test_diff_routes_to_diff_runtime_path(self):
+        """``/git/diff`` proxies to ``/api/git/diff`` (not /changes)."""
+        # Arrange
+        conv_id = uuid4()
+        ctx = _make_agent_server_context(conv_id)
+        upstream_response = MagicMock()
+        upstream_response.raise_for_status = MagicMock()
+        upstream_response.json = MagicMock(
+            return_value={'modified': 'new', 'original': 'old'},
+        )
+        client = _make_get_httpx_client(get_return=upstream_response)
+
+        # Act
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            await get_conversation_git_diff(
+                conversation_id=conv_id,
+                path='/workspace/project/file.py',
+                ref=None,
+                app_conversation_service=MagicMock(),
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=client,
+            )
+
+        # Assert: URL targets /api/git/diff and the optional ref param is omitted
+        client.get.assert_awaited_once_with(
+            'http://agent.test/api/git/diff',
+            params={'path': '/workspace/project/file.py'},
+            headers={'X-Session-API-Key': 'sess-key'},
+            timeout=30.0,
+        )
+
+    async def test_returns_404_when_conversation_not_reachable(self):
+        """``_get_agent_server_context`` JSONResponse → mirrored as
+        ``HTTPException`` so the cloud surface returns the same status."""
+        # Arrange
+        helper_response = JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': 'Conversation not found'},
+        )
+
+        # Act + Assert
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=helper_response),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_conversation_git_changes(
+                    conversation_id=uuid4(),
+                    path='/workspace/project',
+                    ref=None,
+                    app_conversation_service=MagicMock(),
+                    sandbox_service=MagicMock(),
+                    sandbox_spec_service=MagicMock(),
+                    httpx_client=_make_get_httpx_client(),
+                )
+
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+
+    async def test_returns_409_when_sandbox_paused(self):
+        """``_get_agent_server_context`` None (paused) → 409 Conflict."""
+        # Act + Assert
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=None),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_conversation_git_changes(
+                    conversation_id=uuid4(),
+                    path='/workspace/project',
+                    ref=None,
+                    app_conversation_service=MagicMock(),
+                    sandbox_service=MagicMock(),
+                    sandbox_spec_service=MagicMock(),
+                    httpx_client=_make_get_httpx_client(),
+                )
+
+        assert exc_info.value.status_code == status.HTTP_409_CONFLICT
+        assert 'paused' in exc_info.value.detail.lower()
+
+    async def test_returns_502_when_runtime_returns_http_error(self):
+        """A 4xx/5xx from the runtime is folded into a 502 with the upstream
+        status code preserved in the detail."""
+        # Arrange
+        conv_id = uuid4()
+        ctx = _make_agent_server_context(conv_id)
+        bad_response = MagicMock()
+        bad_response.status_code = 500
+        bad_response.text = 'runtime crashed'
+        bad_response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(
+                'boom',
+                request=MagicMock(),
+                response=bad_response,
+            ),
+        )
+        client = _make_get_httpx_client(get_return=bad_response)
+
+        # Act + Assert
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_conversation_git_changes(
+                    conversation_id=conv_id,
+                    path='/workspace/project',
+                    ref=None,
+                    app_conversation_service=MagicMock(),
+                    sandbox_service=MagicMock(),
+                    sandbox_spec_service=MagicMock(),
+                    httpx_client=client,
+                )
+
+        assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
+        assert '500' in exc_info.value.detail
+
+    async def test_returns_502_when_runtime_unreachable(self):
+        """A network-level RequestError is folded into a 502."""
+        # Arrange
+        conv_id = uuid4()
+        ctx = _make_agent_server_context(conv_id)
+        client = _make_get_httpx_client(
+            get_side_effect=httpx.RequestError('connection refused'),
+        )
+
+        # Act + Assert
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_conversation_git_changes(
+                    conversation_id=conv_id,
+                    path='/workspace/project',
+                    ref=None,
+                    app_conversation_service=MagicMock(),
+                    sandbox_service=MagicMock(),
+                    sandbox_spec_service=MagicMock(),
+                    httpx_client=client,
+                )
+
+        assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
+        assert 'reach agent server' in exc_info.value.detail.lower()
+
+    async def test_returns_502_when_runtime_returns_non_json(self):
+        """A 200 OK whose body fails to decode (``json.JSONDecodeError``) is
+        folded into a 502 rather than escaping as an unhandled 500."""
+        # Arrange
+        conv_id = uuid4()
+        ctx = _make_agent_server_context(conv_id)
+        bad_response = MagicMock()
+        bad_response.raise_for_status = MagicMock()
+        bad_response.json = MagicMock(
+            side_effect=json.JSONDecodeError('Expecting value', '<html>', 0),
+        )
+        client = _make_get_httpx_client(get_return=bad_response)
+
+        # Act + Assert
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_conversation_git_changes(
+                    conversation_id=conv_id,
+                    path='/workspace/project',
+                    ref=None,
+                    app_conversation_service=MagicMock(),
+                    sandbox_service=MagicMock(),
+                    sandbox_spec_service=MagicMock(),
+                    httpx_client=client,
+                )
+
+        assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
+        assert 'unexpected response' in exc_info.value.detail.lower()
+
+    async def test_diff_returns_409_when_sandbox_paused(self):
+        """Confirms ``/git/diff`` shares the same error wiring as ``/changes``:
+        a paused sandbox (helper ``None``) surfaces as 409 Conflict."""
+        # Act + Assert
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=None),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_conversation_git_diff(
+                    conversation_id=uuid4(),
+                    path='/workspace/project/file.py',
+                    ref=None,
+                    app_conversation_service=MagicMock(),
+                    sandbox_service=MagicMock(),
+                    sandbox_spec_service=MagicMock(),
+                    httpx_client=_make_get_httpx_client(),
+                )
+
+        assert exc_info.value.status_code == status.HTTP_409_CONFLICT
+        assert 'paused' in exc_info.value.detail.lower()

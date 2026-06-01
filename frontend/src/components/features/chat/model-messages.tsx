@@ -34,8 +34,7 @@ function ProfileRow({ profile }: ProfileRowProps) {
           <hr className="border-neutral-700" />
           <div className="px-3 py-2 text-xs text-neutral-300 font-mono whitespace-pre-wrap">
             {`model:    ${profile.model ?? "—"}\n` +
-              `base_url: ${profile.base_url ?? "—"}\n` +
-              `api_key:  ${profile.api_key_set ? "set" : "not set"}`}
+              `base_url: ${profile.base_url ?? "—"}`}
           </div>
         </>
       )}

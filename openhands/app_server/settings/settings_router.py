@@ -431,7 +431,10 @@ async def list_profiles(
         return ProfileListResponse(profiles=[], active_profile=None)
 
     return ProfileListResponse(
-        profiles=[ProfileInfo(**p) for p in settings.llm_profiles.summaries()],
+        profiles=[
+            ProfileInfo(**p)
+            for p in settings.llm_profiles.summaries(managed_proxy_url=LITE_LLM_API_URL)
+        ],
         active_profile=settings.llm_profiles.active,
     )
 

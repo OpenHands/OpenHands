@@ -54,7 +54,7 @@ const renderRecentConversation = (conversation: V1AppConversation) =>
   );
 
 describe("RecentConversation - llm_model", () => {
-  it("should render the llm model when provided", () => {
+  it("should render the raw llm_model when provided", () => {
     renderRecentConversation({
       ...baseConversation,
       llm_model: "anthropic/claude-sonnet-4-20250514",
@@ -69,13 +69,24 @@ describe("RecentConversation - llm_model", () => {
     );
     expect(model.querySelector("svg")).toBeInTheDocument();
 
-    // Verify truncation structure: text is wrapped in a span with truncate class
     const textSpan = model.querySelector("span.truncate");
     expect(textSpan).toBeInTheDocument();
     expect(textSpan).toHaveTextContent("anthropic/claude-sonnet-4-20250514");
   });
 
-  it("should not render the llm model when not provided", () => {
+  it("should render plain 'ACP' for ACP-agent conversations", () => {
+    renderRecentConversation({
+      ...baseConversation,
+      agent_kind: "acp",
+      llm_model: null,
+    });
+
+    const model = screen.getByTestId("recent-conversation-llm-model");
+    expect(model).toHaveTextContent("ACP");
+    expect(model).toHaveAttribute("title", "ACP");
+  });
+
+  it("should not render the model chip when neither llm_model nor ACP", () => {
     renderRecentConversation(baseConversation);
 
     expect(

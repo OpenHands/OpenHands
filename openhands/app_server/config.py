@@ -7,7 +7,6 @@ from typing import AsyncContextManager
 import httpx
 from fastapi import Depends, Request
 from pydantic import Field, SecretStr
-from sqlalchemy.ext.asyncio import AsyncSession
 
 # Import the event_callback module to ensure all processors are registered
 import openhands.app_server.event_callback  # noqa: F401
@@ -51,6 +50,10 @@ from openhands.app_server.sandbox.sandbox_service import (
 from openhands.app_server.sandbox.sandbox_spec_service import (
     SandboxSpecService,
     SandboxSpecServiceInjector,
+)
+from openhands.app_server.services.db_session import (  # noqa: F401  (re-exported)
+    depends_db_session,
+    get_db_session,
 )
 from openhands.app_server.services.db_session_injector import (
     DbSessionInjector,
@@ -518,12 +521,6 @@ def get_jwt_service(
     return injector.context(state, request)
 
 
-def get_db_session(
-    state: InjectorState, request: Request | None = None
-) -> AsyncContextManager[AsyncSession]:
-    return get_global_config().db_session.context(state, request)
-
-
 def get_app_lifespan_service() -> AppLifespanService | None:
     config = get_global_config()
     return config.lifespan
@@ -591,10 +588,6 @@ def depends_jwt_service():
     injector = get_global_config().jwt
     assert injector is not None
     return Depends(injector.depends)
-
-
-def depends_db_session():
-    return Depends(get_global_config().db_session.depends)
 
 
 def get_llm_model_service(

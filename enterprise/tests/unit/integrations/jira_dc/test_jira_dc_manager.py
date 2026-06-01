@@ -1,6 +1,4 @@
-"""
-Unit tests for JiraDcManager.
-"""
+"""Unit tests for JiraDcManager."""
 
 import hashlib
 import hmac
@@ -10,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 from fastapi import Request
-from integrations.jira_dc.jira_dc_manager import JiraDcManager
+from integrations.jira_dc.jira_dc_manager import JIRA_DC_WEBHOOK_EVENTS, JiraDcManager
 from integrations.jira_dc.jira_dc_types import JiraDcViewInterface
 from integrations.jira_dc.jira_dc_view import (
     JiraDcExistingConversationView,
@@ -97,6 +95,47 @@ class TestAuthenticateUser:
         assert jira_dc_user is None
         assert user_auth is None
 
+    @pytest.mark.asyncio
+    async def test_authenticate_user_email_mode_matches_by_email(
+        self,
+        jira_dc_manager,
+        mock_token_manager,
+        sample_jira_dc_user,
+        sample_user_auth,
+    ):
+        """Resolve the user by email when OAuth is disabled (email-match mode).
+
+        Even though the webhook supplies a real Jira user key, the stored
+        workspace link carries the 'unavailable' sentinel rather than the
+        real key, so a key lookup would never match (the original bug).
+        """
+        mock_token_manager.get_user_id_from_user_email.return_value = 'test_keycloak_id'
+        jira_dc_manager.integration_store.get_active_user_by_keycloak_id_and_workspace = AsyncMock(
+            return_value=sample_jira_dc_user
+        )
+
+        with (
+            patch('integrations.jira_dc.jira_dc_manager.JIRA_DC_ENABLE_OAUTH', False),
+            patch(
+                'integrations.jira_dc.jira_dc_manager.get_user_auth_from_keycloak_id',
+                return_value=sample_user_auth,
+            ),
+        ):
+            jira_dc_user, user_auth = await jira_dc_manager.authenticate_user(
+                'user@company.com', 'real_jira_key_from_webhook', 1
+            )
+
+        assert jira_dc_user == sample_jira_dc_user
+        assert user_auth == sample_user_auth
+        # Resolved by email, NOT by the webhook's Jira key.
+        mock_token_manager.get_user_id_from_user_email.assert_called_once_with(
+            'user@company.com'
+        )
+        jira_dc_manager.integration_store.get_active_user_by_keycloak_id_and_workspace.assert_called_once_with(
+            'test_keycloak_id', 1
+        )
+        jira_dc_manager.integration_store.get_active_user.assert_not_called()
+
 
 class TestGetRepositories:
     """Test repository retrieval functionality."""
@@ -168,6 +207,147 @@ class TestValidateRequest:
         assert is_valid is True
         assert returned_signature == signature
         assert payload == sample_comment_webhook_payload
+
+    @pytest.mark.asyncio
+    async def test_validate_request_issue_created_success(
+        self,
+        jira_dc_manager,
+        mock_token_manager,
+        sample_jira_dc_workspace,
+        sample_issue_created_webhook_payload,
+    ):
+        """Issue-created webhooks validate for automation forwarding."""
+        mock_token_manager.decrypt_text.return_value = 'test_secret'
+        jira_dc_manager.integration_store.get_workspace_by_name.return_value = (
+            sample_jira_dc_workspace
+        )
+
+        body = json.dumps(sample_issue_created_webhook_payload).encode()
+        signature = hmac.new('test_secret'.encode(), body, hashlib.sha256).hexdigest()
+
+        mock_request = MagicMock(spec=Request)
+        mock_request.headers = {'x-hub-signature': f'sha256={signature}'}
+        mock_request.body = AsyncMock(return_value=body)
+        mock_request.json = AsyncMock(return_value=sample_issue_created_webhook_payload)
+
+        is_valid, returned_signature, payload = await jira_dc_manager.validate_request(
+            mock_request
+        )
+
+        assert is_valid is True
+        assert returned_signature == signature
+        assert payload == sample_issue_created_webhook_payload
+        jira_dc_manager.integration_store.get_workspace_by_name.assert_called_with(
+            'jira.company.com'
+        )
+
+    @pytest.mark.asyncio
+    async def test_validate_request_context_uses_workspace_id(
+        self,
+        jira_dc_manager,
+        mock_token_manager,
+        sample_jira_dc_workspace,
+        sample_issue_created_webhook_payload,
+    ):
+        """Connection-scoped webhook URLs resolve the workspace by path id."""
+        mock_token_manager.decrypt_text.return_value = 'test_secret'
+        jira_dc_manager.integration_store.get_workspace_by_id = AsyncMock(
+            return_value=sample_jira_dc_workspace
+        )
+
+        body = json.dumps(sample_issue_created_webhook_payload).encode()
+        signature = hmac.new('test_secret'.encode(), body, hashlib.sha256).hexdigest()
+
+        mock_request = MagicMock(spec=Request)
+        mock_request.headers = {'x-hub-signature': f'sha256={signature}'}
+        mock_request.body = AsyncMock(return_value=body)
+        mock_request.json = AsyncMock(return_value=sample_issue_created_webhook_payload)
+
+        (
+            is_valid,
+            returned_signature,
+            payload,
+            workspace,
+        ) = await jira_dc_manager.validate_request_context(mock_request, workspace_id=1)
+
+        assert is_valid is True
+        assert returned_signature == signature
+        assert payload == sample_issue_created_webhook_payload
+        assert workspace == sample_jira_dc_workspace
+        jira_dc_manager.integration_store.get_workspace_by_id.assert_called_once_with(1)
+        jira_dc_manager.integration_store.get_workspace_by_name.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_validate_request_context_rejects_workspace_id_host_mismatch(
+        self,
+        jira_dc_manager,
+        mock_token_manager,
+        sample_jira_dc_workspace,
+        sample_issue_created_webhook_payload,
+    ):
+        """Connection-scoped webhook URLs fail closed when payload host differs."""
+        mock_token_manager.decrypt_text.return_value = 'test_secret'
+        jira_dc_manager.integration_store.get_workspace_by_id = AsyncMock(
+            return_value=sample_jira_dc_workspace
+        )
+        payload = json.loads(json.dumps(sample_issue_created_webhook_payload))
+        payload['issue']['self'] = (
+            'https://other-jira.company.com/rest/api/2/issue/12345'
+        )
+        body = json.dumps(payload).encode()
+        signature = hmac.new('test_secret'.encode(), body, hashlib.sha256).hexdigest()
+
+        mock_request = MagicMock(spec=Request)
+        mock_request.headers = {'x-hub-signature': f'sha256={signature}'}
+        mock_request.body = AsyncMock(return_value=body)
+        mock_request.json = AsyncMock(return_value=payload)
+
+        (
+            is_valid,
+            returned_signature,
+            returned_payload,
+            workspace,
+        ) = await jira_dc_manager.validate_request_context(mock_request, workspace_id=1)
+
+        assert is_valid is False
+        assert returned_signature is None
+        assert returned_payload is None
+        assert workspace is None
+
+    @pytest.mark.asyncio
+    async def test_validate_request_comment_updated_success(
+        self,
+        jira_dc_manager,
+        mock_token_manager,
+        sample_jira_dc_workspace,
+        sample_comment_updated_webhook_payload,
+    ):
+        """Comment update webhooks can identify the workspace from issue.self."""
+        mock_token_manager.decrypt_text.return_value = 'test_secret'
+        jira_dc_manager.integration_store.get_workspace_by_name.return_value = (
+            sample_jira_dc_workspace
+        )
+
+        body = json.dumps(sample_comment_updated_webhook_payload).encode()
+        signature = hmac.new('test_secret'.encode(), body, hashlib.sha256).hexdigest()
+
+        mock_request = MagicMock(spec=Request)
+        mock_request.headers = {'x-hub-signature': f'sha256={signature}'}
+        mock_request.body = AsyncMock(return_value=body)
+        mock_request.json = AsyncMock(
+            return_value=sample_comment_updated_webhook_payload
+        )
+
+        is_valid, returned_signature, payload = await jira_dc_manager.validate_request(
+            mock_request
+        )
+
+        assert is_valid is True
+        assert returned_signature == signature
+        assert payload == sample_comment_updated_webhook_payload
+        jira_dc_manager.integration_store.get_workspace_by_name.assert_called_with(
+            'jira.company.com'
+        )
 
     @pytest.mark.asyncio
     async def test_validate_request_missing_signature(
@@ -345,6 +525,39 @@ class TestParseWebhook:
         job_context = jira_dc_manager.parse_webhook(payload)
         assert job_context is None
 
+    @pytest.mark.parametrize(
+        'event_type',
+        [
+            'jira:issue_created',
+            'jira:issue_deleted',
+            'comment_updated',
+            'comment_deleted',
+        ],
+    )
+    def test_parse_webhook_automation_only_events_do_not_start_resolver(
+        self, jira_dc_manager, event_type
+    ):
+        """Automation-only events should not create resolver jobs."""
+        payload = {
+            'webhookEvent': event_type,
+            'comment': {
+                'body': 'Please fix this @openhands',
+                'author': {
+                    'emailAddress': 'user@company.com',
+                    'displayName': 'Test User',
+                    'self': 'https://jira.company.com/rest/api/2/user?username=testuser',
+                },
+            },
+            'issue': {
+                'id': '12345',
+                'key': 'PROJ-123',
+                'self': 'https://jira.company.com/rest/api/2/issue/12345',
+            },
+        }
+
+        job_context = jira_dc_manager.parse_webhook(payload)
+        assert job_context is None
+
     def test_parse_webhook_missing_required_fields(self, jira_dc_manager):
         """Test parsing webhook with missing required fields."""
         payload = {
@@ -500,6 +713,58 @@ class TestReceiveMessage:
         jira_dc_manager._send_error_comment.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_receive_message_no_account_sends_signup_message(
+        self,
+        jira_dc_manager,
+        mock_token_manager,
+        sample_comment_webhook_payload,
+        sample_jira_dc_workspace,
+    ):
+        """No OpenHands account → reply asks the user to sign up."""
+        jira_dc_manager.integration_store.get_workspace_by_name.return_value = (
+            sample_jira_dc_workspace
+        )
+        jira_dc_manager.authenticate_user = AsyncMock(return_value=(None, None))
+        jira_dc_manager._send_error_comment = AsyncMock()
+        mock_token_manager.get_user_id_from_user_email.return_value = None
+
+        message = Message(
+            source=SourceType.JIRA_DC,
+            message={'payload': sample_comment_webhook_payload},
+        )
+        await jira_dc_manager.receive_message(message)
+
+        jira_dc_manager._send_error_comment.assert_called_once()
+        sent_msg = jira_dc_manager._send_error_comment.call_args.args[1]
+        assert 'sign up' in sent_msg.lower()
+
+    @pytest.mark.asyncio
+    async def test_receive_message_account_not_linked_sends_link_message(
+        self,
+        jira_dc_manager,
+        mock_token_manager,
+        sample_comment_webhook_payload,
+        sample_jira_dc_workspace,
+    ):
+        """Has an account but not linked → reply asks the user to link it."""
+        jira_dc_manager.integration_store.get_workspace_by_name.return_value = (
+            sample_jira_dc_workspace
+        )
+        jira_dc_manager.authenticate_user = AsyncMock(return_value=(None, None))
+        jira_dc_manager._send_error_comment = AsyncMock()
+        mock_token_manager.get_user_id_from_user_email.return_value = 'kc-user-123'
+
+        message = Message(
+            source=SourceType.JIRA_DC,
+            message={'payload': sample_comment_webhook_payload},
+        )
+        await jira_dc_manager.receive_message(message)
+
+        jira_dc_manager._send_error_comment.assert_called_once()
+        sent_msg = jira_dc_manager._send_error_comment.call_args.args[1]
+        assert 'linked' in sent_msg.lower()
+
+    @pytest.mark.asyncio
     async def test_receive_message_get_issue_details_failed(
         self,
         jira_dc_manager,
@@ -639,7 +904,7 @@ class TestIsJobRequested:
 
             assert result is False
             jira_dc_manager._send_repo_selection_comment.assert_called_once_with(
-                mock_view
+                mock_view, [], []
             )
 
     @pytest.mark.asyncio
@@ -943,9 +1208,10 @@ class TestGetIssueDetails:
             response=mock_response,
         )
 
-        with patch('httpx.AsyncClient') as mock_client, patch(
-            'integrations.jira_dc.jira_dc_manager.logger'
-        ) as mock_logger:
+        with (
+            patch('httpx.AsyncClient') as mock_client,
+            patch('integrations.jira_dc.jira_dc_manager.logger') as mock_logger,
+        ):
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
                 return_value=mock_response
             )
@@ -989,6 +1255,135 @@ class TestSendMessage:
 
             assert result == {'id': 'comment_id'}
             mock_response.raise_for_status.assert_called_once()
+
+
+class TestWebhookRegistration:
+    """Test Jira DC global webhook install and removal."""
+
+    @pytest.mark.asyncio
+    async def test_register_webhook_updates_existing_url(self, jira_dc_manager):
+        """register_webhook updates the existing OpenHands webhook in place."""
+        listing_response = MagicMock()
+        listing_response.json.return_value = [
+            {'id': 3, 'name': 'OpenHands', 'url': 'https://oh.example/events'}
+        ]
+        listing_response.raise_for_status = MagicMock()
+
+        update_response = MagicMock()
+        update_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            client = mock_client.return_value.__aenter__.return_value
+            client.get = AsyncMock(return_value=listing_response)
+            client.put = AsyncMock(return_value=update_response)
+
+            webhook_id = await jira_dc_manager.register_webhook(
+                base_api_url='https://jira.company.com/',
+                admin_api_key='admin-pat',
+                events_url='https://oh.example/events',
+                secret='webhook-secret',
+            )
+
+        assert webhook_id == 3
+        client.get.assert_called_once_with(
+            'https://jira.company.com/rest/jira-webhook/1.0/webhooks',
+            headers={'Authorization': 'Bearer admin-pat'},
+        )
+        client.put.assert_called_once()
+        assert (
+            client.put.call_args.args[0]
+            == 'https://jira.company.com/rest/jira-webhook/1.0/webhooks/3'
+        )
+        assert client.put.call_args.kwargs['json']['id'] == 3
+        assert client.put.call_args.kwargs['json']['configuration'] == {
+            'SECRET': 'webhook-secret',
+            'EXCLUDE_BODY': 'false',
+        }
+        assert client.put.call_args.kwargs['json']['events'] == JIRA_DC_WEBHOOK_EVENTS
+        update_response.raise_for_status.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_register_webhook_creates_when_absent(self, jira_dc_manager):
+        """register_webhook creates a new webhook when no URL match exists."""
+        listing_response = MagicMock()
+        listing_response.json.return_value = []
+        listing_response.raise_for_status = MagicMock()
+
+        create_response = MagicMock()
+        create_response.json.return_value = {'id': 7}
+        create_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            client = mock_client.return_value.__aenter__.return_value
+            client.get = AsyncMock(return_value=listing_response)
+            client.post = AsyncMock(return_value=create_response)
+
+            webhook_id = await jira_dc_manager.register_webhook(
+                base_api_url='https://jira.company.com',
+                admin_api_key='admin-pat',
+                events_url='https://oh.example/events',
+                secret='webhook-secret',
+            )
+
+        assert webhook_id == 7
+        client.post.assert_called_once()
+        assert (
+            client.post.call_args.args[0]
+            == 'https://jira.company.com/rest/jira-webhook/1.0/webhooks'
+        )
+        assert client.post.call_args.kwargs['json']['id'] is None
+        create_response.raise_for_status.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_delete_webhook_removes_existing_url(self, jira_dc_manager):
+        """delete_webhook deletes the webhook that targets the OpenHands URL."""
+        listing_response = MagicMock()
+        listing_response.json.return_value = [
+            {'id': 3, 'name': 'OpenHands', 'url': 'https://oh.example/events'}
+        ]
+        listing_response.raise_for_status = MagicMock()
+
+        delete_response = MagicMock()
+        delete_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            client = mock_client.return_value.__aenter__.return_value
+            client.get = AsyncMock(return_value=listing_response)
+            client.delete = AsyncMock(return_value=delete_response)
+
+            deleted = await jira_dc_manager.delete_webhook(
+                base_api_url='https://jira.company.com',
+                admin_api_key='admin-pat',
+                events_url='https://oh.example/events',
+            )
+
+        assert deleted is True
+        client.delete.assert_called_once_with(
+            'https://jira.company.com/rest/jira-webhook/1.0/webhooks/3',
+            headers={'Authorization': 'Bearer admin-pat'},
+        )
+        delete_response.raise_for_status.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_delete_webhook_returns_false_when_absent(self, jira_dc_manager):
+        """delete_webhook is idempotent when no webhook targets the URL."""
+        listing_response = MagicMock()
+        listing_response.json.return_value = []
+        listing_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            client = mock_client.return_value.__aenter__.return_value
+            client.get = AsyncMock(return_value=listing_response)
+            client.delete = AsyncMock()
+
+            deleted = await jira_dc_manager.delete_webhook(
+                base_api_url='https://jira.company.com',
+                admin_api_key='admin-pat',
+                events_url='https://oh.example/events',
+            )
+
+        assert deleted is False
+        client.delete.assert_not_called()
 
 
 class TestSendErrorComment:
@@ -1053,7 +1448,33 @@ class TestSendRepoSelectionComment:
 
         jira_dc_manager.send_message.assert_called_once()
         call_args = jira_dc_manager.send_message.call_args[0]
-        assert 'which repository to work with' in call_args[0]
+        assert 'Could not determine which repository to use' in call_args[0]
+
+    @pytest.mark.asyncio
+    async def test_send_repo_selection_comment_repo_inaccessible(
+        self, jira_dc_manager, sample_jira_dc_workspace
+    ):
+        """Test repository selection comment when mentioned repos are inaccessible."""
+        mock_view = MagicMock(spec=JiraDcViewInterface)
+        mock_view.jira_dc_workspace = sample_jira_dc_workspace
+        mock_view.job_context = MagicMock()
+        mock_view.job_context.issue_key = 'PROJ-123'
+        mock_view.job_context.base_api_url = 'https://jira.company.com'
+
+        jira_dc_manager.send_message = AsyncMock()
+        jira_dc_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
+
+        await jira_dc_manager._send_repo_selection_comment(
+            mock_view, ['company/repo'], []
+        )
+
+        jira_dc_manager.send_message.assert_called_once()
+        call_args = jira_dc_manager.send_message.call_args[0]
+        assert (
+            'Could not access any of the mentioned repositories: company/repo'
+            in call_args[0]
+        )
+        assert 'OpenHands account has access' in call_args[0]
 
     @pytest.mark.asyncio
     async def test_send_repo_selection_comment_send_fails(
@@ -1071,3 +1492,75 @@ class TestSendRepoSelectionComment:
 
         # Should not raise exception even if send_message fails
         await jira_dc_manager._send_repo_selection_comment(mock_view)
+
+
+class TestAddReaction:
+    """Test emoji reaction posting via the internal reactions API."""
+
+    @pytest.mark.asyncio
+    async def test_add_reaction_posts_to_reactions_endpoint(self, jira_dc_manager):
+        """add_reaction POSTs the comment id + emoji to the reactions endpoint."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+
+            await jira_dc_manager.add_reaction(
+                comment_id='10106',
+                base_api_url='https://jira.company.com',
+                svc_acc_api_key='bearer_token',
+            )
+
+            mock_post.assert_called_once()
+            call = mock_post.call_args
+            assert call.args[0] == 'https://jira.company.com/rest/internal/2/reactions'
+            assert call.kwargs['json'] == {'commentId': '10106', 'emojiId': '1f44d'}
+            assert call.kwargs['headers']['Authorization'] == 'Bearer bearer_token'
+            mock_response.raise_for_status.assert_called_once()
+
+
+class TestAddAcknowledgementReaction:
+    """Test the best-effort acknowledgement reaction on the triggering comment."""
+
+    @pytest.mark.asyncio
+    async def test_reacts_when_comment_id_present(
+        self, jira_dc_manager, sample_jira_dc_workspace, sample_job_context
+    ):
+        sample_job_context.comment_id = '10106'
+        jira_dc_manager.add_reaction = AsyncMock()
+        jira_dc_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
+
+        await jira_dc_manager._add_acknowledgement_reaction(
+            sample_job_context, sample_jira_dc_workspace
+        )
+
+        jira_dc_manager.add_reaction.assert_called_once()
+        assert jira_dc_manager.add_reaction.call_args.kwargs['comment_id'] == '10106'
+
+    @pytest.mark.asyncio
+    async def test_skips_when_no_comment_id(
+        self, jira_dc_manager, sample_jira_dc_workspace, sample_job_context
+    ):
+        sample_job_context.comment_id = ''
+        jira_dc_manager.add_reaction = AsyncMock()
+
+        await jira_dc_manager._add_acknowledgement_reaction(
+            sample_job_context, sample_jira_dc_workspace
+        )
+
+        jira_dc_manager.add_reaction.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_does_not_raise_on_failure(
+        self, jira_dc_manager, sample_jira_dc_workspace, sample_job_context
+    ):
+        sample_job_context.comment_id = '10106'
+        jira_dc_manager.add_reaction = AsyncMock(side_effect=Exception('boom'))
+        jira_dc_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
+
+        # Reactions are non-essential; a failure must never propagate.
+        await jira_dc_manager._add_acknowledgement_reaction(
+            sample_job_context, sample_jira_dc_workspace
+        )

@@ -18,13 +18,18 @@ from fastapi import (
     status,
 )
 from fastapi.responses import JSONResponse, RedirectResponse
-from pydantic import SecretStr
+from pydantic import BaseModel, SecretStr
 from server.auth.constants import (
     KEYCLOAK_CLIENT_ID,
     KEYCLOAK_REALM_NAME,
     KEYCLOAK_SERVER_URL_EXT,
     RECAPTCHA_SITE_KEY,
     ROLE_CHECK_ENABLED,
+)
+from server.auth.cookie_chunking import (
+    delete_chunked_cookie,
+    read_chunked_cookie,
+    set_chunked_cookie,
 )
 from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.recaptcha_service import recaptcha_service
@@ -53,7 +58,7 @@ from storage.database import a_session_maker
 from storage.user import User
 from storage.user_store import UserStore
 
-from openhands.analytics import get_analytics_service
+from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderHandler,
@@ -105,25 +110,20 @@ def set_response_cookie(
         cookie_data, expires_in=timedelta(weeks=1)
     )
 
-    # Set secure cookie with signed token
-    domain = get_cookie_domain()
-    if domain:
-        response.set_cookie(
-            key='keycloak_auth',
-            value=signed_token,
-            domain=domain,
-            httponly=True,
-            secure=secure,
-            samesite=get_cookie_samesite(),
-        )
-    else:
-        response.set_cookie(
-            key='keycloak_auth',
-            value=signed_token,
-            httponly=True,
-            secure=secure,
-            samesite=get_cookie_samesite(),
-        )
+    # Set secure cookie with signed token. The value can exceed the
+    # browser's 4096-byte single-cookie cap for users with large Keycloak
+    # claim sets, so write it through the chunked-cookie helper, which
+    # splits oversized values across sibling cookies and stays
+    # byte-identical for values that fit in one cookie.
+    set_chunked_cookie(
+        response,
+        'keycloak_auth',
+        signed_token,
+        domain=get_cookie_domain(),
+        secure=secure,
+        httponly=True,
+        samesite=get_cookie_samesite(),
+    )
 
 
 def _extract_oauth_state(state: str | None) -> tuple[str, str | None, str | None]:
@@ -648,22 +648,15 @@ async def keycloak_offline_callback(code: str, state: str, request: Request):
     )
 
     user = await UserStore.get_user_by_id(user_info.sub)
-    has_accepted_tos = user is not None and user.accepted_tos is not None
-
     redirect_url, _, _ = _extract_oauth_state(state)
     default_url = redirect_url if redirect_url else web_url
     final_url = await _get_post_auth_redirect(user_info.sub, default_url, web_url, user)
 
-    response = RedirectResponse(final_url, status_code=302)
-    set_response_cookie(
-        request=request,
-        response=response,
-        keycloak_access_token=keycloak_access_token,
-        keycloak_refresh_token=keycloak_refresh_token,
-        secure=True if web_url.startswith('https') else False,
-        accepted_tos=has_accepted_tos,
-    )
-    return response
+    # Intentionally do NOT write tokens into the `keycloak_auth` cookie:
+    # the cookie tracks the regular (online) session and is the token
+    # passed to Keycloak's /logout endpoint. Putting the offline token
+    # in the cookie causes logout to terminate the offline session.
+    return RedirectResponse(final_url, status_code=302)
 
 
 @oauth_router.get('/github/callback')
@@ -687,11 +680,12 @@ async def authenticate(request: Request):
             content={'error': 'User is not authenticated'},
         )
 
-        # Delete the auth cookie if it exists
-        keycloak_auth_cookie = request.cookies.get('keycloak_auth')
+        # Delete the auth cookie (and any sibling chunks) if it exists
+        keycloak_auth_cookie = read_chunked_cookie(request, 'keycloak_auth')
         if keycloak_auth_cookie:
-            response.delete_cookie(
-                key='keycloak_auth',
+            delete_chunked_cookie(
+                response,
+                'keycloak_auth',
                 domain=get_cookie_domain(),
                 samesite=get_cookie_samesite(),
             )
@@ -978,9 +972,32 @@ async def onboarding_status(request: Request):
     )
 
 
+class OnboardingSubmission(BaseModel):
+    """Payload posted from the onboarding form.
+
+    ``selections`` maps onboarding question_id -> selected option(s), e.g.
+    ``{"role": "software_engineer", "org_size": "solo",
+       "use_case": ["new_features", "fixing_bugs"]}``.
+
+    The field is optional so the endpoint stays backwards-compatible with any
+    client that previously called it with an empty body, but the current
+    frontend always submits a populated mapping.
+    """
+
+    selections: dict[str, str | list[str]] = {}
+
+
 @api_router.post('/complete_onboarding')
-async def complete_onboarding(request: Request):
-    """Mark onboarding as completed for the current user."""
+async def complete_onboarding(
+    request: Request, body: OnboardingSubmission | None = None
+):
+    """Mark onboarding as completed for the current user and fire analytics.
+
+    Persists ``user.onboarding_completed = True`` and emits the
+    ``onboarding completed`` PostHog event (plus an org ``group_identify`` to
+    stamp ``onboarding_completed_at``). Analytics failures are swallowed so
+    they never block the user from leaving the onboarding flow.
+    """
     user_auth = cast(SaasUserAuth, await get_user_auth(request))
     user_id = await user_auth.get_user_id()
 
@@ -1002,6 +1019,31 @@ async def complete_onboarding(request: Request):
         extra={'user_id': user_id},
     )
 
+    # Analytics: 'onboarding completed' event + org group_identify.
+    # Best-effort: never let a tracking failure break the onboarding flow.
+    selections = body.selections if body is not None else {}
+    try:
+        analytics = get_analytics_service()
+        if analytics:
+            ctx = await resolve_analytics_context(user_id)
+            analytics.track_onboarding_completed(
+                ctx=ctx,
+                selections=selections,
+            )
+            if ctx.org_id:
+                analytics.group_identify(
+                    ctx=ctx,
+                    group_type='org',
+                    group_key=ctx.org_id,
+                    properties={
+                        'onboarding_completed_at': datetime.now(
+                            timezone.utc
+                        ).isoformat(),
+                    },
+                )
+    except Exception:
+        logger.exception('analytics:onboarding_completed:failed')
+
     return JSONResponse(
         status_code=status.HTTP_200_OK,
         content={'message': 'Onboarding completed'},
@@ -1016,9 +1058,10 @@ async def logout(request: Request):
         content={'message': 'User logged out'},
     )
 
-    # Always delete the cookie regardless of what happens
-    response.delete_cookie(
-        key='keycloak_auth',
+    # Always delete the cookie (and any sibling chunks) regardless of what happens
+    delete_chunked_cookie(
+        response,
+        'keycloak_auth',
         domain=get_cookie_domain(),
         samesite=get_cookie_samesite(),
     )

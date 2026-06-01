@@ -51,7 +51,8 @@ from openhands.app_server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
 )
 from openhands.sdk import ConversationExecutionStatus, Event
-from openhands.sdk.event import ConversationStateUpdateEvent
+from openhands.sdk.event import ConversationStateUpdateEvent, ObservationEvent
+from openhands.sdk.tool.builtins import SwitchLLMObservation
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
 event_service_dependency = depends_event_service()
@@ -301,7 +302,12 @@ async def on_conversation_update(
     sandbox_info: SandboxInfo = Depends(valid_sandbox),
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
 ) -> Success:
-    """Webhook callback for when a conversation starts, pauses, resumes, or deletes."""
+    """Webhook callback for when a conversation starts, pauses, resumes, or deletes.
+
+    The ``ConversationInfo.agent`` field is an ``AgentBase`` discriminated
+    union so both OpenHands (``Agent``) and ACP (``ACPAgent``) payloads are
+    accepted on this single endpoint.
+    """
     existing = await valid_conversation(
         conversation_info.id, sandbox_info, app_conversation_info_service
     )
@@ -326,12 +332,28 @@ async def on_conversation_update(
         sandbox_id=sandbox_info.id,
     )
 
+    # Trust the discriminated-union payload over any stored ``agent_kind``
+    # on ``existing``: a webhook is always authoritative for the agent
+    # currently running, and a drifted row (e.g. mid-migration data) must
+    # not lock us into the wrong branch. Branch on the ``agent_kind``
+    # discriminator (an ``AgentBase`` property) so we don't import a
+    # concrete SDK subclass just to do a kind check.
+    agent = conversation_info.agent
+    if agent.agent_kind == 'acp':
+        agent_kind = 'acp'
+        llm_model = None
+    else:
+        # ``AgentBase.llm: LLM`` is non-optional on both arms of the union.
+        agent_kind = 'openhands'
+        llm_model = agent.llm.model
+
     app_conversation_info = AppConversationInfo(
         id=conversation_info.id,
         title=existing.title or f'Conversation {conversation_info.id.hex}',
         sandbox_id=sandbox_info.id,
         created_by_user_id=sandbox_info.created_by_user_id,
-        llm_model=conversation_info.agent.llm.model,
+        llm_model=llm_model,
+        agent_kind=agent_kind,
         # Git parameters
         selected_repository=existing.selected_repository,
         selected_branch=existing.selected_branch,
@@ -362,6 +384,7 @@ async def on_conversation_update(
             await event_callback_service.save_event_callback(
                 EventCallback(
                     conversation_id=conversation_info.id,
+                    event_kind=SetTitleCallbackProcessor.get_event_kind(),
                     processor=SetTitleCallbackProcessor(),
                 )
             )
@@ -374,11 +397,7 @@ async def on_conversation_update(
             ctx=ctx,
             conversation_id=str(conversation_info.id),
             trigger=existing.trigger.value if existing.trigger else None,
-            llm_model=(
-                conversation_info.agent.llm.model
-                if conversation_info.agent and conversation_info.agent.llm
-                else None
-            ),
+            llm_model=llm_model,
             agent_type='default',
             has_repository=existing.selected_repository is not None,
         )
@@ -407,6 +426,29 @@ async def on_event(
                 await app_conversation_info_service.process_stats_event(
                     event, conversation_id
                 )
+
+        # Reflect an agent-initiated LLM switch (via the built-in SwitchLLMTool)
+        # on the conversation record. The tool emits a ``SwitchLLMObservation``
+        # carrying the new ``active_model``; unlike the explicit switch_profile
+        # route, nothing else persists it here, so the chat header and
+        # switch-profile button would otherwise stay stale until the next full
+        # conversation-info webhook (which only fires on start/pause/interrupt/
+        # delete, never mid-run). ``active_model`` is only set on success.
+        switched_model: str | None = None
+        for event in events:
+            if (
+                isinstance(event, ObservationEvent)
+                and isinstance(event.observation, SwitchLLMObservation)
+                and event.observation.active_model
+            ):
+                switched_model = event.observation.active_model
+        if switched_model and app_conversation_info.llm_model != switched_model:
+            info = await app_conversation_info_service.get_app_conversation_info(
+                conversation_id
+            )
+            if info is not None and info.llm_model != switched_model:
+                info.llm_model = switched_model
+                await app_conversation_info_service.save_app_conversation_info(info)
 
         # Analytics: conversation terminal state detection
         for event in events:
