@@ -34,8 +34,10 @@ export interface BitbucketDCResource {
   name: string;
   full_name: string;
   type: "repository";
+  connection_id: number | null;
   webhook_enrolled: boolean;
   webhook_id: string | null;
+  webhook_url: string | null;
   webhook_secret_set: boolean;
   installed_by_user_id: string | null;
   last_synced: string | null;
@@ -59,6 +61,7 @@ export interface BitbucketDCWebhookEnrollmentResult {
   repo_slug: string;
   success: boolean;
   error: string | null;
+  connection_id: number | null;
   webhook_url: string | null;
   webhook_secret: string | null;
   webhook_name: string;
@@ -87,4 +90,6 @@ export interface BitbucketDCWebhookInstallationResult {
   success: boolean;
   error: string | null;
   webhook_id: string | null;
+  connection_id: number | null;
+  webhook_url: string | null;
 }

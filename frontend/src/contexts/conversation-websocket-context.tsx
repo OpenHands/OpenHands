@@ -10,6 +10,9 @@ import React, {
 import { useQueryClient } from "@tanstack/react-query";
 import { useWebSocket, WebSocketHookOptions } from "#/hooks/use-websocket";
 import { useEventStore } from "#/stores/use-event-store";
+import { useModelStore } from "#/stores/model-store";
+import { getRenderedV1Events } from "#/components/v1/chat/event-content-helpers/should-render-event";
+import { updateConversationLlmModelInCache } from "#/hooks/mutation/conversation-mutation-utils";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useV1ConversationStateStore } from "#/stores/v1-conversation-state-store";
@@ -24,6 +27,7 @@ import {
   isFullStateConversationStateUpdateEvent,
   isAgentStatusConversationStateUpdateEvent,
   isStatsConversationStateUpdateEvent,
+  isSwitchLLMObservationEvent,
   isExecuteBashActionEvent,
   isExecuteBashObservationEvent,
   isDisplayableErrorEvent,
@@ -453,6 +457,45 @@ export function ConversationWebSocketProvider({
             }
             if (isStatsConversationStateUpdateEvent(event)) {
               updateMetricsFromStats(event);
+            }
+          }
+
+          // The agent switched its own LLM (via the built-in switch_llm tool).
+          // Mirror the manual-switch UX: record the new profile (so the
+          // switch-profile button flips by name, unambiguous even when several
+          // profiles share a model string) and patch the running model into the
+          // conversation cache so the chat header updates instantly.
+          //
+          // We deliberately do NOT invalidate the conversation query here. The
+          // app-server only learns of the switch via the webhook, which is
+          // batched (``event_buffer_size`` / ``flush_delay``), and the
+          // conversation endpoint reports the *persisted* ``llm_model`` (not the
+          // sandbox's live model). An immediate refetch would therefore read the
+          // pre-switch model and clobber the patch above. The persisted value
+          // catches up on the next poll once the webhook has flushed.
+          if (
+            conversationId &&
+            isSwitchLLMObservationEvent(event) &&
+            !event.observation.is_error
+          ) {
+            const last = getRenderedV1Events(
+              useEventStore.getState().uiEvents,
+            ).at(-1);
+            const anchorEventId = last ? String(last.id) : null;
+            useModelStore
+              .getState()
+              .recordSwitch(
+                conversationId,
+                anchorEventId,
+                event.observation.profile_name,
+              );
+
+            if (event.observation.active_model) {
+              updateConversationLlmModelInCache(
+                queryClient,
+                conversationId,
+                event.observation.active_model,
+              );
             }
           }
 

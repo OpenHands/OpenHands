@@ -11,7 +11,7 @@ from typing import AsyncGenerator
 from uuid import UUID, uuid4
 
 from fastapi import Request
-from sqlalchemy import Enum, String, and_, func, or_, select
+from sqlalchemy import Enum, String, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -201,18 +201,8 @@ class SQLEventCallbackService(EventCallbackService):
         query = (
             select(StoredEventCallback)
             .where(StoredEventCallback.status == EventCallbackStatus.ACTIVE)
-            .where(
-                or_(
-                    StoredEventCallback.event_kind == event.kind,
-                    StoredEventCallback.event_kind.is_(None),
-                )
-            )
-            .where(
-                or_(
-                    StoredEventCallback.conversation_id == conversation_id,
-                    StoredEventCallback.conversation_id.is_(None),
-                )
-            )
+            .where(StoredEventCallback.event_kind == event.kind)
+            .where(StoredEventCallback.conversation_id == conversation_id)
         )
         result = await self.db_session.execute(query)
         stored_callbacks = result.scalars().all()

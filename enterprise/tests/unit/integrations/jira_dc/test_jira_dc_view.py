@@ -1,6 +1,7 @@
 """Tests for the Jira DC view factory's conversation-creation strategy."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID
 
 import pytest
 from integrations.jira_dc.jira_dc_view import (
@@ -8,6 +9,8 @@ from integrations.jira_dc.jira_dc_view import (
     JiraDcFactory,
     JiraDcNewConversationView,
 )
+
+from openhands.app_server.integrations.service_types import ProviderType, Repository
 
 
 @pytest.mark.asyncio
@@ -46,3 +49,41 @@ async def test_factory_always_creates_new_conversation(
     # A fresh view starts with no conversation id (assigned at creation time).
     assert view.conversation_id == ''
     assert view.selected_repo is None
+
+
+@pytest.mark.asyncio
+async def test_new_conversation_resolves_org_from_selected_repo_claim(
+    new_conversation_view,
+):
+    """Jira DC @mentions use the shared repo-claim org routing path."""
+    resolved_org_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+    new_conversation_view.saas_user_auth.get_provider_tokens.return_value = {
+        ProviderType.GITHUB: MagicMock()
+    }
+    repository = Repository(
+        id='1',
+        full_name='company/repo1',
+        stargazers_count=0,
+        git_provider=ProviderType.GITHUB,
+        is_public=False,
+    )
+
+    with (
+        patch('integrations.jira_dc.jira_dc_view.ProviderHandler') as handler_cls,
+        patch(
+            'integrations.jira_dc.jira_dc_view.resolve_org_for_repo',
+            new=AsyncMock(return_value=resolved_org_id),
+        ) as resolve_org,
+    ):
+        handler = MagicMock()
+        handler.verify_repo_provider = AsyncMock(return_value=repository)
+        handler_cls.return_value = handler
+
+        result = await new_conversation_view._get_resolved_org_id()
+
+    assert result == resolved_org_id
+    resolve_org.assert_awaited_once_with(
+        provider=ProviderType.GITHUB.value,
+        full_repo_name='company/repo1',
+        keycloak_user_id='test_keycloak_id',
+    )
