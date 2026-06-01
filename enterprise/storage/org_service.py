@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 from uuid import UUID as parse_uuid
 
 from server.constants import (
+    DEPLOYMENT_MODE,
     ORG_SETTINGS_VERSION,
     get_default_llm_base_url,
     get_default_llm_model,
@@ -845,6 +846,9 @@ class OrgService:
         Returns:
             bool: True if BYOR export is enabled, False otherwise.
         """
+        if DEPLOYMENT_MODE == 'self_hosted':
+            return True
+
         if org_id is None:
             user = await UserStore.get_user_by_id(user_id)
             if not user or not user.current_org_id:

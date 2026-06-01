@@ -1874,6 +1874,26 @@ async def test_update_org_with_permissions_only_non_llm_fields(
 
 
 @pytest.mark.asyncio
+async def test_check_byor_export_enabled_allows_self_hosted_deployments():
+    with (
+        patch('storage.org_service.DEPLOYMENT_MODE', 'self_hosted'),
+        patch(
+            'storage.org_service.UserStore.get_user_by_id',
+            new_callable=AsyncMock,
+        ) as get_user_by_id_mock,
+        patch(
+            'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+        ) as get_org_by_id_mock,
+    ):
+        result = await OrgService.check_byor_export_enabled('test-user-123')
+
+    assert result is True
+    get_user_by_id_mock.assert_not_awaited()
+    get_org_by_id_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_check_byor_export_enabled_returns_true_when_enabled():
     """
     GIVEN: User has current_org with byor_export_enabled=True
