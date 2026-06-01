@@ -34,7 +34,17 @@ export function OnboardingGuard({ children }: { children: React.ReactNode }) {
       // already the default landing page after onboarding.
       let destination = "/onboarding";
       if (pathname !== "/") {
-        const returnTo = `${pathname}${search}`;
+        // Decode ``search`` first so already-encoded characters (e.g.
+        // ``%20``) are not double-encoded by ``encodeURIComponent``.
+        // The try/catch handles malformed percent-encoding sequences by
+        // falling back to the raw ``search`` string.
+        let decodedSearch: string;
+        try {
+          decodedSearch = search ? decodeURIComponent(search) : "";
+        } catch {
+          decodedSearch = search;
+        }
+        const returnTo = `${pathname}${decodedSearch}`;
         destination = `/onboarding?returnTo=${encodeURIComponent(returnTo)}`;
       }
       navigate(destination, { replace: true });

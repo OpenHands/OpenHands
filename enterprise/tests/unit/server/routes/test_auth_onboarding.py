@@ -358,6 +358,26 @@ class TestBuildOnboardingRedirect:
             '?returnTo=https%3A%2F%2Fother.example.com%2Ffoo'
         )
 
+    def test_unwraps_cross_origin_login_returnTo(self):
+        """Cross-origin login URLs still have their inner ``returnTo`` extracted.
+
+        ``_extract_login_inner_return_to`` matches on the path only
+        (``parsed.path == '/login'``); it does not check the host.  A
+        login URL at a different origin therefore has its inner
+        destination unwrapped to a safe relative path rather than being
+        preserved as a cross-origin absolute URL.
+
+        This differs from ``test_passes_through_absolute_url_when_origin_does_not_match``
+        (non-login cross-origin path → absolute URL preserved as-is) and
+        the behaviour is intentionally *safer*: the attacker-controlled
+        origin is discarded and only the relative ``returnTo`` value from
+        the query string is used.
+        """
+        result = _build_onboarding_redirect(
+            'https://other.example.com/login?returnTo=%2Ffoo', 'https://example.com'
+        )
+        assert result == 'https://example.com/onboarding?returnTo=%2Ffoo'
+
     def test_unwraps_login_returnTo_to_inner_destination(self):
         """Regression: login-wrapped destinations are unwrapped.
 
