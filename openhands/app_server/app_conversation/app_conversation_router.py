@@ -1133,7 +1133,14 @@ async def _proxy_git_runtime_call(
 @router.get('/{conversation_id}/git/changes')
 async def get_conversation_git_changes(
     conversation_id: UUID,
-    path: Annotated[str, Query(description='The git repository path')],
+    path: Annotated[
+        str,
+        Query(
+            description=(
+                'Absolute path to the git repository root (e.g. /workspace/project)'
+            ),
+        ),
+    ],
     ref: Annotated[
         str | None, Query(description='Optional git ref to diff against')
     ] = None,
@@ -1143,7 +1150,7 @@ async def get_conversation_git_changes(
     sandbox_service: SandboxService = sandbox_service_dependency,
     sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
     httpx_client: httpx.AsyncClient = httpx_client_dependency,
-):
+) -> Any:
     """Proxy ``GET /api/git/changes`` on the conversation's runtime."""
     return await _proxy_git_runtime_call(
         conversation_id,
@@ -1170,7 +1177,7 @@ async def get_conversation_git_diff(
     sandbox_service: SandboxService = sandbox_service_dependency,
     sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
     httpx_client: httpx.AsyncClient = httpx_client_dependency,
-):
+) -> Any:
     """Proxy ``GET /api/git/diff`` on the conversation's runtime."""
     return await _proxy_git_runtime_call(
         conversation_id,
