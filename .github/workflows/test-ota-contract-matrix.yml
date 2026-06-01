@@ -130,19 +130,29 @@ jobs:
           ota execution topology --json . > ota-execution-topology.json
           cat ota-execution-topology.json
 
-      - name: Doctor app workflow + annotations
-        id: doctor_app
+      - name: Doctor app workflow reports unsupported host
         if: ${{ matrix.unsupported_host }}
         timeout-minutes: 10
-        continue-on-error: true
         shell: bash
         run: |
           set +e
           ota doctor --workflow app --json . > ota-doctor-app.json
-          doctor_status=$?
+          status=$?
           set -e
-          ota annotations --mode doctor --format github --input ota-doctor-app.json
-          exit $doctor_status
+          if [ "$status" -eq 0 ]; then
+            echo "expected ota doctor to fail on unsupported native Windows host"
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          with open("ota-doctor-app.json", "r", encoding="utf-8") as fh:
+              report = json.load(fh)
+          findings = report.get("findings", [])
+          assert any(
+              finding.get("summary", "").startswith("Unsupported host platform for context:")
+              for finding in findings
+          ), findings
+          PY
 
       - name: Dry-run app workflow
         if: ${{ !matrix.unsupported_host }}
@@ -164,7 +174,7 @@ jobs:
         timeout-minutes: 45
         shell: bash
         run: |
-          ota run lint:frontend --native --stream .
+          ota run build:frontend --native --stream .
 
       - name: Execute safe verification tasks
         if: ${{ matrix.full_proof }}
@@ -302,25 +312,6 @@ jobs:
               ota run --container --dry-run --json "$task_name" .
             fi
           done < ota-non-internal-container.jsonl
-
-      - name: Assert unsupported host diagnosis
-        if: ${{ matrix.unsupported_host }}
-        shell: bash
-        run: |
-          if [ "${{ steps.doctor_app.outcome }}" != "failure" ]; then
-            echo "expected ota doctor to fail on unsupported native Windows host"
-            exit 1
-          fi
-          python - <<'PY'
-          import json
-          with open("ota-doctor-app.json", "r", encoding="utf-8") as fh:
-              report = json.load(fh)
-          findings = report.get("findings", [])
-          assert any(
-              finding.get("summary", "").startswith("Unsupported host platform for context:")
-              for finding in findings
-          ), findings
-          PY
 
       - name: Dry-run app workflow reports unsupported host
         if: ${{ matrix.unsupported_host }}

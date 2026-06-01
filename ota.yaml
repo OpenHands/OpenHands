@@ -403,7 +403,7 @@ tasks:
     context: docker-host
     description: Run the packaged OpenHands image through Ota-managed container launch
     notes: |
-      This uses the published `ghcr.io/openhands/openhands:latest` image directly through Ota's
+      This uses the published `ghcr.io/openhands/openhands:1.7.0` image directly through Ota's
       structured `launch.kind: container` path. Unlike `app:docker`, which follows the repo's
       `make docker-run` wrapper flow, this models the packaged runtime as a first-class Ota
       container service.
@@ -413,7 +413,7 @@ tasks:
         - docker
     launch:
       kind: container
-      image: ghcr.io/openhands/openhands:latest
+      image: ghcr.io/openhands/openhands:1.7.0
       engine: docker
     runtime:
       kind: service
@@ -512,7 +512,7 @@ workflows:
     intent: packaged_runtime
     description: Ota-managed packaged container runtime for OpenHands
     notes: |
-      This launches the published `ghcr.io/openhands/openhands:latest` image through Ota's
+      This launches the published `ghcr.io/openhands/openhands:1.7.0` image through Ota's
       structured container launch path. It adds a real Ota-managed container runtime surface
       without replacing the repo's documented `make docker-run` wrapper workflow.
     run:
