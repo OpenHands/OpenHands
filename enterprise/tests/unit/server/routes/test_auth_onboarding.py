@@ -16,8 +16,8 @@ from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.auth import (
-    _build_onboarding_redirect,
     OnboardingSubmission,
+    _build_onboarding_redirect,
     _get_post_auth_redirect,
     _should_redirect_to_onboarding,
     complete_onboarding,
@@ -316,17 +316,14 @@ class TestBuildOnboardingRedirect:
         result = _build_onboarding_redirect(
             'https://example.com/foo/bar', 'https://example.com'
         )
-        assert result == (
-            'https://example.com/onboarding?returnTo=%2Ffoo%2Fbar'
-        )
+        assert result == ('https://example.com/onboarding?returnTo=%2Ffoo%2Fbar')
 
     def test_preserves_query_string_in_returnTo(self):
         result = _build_onboarding_redirect(
             'https://example.com/foo?bar=baz&qux=1', 'https://example.com'
         )
         assert result == (
-            'https://example.com/onboarding'
-            '?returnTo=%2Ffoo%3Fbar%3Dbaz%26qux%3D1'
+            'https://example.com/onboarding' '?returnTo=%2Ffoo%3Fbar%3Dbaz%26qux%3D1'
         )
 
     def test_skips_returnTo_for_bare_home_with_trailing_slash(self):
@@ -378,8 +375,7 @@ class TestBuildOnboardingRedirect:
             'https://example.com',
         )
         assert result == (
-            'https://example.com/onboarding'
-            '?returnTo=%2Fsettings%2Fuser'
+            'https://example.com/onboarding' '?returnTo=%2Fsettings%2Fuser'
         )
 
     def test_unwraps_login_returnTo_with_inner_query_string(self):
@@ -423,8 +419,7 @@ class TestBuildOnboardingRedirect:
             'https://example.com/foo?returnTo=%2Fbar', 'https://example.com'
         )
         assert result == (
-            'https://example.com/onboarding'
-            '?returnTo=%2Ffoo%3FreturnTo%3D%252Fbar'
+            'https://example.com/onboarding' '?returnTo=%2Ffoo%3FreturnTo%3D%252Fbar'
         )
 
 

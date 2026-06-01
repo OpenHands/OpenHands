@@ -764,7 +764,7 @@ def _build_onboarding_redirect(original_url: str, web_url: str) -> str:
     # defensively.
     relative = original_url
     if web_url and original_url.startswith(web_url):
-        relative = original_url[len(web_url):] or '/'
+        relative = original_url[len(web_url) :] or '/'
 
     # If we ended up with a login-page URL, unwrap its inner
     # ``returnTo`` so post-onboarding navigation goes straight to the
