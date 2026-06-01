@@ -53,7 +53,9 @@ export function sanitizeReturnTo(raw: string | null): string {
  *
  * This loader intentionally redirects same-origin only — absolute URLs
  * are dropped to ``"/"`` rather than being followed, since the loader
- * runs server-side-style during navigation and following an external
+ * This loader intentionally redirects to same-origin paths only. Absolute
+ * URLs are silently dropped to "/" because a loader's `redirect()` performs
+ * a client-side navigation — following an external URL would break the SPA.
  * URL here would break the SPA.
  */
 function safeReturnToFromRequest(request: Request): string {
