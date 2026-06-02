@@ -181,12 +181,15 @@ class ProcessSandboxService(SandboxService):
             process = psutil.Process(process_info.pid)
             if process.is_running():
                 status = process.status()
-                if status == psutil.STATUS_RUNNING:
-                    return SandboxStatus.RUNNING
-                elif status == psutil.STATUS_STOPPED:
+                if status == psutil.STATUS_STOPPED:
                     return SandboxStatus.PAUSED
+                elif status in (psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD):
+                    return SandboxStatus.MISSING
                 else:
-                    return SandboxStatus.STARTING
+                    # RUNNING covers psutil 'running' AND 'sleeping' (typical for
+                    # an asyncio uvicorn process waiting on epoll). The /alive
+                    # check in _process_to_sandbox_info verifies real readiness.
+                    return SandboxStatus.RUNNING
             else:
                 return SandboxStatus.MISSING
         except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -419,7 +422,7 @@ class ProcessSandboxServiceInjector(SandboxServiceInjector):
         description='Base directory for sandbox working directories',
     )
     base_port: int = Field(
-        default=8000, description='Base port number for agent servers'
+        default=18000, description='Base port number for agent servers'
     )
     python_executable: str = Field(
         default=sys.executable,
