@@ -102,8 +102,8 @@ FUNCTION_CALLING_PATTERNS: list[str] = [
     'glm-4*',
     'glm-5*',
     # MiniMax - verified via official docs (OpenAI-compatible API)
+    'minimax-m3*',
     'minimax-m2.7*',
-    'minimax-m2.5*',
 ]
 
 REASONING_EFFORT_PATTERNS: list[str] = [
