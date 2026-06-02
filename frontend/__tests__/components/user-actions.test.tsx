@@ -1,16 +1,13 @@
-import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import { describe, expect, it, vi, afterEach, beforeEach, test } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
-import { MemoryRouter, createRoutesStub } from "react-router";
+import { MemoryRouter } from "react-router";
 import { ReactElement } from "react";
-import { http, HttpResponse } from "msw";
 import { UserActions } from "#/components/features/sidebar/user-actions";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import { MOCK_PERSONAL_ORG, MOCK_TEAM_ORG_ACME } from "#/mocks/org-handlers";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
-import { server } from "#/mocks/node";
-import { createMockWebClientConfig } from "#/mocks/settings-handlers";
 import { renderWithProviders } from "../../test-utils";
 
 vi.mock("react-router", async (importActual) => ({
@@ -60,20 +57,6 @@ const renderUserActions = (props = { hasAvatar: true }) => {
       ),
     },
   );
-};
-
-// RouterStub and render helper for menu close delay tests
-const RouterStubForMenuCloseDelay = createRoutesStub([
-  {
-    path: "/",
-    Component: () => (
-      <UserActions user={{ avatar_url: "https://example.com/avatar.png" }} />
-    ),
-  },
-]);
-
-const renderUserActionsForMenuCloseDelay = () => {
-  return renderWithProviders(<RouterStubForMenuCloseDelay initialEntries={["/"]} />);
 };
 
 // Create mocks for all the hooks we need
@@ -135,10 +118,23 @@ describe("UserActions", () => {
     expect(screen.getByTestId("user-avatar")).toBeInTheDocument();
   });
 
+  it("should not show context menu before clicking", () => {
+    renderUserActions();
+    expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
+  });
+
+  it("should show context menu when avatar is clicked", async () => {
+    renderUserActions();
+    const userActions = screen.getByTestId("user-actions");
+    await user.click(userActions);
+
+    expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
+  });
+
   it("should show context menu even when user has no avatar_url", async () => {
     renderUserActions();
     const userActions = screen.getByTestId("user-actions");
-    await user.hover(userActions);
+    await user.click(userActions);
 
     // Context menu SHOULD appear because user object exists (even with empty avatar_url)
     expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
@@ -157,7 +153,7 @@ describe("UserActions", () => {
 
     renderUserActions();
     const userActions = screen.getByTestId("user-actions");
-    await user.hover(userActions);
+    await user.click(userActions);
 
     // Context menu should still appear even when loading
     expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
@@ -166,7 +162,7 @@ describe("UserActions", () => {
   test("context menu should default to user role", async () => {
     renderUserActions();
     const userActions = screen.getByTestId("user-actions");
-    await user.hover(userActions);
+    await user.click(userActions);
 
     // Verify logout is present
     expect(screen.getByTestId("user-context-menu")).toHaveTextContent(
@@ -188,50 +184,43 @@ describe("UserActions", () => {
   test("should NOT show Team and Organization nav items when personal workspace is selected", async () => {
     renderUserActions();
     const userActions = screen.getByTestId("user-actions");
-    await user.hover(userActions);
+    await user.click(userActions);
 
     // Team and Organization nav links should NOT be visible when no org is selected (personal workspace)
     expect(screen.queryByText("Team")).not.toBeInTheDocument();
     expect(screen.queryByText("Organization")).not.toBeInTheDocument();
   });
 
-  it("should show context menu on hover", async () => {
+  it("should toggle context menu on repeated clicks", async () => {
     renderUserActions();
-
     const userActions = screen.getByTestId("user-actions");
-    const contextMenu = screen.getByTestId("user-context-menu");
 
-    // Menu is in DOM but hidden via CSS (opacity-0, pointer-events-none)
-    expect(contextMenu.parentElement).toHaveClass("opacity-0");
-    expect(contextMenu.parentElement).toHaveClass("pointer-events-none");
+    // First click — opens
+    await user.click(userActions);
+    expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
 
-    // Hover over the user actions area
-    await user.hover(userActions);
-
-    // Menu should be visible on hover (CSS classes change via group-hover)
-    expect(contextMenu).toBeVisible();
+    // Second click — closes
+    await user.click(userActions);
+    expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
   });
 
-  it("should use state-based visibility for hover behavior instead of CSS pseudo-element", async () => {
+  it("should close context menu when clicking outside", async () => {
     renderUserActions();
-
     const userActions = screen.getByTestId("user-actions");
-    await user.hover(userActions);
 
-    const contextMenu = screen.getByTestId("user-context-menu");
-    const hoverBridgeContainer = contextMenu.parentElement;
+    // Open menu
+    await user.click(userActions);
+    expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
 
-    // The component uses state-based visibility with a 500ms delay for diagonal mouse movement
-    // When visible, the container should have opacity-100 and pointer-events-auto
-    expect(hoverBridgeContainer?.className).toContain("opacity-100");
-    expect(hoverBridgeContainer?.className).toContain("pointer-events-auto");
+    // Click outside
+    await user.click(document.body);
+    expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
   });
 
   describe("Org selector dropdown state reset when context menu hides", () => {
     // These tests verify that the org selector dropdown resets its internal
     // state (search text, open/closed) when the context menu hides and
-    // reappears. The component uses a 500ms delay before hiding (to support
-    // diagonal mouse movement).
+    // reappears (via remount triggered by menuResetCount key).
 
     beforeEach(() => {
       vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
@@ -245,8 +234,8 @@ describe("UserActions", () => {
       renderUserActions();
       const userActions = screen.getByTestId("user-actions");
 
-      // Hover to show context menu
-      await user.hover(userActions);
+      // Click to show context menu
+      await user.click(userActions);
 
       // Wait for orgs to load and auto-select
       await waitFor(() => {
@@ -263,23 +252,11 @@ describe("UserActions", () => {
       await user.type(input, "search text");
       expect(input).toHaveValue("search text");
 
-      // Unhover to trigger hide timeout, then wait for the 500ms delay to complete
-      await user.unhover(userActions);
+      // Click outside to close menu (triggers remount counter increment)
+      await user.click(document.body);
 
-      // Wait for the 500ms hide delay to complete and menu to actually hide
-      await waitFor(
-        () => {
-          // The menu resets when it actually hides (after 500ms delay)
-          // After hiding, hovering again should show a fresh menu
-        },
-        { timeout: 600 },
-      );
-
-      // Wait a bit more for the timeout to fire
-      await new Promise((resolve) => setTimeout(resolve, 550));
-
-      // Now hover again to show the menu
-      await user.hover(userActions);
+      // Click again to reopen
+      await user.click(userActions);
 
       // Org selector should be reset — showing selected org name, not search text
       await waitFor(() => {
@@ -293,8 +270,8 @@ describe("UserActions", () => {
       renderUserActions();
       const userActions = screen.getByTestId("user-actions");
 
-      // Hover to show context menu
-      await user.hover(userActions);
+      // Click to show context menu
+      await user.click(userActions);
 
       // Wait for orgs to load
       await waitFor(() => {
@@ -311,14 +288,11 @@ describe("UserActions", () => {
       await user.type(input, "Acme");
       expect(input).toHaveValue("Acme");
 
-      // Unhover to trigger hide timeout
-      await user.unhover(userActions);
+      // Click outside to close menu
+      await user.click(document.body);
 
-      // Wait for the 500ms hide delay to complete
-      await new Promise((resolve) => setTimeout(resolve, 550));
-
-      // Now hover again to show the menu
-      await user.hover(userActions);
+      // Click again to reopen
+      await user.click(userActions);
 
       // Wait for fresh component with org data
       await waitFor(() => {
@@ -334,85 +308,6 @@ describe("UserActions", () => {
       );
       // No option elements should be rendered
       expect(screen.queryAllByRole("option")).toHaveLength(0);
-    });
-  });
-
-  describe("menu close delay", () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-      useSelectedOrganizationStore.setState({ organizationId: "1" });
-
-      // Mock config to return SaaS mode so useShouldShowUserFeatures returns true
-      server.use(
-        http.get("/api/v1/web-client/config", () =>
-          HttpResponse.json(createMockWebClientConfig({ app_mode: "saas" })),
-        ),
-      );
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-      server.resetHandlers();
-    });
-
-    it("should keep menu visible when mouse leaves and re-enters within 500ms", async () => {
-      // Arrange - render and wait for queries to settle
-      renderUserActionsForMenuCloseDelay();
-      await act(async () => {
-        await vi.runAllTimersAsync();
-      });
-
-      const userActions = screen.getByTestId("user-actions");
-
-      // Act - open menu
-      await act(async () => {
-        fireEvent.mouseEnter(userActions);
-      });
-
-      // Assert - menu is visible
-      expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
-
-      // Act - leave and re-enter within 500ms
-      await act(async () => {
-        fireEvent.mouseLeave(userActions);
-        await vi.advanceTimersByTimeAsync(200);
-        fireEvent.mouseEnter(userActions);
-      });
-
-      // Assert - menu should still be visible after waiting (pending close was cancelled)
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(500);
-      });
-      expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
-    });
-
-    it("should not close menu before 500ms delay when mouse leaves", async () => {
-      // Arrange - render and wait for queries to settle
-      renderUserActionsForMenuCloseDelay();
-      await act(async () => {
-        await vi.runAllTimersAsync();
-      });
-
-      const userActions = screen.getByTestId("user-actions");
-
-      // Act - open menu
-      await act(async () => {
-        fireEvent.mouseEnter(userActions);
-      });
-
-      // Assert - menu is visible
-      expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
-
-      // Act - leave without re-entering, but check before timeout expires
-      await act(async () => {
-        fireEvent.mouseLeave(userActions);
-        await vi.advanceTimersByTimeAsync(400); // Before the 500ms delay
-      });
-
-      // Assert - menu should still be visible (delay hasn't expired yet)
-      // Note: The menu is always in DOM but with opacity-0 when closed.
-      // This test verifies the state hasn't changed yet (delay is working).
-      expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
     });
   });
 });

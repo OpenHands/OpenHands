@@ -119,6 +119,13 @@ export function CustomChatInput({
     closeMenu: closeSlashMenu,
   } = useSlashCommand(chatInputRef as React.RefObject<HTMLDivElement | null>);
 
+  // Focus the input when a new conversation is loaded
+  useEffect(() => {
+    if (!isDisabled && chatInputRef.current) {
+      chatInputRef.current.focus();
+    }
+  }, []);
+
   // Cleanup: reset suggestions visibility when component unmounts
   useEffect(
     () => () => {
