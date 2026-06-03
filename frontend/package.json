@@ -95,7 +95,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
-    "@vitest/coverage-v8": "^4.0.17",
+    "@vitest/coverage-v8": "^4.1.0",
     "cross-env": "^10.1.0",
     "eslint": "^8.57.0",
     "eslint-config-airbnb": "^19.0.4",
@@ -117,7 +117,7 @@
     "typescript": "^5.9.3",
     "vite-plugin-svgr": "^4.5.0",
     "vite-tsconfig-paths": "^6.1.0",
-    "vitest": "^4.0.14"
+    "vitest": "^4.1.0"
   },
   "packageManager": "npm@10.5.0",
   "volta": {
