@@ -19,6 +19,10 @@ on:
         description: "Image tag to promote (defaults to sha-<short SHA> for the selected ref)"
         required: false
         type: string
+      source-sha:
+        description: "Commit SHA that produced the image (leave blank to use current HEAD)"
+        required: false
+        type: string
   workflow_run:
     workflows: ["Docker"]
     types: [completed]
@@ -68,7 +72,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           IMAGE_TAG: ${{ steps.tag.outputs.tag }}
-          SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          SOURCE_SHA: ${{ github.event.inputs['source-sha'] || github.event.workflow_run.head_sha || github.sha }}
         run: |
           gh api /repos/OpenHands/saas-deploy/dispatches \
             -f event_type=promote-to-development \
