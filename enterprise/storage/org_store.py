@@ -486,6 +486,16 @@ class OrgStore:
                 # same snapshot/locks as the destructive writes below, so
                 # another session cannot create a new orphan between
                 # check-and-act.
+                #
+                # No row-level lock (``FOR UPDATE``) is acquired here. A
+                # concurrent session could in principle insert or remove
+                # an ``org_member`` row for the requester between this
+                # read and the ``DELETE User`` write below; we accept
+                # that as an unlikely edge case for the personal-org
+                # self-service path, where the requester is the only
+                # actor with permission to mutate their own memberships.
+                # Promote to ``FOR UPDATE`` if this code starts running
+                # on behalf of multi-actor flows.
                 orphaned_result = await session.execute(
                     text("""
                         SELECT u.id
@@ -590,6 +600,17 @@ class OrgStore:
                 # ``org_git_claim`` cascade on ``org.id`` in the DB schema,
                 # but the org row still exists at this point, so we clean
                 # those references explicitly here.
+                #
+                # FK edges on ``user.id`` cleared before ``DELETE User``:
+                #   * ``org_invitation.inviter_id``
+                #   * ``org_invitation.accepted_by_user_id``
+                #   * ``org_git_claim.claimed_by``
+                #   * ``org_member.user_id``
+                # *** If a future migration adds another table with a
+                # FK to ``user.id`` (e.g. ``user_api_key``, ``audit_log``)
+                # this block MUST be updated to release it, or the
+                # ``DELETE User`` below will raise a runtime FK violation
+                # with no obvious pointer back to this site. ***
                 if requester_orphan_ids:
                     await session.execute(
                         delete(OrgInvitation).where(
@@ -641,14 +662,15 @@ class OrgStore:
                 )
 
                 # 5. Finally delete the organization.
-                # ``AsyncSession.delete`` is a coroutine; without ``await`` it
-                # is a silent no-op (the ORM never flushes the DELETE), which
-                # left the ``org`` row behind even though the route returned
-                # success and the rest of the cascade committed. The next
-                # login then collided on ``org_pkey`` when
-                # ``UserStore.create_user`` tried to INSERT a new ``Org`` row
-                # keyed on the same Keycloak ``sub``. See PR #14617 staging
-                # diagnosis for details.
+                # ``AsyncSession.delete`` is a coroutine; without ``await``
+                # it is a silent no-op — the ORM never flushes the DELETE
+                # and the ``org`` row survives the transaction even though
+                # every preceding step committed. Forgetting the ``await``
+                # here would leave the next sign-in colliding on
+                # ``org_pkey`` in ``UserStore.create_user``, because both
+                # the surviving row and the new row are keyed on the same
+                # stable Keycloak ``sub``. Awaited explicitly to make that
+                # invariant load-bearing rather than incidental.
                 await session.delete(org)
 
                 # 6. Clean up LiteLLM team before committing transaction
