@@ -81,12 +81,22 @@ class OrgAuthorizationError(OrgDeletionError):
 
 
 class OrphanedUserError(OrgDeletionError):
-    """Raised when deleting an org would leave users without any organization."""
+    """Raised when deleting an org would leave OTHER users (not the requester)
+    without any organization.
+
+    A user is "orphaned" when their only ``org_member`` row is for the org being
+    deleted. The deletion path tolerates *the requester themselves* being orphaned
+    (the personal-org self-service case — the requester is consenting to their
+    own deletion by calling ``DELETE``), but refuses to silently destroy the
+    accounts of other members. In that case it raises this error so the org
+    owner can transfer or remove those members first.
+    """
 
     def __init__(self, user_ids: list[str]):
         self.user_ids = user_ids
         super().__init__(
-            f'Cannot delete organization: {len(user_ids)} user(s) would have no remaining organization'
+            f'Cannot delete organization: {len(user_ids)} other user(s) '
+            'would have no remaining organization'
         )
 
 
