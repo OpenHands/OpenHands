@@ -57,7 +57,7 @@ jobs:
 
       - name: Mint saas-deploy token
         id: app-token
-        uses: actions/create-github-app-token@7bd03711494f032dfa3be3558f7dc8787b0be333  # v3.1.0
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
           app-id: ${{ secrets.SAAS_DEPLOY_APP_ID }}
           private-key: ${{ secrets.SAAS_DEPLOY_APP_PRIVATE_KEY }}
