@@ -640,8 +640,16 @@ class OrgStore:
                     {'org_id': str(org_id)},
                 )
 
-                # 5. Finally delete the organization
-                session.delete(org)
+                # 5. Finally delete the organization.
+                # ``AsyncSession.delete`` is a coroutine; without ``await`` it
+                # is a silent no-op (the ORM never flushes the DELETE), which
+                # left the ``org`` row behind even though the route returned
+                # success and the rest of the cascade committed. The next
+                # login then collided on ``org_pkey`` when
+                # ``UserStore.create_user`` tried to INSERT a new ``Org`` row
+                # keyed on the same Keycloak ``sub``. See PR #14617 staging
+                # diagnosis for details.
+                await session.delete(org)
 
                 # 6. Clean up LiteLLM team before committing transaction
                 logger.info(
