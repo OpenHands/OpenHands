@@ -963,21 +963,234 @@ async def test_get_user_orgs_paginated_ordering(async_session_maker, mock_litell
 def test_orphaned_user_error_contains_user_ids():
     """
     GIVEN: OrphanedUserError is created with a list of user IDs
-    WHEN: The error message is accessed
-    THEN: Message includes the count and stores user IDs
+    WHEN:  The error message is accessed
+    THEN:  Message includes the count and stores user IDs.
+
+    The error is raised only for orphans OTHER than the requester (so the
+    count refers to "other users"), preserving the safeguard that a
+    multi-user org owner cannot silently destroy other members' accounts.
     """
-    # Arrange
     from server.routes.org_models import OrphanedUserError
 
     user_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
-
-    # Act
     error = OrphanedUserError(user_ids)
 
-    # Assert
     assert error.user_ids == user_ids
-    assert '2 user(s)' in str(error)
+    assert '2 other user(s)' in str(error)
     assert 'no remaining organization' in str(error)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skip(
+    reason='Uses PostgreSQL-specific ::uuid cast syntax not supported by SQLite'
+)
+async def test_delete_org_cascade_sole_org_requester_is_deleted(
+    async_session_maker, mock_litellm_api
+):
+    """
+    GIVEN: A sole-org user (orphan) whose only membership is in the org being
+           deleted, AND that user is the requester of the deletion
+    WHEN:  delete_org_cascade is called with requester_user_id=the user's id
+    THEN:  The user, org, and org_member rows are all removed in the same
+           transaction. No OrphanedUserError is raised.
+
+    Re-onboarding contract: because UserStore.create_user derives both User.id
+    and Org.id from the Keycloak ``sub`` claim (which is stable across logins),
+    a re-login after this cascade reproduces the same UUIDs the user had
+    before, preserving personal-org identity for downstream lookups keyed on
+    ``keycloak_user_id``. See ``enterprise/storage/user_store.py:create_user``.
+    """
+    # Arrange — personal-org invariant: User.id == Org.id == UUID(keycloak.sub)
+    user_id = uuid.uuid4()
+    org_id = user_id
+    role_id = 1
+
+    async with async_session_maker() as session:
+        session.add_all(
+            [
+                Role(id=role_id, name='owner', rank=1),
+                Org(
+                    id=org_id,
+                    name='Personal Org',
+                    contact_name='Sole Owner',
+                    contact_email='sole@example.com',
+                ),
+                User(id=user_id, current_org_id=org_id),
+                OrgMember(
+                    org_id=org_id,
+                    user_id=user_id,
+                    role_id=role_id,
+                    status='active',
+                    llm_api_key='test-key',
+                ),
+            ]
+        )
+        await session.commit()
+
+    # Act
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        result = await OrgStore.delete_org_cascade(
+            org_id, requester_user_id=str(user_id)
+        )
+
+    # Assert: the deleted org is returned, and the user/org/member rows are gone.
+    assert result is not None
+    assert result.id == org_id
+
+    async with async_session_maker() as session:
+        assert await session.get(Org, org_id) is None
+        assert await session.get(User, user_id) is None
+        remaining_members = (
+            (await session.execute(select(OrgMember).filter_by(org_id=org_id)))
+            .scalars()
+            .all()
+        )
+        assert remaining_members == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.skip(
+    reason='Uses PostgreSQL-specific ::uuid cast syntax not supported by SQLite'
+)
+async def test_delete_org_cascade_keeps_user_with_alternative_org(
+    async_session_maker, mock_litellm_api
+):
+    """
+    GIVEN: A user belonging to two orgs whose current_org_id points at the org
+           being deleted
+    WHEN:  delete_org_cascade is called on that org
+    THEN:  The user row survives with current_org_id reassigned to the
+           remaining org. No orphan handling is triggered.
+    """
+    deleted_org_id = uuid.uuid4()
+    other_org_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    role_id = 1
+
+    async with async_session_maker() as session:
+        session.add_all(
+            [
+                Role(id=role_id, name='owner', rank=1),
+                Org(
+                    id=deleted_org_id,
+                    name='Org to delete',
+                    contact_email='a@example.com',
+                ),
+                Org(
+                    id=other_org_id,
+                    name='Other Org',
+                    contact_email='b@example.com',
+                ),
+                User(id=user_id, current_org_id=deleted_org_id),
+                OrgMember(
+                    org_id=deleted_org_id,
+                    user_id=user_id,
+                    role_id=role_id,
+                    status='active',
+                    llm_api_key='k1',
+                ),
+                OrgMember(
+                    org_id=other_org_id,
+                    user_id=user_id,
+                    role_id=role_id,
+                    status='active',
+                    llm_api_key='k2',
+                ),
+            ]
+        )
+        await session.commit()
+
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        result = await OrgStore.delete_org_cascade(
+            deleted_org_id, requester_user_id=str(user_id)
+        )
+
+    assert result is not None
+    async with async_session_maker() as session:
+        assert await session.get(Org, deleted_org_id) is None
+        surviving_user = await session.get(User, user_id)
+        assert surviving_user is not None
+        assert surviving_user.current_org_id == other_org_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.skip(
+    reason='Uses PostgreSQL-specific ::uuid cast syntax not supported by SQLite'
+)
+async def test_delete_org_cascade_raises_for_non_requester_orphans(
+    async_session_maker, mock_litellm_api
+):
+    """
+    GIVEN: A multi-user org where the requester has another org to fall back
+           on, but a second member's only membership is in this org
+    WHEN:  delete_org_cascade is called with requester_user_id=the requester
+    THEN:  OrphanedUserError is raised listing the OTHER member's id; the
+           whole transaction is rolled back, so org/user/member rows survive.
+
+    This is the multi-user safeguard: an org owner cannot delete an org if
+    doing so would silently destroy another member's account. The owner must
+    first transfer or remove those members.
+    """
+    org_id = uuid.uuid4()
+    other_org_id = uuid.uuid4()
+    requester_id = uuid.uuid4()
+    other_user_id = uuid.uuid4()
+    role_id = 1
+
+    async with async_session_maker() as session:
+        session.add_all(
+            [
+                Role(id=role_id, name='owner', rank=1),
+                Org(id=org_id, name='Shared Org', contact_email='shared@e.com'),
+                Org(
+                    id=other_org_id,
+                    name='Requester Alt Org',
+                    contact_email='alt@e.com',
+                ),
+                # Requester: member of both orgs (NOT orphaned by deleting `org_id`)
+                User(id=requester_id, current_org_id=org_id),
+                OrgMember(
+                    org_id=org_id,
+                    user_id=requester_id,
+                    role_id=role_id,
+                    status='active',
+                    llm_api_key='k1',
+                ),
+                OrgMember(
+                    org_id=other_org_id,
+                    user_id=requester_id,
+                    role_id=role_id,
+                    status='active',
+                    llm_api_key='k2',
+                ),
+                # Other member: sole-org in `org_id` → would be orphaned
+                User(id=other_user_id, current_org_id=org_id),
+                OrgMember(
+                    org_id=org_id,
+                    user_id=other_user_id,
+                    role_id=role_id,
+                    status='active',
+                    llm_api_key='k3',
+                ),
+            ]
+        )
+        await session.commit()
+
+    from server.routes.org_models import OrphanedUserError
+
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        with pytest.raises(OrphanedUserError) as exc_info:
+            await OrgStore.delete_org_cascade(
+                org_id, requester_user_id=str(requester_id)
+            )
+
+    assert exc_info.value.user_ids == [str(other_user_id)]
+
+    # Transaction rolled back — nothing should have been deleted.
+    async with async_session_maker() as session:
+        assert await session.get(Org, org_id) is not None
+        assert await session.get(User, requester_id) is not None
+        assert await session.get(User, other_user_id) is not None
 
 
 def test_org_deletion_with_invitations_uses_passive_deletes(

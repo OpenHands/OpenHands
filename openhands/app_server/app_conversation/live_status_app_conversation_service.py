@@ -1593,16 +1593,20 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     ) -> StartConversationRequest:
         """Build a StartConversationRequest for ACP agent conversations.
 
-        Unlike the LLM path, ACP agents run as separate subprocesses; we pass
-        credentials via environment variables rather than injecting an LLM object.
+        Unlike the LLM path, ACP agents run as separate subprocesses; the
+        provider credentials reach the subprocess as environment variables
+        rather than via an injected LLM object.
 
-        User secrets (Secrets panel + git provider tokens) flow through two
-        complementary channels: they're rendered into the ACP prompt as a
-        ``<CUSTOM_SECRETS>`` block via ``AgentContext.secrets`` (so the agent
-        knows the names) and also pre-exported as environment variables on
-        the ACP subprocess via ``acp_env`` (so plain CLI commands like
-        ``gh`` / ``aws`` / ``git`` pick them up from env without the agent
-        having to manually export them).
+        Both the provider credentials (the UI-saved ``llm.api_key`` /
+        ``base_url``, keyed by the provider's env-var names) and user secrets
+        (Secrets panel + git provider tokens) flow through the single
+        ``AgentContext.secrets`` channel: their names are rendered into the
+        ACP prompt as a ``<CUSTOM_SECRETS>`` block, and the SDK's
+        ``ACPAgent._start_acp_server`` gap-fills the values into the subprocess
+        env at launch. Routing the provider creds this way keeps them on the
+        cipher-protected ``request.secrets`` boundary instead of the
+        deprecated, persist-unsafe ``acp_env`` channel (software-agent-sdk
+        #3464; OpenHands/agent-canvas#1039).
 
         Args:
             sandbox: Sandbox information
@@ -1640,19 +1644,36 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         acp_settings = user.agent_settings  # already verified to be ACPAgentSettings
         assert isinstance(acp_settings, ACPAgentSettings)
 
-        # Pass user secrets via AgentContext. The SDK renders them as a
-        # <CUSTOM_SECRETS> block in the ACP prompt (so the agent knows the
-        # names) and ``ACPAgent._start_acp_server`` gap-fills any that
-        # aren't already in ``acp_env`` into the subprocess env at launch
-        # time — preserving the ``acp_env > provider env > secrets``
-        # precedence end-to-end. We pass ``SecretSource`` objects through
-        # verbatim; resolving them here (with ``source.get_value()``) would
-        # eagerly hit the auth service for every ``LookupSecret`` on every
-        # conversation start, from the wrong process.
+        # Route the ACP provider credentials (the UI-saved ``llm.api_key`` /
+        # ``base_url``) through the cipher-protected ``agent_context.secrets``
+        # channel — keyed by the provider's expected env-var names — instead
+        # of ``acp_env``. ``acp_env`` is a parallel, persist-unsafe credential
+        # channel the SDK has deprecated (software-agent-sdk #3464). Provider
+        # creds override a same-named Secrets-panel entry, preserving the prior
+        # ``provider env > panel secret`` priority. See
+        # OpenHands/agent-canvas#1039.
+        provider_env = acp_settings.resolve_provider_env()
+        for env_name, env_value in provider_env.items():
+            secrets[env_name] = StaticSecret(value=SecretStr(env_value))
+
+        # Pass secrets via AgentContext. The SDK renders the names as a
+        # <CUSTOM_SECRETS> block in the ACP prompt and
+        # ``ACPAgent._start_acp_server`` gap-fills any not already in the
+        # subprocess env at launch time, delivering the provider creds. We
+        # pass ``SecretSource`` objects verbatim; resolving them here (with
+        # ``source.get_value()``) would eagerly hit the auth service for every
+        # ``LookupSecret`` on every conversation start, from the wrong process.
         agent_context = AgentContext(secrets=secrets) if secrets else None
-        settings_update = (
-            {'agent_context': agent_context} if agent_context is not None else {}
-        )
+        settings_update: dict[str, object] = {}
+        if agent_context is not None:
+            settings_update['agent_context'] = agent_context
+        # Strip the provider creds off the (dummy) ACP ``llm`` so
+        # ``create_agent()`` does not re-fold them into ``acp_env`` via
+        # ``resolve_provider_env``.
+        if provider_env:
+            settings_update['llm'] = acp_settings.llm.model_copy(
+                update={'api_key': None, 'base_url': None}
+            )
         acp_agent = acp_settings.model_copy(update=settings_update).create_agent()
 
         sdk_plugins: list[PluginSource] | None = None
