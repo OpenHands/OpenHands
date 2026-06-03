@@ -51,7 +51,11 @@ from server.services.org_invitation_service import (
     UserAlreadyMemberError,
 )
 from server.utils.conversation_utils import get_session_api_key, get_user_id
-from server.utils.rate_limit_utils import check_rate_limit_by_user_id
+from server.utils.rate_limit_utils import (
+    RATE_LIMIT_AUTH_VERIFY_EMAIL_IP_SECONDS,
+    RATE_LIMIT_AUTH_VERIFY_EMAIL_USER_SECONDS,
+    check_rate_limit_by_user_id,
+)
 from server.utils.url_utils import get_cookie_domain, get_cookie_samesite, get_web_url
 from sqlalchemy import select
 from storage.database import a_session_maker
@@ -399,16 +403,17 @@ async def keycloak_callback(
         # Import locally to avoid circular import with email.py
         from server.routes.email import verify_email
 
-        # Rate limit verification emails during auth flow (60 seconds per user)
-        # This is separate from the manual resend rate limit which uses 30 seconds
+        # Rate limit verification emails during auth flow (defaults: 60s per user,
+        # 120s per IP; configurable via RATE_LIMIT_AUTH_VERIFY_EMAIL_* env vars).
+        # This is separate from the manual resend limit (RATE_LIMIT_EMAIL_RESEND_*).
         rate_limited = False
         try:
             await check_rate_limit_by_user_id(
                 request=request,
                 key_prefix='auth_verify_email',
                 user_id=user_id,
-                user_rate_limit_seconds=60,
-                ip_rate_limit_seconds=120,
+                user_rate_limit_seconds=RATE_LIMIT_AUTH_VERIFY_EMAIL_USER_SECONDS,
+                ip_rate_limit_seconds=RATE_LIMIT_AUTH_VERIFY_EMAIL_IP_SECONDS,
             )
             await verify_email(request=request, user_id=user_id, is_auth_flow=True)
         except HTTPException as e:
