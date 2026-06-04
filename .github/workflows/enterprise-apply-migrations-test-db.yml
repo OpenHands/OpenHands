@@ -13,6 +13,10 @@ on:
       - 'enterprise/alembic.ini'
       - '.github/workflows/enterprise-apply-migrations-test-db.yml'
 
+# Group is per-PR-branch, so this only cancels a superseded run of the SAME PR
+# (e.g. after a new push) — never another PR. cancel-in-progress is safe here
+# because each run uses its own throwaway Postgres service that is destroyed with
+# the runner: cancelling mid-migration leaves no shared/persistent state behind.
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
