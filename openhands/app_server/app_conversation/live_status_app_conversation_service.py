@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import tempfile
 import zipfile
 from collections import defaultdict
@@ -17,6 +18,7 @@ from pydantic import Field, SecretStr, TypeAdapter
 
 from openhands.agent_server.models import (
     ConversationInfo,
+    EventSortOrder,
     SendMessageRequest,
     StartConversationRequest,
     TextContent,
@@ -94,7 +96,9 @@ from openhands.app_server.utils.llm_metadata import (
     get_llm_metadata,
     should_set_litellm_extra_body,
 )
-from openhands.sdk import Agent, AgentContext, LocalWorkspace
+from openhands.sdk import Agent, AgentContext, LocalWorkspace, MessageEvent
+from openhands.sdk.event import ActionEvent
+from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.llm.llm_profile_store import PROFILE_NAME_REGEX
@@ -121,6 +125,324 @@ from openhands.tools.preset.planning import (
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
+
+# Limits for bootstrap-prompt resume (Solution A of issue #14260).
+#
+# The rendering logic below mirrors OpenHands/software-agent-sdk#3323, which
+# adds these primitives to the SDK. Once that version is pinned, this block
+# can be simplified to:
+#   from openhands.sdk.event import RESUME_CONTEXT_MARKER, render_resume_transcript
+#   (see #14474 for the migration checklist)
+# The fetch/pagination wrapper, double-resume guard, and provider-specific
+# scrubbing (_sanitize_paths, _strip_terminal_boilerplate, _extract_output_text,
+# _format_raw_input, _RAW_INPUT_NOISE_KEYS) stay here — they encode sandbox-
+# lifecycle and Codex-shape concerns the SDK layer deliberately doesn't know about.
+_ACP_RESUME_MAX_EVENTS = 200  # hard event-count cap (prevents O(N) fetches)
+_ACP_RESUME_CONTEXT_MAX_CHARS = 60_000  # total resume block
+_ACP_RESUME_MESSAGE_MAX_CHARS = 8_000  # per message turn
+_ACP_RESUME_TOOL_MAX_CHARS = 2_000  # per tool event
+_ACP_RESUME_CONTEXT_MARKER = '<<RESUMED CONVERSATION>>'
+
+
+def _truncate_keep_head(text: str, max_chars: int) -> str:
+    """Truncate to at most max_chars, keeping the start. Honors caps below 4."""
+    if max_chars <= 0:
+        return ''
+    if len(text) <= max_chars:
+        return text
+    if max_chars < 4:
+        return text[:max_chars]
+    return text[: max_chars - 3] + '...'
+
+
+def _truncate_keep_tail(text: str, max_chars: int) -> str:
+    """Truncate to at most max_chars, keeping the end (newest content first).
+
+    Used for the overall resume transcript so that when history is too long the
+    most recent events survive rather than the oldest.
+    """
+    if max_chars <= 0:
+        return ''
+    if len(text) <= max_chars:
+        return text
+    if max_chars < 5:
+        return text[-max_chars:]
+    return '...\n' + text[-(max_chars - 4) :]
+
+
+def _content_to_text(content: Sequence) -> str:
+    parts: list[str] = []
+    for item in content:
+        if isinstance(item, TextContent):
+            parts.append(item.text)
+            continue
+        image_urls = getattr(item, 'image_urls', None)
+        if image_urls:
+            parts.append(f'[Image: {len(image_urls)} URL(s)]')
+            continue
+        parts.append(f'[{type(item).__name__}]')
+    return '\n'.join(p for p in parts if p)
+
+
+def _message_to_text(event: 'MessageEvent') -> str:
+    """Render all content of a message event (including extended_content)."""
+    message = event.to_llm_message()
+    parts: list[str] = []
+    for item in message.content:
+        if isinstance(item, TextContent):
+            parts.append(item.text)
+        else:
+            image_urls = getattr(item, 'image_urls', None)
+            if image_urls:
+                parts.append(f'[Image: {len(image_urls)} URL(s)]')
+            else:
+                parts.append(f'[{type(item).__name__}]')
+    return '\n'.join(p for p in parts if p)
+
+
+_ABS_PATH_RE = re.compile(r'/[^\s\'",:}\]]{10,}')
+
+
+_BLOCK_FIELD_MISSING: object = object()
+
+
+def _block_field(block: object, *names: str) -> object:
+    """Read the first matching field from ``names`` on a content block.
+
+    Accepts Pydantic model attrs, snake_case dicts (model_dump), and camelCase
+    dicts (ACP JSON wire). Needed so is_patch_edit handles all three shapes.
+    """
+    if isinstance(block, dict):
+        for name in names:
+            if name in block:
+                return block[name]
+        return None
+    for name in names:
+        v = getattr(block, name, _BLOCK_FIELD_MISSING)
+        if v is not _BLOCK_FIELD_MISSING:
+            return v
+    return None
+
+
+def _is_patch_edit(event: 'ACPToolCallEvent') -> bool:
+    """True if this event represents a patch/diff edit (not a full-file write).
+
+    Scans ALL diff blocks in event.content (multi-file calls can mix writes and
+    patches). Returns True if any diff has old_text set; False only when every
+    diff is a write. Falls back to raw_input only when no diff block exists.
+    Accepts both snake_case (model_dump) and camelCase (wire) field names.
+    """
+    content = getattr(event, 'content', None) or []
+    diff_blocks = [b for b in content if _block_field(b, 'type') == 'diff']
+    if diff_blocks:
+        return any(
+            _block_field(b, 'old_text', 'oldText') is not None for b in diff_blocks
+        )
+    raw = dict(event.raw_input) if isinstance(event.raw_input, dict) else {}
+    old = raw.get('old_string')
+    return isinstance(old, str) and len(old) > 0
+
+
+def _render_content_block(block: object) -> str | None:
+    """Render one ACP ToolCallContent block as a compact summary.
+
+    Handles diff / content-wrapper / terminal at the top level, plus direct
+    ContentBlock variants (text, image, audio) that some servers emit unwrapped.
+    """
+    block_type = _block_field(block, 'type')
+    if block_type == 'diff':
+        path = _block_field(block, 'path') or ''
+        old_text = _block_field(block, 'old_text', 'oldText')
+        kind = 'patch' if old_text is not None else 'write'
+        header = f'[diff {kind}] {path}'.rstrip()
+        new_text = _block_field(block, 'new_text', 'newText')
+        if isinstance(new_text, str) and new_text:
+            return f'{header}\n{new_text}'
+        return header
+    if block_type == 'content':
+        inner = _block_field(block, 'content')
+        if inner is None:
+            return None
+        return _render_content_block(inner)
+    if block_type == 'terminal':
+        tid = _block_field(block, 'terminal_id', 'terminalId')
+        return f'[terminal {tid}]' if tid else '[terminal]'
+    if block_type == 'text':
+        text = _block_field(block, 'text')
+        if isinstance(text, str) and text:
+            return text
+        return None
+    if block_type == 'image':
+        return '[Image]'
+    if block_type == 'audio':
+        return '[Audio]'
+    if block_type in ('resource', 'resource_link'):
+        return f'[{block_type}]'
+    if block_type:
+        return f'[{block_type}]'
+    return None
+
+
+def _render_content_list(content: list | None) -> list[str]:
+    """Render all renderable blocks from an ACP content list."""
+    if not content:
+        return []
+    return [r for b in content if (r := _render_content_block(b)) is not None]
+
+
+# Pytest/terminal boilerplate lines to strip from command output.
+_TERMINAL_BOILERPLATE_RE = re.compile(
+    r'^(?:'
+    r'={10,}.*test session starts.*={10,}'
+    r'|platform \w+'
+    r'|cachedir:'
+    r'|rootdir:'
+    r'|plugins:'
+    r'|asyncio:'
+    r'|collecting \.\.\.'
+    r')',
+    re.MULTILINE,
+)
+
+
+def _strip_terminal_boilerplate(text: str) -> str:
+    """Remove pytest/shell boilerplate header lines from command output.
+
+    Strips ``platform``, ``cachedir``, ``rootdir``, ``plugins``, ``asyncio``,
+    and ``collecting ...`` lines that carry no useful information for a resumed
+    agent.  The test result lines (PASSED/FAILED/ERROR) and summary are kept.
+    """
+    lines = [ln for ln in text.splitlines() if not _TERMINAL_BOILERPLATE_RE.match(ln)]
+    # Collapse runs of blank lines left behind after stripping.
+    out: list[str] = []
+    prev_blank = False
+    for ln in lines:
+        blank = not ln.strip()
+        if blank and prev_blank:
+            continue
+        out.append(ln)
+        prev_blank = blank
+    return '\n'.join(out).strip()
+
+
+# Provider-internal metadata keys that add no value to a resume message.
+# Codex execute tools include call_id, process_id, turn_id, timestamps, etc.
+# 'cwd' is always the sandbox working directory — after path sanitization it
+# shows as the sandbox ID, which is meaningless; drop it too.
+_RAW_INPUT_NOISE_KEYS = frozenset(
+    {
+        'call_id',
+        'process_id',
+        'turn_id',
+        'started_at_ms',
+        'completed_at_ms',
+        'parsed_cmd',
+        'source',
+        'auto_approved',
+        'cwd',
+    }
+)
+
+
+def _extract_output_text(raw_output: object) -> str:
+    """Extract the human-readable text from a tool's raw_output.
+
+    Some ACP providers (e.g. Codex) wrap stdout/stderr in a dict alongside
+    metadata.  We pull out just the meaningful content so the agent sees the
+    actual command output rather than a Python dict repr.
+    """
+    if isinstance(raw_output, dict):
+        stdout = str(raw_output.get('stdout', '') or '').strip()
+        stderr = str(raw_output.get('stderr', '') or '').strip()
+        parts = []
+        if stdout:
+            parts.append(stdout)
+        if stderr:
+            parts.append(f'[stderr]: {stderr}')
+        if parts:
+            return '\n'.join(parts)
+        # dict but no stdout/stderr keys — fall through to repr
+    return str(raw_output)
+
+
+def _format_raw_input(raw: dict, max_chars: int, is_edit_diff: bool = False) -> str:
+    """Render a tool's raw_input dict in a readable form.
+
+    For edit-diff tools only the filename is shown — the file on the
+    persistent /workspace PVC is the source of truth.
+
+    For Codex-style changes dicts (``{path: {type, content}}``) the file
+    contents are rendered under their sanitized basenames.
+
+    For execute tools internal metadata keys (call_id, process_id, …) are
+    stripped; a list-valued ``command`` field is unwrapped to its last element.
+
+    For all other tools, multiline string values are rendered with real
+    newlines; single-line values as ``key=value``.
+    """
+    if is_edit_diff:
+        # Patch/diff: file is on /workspace — just show the filename.
+        fp = _sanitize_paths(str(raw.get('file_path', '')))
+        return f'file={fp}'
+
+    # Codex-style bulk changes: {abs_path: {type, content}, …}
+    if 'changes' in raw and isinstance(raw.get('changes'), dict):
+        changes = raw['changes']
+        parts: list[str] = []
+        for path, change in changes.items():
+            basename = os.path.basename(str(path)) if path else 'file'
+            content = str(change.get('content', '') or '')
+            change_type = change.get('type', 'edit')
+            if content:
+                parts.append(
+                    f'{change_type} {basename}:\n{_truncate_keep_head(content, 400)}'
+                )
+            else:
+                parts.append(f'{change_type} {basename}')
+        return _truncate_keep_head('\n'.join(parts), max_chars)
+
+    # General case: filter noise keys, extract command list, sanitize values.
+    cleaned: dict[str, object] = {}
+    for k, v in raw.items():
+        if k in _RAW_INPUT_NOISE_KEYS:
+            continue
+        # Unwrap list-valued command: ['/bin/zsh', '-lc', 'actual cmd'] → 'actual cmd'
+        if k == 'command' and isinstance(v, list) and v:
+            cleaned[k] = v[-1]
+        else:
+            cleaned[k] = v
+
+    out_parts: list[str] = []
+    for k, v in cleaned.items():
+        if isinstance(v, str):
+            v_san = _sanitize_paths(v)
+            if '\n' in v_san:
+                out_parts.append(f'{k}:\n{v_san}')
+            else:
+                out_parts.append(f'{k}={v_san}')
+        else:
+            out_parts.append(f'{k}={_sanitize_paths(str(v))}')
+    return _truncate_keep_head('\n'.join(out_parts), max_chars)
+
+
+def _sanitize_paths(text: str) -> str:
+    """Replace absolute filesystem paths with their basename.
+
+    ACP tool raw_input/raw_output often contains the full ephemeral sandbox
+    path (e.g. /private/var/folders/.../hello.py).  That path is meaningless
+    in a resumed session and could confuse the agent about file locations.
+    We keep only the basename so the agent retains the filename intent.
+    """
+
+    def _replace(m: re.Match) -> str:  # type: ignore[type-arg]
+        path = m.group(0)
+        # Only shorten paths that look like absolute filesystem paths, not URLs.
+        if path.startswith('//') or '://' in path:
+            return path
+        base = os.path.basename(path.rstrip('/'))
+        return base if base else path
+
+    return _ABS_PATH_RE.sub(_replace, text)
 
 
 # Planning agent instruction to prevent "Ready to proceed?" behavior
@@ -1581,6 +1903,192 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             _logger.warning(f'Failed to load skills: {e}', exc_info=True)
             return request
 
+    async def _synthesize_acp_resume_initial_message(
+        self,
+        conversation_id: UUID,
+        initial_message: SendMessageRequest | None = None,
+    ) -> SendMessageRequest | None:
+        """Build a bootstrap-prompt resume message from the durable event store.
+
+        When a sandbox is recycled the ACP server's own session storage is gone,
+        so ``session/load`` cannot be used.  Instead we start a fresh
+        ``new_session`` and inject the prior event history as the first user
+        message (Solution A of issue #14260).
+
+        TODO(#14474): Replace the event-walking loop below with
+        ``openhands.sdk.event.render_resume_transcript`` once the SDK pin
+        includes OpenHands/software-agent-sdk#3323. See top-of-file note.
+
+        Returns ``None`` when there are no prior events (fresh conversation).
+        If ``initial_message`` is provided it is appended after the history block
+        so the agent receives both context and the new user turn.
+        """
+        # Guard: don't double-wrap an already-synthesized resume message.
+        if initial_message and initial_message.content:
+            first_text = getattr(initial_message.content[0], 'text', None)
+            if isinstance(first_text, str) and first_text.startswith(
+                _ACP_RESUME_CONTEXT_MARKER
+            ):
+                return initial_message
+
+        # Fetch newest-first so that when the conversation exceeds
+        # _ACP_RESUME_MAX_EVENTS we keep the most recent context, not the oldest.
+        # The count cap avoids O(N) fetches for very long conversations; the
+        # character cap (_ACP_RESUME_CONTEXT_MAX_CHARS) is applied at render time.
+        all_events: list = []
+        try:
+            page_id: str | None = None
+            while len(all_events) < _ACP_RESUME_MAX_EVENTS:
+                page = await self.event_service.search_events(
+                    conversation_id,
+                    sort_order=EventSortOrder.TIMESTAMP_DESC,
+                    page_id=page_id,
+                    limit=100,
+                )
+                all_events.extend(page.items)
+                if len(all_events) >= _ACP_RESUME_MAX_EVENTS:
+                    all_events = all_events[:_ACP_RESUME_MAX_EVENTS]
+                    break
+                if page.next_page_id is None:
+                    break
+                page_id = page.next_page_id
+        except Exception:
+            _logger.warning(
+                'Failed to fetch events for ACP resume of conversation %s',
+                conversation_id,
+                exc_info=True,
+            )
+            return initial_message
+        all_events.reverse()
+
+        # Deduplicate ACPToolCallEvents: keep only the terminal (last) event per
+        # tool_call_id so that ACP's streaming "pending → pending → completed"
+        # sequence renders as a single completed entry.
+        _tool_terminal: dict[str, ACPToolCallEvent] = {}
+        for event in all_events:
+            if isinstance(event, ACPToolCallEvent) and event.tool_call_id:
+                _tool_terminal[event.tool_call_id] = event
+
+        lines: list[str] = []
+        for event in all_events:
+            if isinstance(event, MessageEvent):
+                role = event.llm_message.role
+                role_label = '[USER]' if role == 'user' else '[ASSISTANT]'
+                text = _truncate_keep_head(
+                    _message_to_text(event).strip(),
+                    _ACP_RESUME_MESSAGE_MAX_CHARS,
+                )
+                if text:
+                    lines.append(f'{role_label}: {text}')
+                    lines.append('')
+            elif isinstance(event, ACPToolCallEvent):
+                # Skip non-terminal events for this tool_call_id.
+                if (
+                    event.tool_call_id
+                    and _tool_terminal.get(event.tool_call_id) is not event
+                ):
+                    continue
+                # Placeholder events have no input, no output, no error, and no
+                # Skip placeholder events (ACP streams these before params arrive).
+                # raw_input: treat empty-dict {} the same as None — no payload.
+                # raw_output: use is-None so falsey scalars (0, False, "") survive.
+                if (
+                    not event.raw_input
+                    and event.raw_output is None
+                    and not event.is_error
+                    and not event.content
+                ):
+                    continue
+                status = 'failed' if event.is_error else (event.status or 'completed')
+                name = _sanitize_paths(event.title or event.tool_kind or 'tool')
+                raw_in = (
+                    dict(event.raw_input) if isinstance(event.raw_input, dict) else {}
+                )
+                is_edit_diff = _is_patch_edit(event)
+                detail_parts: list[str] = []
+                if raw_in:
+                    detail_parts.append(
+                        f'input:\n{_format_raw_input(raw_in, 800, is_edit_diff=is_edit_diff)}'
+                    )
+                content_lines = _render_content_list(event.content)
+                if content_lines:
+                    detail_parts.append('content:\n' + '\n'.join(content_lines))
+                if event.raw_output is not None:
+                    raw_out = _strip_terminal_boilerplate(
+                        _sanitize_paths(_extract_output_text(event.raw_output))
+                    )
+                    if event.is_error and len(raw_out) > 800:
+                        raw_out = '...\n' + raw_out[-800:]
+                    else:
+                        raw_out = _truncate_keep_head(raw_out, 800)
+                    detail_parts.append(f'output:\n{raw_out}')
+                detail_str = (
+                    '\n'
+                    + '\n'.join(
+                        f'  {ln}' for part in detail_parts for ln in part.splitlines()
+                    )
+                    if detail_parts
+                    else ''
+                )
+                lines.append(
+                    _truncate_keep_head(
+                        f'[TOOL USE: {name}] ({status}){detail_str}',
+                        _ACP_RESUME_TOOL_MAX_CHARS,
+                    )
+                )
+                lines.append('')
+            elif isinstance(event, ActionEvent):
+                msg = getattr(event.action, 'message', None) if event.action else None
+                if msg and isinstance(msg, str):
+                    lines.append(
+                        f'[AGENT]: {_truncate_keep_head(_sanitize_paths(msg.strip()), _ACP_RESUME_MESSAGE_MAX_CHARS)}'
+                    )
+                    lines.append('')
+
+        if not lines:
+            return None
+
+        header_lines = [
+            _ACP_RESUME_CONTEXT_MARKER,
+            '',
+            (
+                'The sandbox was recycled and the ACP agent session storage was lost. '
+                'The following is the conversation history from the previous session. '
+                'Please treat this as context and continue from where we left off.'
+            ),
+            '',
+        ]
+        footer_line = '--- End of prior session ---'
+        header_str = '\n'.join(header_lines)
+        body_str = '\n'.join(lines)
+        footer_str = footer_line
+
+        # Assemble; when body is too long keep the tail (newest events survive)
+        # rather than the oldest. Header and footer are preserved as anchors.
+        sep = '\n\n'
+        overhead = len(header_str) + len(sep) + len(sep) + len(footer_str)
+        body_budget = _ACP_RESUME_CONTEXT_MAX_CHARS - overhead
+        if body_budget >= 5:
+            body_str = _truncate_keep_tail(body_str, body_budget)
+        full = header_str + sep + body_str + sep + footer_str
+        resume_text = full[:_ACP_RESUME_CONTEXT_MAX_CHARS]
+
+        if initial_message is None:
+            return SendMessageRequest(
+                role='user',
+                content=[TextContent(type='text', text=resume_text)],
+            )
+
+        # Preserve the new user turn as a separate content block after the history.
+        return SendMessageRequest(
+            role=initial_message.role,
+            content=[
+                TextContent(type='text', text=resume_text),
+                *initial_message.content,
+            ],
+            run=getattr(initial_message, 'run', None),
+        )
+
     async def _build_acp_start_conversation_request(
         self,
         sandbox: SandboxInfo,
@@ -1639,6 +2147,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                         'API-provided secret %r overrides existing secret', name
                     )
                 secrets[name] = StaticSecret(value=value)
+
+        # --- bootstrap-prompt resume (Solution A of issue #14260) -----------
+        # If this conversation has prior events in the durable store the sandbox
+        # was recycled and the ACP server's session storage is gone.  Synthesize
+        # the history as the opening content block so the agent has context.
+        resume_result = await self._synthesize_acp_resume_initial_message(
+            conversation_id, initial_message
+        )
+        if resume_result is not None:
+            initial_message = resume_result
 
         # --- build the ACP agent ------------------------------------------
         acp_settings = user.agent_settings  # already verified to be ACPAgentSettings
