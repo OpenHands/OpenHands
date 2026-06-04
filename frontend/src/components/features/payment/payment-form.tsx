@@ -7,7 +7,11 @@ import MoneyIcon from "#/icons/money.svg?react";
 import { SettingsInput } from "../settings/settings-input";
 import { BrandButton } from "../settings/brand-button";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
-import { amountIsValid } from "#/utils/amount-is-valid";
+import {
+  amountIsValid,
+  MAXIMUM_AMOUNT,
+  MINIMUM_AMOUNT,
+} from "#/utils/amount-is-valid";
 import { I18nKey } from "#/i18n/declaration";
 import { PoweredByStripeTag } from "./powered-by-stripe-tag";
 
@@ -24,7 +28,7 @@ export function PaymentForm({ isDisabled }: { isDisabled?: boolean }) {
     if (amount?.trim()) {
       if (!amountIsValid(amount)) return;
 
-      const intValue = parseInt(amount, 10);
+      const intValue = Number(amount.trim());
       addBalance({ amount: intValue });
     }
 
@@ -66,8 +70,8 @@ export function PaymentForm({ isDisabled }: { isDisabled?: boolean }) {
           label={t(I18nKey.PAYMENT$ADD_FUNDS)}
           placeholder={t(I18nKey.PAYMENT$SPECIFY_AMOUNT_USD)}
           className="w-[680px]"
-          min={10}
-          max={25000}
+          min={MINIMUM_AMOUNT}
+          max={MAXIMUM_AMOUNT}
           step={1}
           isDisabled={isDisabled}
         />

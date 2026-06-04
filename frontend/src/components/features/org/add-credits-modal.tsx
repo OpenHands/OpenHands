@@ -5,7 +5,12 @@ import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalButtonGroup } from "#/components/shared/modals/modal-button-group";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { I18nKey } from "#/i18n/declaration";
-import { amountIsValid } from "#/utils/amount-is-valid";
+import {
+  amountIsValid,
+  getAmountValidationError,
+  MAXIMUM_AMOUNT,
+  MINIMUM_AMOUNT,
+} from "#/utils/amount-is-valid";
 
 interface AddCreditsModalProps {
   onClose: () => void;
@@ -19,25 +24,23 @@ export function AddCreditsModal({ onClose }: AddCreditsModalProps) {
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
   const getErrorMessage = (value: string): string | null => {
-    if (!value.trim()) return null;
+    const error = getAmountValidationError(value);
 
-    const numValue = parseInt(value, 10);
-    if (Number.isNaN(numValue)) {
-      return t(I18nKey.PAYMENT$ERROR_INVALID_NUMBER);
+    switch (error) {
+      case null:
+      case "empty":
+        return null;
+      case "invalid":
+        return t(I18nKey.PAYMENT$ERROR_INVALID_NUMBER);
+      case "negative":
+        return t(I18nKey.PAYMENT$ERROR_NEGATIVE_AMOUNT);
+      case "not_integer":
+        return t(I18nKey.PAYMENT$ERROR_MUST_BE_WHOLE_NUMBER);
+      case "below_minimum":
+        return t(I18nKey.PAYMENT$ERROR_MINIMUM_AMOUNT);
+      case "above_maximum":
+        return t(I18nKey.PAYMENT$ERROR_MAXIMUM_AMOUNT);
     }
-    if (numValue < 0) {
-      return t(I18nKey.PAYMENT$ERROR_NEGATIVE_AMOUNT);
-    }
-    if (numValue < 10) {
-      return t(I18nKey.PAYMENT$ERROR_MINIMUM_AMOUNT);
-    }
-    if (numValue > 25000) {
-      return t(I18nKey.PAYMENT$ERROR_MAXIMUM_AMOUNT);
-    }
-    if (numValue !== parseFloat(value)) {
-      return t(I18nKey.PAYMENT$ERROR_MUST_BE_WHOLE_NUMBER);
-    }
-    return null;
   };
 
   const formAction = (formData: FormData) => {
@@ -78,8 +81,8 @@ export function AddCreditsModal({ onClose }: AddCreditsModalProps) {
             name="amount"
             label={t(I18nKey.PAYMENT$SPECIFY_AMOUNT_USD)}
             type="number"
-            min={10}
-            max={25000}
+            min={MINIMUM_AMOUNT}
+            max={MAXIMUM_AMOUNT}
             step={1}
             value={inputValue}
             onChange={(value) => handleAmountInputChange(value)}
