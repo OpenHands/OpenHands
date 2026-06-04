@@ -25,9 +25,14 @@ jobs:
   apply-migrations:
     name: Apply migrations on test DB (pg8000)
     runs-on: ubuntu-24.04
+    # Safety timeout: large schemas with many indexes/tables can take 15+ minutes
+    # to migrate. Adjust if schema growth outpaces this estimate.
+    timeout-minutes: 30
     services:
       postgres:
-        image: postgres:16   # match the Cloud SQL major version in prod
+        # Pin to the Cloud SQL major version. Check the deploy repo for the
+        # current version (e.g. cloudsql-postgres image tag) and update here.
+        image: postgres:16
         env:
           POSTGRES_USER: openhands
           POSTGRES_PASSWORD: openhands
