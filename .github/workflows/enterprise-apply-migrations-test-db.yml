@@ -63,6 +63,9 @@ jobs:
       - name: Install Python dependencies using Poetry
         working-directory: ./enterprise
         run: poetry install --with dev,test
+      - name: Show migration history
+        working-directory: ./enterprise
+        run: poetry run alembic history --verbose
       - name: Apply full migration chain (upgrade head)
         working-directory: ./enterprise
         run: |
@@ -74,9 +77,15 @@ jobs:
           poetry run alembic current
       - name: Round-trip the newest migration (downgrade -1, upgrade head)
         working-directory: ./enterprise
+        # Fail fast if downgrade fails. The database is throwaway, and the
+        # final reporting step still prints the current revision for debugging.
         run: |
           echo "::group::downgrade -1 then re-upgrade"
           poetry run alembic downgrade -1
           poetry run alembic upgrade head
           echo "::endgroup::"
           poetry run alembic current
+      - name: Report migration state
+        if: always()
+        working-directory: ./enterprise
+        run: poetry run alembic current || true
