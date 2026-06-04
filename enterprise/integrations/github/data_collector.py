@@ -658,6 +658,8 @@ class GitHubDataCollector:
         # Extract timestamps. Example: "closed_at":"2025-06-19T21:19:36Z".
         # Both are normalized to naive UTC so they can be bound to the naive
         # TIMESTAMP columns on openhands_prs (see _github_ts_to_naive_utc).
+        # Previously created_at was passed as a raw string; it is now
+        # consistently a naive-UTC datetime like closed_at.
         closed_at = _github_ts_to_naive_utc(pr_data.get('closed_at'))
         created_at = _github_ts_to_naive_utc(pr_data.get('created_at'))
 
