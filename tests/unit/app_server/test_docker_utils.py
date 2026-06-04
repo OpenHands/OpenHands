@@ -295,3 +295,45 @@ class TestReplaceLocalhostHostnameForDocker:
         # Only hostname should be different
         assert original_parsed.hostname == 'localhost'
         assert result_parsed.hostname == 'host.docker.internal'
+
+    @patch(
+        'openhands.app_server.utils.docker_utils.is_running_in_docker',
+        return_value=True,
+    )
+    def test_userinfo_containing_localhost_is_not_replaced(self, mock_is_docker):
+        """Credentials that contain the literal string 'localhost' must not be
+        rewritten; only the host component should change.
+
+        Replacing the first occurrence of 'localhost' in the raw netloc corrupts
+        the userinfo (e.g. a password equal to 'localhost') and leaves the actual
+        host untouched.
+        """
+        from urllib.parse import urlparse
+
+        result = replace_localhost_hostname_for_docker(
+            'http://user:localhost@localhost:8080/path'
+        )
+        assert result == 'http://user:localhost@host.docker.internal:8080/path'
+
+        parsed = urlparse(result)
+        assert parsed.username == 'user'
+        assert parsed.password == 'localhost'
+        assert parsed.hostname == 'host.docker.internal'
+        assert parsed.port == 8080
+
+        # A username equal to 'localhost' must also be preserved.
+        result = replace_localhost_hostname_for_docker(
+            'http://localhost:pass@localhost:8080/path'
+        )
+        assert result == 'http://localhost:pass@host.docker.internal:8080/path'
+
+    @patch(
+        'openhands.app_server.utils.docker_utils.is_running_in_docker',
+        return_value=True,
+    )
+    def test_uppercase_localhost_host_is_replaced(self, mock_is_docker):
+        """An uppercase 'LOCALHOST' host matches parsed.hostname (which urlparse
+        lowercases) and so must actually be replaced, not silently left as-is.
+        """
+        result = replace_localhost_hostname_for_docker('http://LOCALHOST:8080/path')
+        assert result == 'http://host.docker.internal:8080/path'

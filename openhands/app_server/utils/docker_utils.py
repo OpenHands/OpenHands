@@ -26,7 +26,18 @@ def replace_localhost_hostname_for_docker(
         return url
     parsed = urlparse(url)
     if parsed.hostname == 'localhost':
-        # Replace only the hostname part, preserving port and everything else
-        netloc = parsed.netloc.replace('localhost', replacement, 1)
+        # Rebuild the netloc from its components so that only the host is
+        # changed. A naive str.replace on the raw netloc would corrupt
+        # userinfo that happens to contain 'localhost' (e.g. a password equal
+        # to 'localhost') and would miss a differently-cased host such as
+        # 'LOCALHOST', which urlparse normalizes when exposing parsed.hostname.
+        netloc = replacement
+        if parsed.port is not None:
+            netloc = f'{netloc}:{parsed.port}'
+        if parsed.username is not None:
+            userinfo = parsed.username
+            if parsed.password is not None:
+                userinfo = f'{userinfo}:{parsed.password}'
+            netloc = f'{userinfo}@{netloc}'
         return urlunparse(parsed._replace(netloc=netloc))
     return url
