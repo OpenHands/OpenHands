@@ -1,0 +1,73 @@
+name: Enterprise Apply Migrations on Test DB
+
+# Applies the full enterprise migration chain against a throwaway test Postgres, using the
+# SAME driver as production (pg8000) and the real migrations/env.py harness
+# (advisory lock + transaction wrapping). This catches migration bugs before
+# merge/deploy instead of in the staging migrate-db init container — e.g. a
+# CREATE INDEX CONCURRENTLY in an autocommit_block, which crashes under env.py.
+
+on:
+  pull_request:
+    paths:
+      - 'enterprise/migrations/**'
+      - 'enterprise/alembic.ini'
+      - '.github/workflows/enterprise-apply-migrations-test-db.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  apply-migrations:
+    name: Apply migrations on test DB (pg8000)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16   # match the Cloud SQL major version in prod
+        env:
+          POSTGRES_USER: openhands
+          POSTGRES_PASSWORD: openhands
+          POSTGRES_DB: openhands
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U openhands"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_USER: openhands
+      DB_PASS: openhands
+      DB_NAME: openhands
+      DB_DRIVER: pg8000   # production connects via the Cloud SQL connector on pg8000
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install poetry via pipx
+        run: pipx install poetry
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "poetry"
+      - name: Install Python dependencies using Poetry
+        working-directory: ./enterprise
+        run: poetry install --with dev,test
+      - name: Apply full migration chain (upgrade head)
+        working-directory: ./enterprise
+        run: |
+          echo "::group::alembic upgrade head (from empty DB)"
+          START=$(date +%s)
+          poetry run alembic upgrade head
+          echo "upgrade head took $(( $(date +%s) - START ))s"
+          echo "::endgroup::"
+          poetry run alembic current
+      - name: Round-trip the newest migration (downgrade -1, upgrade head)
+        working-directory: ./enterprise
+        run: |
+          echo "::group::downgrade -1 then re-upgrade"
+          poetry run alembic downgrade -1
+          poetry run alembic upgrade head
+          echo "::endgroup::"
+          poetry run alembic current
