@@ -604,9 +604,10 @@ class SlackManager(Manager[SlackViewInterface]):
             return False
 
         inferred_repo = inferred_repos[0]
+        user_id = await slack_view.saas_user_auth.get_user_id()
         logger.info(
             f'[Slack] Verifying inferred repo "{inferred_repo}" '
-            f'for user {user.slack_display_name} (id={slack_view.saas_user_auth.get_user_id()})'
+            f'for user {user.slack_display_name} (id={user_id})'
         )
 
         try:
