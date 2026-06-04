@@ -19,7 +19,7 @@ from openhands.app_server.config import (
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk import Event
 
 # Lazy import of _get_agent_server_context to avoid circular import
