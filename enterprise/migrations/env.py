@@ -24,6 +24,11 @@ DB_PASS = os.getenv('DB_PASS', 'postgres')
 DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_PORT = os.getenv('DB_PORT', '5432')
 DB_NAME = os.getenv('DB_NAME', 'openhands')
+# Driver for the non-Cloud-SQL (DB_HOST) path used by feature/local/CI. Production
+# connects through the Cloud SQL connector on pg8000, so we default to pg8000 here
+# too: this keeps every environment on the same driver and lets pg8000-specific
+# migration failures surface before deploy. Set DB_DRIVER='' to use psycopg2.
+DB_DRIVER = os.getenv('DB_DRIVER', 'pg8000')
 
 GCP_DB_INSTANCE = os.getenv('GCP_DB_INSTANCE')
 GCP_PROJECT = os.getenv('GCP_PROJECT')
@@ -56,7 +61,8 @@ def get_engine(database_name=DB_NAME):
             pool_pre_ping=True,
         )
     else:
-        url = f'postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{database_name}'
+        scheme = f'postgresql+{DB_DRIVER}' if DB_DRIVER else 'postgresql'
+        url = f'{scheme}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{database_name}'
         return create_engine(
             url,
             pool_size=POOL_SIZE,
