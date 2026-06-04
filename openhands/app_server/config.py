@@ -268,6 +268,12 @@ def config_from_env() -> AppServerConfig:
     from openhands.app_server.sandbox.docker_sandbox_spec_service import (
         DockerSandboxSpecServiceInjector,
     )
+    from openhands.app_server.sandbox.podman_sandbox_service import (
+        PodmanSandboxServiceInjector,
+    )
+    from openhands.app_server.sandbox.podman_sandbox_spec_service import (
+        PodmanSandboxSpecServiceInjector,
+    )
     from openhands.app_server.sandbox.process_sandbox_service import (
         ProcessSandboxServiceInjector,
     )
@@ -385,13 +391,19 @@ def config_from_env() -> AppServerConfig:
                         )
                 if mounts:
                     docker_sandbox_kwargs['mounts'] = mounts
-            config.sandbox = DockerSandboxServiceInjector(**docker_sandbox_kwargs)
+
+            if os.getenv('RUNTIME') == 'podman':
+                config.sandbox = PodmanSandboxServiceInjector(**docker_sandbox_kwargs)
+            else:
+                config.sandbox = DockerSandboxServiceInjector(**docker_sandbox_kwargs)
 
     if config.sandbox_spec is None:
         if os.getenv('RUNTIME') == 'remote':
             config.sandbox_spec = RemoteSandboxSpecServiceInjector()
         elif os.getenv('RUNTIME') in ('local', 'process'):
             config.sandbox_spec = ProcessSandboxSpecServiceInjector()
+        elif os.getenv('RUNTIME') == 'podman':
+            config.sandbox_spec = PodmanSandboxSpecServiceInjector()
         else:
             config.sandbox_spec = DockerSandboxSpecServiceInjector()
 

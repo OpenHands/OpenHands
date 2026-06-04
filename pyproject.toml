@@ -68,6 +68,7 @@ dependencies = [
   "pg8000>=1.31.5",
   "pillow>=12.1.1",
   "playwright>=1.55",
+  "podman>=5.8.0",
   "poetry>=2.3.4,<2.4.0",
   "prompt-toolkit>=3.0.50",
   "protobuf>=5.29.6,<6",

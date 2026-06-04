@@ -6298,6 +6298,27 @@ dev = ["pre-commit", "tox"]
 testing = ["coverage", "pytest", "pytest-benchmark"]
 
 [[package]]
+name = "podman"
+version = "5.8.0"
+description = "Bindings for Podman RESTful API"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "podman-5.8.0-py3-none-any.whl", hash = "sha256:0c0383386fc926e15b58890a727d8bb53b0c42730a5c610db391bfd20310ceeb"},
+    {file = "podman-5.8.0.tar.gz", hash = "sha256:bc39b77f4a6a0598bbe860d199e0d54ef2ec551131ae7eab66f0557c43331fb3"},
+]
+
+[package.dependencies]
+requests = ">=2.24"
+urllib3 = "*"
+
+[package.extras]
+docs = ["sphinx"]
+progress-bar = ["rich (>=12.5.1)"]
+test = ["coverage", "fixtures", "pytest", "requests-mock", "tox"]
+
+[[package]]
 name = "poetry"
 version = "2.3.4"
 description = "Python dependency management and packaging made easy."
@@ -13804,4 +13825,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "18050ea651088c9ba79dc2bcaa853c2068d9fe2d42525619f1d550c15ef36923"
+content-hash = "4aa60984b62c106e9da538ba0b7d97bfc4ad820ba0f319c38c68ed604a7305b3"
