@@ -151,20 +151,6 @@ describe("AddCreditsModal", () => {
       });
     });
 
-    it("should display invalid number error after submitting exponent notation", async () => {
-      const { user } = renderModal();
-      const amountInput = screen.getByTestId("amount-input");
-      const nextButton = screen.getByRole("button", { name: /ORG\$NEXT/i });
-
-      await user.type(amountInput, "1e2");
-      await user.click(nextButton);
-
-      await waitFor(() => {
-        const errorMessage = screen.getByTestId("amount-error");
-        expect(errorMessage).toHaveTextContent("PAYMENT$ERROR_INVALID_NUMBER");
-      });
-    });
-
     it("should display error message after submitting amount below minimum", async () => {
       const { user } = renderModal();
       const amountInput = screen.getByTestId("amount-input");

@@ -22,6 +22,7 @@ export const getAmountValidationError = (
   const value = Number(trimmedAmount);
   if (!Number.isFinite(value)) return "invalid";
   if (value < 0) return "negative";
+  if (trimmedAmount.includes(".")) return "not_integer";
   if (!Number.isInteger(value)) return "not_integer";
   if (value < MINIMUM_AMOUNT) return "below_minimum";
   if (value > MAXIMUM_AMOUNT) return "above_maximum";
@@ -29,6 +30,5 @@ export const getAmountValidationError = (
   return null;
 };
 
-export const amountIsValid = (amount: string) => {
-  return getAmountValidationError(amount) === null;
-};
+export const amountIsValid = (amount: string) =>
+  getAmountValidationError(amount) === null;

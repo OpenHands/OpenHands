@@ -40,6 +40,8 @@ export function AddCreditsModal({ onClose }: AddCreditsModalProps) {
         return t(I18nKey.PAYMENT$ERROR_MINIMUM_AMOUNT);
       case "above_maximum":
         return t(I18nKey.PAYMENT$ERROR_MAXIMUM_AMOUNT);
+      default:
+        return null;
     }
   };
 
