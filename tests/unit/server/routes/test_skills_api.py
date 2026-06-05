@@ -117,8 +117,8 @@ async def test_skills_search_returns_skills(test_client, tmp_path):
     with (
         patch('openhands.app_server.user.skills_router.GLOBAL_SKILLS_DIR', global_dir),
         patch(
-            'openhands.app_server.user.skills_router.USER_SKILLS_DIR',
-            tmp_path / 'nonexistent',
+            'openhands.app_server.user.skills_router.USER_SKILLS_DIRS',
+            (tmp_path / 'nonexistent',),
         ),
     ):
         response = test_client.get('/api/v1/skills/search')
@@ -157,8 +157,8 @@ async def test_skills_search_handles_missing_dirs(test_client, tmp_path):
             tmp_path / 'no_such_dir',
         ),
         patch(
-            'openhands.app_server.user.skills_router.USER_SKILLS_DIR',
-            tmp_path / 'also_missing',
+            'openhands.app_server.user.skills_router.USER_SKILLS_DIRS',
+            (tmp_path / 'also_missing',),
         ),
     ):
         response = test_client.get('/api/v1/skills/search')
@@ -181,7 +181,7 @@ async def test_skills_search_sorted_by_source_then_name(test_client, tmp_path):
 
     with (
         patch('openhands.app_server.user.skills_router.GLOBAL_SKILLS_DIR', global_dir),
-        patch('openhands.app_server.user.skills_router.USER_SKILLS_DIR', user_dir),
+        patch('openhands.app_server.user.skills_router.USER_SKILLS_DIRS', (user_dir,)),
     ):
         response = test_client.get('/api/v1/skills/search')
 
@@ -210,8 +210,8 @@ async def test_skills_search_pagination(test_client, tmp_path):
     with (
         patch('openhands.app_server.user.skills_router.GLOBAL_SKILLS_DIR', global_dir),
         patch(
-            'openhands.app_server.user.skills_router.USER_SKILLS_DIR',
-            tmp_path / 'nonexistent',
+            'openhands.app_server.user.skills_router.USER_SKILLS_DIRS',
+            (tmp_path / 'nonexistent',),
         ),
     ):
         # First page with limit=2
@@ -233,6 +233,38 @@ async def test_skills_search_pagination(test_client, tmp_path):
         assert len(data['items']) == 1
         assert data['items'][0]['name'] == 'skill_c'
         assert data['next_page_id'] is None
+
+
+@pytest.mark.asyncio
+async def test_skills_search_reads_all_user_skill_dirs(test_client, tmp_path):
+    global_dir = tmp_path / 'global'
+    user_dirs = (
+        tmp_path / '.agents' / 'skills',
+        tmp_path / '.openhands' / 'skills',
+        tmp_path / '.openhands' / 'skills' / 'installed',
+        tmp_path / '.openhands' / 'microagents',
+    )
+
+    _write_skill_file(user_dirs[0], 'agent_skill')
+    _write_skill_file(user_dirs[1], 'openhands_skill')
+    _write_skill_file(user_dirs[2], 'installed_skill')
+    _write_skill_file(user_dirs[3], 'microagent_skill')
+
+    with (
+        patch('openhands.app_server.user.skills_router.GLOBAL_SKILLS_DIR', global_dir),
+        patch('openhands.app_server.user.skills_router.USER_SKILLS_DIRS', user_dirs),
+    ):
+        response = test_client.get('/api/v1/skills/search')
+
+    assert response.status_code == 200
+    skills = response.json()['items']
+    assert {skill['name'] for skill in skills} == {
+        'agent_skill',
+        'openhands_skill',
+        'installed_skill',
+        'microagent_skill',
+    }
+    assert {skill['source'] for skill in skills} == {'user'}
 
 
 def test_global_skills_dir_points_to_repo_root():

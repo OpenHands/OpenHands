@@ -13,7 +13,12 @@ router = APIRouter(prefix='/skills', tags=['Skills'], dependencies=get_dependenc
 
 # skills/ is at the repo root, two levels above the openhands package __file__
 GLOBAL_SKILLS_DIR = Path(openhands.__file__).parent.parent / 'skills'
-USER_SKILLS_DIR = Path.home() / '.openhands' / 'microagents'
+USER_SKILLS_DIRS = (
+    Path.home() / '.agents' / 'skills',
+    Path.home() / '.openhands' / 'skills',
+    Path.home() / '.openhands' / 'skills' / 'installed',
+    Path.home() / '.openhands' / 'microagents',
+)
 
 
 class SkillInfo(BaseModel):
@@ -131,10 +136,11 @@ async def search_skills(
         logger.warning(f'Failed to load global skills: {e}')
 
     # Load user-level skills
-    try:
-        skills.extend(_load_skills_from_dir(USER_SKILLS_DIR, 'user'))
-    except Exception as e:
-        logger.warning(f'Failed to load user skills: {e}')
+    for user_skills_dir in USER_SKILLS_DIRS:
+        try:
+            skills.extend(_load_skills_from_dir(user_skills_dir, 'user'))
+        except Exception as e:
+            logger.warning(f'Failed to load user skills from {user_skills_dir}: {e}')
 
     # Sort by source (global first), then by name
     skills.sort(key=lambda s: (s.source, s.name))
