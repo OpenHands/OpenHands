@@ -70,7 +70,7 @@ from openhands.app_server.integrations.provider import (
 )
 from openhands.app_server.integrations.service_types import ProviderType, TokenResponse
 from openhands.app_server.user_auth import get_access_token
-from openhands.app_server.user_auth.user_auth import get_user_auth
+from openhands.app_server.user_auth.user_auth import AuthType, get_user_auth
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 with warnings.catch_warnings():
@@ -1075,10 +1075,25 @@ async def logout(request: Request):
         samesite=get_cookie_samesite(),
     )
 
-    # Try to properly logout from Keycloak, but don't fail if it doesn't work
+    # Try to properly logout from Keycloak, but don't fail if it doesn't work.
+    #
+    # IMPORTANT: only terminate the Keycloak session when the resolved
+    # auth is the *cookie* (browser session). ``get_user_auth`` resolves
+    # bearer tokens before cookies, so a request that carries both an
+    # ``Authorization: Bearer <api-key>`` header *and* a
+    # ``keycloak_auth`` cookie would otherwise have its API-key-bound
+    # *offline_token* terminated when the user clicked "logout" in the
+    # browser. The browser intent is to drop the cookie session, not to
+    # revoke a long-lived API key. The cookie itself is always deleted
+    # above; we just must not nuke an offline session that belongs to a
+    # different auth surface.
     try:
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
-        if user_auth and user_auth.refresh_token:
+        if (
+            user_auth
+            and user_auth.refresh_token
+            and user_auth.auth_type == AuthType.COOKIE
+        ):
             refresh_token = user_auth.refresh_token.get_secret_value()
             await token_manager.logout(refresh_token)
     except Exception as e:
