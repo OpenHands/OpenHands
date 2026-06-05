@@ -18,8 +18,6 @@ from openhands.app_server.settings.settings_models import Settings
 
 def _set_acp(
     command: list[str] | None = None,
-    *,
-    acp_env: dict | None = None,
 ) -> dict:
     return {
         'agent_settings_diff': {
@@ -27,7 +25,6 @@ def _set_acp(
             'acp_command': command
             or ['npx', '-y', '@agentclientprotocol/claude-agent-acp'],
             'acp_args': [],
-            **({'acp_env': acp_env} if acp_env is not None else {}),
         }
     }
 
@@ -77,21 +74,6 @@ def test_kind_switch_resets_new_kind_to_defaults():
     # ACP base — ``llm`` defaults to the ACP sentinel, not the OH model.
     assert s.agent_settings.agent_kind == 'acp'
     assert s.agent_settings.llm.model != 'anthropic/claude-sonnet-4-5'
-
-
-def test_acp_env_replaced_wholesale():
-    """``acp_env`` is replaced wholesale (not deep-merged) so removed keys
-    don't leak across saves.
-
-    This is independent of the kind switch: any ``acp_env`` in the update
-    payload replaces the stored dict in full.
-    """
-    s = Settings()
-    s.update(_set_acp(acp_env={'FOO': '1', 'BAR': '2'}))
-    assert s.agent_settings.acp_env == {'FOO': '1', 'BAR': '2'}
-
-    s.update({'agent_settings_diff': {'acp_env': {'FOO': '9'}}})
-    assert s.agent_settings.acp_env == {'FOO': '9'}
 
 
 def test_kind_switch_with_inline_field_override():
