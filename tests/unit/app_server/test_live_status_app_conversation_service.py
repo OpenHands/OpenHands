@@ -3338,25 +3338,14 @@ class TestBuildAcpStartConversationRequestSecrets:
 
     @pytest.mark.asyncio
     async def test_provider_env_in_agent_context_not_acp_env(self, service, tmp_path):
-        """LLM credentials land in agent_context.secrets, never acp_env.
-
-        The provider cred (from ``llm.api_key``) overrides a same-named
-        Secrets-panel entry, preserving the prior ``provider env > panel``
-        priority — now expressed within the single ``agent_context.secrets``
-        channel rather than across ``acp_env`` vs ``agent_context``.
-        """
+        """Provider cred lands in agent_context.secrets, not acp_env."""
         user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
-        panel_secret = StaticSecret(value=SecretStr('sk-from-secrets-panel'))
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'ANTHROPIC_API_KEY': panel_secret}
-        )
+        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
 
         request = await self._call_build(service, user, tmp_path)
 
-        # Provider creds no longer ride acp_env.
         assert request.agent.acp_env.get('ANTHROPIC_API_KEY') is None
         assert request.agent.agent_context is not None
-        # Provider env wins over the same-named panel secret.
         assert (
             request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY').get_value()
             == 'sk-ui-key'
@@ -3374,14 +3363,7 @@ class TestBuildAcpStartConversationRequestSecrets:
 
     @pytest.mark.asyncio
     async def test_acp_env_overrides_provider_env(self, service, tmp_path):
-        """Explicit acp_env entries take priority over the provider cred.
-
-        When a user sets ANTHROPIC_API_KEY explicitly in acp_env, it must win
-        over the key the SDK derives from the UI-saved LLM credentials. The
-        provider cred now rides ``agent_context.secrets`` (not ``acp_env``);
-        the SDK's launch-time precedence is ``acp_env > agent_context.secrets``,
-        so the explicit ``acp_env`` entry still wins.
-        """
+        """Explicit acp_env entry beats the provider cred (acp_env > agent_context.secrets at launch)."""
         user = self._make_acp_user(
             acp_server='claude-code',
             acp_env={'ANTHROPIC_API_KEY': 'sk-explicit-override'},
@@ -3391,11 +3373,8 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        # The user's explicit acp_env entry is preserved verbatim; the provider
-        # cred is NOT folded into acp_env.
         assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-explicit-override'
-        # The provider cred lands in agent_context.secrets; the SDK gap-fill
-        # then defers to the higher-precedence acp_env entry at launch.
+        # Provider cred still lands in agent_context.secrets; acp_env wins at launch.
         assert request.agent.agent_context is not None
         assert (
             request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY').get_value()
@@ -3404,15 +3383,7 @@ class TestBuildAcpStartConversationRequestSecrets:
 
     @pytest.mark.asyncio
     async def test_secrets_forwarded_via_agent_context(self, service, tmp_path):
-        """Panel secrets flow through ``agent_context.secrets`` only.
-
-        The SDK's ``ACPAgent._start_acp_server`` gap-fills ``agent_context.secrets``
-        into the subprocess env at launch time. Pre-resolving here would
-        eagerly hit external auth services (e.g. ``LookupSecret``) on every
-        conversation start from the wrong process, so we forward the
-        ``SecretSource`` objects untouched and let the SDK resolve them
-        at the right boundary.
-        """
+        """Panel secrets flow through agent_context.secrets; not pre-resolved into acp_env."""
         gh_secret = StaticSecret(value=SecretStr('ghp_test123'))
         user = self._make_acp_user()
         service._setup_secrets_for_git_providers = AsyncMock(
@@ -3421,20 +3392,18 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        # NOT pre-resolved into acp_env — the SDK does that at subprocess start.
         assert request.agent.acp_env.get('GH_TOKEN') is None
-        # Surfaced as a SecretSource in agent_context.
         assert request.agent.agent_context is not None
         assert request.agent.agent_context.secrets.get('GH_TOKEN') is gh_secret
 
     @pytest.mark.asyncio
-    async def test_panel_secret_does_not_override_provider_env(self, service, tmp_path):
-        """Provider env (from ``llm.api_key``) keeps priority over panel secrets.
+    async def test_panel_secret_overrides_provider_env_when_conflicting(
+        self, service, tmp_path
+    ):
+        """Panel secret beats provider-derived cred when both name the same key.
 
-        If a user has both a UI-saved Claude Code LLM key AND a same-named
-        ``ANTHROPIC_API_KEY`` in the Secrets panel, the LLM-saved one wins.
-        Both now ride ``agent_context.secrets`` (not ``acp_env``); the provider
-        cred is folded in last so it overrides the panel entry of the same name.
+        SDK merge order: {**provider_secrets, **existing} → existing (panel) wins.
+        Priority is now panel > provider, reversed from the old workaround.
         """
         user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
         panel_secret = StaticSecret(value=SecretStr('sk-from-secrets-panel'))
@@ -3444,13 +3413,11 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        # Provider creds no longer ride acp_env.
         assert request.agent.acp_env.get('ANTHROPIC_API_KEY') is None
-        # The provider cred overrides the same-named panel secret.
         assert request.agent.agent_context is not None
         assert (
             request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY').get_value()
-            == 'sk-ui-key'
+            == 'sk-from-secrets-panel'
         )
 
     @pytest.mark.asyncio
