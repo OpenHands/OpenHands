@@ -17,12 +17,12 @@ from openhands.app_server.config import (
     depends_user_context,
     resolve_provider_llm_base_url,
 )
+from openhands.app_server.integrations.provider import ProviderHandler
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.sandbox.session_auth import validate_session_key_ownership
 from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.integrations.provider import ProviderHandler
-from openhands.integrations.service_types import ProviderType
 
 _logger = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ async def get_current_user_git_organizations(
     provider_tokens = await user_context.get_provider_tokens()
     if not provider_tokens:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,  # 403 not 401 to avoid frontend logout
             detail='Git provider token required.',
         )
 
@@ -133,6 +133,8 @@ async def get_current_user_git_organizations(
         orgs = await client.get_gitlab_groups()
     elif provider == ProviderType.BITBUCKET:
         orgs = await client.get_bitbucket_workspaces()
+    elif provider == ProviderType.BITBUCKET_DATA_CENTER:
+        orgs = await client.get_bitbucket_dc_projects()
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

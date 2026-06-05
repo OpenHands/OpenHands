@@ -8,7 +8,7 @@ import pytest
 from freezegun import freeze_time
 from server.logger import format_stack, setup_json_logger
 
-from openhands.core.logger import openhands_logger
+from openhands.app_server.utils.logger import openhands_logger
 
 FROZEN_TIMESTAMP = '2024-01-15T10:30:00+00:00'
 # datetime.now().isoformat() doesn't include timezone info

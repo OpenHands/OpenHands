@@ -27,12 +27,6 @@ describe("useIsOnIntermediatePage", () => {
       expect(result.current).toBe(true);
     });
 
-    it("should return true when on /onboarding page", () => {
-      useLocationMock.mockReturnValue({ pathname: "/onboarding" });
-      const { result } = renderHook(() => useIsOnIntermediatePage());
-      expect(result.current).toBe(true);
-    });
-
     it("should return true when on /information-request page", () => {
       useLocationMock.mockReturnValue({ pathname: "/information-request" });
       const { result } = renderHook(() => useIsOnIntermediatePage());
@@ -49,6 +43,12 @@ describe("useIsOnIntermediatePage", () => {
 
     it("should return false when on /settings page", () => {
       useLocationMock.mockReturnValue({ pathname: "/settings" });
+      const { result } = renderHook(() => useIsOnIntermediatePage());
+      expect(result.current).toBe(false);
+    });
+
+    it("should return false when on /onboarding page so settings/auth queries can fire", () => {
+      useLocationMock.mockReturnValue({ pathname: "/onboarding" });
       const { result } = renderHook(() => useIsOnIntermediatePage());
       expect(result.current).toBe(false);
     });

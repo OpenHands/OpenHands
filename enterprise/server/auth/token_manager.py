@@ -1,14 +1,11 @@
 import asyncio
 import base64
-import hashlib
 import json
 import time
-from base64 import b64encode
 from urllib.parse import parse_qs
 
 import httpx
 import jwt
-from cryptography.fernet import Fernet
 from jwt.exceptions import DecodeError
 from keycloak.exceptions import (
     KeycloakAuthenticationError,
@@ -19,6 +16,11 @@ from keycloak.exceptions import (
 from pydantic import BaseModel
 from server.auth.auth_error import ExpiredError
 from server.auth.constants import (
+    AZURE_DEVOPS_CLIENT_ID,
+    AZURE_DEVOPS_CLIENT_SECRET,
+    AZURE_DEVOPS_SCOPE,
+    AZURE_DEVOPS_TENANT_ID,
+    AZURE_DEVOPS_TOKEN_URL,
     BITBUCKET_APP_CLIENT_ID,
     BITBUCKET_APP_CLIENT_SECRET,
     BITBUCKET_DATA_CENTER_CLIENT_ID,
@@ -30,6 +32,7 @@ from server.auth.constants import (
     GITHUB_APP_CLIENT_SECRET,
     GITLAB_APP_CLIENT_ID,
     GITLAB_APP_CLIENT_SECRET,
+    GITLAB_TOKEN_URL,
     KEYCLOAK_REALM_NAME,
     KEYCLOAK_SERVER_URL,
     KEYCLOAK_SERVER_URL_EXT,
@@ -40,7 +43,6 @@ from server.auth.email_validation import (
     matches_base_email,
 )
 from server.auth.keycloak_manager import get_keycloak_admin, get_keycloak_openid
-from server.config import get_config
 from server.logger import logger
 from sqlalchemy import String as SQLString
 from sqlalchemy import select, type_coerce
@@ -50,9 +52,9 @@ from storage.github_app_installation import GithubAppInstallation
 from storage.offline_token_store import OfflineTokenStore
 from tenacity import RetryCallState, retry, retry_if_exception_type, stop_after_attempt
 
-from openhands.integrations.service_types import ProviderType
-from openhands.server.types import SessionExpiredError
-from openhands.utils.http_session import httpx_verify_option
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.types import SessionExpiredError
+from openhands.app_server.utils.http_session import httpx_verify_option
 
 
 class KeycloakUserInfo(BaseModel):
@@ -87,47 +89,25 @@ def _before_sleep_callback(retry_state: RetryCallState) -> None:
     logger.info(f'Retry attempt {retry_state.attempt_number} for Keycloak operation')
 
 
-def create_encryption_utility(secret_key: bytes):
-    """Creates an encryption utility using a 32-byte secret key.
-
-    Args:
-        secret_key (bytes): A 32-byte secret key
-    Returns:
-        tuple: (encrypt_string, decrypt_string) functions.
-    """
-    # Convert the 32-byte key into a Fernet key (32 bytes -> urlsafe base64)
-    fernet_key = b64encode(hashlib.sha256(secret_key).digest())
-    f = Fernet(fernet_key)
-
-    def encrypt_text(text: str) -> str:
-        return f.encrypt(text.encode()).decode()
-
-    def encrypt_payload(payload: dict) -> str:
-        """Encrypts a string and returns the result as a base64 string."""
-        text = json.dumps(payload)
-        return encrypt_text(text)
-
-    def decrypt_text(encrypted_text: str) -> str:
-        return f.decrypt(encrypted_text.encode()).decode()
-
-    def decrypt_payload(encrypted_text: str) -> dict:
-        """Decrypts a base64 encoded encrypted string."""
-        text = decrypt_text(encrypted_text)
-        return json.loads(text)
-
-    return encrypt_payload, decrypt_payload, encrypt_text, decrypt_text
-
-
 class TokenManager:
     def __init__(self, external: bool = False):
         self.external = external
-        jwt_secret = get_config().jwt_secret.get_secret_value()
-        (
-            self.encrypt_payload,
-            self.decrypt_payload,
-            self.encrypt_text,
-            self.decrypt_text,
-        ) = create_encryption_utility(jwt_secret.encode())
+        from storage.encrypt_utils import get_jwt_service
+
+        self._jwt_svc = get_jwt_service()
+
+    def encrypt_text(self, text: str) -> str:
+        encrypted = self._jwt_svc.encrypt_value(text)
+        return encrypted
+
+    def decrypt_text(self, encrypted_text: str) -> str:
+        return self._jwt_svc.decrypt_value(encrypted_text)
+
+    def encrypt_payload(self, payload: dict) -> str:
+        return self.encrypt_text(json.dumps(payload))
+
+    def decrypt_payload(self, encrypted_text: str) -> dict:
+        return json.loads(self.decrypt_text(encrypted_text))
 
     async def get_keycloak_tokens(
         self, code: str, redirect_uri: str
@@ -315,7 +295,7 @@ class TokenManager:
                 raise ValueError(
                     f'No tokens for user: {username}, identity provider: {idp}'
                 )
-            access_token = self.decrypt_text(token_info['access_token'])
+            access_token = self.decrypt_text(str(token_info['access_token']))
             logger.info(f'Got {idp} token: {access_token[0:5]}')
             return access_token
         except httpx.HTTPStatusError as e:
@@ -339,12 +319,17 @@ class TokenManager:
         refresh_token_expires_at: int,
     ) -> dict[str, str | int] | None:
         current_time = int(time.time())
-        # expire access_token four hours before actual expiration
-        # This ensures tokens are refreshed on resume to have at least 4 hours validity
+        # Refresh access tokens before expiration to ensure validity on resume.
+        # Azure DevOps uses a shorter buffer because Entra access tokens are
+        # short-lived; other providers keep the existing 4-hour buffer.
+        access_token_refresh_buffer_seconds = (
+            300 if identity_provider == ProviderType.AZURE_DEVOPS else 14400
+        )
         access_expired = (
             False
             if access_token_expires_at == 0
-            else access_token_expires_at < current_time + 14400
+            else access_token_expires_at
+            < current_time + access_token_refresh_buffer_seconds
         )
         refresh_expired = (
             False
@@ -361,8 +346,8 @@ class TokenManager:
         logger.info(f'Access token expired for {identity_provider}. Refreshing token.')
         refresh_token = self.decrypt_text(encrypted_refresh_token)
         token_data = await self._refresh_token(identity_provider, refresh_token)
-        access_token = token_data['access_token']
-        refresh_token = token_data['refresh_token']
+        access_token = str(token_data['access_token'])
+        refresh_token = str(token_data['refresh_token'])
         access_expiration = token_data['access_token_expires_at']
         refresh_expiration = token_data['refresh_token_expires_at']
 
@@ -385,6 +370,8 @@ class TokenManager:
             return await self._refresh_bitbucket_token(refresh_token)
         elif idp == ProviderType.BITBUCKET_DATA_CENTER:
             return await self._refresh_bitbucket_data_center_token(refresh_token)
+        elif idp == ProviderType.AZURE_DEVOPS:
+            return await self._refresh_azure_devops_token(refresh_token)
         else:
             raise ValueError(f'Unsupported IDP: {idp}')
 
@@ -417,7 +404,7 @@ class TokenManager:
             return await self._parse_refresh_response(data)
 
     async def _refresh_gitlab_token(self, refresh_token: str) -> dict[str, str | int]:
-        url = 'https://gitlab.com/oauth/token'
+        url = GITLAB_TOKEN_URL
         logger.info(f'Refreshing GitLab token with URL: {url}')
 
         payload = {
@@ -491,6 +478,38 @@ class TokenManager:
             logger.info('Successfully refreshed Bitbucket Data Center token')
 
             data = response.json()
+            return await self._parse_refresh_response(data)
+
+    async def _refresh_azure_devops_token(
+        self, refresh_token: str
+    ) -> dict[str, str | int]:
+        if (
+            not AZURE_DEVOPS_TENANT_ID
+            or not AZURE_DEVOPS_CLIENT_ID
+            or not AZURE_DEVOPS_CLIENT_SECRET
+        ):
+            raise ValueError(
+                'Azure DevOps OAuth is not configured. Set AZURE_DEVOPS_TENANT_ID, '
+                'AZURE_DEVOPS_CLIENT_ID, and AZURE_DEVOPS_CLIENT_SECRET.'
+            )
+
+        logger.info(f'Refreshing Azure DevOps token with URL: {AZURE_DEVOPS_TOKEN_URL}')
+        payload = {
+            'client_id': AZURE_DEVOPS_CLIENT_ID,
+            'client_secret': AZURE_DEVOPS_CLIENT_SECRET,
+            'refresh_token': refresh_token,
+            'grant_type': 'refresh_token',
+            'scope': AZURE_DEVOPS_SCOPE,
+        }
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=IDP_HTTP_TIMEOUT
+        ) as client:
+            response = await client.post(AZURE_DEVOPS_TOKEN_URL, data=payload)
+            response.raise_for_status()
+            logger.info('Successfully refreshed Azure DevOps token')
+
+            data = response.json()
+            data.setdefault('refresh_token', refresh_token)
             return await self._parse_refresh_response(data)
 
     async def _parse_refresh_response(self, data: dict) -> dict[str, str | int]:
@@ -895,7 +914,7 @@ class TokenManager:
             return token
 
     async def store_offline_token(self, user_id: str, offline_token: str):
-        token_store = await OfflineTokenStore.get_instance(get_config(), user_id)
+        token_store = await OfflineTokenStore.get_instance(user_id)
         encrypted_tokens = self.encrypt_payload({'refresh_token': offline_token})
         payload = {'tokens': encrypted_tokens}
         await token_store.store_token(json.dumps(payload))
@@ -964,7 +983,7 @@ class TokenManager:
         return active
 
     async def load_offline_token(self, user_id: str) -> str | None:
-        token_store = await OfflineTokenStore.get_instance(get_config(), user_id)
+        token_store = await OfflineTokenStore.get_instance(user_id)
         payload = await token_store.load_token()
         if not payload:
             return None

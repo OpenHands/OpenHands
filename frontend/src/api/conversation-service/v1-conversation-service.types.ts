@@ -1,4 +1,8 @@
-import { ConversationTrigger } from "../open-hands.types";
+import {
+  AgentKind,
+  ConversationTags,
+  ConversationTrigger,
+} from "../open-hands.types";
 import { V1SandboxStatus } from "../sandbox-service/sandbox-service.types";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
@@ -111,6 +115,8 @@ export interface V1AppConversation {
   trigger: ConversationTrigger | null;
   pr_number: number[];
   llm_model: string | null;
+  agent_kind?: AgentKind;
+  tags?: ConversationTags;
   metrics: V1MetricsSnapshot | null;
   created_at: string;
   updated_at: string;

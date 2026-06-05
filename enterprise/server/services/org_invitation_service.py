@@ -21,7 +21,7 @@ from storage.org_store import OrgStore
 from storage.role_store import RoleStore
 from storage.user_store import UserStore
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class OrgInvitationService:
@@ -313,11 +313,22 @@ class OrgInvitationService:
             raise InvitationInvalidError('User not found')
 
         user_email = user.email
-        # Fallback: fetch email from Keycloak if not in database (for existing users)
+        # Fallback: fetch email from Keycloak if not in database (for existing users).
+        # When found, persist it back to User.email so the members list shows it
+        # without requiring the user to log out and log back in.
         if not user_email:
             token_manager = TokenManager()
             user_info = await token_manager.get_user_info_from_user_id(str(user_id))
-            user_email = user_info.get('email') if user_info else None
+            if user_info:
+                user_email = user_info.get('email')
+                if user_email:
+                    await UserStore.backfill_user_email(
+                        str(user_id),
+                        {
+                            'email': user_email,
+                            'email_verified': user_info.get('emailVerified', False),
+                        },
+                    )
 
         if not user_email:
             raise EmailMismatchError('Your account does not have an email address')
@@ -375,7 +386,7 @@ class OrgInvitationService:
         # continue to flow through automatically.
         llm_api_key_secret = settings.agent_settings.llm.api_key
         llm_api_key = (
-            llm_api_key_secret.get_secret_value() if llm_api_key_secret else ''
+            llm_api_key_secret.get_secret_value() if llm_api_key_secret else ''  # type: ignore[union-attr]
         )
 
         await OrgMemberStore.add_user_to_org(

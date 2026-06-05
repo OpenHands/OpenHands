@@ -34,10 +34,10 @@ from server.auth.constants import (
     AUTOMATION_WEBHOOK_SECRET,
 )
 from server.auth.token_manager import TokenManager
+from storage.redis import get_redis_client_async
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.provider import ProviderType
-from openhands.server.shared import sio
+from openhands.app_server.integrations.provider import ProviderType
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Cache TTL constants
 ORG_CLAIM_CACHE_TTL_SECONDS = 3600  # 1 hour for org claims (rarely change)
@@ -137,6 +137,51 @@ class AutomationEventService:
             )
             # Don't re-raise in background task - just log for debugging
 
+    async def forward_jira_dc_event(
+        self,
+        org_id: UUID,
+        payload: dict[str, Any],
+        workspace_name: str,
+        connection_id: int | None = None,
+        delivery_id: str | None = None,
+    ) -> None:
+        """
+        Forward a Jira Data Center webhook event to the automation service.
+
+        Jira DC workspaces are configured directly in OpenHands, so the route
+        resolves the OpenHands org from the workspace instead of using the
+        Git-provider owner resolver.
+        """
+        try:
+            event_payload = {
+                'organization': {
+                    'jira_dc_workspace': workspace_name,
+                    'openhands_org_id': str(org_id),
+                },
+                'payload': payload,
+            }
+            if connection_id is not None:
+                event_payload['organization']['jira_dc_connection_id'] = connection_id
+            await self._send_source_to_automation_service(
+                source='jira_dc',
+                org_id=org_id,
+                payload=event_payload,
+            )
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            logger.error(
+                f'[AutomationEventService] Network error forwarding '
+                f'jira_dc event (org_id={org_id}): {e}',
+                exc_info=True,
+                extra={'delivery_id': delivery_id},
+            )
+        except Exception as e:
+            logger.error(
+                f'[AutomationEventService] Unexpected error forwarding '
+                f'jira_dc event (org_id={org_id}): {e}',
+                exc_info=True,
+                extra={'delivery_id': delivery_id},
+            )
+
     async def _resolve_org_context(
         self, provider: ProviderType, payload: dict[str, Any]
     ) -> OrgContext | None:
@@ -205,9 +250,25 @@ class AutomationEventService:
             repo = payload.get('repository', {})
             owner = repo.get('owner', {})
             return owner.get('login'), owner.get('type'), owner.get('id')
+        if provider == ProviderType.BITBUCKET_DATA_CENTER:
+            repo = self._extract_bitbucket_data_center_repository(payload)
+            project = repo.get('project') or {}
+            return project.get('key'), 'Project', None
 
         logger.warning(f'Unsupported provider ({provider.value})')
         return None, None, None
+
+    def _extract_bitbucket_data_center_repository(
+        self,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Extract the target repository from a Bitbucket Data Center payload."""
+        pull_request = payload.get('pullRequest') or {}
+        return (
+            (pull_request.get('toRef') or {}).get('repository')
+            or payload.get('repository')
+            or {}
+        )
 
     def _build_event_payload(
         self,
@@ -382,16 +443,7 @@ class AutomationEventService:
         Monitor logs for 'Redis unavailable' warnings to detect degradation.
         """
         try:
-            redis = getattr(sio.manager, 'redis', None)
-            if not redis:
-                # Log at warning level - this is a significant degradation that
-                # will cause DB load. Monitor these logs for alerting.
-                logger.warning(
-                    '[AutomationEventService] Redis unavailable for cache read, '
-                    'falling back to direct DB queries (this will increase DB load)'
-                )
-                return None
-
+            redis = get_redis_client_async()
             cached = await redis.get(cache_key)
             if cached is None:
                 return None
@@ -415,11 +467,7 @@ class AutomationEventService:
         Fails silently if Redis is unavailable (graceful degradation).
         """
         try:
-            redis = getattr(sio.manager, 'redis', None)
-            if not redis:
-                # Silent failure - read path already logs the warning
-                return
-
+            redis = get_redis_client_async()
             await redis.setex(cache_key, ttl_seconds, value)
         except Exception as e:
             # Log at warning level for visibility
@@ -447,6 +495,18 @@ class AutomationEventService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> None:
+        await self._send_source_to_automation_service(
+            source=provider.value,
+            org_id=org_id,
+            payload=payload,
+        )
+
+    async def _send_source_to_automation_service(
+        self,
+        source: str,
+        org_id: UUID,
+        payload: dict[str, Any],
+    ) -> None:
         """
         Send the normalized payload to the automation service.
 
@@ -454,7 +514,7 @@ class AutomationEventService:
         automation service can verify it came from the OpenHands server.
 
         Args:
-            provider: The Git provider type
+            source: The automation event source
             org_id: The OpenHands organization ID
             payload: The event payload to send
         """
@@ -466,9 +526,9 @@ class AutomationEventService:
 
         # Build endpoint URL. AUTOMATION_SERVICE_URL may include path segments
         # (e.g., https://example.com/api/automation), so we strip trailing slash
-        # and append our path. The provider is included in the URL path.
+        # and append our path. The source is included in the URL path.
         base_url = AUTOMATION_SERVICE_URL.rstrip('/')
-        url = f'{base_url}/v1/events/{org_id}/{provider.value}'
+        url = f'{base_url}/v1/events/{org_id}/{source}'
 
         # Serialize payload to JSON bytes for signing
         payload_bytes = json.dumps(payload, separators=(',', ':')).encode('utf-8')
@@ -496,22 +556,22 @@ class AutomationEventService:
                             body = await resp.text()
                         logger.warning(
                             f'[AutomationEventService] Automation service returned '
-                            f'{resp.status} for {provider.value} org {org_id}: {body}'
+                            f'{resp.status} for {source} org {org_id}: {body}'
                         )
                     else:
                         data = await resp.json()
                         matched = data.get('matched', 0)
                         logger.info(
-                            f'[AutomationEventService] Forwarded {provider.value} '
+                            f'[AutomationEventService] Forwarded {source} '
                             f'event to org {org_id}: {matched} automations matched'
                         )
         except asyncio.TimeoutError:
             logger.warning(
                 f'[AutomationEventService] Timeout ({AUTOMATION_SERVICE_TIMEOUT}s) '
-                f'forwarding {provider.value} event to automation service'
+                f'forwarding {source} event to automation service'
             )
         except aiohttp.ClientError as e:
             logger.warning(
                 f'[AutomationEventService] HTTP error forwarding '
-                f'{provider.value} event to automation service: {e}'
+                f'{source} event to automation service: {e}'
             )

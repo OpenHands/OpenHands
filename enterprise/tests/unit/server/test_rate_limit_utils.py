@@ -1,3 +1,4 @@
+import importlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -7,6 +8,8 @@ from server.utils.rate_limit_utils import (
     RATE_LIMIT_USER_SECONDS,
     check_rate_limit_by_user_id,
 )
+
+REDIS_PATCH = 'server.utils.rate_limit_utils.get_redis_client_async'
 
 
 @pytest.fixture
@@ -34,11 +37,9 @@ async def test_rate_limit_by_user_id_first_request_succeeds(mock_request, mock_r
     key_prefix = 'email_resend'
 
     with (
-        patch('server.utils.rate_limit_utils.sio') as mock_sio,
+        patch(REDIS_PATCH, return_value=mock_redis),
         patch('server.utils.rate_limit_utils.logger') as mock_logger,
     ):
-        mock_sio.manager.redis = mock_redis
-
         # Act
         await check_rate_limit_by_user_id(
             request=mock_request, key_prefix=key_prefix, user_id=user_id
@@ -63,11 +64,9 @@ async def test_rate_limit_by_user_id_second_request_within_window_fails(
     mock_redis.set = AsyncMock(return_value=False)  # Key already exists
 
     with (
-        patch('server.utils.rate_limit_utils.sio') as mock_sio,
+        patch(REDIS_PATCH, return_value=mock_redis),
         patch('server.utils.rate_limit_utils.logger') as mock_logger,
     ):
-        mock_sio.manager.redis = mock_redis
-
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
             await check_rate_limit_by_user_id(
@@ -87,11 +86,9 @@ async def test_rate_limit_by_ip_when_user_id_is_none(mock_request, mock_redis):
     key_prefix = 'email_resend'
 
     with (
-        patch('server.utils.rate_limit_utils.sio') as mock_sio,
+        patch(REDIS_PATCH, return_value=mock_redis),
         patch('server.utils.rate_limit_utils.logger') as mock_logger,
     ):
-        mock_sio.manager.redis = mock_redis
-
         # Act
         await check_rate_limit_by_user_id(
             request=mock_request, key_prefix=key_prefix, user_id=None
@@ -116,11 +113,7 @@ async def test_rate_limit_by_ip_second_request_within_window_fails(
     key_prefix = 'email_resend'
     mock_redis.set = AsyncMock(return_value=False)  # Key already exists
 
-    with (
-        patch('server.utils.rate_limit_utils.sio') as mock_sio,
-    ):
-        mock_sio.manager.redis = mock_redis
-
+    with patch(REDIS_PATCH, return_value=mock_redis):
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
             await check_rate_limit_by_user_id(
@@ -139,11 +132,9 @@ async def test_rate_limit_redis_unavailable_fails_open(mock_request):
     user_id = 'test_user_id'
 
     with (
-        patch('server.utils.rate_limit_utils.sio') as mock_sio,
+        patch(REDIS_PATCH, return_value=None),
         patch('server.utils.rate_limit_utils.logger') as mock_logger,
     ):
-        mock_sio.manager.redis = None  # Redis unavailable
-
         # Act
         await check_rate_limit_by_user_id(
             request=mock_request, key_prefix=key_prefix, user_id=user_id
@@ -164,11 +155,9 @@ async def test_rate_limit_redis_exception_fails_open(mock_request, mock_redis):
     mock_redis.set = AsyncMock(side_effect=Exception('Redis connection error'))
 
     with (
-        patch('server.utils.rate_limit_utils.sio') as mock_sio,
+        patch(REDIS_PATCH, return_value=mock_redis),
         patch('server.utils.rate_limit_utils.logger') as mock_logger,
     ):
-        mock_sio.manager.redis = mock_redis
-
         # Act
         await check_rate_limit_by_user_id(
             request=mock_request, key_prefix=key_prefix, user_id=user_id
@@ -186,9 +175,7 @@ async def test_rate_limit_custom_key_prefix(mock_request, mock_redis):
     user_id = 'test_user_id'
     key_prefix = 'password_reset'
 
-    with patch('server.utils.rate_limit_utils.sio') as mock_sio:
-        mock_sio.manager.redis = mock_redis
-
+    with patch(REDIS_PATCH, return_value=mock_redis):
         # Act
         await check_rate_limit_by_user_id(
             request=mock_request, key_prefix=key_prefix, user_id=user_id
@@ -209,9 +196,7 @@ async def test_rate_limit_custom_rate_limit_seconds(mock_request, mock_redis):
     custom_user_seconds = 60
     custom_ip_seconds = 180
 
-    with patch('server.utils.rate_limit_utils.sio') as mock_sio:
-        mock_sio.manager.redis = mock_redis
-
+    with patch(REDIS_PATCH, return_value=mock_redis):
         # Act
         await check_rate_limit_by_user_id(
             request=mock_request,
@@ -234,9 +219,7 @@ async def test_rate_limit_ip_with_unknown_client(mock_request, mock_redis):
     key_prefix = 'email_resend'
     mock_request.client = None  # No client information
 
-    with patch('server.utils.rate_limit_utils.sio') as mock_sio:
-        mock_sio.manager.redis = mock_redis
-
+    with patch(REDIS_PATCH, return_value=mock_redis):
         # Act
         await check_rate_limit_by_user_id(
             request=mock_request, key_prefix=key_prefix, user_id=None
@@ -258,9 +241,7 @@ async def test_rate_limit_different_users_have_separate_limits(
     user_id_1 = 'user_1'
     user_id_2 = 'user_2'
 
-    with patch('server.utils.rate_limit_utils.sio') as mock_sio:
-        mock_sio.manager.redis = mock_redis
-
+    with patch(REDIS_PATCH, return_value=mock_redis):
         # Act
         await check_rate_limit_by_user_id(
             request=mock_request, key_prefix=key_prefix, user_id=user_id_1
@@ -288,3 +269,57 @@ async def test_rate_limit_different_users_have_separate_limits(
             True,
             RATE_LIMIT_USER_SECONDS,
         ) in call_args_list
+
+
+class TestRateLimitEnvConfiguration:
+    """Rate limit windows are read from environment variables at import time,
+    with a default value for each when the variable is unset."""
+
+    @pytest.mark.parametrize(
+        'const_name,expected_default',
+        [
+            ('RATE_LIMIT_AUTH_WINDOWS', '10/second; 100/minute'),
+            ('RATE_LIMIT_USER_SECONDS', 120),
+            ('RATE_LIMIT_IP_SECONDS', 300),
+            ('RATE_LIMIT_AUTH_VERIFY_EMAIL_USER_SECONDS', 60),
+            ('RATE_LIMIT_AUTH_VERIFY_EMAIL_IP_SECONDS', 120),
+            ('RATE_LIMIT_EMAIL_RESEND_USER_SECONDS', 30),
+            ('RATE_LIMIT_EMAIL_RESEND_IP_SECONDS', 60),
+            ('RATE_LIMIT_ORG_INVITATION_USER_SECONDS', 6),
+        ],
+    )
+    def test_default_values(self, const_name, expected_default):
+        import server.utils.rate_limit_utils as rate_limit_utils
+
+        assert getattr(rate_limit_utils, const_name) == expected_default
+
+    def test_environment_variables_override_defaults(self, monkeypatch):
+        import server.utils.rate_limit_utils as rate_limit_utils
+
+        overrides = {
+            'RATE_LIMIT_AUTH_WINDOWS': '5/second; 50/minute',
+            'RATE_LIMIT_USER_SECONDS': '11',
+            'RATE_LIMIT_IP_SECONDS': '22',
+            'RATE_LIMIT_AUTH_VERIFY_EMAIL_USER_SECONDS': '33',
+            'RATE_LIMIT_AUTH_VERIFY_EMAIL_IP_SECONDS': '44',
+            'RATE_LIMIT_EMAIL_RESEND_USER_SECONDS': '55',
+            'RATE_LIMIT_EMAIL_RESEND_IP_SECONDS': '66',
+            'RATE_LIMIT_ORG_INVITATION_USER_SECONDS': '77',
+        }
+        for key, value in overrides.items():
+            monkeypatch.setenv(key, value)
+
+        try:
+            importlib.reload(rate_limit_utils)
+            assert rate_limit_utils.RATE_LIMIT_AUTH_WINDOWS == '5/second; 50/minute'
+            assert rate_limit_utils.RATE_LIMIT_USER_SECONDS == 11
+            assert rate_limit_utils.RATE_LIMIT_IP_SECONDS == 22
+            assert rate_limit_utils.RATE_LIMIT_AUTH_VERIFY_EMAIL_USER_SECONDS == 33
+            assert rate_limit_utils.RATE_LIMIT_AUTH_VERIFY_EMAIL_IP_SECONDS == 44
+            assert rate_limit_utils.RATE_LIMIT_EMAIL_RESEND_USER_SECONDS == 55
+            assert rate_limit_utils.RATE_LIMIT_EMAIL_RESEND_IP_SECONDS == 66
+            assert rate_limit_utils.RATE_LIMIT_ORG_INVITATION_USER_SECONDS == 77
+        finally:
+            # Restore module-level defaults so other tests are unaffected.
+            monkeypatch.undo()
+            importlib.reload(rate_limit_utils)

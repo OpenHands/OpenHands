@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Any, ClassVar
 from uuid import UUID
 
 import httpx
@@ -13,6 +13,7 @@ from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
+    EventKind,
 )
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
@@ -31,6 +32,8 @@ _logger = logging.getLogger(__name__)
 
 class GithubV1CallbackProcessor(EventCallbackProcessor):
     """Callback processor for GitHub V1 integrations."""
+
+    event_kind: ClassVar[EventKind] = 'ConversationStateUpdateEvent'
 
     github_view_data: dict[str, Any] = Field(default_factory=dict)
     should_request_summary: bool = Field(default=True)

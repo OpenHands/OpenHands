@@ -1,3 +1,4 @@
+import importlib
 import warnings
 from unittest.mock import patch
 
@@ -5,85 +6,23 @@ import pytest
 from fastmcp.mcp_config import MCPConfig
 from pydantic import SecretStr
 
-from openhands.core.config.llm_config import LLMConfig
-from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.core.config.sandbox_config import SandboxConfig
-from openhands.core.config.security_config import SecurityConfig
+import openhands.app_server.settings.settings_models as settings_module
+from openhands.app_server.settings.llm_profiles import ProfileNotFoundError
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import (
     AGENT_SETTINGS_SCHEMA_VERSION,
-    AgentSettings,
     ConversationSettings,
+    OpenHandsAgentSettings,
 )
 from openhands.sdk.settings.model import CondenserSettings, VerificationSettings
-from openhands.storage.data_models.settings import Settings
-
-
-def test_settings_from_config():
-    mock_app_config = OpenHandsConfig(
-        default_agent='test-agent',
-        max_iterations=100,
-        security=SecurityConfig(
-            security_analyzer='llm',
-            confirmation_mode=True,
-        ),
-        llms={
-            'llm': LLMConfig(
-                model='test-model',
-                api_key=SecretStr('test-key'),
-                base_url='https://test.example.com',
-            )
-        },
-        sandbox=SandboxConfig(remote_runtime_resource_factor=2),
-    )
-
-    with patch(
-        'openhands.storage.data_models.settings.load_openhands_config',
-        return_value=mock_app_config,
-    ):
-        settings = Settings.from_config()
-
-        assert settings is not None
-        assert settings.language == 'en'
-        assert settings.agent_settings.agent == 'test-agent'
-        assert settings.conversation_settings.max_iterations == 100
-        assert settings.conversation_settings.security_analyzer == 'llm'
-        assert settings.conversation_settings.confirmation_mode is True
-        assert settings.agent_settings.llm.model == 'test-model'
-        assert settings.agent_settings.llm.api_key.get_secret_value() == 'test-key'
-        assert settings.agent_settings.llm.base_url == 'https://test.example.com'
-        assert settings.remote_runtime_resource_factor == 2
-        assert not settings.secrets_store.provider_tokens
-
-
-def test_settings_from_config_no_api_key():
-    mock_app_config = OpenHandsConfig(
-        default_agent='test-agent',
-        max_iterations=100,
-        security=SecurityConfig(
-            security_analyzer='llm',
-            confirmation_mode=True,
-        ),
-        llms={
-            'llm': LLMConfig(
-                model='test-model', api_key=None, base_url='https://test.example.com'
-            )
-        },
-        sandbox=SandboxConfig(remote_runtime_resource_factor=2),
-    )
-
-    with patch(
-        'openhands.storage.data_models.settings.load_openhands_config',
-        return_value=mock_app_config,
-    ):
-        settings = Settings.from_config()
-        assert settings is None
 
 
 def test_settings_handles_sensitive_data():
     settings = Settings(
         language='en',
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             agent='test-agent',
             llm=LLM(
                 model='test-model',
@@ -104,10 +43,37 @@ def test_settings_handles_sensitive_data():
     assert llm_api_key.get_secret_value() == 'test-key'
 
 
+def test_settings_loads_persisted_settings_via_sdk_loaders():
+    loaded_agent_settings = OpenHandsAgentSettings(agent='migrated-agent')
+    loaded_conversation_settings = ConversationSettings(max_iterations=77)
+
+    with (
+        patch.object(
+            settings_module,
+            'validate_agent_settings',
+            return_value=loaded_agent_settings,
+        ) as agent_loader,
+        patch.object(
+            ConversationSettings,
+            'from_persisted',
+            return_value=loaded_conversation_settings,
+        ) as conversation_loader,
+    ):
+        settings = Settings(
+            agent_settings={'legacy': True},
+            conversation_settings={'legacy': True},
+        )
+
+    agent_loader.assert_called_once_with({'legacy': True})
+    conversation_loader.assert_called_once_with({'legacy': True})
+    assert settings.agent_settings.agent == 'migrated-agent'
+    assert settings.conversation_settings.max_iterations == 77
+
+
 def test_settings_update_deep_merges_agent_settings():
     """Updating agent_settings with a partial dict must not overwrite sibling sub-fields."""
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='existing-model', api_key=SecretStr('existing-key')),
             condenser=CondenserSettings(enabled=True, max_size=200),
         ),
@@ -123,7 +89,7 @@ def test_settings_update_deep_merges_agent_settings():
 
 def test_settings_preserve_agent_settings():
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(
                 model='test-model',
                 api_key=SecretStr('test-key'),
@@ -151,7 +117,7 @@ def test_settings_preserve_agent_settings():
 
 def test_settings_to_agent_settings_uses_agent_vals():
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(
                 model='sdk-model',
                 base_url='https://sdk.example.com',
@@ -177,7 +143,7 @@ def test_settings_to_agent_settings_uses_agent_vals():
 
 def test_settings_agent_settings_keeps_sdk_mcp_shape_canonical():
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='sdk-model'),
             mcp_config=MCPConfig(
                 mcpServers={
@@ -202,7 +168,9 @@ def test_settings_agent_settings_keeps_sdk_mcp_shape_canonical():
 
 
 def test_settings_update_mcp_config():
-    settings = Settings(agent_settings=AgentSettings(llm=LLM(model='sdk-model')))
+    settings = Settings(
+        agent_settings=OpenHandsAgentSettings(llm=LLM(model='sdk-model'))
+    )
 
     settings.update(
         {
@@ -228,7 +196,7 @@ def test_settings_update_mcp_config():
 
 def test_settings_update_replaces_existing_mcp_servers():
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='sdk-model'),
             mcp_config=MCPConfig(
                 mcpServers={
@@ -264,7 +232,7 @@ def test_settings_update_replaces_existing_mcp_servers():
 
 def test_settings_update_can_clear_mcp_config():
     settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='sdk-model'),
             mcp_config=MCPConfig(
                 mcpServers={
@@ -303,6 +271,179 @@ def test_settings_update_batch():
     assert settings.conversation_settings.max_iterations == 200
 
 
+# ── LLM profiles: Settings-integration tests ────────────────────────
+# Pure LLMProfiles behaviour lives in test_llm_profiles.py.
+
+
+def test_switch_to_profile_updates_agent_settings_llm():
+    settings = Settings()
+    settings.llm_profiles.save('my-profile', LLM(model='openai/gpt-4o'))
+
+    settings.switch_to_profile('my-profile')
+
+    assert settings.agent_settings.llm.model == 'openai/gpt-4o'
+    assert settings.llm_profiles.active == 'my-profile'
+
+
+def test_switch_to_nonexistent_profile_raises():
+    settings = Settings()
+
+    with pytest.raises(ProfileNotFoundError) as exc_info:
+        settings.switch_to_profile('nonexistent')
+
+    assert exc_info.value.name == 'nonexistent'
+    assert settings.llm_profiles.active is None
+
+
+def test_llm_profiles_masking_and_roundtrip():
+    """Masked by default, exposed with context, and reconstructible via ``model_validate``."""
+    settings = Settings()
+    settings.llm_profiles.save(
+        'p', LLM(model='openai/gpt-4o', api_key=SecretStr('secret'))
+    )
+
+    masked = settings.model_dump(mode='json')
+    exposed = settings.model_dump(mode='json', context={'expose_secrets': True})
+    assert masked['llm_profiles']['profiles']['p']['api_key'] != 'secret'
+    assert exposed['llm_profiles']['profiles']['p']['api_key'] == 'secret'
+
+    rehydrated = Settings.model_validate(exposed)
+    assert rehydrated.llm_profiles.get('p').api_key.get_secret_value() == 'secret'
+
+
+def test_switch_to_profile_preserves_other_agent_settings():
+    """Switching the LLM must not wipe condenser/verification/mcp_config.
+
+    Real user: has condenser+verification configured, switches LLM profile —
+    expects everything else to stay. A bare-field reassign in
+    ``switch_to_profile`` would silently drop those sibling configs.
+    """
+    settings = Settings(
+        agent_settings=OpenHandsAgentSettings(
+            llm=LLM(model='openai/gpt-4o'),
+            condenser=CondenserSettings(enabled=True, max_size=321),
+            verification=VerificationSettings(
+                critic_enabled=True, critic_mode='all_actions'
+            ),
+            mcp_config=MCPConfig(
+                mcpServers={
+                    's': {
+                        'transport': 'http',
+                        'url': 'https://example.com/mcp',
+                    }
+                }
+            ),
+        ),
+    )
+    settings.llm_profiles.save('p', LLM(model='anthropic/claude-opus-4'))
+
+    settings.switch_to_profile('p')
+
+    assert settings.agent_settings.llm.model == 'anthropic/claude-opus-4'
+    assert settings.agent_settings.condenser.max_size == 321
+    assert settings.agent_settings.verification.critic_mode == 'all_actions'
+    assert settings.agent_settings.mcp_config is not None
+    assert 's' in settings.agent_settings.mcp_config.mcpServers
+
+
+def test_delete_active_profile_promotes_remaining_one():
+    settings = Settings()
+    settings.llm_profiles.save('a', LLM(model='openai/gpt-4o'))
+    settings.llm_profiles.save('b', LLM(model='anthropic/claude-opus-4'))
+    settings.switch_to_profile('a')
+
+    assert settings.delete_profile('a') is True
+
+    assert 'a' not in settings.llm_profiles.profiles
+    assert settings.llm_profiles.active == 'b'
+    assert settings.agent_settings.llm.model == 'anthropic/claude-opus-4'
+
+
+def test_delete_inactive_profile_does_not_touch_active():
+    settings = Settings()
+    settings.llm_profiles.save('a', LLM(model='openai/gpt-4o'))
+    settings.llm_profiles.save('b', LLM(model='anthropic/claude-opus-4'))
+    settings.switch_to_profile('a')
+
+    assert settings.delete_profile('b') is True
+
+    assert settings.llm_profiles.active == 'a'
+    assert settings.agent_settings.llm.model == 'openai/gpt-4o'
+
+
+def test_delete_only_profile_clears_active():
+    settings = Settings()
+    settings.llm_profiles.save('only', LLM(model='openai/gpt-4o'))
+    settings.switch_to_profile('only')
+
+    assert settings.delete_profile('only') is True
+
+    assert settings.llm_profiles.profiles == {}
+    assert settings.llm_profiles.active is None
+
+
+def test_delete_missing_profile_returns_false():
+    settings = Settings()
+    assert settings.delete_profile('nope') is False
+
+
+def test_update_ignores_llm_profiles_payload():
+    """``Settings.update`` refuses to mutate ``llm_profiles``; profile changes
+    must go through the dedicated endpoints (which enforce name rules, the
+    count cap, and the per-user lock)."""
+    settings = Settings()
+
+    settings.update(
+        {
+            'llm_profiles': {
+                'profiles': {'X': {'model': 'openai/gpt-4o'}},
+                'active': 'X',
+            }
+        }
+    )
+
+    assert settings.llm_profiles.profiles == {}
+    assert settings.llm_profiles.active is None
+
+
+def test_update_clears_active_when_llm_diverges():
+    """Editing agent_settings.llm via ``update`` must drop a now-stale active profile."""
+    settings = Settings(
+        agent_settings=OpenHandsAgentSettings(
+            llm=LLM(model='openai/gpt-4o', api_key=SecretStr('sk-a'))
+        )
+    )
+    settings.llm_profiles.save(
+        'p', LLM(model='openai/gpt-4o', api_key=SecretStr('sk-a'))
+    )
+    settings.switch_to_profile('p')
+    assert settings.llm_profiles.active == 'p'
+
+    settings.update(
+        {'agent_settings_diff': {'llm': {'model': 'anthropic/claude-opus-4'}}}
+    )
+
+    assert settings.llm_profiles.active is None
+
+
+def test_update_keeps_active_when_llm_unchanged():
+    """A no-op LLM update must not spuriously clear ``active``."""
+    settings = Settings(
+        agent_settings=OpenHandsAgentSettings(
+            llm=LLM(model='openai/gpt-4o', api_key=SecretStr('sk-a'))
+        )
+    )
+    settings.llm_profiles.save(
+        'p', LLM(model='openai/gpt-4o', api_key=SecretStr('sk-a'))
+    )
+    settings.switch_to_profile('p')
+
+    # Update an unrelated field.
+    settings.update({'language': 'fr'})
+
+    assert settings.llm_profiles.active == 'p'
+
+
 def test_settings_update_batch_accepts_diff_keys():
     settings = Settings()
     settings.update(
@@ -334,12 +475,7 @@ def test_settings_no_pydantic_frozen_field_warning():
     """Test that Settings model does not trigger Pydantic UnsupportedFieldAttributeWarning."""
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter('always')
-
-        import importlib
-
-        import openhands.storage.data_models.settings
-
-        importlib.reload(openhands.storage.data_models.settings)
+        importlib.reload(settings_module)
 
         frozen_warnings = [
             warning for warning in w if 'frozen' in str(warning.message).lower()
@@ -348,3 +484,57 @@ def test_settings_no_pydantic_frozen_field_warning():
         assert len(frozen_warnings) == 0, (
             f'Pydantic frozen field warnings found: {[str(w.message) for w in frozen_warnings]}'
         )
+
+
+def test_litellm_proxy_to_openhands_conversion_with_openhands_proxy():
+    """Test that litellm_proxy/ is converted to openhands/ when using OpenHands proxy."""
+    settings = Settings(
+        agent_settings=OpenHandsAgentSettings(
+            llm=LLM(
+                model='litellm_proxy/claude-opus-4-5-20251101',
+                base_url=LITE_LLM_API_URL,
+            )
+        )
+    )
+
+    # Internal representation should be litellm_proxy/
+    assert settings.agent_settings.llm.model == 'litellm_proxy/claude-opus-4-5-20251101'
+
+    # Display representation should convert to openhands/
+    api_data = settings.get_agent_settings_display()
+    assert api_data['llm']['model'] == 'openhands/claude-opus-4-5-20251101'
+
+
+def test_litellm_proxy_custom_endpoint_keeps_prefix():
+    """Test that custom litellm_proxy endpoints keep their litellm_proxy/ prefix."""
+    settings = Settings(
+        agent_settings=OpenHandsAgentSettings(
+            llm=LLM(
+                model='litellm_proxy/gpt-5.3-codex',
+                base_url='http://custom-proxy.example.com:4000',
+            )
+        )
+    )
+
+    # Internal representation
+    assert settings.agent_settings.llm.model == 'litellm_proxy/gpt-5.3-codex'
+
+    # Display should NOT convert to openhands/ because it's a custom endpoint
+    api_data = settings.get_agent_settings_display()
+    assert api_data['llm']['model'] == 'litellm_proxy/gpt-5.3-codex'
+
+
+def test_openhands_model_converts_to_litellm_proxy_internally():
+    """Test that openhands/ models are stored as litellm_proxy/ internally."""
+    settings = Settings(
+        agent_settings=OpenHandsAgentSettings(
+            llm=LLM(model='openhands/claude-opus-4-5-20251101')
+        )
+    )
+
+    # Internal representation should be litellm_proxy/
+    assert settings.agent_settings.llm.model == 'litellm_proxy/claude-opus-4-5-20251101'
+
+    # Display representation should convert back to openhands/
+    api_data = settings.get_agent_settings_display()
+    assert api_data['llm']['model'] == 'openhands/claude-opus-4-5-20251101'

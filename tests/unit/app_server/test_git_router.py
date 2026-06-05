@@ -18,11 +18,8 @@ from openhands.app_server.git.git_router import (
     search_suggested_tasks,
     search_user_installations,
 )
-from openhands.app_server.user.user_context import UserContext
-from openhands.app_server.utils.dependencies import check_session_api_key
-from openhands.app_server.utils.paging_utils import encode_page_id, paginate_results
-from openhands.integrations.provider import ProviderToken
-from openhands.integrations.service_types import (
+from openhands.app_server.integrations.provider import ProviderToken
+from openhands.app_server.integrations.service_types import (
     Branch,
     PaginatedBranchesResponse,
     ProviderType,
@@ -30,6 +27,9 @@ from openhands.integrations.service_types import (
     SuggestedTask,
     TaskType,
 )
+from openhands.app_server.user.user_context import UserContext
+from openhands.app_server.utils.dependencies import check_session_api_key
+from openhands.app_server.utils.paging_utils import encode_page_id, paginate_results
 
 
 class TestPagination:
@@ -133,8 +133,8 @@ def test_client():
 class TestInstallationsEndpoint:
     """Test suite for /installations endpoint."""
 
-    def test_returns_401_when_no_provider_tokens(self, test_client):
-        """Test that 401 is returned when no provider tokens."""
+    def test_returns_403_when_no_provider_tokens(self, test_client):
+        """Test that 403 is returned when no provider tokens."""
         with patch(
             'openhands.app_server.user.auth_user_context.AuthUserContext.get_provider_tokens',
             AsyncMock(return_value=None),
@@ -142,7 +142,7 @@ class TestInstallationsEndpoint:
             response = test_client.get(
                 '/git/installations/search', params={'provider': 'github'}
             )
-            assert response.status_code == status.HTTP_401_UNAUTHORIZED
+            assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_returns_422_for_unsupported_provider(self, test_client):
         """Test that 422 is returned for unsupported provider."""
@@ -686,8 +686,8 @@ class TestSearchRepositories:
         assert result.items == []
         assert result.next_page_id is None
 
-    def test_returns_401_when_no_provider_tokens(self, test_client, monkeypatch):
-        """Test that 401 is returned when no provider tokens."""
+    def test_returns_403_when_no_provider_tokens(self, test_client, monkeypatch):
+        """Test that 403 is returned when no provider tokens."""
         with patch(
             'openhands.app_server.user.auth_user_context.AuthUserContext.get_provider_tokens',
             AsyncMock(return_value=None),
@@ -696,7 +696,7 @@ class TestSearchRepositories:
                 '/git/repositories/search',
                 params={'provider': 'github', 'query': 'test'},
             )
-            assert response.status_code == status.HTTP_401_UNAUTHORIZED
+            assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.asyncio
@@ -884,8 +884,8 @@ class TestSearchBranches:
             query='feature',
         )
 
-    def test_returns_401_when_no_provider_tokens(self, test_client):
-        """Test that 401 is returned when no provider tokens."""
+    def test_returns_403_when_no_provider_tokens(self, test_client):
+        """Test that 403 is returned when no provider tokens."""
         with patch(
             'openhands.app_server.user.auth_user_context.AuthUserContext.get_provider_tokens',
             AsyncMock(return_value=None),
@@ -898,7 +898,7 @@ class TestSearchBranches:
                     'query': 'main',
                 },
             )
-            assert response.status_code == status.HTTP_401_UNAUTHORIZED
+            assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.asyncio
@@ -1037,11 +1037,11 @@ class TestSearchSuggestedTasks:
         assert result.items == []
         assert result.next_page_id is None
 
-    def test_returns_401_when_no_provider_tokens(self, test_client):
-        """Test that 401 is returned when no provider tokens."""
+    def test_returns_403_when_no_provider_tokens(self, test_client):
+        """Test that 403 is returned when no provider tokens."""
         with patch(
             'openhands.app_server.user.auth_user_context.AuthUserContext.get_provider_tokens',
             AsyncMock(return_value=None),
         ):
             response = test_client.get('/git/suggested-tasks/search')
-            assert response.status_code == status.HTTP_401_UNAUTHORIZED
+            assert response.status_code == status.HTTP_403_FORBIDDEN

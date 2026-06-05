@@ -476,6 +476,7 @@ class TestProcessSandboxSpecEnvironmentOverride:
             # Should only have the default environment variables
             expected_defaults = {
                 'OH_ENABLE_VS_CODE',
+                'TMUX_TMPDIR',
             }
 
             # All defaults should be present
@@ -484,6 +485,8 @@ class TestProcessSandboxSpecEnvironmentOverride:
 
             # Should have exactly the expected variables
             assert set(spec.initial_env.keys()) == expected_defaults
+            assert spec.initial_env['TMUX_TMPDIR'] == '/tmp/openhands-tmux'
+            assert spec.working_dir == '.'
 
 
 class TestRemoteSandboxSpecEnvironmentOverride:

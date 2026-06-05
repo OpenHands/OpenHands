@@ -450,14 +450,14 @@ class TestGoogleCloudSharedEventServiceInjector:
         mock_db_context.__aenter__.return_value = mock_db_session
         mock_db_context.__aexit__.return_value = None
 
-        # Mock storage.Client and bucket
+        # Mock shared storage client and bucket
         mock_storage_client = MagicMock()
         mock_bucket = MagicMock()
         mock_storage_client.bucket.return_value = mock_bucket
 
         with (
             patch(
-                'server.sharing.google_cloud_shared_event_service.storage.Client',
+                'server.sharing.google_cloud_shared_event_service._get_shared_storage_client',
                 return_value=mock_storage_client,
             ),
             patch(
@@ -489,14 +489,14 @@ class TestGoogleCloudSharedEventServiceInjector:
         mock_db_context.__aenter__.return_value = mock_db_session
         mock_db_context.__aexit__.return_value = None
 
-        # Mock storage.Client and bucket
+        # Mock shared storage client and bucket
         mock_storage_client = MagicMock()
         mock_bucket = MagicMock()
         mock_storage_client.bucket.return_value = mock_bucket
 
         with (
             patch(
-                'server.sharing.google_cloud_shared_event_service.storage.Client',
+                'server.sharing.google_cloud_shared_event_service._get_shared_storage_client',
                 return_value=mock_storage_client,
             ),
             patch(
@@ -526,14 +526,14 @@ class TestGoogleCloudSharedEventServiceInjector:
         mock_db_context.__aenter__.return_value = mock_db_session
         mock_db_context.__aexit__.return_value = None
 
-        # Mock storage.Client and bucket
+        # Mock shared storage client and bucket
         mock_storage_client = MagicMock()
         mock_bucket = MagicMock()
         mock_storage_client.bucket.return_value = mock_bucket
 
         with (
             patch(
-                'server.sharing.google_cloud_shared_event_service.storage.Client',
+                'server.sharing.google_cloud_shared_event_service._get_shared_storage_client',
                 return_value=mock_storage_client,
             ),
             patch(
@@ -569,13 +569,13 @@ class TestGoogleCloudSharedEventServiceInjector:
         mock_db_context.__aenter__.return_value = mock_db_session
         mock_db_context.__aexit__.return_value = None
 
-        # Mock storage.Client and bucket
+        # Mock shared storage client and bucket
         mock_storage_client = MagicMock()
         mock_bucket = MagicMock()
         mock_storage_client.bucket.return_value = mock_bucket
 
         with patch(
-            'server.sharing.google_cloud_shared_event_service.storage.Client',
+            'server.sharing.google_cloud_shared_event_service._get_shared_storage_client',
             return_value=mock_storage_client,
         ):
             with patch(

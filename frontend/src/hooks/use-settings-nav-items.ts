@@ -11,11 +11,17 @@ import { isSettingsPageHidden } from "#/utils/settings-utils";
 import { useMe } from "./query/use-me";
 import { usePermission } from "./organizations/use-permissions";
 import { useOrgTypeAndAccess } from "./use-org-type-and-access";
+import { useSettings } from "./query/use-settings";
 import { I18nKey } from "#/i18n/declaration";
 
 // Rendered navigation item types
 export type SettingsNavRenderedItem =
-  | { type: "item"; item: SettingsNavItem }
+  | {
+      type: "item";
+      item: SettingsNavItem;
+      disabled?: boolean;
+      disabledAgentName?: string;
+    }
   | { type: "header"; text: I18nKey }
   | { type: "divider" };
 
@@ -36,6 +42,7 @@ const SECTION_HEADERS: Partial<Record<SettingsNavSection, I18nKey>> = {
 export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   const { data: config } = useConfig();
   const { data: user } = useMe();
+  const { data: settings } = useSettings();
   const userRole: OrganizationUserRole = user?.role ?? "member";
   const { hasPermission } = usePermission(userRole);
   const { isPersonalOrg, isTeamOrg, organizationId } = useOrgTypeAndAccess();
@@ -47,6 +54,12 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   const isSaasMode = config?.app_mode === "saas";
   const featureFlags = config?.feature_flags;
   const isAdminOrOwner = userRole === "admin" || userRole === "owner";
+  const isAcpAgent = settings?.agent_settings?.agent_kind === "acp";
+  const acpServerName = isAcpAgent
+    ? (config?.acp_providers?.find(
+        ({ key }) => key === settings?.agent_settings?.acp_server,
+      )?.display_name ?? "ACP Agent")
+    : null;
 
   let items = isSaasMode ? [...SAAS_NAV_ITEMS] : [...OSS_NAV_ITEMS];
 
@@ -86,9 +99,23 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
     items = items.filter((item) => !PERSONAL_LLM_PATHS.has(item.to));
   }
 
+  const buildRenderedItem = (
+    item: SettingsNavItem,
+  ): SettingsNavRenderedItem => {
+    if (isAcpAgent && item.disabledByAcp) {
+      return {
+        type: "item",
+        item,
+        disabled: true,
+        disabledAgentName: acpServerName ?? undefined,
+      };
+    }
+    return { type: "item", item };
+  };
+
   // For OSS mode or non-SaaS, return flat list without sections
   if (!isSaasMode) {
-    return items.map((item) => ({ type: "item", item }));
+    return items.map(buildRenderedItem);
   }
 
   // Build rendered items with headers and dividers for SaaS mode
@@ -129,7 +156,7 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
       isFirstSection = false;
     }
 
-    renderedItems.push({ type: "item", item });
+    renderedItems.push(buildRenderedItem(item));
   }
 
   return renderedItems;

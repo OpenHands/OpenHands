@@ -28,7 +28,15 @@ export interface WebClientFeatureFlags {
   hide_users_page: boolean;
   hide_billing_page: boolean;
   hide_integrations_page: boolean;
+  enable_acp?: boolean;
   deployment_mode?: DeploymentMode;
+  enable_onboarding: boolean;
+}
+
+export interface ACPProviderConfig {
+  key: string;
+  display_name: string;
+  default_command: string[];
 }
 
 export interface WebClientConfig {
@@ -44,5 +52,16 @@ export interface WebClientConfig {
   updated_at: string;
   github_app_slug: string | null;
   gitlab_enabled?: boolean;
+  provider_default_hosts?: Partial<Record<Provider, string>>;
   slack_enabled?: boolean;
+  acp_providers?: ACPProviderConfig[];
+  /** Jira DC host when DC OAuth is configured; used to pre-fill + lock the
+   *  configure form's host field. Null/absent in email-match mode. */
+  jira_dc_oauth_host?: string | null;
+  /** True when Jira DC service-account credentials are managed by OHE/KOTS. */
+  jira_dc_service_account_managed?: boolean;
+  /** Non-secret service-account email when managed by OHE/KOTS. */
+  jira_dc_service_account_email?: string | null;
+  /** Non-secret Jira DC service-account env config error, if any. */
+  jira_dc_service_account_config_error?: string | null;
 }

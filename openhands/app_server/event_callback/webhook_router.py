@@ -13,11 +13,13 @@ from pydantic import SecretStr
 
 from openhands import tools  # type: ignore[attr-defined]
 from openhands.agent_server.models import ConversationInfo, Success
+from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
+    ConversationTrigger,
 )
 from openhands.app_server.config import (
     depends_app_conversation_info_service,
@@ -27,12 +29,14 @@ from openhands.app_server.config import (
     get_global_config,
     get_sandbox_service,
 )
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.errors import AuthError
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventCallback
 from openhands.app_server.event_callback.set_title_callback_processor import (
     SetTitleCallbackProcessor,
 )
+from openhands.app_server.integrations.provider import ProviderType
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
@@ -42,15 +46,13 @@ from openhands.app_server.user.specifiy_user_context import (
     USER_CONTEXT_ATTR,
     SpecifyUserContext,
 )
-from openhands.integrations.provider import ProviderType
-from openhands.sdk import ConversationExecutionStatus, Event
-from openhands.sdk.event import ConversationStateUpdateEvent
-from openhands.server.types import AppMode
-from openhands.server.user_auth.default_user_auth import DefaultUserAuth
-from openhands.server.user_auth.user_auth import (
+from openhands.app_server.user_auth.default_user_auth import DefaultUserAuth
+from openhands.app_server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
 )
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
+from openhands.sdk import ConversationExecutionStatus, Event
+from openhands.sdk.event import ConversationStateUpdateEvent, ObservationEvent
+from openhands.sdk.tool.builtins import SwitchLLMObservation
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
 event_service_dependency = depends_event_service()
@@ -58,6 +60,29 @@ app_conversation_info_service_dependency = depends_app_conversation_info_service
 jwt_dependency = depends_jwt_service()
 app_mode = get_global_config().app_mode
 _logger = logging.getLogger(__name__)
+
+
+def _classify_error_type(error_message: str | None) -> str:
+    """Classify conversation error into broad categories for dashboard filtering.
+
+    Categories: budget_exceeded, model_error, runtime_error, timeout, user_cancelled, unknown.
+    Uses best-effort string matching per CONTEXT.md decision.
+    """
+    if not error_message:
+        return 'unknown'
+    msg_lower = error_message.lower()
+    if 'budget' in msg_lower or 'budgetexceeded' in msg_lower:
+        return 'budget_exceeded'
+    if 'timeout' in msg_lower or 'timed out' in msg_lower:
+        return 'timeout'
+    if 'cancel' in msg_lower:
+        return 'user_cancelled'
+    if any(
+        kw in msg_lower
+        for kw in ('model', 'llm', 'api key', 'rate limit', 'authentication')
+    ):
+        return 'model_error'
+    return 'runtime_error'
 
 
 def merge_conversation_tags(
@@ -76,6 +101,86 @@ def merge_conversation_tags(
     existing = existing_tags or {}
     incoming = incoming_tags or {}
     return {**existing, **incoming}
+
+
+async def _track_conversation_terminal(
+    conversation_id: UUID,
+    app_conversation_info: AppConversationInfo,
+    events: list[Event],
+    exec_status: ConversationExecutionStatus,
+) -> None:
+    """Track analytics for terminal conversation states.
+
+    Handles BIZZ-03 (credit limit), BIZZ-05 (finished), and BIZZ-06 (errored) events.
+    """
+    analytics = get_analytics_service()
+    if not analytics or not app_conversation_info.created_by_user_id:
+        return
+
+    ctx = await resolve_analytics_context(app_conversation_info.created_by_user_id)
+
+    # Extract metrics
+    metrics = app_conversation_info.metrics
+    accumulated_cost = metrics.accumulated_cost if metrics else None
+    prompt_tokens = (
+        metrics.accumulated_token_usage.prompt_tokens
+        if metrics and metrics.accumulated_token_usage
+        else None
+    )
+    completion_tokens = (
+        metrics.accumulated_token_usage.completion_tokens
+        if metrics and metrics.accumulated_token_usage
+        else None
+    )
+
+    is_error = exec_status in (
+        ConversationExecutionStatus.ERROR,
+        ConversationExecutionStatus.STUCK,
+    )
+
+    if is_error:
+        # Find last error message
+        error_message = None
+        for ev in events:
+            if isinstance(ev, ConversationStateUpdateEvent) and ev.key == 'last_error':
+                error_message = str(ev.value)[:500] if ev.value else None
+
+        error_type = _classify_error_type(error_message)
+
+        # BIZZ-06: conversation errored
+        analytics.track_conversation_errored(
+            ctx=ctx,
+            conversation_id=str(conversation_id),
+            error_type=error_type,
+            error_message=error_message,
+            llm_model=app_conversation_info.llm_model,
+            turn_count=None,
+            terminal_state=exec_status.value,
+        )
+
+        # BIZZ-03: credit limit reached
+        if error_type == 'budget_exceeded':
+            analytics.track_credit_limit_reached(
+                ctx=ctx,
+                conversation_id=str(conversation_id),
+                llm_model=app_conversation_info.llm_model,
+            )
+        return
+
+    # BIZZ-05: conversation finished
+    analytics.track_conversation_finished(
+        ctx=ctx,
+        conversation_id=str(conversation_id),
+        terminal_state=exec_status.value,
+        turn_count=None,
+        accumulated_cost_usd=accumulated_cost,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        llm_model=app_conversation_info.llm_model,
+        trigger=app_conversation_info.trigger.value
+        if app_conversation_info.trigger
+        else None,
+    )
 
 
 def detect_automation_trigger(
@@ -197,7 +302,12 @@ async def on_conversation_update(
     sandbox_info: SandboxInfo = Depends(valid_sandbox),
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
 ) -> Success:
-    """Webhook callback for when a conversation starts, pauses, resumes, or deletes."""
+    """Webhook callback for when a conversation starts, pauses, resumes, or deletes.
+
+    The ``ConversationInfo.agent`` field is an ``AgentBase`` discriminated
+    union so both OpenHands (``Agent``) and ACP (``ACPAgent``) payloads are
+    accepted on this single endpoint.
+    """
     existing = await valid_conversation(
         conversation_info.id, sandbox_info, app_conversation_info_service
     )
@@ -222,12 +332,28 @@ async def on_conversation_update(
         sandbox_id=sandbox_info.id,
     )
 
+    # Trust the discriminated-union payload over any stored ``agent_kind``
+    # on ``existing``: a webhook is always authoritative for the agent
+    # currently running, and a drifted row (e.g. mid-migration data) must
+    # not lock us into the wrong branch. Branch on the ``agent_kind``
+    # discriminator (an ``AgentBase`` property) so we don't import a
+    # concrete SDK subclass just to do a kind check.
+    agent = conversation_info.agent
+    if agent.agent_kind == 'acp':
+        agent_kind = 'acp'
+        llm_model = None
+    else:
+        # ``AgentBase.llm: LLM`` is non-optional on both arms of the union.
+        agent_kind = 'openhands'
+        llm_model = agent.llm.model
+
     app_conversation_info = AppConversationInfo(
         id=conversation_info.id,
         title=existing.title or f'Conversation {conversation_info.id.hex}',
         sandbox_id=sandbox_info.id,
         created_by_user_id=sandbox_info.created_by_user_id,
-        llm_model=conversation_info.agent.llm.model,
+        llm_model=llm_model,
+        agent_kind=agent_kind,
         # Git parameters
         selected_repository=existing.selected_repository,
         selected_branch=existing.selected_branch,
@@ -258,9 +384,23 @@ async def on_conversation_update(
             await event_callback_service.save_event_callback(
                 EventCallback(
                     conversation_id=conversation_info.id,
+                    event_kind=SetTitleCallbackProcessor.get_event_kind(),
                     processor=SetTitleCallbackProcessor(),
                 )
             )
+
+    # Analytics: conversation created
+    analytics = get_analytics_service()
+    if analytics and sandbox_info.created_by_user_id:
+        ctx = await resolve_analytics_context(sandbox_info.created_by_user_id)
+        analytics.track_conversation_created(
+            ctx=ctx,
+            conversation_id=str(conversation_info.id),
+            trigger=existing.trigger.value if existing.trigger else None,
+            llm_model=llm_model,
+            agent_type='default',
+            has_repository=existing.selected_repository is not None,
+        )
 
     return Success()
 
@@ -286,6 +426,44 @@ async def on_event(
                 await app_conversation_info_service.process_stats_event(
                     event, conversation_id
                 )
+
+        # Reflect an agent-initiated LLM switch (via the built-in SwitchLLMTool)
+        # on the conversation record. The tool emits a ``SwitchLLMObservation``
+        # carrying the new ``active_model``; unlike the explicit switch_profile
+        # route, nothing else persists it here, so the chat header and
+        # switch-profile button would otherwise stay stale until the next full
+        # conversation-info webhook (which only fires on start/pause/interrupt/
+        # delete, never mid-run). ``active_model`` is only set on success.
+        switched_model: str | None = None
+        for event in events:
+            if (
+                isinstance(event, ObservationEvent)
+                and isinstance(event.observation, SwitchLLMObservation)
+                and event.observation.active_model
+            ):
+                switched_model = event.observation.active_model
+        if switched_model and app_conversation_info.llm_model != switched_model:
+            info = await app_conversation_info_service.get_app_conversation_info(
+                conversation_id
+            )
+            if info is not None and info.llm_model != switched_model:
+                info.llm_model = switched_model
+                await app_conversation_info_service.save_app_conversation_info(info)
+
+        # Analytics: conversation terminal state detection
+        for event in events:
+            if not isinstance(event, ConversationStateUpdateEvent):
+                continue
+            if event.key != 'execution_status':
+                continue
+            try:
+                exec_status = ConversationExecutionStatus(event.value)
+                if exec_status.is_terminal():
+                    await _track_conversation_terminal(
+                        conversation_id, app_conversation_info, events, exec_status
+                    )
+            except Exception:
+                _logger.exception('analytics:conversation_terminal:failed')
 
         asyncio.create_task(
             _run_callbacks_in_bg_and_close(

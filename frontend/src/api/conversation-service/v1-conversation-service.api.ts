@@ -235,6 +235,22 @@ class V1ConversationService {
   }
 
   /**
+   * Switch the running conversation's LLM to a saved profile.
+   * Goes through the app-server proxy, which loads the profile from user
+   * settings (with api_key) and hands the LLM to the agent-server's
+   * `switch_llm` endpoint.
+   */
+  static async switchProfile(
+    conversationId: string,
+    profileName: string,
+  ): Promise<void> {
+    await openHands.post(
+      `/api/v1/app-conversations/${conversationId}/switch_profile`,
+      { profile_name: profileName },
+    );
+  }
+
+  /**
    * Resume a V1 conversation
    * Uses the custom runtime URL from the conversation
    *
@@ -462,10 +478,29 @@ class V1ConversationService {
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
   ): Promise<V1RuntimeConversationInfo> {
-    const url = this.buildRuntimeUrl(
-      conversationUrl,
-      `/api/conversations/${conversationId}`,
-    );
+    // The agent-server provides a full ``conversationUrl`` with a
+    // ``/api/conversations/{id}`` path (the SDK unified the LLM and ACP
+    // endpoints onto this single route). We still preserve the URL's path
+    // verbatim because a proxy deployment may add a prefix (e.g.
+    // ``/runtime/55313/api/conversations/...``). If the URL is missing or
+    // malformed we fall back to the default path derived from
+    // ``window.location``.
+    //
+    // Either way we route through ``buildRuntimeUrl`` so its
+    // ``extractBaseHost`` rewrites localhost/127.0.0.1 to the browser's
+    // hostname when accessed from a non-local browser (proxy/external host
+    // deployments). Without this, a conversation_url containing
+    // ``localhost`` is unreachable from anywhere but the host machine.
+    let path = `/api/conversations/${conversationId}`;
+    if (conversationUrl) {
+      try {
+        path = new URL(conversationUrl).pathname;
+      } catch {
+        // Malformed URL — fall back to the default LLM path; buildRuntimeUrl
+        // will resolve the host against window.location.
+      }
+    }
+    const url = this.buildRuntimeUrl(conversationUrl, path);
     const headers = buildSessionHeaders(sessionApiKey);
 
     const { data } = await axios.get<V1RuntimeConversationInfo>(url, {

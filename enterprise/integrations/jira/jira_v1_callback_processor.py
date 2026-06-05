@@ -1,4 +1,5 @@
 import logging
+from typing import ClassVar
 from uuid import UUID
 
 import httpx
@@ -9,6 +10,7 @@ from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
+    EventKind,
 )
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
@@ -19,9 +21,9 @@ from openhands.app_server.event_callback.util import (
     ensure_running_sandbox,
     get_agent_server_url_from_sandbox,
 )
+from openhands.app_server.utils.http_session import httpx_verify_option
 from openhands.sdk import Event
 from openhands.sdk.event import ConversationStateUpdateEvent
-from openhands.utils.http_session import httpx_verify_option
 
 _logger = logging.getLogger(__name__)
 
@@ -30,6 +32,8 @@ JIRA_CLOUD_API_URL = 'https://api.atlassian.com/ex/jira'
 
 class JiraV1CallbackProcessor(EventCallbackProcessor):
     """Callback processor for Jira V1 integrations."""
+
+    event_kind: ClassVar[EventKind] = 'ConversationStateUpdateEvent'
 
     should_request_summary: bool = Field(default=True)
     svc_acc_email: str

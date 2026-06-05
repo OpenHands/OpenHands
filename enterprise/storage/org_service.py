@@ -7,7 +7,11 @@ from typing import NoReturn
 from uuid import UUID, uuid4
 from uuid import UUID as parse_uuid
 
-from server.constants import ORG_SETTINGS_VERSION, get_default_litellm_model
+from server.constants import (
+    ORG_SETTINGS_VERSION,
+    get_default_llm_base_url,
+    get_default_llm_model,
+)
 from server.routes.org_models import (
     LiteLLMIntegrationError,
     OrgAuthorizationError,
@@ -15,6 +19,7 @@ from server.routes.org_models import (
     OrgNameExistsError,
     OrgNotFoundError,
     OrgUpdate,
+    OrphanedUserError,
 )
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org import Org
@@ -24,9 +29,9 @@ from storage.org_store import OrgStore
 from storage.role_store import RoleStore
 from storage.user_store import UserStore
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.sdk.settings import AgentSettings, ConversationSettings
-from openhands.storage.data_models.settings import Settings
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk.settings import ConversationSettings, default_agent_settings
 
 
 class OrgService:
@@ -108,15 +113,16 @@ class OrgService:
         Returns:
             Org: New organization entity (not yet persisted)
         """
-        default_agent_settings = AgentSettings()
-        default_agent_settings.llm.model = get_default_litellm_model()
+        agent_settings = default_agent_settings()
+        agent_settings.llm.model = get_default_llm_model()
+        agent_settings.llm.base_url = get_default_llm_base_url()
         return Org(
             id=org_id,
             name=name,
             contact_name=contact_name,
             contact_email=contact_email,
             org_version=ORG_SETTINGS_VERSION,
-            agent_settings=default_agent_settings,
+            agent_settings=agent_settings,
             conversation_settings=ConversationSettings(),
         )
 
@@ -794,7 +800,9 @@ class OrgService:
 
         # Step 2: Perform database cascade deletion with LiteLLM cleanup in transaction
         try:
-            deleted_org = await OrgStore.delete_org_cascade(org_id)
+            deleted_org = await OrgStore.delete_org_cascade(
+                org_id, requester_user_id=user_id
+            )
             if not deleted_org:
                 # This shouldn't happen since we verified existence above
                 raise OrgDatabaseError('Organization not found during deletion')
@@ -810,6 +818,11 @@ class OrgService:
 
             return deleted_org
 
+        except OrphanedUserError:
+            # Propagate as-is so the route can return a 400 with the affected
+            # user list. Wrapping into OrgDatabaseError below would mask the
+            # specific failure mode and force a 500.
+            raise
         except Exception as e:
             logger.error(
                 'Organization deletion failed',
@@ -818,23 +831,27 @@ class OrgService:
             raise OrgDatabaseError(f'Failed to delete organization: {str(e)}')
 
     @staticmethod
-    async def check_byor_export_enabled(user_id: str) -> bool:
-        """Check if BYOR export is enabled for the user's current org.
-
-        Returns True if the user's current org has byor_export_enabled set to True.
-        Returns False if the user is not found, has no current org, or the flag is False.
+    async def check_byor_export_enabled(
+        user_id: str, org_id: UUID | None = None
+    ) -> bool:
+        """Check if BYOR export is enabled for an organization.
 
         Args:
-            user_id: User ID to check
+            user_id: User ID (used only as fallback to look up the user's
+                ``current_org_id`` when ``org_id`` is omitted).
+            org_id: Explicit org id. Request-context callers should pass
+                the effective org id from ``SaasUserAuth.get_effective_org_id``.
 
         Returns:
-            bool: True if BYOR export is enabled, False otherwise
+            bool: True if BYOR export is enabled, False otherwise.
         """
-        user = await UserStore.get_user_by_id(user_id)
-        if not user or not user.current_org_id:
-            return False
+        if org_id is None:
+            user = await UserStore.get_user_by_id(user_id)
+            if not user or not user.current_org_id:
+                return False
+            org_id = user.current_org_id
 
-        org = await OrgStore.get_org_by_id(user.current_org_id)
+        org = await OrgStore.get_org_by_id(org_id)
         if not org:
             return False
 

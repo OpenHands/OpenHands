@@ -16,17 +16,17 @@ from sqlalchemy.pool import StaticPool
 from openhands.agent_server.models import ConversationInfo, Success
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
+    ConversationTrigger,
 )
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
 )
 from openhands.app_server.event_callback.webhook_router import on_conversation_update
+from openhands.app_server.integrations.provider import ProviderType
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxStatus
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
-from openhands.integrations.provider import ProviderType
 from openhands.sdk.conversation import ConversationExecutionStatus
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 
 @asynccontextmanager

@@ -4,10 +4,10 @@ from integrations.store_repo_utils import store_repositories_in_db
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.github.github_service import GitHubService
-from openhands.integrations.service_types import ProviderType, Repository
-from openhands.server.types import AppMode
+from openhands.app_server.integrations.github.github_service import GitHubService
+from openhands.app_server.integrations.service_types import ProviderType, Repository
+from openhands.app_server.types import AppMode
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class SaaSGitHubService(GitHubService):
@@ -51,20 +51,22 @@ class SaaSGitHubService(GitHubService):
             offline_token = await self.token_manager.load_offline_token(
                 self.external_auth_id
             )
-            github_token = SecretStr(
+            github_token_str: str | None = (
                 await self.token_manager.get_idp_token_from_offline_token(
                     offline_token, ProviderType.GITHUB
                 )
+                if offline_token
+                else None
             )
+            github_token = SecretStr(github_token_str) if github_token_str else None
             logger.debug(
                 f'Got GitHub token {github_token} from external auth user ID: {self.external_auth_id}'
             )
         elif self.user_id:
-            github_token = SecretStr(
-                await self.token_manager.get_idp_token_from_idp_user_id(
-                    self.user_id, ProviderType.GITHUB
-                )
+            github_token_str = await self.token_manager.get_idp_token_from_idp_user_id(
+                self.user_id, ProviderType.GITHUB
             )
+            github_token = SecretStr(github_token_str) if github_token_str else None
             logger.debug(
                 f'Got GitHub token {github_token} from user ID: {self.user_id}'
             )

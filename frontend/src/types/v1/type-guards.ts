@@ -8,6 +8,7 @@ import {
   PlanningFileEditorObservation,
   TerminalObservation,
   BrowserObservation,
+  SwitchLLMObservation,
   BrowserNavigateAction,
 } from "./core";
 import { AgentErrorEvent } from "./core/events/observation-event";
@@ -22,6 +23,7 @@ import {
   ServerErrorEvent,
 } from "./core/events/conversation-state-event";
 import { HookExecutionEvent } from "./core/events/hook-execution-event";
+import { ACPToolCallEvent } from "./core/events/acp-tool-call-event";
 import { SystemPromptEvent } from "./core/events/system-event";
 import type { OpenHandsParsedEvent } from "../core/index";
 
@@ -187,6 +189,16 @@ export const isStatsConversationStateUpdateEvent = (
 ): event is ConversationStateUpdateEventStats => event.key === "stats";
 
 /**
+ * Type guard function to check if an observation event is a SwitchLLMObservation
+ * (emitted when the agent switches its LLM via the built-in switch_llm tool).
+ */
+export const isSwitchLLMObservationEvent = (
+  event: OpenHandsEvent,
+): event is ObservationEvent<SwitchLLMObservation> =>
+  isObservationEvent(event) &&
+  event.observation.kind === "SwitchLLMObservation";
+
+/**
  * Type guard function to check if an event is a conversation error event
  */
 export const isConversationErrorEvent = (
@@ -216,6 +228,14 @@ export const isHookExecutionEvent = (
   event: OpenHandsEvent,
 ): event is HookExecutionEvent =>
   "kind" in event && event.kind === "HookExecutionEvent";
+
+/**
+ * Type guard function to check if an event is an ACP tool call event
+ */
+export const isACPToolCallEvent = (
+  event: OpenHandsEvent,
+): event is ACPToolCallEvent =>
+  "kind" in event && event.kind === "ACPToolCallEvent";
 
 // =============================================================================
 // TEMPORARY COMPATIBILITY TYPE GUARDS

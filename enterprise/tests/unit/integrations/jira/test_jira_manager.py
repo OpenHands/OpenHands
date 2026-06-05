@@ -8,7 +8,7 @@ import pytest
 from integrations.jira.jira_manager import JiraManager
 from integrations.jira.jira_payload import JiraEventType, JiraWebhookPayload
 
-from openhands.server.types import (
+from openhands.app_server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
     SessionExpiredError,

@@ -16,7 +16,7 @@ from server.routes.user_app_settings_models import (
     UserNotFoundError,
 )
 
-from openhands.server.user_auth import get_user_id
+from openhands.app_server.user_auth import get_user_id
 
 TEST_USER_ID = str(uuid.uuid4())
 

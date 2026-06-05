@@ -12,6 +12,7 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
+from openhands.app_server.conversation_paths import V1_CONVERSATIONS_DIR
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
@@ -60,7 +61,7 @@ class EventServiceBase(EventService, ABC):
             conversation_info = await task
             if conversation_info and conversation_info.created_by_user_id:
                 path /= conversation_info.created_by_user_id
-        path = path / 'v1_conversations' / conversation_id.hex
+        path = path / V1_CONVERSATIONS_DIR / conversation_id.hex
         return path
 
     async def get_event(self, conversation_id: UUID, event_id: UUID) -> Event | None:
@@ -90,16 +91,20 @@ class EventServiceBase(EventService, ABC):
         events = await asyncio.gather(
             *[loop.run_in_executor(None, self._load_event, path) for path in paths]  # type: ignore[arg-type]
         )
+        # Convert datetime filters to ISO strings so they can be compared
+        # against event.timestamp (which is stored as an ISO 8601 string).
+        timestamp_gte_str = timestamp__gte.isoformat() if timestamp__gte else None
+        timestamp_lt_str = timestamp__lt.isoformat() if timestamp__lt else None
+
         items = []
         for event in events:
             if not event:
                 continue
             if kind__eq and event.kind != kind__eq:
                 continue
-            # TODO: Are these comparison operators valid?
-            if timestamp__gte and event.timestamp < timestamp__gte:  # type: ignore[operator]
+            if timestamp_gte_str and event.timestamp < timestamp_gte_str:
                 continue
-            if timestamp__lt and event.timestamp >= timestamp__lt:  # type: ignore[operator]
+            if timestamp_lt_str and event.timestamp >= timestamp_lt_str:
                 continue
             items.append(event)
 

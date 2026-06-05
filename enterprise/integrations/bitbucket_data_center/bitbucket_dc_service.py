@@ -1,11 +1,11 @@
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.bitbucket_data_center.bitbucket_dc_service import (
+from openhands.app_server.integrations.bitbucket_data_center.bitbucket_dc_service import (
     BitbucketDCService,
 )
-from openhands.integrations.service_types import ProviderType
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class SaaSBitbucketDCService(BitbucketDCService):
@@ -47,17 +47,25 @@ class SaaSBitbucketDCService(BitbucketDCService):
             offline_token = await self.token_manager.load_offline_token(
                 self.external_auth_id
             )
-            bitbucket_dc_token = SecretStr(
+            bitbucket_dc_token_str: str | None = (
                 await self.token_manager.get_idp_token_from_offline_token(
                     offline_token, ProviderType.BITBUCKET_DATA_CENTER
                 )
+                if offline_token
+                else None
+            )
+            bitbucket_dc_token = (
+                SecretStr(bitbucket_dc_token_str) if bitbucket_dc_token_str else None
             )
             logger.debug('Got Bitbucket DC token via external_auth_id')
         elif self.user_id:
-            bitbucket_dc_token = SecretStr(
+            bitbucket_dc_token_str = (
                 await self.token_manager.get_idp_token_from_idp_user_id(
                     self.user_id, ProviderType.BITBUCKET_DATA_CENTER
                 )
+            )
+            bitbucket_dc_token = (
+                SecretStr(bitbucket_dc_token_str) if bitbucket_dc_token_str else None
             )
             logger.debug('Got Bitbucket DC token via user_id')
         else:

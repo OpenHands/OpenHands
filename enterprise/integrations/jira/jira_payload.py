@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 from urllib.parse import urlparse
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class JiraEventType(Enum):
