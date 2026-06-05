@@ -4,16 +4,6 @@
     "access": "public"
   },
   "license": "MIT",
-  "authors": [
-    {
-      "name": "Mislav Lukach",
-      "email": "mislavlukach@gmail.com"
-    },
-    {
-      "name": "Stephan Psaras",
-      "email": "stephan@all-hands.dev"
-    }
-  ],
   "version": "1.0.0-beta.9",
   "description": "OpenHands UI Components",
   "keywords": [
