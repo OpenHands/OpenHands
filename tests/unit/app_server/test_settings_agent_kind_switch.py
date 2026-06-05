@@ -76,7 +76,6 @@ def test_kind_switch_resets_new_kind_to_defaults():
     assert s.agent_settings.llm.model != 'anthropic/claude-sonnet-4-5'
 
 
-
 def test_kind_switch_with_inline_field_override():
     """An ``agent_kind`` switch alongside other fields in the same payload
     must apply those fields on top of the fresh base.
