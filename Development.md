@@ -78,7 +78,7 @@ This guide covers Ubuntu/Debian. For other distributions, adapt the package mana
 sudo apt update
 
 # Install system dependencies
-sudo apt install -y build-essential curl netcat software-properties-common
+sudo apt install -y build-essential curl netcat-openbsd software-properties-common
 
 # Install Python 3.12
 # Ubuntu 24.04+ and Debian 13+ ship with Python 3.12 — skip the PPA step if
