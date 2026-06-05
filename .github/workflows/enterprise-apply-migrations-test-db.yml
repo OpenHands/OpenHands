@@ -23,15 +23,22 @@ concurrency:
 
 jobs:
   apply-migrations:
-    name: Apply migrations on test DB (pg8000)
+    name: Apply migrations on test DB
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        # Test both the production driver (pg8000) and the psycopg2 fallback.
+        # The CLOUD_SQL_POSTGRES_VERSION env var holds the canonical Cloud SQL
+        # major version — update this job's image tag whenever that variable
+        # changes in the deploy repo. If CLOUD_SQL_POSTGRES_VERSION is unset,
+        # postgres:16 is used as a reasonable fallback (check deploy repo for
+        # the current cloudsql-postgres image tag and keep them in sync).
+        db-driver: [pg8000, ""]  # [production driver, psycopg2 fallback]
     # Safety timeout: large schemas with many indexes/tables can take 15+ minutes
     # to migrate. Adjust if schema growth outpaces this estimate.
     timeout-minutes: 30
     services:
       postgres:
-        # Pin to the Cloud SQL major version. Check the deploy repo for the
-        # current version (e.g. cloudsql-postgres image tag) and update here.
         image: postgres:16
         env:
           POSTGRES_USER: openhands
@@ -50,7 +57,7 @@ jobs:
       DB_USER: openhands
       DB_PASS: openhands
       DB_NAME: openhands
-      DB_DRIVER: pg8000   # production connects via the Cloud SQL connector on pg8000
+      DB_DRIVER: ${{ matrix.db-driver }}  # pg8000 for prod parity, "" for psycopg2
     steps:
       - uses: actions/checkout@v6
       - name: Install poetry via pipx
