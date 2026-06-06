@@ -45,9 +45,7 @@ class PendingMessageService {
    *
    * @param conversationId The conversation ID.
    */
-  static async deliverPendingMessages(
-    conversationId: string,
-  ): Promise<void> {
+  static async deliverPendingMessages(conversationId: string): Promise<void> {
     await openHands.post(
       `/api/v1/conversations/${conversationId}/pending-messages/deliver`,
     );
