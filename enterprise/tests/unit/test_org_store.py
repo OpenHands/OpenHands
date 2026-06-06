@@ -14,7 +14,11 @@ from storage.role import Role
 from storage.user import User
 
 from openhands.app_server.settings.settings_models import Settings
-from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
+from openhands.sdk.settings import (
+    ACPAgentSettings,
+    ConversationSettings,
+    OpenHandsAgentSettings,
+)
 
 
 @pytest.fixture
@@ -157,6 +161,41 @@ def test_get_org_settings_from_org_use_persisted_loaders():
 
     agent_loader.assert_called_once_with({'legacy': True})
     conversation_loader.assert_called_once_with({'legacy': True})
+
+
+def test_get_agent_settings_from_org_preserves_acp_variant():
+    """Regression: ACP org settings (``agent_kind: 'acp'``, null
+    ``agent_context``) must load as ``ACPAgentSettings`` rather than being
+    coerced into ``OpenHandsAgentSettings`` — that coercion 500'd on the
+    non-nullable ``agent_context``.
+    """
+    org = MagicMock(spec=Org)
+    org.agent_settings = {
+        'agent_kind': 'acp',
+        'acp_server': 'claude-code',
+        'llm': {'model': 'litellm_proxy/anthropic/claude-sonnet-4'},
+    }
+
+    settings = OrgStore.get_agent_settings_from_org(org)
+
+    assert isinstance(settings, ACPAgentSettings)
+    assert settings.agent_kind == 'acp'
+    assert settings.agent_context is None
+
+
+def test_merge_and_validate_settings_switches_variant_without_mongrel():
+    """Switching ``agent_kind`` replaces the variant instead of deep-merging
+    incompatible fields across the discriminated-union boundary (which would
+    produce an invalid ``llm``-plus-``acp_server`` mongrel).
+    """
+    merged = OrgStore._merge_and_validate_settings(
+        {'agent_kind': 'openhands', 'llm': {'model': 'gpt'}},
+        {'agent_kind': 'acp', 'acp_server': 'claude-code'},
+        OpenHandsAgentSettings,
+    )
+
+    assert isinstance(merged, ACPAgentSettings)
+    assert merged.acp_server == 'claude-code'
 
 
 @pytest.mark.asyncio

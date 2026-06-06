@@ -4,16 +4,6 @@
     "access": "public"
   },
   "license": "MIT",
-  "authors": [
-    {
-      "name": "Mislav Lukach",
-      "email": "mislavlukach@gmail.com"
-    },
-    {
-      "name": "Stephan Psaras",
-      "email": "stephan@all-hands.dev"
-    }
-  ],
   "version": "1.0.0-beta.9",
   "description": "OpenHands UI Components",
   "keywords": [
@@ -62,13 +52,13 @@
     "@types/bun": "latest",
     "@types/deep-equal": "^1.0.4",
     "@vitejs/plugin-react": "^4.5.2",
-    "@vitest/browser": "^3.2.4",
-    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/browser": "^4.1.0",
+    "@vitest/coverage-v8": "^4.1.0",
     "playwright": "^1.53.1",
     "storybook": "^9.0.12",
     "typescript": "^5.8.3",
     "vite-plugin-dts": "^4.5.4",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.0"
   },
   "peerDependencies": {
     "react": ">=19.1.0",
