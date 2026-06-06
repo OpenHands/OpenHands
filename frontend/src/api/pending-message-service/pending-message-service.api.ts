@@ -35,6 +35,23 @@ class PendingMessageService {
     );
     return data;
   }
+
+  /**
+   * Trigger delivery of any pending messages after WebSocket reconnection.
+   *
+   * Call this from the WebSocket onOpen handler to ensure queued messages
+   * are pushed through the now-active connection.  On failure the queued
+   * messages are not lost — they will be picked up on the next server poll.
+   *
+   * @param conversationId The conversation ID.
+   */
+  static async deliverPendingMessages(
+    conversationId: string,
+  ): Promise<void> {
+    await openHands.post(
+      `/api/v1/conversations/${conversationId}/pending-messages/deliver`,
+    );
+  }
 }
 
 export default PendingMessageService;

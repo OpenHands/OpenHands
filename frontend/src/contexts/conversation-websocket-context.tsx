@@ -751,6 +751,17 @@ export function ConversationWebSocketProvider({
         hasConnectedRefMain.current = true; // Mark that we've successfully connected
         removeErrorMessage(); // Clear any previous error messages on successful connection
 
+        // Deliver any pending messages that were queued while disconnected.
+        // Messages queued via PendingMessageService.queueMessage() during
+        // sandbox startup are now delivered now that the WebSocket is ready.
+        if (conversationId) {
+          try {
+            await PendingMessageService.deliverPendingMessages(conversationId);
+          } catch {
+            // Non-fatal: queued messages will be picked up on next poll
+          }
+        }
+
         // Fetch expected event count for history loading detection
         if (conversationId && conversationUrl) {
           try {
