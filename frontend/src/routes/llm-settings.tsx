@@ -170,9 +170,17 @@ export function LlmSettingsScreen({
 
   const handleSaveDatabricksSettings = React.useCallback(
     async (formData: FormData) => {
+      // The workspace URL must go through agent_settings_diff.llm.base_url so
+      // it is actually persisted — llm_base_url is a frontend-virtual field that
+      // the backend's Settings.update() ignores.
+      const workspaceUrl =
+        formData.get("databricks-workspace-url-input")?.toString() || null;
       const payload: Record<string, unknown> = {
-        llm_base_url:
-          formData.get("databricks-workspace-url-input")?.toString() || null,
+        agent_settings_diff: {
+          llm: {
+            base_url: workspaceUrl,
+          },
+        },
         databricks_client_id:
           formData.get("databricks-client-id-input")?.toString() || null,
         databricks_client_secret:
@@ -511,7 +519,11 @@ export function LlmSettingsScreen({
         agentSettings.llm = llm;
       }
 
-      if (context.view === "basic") {
+      // For Databricks the workspace URL is managed by the dedicated Databricks
+      // auth section (handleSaveDatabricksSettings), so we must not overwrite
+      // llm.base_url with the schema default when the user saves the model
+      // selector in basic view.
+      if (context.view === "basic" && activeProvider !== "databricks") {
         llm.base_url = getSchemaFieldDefaultValue(schema, "llm.base_url");
         agentSettings.llm = llm;
       }
@@ -587,6 +599,17 @@ export function LlmSettingsScreen({
     setProfileName(name);
     setInitialProfileName(name);
     setInitialViewHint(view);
+    // New profile: clear Databricks credential fields so they don't bleed over
+    // from the previously active profile.
+    if (!name) {
+      setDatabricksWorkspaceUrl("");
+      setU2mClientIdValue("");
+      setU2mClientSecretValue("");
+      setM2mClientIdValue("");
+      setM2mClientSecretValue("");
+      setRedirectUriValue("");
+      setDatabricksDirty(false);
+    }
     setShowProfiles(false);
   };
 

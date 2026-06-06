@@ -945,13 +945,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if model.startswith('databricks/'):
             try:
                 from openhands.sdk.llm.providers.databricks.llm import DatabricksLLM
-
+            except ImportError:
+                pass  # SDK not installed — fall through to standard LLM
+            else:
+                # When base_url wasn't saved (e.g. profile activated without it),
+                # fall back to DATABRICKS_HOST env var so a server-level default works.
+                effective_host = base_url or os.environ.get('DATABRICKS_HOST') or None
                 extras: dict = {}
                 if self.databricks_u2m_token_data:
                     extras['stored_u2m_tokens'] = self.databricks_u2m_token_data
                 return DatabricksLLM(
                     model=model,
-                    databricks_host=base_url,
+                    databricks_host=effective_host,
                     databricks_client_id=getattr(user, 'databricks_client_id', None),
                     databricks_client_secret=getattr(
                         user, 'databricks_client_secret', None
@@ -965,8 +970,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     usage_id='agent',
                     **extras,
                 )
-            except Exception:
-                pass  # fall through to standard LLM
 
         return LLM(
             model=model,
