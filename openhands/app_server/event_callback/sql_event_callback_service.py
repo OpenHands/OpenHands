@@ -11,7 +11,7 @@ from typing import AsyncGenerator
 from uuid import UUID, uuid4
 
 from fastapi import Request
-from sqlalchemy import Enum, String, and_, func, select
+from sqlalchemy import Enum, Index, String, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -47,6 +47,14 @@ _logger = logging.getLogger(__name__)
 
 class StoredEventCallback(Base):
     __tablename__ = 'event_callback'
+    __table_args__ = (
+        Index(
+            'ix_event_callback_conversation_id_status_event_kind',
+            'conversation_id',
+            'status',
+            'event_kind',
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
     conversation_id: Mapped[UUID | None] = mapped_column(nullable=True)

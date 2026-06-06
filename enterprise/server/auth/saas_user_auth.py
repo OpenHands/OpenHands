@@ -23,6 +23,7 @@ from server.auth.cookie_chunking import read_chunked_cookie
 from server.auth.token_manager import TokenManager
 from server.logger import logger
 from server.rate_limit import RateLimiter, create_redis_rate_limiter
+from server.utils.rate_limit_utils import RATE_LIMIT_AUTH_WINDOWS
 from sqlalchemy import delete, select
 from storage.api_key_store import ApiKeyStore
 from storage.auth_tokens import AuthTokens
@@ -49,7 +50,7 @@ from openhands.app_server.user_auth.user_auth import AuthType, UserAuth
 token_manager = TokenManager()
 
 
-rate_limiter: RateLimiter = create_redis_rate_limiter('10/second; 100/minute')
+rate_limiter: RateLimiter = create_redis_rate_limiter(RATE_LIMIT_AUTH_WINDOWS)
 
 
 @dataclass

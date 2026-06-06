@@ -9,7 +9,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, AsyncGenerator, Literal
+from typing import Annotated, Any, AsyncGenerator, Literal
 from uuid import UUID
 
 import httpx
@@ -1055,6 +1055,140 @@ async def read_conversation_file(
                 pass
 
     return ''
+
+
+async def _proxy_git_runtime_call(
+    conversation_id: UUID,
+    runtime_path: str,
+    path: str,
+    ref: str | None,
+    app_conversation_service: AppConversationService,
+    sandbox_service: SandboxService,
+    sandbox_spec_service: SandboxSpecService,
+    httpx_client: httpx.AsyncClient,
+) -> Any:
+    """Resolve the conversation's runtime and proxy a GET to ``runtime_path``.
+
+    Browsers can't reach runtime sandboxes directly (no CORS for non-localhost
+    origins on most paths), so the frontend hits these endpoints on the cloud
+    API host instead and we make the runtime hop server-side using the
+    sandbox's session API key.
+    """
+    ctx = await _get_agent_server_context(
+        conversation_id,
+        app_conversation_service,
+        sandbox_service,
+        sandbox_spec_service,
+    )
+    if isinstance(ctx, JSONResponse):
+        raise HTTPException(
+            status_code=ctx.status_code,
+            detail=f'Conversation {conversation_id} is not reachable',
+        )
+    if ctx is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail='Sandbox is paused; resume it before reading git state.',
+        )
+
+    headers = {'X-Session-API-Key': ctx.session_api_key} if ctx.session_api_key else {}
+    params: dict[str, str] = {'path': path}
+    if ref is not None:
+        params['ref'] = ref
+
+    try:
+        upstream = await httpx_client.get(
+            f'{ctx.agent_server_url}{runtime_path}',
+            params=params,
+            headers=headers,
+            timeout=30.0,
+        )
+        upstream.raise_for_status()
+        return upstream.json()
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            'Agent server returned error during %s: %s - %s',
+            runtime_path,
+            e.response.status_code,
+            e.response.text,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f'Agent server error: {e.response.status_code}',
+        )
+    except (json.JSONDecodeError, httpx.DecodingError) as e:
+        logger.error('Agent server returned non-JSON during %s: %s', runtime_path, e)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Agent server returned unexpected response.',
+        )
+    except httpx.RequestError as e:
+        logger.error('Failed to reach agent server during %s: %s', runtime_path, e)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Failed to reach agent server.',
+        )
+
+
+@router.get('/{conversation_id}/git/changes')
+async def get_conversation_git_changes(
+    conversation_id: UUID,
+    path: Annotated[
+        str,
+        Query(
+            description=(
+                'Absolute path to the git repository root (e.g. /workspace/project)'
+            ),
+        ),
+    ],
+    ref: Annotated[
+        str | None, Query(description='Optional git ref to diff against')
+    ] = None,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> Any:
+    """Proxy ``GET /api/git/changes`` on the conversation's runtime."""
+    return await _proxy_git_runtime_call(
+        conversation_id,
+        '/api/git/changes',
+        path,
+        ref,
+        app_conversation_service,
+        sandbox_service,
+        sandbox_spec_service,
+        httpx_client,
+    )
+
+
+@router.get('/{conversation_id}/git/diff')
+async def get_conversation_git_diff(
+    conversation_id: UUID,
+    path: Annotated[str, Query(description='The file path to diff')],
+    ref: Annotated[
+        str | None, Query(description='Optional git ref to diff against')
+    ] = None,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> Any:
+    """Proxy ``GET /api/git/diff`` on the conversation's runtime."""
+    return await _proxy_git_runtime_call(
+        conversation_id,
+        '/api/git/diff',
+        path,
+        ref,
+        app_conversation_service,
+        sandbox_service,
+        sandbox_spec_service,
+        httpx_client,
+    )
 
 
 @router.get('/{conversation_id}/skills')
