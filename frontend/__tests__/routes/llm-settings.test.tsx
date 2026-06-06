@@ -1899,7 +1899,7 @@ describe("LlmSettingsScreen", () => {
         });
       });
 
-      it("should enable submit button when form is dirty", async () => {
+      it("keeps the submit button enabled in the profile form even when pristine", async () => {
         vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
           buildSettings({
             llm_model: "openai/gpt-4o",
@@ -1915,8 +1915,14 @@ describe("LlmSettingsScreen", () => {
 
         await screen.findByTestId("llm-settings-screen");
         const submitButton = screen.getByTestId("save-button");
-        expect(submitButton).toBeDisabled();
+        // The profile form snapshots the current config as a profile (the
+        // name is optional — it falls back to a model-derived default), so
+        // Save is available without first dirtying a field. This is what lets
+        // you save a profile in SaaS managed mode, where the model is fixed
+        // and there's no editable API key to make the form dirty.
+        expect(submitButton).not.toBeDisabled();
 
+        // Editing a field keeps it enabled.
         await userEvent.type(
           screen.getByTestId("llm-api-key-input"),
           "test-api-key",
@@ -2020,7 +2026,7 @@ describe("LlmSettingsScreen", () => {
         });
       });
 
-      it("should enable submit button when form is dirty", async () => {
+      it("keeps the submit button enabled in the profile form even when pristine", async () => {
         vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
           buildSettings({
             llm_model: "openai/gpt-4o",
@@ -2036,8 +2042,14 @@ describe("LlmSettingsScreen", () => {
 
         await screen.findByTestId("llm-settings-screen");
         const submitButton = screen.getByTestId("save-button");
-        expect(submitButton).toBeDisabled();
+        // The profile form snapshots the current config as a profile (the
+        // name is optional — it falls back to a model-derived default), so
+        // Save is available without first dirtying a field. This is what lets
+        // you save a profile in SaaS managed mode, where the model is fixed
+        // and there's no editable API key to make the form dirty.
+        expect(submitButton).not.toBeDisabled();
 
+        // Editing a field keeps it enabled.
         await userEvent.type(
           screen.getByTestId("llm-api-key-input"),
           "test-api-key",

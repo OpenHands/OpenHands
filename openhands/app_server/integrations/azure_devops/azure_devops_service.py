@@ -29,6 +29,7 @@ from openhands.app_server.integrations.service_types import (
     ProviderType,
     RequestMethod,
 )
+from openhands.app_server.utils.auth import looks_like_jwt
 from openhands.app_server.utils.import_utils import get_impl
 
 
@@ -114,25 +115,6 @@ class AzureDevOpsService(
         """Get the base URL for Azure DevOps API calls."""
         return f'https://dev.azure.com/{self.organization}'
 
-    @staticmethod
-    def _is_oauth_token(token: str) -> bool:
-        """Check if a token is an OAuth JWT token (from SSO) vs a PAT.
-
-        OAuth tokens from Azure AD/Entra ID are JWTs with the format:
-        header.payload.signature (three base64url-encoded parts separated by dots)
-
-        PATs are opaque tokens without this structure.
-
-        Args:
-            token: The token string to check
-
-        Returns:
-            True if the token appears to be a JWT (OAuth), False if it's a PAT
-        """
-        # JWTs have exactly 3 parts separated by dots
-        parts = token.split('.')
-        return len(parts) == 3 and all(len(part) > 0 for part in parts)
-
     async def _get_azure_devops_headers(self) -> dict[str, Any]:
         """Retrieve the Azure DevOps authentication headers.
 
@@ -155,7 +137,7 @@ class AzureDevOpsService(
         token_value = self.token.get_secret_value()
 
         # Detect token type and use appropriate authentication method
-        if self._is_oauth_token(token_value):
+        if looks_like_jwt(token_value):
             # OAuth 2.0 access token from SSO (Azure AD/Keycloak broker)
             # Use Bearer authentication as per OAuth 2.0 spec
             auth_header = f'Bearer {token_value}'

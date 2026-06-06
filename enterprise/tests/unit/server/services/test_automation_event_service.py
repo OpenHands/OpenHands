@@ -801,6 +801,7 @@ class TestSendToAutomationService:
                 org_id=org_id,
                 payload=payload,
                 workspace_name='jira.company.com',
+                connection_id=7,
                 delivery_id='sig123',
             )
 
@@ -810,6 +811,7 @@ class TestSendToAutomationService:
             assert mock_send.call_args.kwargs['payload'] == {
                 'organization': {
                     'jira_dc_workspace': 'jira.company.com',
+                    'jira_dc_connection_id': 7,
                     'openhands_org_id': str(org_id),
                 },
                 'payload': payload,

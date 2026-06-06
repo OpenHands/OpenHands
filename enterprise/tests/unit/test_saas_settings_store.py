@@ -886,14 +886,28 @@ async def test_store_and_load_llm_profiles_round_trip(
     assert personal.api_key.get_secret_value() == 'personal-key'
 
 
+@pytest.mark.parametrize(
+    'llm_profiles_value',
+    [
+        pytest.param(None, id='pre-migration: llm_profiles is null'),
+        pytest.param(
+            {'profiles': {}, 'active': None},
+            id='already-migrated: profiles dict is empty',
+        ),
+    ],
+)
 @pytest.mark.asyncio
-async def test_load_with_null_llm_profiles_column_uses_default_factory(
-    async_session_maker, org_with_multiple_members_fixture
+async def test_load_with_null_or_empty_llm_profiles_seeds_default_profile(
+    async_session_maker, org_with_multiple_members_fixture, llm_profiles_value
 ):
-    """Rows predating the user.llm_profiles column read back as None.
-    Settings.llm_profiles is non-nullable (default_factory=LLMProfiles), so
-    load() must drop the None and let the factory produce an empty container
-    rather than crashing validation."""
+    """Seed Default profile from legacy config when no profiles exist.
+
+    Rows predating the llm_profiles column read back as None, and already-
+    migrated orgs may have an empty profiles dict. Rather than presenting an
+    empty profiles UI on upgrade, load() seeds a "Default" profile from the
+    legacy agent_settings.llm config (mirroring the OSS FileSettingsStore
+    behaviour), with that profile marked active.
+    """
     from sqlalchemy import update
     from storage.user import User
 
@@ -911,7 +925,9 @@ async def test_load_with_null_llm_profiles_column_uses_default_factory(
 
     async with async_session_maker() as session:
         await session.execute(
-            update(User).where(User.id == admin_user_id).values(llm_profiles=None)
+            update(User)
+            .where(User.id == admin_user_id)
+            .values(llm_profiles=llm_profiles_value)
         )
         await session.commit()
 
@@ -923,8 +939,69 @@ async def test_load_with_null_llm_profiles_column_uses_default_factory(
         loaded = await admin_store.load()
 
     assert loaded is not None
-    assert loaded.llm_profiles.profiles == {}
-    assert loaded.llm_profiles.active is None
+    assert set(loaded.llm_profiles.profiles.keys()) == {'Default'}
+    assert loaded.llm_profiles.active == 'Default'
+    default = loaded.llm_profiles.require('Default')
+    assert default.model == 'anthropic/claude-sonnet-4-5-20250929'
+
+
+@pytest.mark.asyncio
+async def test_load_persists_seeded_default_profile_onto_org(
+    async_session_maker, org_with_multiple_members_fixture
+):
+    """The seeded Default profile must be written back to org.llm_profiles.
+
+    The seed is otherwise in-memory only, so the org-profiles management API
+    (which reads org.llm_profiles directly) would still see an empty list.
+    load() backfills it once so the user's last LLM becomes a real stored
+    profile on first use of LLM profiles.
+    """
+    from sqlalchemy import select, update
+    from storage.org import Org
+
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = fixture['admin_user_id']
+    org_id = fixture['org_id']
+    admin_store = SaasSettingsStore(str(admin_user_id))
+
+    seed_settings = _make_settings(
+        model='anthropic/claude-sonnet-4-5-20250929',
+        api_key='seed-key',
+        base_url='https://api.anthropic.com/v1',
+    )
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await admin_store.store(seed_settings)
+
+    # Simulate a pre-migration org: no profiles stored yet.
+    async with async_session_maker() as session:
+        await session.execute(
+            update(Org).where(Org.id == org_id).values(llm_profiles=None)
+        )
+        await session.commit()
+
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+    ):
+        await admin_store.load()
+
+    async with async_session_maker() as session:
+        org = (
+            (await session.execute(select(Org).where(Org.id == org_id)))
+            .scalars()
+            .first()
+        )
+
+    assert org.llm_profiles is not None
+    assert set(org.llm_profiles['profiles'].keys()) == {'Default'}
+    assert org.llm_profiles['active'] == 'Default'
+    persisted_default = org.llm_profiles['profiles']['Default']
+    assert persisted_default['model'] == 'anthropic/claude-sonnet-4-5-20250929'
+    assert persisted_default['base_url'] == 'https://api.anthropic.com/v1'
+    # API key from the legacy config must survive the round-trip so the user
+    # doesn't have to re-enter it after the profiles upgrade.
+    assert persisted_default['api_key'] == 'seed-key'
 
 
 @pytest.mark.asyncio

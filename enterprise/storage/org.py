@@ -10,7 +10,7 @@ from server.constants import DEFAULT_BILLING_MARGIN
 from sqlalchemy import JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from storage.base import Base
-from storage.encrypt_utils import decrypt_value, encrypt_value
+from storage.encrypt_utils import EncryptedJSON, decrypt_value, encrypt_value
 
 if TYPE_CHECKING:
     from storage.api_key import ApiKey
@@ -66,6 +66,10 @@ class Org(Base):
     conversation_expiration: Mapped[int | None] = mapped_column(nullable=True)
     byor_export_enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
     sandbox_grouping_strategy: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Encrypted column for LLM profiles (contains API keys)
+    llm_profiles: Mapped[dict[str, Any] | None] = mapped_column(
+        EncryptedJSON, nullable=True
+    )
 
     # Relationships
     org_members: Mapped[list['OrgMember']] = relationship(

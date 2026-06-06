@@ -16,6 +16,11 @@ from keycloak.exceptions import (
 from pydantic import BaseModel
 from server.auth.auth_error import ExpiredError
 from server.auth.constants import (
+    AZURE_DEVOPS_CLIENT_ID,
+    AZURE_DEVOPS_CLIENT_SECRET,
+    AZURE_DEVOPS_SCOPE,
+    AZURE_DEVOPS_TENANT_ID,
+    AZURE_DEVOPS_TOKEN_URL,
     BITBUCKET_APP_CLIENT_ID,
     BITBUCKET_APP_CLIENT_SECRET,
     BITBUCKET_DATA_CENTER_CLIENT_ID,
@@ -314,12 +319,17 @@ class TokenManager:
         refresh_token_expires_at: int,
     ) -> dict[str, str | int] | None:
         current_time = int(time.time())
-        # expire access_token four hours before actual expiration
-        # This ensures tokens are refreshed on resume to have at least 4 hours validity
+        # Refresh access tokens before expiration to ensure validity on resume.
+        # Azure DevOps uses a shorter buffer because Entra access tokens are
+        # short-lived; other providers keep the existing 4-hour buffer.
+        access_token_refresh_buffer_seconds = (
+            300 if identity_provider == ProviderType.AZURE_DEVOPS else 14400
+        )
         access_expired = (
             False
             if access_token_expires_at == 0
-            else access_token_expires_at < current_time + 14400
+            else access_token_expires_at
+            < current_time + access_token_refresh_buffer_seconds
         )
         refresh_expired = (
             False
@@ -360,6 +370,8 @@ class TokenManager:
             return await self._refresh_bitbucket_token(refresh_token)
         elif idp == ProviderType.BITBUCKET_DATA_CENTER:
             return await self._refresh_bitbucket_data_center_token(refresh_token)
+        elif idp == ProviderType.AZURE_DEVOPS:
+            return await self._refresh_azure_devops_token(refresh_token)
         else:
             raise ValueError(f'Unsupported IDP: {idp}')
 
@@ -466,6 +478,38 @@ class TokenManager:
             logger.info('Successfully refreshed Bitbucket Data Center token')
 
             data = response.json()
+            return await self._parse_refresh_response(data)
+
+    async def _refresh_azure_devops_token(
+        self, refresh_token: str
+    ) -> dict[str, str | int]:
+        if (
+            not AZURE_DEVOPS_TENANT_ID
+            or not AZURE_DEVOPS_CLIENT_ID
+            or not AZURE_DEVOPS_CLIENT_SECRET
+        ):
+            raise ValueError(
+                'Azure DevOps OAuth is not configured. Set AZURE_DEVOPS_TENANT_ID, '
+                'AZURE_DEVOPS_CLIENT_ID, and AZURE_DEVOPS_CLIENT_SECRET.'
+            )
+
+        logger.info(f'Refreshing Azure DevOps token with URL: {AZURE_DEVOPS_TOKEN_URL}')
+        payload = {
+            'client_id': AZURE_DEVOPS_CLIENT_ID,
+            'client_secret': AZURE_DEVOPS_CLIENT_SECRET,
+            'refresh_token': refresh_token,
+            'grant_type': 'refresh_token',
+            'scope': AZURE_DEVOPS_SCOPE,
+        }
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=IDP_HTTP_TIMEOUT
+        ) as client:
+            response = await client.post(AZURE_DEVOPS_TOKEN_URL, data=payload)
+            response.raise_for_status()
+            logger.info('Successfully refreshed Azure DevOps token')
+
+            data = response.json()
+            data.setdefault('refresh_token', refresh_token)
             return await self._parse_refresh_response(data)
 
     async def _parse_refresh_response(self, data: dict) -> dict[str, str | int]:

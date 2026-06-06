@@ -242,6 +242,79 @@ class TestValidateRequest:
         )
 
     @pytest.mark.asyncio
+    async def test_validate_request_context_uses_workspace_id(
+        self,
+        jira_dc_manager,
+        mock_token_manager,
+        sample_jira_dc_workspace,
+        sample_issue_created_webhook_payload,
+    ):
+        """Connection-scoped webhook URLs resolve the workspace by path id."""
+        mock_token_manager.decrypt_text.return_value = 'test_secret'
+        jira_dc_manager.integration_store.get_workspace_by_id = AsyncMock(
+            return_value=sample_jira_dc_workspace
+        )
+
+        body = json.dumps(sample_issue_created_webhook_payload).encode()
+        signature = hmac.new('test_secret'.encode(), body, hashlib.sha256).hexdigest()
+
+        mock_request = MagicMock(spec=Request)
+        mock_request.headers = {'x-hub-signature': f'sha256={signature}'}
+        mock_request.body = AsyncMock(return_value=body)
+        mock_request.json = AsyncMock(return_value=sample_issue_created_webhook_payload)
+
+        (
+            is_valid,
+            returned_signature,
+            payload,
+            workspace,
+        ) = await jira_dc_manager.validate_request_context(mock_request, workspace_id=1)
+
+        assert is_valid is True
+        assert returned_signature == signature
+        assert payload == sample_issue_created_webhook_payload
+        assert workspace == sample_jira_dc_workspace
+        jira_dc_manager.integration_store.get_workspace_by_id.assert_called_once_with(1)
+        jira_dc_manager.integration_store.get_workspace_by_name.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_validate_request_context_rejects_workspace_id_host_mismatch(
+        self,
+        jira_dc_manager,
+        mock_token_manager,
+        sample_jira_dc_workspace,
+        sample_issue_created_webhook_payload,
+    ):
+        """Connection-scoped webhook URLs fail closed when payload host differs."""
+        mock_token_manager.decrypt_text.return_value = 'test_secret'
+        jira_dc_manager.integration_store.get_workspace_by_id = AsyncMock(
+            return_value=sample_jira_dc_workspace
+        )
+        payload = json.loads(json.dumps(sample_issue_created_webhook_payload))
+        payload['issue']['self'] = (
+            'https://other-jira.company.com/rest/api/2/issue/12345'
+        )
+        body = json.dumps(payload).encode()
+        signature = hmac.new('test_secret'.encode(), body, hashlib.sha256).hexdigest()
+
+        mock_request = MagicMock(spec=Request)
+        mock_request.headers = {'x-hub-signature': f'sha256={signature}'}
+        mock_request.body = AsyncMock(return_value=body)
+        mock_request.json = AsyncMock(return_value=payload)
+
+        (
+            is_valid,
+            returned_signature,
+            returned_payload,
+            workspace,
+        ) = await jira_dc_manager.validate_request_context(mock_request, workspace_id=1)
+
+        assert is_valid is False
+        assert returned_signature is None
+        assert returned_payload is None
+        assert workspace is None
+
+    @pytest.mark.asyncio
     async def test_validate_request_comment_updated_success(
         self,
         jira_dc_manager,
@@ -831,7 +904,7 @@ class TestIsJobRequested:
 
             assert result is False
             jira_dc_manager._send_repo_selection_comment.assert_called_once_with(
-                mock_view
+                mock_view, [], []
             )
 
     @pytest.mark.asyncio
@@ -1375,7 +1448,33 @@ class TestSendRepoSelectionComment:
 
         jira_dc_manager.send_message.assert_called_once()
         call_args = jira_dc_manager.send_message.call_args[0]
-        assert 'which repository to work with' in call_args[0]
+        assert 'Could not determine which repository to use' in call_args[0]
+
+    @pytest.mark.asyncio
+    async def test_send_repo_selection_comment_repo_inaccessible(
+        self, jira_dc_manager, sample_jira_dc_workspace
+    ):
+        """Test repository selection comment when mentioned repos are inaccessible."""
+        mock_view = MagicMock(spec=JiraDcViewInterface)
+        mock_view.jira_dc_workspace = sample_jira_dc_workspace
+        mock_view.job_context = MagicMock()
+        mock_view.job_context.issue_key = 'PROJ-123'
+        mock_view.job_context.base_api_url = 'https://jira.company.com'
+
+        jira_dc_manager.send_message = AsyncMock()
+        jira_dc_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
+
+        await jira_dc_manager._send_repo_selection_comment(
+            mock_view, ['company/repo'], []
+        )
+
+        jira_dc_manager.send_message.assert_called_once()
+        call_args = jira_dc_manager.send_message.call_args[0]
+        assert (
+            'Could not access any of the mentioned repositories: company/repo'
+            in call_args[0]
+        )
+        assert 'OpenHands account has access' in call_args[0]
 
     @pytest.mark.asyncio
     async def test_send_repo_selection_comment_send_fails(

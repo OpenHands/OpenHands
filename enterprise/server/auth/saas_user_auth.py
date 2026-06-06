@@ -18,11 +18,12 @@ from server.auth.authorization import (
     get_role_permissions,
     get_user_org_role,
 )
-from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
+from server.auth.constants import AZURE_DEVOPS_ORGANIZATION, BITBUCKET_DATA_CENTER_HOST
 from server.auth.cookie_chunking import read_chunked_cookie
 from server.auth.token_manager import TokenManager
 from server.logger import logger
 from server.rate_limit import RateLimiter, create_redis_rate_limiter
+from server.utils.rate_limit_utils import RATE_LIMIT_AUTH_WINDOWS
 from sqlalchemy import delete, select
 from storage.api_key_store import ApiKeyStore
 from storage.auth_tokens import AuthTokens
@@ -49,7 +50,7 @@ from openhands.app_server.user_auth.user_auth import AuthType, UserAuth
 token_manager = TokenManager()
 
 
-rate_limiter: RateLimiter = create_redis_rate_limiter('10/second; 100/minute')
+rate_limiter: RateLimiter = create_redis_rate_limiter(RATE_LIMIT_AUTH_WINDOWS)
 
 
 @dataclass
@@ -414,6 +415,9 @@ class SaasUserAuth(UserAuth):
 
                     if idp_type == ProviderType.BITBUCKET_DATA_CENTER and not host:
                         host = BITBUCKET_DATA_CENTER_HOST or None
+
+                    if idp_type == ProviderType.AZURE_DEVOPS and not host:
+                        host = AZURE_DEVOPS_ORGANIZATION or None
 
                     provider_token = await token_manager.get_idp_token(
                         access_token.get_secret_value(),

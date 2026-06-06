@@ -36,6 +36,7 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
+from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.settings.settings_models import (
     SandboxGroupingStrategy,
     Settings,
@@ -83,6 +84,19 @@ class _TestUserInfo(SimpleNamespace):
         object.__setattr__(self, '_agent_settings_override', value)
 
     @property
+    def llm_profiles(self) -> LLMProfiles:
+        # Real UserInfo always carries llm_profiles; default to empty unless a
+        # test sets profiles.
+        override = getattr(self, '_llm_profiles_override', None)
+        if override is not None:
+            return override
+        return LLMProfiles(profiles={})
+
+    @llm_profiles.setter
+    def llm_profiles(self, value):
+        object.__setattr__(self, '_llm_profiles_override', value)
+
+    @property
     def conversation_settings(self) -> ConversationSettings:
         kwargs: dict = {
             'confirmation_mode': getattr(self, 'confirmation_mode', False),
@@ -124,6 +138,7 @@ class TestLiveStatusAppConversationService:
         self.mock_user_context = Mock(spec=UserContext)
         self.mock_user_auth = Mock()
         self.mock_user_context.user_auth = self.mock_user_auth
+        self.mock_user_context.get_user_email = AsyncMock(return_value=None)
         self.mock_jwt_service = Mock()
         self.mock_sandbox_service = Mock()
         self.mock_sandbox_spec_service = Mock()
@@ -181,6 +196,61 @@ class TestLiveStatusAppConversationService:
         # Default mock for hooks loading - returns None (no hooks found)
         # Tests that specifically test hooks loading can override this mock
         self.service._load_hooks_from_workspace = AsyncMock(return_value=None)
+
+    @pytest.mark.asyncio
+    async def test_seed_sandbox_profiles_upserts_resolved_keys_and_prunes(self):
+        """Pushes each profile to the sandbox with its key resolved (managed key
+        injected, BYOR key kept), then deletes profiles that no longer exist on
+        the app-server.
+        """
+        user = SimpleNamespace(
+            llm_profiles=LLMProfiles(
+                profiles={
+                    'Managed': LLM(model='litellm_proxy/minimax-m2.7', usage_id='p'),
+                    'BYOR': LLM(
+                        model='anthropic/claude-sonnet-4-6',
+                        api_key='byor-key',
+                        usage_id='p',
+                    ),
+                    # Org names aren't character-restricted; this one must be
+                    # skipped so it can't path-inject the request URL.
+                    '../evil': LLM(model='openai/gpt-4o', usage_id='p'),
+                }
+            ),
+            agent_settings=SimpleNamespace(
+                llm=SimpleNamespace(api_key=SecretStr('managed-key'))
+            ),
+        )
+        self.mock_user_context.get_user_info = AsyncMock(return_value=user)
+
+        ok = Mock(raise_for_status=Mock())
+        listing = Mock(raise_for_status=Mock())
+        listing.json = Mock(
+            return_value={
+                'profiles': [{'name': 'Managed'}, {'name': 'BYOR'}, {'name': 'Gone'}]
+            }
+        )
+        self.mock_httpx_client.post = AsyncMock(return_value=ok)
+        self.mock_httpx_client.get = AsyncMock(return_value=listing)
+        self.mock_httpx_client.delete = AsyncMock(return_value=ok)
+
+        await self.service._seed_sandbox_profiles('http://agent.test', 'sess-key')
+
+        base = 'http://agent.test/api/profiles'
+        pushed = {
+            call.args[0]: call.kwargs['json']['llm']
+            for call in self.mock_httpx_client.post.call_args_list
+        }
+        # Managed profile (no stored key) falls back to the effective key; BYOR
+        # keeps its own.
+        assert pushed[f'{base}/Managed']['api_key'] == 'managed-key'
+        assert pushed[f'{base}/BYOR']['api_key'] == 'byor-key'
+        # The unsafe-named profile is skipped entirely (never POSTed).
+        assert self.mock_httpx_client.post.await_count == 2
+        assert not any('evil' in url for url in pushed)
+        # The profile deleted on the app-server is pruned from the sandbox.
+        self.mock_httpx_client.delete.assert_awaited_once()
+        assert self.mock_httpx_client.delete.await_args.args[0] == f'{base}/Gone'
 
     def test_apply_suggested_task_sets_prompt_and_trigger(self):
         """Test suggested task prompts populate initial message and trigger."""
@@ -2165,6 +2235,7 @@ class TestPluginHandling:
         self.mock_user_context = Mock(spec=UserContext)
         self.mock_user_auth = Mock()
         self.mock_user_context.user_auth = self.mock_user_auth
+        self.mock_user_context.get_user_email = AsyncMock(return_value=None)
         self.mock_jwt_service = Mock()
         self.mock_sandbox_service = Mock()
         self.mock_sandbox_spec_service = Mock()
@@ -3211,7 +3282,14 @@ class TestBuildAcpStartConversationRequestSecrets:
 
     def _call_build(self, service, user, tmp_path):
         """Wire user_context and call _build_acp_start_conversation_request."""
+        from openhands.agent_server.models import EventPage
+
         service.user_context.get_user_info = AsyncMock(return_value=user)
+        service.user_context.get_user_email = AsyncMock(return_value=None)
+        # Fresh conversation — no prior events, so resume synthesis returns None.
+        service.event_service.search_events = AsyncMock(
+            return_value=EventPage(items=[], next_page_id=None)
+        )
         sandbox = Mock(spec=SandboxInfo)
         return service._build_acp_start_conversation_request(
             sandbox=sandbox,
@@ -3265,22 +3343,18 @@ class TestBuildAcpStartConversationRequestSecrets:
         assert request.agent.acp_env.get('MY_TOKEN') == 'explicit-override'
 
     @pytest.mark.asyncio
-    async def test_provider_env_in_acp_env_secrets_in_agent_context(
-        self, service, tmp_path
-    ):
-        """LLM credentials land in acp_env; panel secrets in agent_context."""
+    async def test_provider_env_in_agent_context_not_acp_env(self, service, tmp_path):
+        """Provider cred lands in agent_context.secrets, not acp_env."""
         user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
-        panel_secret = StaticSecret(value=SecretStr('sk-from-secrets-panel'))
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'ANTHROPIC_API_KEY': panel_secret}
-        )
+        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
 
         request = await self._call_build(service, user, tmp_path)
 
-        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-ui-key'
+        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') is None
         assert request.agent.agent_context is not None
         assert (
-            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY') is panel_secret
+            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY').get_value()
+            == 'sk-ui-key'
         )
 
     @pytest.mark.asyncio
@@ -3295,13 +3369,7 @@ class TestBuildAcpStartConversationRequestSecrets:
 
     @pytest.mark.asyncio
     async def test_acp_env_overrides_provider_env(self, service, tmp_path):
-        """Explicit acp_env entries take priority over auto-generated provider_env.
-
-        When a user sets ANTHROPIC_API_KEY explicitly in acp_env, it must win
-        over the same key the SDK derives from the UI-saved LLM credentials.
-        This exercises the merge priority:
-          acp_env > provider_env > agent_context.secrets
-        """
+        """Explicit acp_env entry beats the provider cred (acp_env > agent_context.secrets at launch)."""
         user = self._make_acp_user(
             acp_server='claude-code',
             acp_env={'ANTHROPIC_API_KEY': 'sk-explicit-override'},
@@ -3311,20 +3379,17 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        # acp_env must win; the UI-saved key must NOT overwrite it
         assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-explicit-override'
+        # Provider cred still lands in agent_context.secrets; acp_env wins at launch.
+        assert request.agent.agent_context is not None
+        assert (
+            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY').get_value()
+            == 'sk-ui-key'
+        )
 
     @pytest.mark.asyncio
     async def test_secrets_forwarded_via_agent_context(self, service, tmp_path):
-        """Panel secrets flow through ``agent_context.secrets`` only.
-
-        The SDK's ``ACPAgent._start_acp_server`` gap-fills ``agent_context.secrets``
-        into the subprocess env at launch time. Pre-resolving here would
-        eagerly hit external auth services (e.g. ``LookupSecret``) on every
-        conversation start from the wrong process, so we forward the
-        ``SecretSource`` objects untouched and let the SDK resolve them
-        at the right boundary.
-        """
+        """Panel secrets flow through agent_context.secrets; not pre-resolved into acp_env."""
         gh_secret = StaticSecret(value=SecretStr('ghp_test123'))
         user = self._make_acp_user()
         service._setup_secrets_for_git_providers = AsyncMock(
@@ -3333,22 +3398,18 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        # NOT pre-resolved into acp_env — the SDK does that at subprocess start.
         assert request.agent.acp_env.get('GH_TOKEN') is None
-        # Surfaced as a SecretSource in agent_context.
         assert request.agent.agent_context is not None
         assert request.agent.agent_context.secrets.get('GH_TOKEN') is gh_secret
 
     @pytest.mark.asyncio
-    async def test_panel_secret_does_not_override_provider_env(self, service, tmp_path):
-        """Provider env (from ``llm.api_key``) keeps priority over panel secrets.
+    async def test_panel_secret_overrides_provider_env_when_conflicting(
+        self, service, tmp_path
+    ):
+        """Panel secret beats provider-derived cred when both name the same key.
 
-        If a user has both a UI-saved Claude Code LLM key AND a same-named
-        ``ANTHROPIC_API_KEY`` in the Secrets panel, the LLM-saved one ends
-        up driving the subprocess: ``acp_env`` carries it (via the SDK's
-        ``resolve_acp_env`` → ``resolve_provider_env``), and the SDK's
-        subprocess-launch gap-fill skips ``agent_context.secrets`` keys
-        already present in env.
+        SDK merge order: {**provider_secrets, **existing} → existing (panel) wins.
+        Priority is now panel > provider, reversed from the old workaround.
         """
         user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
         panel_secret = StaticSecret(value=SecretStr('sk-from-secrets-panel'))
@@ -3358,14 +3419,11 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        # llm.api_key-derived provider env wins in acp_env.
-        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-ui-key'
-        # The panel secret is still forwarded in agent_context.secrets; the
-        # SDK's gap-fill will see ANTHROPIC_API_KEY already in env and skip
-        # it, preserving the priority.
+        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') is None
         assert request.agent.agent_context is not None
         assert (
-            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY') is panel_secret
+            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY').get_value()
+            == 'sk-from-secrets-panel'
         )
 
     @pytest.mark.asyncio
@@ -3379,3 +3437,698 @@ class TestBuildAcpStartConversationRequestSecrets:
         request = await self._call_build(service, user, tmp_path)
 
         assert request.agent.acp_env.get('GH_TOKEN') == 'explicit-token'
+
+
+class TestSynthesizeAcpResumeInitialMessage:
+    """Tests for _synthesize_acp_resume_initial_message (Solution A, issue #14260).
+
+    Verifies that bootstrap-prompt resume correctly converts the durable event
+    store into an initial_message for a fresh ACP new_session when the sandbox
+    is recycled and the agent's own session storage is gone.
+    """
+
+    @pytest.fixture
+    def service(self):
+        return LiveStatusAppConversationService(
+            init_git_in_empty_workspace=True,
+            user_context=Mock(spec=UserContext),
+            app_conversation_info_service=Mock(),
+            app_conversation_start_task_service=Mock(),
+            event_callback_service=Mock(),
+            event_service=Mock(),
+            sandbox_service=Mock(),
+            sandbox_spec_service=Mock(),
+            jwt_service=Mock(),
+            pending_message_service=Mock(),
+            sandbox_startup_timeout=30,
+            sandbox_startup_poll_frequency=1,
+            max_num_conversations_per_sandbox=20,
+            httpx_client=Mock(),
+            web_url=None,
+            openhands_provider_base_url=None,
+            access_token_hard_timeout=None,
+            app_mode='test',
+        )
+
+    def _make_empty_page(self):
+        from openhands.agent_server.models import EventPage
+
+        return EventPage(items=[], next_page_id=None)
+
+    def _make_page(self, items, next_page_id=None):
+        from openhands.agent_server.models import EventPage
+
+        return EventPage(items=items, next_page_id=next_page_id)
+
+    def _make_message_event(self, role, text):
+        from openhands.sdk import MessageEvent
+        from openhands.sdk.llm.message import Message
+        from openhands.sdk.llm.message import TextContent as MsgTextContent
+
+        msg = Message(role=role, content=[MsgTextContent(type='text', text=text)])
+        return MessageEvent(
+            source='user' if role == 'user' else 'agent', llm_message=msg
+        )
+
+    def _make_tool_event(
+        self,
+        title,
+        is_error=False,
+        status=None,
+        tool_call_id=None,
+        raw_input=None,
+        raw_output=None,
+    ):
+        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
+
+        return ACPToolCallEvent(
+            source='agent',
+            tool_call_id=tool_call_id or f'tc-{title}',
+            title=title,
+            is_error=is_error,
+            status=status,
+            raw_input=raw_input or {},
+            raw_output=raw_output,
+        )
+
+    @pytest.mark.asyncio
+    async def test_no_events_returns_none(self, service):
+        """Fresh conversations have no prior events; nothing to synthesize."""
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_empty_page()
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_only_irrelevant_events_returns_none(self, service):
+        """Events that are neither MessageEvent nor ACPToolCallEvent → no resume."""
+        from openhands.sdk.event.conversation_state import ConversationStateUpdateEvent
+
+        state_event = ConversationStateUpdateEvent(
+            source='agent', key='status', value='running'
+        )
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_page([state_event])
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_message_events_produce_role_tagged_turns(self, service):
+        """MessageEvents are rendered as [USER] / [ASSISTANT] tagged lines."""
+        events = [
+            self._make_message_event('user', 'Please refactor the login module.'),
+            self._make_message_event('assistant', 'Sure, I will start now.'),
+        ]
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_page(events)
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is not None
+        assert result.role == 'user'
+        text = result.content[0].text
+        assert '<<RESUMED CONVERSATION>>' in text
+        assert '[USER]: Please refactor the login module.' in text
+        assert '[ASSISTANT]: Sure, I will start now.' in text
+
+    @pytest.mark.asyncio
+    async def test_tool_events_produce_tool_use_lines(self, service):
+        """ACPToolCallEvents appear as [TOOL USE: …] summary lines."""
+        events = [
+            self._make_tool_event(
+                'Write File',
+                is_error=False,
+                status='completed',
+                tool_call_id='tc-write',
+                raw_input={'content': 'x'},
+            ),
+            self._make_tool_event(
+                'Run Tests',
+                is_error=True,
+                tool_call_id='tc-run',
+                raw_input={'cmd': 'pytest'},
+            ),
+        ]
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_page(events)
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is not None
+        text = result.content[0].text
+        assert '[TOOL USE: Write File] (completed)' in text
+        assert '[TOOL USE: Run Tests] (failed)' in text
+
+    @pytest.mark.asyncio
+    async def test_mixed_events_preserve_order(self, service):
+        """Message and tool events appear in chronological order after DESC fetch + reverse."""
+        # search_events is called with TIMESTAMP_DESC (newest first); mock matches that order.
+        events = [
+            self._make_message_event('assistant', 'Done reading'),
+            self._make_tool_event('Read File', raw_input={'path': 'auth.py'}),
+            self._make_message_event('user', 'First message'),
+        ]
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_page(events)
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is not None
+        text = result.content[0].text
+        first_pos = text.index('[USER]: First message')
+        tool_pos = text.index('[TOOL USE: Read File]')
+        agent_pos = text.index('[ASSISTANT]: Done reading')
+        assert first_pos < tool_pos < agent_pos
+
+    @pytest.mark.asyncio
+    async def test_pagination_collects_all_events(self, service):
+        """All pages are fetched until next_page_id is None."""
+        from openhands.agent_server.models import EventPage
+
+        page1 = EventPage(
+            items=[self._make_message_event('user', 'Page 1 message')],
+            next_page_id='page2',
+        )
+        page2 = EventPage(
+            items=[self._make_message_event('assistant', 'Page 2 reply')],
+            next_page_id=None,
+        )
+        service.event_service.search_events = AsyncMock(side_effect=[page1, page2])
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is not None
+        text = result.content[0].text
+        assert '[USER]: Page 1 message' in text
+        assert '[ASSISTANT]: Page 2 reply' in text
+        assert service.event_service.search_events.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_no_prior_events_initial_message_unchanged(self, service):
+        """Fresh start: no events → initial_message flows through unchanged."""
+        try:
+            from openhands.sdk.settings import ACPAgentSettings
+        except ImportError:
+            pytest.skip('ACPAgentSettings not available in this SDK build')
+
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_empty_page()
+        )
+
+        user = _TestUserInfo(
+            id='u1',
+            llm_model='',
+            llm_base_url=None,
+            llm_api_key=None,
+            sandbox_grouping_strategy=SandboxGroupingStrategy.ADD_TO_ANY,
+            confirmation_mode=False,
+            security_analyzer=None,
+            search_api_key=None,
+            mcp_config=None,
+            disabled_skills=[],
+        )
+        user.agent_settings = ACPAgentSettings(
+            acp_server='codex',
+            llm=LLM(model='claude-sonnet-4-5'),
+            acp_env={},
+        )
+        service.user_context.get_user_info = AsyncMock(return_value=user)
+        service.user_context.get_user_email = AsyncMock(return_value=None)
+        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            user_msg = SendMessageRequest(
+                role='user', content=[TextContent(type='text', text='Brand new task')]
+            )
+            req = await service._build_acp_start_conversation_request(
+                sandbox=Mock(spec=SandboxInfo),
+                conversation_id=uuid4(),
+                initial_message=user_msg,
+                working_dir=tmp,
+            )
+
+        assert req.initial_message is not None
+        all_text = ' '.join(c.text for c in req.initial_message.content)
+        assert '<<RESUMED CONVERSATION>>' not in all_text
+        assert 'Brand new task' in all_text
+
+    @pytest.mark.asyncio
+    async def test_restart_no_user_message_uses_resume_as_initial(self, service):
+        """Restart with no new user message → synthesized history is initial_message."""
+        try:
+            from openhands.sdk.settings import ACPAgentSettings
+        except ImportError:
+            pytest.skip('ACPAgentSettings not available in this SDK build')
+
+        events = [
+            self._make_message_event('user', 'Original task'),
+            self._make_tool_event('Execute Code', raw_input={'cmd': 'python test.py'}),
+            self._make_message_event('assistant', 'All done'),
+        ]
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_page(events)
+        )
+
+        user = _TestUserInfo(
+            id='u1',
+            llm_model='',
+            llm_base_url=None,
+            llm_api_key=None,
+            sandbox_grouping_strategy=SandboxGroupingStrategy.ADD_TO_ANY,
+            confirmation_mode=False,
+            security_analyzer=None,
+            search_api_key=None,
+            mcp_config=None,
+            disabled_skills=[],
+        )
+        user.agent_settings = ACPAgentSettings(
+            acp_server='gemini-cli',
+            llm=LLM(model='claude-sonnet-4-5'),
+            acp_env={},
+        )
+        service.user_context.get_user_info = AsyncMock(return_value=user)
+        service.user_context.get_user_email = AsyncMock(return_value=None)
+        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            req = await service._build_acp_start_conversation_request(
+                sandbox=Mock(spec=SandboxInfo),
+                conversation_id=uuid4(),
+                initial_message=None,
+                working_dir=tmp,
+            )
+
+        assert req.initial_message is not None
+        text = req.initial_message.content[0].text
+        assert '<<RESUMED CONVERSATION>>' in text
+        assert '[USER]: Original task' in text
+        assert '[TOOL USE: Execute Code]' in text
+        assert '[ASSISTANT]: All done' in text
+        assert '--- End of prior session ---' in text
+
+    @pytest.mark.asyncio
+    async def test_double_resume_guard(self, service):
+        """A message already starting with the marker is not re-wrapped."""
+        already_resumed = SendMessageRequest(
+            role='user',
+            content=[
+                TextContent(type='text', text='<<RESUMED CONVERSATION>>\nprior history')
+            ],
+        )
+        # search_events should never be called
+        service.event_service.search_events = AsyncMock()
+
+        result = await service._synthesize_acp_resume_initial_message(
+            uuid4(), already_resumed
+        )
+
+        assert result is already_resumed
+        service.event_service.search_events.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_event_fetch_error_returns_initial_message(self, service):
+        """If search_events raises, fall back to initial_message unchanged."""
+        service.event_service.search_events = AsyncMock(
+            side_effect=RuntimeError('storage unavailable')
+        )
+        original = SendMessageRequest(
+            role='user', content=[TextContent(type='text', text='My task')]
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4(), original)
+
+        assert result is original
+
+    @pytest.mark.asyncio
+    async def test_new_user_message_preserved_as_second_content_block(self, service):
+        """When a new user message accompanies prior events, both appear in content."""
+        events = [self._make_message_event('user', 'Prior task')]
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_page(events)
+        )
+        new_msg = SendMessageRequest(
+            role='user',
+            content=[TextContent(type='text', text='Now do the next step.')],
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4(), new_msg)
+
+        assert result is not None
+        assert len(result.content) == 2
+        assert '<<RESUMED CONVERSATION>>' in result.content[0].text
+        assert result.content[1].text == 'Now do the next step.'
+
+    @pytest.mark.asyncio
+    async def test_tool_events_include_raw_input_output(self, service):
+        """raw_input and raw_output are included in the tool summary."""
+        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
+
+        tool = ACPToolCallEvent(
+            source='agent',
+            tool_call_id='tc-99',
+            title='Edit File',
+            status='completed',
+            raw_input={'path': 'auth.py', 'content': 'def login(): pass'},
+            raw_output='ok',
+        )
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_page([tool])
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is not None
+        text = result.content[0].text
+        # New rendering: input/output on separate labelled lines, not as dict repr
+        assert 'input:' in text
+        assert 'path=auth.py' in text
+        assert 'output:' in text
+        assert 'ok' in text
+
+    @pytest.mark.asyncio
+    async def test_long_conversation_truncated_to_max_chars(self, service):
+        """Output is capped at _ACP_RESUME_CONTEXT_MAX_CHARS.
+
+        Tail-preserving: newest events survive and the footer is kept intact.
+        The oldest events are dropped (head of the body is truncated with '...').
+        """
+        from openhands.app_server.app_conversation.live_status_app_conversation_service import (
+            _ACP_RESUME_CONTEXT_MAX_CHARS,
+        )
+
+        long_text = 'x' * 10_000
+        # 10 events × 10k chars each far exceeds the 60k limit
+        events = [self._make_message_event('user', long_text) for _ in range(10)]
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_page(events)
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is not None
+        text = result.content[0].text
+        assert len(text) <= _ACP_RESUME_CONTEXT_MAX_CHARS
+        # Tail-preserving: footer survives instead of being cut off.
+        assert text.endswith('--- End of prior session ---')
+        # Body was head-truncated to fit; the cut marker appears somewhere.
+        assert '...' in text
+
+    @pytest.mark.asyncio
+    async def test_event_count_cap_stops_pagination(self, service):
+        """Pagination stops at _ACP_RESUME_MAX_EVENTS even if more pages exist."""
+        from openhands.agent_server.models import EventPage
+        from openhands.app_server.app_conversation.live_status_app_conversation_service import (
+            _ACP_RESUME_MAX_EVENTS,
+        )
+
+        # Each page has 100 events; cap is 200 so we should stop after 2 pages.
+        page_of_100 = EventPage(
+            items=[self._make_message_event('user', 'msg') for _ in range(100)],
+            next_page_id='more',
+        )
+        service.event_service.search_events = AsyncMock(return_value=page_of_100)
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is not None
+        assert (
+            service.event_service.search_events.call_count
+            == _ACP_RESUME_MAX_EVENTS // 100
+        )
+
+    @pytest.mark.asyncio
+    async def test_tool_dedup_shows_only_terminal_state(self, service):
+        """Multiple events for the same tool_call_id render only the terminal one.
+
+        ACP streams pending → pending → completed for a single tool call.
+        Only the completed entry (with raw_input + raw_output) should appear.
+        """
+        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
+
+        tc_id = 'tc-write-42'
+        placeholder = ACPToolCallEvent(
+            source='agent',
+            tool_call_id=tc_id,
+            title='Write',
+            status='pending',
+            raw_input={},
+        )
+        pending_with_input = ACPToolCallEvent(
+            source='agent',
+            tool_call_id=tc_id,
+            title='Write hello.py',
+            status='pending',
+            raw_input={'file_path': '/tmp/sandbox/hello.py', 'content': 'x\n'},
+        )
+        completed = ACPToolCallEvent(
+            source='agent',
+            tool_call_id=tc_id,
+            title='Write hello.py',
+            status='completed',
+            raw_input={'file_path': '/tmp/sandbox/hello.py', 'content': 'x\n'},
+            raw_output='File created successfully at: /tmp/sandbox/hello.py',
+        )
+        # search returns newest-first
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_page([completed, pending_with_input, placeholder])
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is not None
+        text = result.content[0].text
+        # Only the completed entry should appear — once, not three times.
+        assert text.count('[TOOL USE: Write') == 1
+        assert '(completed)' in text
+        assert '(pending)' not in text
+
+    @pytest.mark.asyncio
+    async def test_placeholder_tool_event_skipped(self, service):
+        """Tool events with no raw_input and no raw_output are not rendered.
+
+        These are ACP streaming artifacts emitted before Claude knows the params.
+        """
+        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
+
+        placeholder = ACPToolCallEvent(
+            source='agent',
+            tool_call_id='tc-orphan',
+            title='Write',
+            status='pending',
+            raw_input={},
+        )
+        real_msg = self._make_message_event('user', 'Do something')
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_page([placeholder, real_msg])
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is not None
+        text = result.content[0].text
+        assert '[TOOL USE:' not in text
+        assert '[USER]: Do something' in text
+
+    @pytest.mark.asyncio
+    async def test_absolute_paths_stripped_from_tool_details(self, service):
+        """Absolute sandbox paths in raw_input/raw_output are reduced to basename."""
+        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
+
+        tool = ACPToolCallEvent(
+            source='agent',
+            tool_call_id='tc-path',
+            title='Write hello.py',
+            status='completed',
+            raw_input={
+                'file_path': '/private/var/folders/tmp/sandbox-abc/hello.py',
+                'content': 'print("hi")\n',
+            },
+            raw_output='File created successfully at: /private/var/folders/tmp/sandbox-abc/hello.py',
+        )
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_page([tool])
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is not None
+        text = result.content[0].text
+        # Absolute path must not appear
+        assert '/private/var/folders' not in text
+        assert '/sandbox-abc' not in text
+        # Basename must still be present so the agent knows which file
+        assert 'hello.py' in text
+
+    @pytest.mark.asyncio
+    async def test_action_event_finish_message_rendered(self, service):
+        """FinishAction message is rendered as [AGENT]: summary after tool events."""
+        from openhands.sdk.event import ActionEvent
+
+        finish_ev = ActionEvent.model_validate(
+            {
+                'source': 'agent',
+                'thought': [],
+                'thinking_blocks': [],
+                'tool_name': 'finish',
+                'tool_call_id': 'fin-1',
+                'tool_call': {
+                    'id': 'fin-1',
+                    'name': 'finish',
+                    'arguments': '{"message": "All done. Created calculator.py and tests pass."}',
+                    'origin': 'completion',
+                },
+                'llm_response_id': 'resp-1',
+                'action': {
+                    'message': 'All done. Created calculator.py and tests pass.',
+                    'kind': 'FinishAction',
+                },
+            }
+        )
+        msg_ev = self._make_message_event('user', 'Write calculator.py')
+        # Newest-first order (DESC): finish event appears before user msg in page
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_page([finish_ev, msg_ev])
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is not None
+        text = result.content[0].text
+        assert '[AGENT]: All done. Created calculator.py and tests pass.' in text
+        # Agent summary should appear after user message in chronological order
+        user_pos = text.index('[USER]:')
+        agent_pos = text.index('[AGENT]:')
+        assert user_pos < agent_pos
+
+    @pytest.mark.asyncio
+    async def test_edit_diff_tool_shows_only_filename(self, service):
+        """Edit tools with old_string/new_string show only file=<name>, not the diff.
+
+        The diff is noise for a resumed agent — the file on the persistent
+        /workspace volume is the source of truth and can be re-read.
+        """
+        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
+
+        edit = ACPToolCallEvent(
+            source='agent',
+            tool_call_id='tc-edit',
+            title='Edit auth.py',
+            status='completed',
+            raw_input={
+                'file_path': 'auth.py',
+                'old_string': 'def old_func():\n    pass',
+                'new_string': 'def new_func():\n    return 42',
+                'replace_all': False,
+            },
+            raw_output='The file auth.py has been updated successfully.',
+        )
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_page([edit])
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is not None
+        text = result.content[0].text
+        assert 'auth.py' in text
+        # Diff content must not appear — too noisy
+        assert 'old_string' not in text
+        assert 'new_string' not in text
+        assert 'old_func' not in text
+        assert 'new_func' not in text
+
+    @pytest.mark.asyncio
+    async def test_terminal_boilerplate_stripped_from_output(self, service):
+        """pytest header lines are stripped; test results are kept."""
+        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
+
+        pytest_output = (
+            '============================= test session starts ==============================\n'
+            'platform linux -- Python 3.12.0, pytest-8.0.0, pluggy-1.5.0 -- /usr/bin/python\n'
+            'cachedir: .pytest_cache\n'
+            'rootdir: /sandbox-abc123\n'
+            'plugins: asyncio-0.23.0\n'
+            'asyncio: mode=Mode.STRICT\n'
+            'collecting ... collected 3 items\n'
+            '\n'
+            'test_foo.py::test_a PASSED                                     [ 33%]\n'
+            'test_foo.py::test_b PASSED                                     [ 66%]\n'
+            'test_foo.py::test_c PASSED                                     [100%]\n'
+            '\n'
+            '============================== 3 passed in 0.01s ==============================\n'
+        )
+        tool = ACPToolCallEvent(
+            source='agent',
+            tool_call_id='tc-term',
+            title='pytest',
+            status='completed',
+            raw_input={'command': 'pytest test_foo.py -v'},
+            raw_output=pytest_output,
+        )
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_page([tool])
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is not None
+        text = result.content[0].text
+        # Boilerplate stripped
+        assert 'platform linux' not in text
+        assert 'cachedir' not in text
+        assert 'rootdir' not in text
+        assert 'plugins' not in text
+        assert 'asyncio:' not in text
+        assert 'collecting' not in text
+        assert 'test session starts' not in text
+        # Results kept
+        assert 'test_a PASSED' in text
+        assert '3 passed in 0.01s' in text
+
+    @pytest.mark.asyncio
+    async def test_failed_terminal_output_shows_tail(self, service):
+        """For failed command output the tail (failure details) is shown, not the head."""
+        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
+
+        # Simulate a long output where failure is at the end
+        passing = '\n'.join(f'test_foo.py::test_{i} PASSED' for i in range(20))
+        failure = (
+            'test_foo.py::test_fail FAILED\n'
+            'AssertionError: expected 1 got 2\n'
+            '1 failed, 20 passed in 0.05s'
+        )
+        long_output = passing + '\n' + failure
+
+        tool = ACPToolCallEvent(
+            source='agent',
+            tool_call_id='tc-fail',
+            title='pytest',
+            status='pending',  # is_error drives tail logic
+            is_error=True,
+            raw_input={'command': 'pytest'},
+            raw_output=long_output,
+        )
+        service.event_service.search_events = AsyncMock(
+            return_value=self._make_page([tool])
+        )
+
+        result = await service._synthesize_acp_resume_initial_message(uuid4())
+
+        assert result is not None
+        text = result.content[0].text
+        # Failure details at the end must appear
+        assert 'AssertionError' in text
+        assert '1 failed, 20 passed' in text
