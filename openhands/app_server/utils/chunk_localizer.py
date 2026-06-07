@@ -183,7 +183,7 @@ def create_chunks(
         return _create_chunks_from_raw_string(text, size)
 
     return _create_chunks_from_tree_sitter(
-        parser.parse(bytes(text, 'utf-8')), text, max_chunk_lines=size
+        parser.parse(text.encode('utf-8')), text, max_chunk_lines=size
     )
 
 
