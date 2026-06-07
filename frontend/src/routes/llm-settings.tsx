@@ -34,6 +34,7 @@ import { DEFAULT_SETTINGS } from "#/services/settings";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useRenameLlmProfile } from "#/hooks/mutation/use-rename-llm-profile";
+import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import {
   useSaveOrgLlmProfile,
   useActivateOrgLlmProfile,
@@ -138,7 +139,6 @@ export function LlmSettingsScreen({
   const [m2mClientIdValue, setM2mClientIdValue] = React.useState("");
   const [m2mClientSecretValue, setM2mClientSecretValue] = React.useState("");
   const [redirectUriValue, setRedirectUriValue] = React.useState("");
-  const [databricksDirty, setDatabricksDirty] = React.useState(false);
   const saveSettingsMutation = useSaveSettings();
 
   const {
@@ -176,52 +176,62 @@ export function LlmSettingsScreen({
     settings?.llm_base_url,
   ]);
 
-  const handleSaveDatabricksSettings = React.useCallback(
-    async (formData: FormData) => {
-      // The workspace URL must go through agent_settings_diff.llm.base_url so
-      // it is actually persisted — llm_base_url is a frontend-virtual field that
-      // the backend's Settings.update() ignores.
-      const workspaceUrl =
-        formData.get("databricks-workspace-url-input")?.toString() || null;
-      const payload: Record<string, unknown> = {
-        agent_settings_diff: {
-          llm: {
-            base_url: workspaceUrl,
-          },
+  // All profile hooks must be declared before saveDatabricksFromState to avoid TDZ.
+  const saveProfile = useSaveLlmProfile();
+  const activateProfile = useActivateLlmProfile();
+  const renameProfile = useRenameLlmProfile();
+  useLlmProfiles();
+
+  // Org profile hooks (for SaaS mode with personal orgs)
+  const saveOrgProfile = useSaveOrgLlmProfile(organizationId);
+  const activateOrgProfile = useActivateOrgLlmProfile(organizationId);
+  const renameOrgProfile = useRenameOrgLlmProfile(organizationId);
+
+  // Save Databricks-specific fields (workspace URL + credentials) from the
+  // current component state.  Called both from the dedicated "Save Databricks
+  // Settings" form submit AND from handleSaveSuccess so a single click on the
+  // main "Save" button persists everything in one go.
+  const saveDatabricksFromState = React.useCallback(async () => {
+    // Only meaningful when Databricks is the active provider and there is
+    // something to save (user has entered/changed credentials or URL).
+    const workspaceUrl = databricksWorkspaceUrl.trim() || null;
+    const payload: Record<string, unknown> = {
+      agent_settings_diff: {
+        llm: {
+          base_url: workspaceUrl,
         },
-        databricks_client_id:
-          formData.get("databricks-client-id-input")?.toString() || null,
-        databricks_client_secret:
-          formData.get("databricks-client-secret-input")?.toString() || null,
-        databricks_u2m_client_id:
-          formData.get("databricks-u2m-client-id-input")?.toString() || null,
-        databricks_u2m_client_secret:
-          formData.get("databricks-u2m-client-secret-input")?.toString() ||
-          null,
-        databricks_u2m_redirect_uri:
-          formData.get("databricks-u2m-redirect-uri-input")?.toString() || null,
-      };
-      await saveSettingsMutation.mutateAsync(payload as Partial<Settings>);
-      setDatabricksDirty(false);
-    },
-    [saveSettingsMutation],
-  );
+      },
+      databricks_u2m_client_id: u2mClientIdValue.trim() || null,
+      // Empty/untouched secret fields should stay null so we don't accidentally
+      // clear a previously-stored secret with an empty string.
+      ...(u2mClientSecretValue.trim()
+        ? { databricks_u2m_client_secret: u2mClientSecretValue.trim() }
+        : {}),
+      ...(m2mClientIdValue.trim()
+        ? { databricks_client_id: m2mClientIdValue.trim() }
+        : {}),
+      ...(m2mClientSecretValue.trim()
+        ? { databricks_client_secret: m2mClientSecretValue.trim() }
+        : {}),
+      databricks_u2m_redirect_uri: redirectUriValue.trim() || null,
+    };
+    await saveSettingsMutation.mutateAsync(payload as Partial<Settings>);
+  }, [
+    databricksWorkspaceUrl,
+    u2mClientIdValue,
+    u2mClientSecretValue,
+    m2mClientIdValue,
+    m2mClientSecretValue,
+    redirectUriValue,
+    saveSettingsMutation,
+  ]);
+
   // ── end Databricks state ────────────────────────────────────────────────────
 
   const hasHydratedInitialPersonalSaasViewRef = React.useRef(false);
   // Captured during buildPayload so onSaveSuccess can derive a profile name
   // from the exact model that was just persisted.
   const lastSavedModelRef = React.useRef<string | null>(null);
-
-  // Personal profile hooks (for OSS mode)
-  const saveProfile = useSaveLlmProfile();
-  const activateProfile = useActivateLlmProfile();
-  const renameProfile = useRenameLlmProfile();
-
-  // Org profile hooks (for SaaS mode with personal orgs)
-  const saveOrgProfile = useSaveOrgLlmProfile(organizationId);
-  const activateOrgProfile = useActivateOrgLlmProfile(organizationId);
-  const renameOrgProfile = useRenameOrgLlmProfile(organizationId);
 
   // Controls whether the LLM form or the Profiles list is shown. Flipping
   // this unmounts the inactive branch, so the SdkSectionPage re-hydrates
@@ -544,8 +554,8 @@ export function LlmSettingsScreen({
         agentSettings.llm = llm;
       }
 
-      // For Databricks the workspace URL is managed by the dedicated Databricks
-      // auth section (handleSaveDatabricksSettings), so we must not overwrite
+      // For Databricks the workspace URL is managed by saveDatabricksFromState
+      // (called from handleSaveSuccess), so we must not overwrite
       // llm.base_url with the schema default when the user saves the model
       // selector in basic view.
       if (context.view === "basic" && activeProvider !== "databricks") {
@@ -579,6 +589,16 @@ export function LlmSettingsScreen({
       ? deriveProfileNameFromModel(savedModel)
       : null;
     const name = userName ?? derivedName;
+
+    // For Databricks, always save the credential / workspace-URL fields as
+    // part of the main Save so users only need to click ONE button.
+    if (isDatabricks) {
+      try {
+        await saveDatabricksFromState();
+      } catch {
+        // Best-effort — don't block the profile save if this fails.
+      }
+    }
 
     // Auto-saved profiles for:
     // - Personal scope (OSS mode)
@@ -637,29 +657,40 @@ export function LlmSettingsScreen({
     activateProfile,
     activateOrgProfile,
     initialProfileName,
+    isDatabricks,
     isPersonalOrg,
     profileName,
     renameProfile,
     renameOrgProfile,
+    saveDatabricksFromState,
     saveProfile,
     saveOrgProfile,
     scope,
   ]);
 
-  const openForm = (view: SettingsView | null, name = "") => {
+  const openForm = (
+    view: SettingsView | null,
+    name = "",
+    profileBaseUrl?: string | null,
+  ) => {
     setProfileName(name);
     setInitialProfileName(name);
     setInitialViewHint(view);
-    // New profile: clear Databricks credential fields so they don't bleed over
-    // from the previously active profile.
     if (!name) {
+      // New profile: clear Databricks credential fields so they don't bleed
+      // over from the previously active profile.
       setDatabricksWorkspaceUrl("");
       setU2mClientIdValue("");
       setU2mClientSecretValue("");
       setM2mClientIdValue("");
       setM2mClientSecretValue("");
       setRedirectUriValue("");
-      setDatabricksDirty(false);
+    } else if (profileBaseUrl !== undefined) {
+      // Editing an existing profile: populate the workspace URL from the
+      // profile's own base_url so the field shows the right host even when
+      // the profile is not currently active (agent_settings.llm.base_url may
+      // differ or be null if a different profile is active).
+      setDatabricksWorkspaceUrl(profileBaseUrl ?? "");
     }
     setShowProfiles(false);
   };
@@ -671,7 +702,9 @@ export function LlmSettingsScreen({
         <OrgLlmProfilesManager
           orgId={organizationId}
           onAddProfile={() => openForm(null)}
-          onEditProfile={(profile) => openForm(null, profile.name)}
+          onEditProfile={(profile) =>
+            openForm(null, profile.name, profile.base_url)
+          }
         />
       );
     }
@@ -679,7 +712,9 @@ export function LlmSettingsScreen({
     return (
       <LlmProfilesManager
         onAddProfile={() => openForm(null)}
-        onEditProfile={(profile) => openForm(null, profile.name)}
+        onEditProfile={(profile) =>
+          openForm(null, profile.name, profile.base_url)
+        }
       />
     );
   }
@@ -731,13 +766,9 @@ export function LlmSettingsScreen({
       />
 
       {isDatabricks ? (
-        <form
+        <div
           className="flex flex-col gap-4 border border-gray-600 rounded-lg p-4"
           data-testid="databricks-auth-section"
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSaveDatabricksSettings(new FormData(e.currentTarget));
-          }}
         >
           <div className="text-sm font-semibold text-gray-200">
             {t(I18nKey.SETTINGS$DATABRICKS_SETUP_GUIDE_TITLE)}
@@ -747,14 +778,22 @@ export function LlmSettingsScreen({
           <ol className="flex flex-col gap-1.5 text-xs text-gray-400 list-none pl-0">
             {databricksAuthMode === "u2m" && (
               <li className="flex gap-2">
-                <span className="shrink-0 w-4 h-4 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px] font-bold">1</span>
+                <span className="shrink-0 w-4 h-4 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px] font-bold">
+                  1
+                </span>
                 <span>
                   {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_INTRO)}&nbsp;
-                  <span className="text-gray-200 font-medium">{t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_FIELD_NAME)}</span>&nbsp;
+                  <span className="text-gray-200 font-medium">
+                    {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_FIELD_NAME)}
+                  </span>
+                  &nbsp;
                   {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_MATCH)}&nbsp;
                   {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_NEW_APP)}&nbsp;
                   {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_COPY_TEXT)}&nbsp;
-                  <span className="text-blue-400">{t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_LOCATION)}</span>.&nbsp;
+                  <span className="text-blue-400">
+                    {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_LOCATION)}
+                  </span>
+                  .&nbsp;
                   {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_EXISTING)}&nbsp;
                   {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP1_EXISTING_ACTION)}
                 </span>
@@ -766,44 +805,45 @@ export function LlmSettingsScreen({
               </span>
               <span>{t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP2)}</span>
             </li>
-            <li className="flex gap-2">
-              <span className="shrink-0 w-4 h-4 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px] font-bold">
-                {databricksAuthMode === "u2m" ? "3" : "2"}
-              </span>
-              <span>
-                <span className="text-gray-200 font-medium">{t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP3_LABEL)}</span>&nbsp;
-                {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP3_SUFFIX)}
-              </span>
-            </li>
             {databricksAuthMode === "u2m" && (
               <li className="flex gap-2">
-                <span className="shrink-0 w-4 h-4 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px] font-bold">4</span>
+                <span className="shrink-0 w-4 h-4 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px] font-bold">
+                  3
+                </span>
                 <span>
-                  {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP4_LABEL)}&nbsp;
                   {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP4_INTRO)}&nbsp;
-                  <span className="text-gray-200 font-medium">{t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP4_BUTTON)}</span>&nbsp;
+                  <span className="text-gray-200 font-medium">
+                    {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP4_BUTTON)}
+                  </span>
+                  &nbsp;
                   {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP4_SUFFIX)}
                 </span>
               </li>
             )}
             <li className="flex gap-2">
               <span className="shrink-0 w-4 h-4 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px] font-bold">
-                {databricksAuthMode === "u2m" ? "5" : "3"}
+                {databricksAuthMode === "u2m" ? "4" : "2"}
               </span>
               <span>
                 {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP5_INTRO)}&nbsp;
-                <span className="text-gray-200 font-medium">{t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP5_BUTTON)}</span>&nbsp;
+                <span className="text-gray-200 font-medium">
+                  {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP5_BUTTON)}
+                </span>
+                &nbsp;
                 {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP5_SUFFIX)}
               </span>
             </li>
             <li className="flex gap-2">
               <span className="shrink-0 w-4 h-4 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px] font-bold">
-                {databricksAuthMode === "u2m" ? "6" : "4"}
+                {databricksAuthMode === "u2m" ? "5" : "3"}
               </span>
               <span>
                 {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP6_INTRO)}&nbsp;
-                <span className="text-gray-200 font-medium">{t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP6_LABEL)}</span>&nbsp;
-                {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP6_SUFFIX)}
+                <span className="text-gray-200 font-medium">
+                  {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP3_LABEL)}
+                </span>
+                &nbsp;
+                {t(I18nKey.SETTINGS$DATABRICKS_SETUP_STEP3_SUFFIX)}
               </span>
             </li>
           </ol>
@@ -819,7 +859,6 @@ export function LlmSettingsScreen({
             placeholder="https://adb-xxxx.azuredatabricks.net"
             onChange={(value) => {
               setDatabricksWorkspaceUrl(value);
-              setDatabricksDirty(true);
             }}
           />
 
@@ -859,7 +898,6 @@ export function LlmSettingsScreen({
                 placeholder="2b073bc9-..."
                 onChange={(val) => {
                   setU2mClientIdValue(val);
-                  setDatabricksDirty(true);
                 }}
               />
               <SettingsInput
@@ -876,7 +914,6 @@ export function LlmSettingsScreen({
                 }
                 onChange={(val) => {
                   setU2mClientSecretValue(val);
-                  setDatabricksDirty(true);
                 }}
               />
               <SettingsInput
@@ -889,7 +926,6 @@ export function LlmSettingsScreen({
                 placeholder={suggestedRedirectUri}
                 onChange={(val) => {
                   setRedirectUriValue(val);
-                  setDatabricksDirty(true);
                 }}
               />
               <DatabricksSignInButton
@@ -915,7 +951,6 @@ export function LlmSettingsScreen({
                 placeholder="Service principal client ID"
                 onChange={(val) => {
                   setM2mClientIdValue(val);
-                  setDatabricksDirty(true);
                 }}
               />
               <SettingsInput
@@ -932,7 +967,6 @@ export function LlmSettingsScreen({
                 }
                 onChange={(val) => {
                   setM2mClientSecretValue(val);
-                  setDatabricksDirty(true);
                 }}
               />
             </div>
@@ -975,16 +1009,7 @@ export function LlmSettingsScreen({
                 </p>
               )}
           </div>
-
-          {databricksDirty ? (
-            <button
-              type="submit"
-              className="self-start px-4 py-1.5 text-sm rounded bg-blue-600 hover:bg-blue-500 text-white"
-            >
-              {t(I18nKey.SETTINGS$SAVE)}
-            </button>
-          ) : null}
-        </form>
+        </div>
       ) : null}
     </div>
   );

@@ -155,6 +155,7 @@ def _clear_u2m_tokens(request: Request) -> None:
     if sid:
         _TOKEN_STORE.pop(sid, None)
     request.session.pop(_SESSION_TOKENS_KEY, None)
+    request.session.pop('databricks_authenticated_host', None)
 
 
 # Session keys for OAuth app credentials set via /prepare
@@ -306,7 +307,19 @@ async def prepare_u2m(
         del request.session[_SESSION_CLIENT_SECRET_KEY]
 
     if body.host:
-        request.session['databricks_u2m_host'] = body.host.strip().rstrip('/')
+        new_host = body.host.strip().rstrip('/')
+        request.session['databricks_u2m_host'] = new_host
+        # If the user is switching to a different workspace, clear any stale
+        # token so they are prompted to sign in to the new workspace.
+        authenticated_host = (
+            request.session.get('databricks_authenticated_host', '').strip().rstrip('/')
+        )
+        env_host = os.environ.get('DATABRICKS_HOST', '').strip().rstrip('/')
+        stale_host = authenticated_host or env_host
+        if stale_host and stale_host != new_host:
+            _clear_u2m_tokens(request)
+            # Restore the new host (clear may have been a no-op but be explicit).
+            request.session['databricks_u2m_host'] = new_host
     if body.redirect_uri:
         request.session[_SESSION_REDIRECT_URI_KEY] = body.redirect_uri.strip()
     elif _SESSION_REDIRECT_URI_KEY in request.session:
@@ -330,9 +343,13 @@ async def prepare_u2m(
             origin = body.origin.rstrip('/')
         else:
             bu = request.base_url
-            origin = f'{bu.scheme}://{bu.hostname}{":" + str(bu.port) if bu.port else ""}'
+            origin = (
+                f'{bu.scheme}://{bu.hostname}{":" + str(bu.port) if bu.port else ""}'
+            )
         # Parse the browser-facing port so we can compare against redirect_port.
-        browser_port = urlparse(origin).port or (443 if origin.startswith('https') else 80)
+        browser_port = urlparse(origin).port or (
+            443 if origin.startswith('https') else 80
+        )
 
         if redirect_port and redirect_host in ('localhost', '127.0.0.1'):
             main_callback_url = f'{origin}/auth/databricks/callback'
@@ -448,6 +465,9 @@ async def handle_u2m_callback(request: Request, code: str, state: str) -> HTMLRe
 </html>""",
             status_code=400,
         )
+    # Record which workspace the user authenticated against so /status can show
+    # the correct host even when DATABRICKS_HOST env var points elsewhere.
+    request.session['databricks_authenticated_host'] = host
     _store_u2m_tokens(request, token_payload)
     _logger.info('databricks_u2m_authenticated', extra={'host': host})
 
@@ -508,15 +528,19 @@ async def u2m_status(request: Request) -> JSONResponse:
     response also advertises whether U2M is configured at all, so the button
     can be hidden when the deployment didn't set up an OAuth app.
     """
-    host = os.environ.get('DATABRICKS_HOST', '').strip().rstrip('/')
+    env_host = os.environ.get('DATABRICKS_HOST', '').strip().rstrip('/')
     client_id = os.environ.get('DATABRICKS_U2M_CLIENT_ID', '').strip()
     # Also configured if the session has credentials from a /prepare call
     try:
         session_client_id = request.session.get(_SESSION_CLIENT_ID_KEY, '')
         session_host = request.session.get('databricks_u2m_host', '')
+        authenticated_host = (
+            request.session.get('databricks_authenticated_host', '').strip().rstrip('/')
+        )
     except (AssertionError, AttributeError):
-        session_client_id = session_host = ''
-    effective_host = host or session_host
+        session_client_id = session_host = authenticated_host = ''
+    # For "configured" check, any known host counts.
+    effective_host = session_host or env_host
     effective_client_id = client_id or session_client_id
     configured = bool(effective_host and effective_client_id)
 
@@ -525,12 +549,21 @@ async def u2m_status(request: Request) -> JSONResponse:
         tokens and isinstance(tokens, dict) and tokens.get('access_token')
     )
 
+    # When showing "Signed in to <host>", prefer the host that was actually
+    # used during OAuth (stored in 'databricks_authenticated_host') over the
+    # env var.  This ensures the UI reflects the workspace the user chose,
+    # not a server-side default.
+    if authenticated:
+        display_host = authenticated_host or session_host or env_host
+    else:
+        display_host = None
+
     return JSONResponse(
         {
             'configured': configured,
             'authenticated': authenticated,
             # Host is public (it's the workspace URL) — safe to echo so the
             # UI can show "Signed in to adb-xxx.azuredatabricks.net".
-            'host': effective_host if authenticated else None,
+            'host': display_host,
         }
     )

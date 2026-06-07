@@ -1222,6 +1222,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 # When base_url wasn't saved (e.g. profile activated without it),
                 # fall back to DATABRICKS_HOST env var so a server-level default works.
                 effective_host = base_url or os.environ.get('DATABRICKS_HOST') or None
+                _logger.info(
+                    'DatabricksLLM config: model=%s base_url_from_profile=%r effective_host=%r u2m_tokens=%s',
+                    model,
+                    base_url,
+                    effective_host,
+                    'present' if self.databricks_u2m_token_data else 'absent',
+                )
                 extras: dict = {}
                 if self.databricks_u2m_token_data:
                     extras['stored_u2m_tokens'] = self.databricks_u2m_token_data

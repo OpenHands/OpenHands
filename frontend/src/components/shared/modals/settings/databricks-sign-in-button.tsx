@@ -124,6 +124,32 @@ export function DatabricksSignInButton({
     );
   }
 
+  // Normalise a host URL to bare hostname for comparison, so trailing slashes
+  // and http/https differences don't cause false mismatches.
+  const normaliseHost = (url: string) => {
+    try {
+      return new URL(url.trim()).hostname.toLowerCase();
+    } catch {
+      return url
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .replace(/\/$/, "");
+    }
+  };
+
+  // Detect if the user is signed in to a DIFFERENT workspace than what they
+  // have configured in the settings form.  In that case we still show the
+  // sign-in button so they can initiate a fresh auth flow — the backend
+  // /prepare endpoint will automatically clear the stale token.
+  const configuredHost = u2mHost?.trim() ?? "";
+  const signedInHost = status?.host ?? "";
+  const hostMismatch =
+    status?.authenticated &&
+    configuredHost !== "" &&
+    signedInHost !== "" &&
+    normaliseHost(configuredHost) !== normaliseHost(signedInHost);
+
   const handleSignIn = async () => {
     const backendOrigin = getOAuthOrigin();
 
@@ -181,7 +207,7 @@ export function DatabricksSignInButton({
     className,
   );
 
-  if (status?.authenticated) {
+  if (status?.authenticated && !hostMismatch) {
     return (
       <div
         data-testid="databricks-signed-in"
@@ -203,6 +229,46 @@ export function DatabricksSignInButton({
           {t("SETTINGS$DATABRICKS_SIGN_OUT", {
             defaultValue: "Sign out of Databricks",
           })}
+        </button>
+      </div>
+    );
+  }
+
+  // Signed in to a different workspace than what is configured — show a
+  // warning and allow the user to sign in to the configured workspace.  The
+  // backend /prepare call will auto-clear the stale token when it detects the
+  // host change, so no explicit sign-out is required.
+  if (status?.authenticated && hostMismatch) {
+    return (
+      <div
+        data-testid="databricks-host-mismatch"
+        className="flex flex-col gap-2 text-sm"
+      >
+        <span className="text-xs text-amber-400">
+          {t("SETTINGS$DATABRICKS_HOST_MISMATCH", {
+            defaultValue: "Currently signed in to",
+          })}{" "}
+          <span className="font-mono">{status?.host}</span>
+          {". "}
+          {t("SETTINGS$DATABRICKS_HOST_MISMATCH_HINT", {
+            defaultValue:
+              "Sign in below to switch to the configured workspace.",
+          })}
+        </span>
+        <button
+          type="button"
+          data-testid="databricks-sign-in-button"
+          className={baseClasses}
+          onClick={handleSignIn}
+          disabled={isPreparing}
+        >
+          {isPreparing
+            ? t("SETTINGS$DATABRICKS_SIGNING_IN", {
+                defaultValue: "Opening sign-in…",
+              })
+            : t("SETTINGS$DATABRICKS_SIGN_IN", {
+                defaultValue: "Sign in with Databricks",
+              })}
         </button>
       </div>
     );
