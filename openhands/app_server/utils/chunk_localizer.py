@@ -73,8 +73,9 @@ def _chunk_sibling_nodes(
     current_group_start_0: int = 0
 
     for node in nodes:
-        node_start_0: int = node.start_point[0]  # 0-indexed row
-        node_end_0: int = node.end_point[0]  # 0-indexed row
+        # both are 0-indexed row
+        node_start_0: int = node.start_point[0]
+        node_end_0: int = node.end_point[0]
 
         if not current_group:
             current_group = [node]
