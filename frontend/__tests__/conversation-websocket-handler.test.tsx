@@ -1110,10 +1110,12 @@ describe("Conversation WebSocket Handler", () => {
       expect(receivedMessages[0]).toEqual({
         role: "user",
         content: [{ type: "text", text: "Message 1" }],
+        run: true,
       });
       expect(receivedMessages[1]).toEqual({
         role: "user",
         content: [{ type: "text", text: "Message 2" }],
+        run: true,
       });
     });
   });

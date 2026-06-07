@@ -910,7 +910,7 @@ export function ConversationWebSocketProvider({
 
       try {
         // Send message through WebSocket as JSON
-        currentSocket.send(JSON.stringify(message));
+        currentSocket.send(JSON.stringify({ ...message, run: true }));
         return { queued: false };
       } catch (error) {
         const errorMessage =
