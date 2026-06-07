@@ -39,6 +39,135 @@ def _create_chunks_from_raw_string(content: str, size: int):
     return ret
 
 
+def _chunk_sibling_nodes(
+    nodes: list,
+    text_lines: list[str],
+    max_chunk_lines: int,
+    range_start_0: int,
+    range_end_0: int,
+) -> list[Chunk]:
+    """Greedy-merge a list of sibling AST nodes into Chunks.
+
+    Args:
+        nodes: Sibling tree-sitter "Node" objects to merge.
+        text_lines: Source text already split on '\\n'.
+        max_chunk_lines: Upper bound on lines per emitted chunk.
+        range_start_0: 0-indexed first line of the region these nodes occupy.
+        range_end_0: 0-indexed last line of the region.
+
+    Returns:
+        A list of class Chunk objects.
+    """
+    if not nodes:
+        # Defensive: emit the whole range as one chunk.
+        chunk_text = '\n'.join(text_lines[range_start_0 : range_end_0 + 1])
+        return [
+            Chunk(
+                text=chunk_text,
+                line_range=(range_start_0 + 1, range_end_0 + 1),
+            )
+        ]
+
+    groups: list[list] = []
+    current_group: list = []
+    current_group_start_0: int = 0
+
+    for node in nodes:
+        node_start_0: int = node.start_point[0]  # 0-indexed row
+        node_end_0: int = node.end_point[0]  # 0-indexed row
+
+        if not current_group:
+            current_group = [node]
+            current_group_start_0 = node_start_0
+        else:
+            # Lines the merged group would span
+            merged_line_count = node_end_0 - current_group_start_0 + 1
+            if merged_line_count <= max_chunk_lines:
+                current_group.append(node)
+            else:
+                groups.append(current_group)
+                current_group = [node]
+                current_group_start_0 = node_start_0
+
+    if current_group:
+        groups.append(current_group)
+
+    result: list[Chunk] = []
+
+    for i, group in enumerate(groups):
+        group_ast_start_0: int = group[0].start_point[0]
+        group_ast_end_0: int = group[-1].end_point[0]
+
+        # Expand boundaries so blank lines are absorbed (full contiguity).
+        actual_start_0 = range_start_0 if i == 0 else group_ast_start_0
+        if i < len(groups) - 1:
+            next_group_ast_start_0: int = groups[i + 1][0].start_point[0]
+            actual_end_0 = next_group_ast_start_0 - 1
+        else:
+            actual_end_0 = range_end_0
+
+        # If a single node is oversized AND has children, recurse.
+        if len(group) == 1:
+            node = group[0]
+            ast_line_count = group_ast_end_0 - group_ast_start_0 + 1
+            if ast_line_count > max_chunk_lines and node.children:
+                sub_chunks = _chunk_sibling_nodes(
+                    nodes=node.children,
+                    text_lines=text_lines,
+                    max_chunk_lines=max_chunk_lines,
+                    range_start_0=actual_start_0,
+                    range_end_0=actual_end_0,
+                )
+                result.extend(sub_chunks)
+                continue
+
+        # Emit the group as a single Chunk.
+        chunk_text = '\n'.join(text_lines[actual_start_0 : actual_end_0 + 1])
+        result.append(
+            Chunk(
+                text=chunk_text,
+                line_range=(
+                    actual_start_0 + 1,
+                    actual_end_0 + 1,
+                ),  # 1-indexed, inclusive
+            )
+        )
+
+    return result
+
+
+def _create_chunks_from_tree_sitter(
+    tree,
+    text: str,
+    max_chunk_lines: int,
+) -> list[Chunk]:
+    """Create semantically-aware chunks from a tree-sitter parse tree.
+
+    Args:
+        tree: A tree_sitter.Tree returned by parser.parse().
+        text: The original source text that was parsed.
+        max_chunk_lines: Maximum number of lines per chunk.
+
+    Returns:
+        A list of class Chunk objects covering the entire source text.
+    """
+    text_lines = text.split('\n')
+    total_lines = len(text_lines)
+
+    root = tree.root_node
+    if not root.children:
+        # Empty or un-parseable file – fall back to the naive splitter.
+        return _create_chunks_from_raw_string(text, max_chunk_lines)
+
+    return _chunk_sibling_nodes(
+        nodes=root.children,
+        text_lines=text_lines,
+        max_chunk_lines=max_chunk_lines,
+        range_start_0=0,
+        range_end_0=total_lines - 1,
+    )
+
+
 def create_chunks(
     text: str, size: int = 100, language: str | None = None
 ) -> list[Chunk]:
@@ -52,9 +181,9 @@ def create_chunks(
         # fallback to raw string
         return _create_chunks_from_raw_string(text, size)
 
-    # TODO: implement tree-sitter chunking
-    # return _create_chunks_from_tree_sitter(parser.parse(bytes(text, 'utf-8')), max_chunk_lines=size)
-    raise NotImplementedError('Tree-sitter chunking not implemented yet.')
+    return _create_chunks_from_tree_sitter(
+        parser.parse(bytes(text, 'utf-8')), text, max_chunk_lines=size
+    )
 
 
 def normalized_lcs(chunk: str, query: str) -> float:

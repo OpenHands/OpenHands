@@ -134,3 +134,39 @@ def test_get_top_k_chunk_matches_with_overlapping_chunks():
     assert matches[1].text == 'chunk3\nchunk4'
     assert matches[1].line_range == (3, 4)
     assert matches[0].normalized_lcs == matches[1].normalized_lcs
+
+
+def test_create_chunks_tree_sitter_python_basic():
+    text = """
+    def foo():
+        print("foo")
+    def bar():
+        print("bar")
+    """
+    chunks = create_chunks(text, size=3, language='python')
+    assert len(chunks) == 2
+    assert chunks[0].line_range == (1, 3)
+    assert 'def foo():' in chunks[0].text
+    assert chunks[1].line_range == (4, 6)
+    assert 'def bar():' in chunks[1].text
+
+
+def test_create_chunks_tree_sitter_python_oversized():
+    text = """
+    class MyClass:
+        def method1(self):
+            a = 1
+            b = 2
+
+        def method2(self):
+            c = 3
+            d = 4
+    """
+    chunks = create_chunks(text, size=4, language='python')
+    assert len(chunks) > 0
+    # Check full contiguity
+    for i in range(len(chunks) - 1):
+        assert chunks[i].line_range[1] + 1 == chunks[i + 1].line_range[0]
+
+    assert chunks[0].line_range[0] == 1
+    assert chunks[-1].line_range[1] == len(text.split('\n'))
