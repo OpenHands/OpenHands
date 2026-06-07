@@ -32,8 +32,11 @@ sys.modules['google.cloud.sql.connector'] = MagicMock()
 # Import after mocking to avoid import-time issues
 from openhands.app_server.services.db_session_injector import (  # noqa: E402
     DbSessionInjector,
-    _build_asyncpg_connect_args,
-    _build_pg8000_connect_args,
+)
+from openhands.db.ssl import (  # noqa: E402
+    build_asyncpg_connect_args,
+    build_db_url_query,
+    build_pg8000_connect_args,
 )
 
 
@@ -292,20 +295,26 @@ class TestDbSessionInjectorConnections:
             }
 
     def test_build_pg8000_connect_args_for_ssl_modes(self):
-        assert _build_pg8000_connect_args(None) == {}
-        assert _build_pg8000_connect_args('prefer') == {}
-        assert _build_pg8000_connect_args('require') == {'ssl_context': True}
-        assert _build_pg8000_connect_args('disable') == {'ssl_context': False}
+        assert build_pg8000_connect_args(None) == {}
+        assert build_pg8000_connect_args('prefer') == {}
+        assert build_pg8000_connect_args('require') == {'ssl_context': True}
+        assert build_pg8000_connect_args('disable') == {'ssl_context': False}
 
     def test_build_asyncpg_connect_args_for_ssl_modes(self):
-        assert _build_asyncpg_connect_args(None) == {}
-        assert _build_asyncpg_connect_args('prefer') == {}
-        assert _build_asyncpg_connect_args('require') == {'ssl': 'require'}
-        assert _build_asyncpg_connect_args('disable') == {'ssl': 'disable'}
+        assert build_asyncpg_connect_args(None) == {}
+        assert build_asyncpg_connect_args('prefer') == {}
+        assert build_asyncpg_connect_args('require') == {'ssl': 'require'}
+        assert build_asyncpg_connect_args('disable') == {'ssl': 'disable'}
+
+    def test_build_db_url_query_for_ssl_modes(self):
+        assert build_db_url_query(None) == ''
+        assert build_db_url_query('prefer') == ''
+        assert build_db_url_query('require') == '?sslmode=require'
+        assert build_db_url_query('disable') == '?sslmode=disable'
 
     def test_build_connect_args_rejects_unsupported_ssl_mode(self):
         with pytest.raises(ValueError, match='Unsupported DB_SSL_MODE'):
-            _build_pg8000_connect_args('verify-full')
+            build_pg8000_connect_args('verify-full')
 
     @patch(
         'openhands.app_server.services.db_session_injector.DbSessionInjector._create_gcp_engine'

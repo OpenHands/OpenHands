@@ -18,42 +18,11 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.util import await_only
 
 from openhands.app_server.services.injector import Injector, InjectorState
+from openhands.db.ssl import build_asyncpg_connect_args, build_pg8000_connect_args
 
 _logger = logging.getLogger(__name__)
 DB_SESSION_ATTR = 'db_session'
 DB_SESSION_KEEP_OPEN_ATTR = 'db_session_keep_open'
-SUPPORTED_DB_SSL_MODES = {'prefer', 'require', 'disable'}
-
-
-def _normalize_db_ssl_mode(db_ssl_mode: str | None) -> str | None:
-    if db_ssl_mode is None:
-        return None
-
-    mode = db_ssl_mode.strip().lower()
-    if not mode or mode == 'prefer':
-        return None
-    if mode not in SUPPORTED_DB_SSL_MODES:
-        raise ValueError(
-            f'Unsupported DB_SSL_MODE "{db_ssl_mode}". '
-            f'Supported values are: {", ".join(sorted(SUPPORTED_DB_SSL_MODES))}.'
-        )
-    return mode
-
-
-def _build_pg8000_connect_args(db_ssl_mode: str | None) -> dict:
-    mode = _normalize_db_ssl_mode(db_ssl_mode)
-    if mode == 'require':
-        return {'ssl_context': True}
-    if mode == 'disable':
-        return {'ssl_context': False}
-    return {}
-
-
-def _build_asyncpg_connect_args(db_ssl_mode: str | None) -> dict:
-    mode = _normalize_db_ssl_mode(db_ssl_mode)
-    if mode:
-        return {'ssl': mode}
-    return {}
 
 
 class DbSessionInjector(BaseModel, Injector[AsyncSession]):
@@ -224,7 +193,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
             if self.host:
                 async_engine = create_async_engine(
                     url,
-                    connect_args=_build_asyncpg_connect_args(self.ssl_mode),
+                    connect_args=build_asyncpg_connect_args(self.ssl_mode),
                     pool_size=self.pool_size,
                     max_overflow=self.max_overflow,
                     pool_recycle=self.pool_recycle,
@@ -268,7 +237,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
                 url = f'sqlite:///{self.persistence_dir}/openhands.db'
             engine = create_engine(
                 url,
-                connect_args=_build_pg8000_connect_args(self.ssl_mode),
+                connect_args=build_pg8000_connect_args(self.ssl_mode),
                 pool_size=self.pool_size,
                 max_overflow=self.max_overflow,
                 pool_recycle=self.pool_recycle,

@@ -17,6 +17,8 @@ from google.cloud.sql.connector import Connector  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 from storage.base import Base  # noqa: E402
 
+from openhands.db.ssl import build_db_url_query, build_pg8000_connect_args  # noqa: E402
+
 target_metadata = Base.metadata
 
 DB_USER = os.getenv('DB_USER', 'postgres')
@@ -30,7 +32,6 @@ DB_NAME = os.getenv('DB_NAME', 'openhands')
 # migration failures surface before deploy. Set DB_DRIVER='' to use psycopg2.
 DB_DRIVER = os.getenv('DB_DRIVER', 'pg8000')
 DB_SSL_MODE = os.getenv('DB_SSL_MODE') or os.getenv('PGSSLMODE')
-SUPPORTED_DB_SSL_MODES = {'prefer', 'require', 'disable'}
 
 GCP_DB_INSTANCE = os.getenv('GCP_DB_INSTANCE')
 GCP_PROJECT = os.getenv('GCP_PROJECT')
@@ -38,37 +39,6 @@ GCP_REGION = os.getenv('GCP_REGION')
 
 POOL_SIZE = int(os.getenv('DB_POOL_SIZE', '25'))
 MAX_OVERFLOW = int(os.getenv('DB_MAX_OVERFLOW', '10'))
-
-
-def _normalize_db_ssl_mode(db_ssl_mode: str | None) -> str | None:
-    if db_ssl_mode is None:
-        return None
-
-    mode = db_ssl_mode.strip().lower()
-    if not mode or mode == 'prefer':
-        return None
-    if mode not in SUPPORTED_DB_SSL_MODES:
-        raise ValueError(
-            f'Unsupported DB_SSL_MODE "{db_ssl_mode}". '
-            f'Supported values are: {", ".join(sorted(SUPPORTED_DB_SSL_MODES))}.'
-        )
-    return mode
-
-
-def _build_pg8000_connect_args(db_ssl_mode: str | None) -> dict:
-    mode = _normalize_db_ssl_mode(db_ssl_mode)
-    if mode == 'require':
-        return {'ssl_context': True}
-    if mode == 'disable':
-        return {'ssl_context': False}
-    return {}
-
-
-def _build_db_url_query(db_ssl_mode: str | None) -> str:
-    mode = _normalize_db_ssl_mode(db_ssl_mode)
-    if mode:
-        return f'?sslmode={mode}'
-    return ''
 
 
 def get_engine(database_name=DB_NAME):
@@ -97,14 +67,14 @@ def get_engine(database_name=DB_NAME):
         scheme = f'postgresql+{DB_DRIVER}' if DB_DRIVER else 'postgresql'
         url = f'{scheme}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{database_name}'
         if DB_DRIVER != 'pg8000':
-            url += _build_db_url_query(DB_SSL_MODE)
+            url += build_db_url_query(DB_SSL_MODE)
         return create_engine(
             url,
             pool_size=POOL_SIZE,
             max_overflow=MAX_OVERFLOW,
             pool_pre_ping=True,
             connect_args=(
-                _build_pg8000_connect_args(DB_SSL_MODE) if DB_DRIVER == 'pg8000' else {}
+                build_pg8000_connect_args(DB_SSL_MODE) if DB_DRIVER == 'pg8000' else {}
             ),
         )
 
