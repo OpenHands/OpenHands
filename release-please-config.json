@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "changelog-type": "default",
+      "skip-changelog": true,
+      "include-component-in-tag": false,
+      "include-v-in-tag": false,
+      "include-v-in-release-name": false,
+      "exclude-paths": ["enterprise"],
+      "changelog-sections": [
+        { "type": "feat", "section": "Features" },
+        { "type": "fix", "section": "Bug Fixes" },
+        { "type": "perf", "section": "Performance Improvements" },
+        { "type": "revert", "section": "Reverts" },
+        { "type": "docs", "section": "Documentation" },
+        { "type": "refactor", "section": "Code Refactoring" },
+        { "type": "test", "section": "Tests" },
+        { "type": "build", "section": "Build System" },
+        { "type": "ci", "section": "Continuous Integration" },
+        { "type": "chore", "section": "Miscellaneous Chores" },
+        { "type": "style", "section": "Styles" }
+      ],
+      "extra-files": [
+        { "type": "toml", "path": "pyproject.toml", "jsonpath": "$.tool.poetry.version" },
+        { "type": "json", "path": "frontend/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "frontend/package-lock.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "frontend/package-lock.json", "jsonpath": "$.packages[''].version" }
+      ]
+    }
+  }
+}

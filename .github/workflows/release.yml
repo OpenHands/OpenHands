@@ -1,0 +1,47 @@
+name: release
+
+# Two independent release lines run from this one repo, both off `main` (and
+# release/** maintenance/freeze branches). Each job calls the SAME shared
+# reusable workflow with its own config + manifest, so each tracks its own
+# version, opens its own release PR, and cuts its own tags:
+#
+#   * openhands-app — the GUI app. Bare tags `X.Y.Z`. Release notes cover every
+#     PR EXCEPT those whose files are entirely under `enterprise/` (the app
+#     config sets exclude-paths: ["enterprise"]).
+#   * cloud — the cloud Docker image, which is built FROM the app image and so
+#     ships the app code too. Tags `cloud-X.Y.Z`. Release notes cover ALL PRs,
+#     including `enterprise/`.
+#
+# release-please needs the root package to receive every commit and then
+# subtract enterprise (app) or nothing (cloud); since only one package per
+# manifest can be the root, the two lines use two separate config/manifest
+# pairs rather than one combined manifest.
+#
+# Merging a release PR pushes its tag with the release App identity (so the
+# push isn't suppressed by GitHub's recursion guard). The existing tag-driven
+# workflows then fire: tag-image.yml retags the images, and pypi-release.yml
+# publishes the PyPI package for bare (non-`cloud-`, non-`-cli`) tags.
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+
+jobs:
+  openhands-app:
+    permissions:
+      contents: write
+      pull-requests: write
+    secrets: inherit
+    # Uses the default config/manifest: release-please-config.json + .release-please-manifest.json
+    uses: OpenHands/release-actions/.github/workflows/release-please.yml@main
+
+  cloud:
+    permissions:
+      contents: write
+      pull-requests: write
+    secrets: inherit
+    uses: OpenHands/release-actions/.github/workflows/release-please.yml@main
+    with:
+      config-file: release-please-config.cloud.json
+      manifest-file: .release-please-manifest.cloud.json
