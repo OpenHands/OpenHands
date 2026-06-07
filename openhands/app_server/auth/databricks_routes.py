@@ -7,15 +7,21 @@ Env vars (read lazily per request — P0-5):
 
 Token storage design
 --------------------
-Only a short opaque ``databricks_u2m_session_id`` is stored in the signed
-Starlette session cookie.  The actual access + refresh tokens live in the
-process-local ``_TOKEN_STORE`` dict, keyed by that session ID.  This keeps
-cookie size small (tokens are often >1 KB JWTs) and avoids growing cookies
-that could exceed browser / proxy limits.
+Starlette's ``SessionMiddleware`` **signs but does not encrypt** the session
+cookie, so it must never carry secret material. Only a short opaque
+``databricks_u2m_session_id`` is stored in the cookie. All secret material —
+the OAuth access/refresh tokens and any confidential-app ``client_secret`` —
+lives server-side in :data:`u2m_session_store`, keyed by that session id.
 
-Tokens are lost on server restart — users must re-authenticate.  For long-lived
-production deployments backed by M2M / PAT auth this is not a concern; U2M is
-primarily used for local interactive sessions.
+The server-side store is in-memory and single-process (TTL + LRU bounded); see
+:mod:`openhands.app_server.auth.databricks_token_store` for the single-worker
+caveat. Tokens are lost on server restart — users must re-authenticate. For
+long-lived production deployments backed by M2M / PAT auth this is not a
+concern; U2M is primarily used for local interactive sessions.
+
+The local-dev OAuth "bridge server" and the root ``/callback`` alias are gated
+behind ``RUNTIME=local`` so production exposes only the single stable
+``/auth/databricks/callback`` redirect URI.
 """
 
 from __future__ import annotations
@@ -32,10 +38,11 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from openhands.app_server.auth.databricks_oauth import (
+    async_exchange_code_for_tokens,
     build_authorize_url,
-    exchange_code_for_tokens,
     generate_pkce,
 )
+from openhands.app_server.auth.databricks_token_store import u2m_session_store
 from openhands.app_server.config import depends_user_context
 from openhands.app_server.user.user_context import UserContext
 
@@ -45,14 +52,24 @@ databricks_router = APIRouter(prefix='/auth/databricks', tags=['databricks-auth'
 
 _user_dependency = depends_user_context()
 
-# Server-side token store: session_id -> {"access_token": ..., "refresh_token": ...}
-# Process-local in-memory store — intentionally simple for single-process deployments.
-_TOKEN_STORE: dict[str, dict] = {}
+# The cookie carries ONLY this opaque session id. All secret material (tokens,
+# confidential-app client secret) lives server-side in u2m_session_store keyed
+# by this id — never in the signed-but-unencrypted session cookie.
 _SESSION_ID_KEY = 'databricks_u2m_session_id'
-# Key used by LiveStatusAppConversationService to pick up the token payload.
-# Tokens are stored here as well as in _TOKEN_STORE so the conversation service
-# can read them without importing private helpers from this module.
-_SESSION_TOKENS_KEY = 'databricks_u2m_tokens'
+# Record keys inside the server-side store.
+_STORE_TOKENS_KEY = 'tokens'
+_STORE_CLIENT_SECRET_KEY = 'oauth_client_secret'
+
+
+def _is_local_runtime() -> bool:
+    """True when running in local dev (``RUNTIME=local``).
+
+    Local-dev-only conveniences (the OAuth port bridge server and the root
+    ``/callback`` alias) are gated behind this so production never exposes them.
+    Mirrors the ``OPENHANDS_SESSION_SECRET`` guard in ``app.py``.
+    """
+    return os.environ.get('RUNTIME', '').lower() == 'local'
+
 
 # Bridge servers: port -> asyncio.Server
 # When the user's registered redirect URI is on a port other than the main
@@ -114,53 +131,61 @@ async def _start_bridge_server(port: int, main_callback_url: str) -> None:
     _logger.info('databricks_u2m_bridge_started', extra={'port': port})
 
 
+def _ensure_session_id(request: Request) -> str:
+    """Return the opaque session id from the cookie, minting one if absent."""
+    sid = request.session.get(_SESSION_ID_KEY)
+    if not sid:
+        sid = secrets.token_urlsafe(32)
+        request.session[_SESSION_ID_KEY] = sid
+    return sid
+
+
 def _get_u2m_tokens(request: Request) -> Optional[dict]:
-    """Look up U2M tokens: session cookie first, then the in-process store."""
+    """Look up U2M tokens from the server-side store via the cookie session id."""
     try:
-        # Primary: conversation service writes to / reads from this session key.
-        direct = request.session.get(_SESSION_TOKENS_KEY)
-        if direct and isinstance(direct, dict) and direct.get('access_token'):
-            return direct
-        # Fallback: in-process store (populated by the same _store_u2m_tokens call).
         sid = request.session.get(_SESSION_ID_KEY)
     except (AssertionError, AttributeError):
         return None
-    if not sid:
+    record = u2m_session_store.get(sid)
+    if not record:
         return None
-    return _TOKEN_STORE.get(sid)
+    tokens = record.get(_STORE_TOKENS_KEY)
+    if isinstance(tokens, dict) and tokens.get('access_token'):
+        return tokens
+    return None
+
+
+def read_u2m_tokens(request: Request) -> Optional[dict]:
+    """Public accessor for the U2M token payload (server-side store only).
+
+    Used by ``LiveStatusAppConversationService`` to pick up the browser-login
+    tokens when starting a conversation. Reads exclusively from the server-side
+    store — the signed cookie never carries tokens.
+    """
+    return _get_u2m_tokens(request)
 
 
 def _store_u2m_tokens(request: Request, token_payload: dict) -> None:
-    """Persist tokens in both the session cookie and the server-side store.
+    """Persist tokens server-side, keyed by the opaque cookie session id.
 
-    The session cookie key ``databricks_u2m_tokens`` is read by
-    ``LiveStatusAppConversationService`` when it starts a conversation, so
-    the tokens must be present there.  The ``_TOKEN_STORE`` is kept for the
-    ``/status`` endpoint and as an in-process fallback (survives session edits
-    that might not flush the cookie immediately).
-
-    Databricks tokens are ~1 KB in JSON; well within the 4 KB session-cookie
-    limit, so storing them in the session is safe.
+    Secret material (access + refresh tokens) is never written to the
+    signed-but-unencrypted session cookie — only the opaque session id is.
     """
-    sid = request.session.get(_SESSION_ID_KEY) or secrets.token_urlsafe(32)
-    _TOKEN_STORE[sid] = token_payload
-    request.session[_SESSION_ID_KEY] = sid
-    # Also write tokens directly so the conversation service can read them.
-    request.session[_SESSION_TOKENS_KEY] = token_payload
+    sid = _ensure_session_id(request)
+    u2m_session_store.put(sid, {_STORE_TOKENS_KEY: token_payload})
 
 
 def _clear_u2m_tokens(request: Request) -> None:
-    """Remove tokens from server-side store and session cookie."""
+    """Remove the server-side record and drop the session id from the cookie."""
     sid = request.session.pop(_SESSION_ID_KEY, None)
-    if sid:
-        _TOKEN_STORE.pop(sid, None)
-    request.session.pop(_SESSION_TOKENS_KEY, None)
+    u2m_session_store.delete(sid)
     request.session.pop('databricks_authenticated_host', None)
 
 
-# Session keys for OAuth app credentials set via /prepare
+# Session keys for non-secret OAuth app config set via /prepare. The
+# confidential-app client_secret is NOT among these — it lives server-side in
+# u2m_session_store under _STORE_CLIENT_SECRET_KEY.
 _SESSION_CLIENT_ID_KEY = 'databricks_u2m_client_id'
-_SESSION_CLIENT_SECRET_KEY = 'databricks_u2m_client_secret'
 _SESSION_REDIRECT_URI_KEY = 'databricks_u2m_redirect_uri'
 
 
@@ -220,12 +245,15 @@ def _get_u2m_config(request: Request) -> tuple[str, str, str, Optional[str]]:
     """
     try:
         session_client_id = request.session.get(_SESSION_CLIENT_ID_KEY)
-        session_client_secret = request.session.get(_SESSION_CLIENT_SECRET_KEY)
         session_host = request.session.get('databricks_u2m_host')
         session_redirect_uri = request.session.get(_SESSION_REDIRECT_URI_KEY)
+        sid = request.session.get(_SESSION_ID_KEY)
     except (AssertionError, AttributeError):
-        session_client_id = session_client_secret = session_host = None
-        session_redirect_uri = None
+        session_client_id = session_host = None
+        session_redirect_uri = sid = None
+    # The confidential-app client secret lives server-side (never in the cookie).
+    record = u2m_session_store.get(sid)
+    session_client_secret = record.get(_STORE_CLIENT_SECRET_KEY) if record else None
 
     host = (session_host or os.environ.get('DATABRICKS_HOST', '')).strip().rstrip('/')
     client_id = (
@@ -293,6 +321,10 @@ async def prepare_u2m(
         raise HTTPException(status_code=400, detail='client_id must not be empty')
     request.session[_SESSION_CLIENT_ID_KEY] = body.client_id.strip()
 
+    # The client secret is sensitive — keep it OUT of the signed cookie and put
+    # it in the server-side store, keyed by the opaque session id.
+    sid = _ensure_session_id(request)
+
     # Resolve client_secret: request body → stored settings → clear.
     # GET /settings masks secrets as "**********", so the frontend may
     # inadvertently send that placeholder.  Treat masked values as absent and
@@ -302,9 +334,15 @@ async def prepare_u2m(
     )
     resolved_secret = raw_secret or await _resolve_stored_u2m_secret(user_context)
     if resolved_secret:
-        request.session[_SESSION_CLIENT_SECRET_KEY] = resolved_secret
-    elif _SESSION_CLIENT_SECRET_KEY in request.session:
-        del request.session[_SESSION_CLIENT_SECRET_KEY]
+        u2m_session_store.put(sid, {_STORE_CLIENT_SECRET_KEY: resolved_secret})
+    else:
+        # Clear any previously stored secret without dropping the token record.
+        record = u2m_session_store.get(sid) or {}
+        if _STORE_CLIENT_SECRET_KEY in record:
+            record.pop(_STORE_CLIENT_SECRET_KEY, None)
+            u2m_session_store.delete(sid)
+            if record:
+                u2m_session_store.put(sid, record)
 
     if body.host:
         new_host = body.host.strip().rstrip('/')
@@ -329,7 +367,10 @@ async def prepare_u2m(
     # port, start a bridge server on that port — exactly as the CLI's
     # databricks_pkce.py does.  The bridge forwards the browser's callback
     # (code + state) to the main server's /auth/databricks/callback endpoint.
-    if body.redirect_uri:
+    #
+    # This raw-socket listener is a local-dev convenience only; in production we
+    # require a single stable registered redirect URI, so gate it on RUNTIME=local.
+    if body.redirect_uri and _is_local_runtime():
         parsed_uri = urlparse(body.redirect_uri.strip())
         redirect_port = parsed_uri.port
         redirect_host = (parsed_uri.hostname or '').lower()
@@ -409,7 +450,8 @@ async def handle_u2m_callback(request: Request, code: str, state: str) -> HTMLRe
 
     host, client_id, redirect_uri, client_secret = _get_u2m_config(request)
     try:
-        token_payload = exchange_code_for_tokens(
+        # Async exchange so the token round-trip does not block the event loop.
+        token_payload = await async_exchange_code_for_tokens(
             host,
             client_id,
             redirect_uri,

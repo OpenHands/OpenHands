@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-import httpx
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
@@ -13,6 +12,19 @@ from fastapi.testclient import TestClient
 from starlette.middleware.sessions import SessionMiddleware
 
 from openhands.app_server.auth.databricks_routes import databricks_router
+
+
+def _async_token_payload(**overrides) -> AsyncMock:
+    """An AsyncMock standing in for async_exchange_code_for_tokens."""
+    payload = {
+        'access_token': 'atok',
+        'refresh_token': 'rtok',
+        'expires_at': 9999999999.0,
+        'client_id': 'cid',
+        'host': 'https://adb-123.azuredatabricks.net',
+    }
+    payload.update(overrides)
+    return AsyncMock(return_value=payload)
 
 
 @pytest.fixture
@@ -88,20 +100,13 @@ def test_callback_exchanges_code_and_stores_session(client: TestClient) -> None:
         'DATABRICKS_U2M_CLIENT_ID': 'cid',
         'DATABRICKS_REDIRECT_URI': 'http://testserver/auth/databricks/callback',
     }
-    token_url = 'https://adb-123.azuredatabricks.net/oidc/v1/token'
-    req = httpx.Request('POST', token_url)
-    mock_resp = httpx.Response(
-        200,
-        json={
-            'access_token': 'atok',
-            'refresh_token': 'rtok',
-            'expires_in': 3600,
-        },
-        request=req,
-    )
+    mock_exchange = _async_token_payload()
 
     with patch.dict(os.environ, env, clear=False):
-        with patch('httpx.post', return_value=mock_resp) as mock_post:
+        with patch(
+            'openhands.app_server.auth.databricks_routes.async_exchange_code_for_tokens',
+            mock_exchange,
+        ):
             # Start OAuth: sets session state + verifier
             r1 = client.get('/auth/databricks/initiate', follow_redirects=False)
             assert r1.status_code in (302, 307)
@@ -123,7 +128,7 @@ def test_callback_exchanges_code_and_stores_session(client: TestClient) -> None:
                 or 'success' in r2.text.lower()
                 or 'signed' in r2.text.lower()
             )
-            mock_post.assert_called_once()
+            mock_exchange.assert_awaited_once()
 
 
 def test_status_returns_not_configured_when_env_missing(client: TestClient) -> None:
@@ -161,16 +166,12 @@ def test_status_reports_authenticated_after_callback(client: TestClient) -> None
         'DATABRICKS_U2M_CLIENT_ID': 'cid',
         'DATABRICKS_REDIRECT_URI': 'http://testserver/auth/databricks/callback',
     }
-    token_url = 'https://adb-123.azuredatabricks.net/oidc/v1/token'
-    req = httpx.Request('POST', token_url)
-    mock_resp = httpx.Response(
-        200,
-        json={'access_token': 'a', 'refresh_token': 'r', 'expires_in': 3600},
-        request=req,
-    )
 
     with patch.dict(os.environ, env, clear=False):
-        with patch('httpx.post', return_value=mock_resp):
+        with patch(
+            'openhands.app_server.auth.databricks_routes.async_exchange_code_for_tokens',
+            _async_token_payload(),
+        ):
             r1 = client.get('/auth/databricks/initiate', follow_redirects=False)
             from urllib.parse import parse_qs, urlparse
 
@@ -193,20 +194,11 @@ def test_logout_clears_session(client: TestClient) -> None:
         'DATABRICKS_U2M_CLIENT_ID': 'cid',
         'DATABRICKS_REDIRECT_URI': 'http://testserver/auth/databricks/callback',
     }
-    token_url = 'https://adb-123.azuredatabricks.net/oidc/v1/token'
-    req = httpx.Request('POST', token_url)
-    mock_resp = httpx.Response(
-        200,
-        json={
-            'access_token': 'a',
-            'refresh_token': 'r',
-            'expires_in': 3600,
-        },
-        request=req,
-    )
-
     with patch.dict(os.environ, env, clear=False):
-        with patch('httpx.post', return_value=mock_resp):
+        with patch(
+            'openhands.app_server.auth.databricks_routes.async_exchange_code_for_tokens',
+            _async_token_payload(),
+        ):
             r1 = client.get('/auth/databricks/initiate', follow_redirects=False)
             from urllib.parse import parse_qs, urlparse
 
@@ -265,7 +257,9 @@ async def test_bridge_server_starts_and_forwards() -> None:
 
     # Open a raw TCP connection and send a minimal HTTP GET.
     reader, writer = await asyncio.open_connection('127.0.0.1', port)
-    writer.write(b'GET /callback?code=abc&state=xyz HTTP/1.1\r\nHost: localhost\r\n\r\n')
+    writer.write(
+        b'GET /callback?code=abc&state=xyz HTTP/1.1\r\nHost: localhost\r\n\r\n'
+    )
     await writer.drain()
     response_bytes = await asyncio.wait_for(reader.read(4096), timeout=3.0)
     writer.close()
@@ -286,7 +280,6 @@ async def test_bridge_server_starts_and_forwards() -> None:
 @pytest.mark.asyncio
 async def test_bridge_server_idempotent() -> None:
     """Calling _start_bridge_server twice on the same port is a no-op."""
-    import asyncio
 
     from openhands.app_server.auth.databricks_routes import (
         _BRIDGE_SERVERS,
@@ -318,6 +311,7 @@ def test_prepare_with_same_port_redirect_uri_does_not_start_bridge(
         'DATABRICKS_HOST': 'https://adb-123.azuredatabricks.net',
         'DATABRICKS_U2M_CLIENT_ID': 'cid',
         'PORT': '3000',
+        'RUNTIME': 'local',
     }
     before = set(_BRIDGE_SERVERS.keys())
     with patch.dict(os.environ, env, clear=False):
@@ -333,3 +327,121 @@ def test_prepare_with_same_port_redirect_uri_does_not_start_bridge(
     assert r.status_code == 200
     # No new bridge servers should have been started.
     assert set(_BRIDGE_SERVERS.keys()) == before
+
+
+def test_prepare_does_not_start_bridge_outside_local_runtime(
+    client: TestClient,
+) -> None:
+    """The OAuth port bridge is local-dev only — gated behind RUNTIME=local.
+
+    A different-port redirect URI would start a bridge in local dev, but in
+    production (RUNTIME unset/non-local) the bridge must never be started.
+    """
+    from openhands.app_server.auth.databricks_routes import _BRIDGE_SERVERS
+
+    env = {
+        'DATABRICKS_HOST': 'https://adb-123.azuredatabricks.net',
+        'DATABRICKS_U2M_CLIENT_ID': 'cid',
+        'PORT': '3000',
+        'RUNTIME': '',  # not local → production behaviour
+    }
+    before = set(_BRIDGE_SERVERS.keys())
+    with patch.dict(os.environ, env, clear=False):
+        r = client.post(
+            '/auth/databricks/prepare',
+            json={
+                'client_id': 'cid',
+                'host': 'https://adb-123.azuredatabricks.net',
+                # A port that differs from both the main and browser ports —
+                # would trigger a bridge in local dev.
+                'redirect_uri': 'http://localhost:9876/callback',
+                'origin': 'http://localhost:3000',
+            },
+        )
+    assert r.status_code == 200
+    assert set(_BRIDGE_SERVERS.keys()) == before
+
+
+# ---------------------------------------------------------------------------
+# Security: secrets must never reach the signed-but-unencrypted session cookie
+# ---------------------------------------------------------------------------
+
+
+def _decode_session_cookie(client: TestClient) -> dict:
+    """Decode the Starlette session cookie payload (signed, NOT encrypted)."""
+    import base64
+    import json
+
+    cookie = client.cookies.get('session')
+    assert cookie, 'expected a session cookie to be set'
+    data_b64 = cookie.split('.')[0]
+    padded = data_b64 + '=' * (-len(data_b64) % 4)
+    return json.loads(base64.urlsafe_b64decode(padded))
+
+
+def test_callback_keeps_tokens_out_of_cookie(client: TestClient) -> None:
+    """After login the cookie holds only the opaque id — tokens live server-side."""
+    from openhands.app_server.auth.databricks_routes import _SESSION_ID_KEY
+
+    env = {
+        'DATABRICKS_HOST': 'https://adb-123.azuredatabricks.net',
+        'DATABRICKS_U2M_CLIENT_ID': 'cid',
+        'DATABRICKS_REDIRECT_URI': 'http://testserver/auth/databricks/callback',
+    }
+    with patch.dict(os.environ, env, clear=False):
+        with patch(
+            'openhands.app_server.auth.databricks_routes.async_exchange_code_for_tokens',
+            _async_token_payload(
+                access_token='SECRET-ACCESS', refresh_token='SECRET-REFRESH'
+            ),
+        ):
+            r1 = client.get('/auth/databricks/initiate', follow_redirects=False)
+            from urllib.parse import parse_qs, urlparse
+
+            state = parse_qs(urlparse(r1.headers['location']).query)['state'][0]
+            client.get(f'/auth/databricks/callback?code=c&state={state}')
+
+    session = _decode_session_cookie(client)
+    # Only the opaque id is in the cookie.
+    assert _SESSION_ID_KEY in session
+    assert 'databricks_u2m_tokens' not in session
+    # No token material anywhere in the cookie payload.
+    import json as _json
+
+    blob = _json.dumps(session)
+    assert 'SECRET-ACCESS' not in blob
+    assert 'SECRET-REFRESH' not in blob
+
+
+def test_prepare_keeps_client_secret_out_of_cookie(client: TestClient) -> None:
+    """A confidential-app client_secret must be stored server-side, not in the cookie."""
+    from openhands.app_server.auth.databricks_routes import (
+        _SESSION_ID_KEY,
+        _STORE_CLIENT_SECRET_KEY,
+    )
+    from openhands.app_server.auth.databricks_token_store import u2m_session_store
+
+    env = {
+        'DATABRICKS_HOST': 'https://adb-123.azuredatabricks.net',
+        'DATABRICKS_U2M_CLIENT_ID': 'cid',
+    }
+    with patch.dict(os.environ, env, clear=False):
+        r = client.post(
+            '/auth/databricks/prepare',
+            json={
+                'client_id': 'cid',
+                'host': 'https://adb-123.azuredatabricks.net',
+                'client_secret': 'TOP-SECRET-VALUE',
+            },
+        )
+    assert r.status_code == 200
+
+    session = _decode_session_cookie(client)
+    import json as _json
+
+    assert 'TOP-SECRET-VALUE' not in _json.dumps(session)
+    # ...but it IS available server-side for the confidential token exchange.
+    sid = session[_SESSION_ID_KEY]
+    record = u2m_session_store.get(sid)
+    assert record is not None
+    assert record[_STORE_CLIENT_SECRET_KEY] == 'TOP-SECRET-VALUE'

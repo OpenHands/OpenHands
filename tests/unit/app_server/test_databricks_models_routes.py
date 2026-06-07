@@ -81,8 +81,18 @@ def _build_app(
 
         @application.get('/_test/seed_session')
         async def _seed(request: Request) -> dict:
+            from openhands.app_server.auth.databricks_routes import (
+                _store_u2m_tokens,
+            )
+
             for k, v in seed_session.items():
-                request.session[k] = v
+                # U2M tokens are secret — route them through the server-side
+                # store (cookie keeps only the opaque session id), matching the
+                # real /callback flow. Other keys go straight to the session.
+                if k == 'databricks_u2m_tokens':
+                    _store_u2m_tokens(request, v)
+                else:
+                    request.session[k] = v
             return {'ok': True}
 
     return application

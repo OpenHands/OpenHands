@@ -2539,13 +2539,17 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 # If server_config is not available (e.g., in tests), continue without it
                 pass
 
-            # Extract Databricks U2M tokens from the HTTP session (set by /auth/databricks/callback).
+            # Extract Databricks U2M tokens (set by /auth/databricks/callback).
+            # Read from the server-side store via the opaque cookie session id —
+            # tokens are never stored in the signed cookie itself.
             databricks_u2m_token_data = None
             if request is not None:
                 try:
-                    databricks_u2m_token_data = request.session.get(
-                        'databricks_u2m_tokens'
+                    from openhands.app_server.auth.databricks_routes import (
+                        read_u2m_tokens,
                     )
+
+                    databricks_u2m_token_data = read_u2m_tokens(request)
                 except Exception:
                     pass
 
