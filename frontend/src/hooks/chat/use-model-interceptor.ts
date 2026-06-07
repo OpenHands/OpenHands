@@ -21,7 +21,7 @@ const MODEL_PREFIX = `${MODEL_COMMAND} `;
  */
 export const useModelInterceptor = (
   conversationId: string | null | undefined,
-  onSubmit: (message: string) => void,
+  onSubmit: (message: string) => Promise<void> | void,
 ) => {
   const showProfiles = useModelStore((s) => s.show);
   const queryClient = useQueryClient();
@@ -29,13 +29,12 @@ export const useModelInterceptor = (
   const { t } = useTranslation();
 
   return useCallback(
-    (message: string) => {
+    (message: string): Promise<void> | void => {
       const trimmed = message.trim();
       const isModel =
         trimmed === MODEL_COMMAND || trimmed.startsWith(MODEL_PREFIX);
       if (!conversationId || !isModel) {
-        onSubmit(message);
-        return;
+        return onSubmit(message);
       }
 
       const arg = trimmed.slice(MODEL_COMMAND.length).trim();

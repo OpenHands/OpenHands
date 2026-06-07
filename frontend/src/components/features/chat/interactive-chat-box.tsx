@@ -14,7 +14,7 @@ import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversatio
 import { isTaskPolling } from "#/utils/utils";
 
 interface InteractiveChatBoxProps {
-  onSubmit: (message: string, images: File[], files: File[]) => void;
+  onSubmit: (message: string, images: File[], files: File[]) => Promise<void>;
   disabled?: boolean;
 }
 
@@ -140,8 +140,8 @@ export function InteractiveChatBox({
   };
 
   const conversationId = conversation?.id ?? null;
-  const submitWithFiles = (message: string) => {
-    onSubmit(message, images, files);
+  const submitWithFiles = async (message: string): Promise<void> => {
+    await onSubmit(message, images, files);
     clearAllFiles();
   };
   const handleAfterModel = useBtwInterceptor(conversationId, submitWithFiles);

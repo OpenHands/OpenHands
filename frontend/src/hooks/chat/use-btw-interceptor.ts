@@ -12,19 +12,18 @@ const BTW_PREFIX = `${BTW_COMMAND} `;
  */
 export const useBtwInterceptor = (
   conversationId: string | null | undefined,
-  onSubmit: (message: string) => void,
+  onSubmit: (message: string) => Promise<void> | void,
 ) => {
   const addPending = useBtwStore((s) => s.addPending);
   const resolve = useBtwStore((s) => s.resolve);
   const fail = useBtwStore((s) => s.fail);
 
   return useCallback(
-    (message: string) => {
+    (message: string): Promise<void> | void => {
       const trimmed = message.trim();
       const isBtw = trimmed === BTW_COMMAND || trimmed.startsWith(BTW_PREFIX);
       if (!conversationId || !isBtw) {
-        onSubmit(message);
-        return;
+        return onSubmit(message);
       }
       const question = trimmed.slice(BTW_COMMAND.length).trim();
       if (!question) return;

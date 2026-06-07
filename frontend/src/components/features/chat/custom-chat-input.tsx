@@ -16,7 +16,7 @@ export interface CustomChatInputProps {
   isNewConversationPending?: boolean;
   showButton?: boolean;
   sandboxStatus?: V1SandboxStatus | null;
-  onSubmit: (message: string) => void;
+  onSubmit: (message: string) => Promise<void> | void;
   onFocus?: () => void;
   onBlur?: () => void;
   onFilesPaste?: (files: File[]) => void;
