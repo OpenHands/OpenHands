@@ -1215,6 +1215,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             base_url=base_url,
             api_key=user.agent_settings.llm.api_key,
             usage_id='agent',
+            timeout=user.agent_settings.llm.timeout,
         )
 
     async def _add_system_mcp_servers(

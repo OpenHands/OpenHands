@@ -637,6 +637,25 @@ class TestLiveStatusAppConversationService:
         assert llm.base_url == 'https://sdk-llm.example.com'
 
     @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_uses_user_llm_timeout(self):
+        """User-configured LLM timeout should override the SDK default (300s)."""
+        self.mock_user.agent_settings = Settings(
+            agent_settings={
+                'llm': {
+                    'model': 'ollama/qwen3',
+                    'timeout': 3600,
+                }
+            }
+        ).agent_settings
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, None, self.conversation_id
+        )
+
+        assert llm.timeout == 3600
+
+    @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_openhands_model_uses_user_base_url(
         self,
     ):
