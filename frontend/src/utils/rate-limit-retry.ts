@@ -1,6 +1,7 @@
 import { AxiosError } from "axios";
 
 const DEFAULT_RETRY_AFTER_MS = 1000;
+const MAX_RETRY_DELAY_MS = 60_000;
 const RETRY_AFTER_HEADER = "retry-after";
 
 function getHeaderValue(headers: unknown, name: string): string | undefined {
@@ -48,7 +49,7 @@ export function getRateLimitRetryDelayMs(error: unknown): number {
 
   const seconds = Number(retryAfter);
   if (Number.isFinite(seconds) && seconds >= 0) {
-    return seconds * 1000;
+    return Math.min(seconds * 1000, MAX_RETRY_DELAY_MS);
   }
 
   const retryAt = Date.parse(retryAfter);
@@ -56,5 +57,5 @@ export function getRateLimitRetryDelayMs(error: unknown): number {
     return DEFAULT_RETRY_AFTER_MS;
   }
 
-  return Math.max(retryAt - Date.now(), 0);
+  return Math.min(Math.max(retryAt - Date.now(), 0), MAX_RETRY_DELAY_MS);
 }
