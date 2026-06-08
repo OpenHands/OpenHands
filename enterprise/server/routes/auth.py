@@ -331,7 +331,7 @@ async def keycloak_callback(
     user_id = user_info.sub
     user_info_dict = user_info.model_dump(exclude_none=True)
     user = await UserStore.get_user_by_id(user_id)
-    is_new_user = False
+    is_new_user: bool = False
     if not user:
         user = await UserStore.create_user(user_id, user_info_dict)
         is_new_user = True

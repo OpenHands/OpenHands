@@ -224,10 +224,9 @@ class DefaultOrgBootstrapService:
             )
             return False
 
-        settings = await OrgService.create_litellm_integration(org.id, str(user.id))
-        llm_api_key_secret = settings.agent_settings.llm.api_key
-        llm_api_key = (
-            llm_api_key_secret.get_secret_value() if llm_api_key_secret else ''  # type: ignore[union-attr]
+        llm_api_key = await DefaultOrgBootstrapService._create_member_litellm_api_key(
+            org_id=org.id,
+            user_id=user.id,
         )
 
         await OrgMemberStore.add_user_to_org(
@@ -248,6 +247,13 @@ class DefaultOrgBootstrapService:
             },
         )
         return True
+
+    @staticmethod
+    async def _create_member_litellm_api_key(org_id: UUID, user_id: UUID) -> str:
+        """Provision org-scoped LiteLLM access and return the member API key."""
+        settings = await OrgService.create_litellm_integration(org_id, str(user_id))
+        llm_api_key_secret = settings.agent_settings.llm.api_key
+        return llm_api_key_secret.get_secret_value() if llm_api_key_secret else ''
 
     @staticmethod
     async def _promote_to_owner_if_needed(
