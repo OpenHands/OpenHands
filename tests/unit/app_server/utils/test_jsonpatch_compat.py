@@ -39,9 +39,9 @@ class TestDeepMergeWithWholesaleKeys:
     """Tests for deep_merge_with_wholesale_keys function."""
 
     def test_default_wholesale_keys(self):
-        """Verify default wholesale keys are mcp_config and acp_env."""
+        """Verify default wholesale keys include mcp_config."""
         assert 'mcp_config' in WHOLESALE_REPLACEMENT_KEYS
-        assert 'acp_env' in WHOLESALE_REPLACEMENT_KEYS
+        assert 'acp_env' not in WHOLESALE_REPLACEMENT_KEYS
 
     def test_mcp_config_replaced_wholesale(self):
         """mcp_config should be replaced, not merged."""
@@ -70,28 +70,6 @@ class TestDeepMergeWithWholesaleKeys:
         # server3 should NOT be resurrected
         assert len(result['mcp_config']['mcpServers']) == 2
         assert 'server3' not in result['mcp_config']['mcpServers']
-
-    def test_acp_env_replaced_wholesale(self):
-        """acp_env should be replaced, not merged."""
-        base = {
-            'acp_env': {
-                'VAR1': 'value1',
-                'VAR2': 'value2',
-                'VAR3': 'value3',
-            }
-        }
-        updates = {
-            'acp_env': {
-                'VAR1': 'value1',
-                'VAR2': 'value2',
-                # VAR3 deleted
-            }
-        }
-
-        result = deep_merge_with_wholesale_keys(base, updates)
-
-        assert len(result['acp_env']) == 2
-        assert 'VAR3' not in result['acp_env']
 
     def test_other_keys_still_deep_merged(self):
         """Non-wholesale keys should still be deep merged."""
