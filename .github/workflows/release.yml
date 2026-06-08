@@ -1,36 +1,11 @@
 name: release
 
-# Two independent release lines run from this one repo, both off `main` (and
-# release/** maintenance/freeze branches). Each job calls the SAME shared
-# reusable workflow with its own config + manifest, so each tracks its own
-# version, opens its own release PR, and cuts its own tags:
+# app (X.Y.Z, excludes enterprise/) and cloud (cloud-X.Y.Z) release lines.
 #
-#   * openhands-app — the GUI app. Bare tags `X.Y.Z`. Release notes cover every
-#     PR EXCEPT those whose files are entirely under `enterprise/` (the app
-#     config sets exclude-paths: ["enterprise"]).
-#   * cloud — the cloud Docker image, which is built FROM the app image and so
-#     ships the app code too. Tags `cloud-X.Y.Z`. Release notes cover ALL PRs,
-#     including `enterprise/`.
-#
-# release-please needs the root package to receive every commit and then
-# subtract enterprise (app) or nothing (cloud); since only one package per
-# manifest can be the root, the two lines use two separate config/manifest
-# pairs rather than one combined manifest.
-#
-# Merging a release PR pushes its tag with the release App identity (so the
-# push isn't suppressed by GitHub's recursion guard). The existing tag-driven
-# workflows then fire: tag-image.yml retags the images, and pypi-release.yml
-# publishes the PyPI package for bare (non-`cloud-`, non-`-cli`) tags.
-#
-# BOOTSTRAP — remove after the first release PR of each line is merged:
-# Both release-please-config*.json carry a top-level `last-release-sha`. The
-# pre-existing 1.7.0 / cloud-1.37.3 tags live on the old release branches
-# (oss-rel-*, saas-rel-*) and aren't reachable from main, so release-please
-# can't bound the first release and would re-announce months of already-shipped
-# commits as new. Each `last-release-sha` pins the start to that line's last
-# divergence from main. It is evaluated on EVERY run (never ignored), so once the
-# first release PR merges and release-please has an on-main release to anchor on,
-# DELETE both `last-release-sha` lines — otherwise they keep capping future runs.
+# BOOTSTRAP: both configs set a top-level `last-release-sha` to bound the first
+# release's notes (the existing tags aren't reachable from main). Delete those
+# lines once each line's first release PR has merged — they cap every run, not
+# just the first.
 on:
   push:
     branches:
@@ -43,7 +18,6 @@ jobs:
       contents: write
       pull-requests: write
     secrets: inherit
-    # Uses the default config/manifest: release-please-config.json + .release-please-manifest.json
     uses: OpenHands/release-actions/.github/workflows/release-please.yml@main
 
   cloud:

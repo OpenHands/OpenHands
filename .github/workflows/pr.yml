@@ -1,16 +1,8 @@
 name: pr
 
-# Lints each PR title for Conventional Commits format and applies a matching
-# `type:` label. Conventional titles are what both release lines parse to pick
-# the next version (fix -> patch, feat -> minor, ! -> major) and to group the
-# release notes, so this gate feeds both the openhands-app and cloud releases.
-#
-# Trigger is pull_request_target (not pull_request) so the lint/label also runs
-# on PRs from forks. It is safe here only because the reusable workflow never
-# checks out or runs PR code (it reads the title from the event payload) and
-# this caller does NOT pass `secrets: inherit`, so the release App token is
-# never in scope — see pr-title.yml in release-actions. Do not add a checkout
-# step or `secrets: inherit` here.
+# Lints PR titles (conventional commits) and applies a `type:` label.
+# Runs on pull_request_target to cover forks — keep it fork-safe: no checkout of
+# PR code and no `secrets: inherit` here (see release-actions/pr-title.yml).
 on:
   pull_request_target:
     types: [opened, edited, reopened, synchronize]
