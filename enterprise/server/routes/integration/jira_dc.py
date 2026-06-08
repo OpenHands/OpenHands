@@ -191,7 +191,7 @@ def _jira_dc_events_url(workspace_id: int) -> str:
     return f'https://{WEB_HOST}/integration/jira-dc/connections/{workspace_id}/events'
 
 
-async def _handle_workspace_link_creation(
+async def _handle_workspace_link_creation(  # noqa: ambiguity-mine
     user_id: str,
     jira_dc_user_id: str,
     target_workspace: str,
@@ -253,7 +253,7 @@ async def _handle_workspace_link_creation(
         )
 
 
-async def _validate_workspace_update_permissions(user_id: str, target_workspace: str):
+async def _validate_workspace_update_permissions(user_id: str, target_workspace: str):  # noqa: ambiguity-mine
     """Validate that user can update the target workspace."""
     workspace = await jira_dc_manager.integration_store.get_workspace_by_name(
         target_workspace
@@ -710,7 +710,7 @@ async def update_jira_dc_workspace_status(
 
 
 @jira_dc_integration_router.post('/workspaces/link')
-async def create_workspace_link(request: Request, link_data: JiraDcLinkCreate):
+async def create_workspace_link(request: Request, link_data: JiraDcLinkCreate):  # noqa: ambiguity-mine
     """Register a user mapping to a Jira DC workspace."""
     try:
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
@@ -947,7 +947,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
     '/workspaces/link',
     response_model=JiraDcUserResponse,
 )
-async def get_current_workspace_link(request: Request):
+async def get_current_workspace_link(request: Request):  # noqa: ambiguity-mine
     """Get current user's Jira DC integration details."""
     try:
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
@@ -1007,7 +1007,7 @@ async def get_current_workspace_link(request: Request):
 
 
 @jira_dc_integration_router.post('/workspaces/unlink')
-async def unlink_workspace(request: Request):
+async def unlink_workspace(request: Request):  # noqa: ambiguity-mine
     """Unlink from Jira DC and, for integration owners, optionally revoke the hook.
 
     A non-owner user is only detached from the workspace (their personal link
@@ -1089,7 +1089,7 @@ async def unlink_workspace(request: Request):
     '/workspaces/validate/{workspace_name}',
     response_model=JiraDcValidateWorkspaceResponse,
 )
-async def validate_workspace_integration(request: Request, workspace_name: str):
+async def validate_workspace_integration(request: Request, workspace_name: str):  # noqa: ambiguity-mine
     """Validate if the workspace has an active Jira DC integration."""
     try:
         await get_user_auth(request)

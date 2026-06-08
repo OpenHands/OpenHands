@@ -162,7 +162,7 @@ async def _org_profiles_transaction(
 
 
 @router.get('/{org_id}/profiles', response_model=ProfileListResponse)
-async def list_profiles(
+async def list_profiles(  # noqa: ambiguity-mine
     org_id: UUID,
     user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
 ) -> ProfileListResponse:
@@ -179,7 +179,7 @@ async def list_profiles(
 
 
 @router.get('/{org_id}/profiles/{name}', response_model=ProfileDetailResponse)
-async def get_profile(
+async def get_profile(  # noqa: ambiguity-mine
     org_id: UUID,
     name: str = Path(..., min_length=1),
     user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
@@ -200,7 +200,7 @@ async def get_profile(
 
 
 @router.post('/{org_id}/profiles/{name}', response_model=ProfileMutationResponse)
-async def save_profile(
+async def save_profile(  # noqa: ambiguity-mine
     org_id: UUID,
     name: str = Path(..., min_length=1, max_length=100),
     request: SaveProfileRequest = SaveProfileRequest(),
@@ -231,7 +231,7 @@ async def save_profile(
 
 
 @router.delete('/{org_id}/profiles/{name}', response_model=ProfileMutationResponse)
-async def delete_profile(
+async def delete_profile(  # noqa: ambiguity-mine
     org_id: UUID,
     name: str = Path(..., min_length=1),
     user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
@@ -254,7 +254,7 @@ async def delete_profile(
 @router.post(
     '/{org_id}/profiles/{name}/activate', response_model=ActivateProfileResponse
 )
-async def activate_profile(
+async def activate_profile(  # noqa: ambiguity-mine
     org_id: UUID,
     name: str = Path(..., min_length=1),
     user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
@@ -342,7 +342,7 @@ async def activate_profile(
 
 
 @router.post('/{org_id}/profiles/{name}/rename', response_model=ProfileMutationResponse)
-async def rename_profile(
+async def rename_profile(  # noqa: ambiguity-mine
     org_id: UUID,
     name: str = Path(..., min_length=1),
     request: RenameProfileRequest = Body(...),

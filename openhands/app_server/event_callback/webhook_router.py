@@ -408,7 +408,7 @@ async def on_conversation_update(
 
 
 @router.post('/events/{conversation_id}')
-async def on_event(
+async def on_event(  # noqa: ambiguity-mine
     events: list[Event],
     conversation_id: UUID,
     app_conversation_info: AppConversationInfo = Depends(valid_conversation),

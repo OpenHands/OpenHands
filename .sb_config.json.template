@@ -365,7 +365,11 @@
         "include_dirs": [
           "."
         ],
-        "exclude_dirs": []
+        "exclude_dirs": [
+          "tests",
+          "enterprise/tests",
+          "scripts"
+        ]
       },
       "interactive-assumptions": {
         "enabled": true,

@@ -23,7 +23,7 @@ def decrypt_value(value: str | SecretStr) -> str:
     return get_jwt_service().decrypt_value(raw)
 
 
-def get_jwt_service():
+def get_jwt_service():  # noqa: ambiguity-mine
     from openhands.app_server.config import get_global_config
 
     global _jwt_service

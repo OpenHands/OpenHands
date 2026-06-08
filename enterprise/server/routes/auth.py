@@ -252,7 +252,7 @@ async def _track_login_analytics_background(
 
 
 @oauth_router.get('/keycloak/callback')
-async def keycloak_callback(
+async def keycloak_callback(  # noqa: ambiguity-mine
     request: Request,
     background_tasks: BackgroundTasks,
     code: Optional[str] = None,

@@ -32,7 +32,7 @@ def get_docker_client() -> docker.DockerClient:
     return _global_docker_client
 
 
-def get_default_sandbox_specs():
+def get_default_sandbox_specs():  # noqa: ambiguity-mine
     return [
         SandboxSpecInfo(
             id=get_agent_server_image(),

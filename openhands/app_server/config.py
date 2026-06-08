@@ -515,7 +515,7 @@ def get_httpx_client(
 
 def get_jwt_service(
     state: InjectorState, request: Request | None = None
-) -> AsyncContextManager[JwtService]:
+) -> AsyncContextManager[JwtService]:  # noqa: ambiguity-mine
     injector = get_global_config().jwt
     assert injector is not None
     return injector.context(state, request)

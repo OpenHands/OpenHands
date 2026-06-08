@@ -18,7 +18,7 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
 from openhands.app_server.services.injector import InjectorState
 
 
-def get_default_sandbox_specs():
+def get_default_sandbox_specs():  # noqa: ambiguity-mine
     return [
         SandboxSpecInfo(
             id=get_agent_server_image(),

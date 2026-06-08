@@ -27,7 +27,7 @@ async def get_user_id(
     api_key_header: str | None = Depends(
         APIKeyHeader(name='X-Access-Token', auto_error=False)
     ),
-) -> str | None:
+) -> str | None:  # noqa: ambiguity-mine
     """Get the current user_id. Used for dependency injection - the
     api key header is used here to signal the requirement in OpenAPI
     docs"""

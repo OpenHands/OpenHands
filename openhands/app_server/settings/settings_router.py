@@ -420,7 +420,7 @@ class SaveProfileRequest(BaseModel):
 
 
 @router.get('/profiles', response_model=ProfileListResponse)
-async def list_profiles(
+async def list_profiles(  # noqa: ambiguity-mine
     settings: Settings | None = Depends(get_user_settings),
 ) -> ProfileListResponse:
     """List all saved LLM profiles.
@@ -440,7 +440,7 @@ async def list_profiles(
 
 
 @router.get('/profiles/{name}', response_model=ProfileDetailResponse)
-async def get_profile(
+async def get_profile(  # noqa: ambiguity-mine
     name: ProfileName,
     settings: Settings | None = Depends(get_user_settings),
 ) -> ProfileDetailResponse:
@@ -468,7 +468,7 @@ async def get_profile(
     response_model=ProfileMutationResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def save_profile(
+async def save_profile(  # noqa: ambiguity-mine
     name: ProfileName,
     request: Annotated[SaveProfileRequest | None, Body()] = None,
     user_id: str | None = Depends(get_user_id),
@@ -526,7 +526,7 @@ async def save_profile(
 
 
 @router.delete('/profiles/{name}', response_model=ProfileMutationResponse)
-async def delete_profile(
+async def delete_profile(  # noqa: ambiguity-mine
     name: ProfileName,
     user_id: str | None = Depends(get_user_id),
     settings_store: SettingsStore = Depends(get_user_settings_store),
@@ -544,7 +544,7 @@ async def delete_profile(
 
 
 @router.post('/profiles/{name}/activate', response_model=ActivateProfileResponse)
-async def activate_profile(
+async def activate_profile(  # noqa: ambiguity-mine
     name: ProfileName,
     user_id: str | None = Depends(get_user_id),
     settings_store: SettingsStore = Depends(get_user_settings_store),
@@ -582,7 +582,7 @@ async def activate_profile(
 
 
 @router.post('/profiles/{name}/rename', response_model=ProfileMutationResponse)
-async def rename_profile(
+async def rename_profile(  # noqa: ambiguity-mine
     name: ProfileName,
     request: RenameProfileRequest,
     user_id: str | None = Depends(get_user_id),

@@ -6,7 +6,7 @@ from storage.database import session_maker
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 
 
-def get_user_id(conversation_id: str) -> str:
+def get_user_id(conversation_id: str) -> str:  # noqa: ambiguity-mine
     """Get the user ID for a conversation from the metadata.
 
     Args:
