@@ -13,12 +13,14 @@ import { I18nKey } from "#/i18n/declaration";
 
 interface OrgLlmProfilesManagerProps {
   orgId: string;
+  canManage?: boolean;
   onAddProfile?: () => void;
   onEditProfile?: (profile: LlmProfileSummary) => void;
 }
 
 export function OrgLlmProfilesManager({
   orgId,
+  canManage = true,
   onAddProfile,
   onEditProfile,
 }: OrgLlmProfilesManagerProps) {
@@ -52,7 +54,7 @@ export function OrgLlmProfilesManager({
           <h2 className="text-base font-semibold text-white">
             {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
           </h2>
-          {onAddProfile ? (
+          {canManage && onAddProfile ? (
             <BrandButton
               testId="add-llm-profile"
               type="button"
@@ -75,6 +77,7 @@ export function OrgLlmProfilesManager({
           onRename={setProfileToRename}
           onDelete={setProfileToDelete}
           isActivating={activateProfile.isPending}
+          canManage={canManage}
         />
       </div>
 
