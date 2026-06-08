@@ -637,13 +637,17 @@ class TestLiveStatusAppConversationService:
         assert llm.base_url == 'https://sdk-llm.example.com'
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_uses_user_llm_timeout(self):
-        """User-configured LLM timeout should override the SDK default (300s)."""
+    async def test_configure_llm_and_mcp_preserves_deepseek_llm_settings(self):
+        """DeepSeek user settings should survive _configure_llm via model_copy."""
         self.mock_user.agent_settings = Settings(
             agent_settings={
                 'llm': {
-                    'model': 'ollama/qwen3',
+                    'model': 'deepseek/deepseek-chat',
+                    'base_url': 'https://api.deepseek.com/v1',
                     'timeout': 3600,
+                    'reasoning_effort': 'none',
+                    'enable_encrypted_reasoning': False,
+                    'litellm_extra_body': {'thinking': {'type': 'disabled'}},
                 }
             }
         ).agent_settings
@@ -653,7 +657,37 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
+        assert llm.model == 'deepseek/deepseek-chat'
+        assert llm.base_url == 'https://api.deepseek.com/v1'
         assert llm.timeout == 3600
+        assert llm.reasoning_effort == 'none'
+        assert llm.enable_encrypted_reasoning is False
+        assert llm.litellm_extra_body == {'thinking': {'type': 'disabled'}}
+        assert llm.usage_id == 'agent'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_overrides_model_and_base_url_only(self):
+        """Conversation model override should not discard other user LLM fields."""
+        self.mock_user.agent_settings = Settings(
+            agent_settings={
+                'llm': {
+                    'model': 'deepseek/deepseek-chat',
+                    'base_url': 'https://api.deepseek.com/v1',
+                    'timeout': 1800,
+                    'num_retries': 8,
+                }
+            }
+        ).agent_settings
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, 'deepseek/deepseek-reasoner', self.conversation_id
+        )
+
+        assert llm.model == 'deepseek/deepseek-reasoner'
+        assert llm.base_url == 'https://api.deepseek.com/v1'
+        assert llm.timeout == 1800
+        assert llm.num_retries == 8
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_openhands_model_uses_user_base_url(
