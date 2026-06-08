@@ -316,7 +316,7 @@
           ".*",
           "*/.*"
         ],
-        "config_file_path": null,
+        "config_file_path": ".secrets.baseline",
         "bandit_config_file": null,
         "pip_audit_ignore_vulns": []
       },
@@ -344,7 +344,7 @@
           ".*",
           "*/.*"
         ],
-        "config_file_path": null,
+        "config_file_path": ".secrets.baseline",
         "bandit_config_file": null,
         "pip_audit_ignore_vulns": []
       },

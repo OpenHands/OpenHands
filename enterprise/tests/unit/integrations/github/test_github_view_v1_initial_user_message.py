@@ -28,7 +28,8 @@ def jinja_env() -> Environment:
                 repo_root
                 / 'openhands/app_server/integrations/templates/resolver/github'
             )
-        )
+        ),
+        autoescape=True,
     )
 
 

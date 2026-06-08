@@ -68,7 +68,8 @@ class JiraManager(Manager[JiraViewInterface]):
         self.token_manager = token_manager
         self.integration_store = JiraIntegrationStore.get_instance()
         self.jinja_env = Environment(
-            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'jira')
+            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'jira'),
+            autoescape=True,
         )
         self.payload_parser = JiraPayloadParser(
             oh_label=OH_LABEL,

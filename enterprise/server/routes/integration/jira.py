@@ -480,7 +480,7 @@ async def jira_callback(request: Request, code: str, state: str):
         'code': code,
         'redirect_uri': JIRA_REDIRECT_URI,
     }
-    response = requests.post(JIRA_TOKEN_URL, json=token_payload)
+    response = requests.post(JIRA_TOKEN_URL, json=token_payload, timeout=10)
     if response.status_code != 200:
         raise HTTPException(
             status_code=400, detail=f'Error fetching token: {response.text}'
@@ -490,7 +490,7 @@ async def jira_callback(request: Request, code: str, state: str):
     access_token = token_data['access_token']
 
     headers = {'Authorization': f'Bearer {access_token}'}
-    response = requests.get(JIRA_RESOURCES_URL, headers=headers)
+    response = requests.get(JIRA_RESOURCES_URL, headers=headers, timeout=10)
 
     if response.status_code != 200:
         raise HTTPException(
@@ -520,7 +520,7 @@ async def jira_callback(request: Request, code: str, state: str):
 
     jira_cloud_id = target_workspace_data.get('id', '')
 
-    jira_user_response = requests.get(JIRA_USER_INFO_URL, headers=headers)
+    jira_user_response = requests.get(JIRA_USER_INFO_URL, headers=headers, timeout=10)
     if jira_user_response.status_code != 200:
         raise HTTPException(
             status_code=400,

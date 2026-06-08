@@ -110,7 +110,8 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         self.token_manager = token_manager
         self.integration_store = JiraDcIntegrationStore.get_instance()
         self.jinja_env = Environment(
-            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'jira_dc')
+            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'jira_dc'),
+            autoescape=True,
         )
 
     async def authenticate_user(

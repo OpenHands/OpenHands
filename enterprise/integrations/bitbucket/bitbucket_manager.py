@@ -44,7 +44,8 @@ class BitbucketManager(Manager[BitbucketViewType]):
         self.token_manager = token_manager
         self.webhook_store = BitbucketWebhookStore()
         self.jinja_env = Environment(
-            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'bitbucket')
+            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'bitbucket'),
+            autoescape=True,
         )
 
     def _confirm_incoming_source_type(self, message: Message) -> None:

@@ -97,7 +97,8 @@ class SuggestedTask(BaseModel):
         env = Environment(
             loader=FileSystemLoader(
                 'openhands/app_server/integrations/templates/suggested_task'
-            )
+            ),
+            autoescape=True,
         )
 
         template = None

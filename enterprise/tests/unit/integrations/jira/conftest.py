@@ -187,7 +187,7 @@ def mock_jinja_env():
         'jira_new_conversation.j2': 'New Jira conversation: {{issue_key}} - {{issue_title}}\n{{issue_description}}\nUser: {{user_message}}',
         'jira_existing_conversation.j2': 'Existing Jira conversation: {{issue_key}} - {{issue_title}}\n{{issue_description}}\nUser: {{user_message}}',
     }
-    return Environment(loader=DictLoader(templates))
+    return Environment(loader=DictLoader(templates), autoescape=True)
 
 
 @pytest.fixture

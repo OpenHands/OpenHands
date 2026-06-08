@@ -41,7 +41,8 @@ class GitlabManager(Manager[GitlabViewType]):
         self.token_manager = token_manager
 
         self.jinja_env = Environment(
-            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'gitlab')
+            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'gitlab'),
+            autoescape=True,
         )
 
     def _confirm_incoming_source_type(self, message: Message):

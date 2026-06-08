@@ -87,7 +87,10 @@ OPENHANDS_RESOLVER_TEMPLATES_DIR = (
     os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
     or 'openhands/app_server/integrations/templates/resolver/'
 )
-_jinja_env = Environment(loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR))
+_jinja_env = Environment(
+    loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR),
+    autoescape=True,
+)
 
 
 def get_oh_labels(web_host: str) -> tuple[str, str]:

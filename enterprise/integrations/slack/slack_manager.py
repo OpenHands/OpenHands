@@ -66,7 +66,8 @@ class SlackManager(Manager[SlackViewInterface]):
         )
 
         self.jinja_env = Environment(
-            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'slack')
+            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'slack'),
+            autoescape=True,
         )
 
     def _confirm_incoming_source_type(self, message: Message):

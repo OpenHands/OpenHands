@@ -53,7 +53,8 @@ class GithubManager(Manager[GithubViewType]):
         )
 
         self.jinja_env = Environment(
-            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'github')
+            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'github'),
+            autoescape=True,
         )
 
     def _confirm_incoming_source_type(self, message: Message):

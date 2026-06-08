@@ -667,6 +667,7 @@ async def switch_conversation_profile(
     )
     content_hash = hashlib.sha1(
         json.dumps(fingerprint, sort_keys=True, default=str).encode('utf-8'),
+        usedforsecurity=False,
     ).hexdigest()[:12]
     profile_llm = profile_llm.model_copy(
         update={'usage_id': f'profile:{request.profile_name}:{content_hash}'},

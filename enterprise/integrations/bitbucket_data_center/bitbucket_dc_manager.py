@@ -50,7 +50,8 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
         # agnostic and the variables (pr_number, branch_name, comments,
         # file_location, line_number) match.
         self.jinja_env = Environment(
-            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'bitbucket')
+            loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'bitbucket'),
+            autoescape=True,
         )
 
     def _confirm_incoming_source_type(self, message: Message) -> None:

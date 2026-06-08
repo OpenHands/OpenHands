@@ -109,7 +109,7 @@ class SaaSServerConfig(ServerConfig):
         }
 
         # Make a request to the GitHub API /app endpoint
-        response = requests.get('https://api.github.com/app', headers=headers)
+        response = requests.get('https://api.github.com/app', headers=headers, timeout=10)
 
         # Check if the response is successful
         if response.status_code != 200:

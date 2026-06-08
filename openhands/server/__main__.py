@@ -15,7 +15,7 @@ def main():
 
     uvicorn.run(
         'openhands.server.listen:app',
-        host='0.0.0.0',
+        host='0.0.0.0',  # nosec B104
         port=int(os.environ.get('port') or '3000'),
         log_level='debug' if os.environ.get('DEBUG') else 'info',
         log_config=log_config,

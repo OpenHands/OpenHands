@@ -30,7 +30,7 @@ def mock_jinja_env():
     templates = {
         'user_message_conversation_instructions.j2': 'Previous messages: {{ messages|join(", ") }}\nUser: {{ username }}\nURL: {{ conversation_url }}'
     }
-    return Environment(loader=DictLoader(templates))
+    return Environment(loader=DictLoader(templates), autoescape=True)
 
 
 @pytest.fixture

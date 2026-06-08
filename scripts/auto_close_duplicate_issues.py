@@ -68,7 +68,7 @@ def request_json(
         method=method,
     )
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=60) as response:  # nosec B310
             payload = response.read().decode('utf-8')
     except urllib.error.HTTPError as exc:
         error_body = exc.read().decode('utf-8', errors='replace')

@@ -811,7 +811,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
         'code': code,
         'redirect_uri': JIRA_DC_REDIRECT_URI,
     }
-    response = requests.post(JIRA_DC_TOKEN_URL, data=token_payload)
+    response = requests.post(JIRA_DC_TOKEN_URL, data=token_payload, timeout=10)
     if response.status_code != 200:
         raise HTTPException(
             status_code=400, detail=f'Error fetching token: {response.text}'
@@ -825,7 +825,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
     if target_workspace != urlparse(JIRA_DC_BASE_URL).hostname:
         raise HTTPException(status_code=400, detail='Target workspace mismatch.')
 
-    jira_dc_user_response = requests.get(JIRA_DC_USER_INFO_URL, headers=headers)
+    jira_dc_user_response = requests.get(JIRA_DC_USER_INFO_URL, headers=headers, timeout=10)
     if jira_dc_user_response.status_code != 200:
         raise HTTPException(
             status_code=400,
