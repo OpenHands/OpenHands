@@ -4,7 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
+from openhands.app_server.user_auth.user_auth import AuthType
 from pydantic import SecretStr
+
 from server.auth.auth_error import (
     AuthError,
     BearerTokenError,
@@ -14,8 +16,6 @@ from server.auth.auth_error import (
 )
 from server.auth.saas_user_auth import SaasUserAuth
 from server.middleware import SetAuthCookieMiddleware
-
-from openhands.app_server.user_auth.user_auth import AuthType
 
 
 @contextmanager

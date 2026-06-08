@@ -2,9 +2,6 @@ import asyncio
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from openhands.sdk import Event
-from openhands.sdk.utils.models import DiscriminatedUnionMixin
-
 from openhands.app_server.event_callback.event_callback_models import (
     CreateEventCallbackRequest,
     EventCallback,
@@ -12,6 +9,8 @@ from openhands.app_server.event_callback.event_callback_models import (
     EventKind,
 )
 from openhands.app_server.services.injector import Injector
+from openhands.sdk import Event
+from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 
 class EventCallbackService(ABC):

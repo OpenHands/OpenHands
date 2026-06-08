@@ -1,12 +1,11 @@
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
+
 from storage.base import Base
 
 
 class UserRepositoryMap(Base):
-    """
-    Represents a map between user id and repo ids
-    """
+    """Represents a map between user id and repo ids."""
 
     __tablename__ = 'user-repos'
 

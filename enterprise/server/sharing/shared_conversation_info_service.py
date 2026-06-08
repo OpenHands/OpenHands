@@ -2,12 +2,12 @@ import asyncio
 from abc import ABC, abstractmethod
 from uuid import UUID
 
+from openhands.app_server.services.injector import Injector
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
+
 from server.sharing.shared_conversation_models import (
     SharedConversation,
 )
-
-from openhands.app_server.services.injector import Injector
 
 
 class SharedConversationInfoService(ABC):

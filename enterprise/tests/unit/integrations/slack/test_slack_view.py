@@ -8,16 +8,16 @@ Focuses on V1 conversation scenarios:
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from jinja2 import DictLoader, Environment
+from openhands.app_server.sandbox.sandbox_models import SandboxStatus
+from openhands.app_server.user_auth.user_auth import UserAuth
+
 from integrations.slack.slack_view import (
     SlackNewConversationView,
     SlackUpdateExistingConversationView,
 )
-from jinja2 import DictLoader, Environment
 from storage.slack_conversation import SlackConversation
 from storage.slack_user import SlackUser
-
-from openhands.app_server.sandbox.sandbox_models import SandboxStatus
-from openhands.app_server.user_auth.user_auth import UserAuth
 
 # ---------------------------------------------------------------------------
 # Fixtures

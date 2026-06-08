@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import DateTime, ForeignKey, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from storage.base import Base
 
 if TYPE_CHECKING:
@@ -11,9 +12,7 @@ if TYPE_CHECKING:
 
 
 class ApiKey(Base):
-    """
-    Represents an API key for a user.
-    """
+    """Represents an API key for a user."""
 
     __tablename__ = 'api_keys'
 

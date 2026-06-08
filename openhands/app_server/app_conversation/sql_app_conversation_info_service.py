@@ -25,10 +25,6 @@ from typing import AsyncGenerator, cast
 from uuid import UUID
 
 from fastapi import Request
-from openhands.agent_server.utils import utc_now
-from openhands.sdk import ConversationStats
-from openhands.sdk.event import ConversationStateUpdateEvent
-from openhands.sdk.llm import MetricsSnapshot, TokenUsage
 from sqlalchemy import (
     ColumnElement,
     DateTime,
@@ -41,6 +37,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
+from openhands.agent_server.utils import utc_now
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
     AppConversationInfoServiceInjector,
@@ -58,6 +55,9 @@ from openhands.app_server.utils.sql_utils import (
     Base,
     create_json_type_decorator,
 )
+from openhands.sdk import ConversationStats
+from openhands.sdk.event import ConversationStateUpdateEvent
+from openhands.sdk.llm import MetricsSnapshot, TokenUsage
 
 logger = logging.getLogger(__name__)
 

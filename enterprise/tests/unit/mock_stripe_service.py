@@ -1,6 +1,4 @@
-"""
-Mock implementation of the stripe_service module for testing.
-"""
+"""Mock implementation of the stripe_service module for testing."""
 
 from unittest.mock import AsyncMock, MagicMock
 
@@ -32,7 +30,7 @@ mock_list_payment_methods = AsyncMock(return_value=mock_payment_methods)
 
 # Mock functions
 async def find_customer_id_by_user_id(user_id: str) -> str | None:
-    """Mock implementation of find_customer_id_by_user_id"""
+    """Mock implementation of find_customer_id_by_user_id."""
     # Check the database first
     with mock_session_maker() as session:
         stripe_customer = session.query(MagicMock()).filter(MagicMock()).first()
@@ -50,7 +48,7 @@ async def find_customer_id_by_user_id(user_id: str) -> str | None:
 
 
 async def find_or_create_customer(user_id: str) -> str:
-    """Mock implementation of find_or_create_customer"""
+    """Mock implementation of find_or_create_customer."""
     customer_id = await find_customer_id_by_user_id(user_id)
     if customer_id:
         return customer_id
@@ -69,7 +67,7 @@ async def find_or_create_customer(user_id: str) -> str:
 
 
 async def has_payment_method(user_id: str) -> bool:
-    """Mock implementation of has_payment_method"""
+    """Mock implementation of has_payment_method."""
     customer_id = await find_customer_id_by_user_id(user_id)
     if customer_id is None:
         return False

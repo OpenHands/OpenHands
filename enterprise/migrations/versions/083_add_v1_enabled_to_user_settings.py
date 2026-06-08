@@ -1,4 +1,4 @@
-"""Add v1_enabled column to user_settings
+"""Add v1_enabled column to user_settings.
 
 Revision ID: 083
 Revises: 082

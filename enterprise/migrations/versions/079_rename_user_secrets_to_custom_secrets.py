@@ -1,4 +1,4 @@
-"""rename user_secrets table to custom_secrets
+"""rename user_secrets table to custom_secrets.
 
 Revision ID: 079
 Revises: 078

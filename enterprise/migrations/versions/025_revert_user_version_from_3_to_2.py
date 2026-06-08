@@ -1,4 +1,4 @@
-"""Revert user_version from 3 to 2
+"""Revert user_version from 3 to 2.
 
 Revision ID: 025
 Revises: 024

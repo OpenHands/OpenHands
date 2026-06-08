@@ -1,5 +1,4 @@
-"""
-Unit tests for OrgService.
+"""Unit tests for OrgService.
 
 Tests the organization creation workflow with compensation pattern,
 including LiteLLM integration and cleanup on failures.
@@ -9,6 +8,7 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from server.routes.org_models import (
     LiteLLMIntegrationError,
     OrgAuthorizationError,
@@ -65,10 +65,9 @@ def owner_role(session_maker):
 
 @pytest.mark.asyncio
 async def test_validate_name_uniqueness_with_unique_name(async_session_maker):
-    """
-    GIVEN: A unique organization name
+    """GIVEN: A unique organization name
     WHEN: validate_name_uniqueness is called
-    THEN: No exception is raised
+    THEN: No exception is raised.
     """
     # Arrange
     unique_name = 'unique-org-name'
@@ -84,10 +83,9 @@ async def test_validate_name_uniqueness_with_unique_name(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_validate_name_uniqueness_with_duplicate_name():
-    """
-    GIVEN: An organization name that already exists
+    """GIVEN: An organization name that already exists
     WHEN: validate_name_uniqueness is called
-    THEN: OrgNameExistsError is raised
+    THEN: OrgNameExistsError is raised.
     """
     # Arrange
     existing_name = 'existing-org'
@@ -110,10 +108,9 @@ async def test_validate_name_uniqueness_with_duplicate_name():
 async def test_create_org_with_owner_success(
     session_maker, async_session_maker, owner_role, mock_litellm_api
 ):
-    """
-    GIVEN: Valid organization data and user ID
+    """GIVEN: Valid organization data and user ID
     WHEN: create_org_with_owner is called
-    THEN: Organization and owner membership are created successfully
+    THEN: Organization and owner membership are created successfully.
     """
     # Arrange
     org_name = 'test-org'
@@ -191,10 +188,9 @@ async def test_create_org_with_owner_success(
 async def test_create_org_with_owner_duplicate_name(
     session_maker, async_session_maker, owner_role, mock_litellm_api
 ):
-    """
-    GIVEN: An organization name that already exists
+    """GIVEN: An organization name that already exists
     WHEN: create_org_with_owner is called
-    THEN: OrgNameExistsError is raised without creating LiteLLM resources
+    THEN: OrgNameExistsError is raised without creating LiteLLM resources.
     """
     # Arrange
     existing_name = 'existing-org'
@@ -230,10 +226,9 @@ async def test_create_org_with_owner_duplicate_name(
 async def test_create_org_with_owner_litellm_failure(
     session_maker, async_session_maker, owner_role, mock_litellm_api
 ):
-    """
-    GIVEN: LiteLLM integration fails
+    """GIVEN: LiteLLM integration fails
     WHEN: create_org_with_owner is called
-    THEN: LiteLLMIntegrationError is raised and no database records are created
+    THEN: LiteLLMIntegrationError is raised and no database records are created.
     """
     # Arrange
     org_name = 'test-org'
@@ -265,10 +260,9 @@ async def test_create_org_with_owner_litellm_failure(
 async def test_create_org_with_owner_database_failure_triggers_cleanup(
     session_maker, async_session_maker, owner_role, mock_litellm_api
 ):
-    """
-    GIVEN: Database persistence fails after LiteLLM integration succeeds
+    """GIVEN: Database persistence fails after LiteLLM integration succeeds
     WHEN: create_org_with_owner is called
-    THEN: OrgDatabaseError is raised and LiteLLM cleanup is triggered
+    THEN: OrgDatabaseError is raised and LiteLLM cleanup is triggered.
     """
     # Arrange
     org_name = 'test-org'
@@ -324,10 +318,9 @@ async def test_create_org_with_owner_database_failure_triggers_cleanup(
 async def test_create_org_with_owner_entity_creation_failure_triggers_cleanup(
     session_maker, async_session_maker, owner_role, mock_litellm_api
 ):
-    """
-    GIVEN: Entity creation fails after LiteLLM integration succeeds
+    """GIVEN: Entity creation fails after LiteLLM integration succeeds
     WHEN: create_org_with_owner is called
-    THEN: OrgDatabaseError is raised and LiteLLM cleanup is triggered
+    THEN: OrgDatabaseError is raised and LiteLLM cleanup is triggered.
     """
     # Arrange
     org_name = 'test-org'
@@ -374,10 +367,9 @@ async def test_create_org_with_owner_entity_creation_failure_triggers_cleanup(
 
 @pytest.mark.asyncio
 async def test_cleanup_litellm_resources_success(mock_litellm_api):
-    """
-    GIVEN: Valid org_id and user_id
+    """GIVEN: Valid org_id and user_id
     WHEN: _cleanup_litellm_resources is called
-    THEN: LiteLLM team is deleted successfully and None is returned
+    THEN: LiteLLM team is deleted successfully and None is returned.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -397,10 +389,9 @@ async def test_cleanup_litellm_resources_success(mock_litellm_api):
 
 @pytest.mark.asyncio
 async def test_cleanup_litellm_resources_failure_returns_exception(mock_litellm_api):
-    """
-    GIVEN: LiteLLM delete_team fails
+    """GIVEN: LiteLLM delete_team fails
     WHEN: _cleanup_litellm_resources is called
-    THEN: Exception is returned (not raised) for logging
+    THEN: Exception is returned (not raised) for logging.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -421,10 +412,9 @@ async def test_cleanup_litellm_resources_failure_returns_exception(mock_litellm_
 
 @pytest.mark.asyncio
 async def test_handle_failure_with_cleanup_success():
-    """
-    GIVEN: Original error and successful cleanup
+    """GIVEN: Original error and successful cleanup
     WHEN: _handle_failure_with_cleanup is called
-    THEN: OrgDatabaseError is raised with original error message
+    THEN: OrgDatabaseError is raised with original error message.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -447,10 +437,9 @@ async def test_handle_failure_with_cleanup_success():
 
 @pytest.mark.asyncio
 async def test_handle_failure_with_cleanup_both_fail():
-    """
-    GIVEN: Original error and cleanup also fails
+    """GIVEN: Original error and cleanup also fails
     WHEN: _handle_failure_with_cleanup is called
-    THEN: OrgDatabaseError is raised with both error messages
+    THEN: OrgDatabaseError is raised with both error messages.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -476,10 +465,9 @@ async def test_handle_failure_with_cleanup_both_fail():
 
 @pytest.mark.asyncio
 async def test_get_org_credits_success(mock_litellm_api):
-    """
-    GIVEN: Valid user_id and org_id with LiteLLM team info
+    """GIVEN: Valid user_id and org_id with LiteLLM team info
     WHEN: get_org_credits is called
-    THEN: Credits are calculated correctly (max_budget - spend)
+    THEN: Credits are calculated correctly (max_budget - spend).
     """
     # Arrange
     user_id = 'test-user-123'
@@ -505,10 +493,9 @@ async def test_get_org_credits_success(mock_litellm_api):
 
 @pytest.mark.asyncio
 async def test_get_org_credits_no_team_info(mock_litellm_api):
-    """
-    GIVEN: LiteLLM returns no team info
+    """GIVEN: LiteLLM returns no team info
     WHEN: get_org_credits is called
-    THEN: None is returned
+    THEN: None is returned.
     """
     # Arrange
     user_id = 'test-user-123'
@@ -527,10 +514,9 @@ async def test_get_org_credits_no_team_info(mock_litellm_api):
 
 @pytest.mark.asyncio
 async def test_get_org_credits_negative_credits_returns_zero(mock_litellm_api):
-    """
-    GIVEN: Spend exceeds max_budget
+    """GIVEN: Spend exceeds max_budget
     WHEN: get_org_credits is called
-    THEN: Zero credits are returned (not negative)
+    THEN: Zero credits are returned (not negative).
     """
     # Arrange
     user_id = 'test-user-123'
@@ -556,10 +542,9 @@ async def test_get_org_credits_negative_credits_returns_zero(mock_litellm_api):
 
 @pytest.mark.asyncio
 async def test_get_org_credits_api_failure_returns_none(mock_litellm_api):
-    """
-    GIVEN: LiteLLM API call fails
+    """GIVEN: LiteLLM API call fails
     WHEN: get_org_credits is called
-    THEN: None is returned and error is logged
+    THEN: None is returned and error is logged.
     """
     # Arrange
     user_id = 'test-user-123'
@@ -578,10 +563,9 @@ async def test_get_org_credits_api_failure_returns_none(mock_litellm_api):
 
 @pytest.mark.asyncio
 async def test_get_org_by_id_success(session_maker, owner_role):
-    """
-    GIVEN: Valid org_id and user_id where user is a member
+    """GIVEN: Valid org_id and user_id where user is a member
     WHEN: get_org_by_id is called
-    THEN: Organization is returned successfully
+    THEN: Organization is returned successfully.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -624,10 +608,9 @@ async def test_get_org_by_id_success(session_maker, owner_role):
 
 @pytest.mark.asyncio
 async def test_get_org_by_id_user_not_member():
-    """
-    GIVEN: User is not a member of the organization
+    """GIVEN: User is not a member of the organization
     WHEN: get_org_by_id is called
-    THEN: OrgNotFoundError is raised
+    THEN: OrgNotFoundError is raised.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -647,10 +630,9 @@ async def test_get_org_by_id_user_not_member():
 
 @pytest.mark.asyncio
 async def test_get_org_by_id_org_not_found():
-    """
-    GIVEN: User is a member but organization doesn't exist (edge case)
+    """GIVEN: User is a member but organization doesn't exist (edge case)
     WHEN: get_org_by_id is called
-    THEN: OrgNotFoundError is raised
+    THEN: OrgNotFoundError is raised.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -688,10 +670,9 @@ async def test_get_org_by_id_org_not_found():
 async def test_get_user_orgs_paginated_success(
     session_maker, async_session_maker, mock_litellm_api
 ):
-    """
-    GIVEN: User has organizations in database
+    """GIVEN: User has organizations in database
     WHEN: get_user_orgs_paginated is called with valid user_id
-    THEN: Organizations are returned with pagination info
+    THEN: Organizations are returned with pagination info.
     """
     # Arrange
     user_id = uuid.uuid4()
@@ -726,10 +707,9 @@ async def test_get_user_orgs_paginated_success(
 async def test_get_user_orgs_paginated_with_pagination(
     session_maker, async_session_maker, mock_litellm_api
 ):
-    """
-    GIVEN: User has multiple organizations
+    """GIVEN: User has multiple organizations
     WHEN: get_user_orgs_paginated is called with page_id and limit
-    THEN: Paginated results are returned correctly
+    THEN: Paginated results are returned correctly.
     """
     # Arrange
     user_id = uuid.uuid4()
@@ -773,10 +753,9 @@ async def test_get_user_orgs_paginated_with_pagination(
 
 @pytest.mark.asyncio
 async def test_get_user_orgs_paginated_empty_results(async_session_maker):
-    """
-    GIVEN: User has no organizations
+    """GIVEN: User has no organizations
     WHEN: get_user_orgs_paginated is called
-    THEN: Empty list and None next_page_id are returned
+    THEN: Empty list and None next_page_id are returned.
     """
     # Arrange
     user_id = str(uuid.uuid4())
@@ -794,10 +773,9 @@ async def test_get_user_orgs_paginated_empty_results(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_get_user_orgs_paginated_invalid_user_id_format():
-    """
-    GIVEN: Invalid user_id format (not a valid UUID string)
+    """GIVEN: Invalid user_id format (not a valid UUID string)
     WHEN: get_user_orgs_paginated is called
-    THEN: ValueError is raised
+    THEN: ValueError is raised.
     """
     # Arrange
     invalid_user_id = 'not-a-uuid'
@@ -811,10 +789,9 @@ async def test_get_user_orgs_paginated_invalid_user_id_format():
 
 @pytest.mark.asyncio
 async def test_verify_owner_authorization_success(session_maker, owner_role):
-    """
-    GIVEN: User is owner of the organization
+    """GIVEN: User is owner of the organization
     WHEN: verify_owner_authorization is called
-    THEN: No exception is raised
+    THEN: No exception is raised.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -862,10 +839,9 @@ async def test_verify_owner_authorization_success(session_maker, owner_role):
 
 @pytest.mark.asyncio
 async def test_verify_owner_authorization_org_not_found():
-    """
-    GIVEN: Organization does not exist
+    """GIVEN: Organization does not exist
     WHEN: verify_owner_authorization is called
-    THEN: OrgNotFoundError is raised
+    THEN: OrgNotFoundError is raised.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -885,10 +861,9 @@ async def test_verify_owner_authorization_org_not_found():
 
 @pytest.mark.asyncio
 async def test_verify_owner_authorization_user_not_member(session_maker, owner_role):
-    """
-    GIVEN: User is not a member of the organization
+    """GIVEN: User is not a member of the organization
     WHEN: verify_owner_authorization is called
-    THEN: OrgAuthorizationError is raised with member message
+    THEN: OrgAuthorizationError is raised with member message.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -922,10 +897,9 @@ async def test_verify_owner_authorization_user_not_member(session_maker, owner_r
 
 @pytest.mark.asyncio
 async def test_verify_owner_authorization_user_not_owner(session_maker):
-    """
-    GIVEN: User is member but not owner (admin role)
+    """GIVEN: User is member but not owner (admin role)
     WHEN: verify_owner_authorization is called
-    THEN: OrgAuthorizationError is raised with owner message
+    THEN: OrgAuthorizationError is raised with owner message.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -972,10 +946,9 @@ async def test_verify_owner_authorization_user_not_owner(session_maker):
 
 @pytest.mark.asyncio
 async def test_delete_org_with_cleanup_success(session_maker, owner_role):
-    """
-    GIVEN: User is organization owner and deletion succeeds
+    """GIVEN: User is organization owner and deletion succeeds
     WHEN: delete_org_with_cleanup is called
-    THEN: Organization is deleted and returned
+    THEN: Organization is deleted and returned.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1006,10 +979,9 @@ async def test_delete_org_with_cleanup_success(session_maker, owner_role):
 
 @pytest.mark.asyncio
 async def test_delete_org_with_cleanup_authorization_failure():
-    """
-    GIVEN: User is not authorized to delete organization
+    """GIVEN: User is not authorized to delete organization
     WHEN: delete_org_with_cleanup is called
-    THEN: OrgAuthorizationError is raised and no deletion occurs
+    THEN: OrgAuthorizationError is raised and no deletion occurs.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1026,10 +998,9 @@ async def test_delete_org_with_cleanup_authorization_failure():
 
 @pytest.mark.asyncio
 async def test_delete_org_with_cleanup_org_not_found():
-    """
-    GIVEN: Organization does not exist
+    """GIVEN: Organization does not exist
     WHEN: delete_org_with_cleanup is called
-    THEN: OrgNotFoundError is raised
+    THEN: OrgNotFoundError is raised.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1046,10 +1017,9 @@ async def test_delete_org_with_cleanup_org_not_found():
 
 @pytest.mark.asyncio
 async def test_delete_org_with_cleanup_database_failure(session_maker, owner_role):
-    """
-    GIVEN: Authorization succeeds but database deletion fails
+    """GIVEN: Authorization succeeds but database deletion fails
     WHEN: delete_org_with_cleanup is called
-    THEN: OrgDatabaseError is raised
+    THEN: OrgDatabaseError is raised.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1073,10 +1043,9 @@ async def test_delete_org_with_cleanup_database_failure(session_maker, owner_rol
 async def test_delete_org_with_cleanup_unexpected_none_result(
     session_maker, owner_role
 ):
-    """
-    GIVEN: Authorization succeeds but delete_org_cascade returns None
+    """GIVEN: Authorization succeeds but delete_org_cascade returns None
     WHEN: delete_org_with_cleanup is called
-    THEN: OrgDatabaseError is raised with not found message
+    THEN: OrgDatabaseError is raised with not found message.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1100,10 +1069,9 @@ async def test_delete_org_with_cleanup_unexpected_none_result(
 async def test_update_org_with_permissions_success_non_llm_fields(
     async_session_maker, session_maker
 ):
-    """
-    GIVEN: Valid organization update with non-LLM fields and user is a member
+    """GIVEN: Valid organization update with non-LLM fields and user is a member
     WHEN: update_org_with_permissions is called
-    THEN: Organization is updated successfully
+    THEN: Organization is updated successfully.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1164,10 +1132,9 @@ async def test_update_org_with_permissions_success_non_llm_fields(
 async def test_update_org_with_permissions_success_llm_fields_admin(
     async_session_maker, session_maker
 ):
-    """
-    GIVEN: Valid organization update with LLM fields and user has admin role
+    """GIVEN: Valid organization update with LLM fields and user has admin role
     WHEN: update_org_with_permissions is called
-    THEN: Organization is updated successfully
+    THEN: Organization is updated successfully.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1230,10 +1197,9 @@ async def test_update_org_with_permissions_success_llm_fields_admin(
 async def test_update_org_with_permissions_success_llm_fields_owner(
     async_session_maker, session_maker
 ):
-    """
-    GIVEN: Valid organization update with LLM fields and user has owner role
+    """GIVEN: Valid organization update with LLM fields and user has owner role
     WHEN: update_org_with_permissions is called
-    THEN: Organization is updated successfully
+    THEN: Organization is updated successfully.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1296,10 +1262,9 @@ async def test_update_org_with_permissions_success_llm_fields_owner(
 async def test_update_org_with_permissions_success_mixed_fields_admin(
     async_session_maker, session_maker
 ):
-    """
-    GIVEN: Valid organization update with both LLM and non-LLM fields and user has admin role
+    """GIVEN: Valid organization update with both LLM and non-LLM fields and user has admin role
     WHEN: update_org_with_permissions is called
-    THEN: Organization is updated successfully
+    THEN: Organization is updated successfully.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1360,10 +1325,9 @@ async def test_update_org_with_permissions_success_mixed_fields_admin(
 async def test_update_org_with_permissions_empty_update(
     async_session_maker, session_maker
 ):
-    """
-    GIVEN: Update request with no fields (all None)
+    """GIVEN: Update request with no fields (all None)
     WHEN: update_org_with_permissions is called
-    THEN: Original organization is returned unchanged
+    THEN: Original organization is returned unchanged.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1419,10 +1383,9 @@ async def test_update_org_with_permissions_empty_update(
 async def test_update_org_with_permissions_org_not_found(
     session_maker, async_session_maker
 ):
-    """
-    GIVEN: Organization ID does not exist
+    """GIVEN: Organization ID does not exist
     WHEN: update_org_with_permissions is called
-    THEN: ValueError is raised
+    THEN: ValueError is raised.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1452,10 +1415,9 @@ async def test_update_org_with_permissions_org_not_found(
 async def test_update_org_with_permissions_non_member(
     session_maker, async_session_maker
 ):
-    """
-    GIVEN: User is not a member of the organization
+    """GIVEN: User is not a member of the organization
     WHEN: update_org_with_permissions is called
-    THEN: PermissionError is raised
+    THEN: PermissionError is raised.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1501,10 +1463,9 @@ async def test_update_org_with_permissions_llm_fields_insufficient_permission(
     async_session_maker,
     session_maker,
 ):
-    """
-    GIVEN: User is a member but lacks admin/owner role and tries to update LLM settings
+    """GIVEN: User is a member but lacks admin/owner role and tries to update LLM settings
     WHEN: update_org_with_permissions is called
-    THEN: PermissionError is raised
+    THEN: PermissionError is raised.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1563,10 +1524,9 @@ async def test_update_org_with_permissions_llm_fields_insufficient_permission(
 async def test_update_org_with_permissions_database_error(
     async_session_maker, session_maker
 ):
-    """
-    GIVEN: Database update operation fails
+    """GIVEN: Database update operation fails
     WHEN: update_org_with_permissions is called
-    THEN: OrgDatabaseError is raised
+    THEN: OrgDatabaseError is raised.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1626,10 +1586,9 @@ async def test_update_org_with_permissions_duplicate_name_raises_org_name_exists
     async_session_maker,
     session_maker,
 ):
-    """
-    GIVEN: User updates org name to a name already used by another organization
+    """GIVEN: User updates org name to a name already used by another organization
     WHEN: update_org_with_permissions is called
-    THEN: OrgNameExistsError is raised with the conflicting name
+    THEN: OrgNameExistsError is raised with the conflicting name.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1686,10 +1645,9 @@ async def test_update_org_with_permissions_duplicate_name_raises_org_name_exists
 async def test_update_org_with_permissions_same_name_allowed(
     session_maker, async_session_maker
 ):
-    """
-    GIVEN: User updates org with name unchanged (same as current org name)
+    """GIVEN: User updates org with name unchanged (same as current org name)
     WHEN: update_org_with_permissions is called
-    THEN: No OrgNameExistsError; update proceeds (name uniqueness allows same org)
+    THEN: No OrgNameExistsError; update proceeds (name uniqueness allows same org).
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1745,10 +1703,9 @@ async def test_update_org_with_permissions_same_name_allowed(
 async def test_update_org_with_permissions_only_llm_fields(
     async_session_maker, session_maker
 ):
-    """
-    GIVEN: Update request contains only LLM fields and user has admin role
+    """GIVEN: Update request contains only LLM fields and user has admin role
     WHEN: update_org_with_permissions is called
-    THEN: Organization is updated successfully
+    THEN: Organization is updated successfully.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1813,10 +1770,9 @@ async def test_update_org_with_permissions_only_llm_fields(
 async def test_update_org_with_permissions_only_non_llm_fields(
     async_session_maker, session_maker
 ):
-    """
-    GIVEN: Update request contains only non-LLM fields and user is a member
+    """GIVEN: Update request contains only non-LLM fields and user is a member
     WHEN: update_org_with_permissions is called
-    THEN: Organization is updated successfully
+    THEN: Organization is updated successfully.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1875,10 +1831,9 @@ async def test_update_org_with_permissions_only_non_llm_fields(
 
 @pytest.mark.asyncio
 async def test_check_byor_export_enabled_returns_true_when_enabled():
-    """
-    GIVEN: User has current_org with byor_export_enabled=True
+    """GIVEN: User has current_org with byor_export_enabled=True
     WHEN: check_byor_export_enabled is called
-    THEN: Returns True
+    THEN: Returns True.
     """
     # Arrange
     user_id = 'test-user-123'
@@ -1910,10 +1865,9 @@ async def test_check_byor_export_enabled_returns_true_when_enabled():
 
 @pytest.mark.asyncio
 async def test_check_byor_export_enabled_returns_false_when_disabled():
-    """
-    GIVEN: User has current_org with byor_export_enabled=False
+    """GIVEN: User has current_org with byor_export_enabled=False
     WHEN: check_byor_export_enabled is called
-    THEN: Returns False
+    THEN: Returns False.
     """
     # Arrange
     user_id = 'test-user-123'
@@ -1945,10 +1899,9 @@ async def test_check_byor_export_enabled_returns_false_when_disabled():
 
 @pytest.mark.asyncio
 async def test_check_byor_export_enabled_returns_false_when_user_not_found():
-    """
-    GIVEN: User does not exist
+    """GIVEN: User does not exist
     WHEN: check_byor_export_enabled is called
-    THEN: Returns False
+    THEN: Returns False.
     """
     # Arrange
     user_id = 'nonexistent-user'
@@ -1966,10 +1919,9 @@ async def test_check_byor_export_enabled_returns_false_when_user_not_found():
 
 @pytest.mark.asyncio
 async def test_check_byor_export_enabled_returns_false_when_no_current_org():
-    """
-    GIVEN: User exists but has no current_org_id
+    """GIVEN: User exists but has no current_org_id
     WHEN: check_byor_export_enabled is called
-    THEN: Returns False
+    THEN: Returns False.
     """
     # Arrange
     user_id = 'test-user-123'
@@ -1990,10 +1942,9 @@ async def test_check_byor_export_enabled_returns_false_when_no_current_org():
 
 @pytest.mark.asyncio
 async def test_check_byor_export_enabled_returns_false_when_org_not_found():
-    """
-    GIVEN: User has current_org_id but org does not exist
+    """GIVEN: User has current_org_id but org does not exist
     WHEN: check_byor_export_enabled is called
-    THEN: Returns False
+    THEN: Returns False.
     """
     # Arrange
     user_id = 'test-user-123'
@@ -2022,10 +1973,9 @@ async def test_check_byor_export_enabled_returns_false_when_org_not_found():
 
 @pytest.mark.asyncio
 async def test_switch_org_success():
-    """
-    GIVEN: Valid org_id and user_id where user is a member
+    """GIVEN: Valid org_id and user_id where user is a member
     WHEN: switch_org is called
-    THEN: User's current_org_id is updated and org is returned
+    THEN: User's current_org_id is updated and org is returned.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -2062,10 +2012,9 @@ async def test_switch_org_success():
 
 @pytest.mark.asyncio
 async def test_switch_org_org_not_found():
-    """
-    GIVEN: Organization does not exist
+    """GIVEN: Organization does not exist
     WHEN: switch_org is called
-    THEN: OrgNotFoundError is raised
+    THEN: OrgNotFoundError is raised.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -2085,10 +2034,9 @@ async def test_switch_org_org_not_found():
 
 @pytest.mark.asyncio
 async def test_switch_org_user_not_member():
-    """
-    GIVEN: User is not a member of the organization
+    """GIVEN: User is not a member of the organization
     WHEN: switch_org is called
-    THEN: OrgAuthorizationError is raised
+    THEN: OrgAuthorizationError is raised.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -2117,10 +2065,9 @@ async def test_switch_org_user_not_member():
 
 @pytest.mark.asyncio
 async def test_switch_org_user_not_found():
-    """
-    GIVEN: User does not exist in database
+    """GIVEN: User does not exist in database
     WHEN: switch_org is called
-    THEN: OrgDatabaseError is raised
+    THEN: OrgDatabaseError is raised.
     """
     # Arrange
     org_id = uuid.uuid4()

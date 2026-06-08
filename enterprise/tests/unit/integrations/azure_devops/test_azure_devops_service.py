@@ -3,10 +3,10 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from integrations.azure_devops.azure_devops_service import SaaSAzureDevOpsService
+from openhands.app_server.integrations.service_types import ProviderType
 from pydantic import SecretStr
 
-from openhands.app_server.integrations.service_types import ProviderType
+from integrations.azure_devops.azure_devops_service import SaaSAzureDevOpsService
 
 
 @pytest.mark.asyncio

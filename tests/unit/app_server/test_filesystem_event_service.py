@@ -215,9 +215,9 @@ class TestFilesystemEventServiceSearchEvents:
 
             for item in result.items:
                 # Verify no duplicates - this would fail with the old buggy code
-                assert (
-                    item.id not in collected_event_ids
-                ), f'Duplicate event {item.id} found on page {page_count}'
+                assert item.id not in collected_event_ids, (
+                    f'Duplicate event {item.id} found on page {page_count}'
+                )
                 collected_event_ids.add(item.id)
 
             if result.next_page_id is None:

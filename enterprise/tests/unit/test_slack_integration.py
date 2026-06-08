@@ -3,6 +3,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import BackgroundTasks
+from openhands.app_server.integrations.service_types import (
+    ProviderTimeoutError,
+    ProviderType,
+    Repository,
+)
+from openhands.app_server.user_auth.user_auth import UserAuth
+
 from integrations.slack.slack_manager import (
     SLACK_USER_MSG_EXPIRATION,
     SLACK_USER_MSG_KEY_PREFIX,
@@ -10,13 +17,6 @@ from integrations.slack.slack_manager import (
 )
 from integrations.slack.slack_view import SlackNewConversationView
 from storage.slack_user import SlackUser
-
-from openhands.app_server.integrations.service_types import (
-    ProviderTimeoutError,
-    ProviderType,
-    Repository,
-)
-from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 @pytest.fixture
@@ -248,7 +248,6 @@ class TestRepoVerificationHandling:
         slack_new_conversation_view,
     ):
         """Test that when repo is successfully verified, job starts without selector."""
-
         # Setup Redis mock
         mock_redis = AsyncMock()
         mock_get_redis_client_async.return_value = mock_redis
@@ -291,7 +290,6 @@ class TestBuildRepoOptions:
 
     def test_build_options_with_repos(self, slack_manager):
         """Test building options from a list of repositories."""
-
         repos = [
             Repository(
                 id='1',
@@ -326,7 +324,6 @@ class TestBuildRepoOptions:
 
     def test_build_options_truncates_long_names(self, slack_manager):
         """Test that repo names longer than 75 chars are truncated."""
-
         long_name = 'a' * 100
         repos = [
             Repository(
@@ -355,7 +352,6 @@ class TestSearchRepositories:
         self, mock_provider_handler_class, slack_manager, mock_user_auth
     ):
         """Test that _search_repositories returns repositories from the provider."""
-
         # Setup: Create real Repository objects
         expected_repos = [
             Repository(
@@ -434,7 +430,6 @@ class TestSearchRepositories:
 
         This exercises the full code path from search → filter → options building.
         """
-
         # Setup: Create a realistic repository list
         repos = [
             Repository(
@@ -783,6 +778,7 @@ class TestOnOptionsLoadEndpoint:
     ):
         """Test that invalid Slack signature raises 403 HTTPException."""
         from fastapi import HTTPException
+
         from server.routes.integration.slack import on_options_load
 
         payload_str = json.dumps(valid_block_suggestion_payload)

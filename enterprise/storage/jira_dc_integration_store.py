@@ -4,13 +4,13 @@ from dataclasses import dataclass
 from typing import Optional
 from uuid import UUID
 
+from openhands.app_server.utils.logger import openhands_logger as logger
 from sqlalchemy import select
+
 from storage.database import a_session_maker
 from storage.jira_dc_conversation import JiraDcConversation
 from storage.jira_dc_user import JiraDcUser
 from storage.jira_dc_workspace import JiraDcWorkspace
-
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass

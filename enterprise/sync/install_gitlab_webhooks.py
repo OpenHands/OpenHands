@@ -3,6 +3,10 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, cast
 
+from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.app_server.utils.logger import openhands_logger as logger
+from sqlalchemy import text
+
 from integrations.gitlab.webhook_installation import (
     BreakLoopException,
     install_webhook_on_resource,
@@ -10,13 +14,9 @@ from integrations.gitlab.webhook_installation import (
 )
 from integrations.types import GitLabResourceType
 from integrations.utils import GITLAB_WEBHOOK_URL
-from sqlalchemy import text
 from storage.database import a_session_maker
 from storage.gitlab_webhook import GitlabWebhook, WebhookStatus
 from storage.gitlab_webhook_store import GitlabWebhookStore
-
-from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 if TYPE_CHECKING:
     from integrations.gitlab.gitlab_service import SaaSGitLabService
@@ -45,9 +45,7 @@ class VerifyWebhookStatus:
         webhook_store: GitlabWebhookStore,
         webhook: GitlabWebhook,
     ):
-        """
-        Check whether webhook already exists on resource
-        """
+        """Check whether webhook already exists on resource."""
         (
             does_webhook_exist_on_resource,
             status,
@@ -101,9 +99,7 @@ class VerifyWebhookStatus:
         webhook_store: GitlabWebhookStore,
         webhook: GitlabWebhook,
     ):
-        """
-        Install webhook on resource
-        """
+        """Install webhook on resource."""
         # Use the standalone function
         await install_webhook_on_resource(
             gitlab_service=gitlab_service,
@@ -114,9 +110,8 @@ class VerifyWebhookStatus:
         )
 
     async def install_webhooks(self):
-        """
-        Periodically check the conditions for installing a webhook on resource as valid
-        Rows with valid conditions with contain (webhook_exists=False, status=WebhookStatus.VERIFIED)
+        """Periodically check the conditions for installing a webhook on resource as valid
+        Rows with valid conditions with contain (webhook_exists=False, status=WebhookStatus.VERIFIED).
 
         Conditions we check for
             1. Resource exists
@@ -128,7 +123,6 @@ class VerifyWebhookStatus:
                 - resource was never setup with webhook
 
         """
-
         from integrations.gitlab.gitlab_service import SaaSGitLabService
 
         # Check if the table exists before proceeding

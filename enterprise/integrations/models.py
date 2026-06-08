@@ -1,9 +1,8 @@
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
-
 from openhands.app_server.integrations.service_types import Comment
+from pydantic import BaseModel, Field
 
 
 class SourceType(str, Enum):

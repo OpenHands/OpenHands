@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 from sqlalchemy import select
+
 from storage.slack_conversation import SlackConversation
 from storage.slack_conversation_store import SlackConversationStore
 

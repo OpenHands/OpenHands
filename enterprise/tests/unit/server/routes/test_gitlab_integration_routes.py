@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, status
+
 from integrations.gitlab.gitlab_service import SaaSGitLabService
 from integrations.gitlab.webhook_installation import BreakLoopException
 from integrations.types import GitLabResourceType

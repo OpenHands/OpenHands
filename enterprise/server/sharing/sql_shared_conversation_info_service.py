@@ -16,7 +16,15 @@ from uuid import UUID
 
 from fastapi import Request
 from openhands.agent_server.utils import utc_now
+from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
+    StoredConversationMetadata,
+)
+from openhands.app_server.integrations.provider import ProviderType
+from openhands.app_server.services.injector import InjectorState
 from openhands.sdk.llm import MetricsSnapshot, TokenUsage
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from server.sharing.shared_conversation_info_service import (
     SharedConversationInfoService,
     SharedConversationInfoServiceInjector,
@@ -24,15 +32,7 @@ from server.sharing.shared_conversation_info_service import (
 from server.sharing.shared_conversation_models import (
     SharedConversation,
 )
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
-
-from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
-    StoredConversationMetadata,
-)
-from openhands.app_server.integrations.provider import ProviderType
-from openhands.app_server.services.injector import InjectorState
 
 logger = logging.getLogger(__name__)
 

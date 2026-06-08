@@ -2,28 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
-from integrations.models import Message
-from integrations.resolver_context import ResolverUserContext
-from integrations.resolver_org_router import resolve_org_for_repo
-from integrations.slack.slack_errors import SlackError, SlackErrorCode
-from integrations.slack.slack_types import (
-    SlackMessageView,
-    SlackViewInterface,
-    StartingConvoException,
-)
-from integrations.slack.slack_v1_callback_processor import SlackV1CallbackProcessor
-from integrations.utils import (
-    CONVERSATION_URL,
-)
 from jinja2 import Environment
-from openhands.sdk import TextContent
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
-from storage.slack_conversation import SlackConversation
-from storage.slack_conversation_store import SlackConversationStore
-from storage.slack_team_store import SlackTeamStore
-from storage.slack_user import SlackUser
-
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTaskStatus,
@@ -38,6 +17,27 @@ from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.app_server.utils.async_utils import GENERAL_TIMEOUT
 from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk import TextContent
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
+
+from integrations.models import Message
+from integrations.resolver_context import ResolverUserContext
+from integrations.resolver_org_router import resolve_org_for_repo
+from integrations.slack.slack_errors import SlackError, SlackErrorCode
+from integrations.slack.slack_types import (
+    SlackMessageView,
+    SlackViewInterface,
+    StartingConvoException,
+)
+from integrations.slack.slack_v1_callback_processor import SlackV1CallbackProcessor
+from integrations.utils import (
+    CONVERSATION_URL,
+)
+from storage.slack_conversation import SlackConversation
+from storage.slack_conversation_store import SlackConversationStore
+from storage.slack_team_store import SlackTeamStore
+from storage.slack_user import SlackUser
 
 # =================================================
 # SECTION: Slack view types
@@ -82,7 +82,7 @@ class SlackNewConversationView(SlackViewInterface):
         return ''
 
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
-        """Instructions passed when conversation is first initialized"""
+        """Instructions passed when conversation is first initialized."""
         user_info: SlackUser = self.slack_to_openhands_user
 
         messages = []
@@ -190,7 +190,7 @@ class SlackNewConversationView(SlackViewInterface):
         )
 
     async def create_or_update_conversation(self, jinja: Environment) -> str:
-        """Only creates a new conversation"""
+        """Only creates a new conversation."""
         self._verify_necessary_values_are_set()
 
         provider_tokens = await self.saas_user_auth.get_provider_tokens()
@@ -316,7 +316,6 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
         """Send a message to a v1 conversation using the agent server API."""
         # Import services within the method to avoid circular imports
         from openhands.agent_server.models import SendMessageRequest
-
         from openhands.app_server.config import (
             get_app_conversation_info_service,
             get_httpx_client,
@@ -367,9 +366,9 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
                 httpx_client=httpx_client,
             )
 
-            assert (
-                running_sandbox.session_api_key is not None
-            ), f'No session API key for sandbox: {running_sandbox.id}'
+            assert running_sandbox.session_api_key is not None, (
+                f'No session API key for sandbox: {running_sandbox.id}'
+            )
 
             # 3. Get the agent server URL
             agent_server_url = get_agent_server_url_from_sandbox(running_sandbox)

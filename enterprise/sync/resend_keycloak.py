@@ -30,10 +30,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import resend
+from openhands.app_server.utils.logger import openhands_logger as logger
 from resend.exceptions import ResendError
 from sqlalchemy import and_, func, select
-from storage.resend_synced_user_store import ResendSyncedUserStore
-from storage.user import User
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -41,7 +40,8 @@ from tenacity import (
     wait_exponential,
 )
 
-from openhands.app_server.utils.logger import openhands_logger as logger
+from storage.resend_synced_user_store import ResendSyncedUserStore
+from storage.user import User
 
 # Get configuration from environment variables
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY')

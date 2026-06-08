@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
+from openhands.app_server.integrations.service_types import ProviderType, Repository
+
 from server.routes.integration.bitbucket_dc import (
     BITBUCKET_DC_WEBHOOK_EVENTS,
     bitbucket_dc_connection_events,
@@ -15,8 +17,6 @@ from server.routes.integration.bitbucket_dc import (
     reinstall_bitbucket_dc_webhook,
     update_bitbucket_dc_webhook_id,
 )
-
-from openhands.app_server.integrations.service_types import ProviderType, Repository
 
 
 def _signed(body: bytes, secret: str = 'shared-secret') -> str:

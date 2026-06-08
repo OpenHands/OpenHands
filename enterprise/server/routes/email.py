@@ -3,7 +3,11 @@ from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
+from openhands.app_server.user_auth import get_user_id
+from openhands.app_server.user_auth.user_auth import get_user_auth
+from openhands.app_server.utils.logger import openhands_logger as logger
 from pydantic import BaseModel, field_validator
+
 from server.auth.constants import KEYCLOAK_CLIENT_ID
 from server.auth.keycloak_manager import get_keycloak_admin
 from server.auth.saas_user_auth import SaasUserAuth
@@ -16,10 +20,6 @@ from server.utils.rate_limit_utils import (
 )
 from server.utils.url_utils import get_web_url
 from storage.user_store import UserStore
-
-from openhands.app_server.user_auth import get_user_id
-from openhands.app_server.user_auth.user_auth import get_user_auth
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Email validation regex pattern
 EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')

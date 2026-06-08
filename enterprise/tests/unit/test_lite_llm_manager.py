@@ -1,6 +1,4 @@
-"""
-Unit tests for LiteLlmManager class.
-"""
+"""Unit tests for LiteLlmManager class."""
 
 import importlib
 import os
@@ -9,7 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from openhands.app_server.settings.settings_models import Settings
 from pydantic import SecretStr
+
 from server.constants import (
     get_default_litellm_model,
 )
@@ -19,8 +19,6 @@ from storage.lite_llm_manager import (
     get_openhands_cloud_key_alias,
 )
 from storage.user_settings import UserSettings
-
-from openhands.app_server.settings.settings_models import Settings
 
 
 def _agent_value(settings: Settings, key: str):
@@ -1824,10 +1822,9 @@ class TestLiteLlmManager:
 
     @pytest.mark.asyncio
     async def test_delete_team_success(self, mock_http_client, mock_response):
-        """
-        GIVEN: Valid team_id and configured LiteLLM API
+        """GIVEN: Valid team_id and configured LiteLLM API
         WHEN: delete_team is called
-        THEN: Team is deleted successfully via POST /team/delete
+        THEN: Team is deleted successfully via POST /team/delete.
         """
         # Arrange
         team_id = 'test-team-123'
@@ -1853,10 +1850,9 @@ class TestLiteLlmManager:
     async def test_delete_team_not_found_is_idempotent(
         self, mock_http_client, mock_response
     ):
-        """
-        GIVEN: Team does not exist (404 response)
+        """GIVEN: Team does not exist (404 response)
         WHEN: delete_team is called
-        THEN: Operation succeeds without raising exception (idempotent)
+        THEN: Operation succeeds without raising exception (idempotent).
         """
         # Arrange
         team_id = 'non-existent-team'
@@ -1879,10 +1875,9 @@ class TestLiteLlmManager:
     async def test_delete_team_api_error_raises_exception(
         self, mock_http_client, mock_response
     ):
-        """
-        GIVEN: LiteLLM API returns error (non-404)
+        """GIVEN: LiteLLM API returns error (non-404)
         WHEN: delete_team is called
-        THEN: HTTPStatusError is raised
+        THEN: HTTPStatusError is raised.
         """
         # Arrange
         team_id = 'test-team-123'
@@ -1907,10 +1902,9 @@ class TestLiteLlmManager:
 
     @pytest.mark.asyncio
     async def test_delete_team_no_config_returns_early(self, mock_http_client):
-        """
-        GIVEN: LiteLLM API is not configured
+        """GIVEN: LiteLLM API is not configured
         WHEN: delete_team is called
-        THEN: Function returns early without making API call
+        THEN: Function returns early without making API call.
         """
         # Arrange
         team_id = 'test-team-123'
@@ -1927,10 +1921,9 @@ class TestLiteLlmManager:
 
     @pytest.mark.asyncio
     async def test_delete_team_public_method(self):
-        """
-        GIVEN: Valid team_id
+        """GIVEN: Valid team_id
         WHEN: Public delete_team method is called
-        THEN: HTTP client is created and team is deleted
+        THEN: HTTP client is created and team is deleted.
         """
         # Arrange
         team_id = 'test-team-123'
@@ -1959,10 +1952,9 @@ class TestLiteLlmManager:
 
     @pytest.mark.asyncio
     async def test_remove_user_from_team_successful(self):
-        """
-        GIVEN: Valid user_id and team_id
+        """GIVEN: Valid user_id and team_id
         WHEN: _remove_user_from_team is called
-        THEN: HTTP POST is made to remove user from team
+        THEN: HTTP POST is made to remove user from team.
         """
         mock_response = AsyncMock()
         mock_response.is_success = True
@@ -1989,10 +1981,9 @@ class TestLiteLlmManager:
 
     @pytest.mark.asyncio
     async def test_remove_user_from_team_not_found(self):
-        """
-        GIVEN: User not in team
+        """GIVEN: User not in team
         WHEN: _remove_user_from_team is called
-        THEN: 404 response is handled gracefully without raising
+        THEN: 404 response is handled gracefully without raising.
         """
         mock_response = AsyncMock()
         mock_response.is_success = False
@@ -2532,9 +2523,9 @@ class TestBudgetPayloadHandling:
 
         # Verify that max_budget IS in the JSON payload with the correct value
         json_payload = call_args[1]['json']
-        assert (
-            'max_budget' in json_payload
-        ), 'max_budget should be in payload when set to a value'
+        assert 'max_budget' in json_payload, (
+            'max_budget should be in payload when set to a value'
+        )
         assert json_payload['max_budget'] == 100.0
 
     @pytest.mark.asyncio
@@ -2593,9 +2584,9 @@ class TestBudgetPayloadHandling:
 
         # Verify that max_budget_in_team IS in the JSON payload
         json_payload = call_args[1]['json']
-        assert (
-            'max_budget_in_team' in json_payload
-        ), 'max_budget_in_team should be in payload when set to a value'
+        assert 'max_budget_in_team' in json_payload, (
+            'max_budget_in_team should be in payload when set to a value'
+        )
         assert json_payload['max_budget_in_team'] == 50.0
 
     @pytest.mark.asyncio
@@ -2654,9 +2645,9 @@ class TestBudgetPayloadHandling:
 
         # Verify that max_budget_in_team IS in the JSON payload
         json_payload = call_args[1]['json']
-        assert (
-            'max_budget_in_team' in json_payload
-        ), 'max_budget_in_team should be in payload when set to a value'
+        assert 'max_budget_in_team' in json_payload, (
+            'max_budget_in_team should be in payload when set to a value'
+        )
         assert json_payload['max_budget_in_team'] == 75.0
 
 
@@ -2670,10 +2661,9 @@ class TestGetTeamMembersFinancialData:
 
     @pytest.mark.asyncio
     async def test_returns_financial_data_for_all_team_members(self, mock_http_client):
-        """
-        GIVEN: Team with multiple members having financial data
+        """GIVEN: Team with multiple members having financial data
         WHEN: _get_team_members_financial_data is called
-        THEN: Returns dict with team info and member data
+        THEN: Returns dict with team info and member data.
         """
         # Arrange
         mock_response = MagicMock()
@@ -2724,10 +2714,9 @@ class TestGetTeamMembersFinancialData:
     async def test_returns_empty_dict_when_litellm_not_configured(
         self, mock_http_client
     ):
-        """
-        GIVEN: LiteLLM API key or URL not configured
+        """GIVEN: LiteLLM API key or URL not configured
         WHEN: _get_team_members_financial_data is called
-        THEN: Returns empty dict
+        THEN: Returns empty dict.
         """
         # Arrange - no patching, so LITE_LLM_API_KEY/URL are None
         with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', None):
@@ -2743,10 +2732,9 @@ class TestGetTeamMembersFinancialData:
 
     @pytest.mark.asyncio
     async def test_returns_empty_dict_when_team_not_found(self, mock_http_client):
-        """
-        GIVEN: Team does not exist in LiteLLM
+        """GIVEN: Team does not exist in LiteLLM
         WHEN: _get_team_members_financial_data is called
-        THEN: Returns empty dict
+        THEN: Returns empty dict.
         """
         # Arrange
         mock_response = MagicMock()
@@ -2768,10 +2756,9 @@ class TestGetTeamMembersFinancialData:
     async def test_returns_empty_members_when_team_has_no_members(
         self, mock_http_client
     ):
-        """
-        GIVEN: Team exists but has no members
+        """GIVEN: Team exists but has no members
         WHEN: _get_team_members_financial_data is called
-        THEN: Returns structure with empty members dict
+        THEN: Returns structure with empty members dict.
         """
         # Arrange
         mock_response = MagicMock()
@@ -2800,10 +2787,9 @@ class TestGetTeamMembersFinancialData:
     async def test_falls_back_to_team_budget_when_member_budget_missing(
         self, mock_http_client
     ):
-        """
-        GIVEN: Team with shared budget, members without individual max_budget_in_team
+        """GIVEN: Team with shared budget, members without individual max_budget_in_team
         WHEN: _get_team_members_financial_data is called
-        THEN: Falls back to team_info.max_budget for members without individual budget
+        THEN: Falls back to team_info.max_budget for members without individual budget.
         """
         # Arrange
         mock_response = MagicMock()
@@ -2861,10 +2847,9 @@ class TestGetTeamMembersFinancialData:
 
     @pytest.mark.asyncio
     async def test_uses_defaults_when_no_budget_data_available(self, mock_http_client):
-        """
-        GIVEN: Team without budget and members without individual budgets
+        """GIVEN: Team without budget and members without individual budgets
         WHEN: _get_team_members_financial_data is called
-        THEN: Returns default values (spend=0, max_budget=None)
+        THEN: Returns default values (spend=0, max_budget=None).
         """
         # Arrange
         mock_response = MagicMock()
@@ -2911,10 +2896,9 @@ class TestGetTeamMembersFinancialData:
 
     @pytest.mark.asyncio
     async def test_skips_members_without_user_id(self, mock_http_client):
-        """
-        GIVEN: Team with members, some missing user_id
+        """GIVEN: Team with members, some missing user_id
         WHEN: _get_team_members_financial_data is called
-        THEN: Skips members without user_id
+        THEN: Skips members without user_id.
         """
         # Arrange
         mock_response = MagicMock()

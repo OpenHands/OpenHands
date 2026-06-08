@@ -4,6 +4,7 @@ import pytest
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import SecretStr
+
 from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.email import (
     EmailUpdate,
@@ -263,7 +264,9 @@ async def test_resend_email_verification_rate_limit_exceeded_returns_429(mock_re
     user_id = 'test_user_id'
     body = ResendEmailVerificationRequest(user_id=user_id)
 
-    with (patch('server.routes.email.check_rate_limit_by_user_id') as mock_rate_limit,):
+    with (
+        patch('server.routes.email.check_rate_limit_by_user_id') as mock_rate_limit,
+    ):
         mock_rate_limit.side_effect = HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail='Too many requests. Please wait 2 minutes before trying again.',

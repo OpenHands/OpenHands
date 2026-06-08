@@ -1,11 +1,10 @@
-"""
-Store class for managing roles.
-"""
+"""Store class for managing roles."""
 
 from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from storage.database import a_session_maker
 from storage.role import Role
 

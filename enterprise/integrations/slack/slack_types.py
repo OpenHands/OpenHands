@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from integrations.types import SummaryExtractionTracker
 from jinja2 import Environment
-from storage.slack_user import SlackUser
-
 from openhands.app_server.user_auth.user_auth import UserAuth
+
+from integrations.types import SummaryExtractionTracker
+from storage.slack_user import SlackUser
 
 
 @dataclass
@@ -115,11 +115,11 @@ class SlackViewInterface(SlackMessageView, SummaryExtractionTracker, ABC):
 
     @abstractmethod
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
-        """Instructions passed when conversation is first initialized"""
+        """Instructions passed when conversation is first initialized."""
 
     @abstractmethod
     async def create_or_update_conversation(self, jinja_env: Environment):
-        """Create a new conversation"""
+        """Create a new conversation."""
 
     @abstractmethod
     def get_response_msg(self) -> str:

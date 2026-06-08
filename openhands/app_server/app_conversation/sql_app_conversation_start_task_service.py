@@ -23,12 +23,12 @@ from typing import AsyncGenerator, cast
 from uuid import UUID
 
 from fastapi import Request
-from openhands.agent_server.models import utc_now
 from sqlalchemy import Enum, String, func, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
+from openhands.agent_server.models import utc_now
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTask,

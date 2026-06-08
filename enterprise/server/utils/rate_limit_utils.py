@@ -1,9 +1,9 @@
 import os
 
 from fastapi import HTTPException, Request, status
-from storage.redis import get_redis_client_async
-
 from openhands.app_server.utils.logger import openhands_logger as logger
+
+from storage.redis import get_redis_client_async
 
 # Rate limiting configuration.
 #
@@ -55,8 +55,7 @@ async def check_rate_limit_by_user_id(
     user_rate_limit_seconds: int = RATE_LIMIT_USER_SECONDS,
     ip_rate_limit_seconds: int = RATE_LIMIT_IP_SECONDS,
 ) -> None:
-    """
-    Check rate limit for requests, using user_id when available, falling back to IP address.
+    """Check rate limit for requests, using user_id when available, falling back to IP address.
 
     Uses Redis to store rate limit keys with expiration. If a key already exists,
     it means the rate limit is active and the request will be rejected.

@@ -4,14 +4,7 @@ from uuid import UUID
 
 import httpx
 from github import Auth, Github, GithubException, GithubIntegration
-from integrations.utils import get_summary_instruction
-from integrations.v1_utils import handle_callback_error
 from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
-from openhands.sdk import Event
-from openhands.sdk.event import ConversationStateUpdateEvent
-from pydantic import Field
-from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
-
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
@@ -26,6 +19,13 @@ from openhands.app_server.event_callback.util import (
     ensure_running_sandbox,
     get_agent_server_url_from_sandbox,
 )
+from openhands.sdk import Event
+from openhands.sdk.event import ConversationStateUpdateEvent
+from pydantic import Field
+
+from integrations.utils import get_summary_instruction
+from integrations.v1_utils import handle_callback_error
+from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 
 _logger = logging.getLogger(__name__)
 
@@ -181,8 +181,8 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
         send_message_request = AskAgentRequest(question=message_content)
 
         url = (
-            f"{agent_server_url.rstrip('/')}"
-            f"/api/conversations/{conversation_id}/ask_agent"
+            f'{agent_server_url.rstrip("/")}'
+            f'/api/conversations/{conversation_id}/ask_agent'
         )
         headers = {'X-Session-API-Key': session_api_key}
         payload = send_message_request.model_dump()
@@ -285,9 +285,9 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 app_conversation_info.sandbox_id,
             )
 
-            assert (
-                sandbox.session_api_key is not None
-            ), f'No session API key for sandbox: {sandbox.id}'
+            assert sandbox.session_api_key is not None, (
+                f'No session API key for sandbox: {sandbox.id}'
+            )
 
             # 3. URL + instruction
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)

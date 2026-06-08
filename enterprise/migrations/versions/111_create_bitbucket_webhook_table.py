@@ -1,4 +1,4 @@
-"""create bitbucket webhook table
+"""create bitbucket webhook table.
 
 Revision ID: 111
 Revises: 110

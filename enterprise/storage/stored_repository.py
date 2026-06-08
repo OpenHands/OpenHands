@@ -1,12 +1,11 @@
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
+
 from storage.base import Base
 
 
 class StoredRepository(Base):
-    """
-    Represents a repositories fetched from git providers.
-    """
+    """Represents a repositories fetched from git providers."""
 
     __tablename__ = 'repos'
 

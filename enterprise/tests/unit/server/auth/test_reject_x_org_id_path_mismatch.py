@@ -18,6 +18,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
 from server.auth.org_context import (
     REJECT_X_ORG_ID_PATH_MISMATCH,
     X_ORG_ID_HEADER,
@@ -28,7 +29,8 @@ from server.auth.org_context import (
 def app() -> FastAPI:
     """Build a tiny app with one path-org route and one non-path route,
     both guarded by the dependency. The non-path route asserts that a
-    misconfigured attachment is a no-op (not a 500)."""
+    misconfigured attachment is a no-op (not a 500).
+    """
     app = FastAPI()
 
     @app.get(
@@ -79,7 +81,8 @@ def test_matching_header_passes_through(client: TestClient, org_id: UUID):
 
 def test_matching_header_case_insensitive_uuid(client: TestClient, org_id: UUID):
     """UUIDs compare value-wise, not string-wise — uppercase header
-    must match lowercase path."""
+    must match lowercase path.
+    """
     r = client.get(
         f'/orgs/{org_id}/things',
         headers={X_ORG_ID_HEADER: str(org_id).upper()},
@@ -91,7 +94,8 @@ def test_empty_header_value_passes_through(client: TestClient, org_id: UUID):
     """An empty string header is treated as 'not present' by FastAPI's
     Header dependency. We document the behavior here so a future change
     that starts treating ``X-Org-Id: ''`` as a malformed UUID is
-    caught."""
+    caught.
+    """
     r = client.get(
         f'/orgs/{org_id}/things',
         headers={X_ORG_ID_HEADER: ''},
@@ -141,7 +145,8 @@ def test_dep_on_non_path_route_is_noop(client: TestClient):
     """If a developer attaches the dep to a route that has no ``{org_id}``
     path param, the dep should NOT raise — even when the header is
     present. (A 500 here would be worse than the silent miswiring that
-    we'd catch in dev when no behavior changed.)"""
+    we'd catch in dev when no behavior changed.).
+    """
     r = client.get(
         '/no-path-org',
         headers={X_ORG_ID_HEADER: str(uuid4())},
@@ -153,7 +158,8 @@ def test_dep_on_non_path_route_is_noop(client: TestClient):
 def test_dep_on_non_path_route_ignores_malformed_header(client: TestClient):
     """Same as above, but with a junk header — still no-op, NOT 400.
     The dep should only complain about path-vs-header conflicts; if
-    there's no path to compare against, it stays silent."""
+    there's no path to compare against, it stays silent.
+    """
     r = client.get(
         '/no-path-org',
         headers={X_ORG_ID_HEADER: 'not-a-uuid'},

@@ -510,18 +510,16 @@ def test_auto_close_main_honors_author_veto(monkeypatch, capsys):
     monkeypatch.setattr(
         module,
         'remove_candidate_label',
-        lambda repository, issue_number, *, dry_run: removed.append(
-            (repository, issue_number, dry_run)
-        )
-        or True,
+        lambda repository, issue_number, *, dry_run: (
+            removed.append((repository, issue_number, dry_run)) or True
+        ),
     )
     monkeypatch.setattr(
         module,
         'post_veto_note',
-        lambda repository, issue_number, *, dry_run: veto_notes.append(
-            (repository, issue_number, dry_run)
-        )
-        or True,
+        lambda repository, issue_number, *, dry_run: (
+            veto_notes.append((repository, issue_number, dry_run)) or True
+        ),
     )
     monkeypatch.setattr(
         module,
@@ -585,8 +583,8 @@ def test_auto_close_main_closes_old_duplicate(monkeypatch, capsys):
     monkeypatch.setattr(
         module,
         'close_issue_as_duplicate',
-        lambda repository, issue_number, canonical_issue_number, *, dry_run: closed.append(
-            (repository, issue_number, canonical_issue_number, dry_run)
+        lambda repository, issue_number, canonical_issue_number, *, dry_run: (
+            closed.append((repository, issue_number, canonical_issue_number, dry_run))
         ),
     )
 
@@ -777,10 +775,10 @@ def test_auto_close_main_removes_label_when_newer_comment_exists(monkeypatch, ca
     monkeypatch.setattr(
         module,
         'keep_open_due_to_newer_comments',
-        lambda repository, issue_arg, issue_number, *, dry_run: keep_open_calls.append(
-            (repository, issue_number, dry_run)
-        )
-        or {'issue_number': issue_number, 'action': 'kept-open'},
+        lambda repository, issue_arg, issue_number, *, dry_run: (
+            keep_open_calls.append((repository, issue_number, dry_run))
+            or {'issue_number': issue_number, 'action': 'kept-open'}
+        ),
     )
     monkeypatch.setattr(
         module,
@@ -841,8 +839,8 @@ def test_auto_close_main_ignores_newer_bot_comments(monkeypatch, capsys):
     monkeypatch.setattr(
         module,
         'close_issue_as_duplicate',
-        lambda repository, issue_number, canonical_issue_number, *, dry_run: closed.append(
-            (repository, issue_number, canonical_issue_number, dry_run)
+        lambda repository, issue_number, canonical_issue_number, *, dry_run: (
+            closed.append((repository, issue_number, canonical_issue_number, dry_run))
         ),
     )
     monkeypatch.setattr(
@@ -913,8 +911,8 @@ def test_auto_close_main_ignores_newer_deleted_user_comments(monkeypatch, capsys
     monkeypatch.setattr(
         module,
         'close_issue_as_duplicate',
-        lambda repository, issue_number, canonical_issue_number, *, dry_run: closed.append(
-            (repository, issue_number, canonical_issue_number, dry_run)
+        lambda repository, issue_number, canonical_issue_number, *, dry_run: (
+            closed.append((repository, issue_number, canonical_issue_number, dry_run))
         ),
     )
 
@@ -1014,8 +1012,8 @@ def test_auto_close_main_ignores_newer_comments_with_invalid_timestamps(
     monkeypatch.setattr(
         module,
         'close_issue_as_duplicate',
-        lambda repository, issue_number, canonical_issue_number, *, dry_run: closed.append(
-            (repository, issue_number, canonical_issue_number, dry_run)
+        lambda repository, issue_number, canonical_issue_number, *, dry_run: (
+            closed.append((repository, issue_number, canonical_issue_number, dry_run))
         ),
     )
 

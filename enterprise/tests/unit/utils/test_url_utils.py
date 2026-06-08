@@ -307,8 +307,7 @@ class TestSecurityScenarios:
         return request
 
     def test_header_poisoning_attack_blocked_when_configured(self, mock_request):
-        """
-        When web_url is configured, X-Forwarded-* header poisoning should not affect
+        """When web_url is configured, X-Forwarded-* header poisoning should not affect
         the returned URL.
         """
         from server.utils.url_utils import get_web_url
@@ -330,8 +329,7 @@ class TestSecurityScenarios:
         assert 'evil' not in result
 
     def test_cookie_domain_not_set_in_dev_environments(self):
-        """
-        Cookie domain should not be set in development environments to prevent
+        """Cookie domain should not be set in development environments to prevent
         cookies from leaking to other subdomains.
         """
         from server.utils.url_utils import get_cookie_domain
@@ -382,8 +380,7 @@ class TestSecurityScenarios:
                 assert result is None, f'Expected None for {env_name} environment'
 
     def test_strict_samesite_only_in_production(self):
-        """
-        SameSite=strict should only be set in production to ensure proper
+        """SameSite=strict should only be set in production to ensure proper
         security without breaking OAuth flows in development.
         """
         from server.utils.url_utils import get_cookie_samesite

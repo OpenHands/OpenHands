@@ -1,4 +1,4 @@
-"""Sync DB with Models
+"""Sync DB with Models.
 
 Revision ID: 076
 Revises: 075
@@ -10,7 +10,6 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
-
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartTaskStatus,
 )

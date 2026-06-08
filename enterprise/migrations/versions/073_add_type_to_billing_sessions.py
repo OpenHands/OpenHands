@@ -1,4 +1,4 @@
-"""add type column to billing_sessions
+"""add type column to billing_sessions.
 
 Revision ID: 073
 Revises: 072

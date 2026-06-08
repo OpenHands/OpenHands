@@ -1,5 +1,4 @@
-"""
-Unit tests for user app settings API routes.
+"""Unit tests for user app settings API routes.
 
 Tests the GET and POST /api/users/app endpoints.
 """
@@ -10,13 +9,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
+from openhands.app_server.user_auth import get_user_id
+
 from server.routes.user_app_settings import user_app_settings_router
 from server.routes.user_app_settings_models import (
     UserAppSettingsResponse,
     UserNotFoundError,
 )
-
-from openhands.app_server.user_auth import get_user_id
 
 TEST_USER_ID = str(uuid.uuid4())
 
@@ -63,10 +62,9 @@ def mock_settings_response():
 
 @pytest.mark.asyncio
 async def test_get_user_app_settings_success(mock_app, mock_settings_response):
-    """
-    GIVEN: An authenticated user with app settings
+    """GIVEN: An authenticated user with app settings
     WHEN: GET /api/users/app is called
-    THEN: User's app settings are returned with 200 status
+    THEN: User's app settings are returned with 200 status.
     """
     # Arrange
     with patch(
@@ -90,10 +88,9 @@ async def test_get_user_app_settings_success(mock_app, mock_settings_response):
 
 @pytest.mark.asyncio
 async def test_get_user_app_settings_not_authenticated(mock_app_unauthenticated):
-    """
-    GIVEN: An unauthenticated request
+    """GIVEN: An unauthenticated request
     WHEN: GET /api/users/app is called
-    THEN: 401 Unauthorized is returned
+    THEN: 401 Unauthorized is returned.
     """
     # Arrange
     client = TestClient(mock_app_unauthenticated)
@@ -108,10 +105,9 @@ async def test_get_user_app_settings_not_authenticated(mock_app_unauthenticated)
 
 @pytest.mark.asyncio
 async def test_get_user_app_settings_user_not_found(mock_app):
-    """
-    GIVEN: An authenticated user that doesn't exist in the database
+    """GIVEN: An authenticated user that doesn't exist in the database
     WHEN: GET /api/users/app is called
-    THEN: 404 Not Found is returned
+    THEN: 404 Not Found is returned.
     """
     # Arrange
     with patch(
@@ -130,10 +126,9 @@ async def test_get_user_app_settings_user_not_found(mock_app):
 
 @pytest.mark.asyncio
 async def test_update_user_app_settings_success(mock_app):
-    """
-    GIVEN: An authenticated user
+    """GIVEN: An authenticated user
     WHEN: POST /api/users/app is called with update data
-    THEN: Updated settings are returned with 200 status
+    THEN: Updated settings are returned with 200 status.
     """
     # Arrange
     updated_response = UserAppSettingsResponse(
@@ -166,10 +161,9 @@ async def test_update_user_app_settings_success(mock_app):
 
 @pytest.mark.asyncio
 async def test_update_user_app_settings_not_authenticated(mock_app_unauthenticated):
-    """
-    GIVEN: An unauthenticated request
+    """GIVEN: An unauthenticated request
     WHEN: POST /api/users/app is called
-    THEN: 401 Unauthorized is returned
+    THEN: 401 Unauthorized is returned.
     """
     # Arrange
     request_data = {'language': 'en'}
@@ -185,10 +179,9 @@ async def test_update_user_app_settings_not_authenticated(mock_app_unauthenticat
 
 @pytest.mark.asyncio
 async def test_update_user_app_settings_user_not_found(mock_app):
-    """
-    GIVEN: An authenticated user that doesn't exist in the database
+    """GIVEN: An authenticated user that doesn't exist in the database
     WHEN: POST /api/users/app is called
-    THEN: 404 Not Found is returned
+    THEN: 404 Not Found is returned.
     """
     # Arrange
     request_data = {'language': 'en'}

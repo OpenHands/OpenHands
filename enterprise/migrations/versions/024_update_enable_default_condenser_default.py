@@ -1,4 +1,4 @@
-"""update enable_default_condenser default to True
+"""update enable_default_condenser default to True.
 
 Revision ID: 024
 Revises: 023

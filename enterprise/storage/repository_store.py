@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from sqlalchemy import select
+
 from storage.database import a_session_maker
 from storage.stored_repository import StoredRepository
 
 
 class RepositoryStore:
     async def store_projects(self, repositories: list[StoredRepository]) -> None:
-        """
-        Store repositories in database (async version)
+        """Store repositories in database (async version).
 
         1. Make sure to store repositories if its ID doesn't exist
         2. If repository ID already exists, make sure to only update the repo is_public and repo_name fields

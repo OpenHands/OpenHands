@@ -12,6 +12,16 @@ to JiraFactory, keeping the orchestration logic clean and traceable.
 """
 
 import httpx
+from jinja2 import Environment, FileSystemLoader
+from openhands.app_server.types import (
+    LLMAuthenticationError,
+    MissingSettingsError,
+    SessionExpiredError,
+)
+from openhands.app_server.user_auth.user_auth import UserAuth
+from openhands.app_server.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.logger import openhands_logger as logger
+
 from integrations.jira.jira_payload import (
     JiraPayloadError,
     JiraPayloadParser,
@@ -35,21 +45,11 @@ from integrations.utils import (
     get_oh_labels,
     get_session_expired_message,
 )
-from jinja2 import Environment, FileSystemLoader
 from server.auth.saas_user_auth import get_user_auth_from_keycloak_id
 from server.auth.token_manager import TokenManager
 from storage.jira_integration_store import JiraIntegrationStore
 from storage.jira_user import JiraUser
 from storage.jira_workspace import JiraWorkspace
-
-from openhands.app_server.types import (
-    LLMAuthenticationError,
-    MissingSettingsError,
-    SessionExpiredError,
-)
-from openhands.app_server.user_auth.user_auth import UserAuth
-from openhands.app_server.utils.http_session import httpx_verify_option
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 JIRA_CLOUD_API_URL = 'https://api.atlassian.com/ex/jira'
 

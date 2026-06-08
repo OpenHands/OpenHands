@@ -2,6 +2,8 @@
 
 from uuid import UUID
 
+from openhands.app_server.utils.logger import openhands_logger as logger
+
 from server.constants import ROLE_ADMIN, ROLE_OWNER
 from server.routes.org_models import (
     CannotModifySelfError,
@@ -20,8 +22,6 @@ from storage.lite_llm_manager import LiteLlmManager
 from storage.org_member_store import OrgMemberStore
 from storage.role_store import RoleStore
 from storage.user_store import UserStore
-
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class OrgMemberService:

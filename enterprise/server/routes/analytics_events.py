@@ -29,10 +29,9 @@ import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
-
 from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.user_auth import get_user_id
+from pydantic import BaseModel
 
 analytics_events_router = APIRouter(prefix='/api/analytics/events', tags=['Analytics'])
 

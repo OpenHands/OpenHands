@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
+
 from server.routes.oauth_device import (
     device_authorization,
     device_token,

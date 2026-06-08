@@ -1,5 +1,4 @@
-"""
-SQLAlchemy model for ConversationMetadataSaas.
+"""SQLAlchemy model for ConversationMetadataSaas.
 
 This model stores the SaaS-specific metadata for conversations,
 containing only the conversation_id, user_id, and org_id.
@@ -10,6 +9,7 @@ from uuid import UUID
 
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from storage.base import Base
 
 if TYPE_CHECKING:

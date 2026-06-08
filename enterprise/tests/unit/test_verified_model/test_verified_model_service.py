@@ -1,11 +1,12 @@
 """Unit tests for VerifiedModelService."""
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
+
 from server.verified_models.verified_model_service import (
     VerifiedModelService,
 )
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
 from storage.base import Base
 
 

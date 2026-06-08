@@ -4,13 +4,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
+from openhands.app_server.integrations.service_types import ProviderType, Repository
+
 from integrations.jira_dc.jira_dc_view import (
     JiraDcExistingConversationView,
     JiraDcFactory,
     JiraDcNewConversationView,
 )
-
-from openhands.app_server.integrations.service_types import ProviderType, Repository
 
 
 @pytest.mark.asyncio

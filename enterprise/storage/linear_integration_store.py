@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from openhands.app_server.utils.logger import openhands_logger as logger
 from sqlalchemy import select
+
 from storage.database import a_session_maker
 from storage.linear_conversation import LinearConversation
 from storage.linear_user import LinearUser
 from storage.linear_workspace import LinearWorkspace
-
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass
@@ -25,7 +25,6 @@ class LinearIntegrationStore:
         status: str = 'active',
     ) -> LinearWorkspace:
         """Create a new Linear workspace with encrypted sensitive data."""
-
         workspace = LinearWorkspace(
             name=name.lower(),
             linear_org_id=linear_org_id,

@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy import DECIMAL, DateTime, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from storage.base import Base
 
 if TYPE_CHECKING:
@@ -12,8 +13,7 @@ if TYPE_CHECKING:
 
 
 class BillingSession(Base):
-    """
-    Represents a Stripe billing session for credit purchases.
+    """Represents a Stripe billing session for credit purchases.
     Tracks the status of payment transactions and associated user information.
     """
 

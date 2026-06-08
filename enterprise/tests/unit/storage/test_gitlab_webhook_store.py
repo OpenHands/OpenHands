@@ -1,10 +1,11 @@
 """Unit tests for GitlabWebhookStore."""
 
 import pytest
-from integrations.types import GitLabResourceType
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
+
+from integrations.types import GitLabResourceType
 from storage.base import Base
 from storage.gitlab_webhook import GitlabWebhook
 from storage.gitlab_webhook_store import GitlabWebhookStore

@@ -7,10 +7,10 @@ workspace based on claimed Git organizations.
 
 from uuid import UUID
 
+from openhands.app_server.utils.logger import openhands_logger as logger
+
 from storage.org_git_claim_store import OrgGitClaimStore
 from storage.org_member_store import OrgMemberStore
-
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 async def resolve_org_for_repo(

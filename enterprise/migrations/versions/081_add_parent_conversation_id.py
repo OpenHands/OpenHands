@@ -1,4 +1,4 @@
-"""add parent_conversation_id to conversation_metadata
+"""add parent_conversation_id to conversation_metadata.
 
 Revision ID: 081
 Revises: 080

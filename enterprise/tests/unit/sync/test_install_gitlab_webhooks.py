@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
 from integrations.gitlab.webhook_installation import (
     BreakLoopException,
     install_webhook_on_resource,

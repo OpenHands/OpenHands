@@ -1,4 +1,4 @@
-"""add proactive conversation starters column
+"""add proactive conversation starters column.
 
 Revision ID: 030
 Revises: 029

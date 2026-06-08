@@ -1,4 +1,4 @@
-"""Enable solvability analysis for all users
+"""Enable solvability analysis for all users.
 
 Revision ID: 057
 Revises: 056

@@ -1,4 +1,4 @@
-"""add sandbox_api_key to user_settings
+"""add sandbox_api_key to user_settings.
 
 Revision ID: 052
 Revises: 051

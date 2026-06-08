@@ -24,13 +24,15 @@ def upgrade() -> None:
     # Migrate existing org-level MCP configs to all members in each org.
     # This preserves existing configurations while transitioning to user-specific settings.
     # Uses server-side SQL to avoid pulling sensitive config data into the Python process.
-    op.execute(sa.text("""
+    op.execute(
+        sa.text("""
             UPDATE org_member
             SET mcp_config = org.mcp_config
             FROM org
             WHERE org_member.org_id = org.id
               AND org.mcp_config IS NOT NULL
-            """))
+            """)
+    )
 
 
 def downgrade() -> None:

@@ -3,7 +3,11 @@ from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from openhands.app_server.user_auth import get_user_auth, get_user_id
+from openhands.app_server.user_auth.user_auth import AuthType
+from openhands.app_server.utils.logger import openhands_logger as logger
 from pydantic import BaseModel, SecretStr, field_validator
+
 from server.auth.org_context import EFFECTIVE_ORG_ID
 from server.auth.saas_user_auth import SaasUserAuth
 from storage.api_key import ApiKey
@@ -13,10 +17,6 @@ from storage.org_member import OrgMember
 from storage.org_member_store import OrgMemberStore
 from storage.org_service import OrgService
 from storage.user_store import UserStore
-
-from openhands.app_server.user_auth import get_user_auth, get_user_id
-from openhands.app_server.user_auth.user_auth import AuthType
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 # Helper functions for BYOR API key management

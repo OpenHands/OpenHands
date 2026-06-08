@@ -1,12 +1,11 @@
-"""
-Test that the models are correctly defined.
-"""
+"""Test that the models are correctly defined."""
 
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from storage.base import Base
 from storage.org import Org
 from storage.org_member import OrgMember

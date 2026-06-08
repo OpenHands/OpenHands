@@ -5,14 +5,14 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from server.utils.url_utils import get_web_url
-from storage.api_key_store import ApiKeyStore
-from storage.device_code_store import DeviceCodeStore
-
 from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.user_auth import get_user_id
 from openhands.app_server.utils.logger import openhands_logger as logger
+from pydantic import BaseModel
+
+from server.utils.url_utils import get_web_url
+from storage.api_key_store import ApiKeyStore
+from storage.device_code_store import DeviceCodeStore
 
 # ---------------------------------------------------------------------------
 # Constants

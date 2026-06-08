@@ -1,14 +1,13 @@
-"""
-SQLAlchemy model for Organization.
-"""
+"""SQLAlchemy model for Organization."""
 
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from pydantic import SecretStr
-from server.constants import DEFAULT_BILLING_MARGIN
 from sqlalchemy import JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from server.constants import DEFAULT_BILLING_MARGIN
 from storage.base import Base
 from storage.encrypt_utils import EncryptedJSON, decrypt_value, encrypt_value
 

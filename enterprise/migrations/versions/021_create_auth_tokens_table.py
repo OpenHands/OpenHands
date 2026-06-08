@@ -1,4 +1,4 @@
-"""create auth tokens table
+"""create auth tokens table.
 
 Revision ID: 021
 Revises: 020

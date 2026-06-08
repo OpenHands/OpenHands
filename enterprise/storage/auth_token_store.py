@@ -4,14 +4,14 @@ import time
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Dict
 
-from server.auth.auth_error import TokenRefreshError
-from sqlalchemy import select, text, update
-from sqlalchemy.exc import OperationalError
-from storage.auth_tokens import AuthTokens
-from storage.database import a_session_maker
-
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.utils.logger import openhands_logger as logger
+from sqlalchemy import select, text, update
+from sqlalchemy.exc import OperationalError
+
+from server.auth.auth_error import TokenRefreshError
+from storage.auth_tokens import AuthTokens
+from storage.database import a_session_maker
 
 # Time buffer (in seconds) before actual expiration to consider token expired
 # This ensures tokens are refreshed before they actually expire. The

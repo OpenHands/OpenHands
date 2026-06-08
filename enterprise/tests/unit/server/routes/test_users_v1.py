@@ -83,9 +83,9 @@ class TestSaasUserInfoModel:
 
     def test_saas_user_info_extends_base_user_info(self):
         """SaasUserInfo should inherit from UserInfo base class."""
-        from server.models.user_models import SaasUserInfo
-
         from openhands.app_server.user.user_models import UserInfo
+
+        from server.models.user_models import SaasUserInfo
 
         assert issubclass(SaasUserInfo, UserInfo)
 
@@ -96,10 +96,10 @@ class TestGetOrgInfoFromContext:
     @pytest.mark.asyncio
     async def test_returns_org_info_from_saas_user_auth(self):
         """Should return org info when context has SaasUserAuth."""
+        from openhands.app_server.user.auth_user_context import AuthUserContext
+
         from server.auth.saas_user_auth import SaasUserAuth
         from server.routes.users_v1 import _get_org_info_from_context
-
-        from openhands.app_server.user.auth_user_context import AuthUserContext
 
         # Create a SaasUserAuth with mocked get_org_info
         mock_user_auth = MagicMock(spec=SaasUserAuth)
@@ -127,9 +127,9 @@ class TestGetOrgInfoFromContext:
     @pytest.mark.asyncio
     async def test_returns_none_for_non_auth_user_context(self):
         """Should return None when context is not AuthUserContext."""
-        from server.routes.users_v1 import _get_org_info_from_context
-
         from openhands.app_server.user.user_context import UserContext
+
+        from server.routes.users_v1 import _get_org_info_from_context
 
         # Create a non-AuthUserContext
         mock_context = MagicMock(spec=UserContext)
@@ -141,10 +141,10 @@ class TestGetOrgInfoFromContext:
     @pytest.mark.asyncio
     async def test_returns_none_for_non_saas_user_auth(self):
         """Should return None when user_auth is not SaasUserAuth."""
-        from server.routes.users_v1 import _get_org_info_from_context
-
         from openhands.app_server.user.auth_user_context import AuthUserContext
         from openhands.app_server.user_auth.user_auth import UserAuth
+
+        from server.routes.users_v1 import _get_org_info_from_context
 
         # Create AuthUserContext with a non-SaasUserAuth
         mock_user_auth = MagicMock(spec=UserAuth)
@@ -172,9 +172,9 @@ class TestGetCurrentUserSaasEndpoint:
         from unittest.mock import patch
 
         from fastapi.responses import JSONResponse
-        from server.routes.users_v1 import get_current_user_saas
-
         from openhands.app_server.user.user_models import UserInfo
+
+        from server.routes.users_v1 import get_current_user_saas
 
         # Mock base user info
         base_user_info = UserInfo(id='user-123')
@@ -212,9 +212,9 @@ class TestGetCurrentUserSaasEndpoint:
         from unittest.mock import patch
 
         from fastapi.responses import JSONResponse
-        from server.routes.users_v1 import get_current_user_saas
-
         from openhands.app_server.user.user_models import UserInfo
+
+        from server.routes.users_v1 import get_current_user_saas
 
         # Mock base user info
         base_user_info = UserInfo(id='user-123')
@@ -241,6 +241,7 @@ class TestGetCurrentUserSaasEndpoint:
     async def test_endpoint_raises_401_when_user_info_is_none(self, mock_user_context):
         """Endpoint should raise 401 when user info is None."""
         from fastapi import HTTPException
+
         from server.routes.users_v1 import get_current_user_saas
 
         mock_user_context.get_user_info = AsyncMock(return_value=None)
@@ -269,11 +270,11 @@ class TestSdkCompatFields:
         """Non-expose response should include llm_model and llm_base_url."""
         from unittest.mock import patch
 
+        from openhands.app_server.user.user_models import UserInfo
         from openhands.sdk.llm import LLM
         from openhands.sdk.settings import OpenHandsAgentSettings
-        from server.routes.users_v1 import get_current_user_saas
 
-        from openhands.app_server.user.user_models import UserInfo
+        from server.routes.users_v1 import get_current_user_saas
 
         base_user_info = UserInfo(
             id='user-123',
@@ -303,11 +304,11 @@ class TestSdkCompatFields:
         """Expose-secrets response should include llm_api_key."""
         from unittest.mock import patch
 
+        from openhands.app_server.user.user_models import UserInfo
         from openhands.sdk.llm import LLM
         from openhands.sdk.settings import OpenHandsAgentSettings
-        from server.routes.users_v1 import get_current_user_saas
 
-        from openhands.app_server.user.user_models import UserInfo
+        from server.routes.users_v1 import get_current_user_saas
 
         base_user_info = UserInfo(
             id='user-123',
@@ -347,9 +348,9 @@ class TestSdkCompatFields:
         """Response should include mcp_config at top level."""
         from unittest.mock import patch
 
-        from server.routes.users_v1 import get_current_user_saas
-
         from openhands.app_server.user.user_models import UserInfo
+
+        from server.routes.users_v1 import get_current_user_saas
 
         base_user_info = UserInfo(id='user-123')
         mock_user_context.get_user_info = AsyncMock(return_value=base_user_info)
@@ -370,11 +371,11 @@ class TestSdkCompatFields:
         """Flat fields should not remove the nested agent_settings."""
         from unittest.mock import patch
 
+        from openhands.app_server.user.user_models import UserInfo
         from openhands.sdk.llm import LLM
         from openhands.sdk.settings import OpenHandsAgentSettings
-        from server.routes.users_v1 import get_current_user_saas
 
-        from openhands.app_server.user.user_models import UserInfo
+        from server.routes.users_v1 import get_current_user_saas
 
         base_user_info = UserInfo(
             id='user-123',
@@ -401,6 +402,7 @@ class TestOverrideUsersEndpoint:
     def test_override_removes_oss_route_and_adds_saas_route(self):
         """override_users_me_endpoint should remove OSS route and add SAAS route."""
         from fastapi import FastAPI
+
         from server.routes.users_v1 import override_users_me_endpoint
 
         # Create a minimal app with a mock OSS route

@@ -1,4 +1,4 @@
-"""create jira_workspaces table
+"""create jira_workspaces table.
 
 Revision ID: 063
 Revises: 062

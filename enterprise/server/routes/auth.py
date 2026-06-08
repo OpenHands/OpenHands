@@ -18,7 +18,19 @@ from fastapi import (
     status,
 )
 from fastapi.responses import JSONResponse, RedirectResponse
+from openhands.analytics import get_analytics_service, resolve_analytics_context
+from openhands.app_server.integrations.provider import (
+    PROVIDER_TOKEN_TYPE,
+    ProviderHandler,
+    ProviderToken,
+)
+from openhands.app_server.integrations.service_types import ProviderType, TokenResponse
+from openhands.app_server.user_auth import get_access_token
+from openhands.app_server.user_auth.user_auth import AuthType, get_user_auth
+from openhands.app_server.utils.logger import openhands_logger as logger
 from pydantic import BaseModel, SecretStr
+from sqlalchemy import select
+
 from server.auth.constants import (
     KEYCLOAK_CLIENT_ID,
     KEYCLOAK_REALM_NAME,
@@ -57,22 +69,10 @@ from server.utils.rate_limit_utils import (
     check_rate_limit_by_user_id,
 )
 from server.utils.url_utils import get_cookie_domain, get_cookie_samesite, get_web_url
-from sqlalchemy import select
 from storage.database import a_session_maker
 from storage.default_org_service import DefaultOrgBootstrapService
 from storage.user import User
 from storage.user_store import UserStore
-
-from openhands.analytics import get_analytics_service, resolve_analytics_context
-from openhands.app_server.integrations.provider import (
-    PROVIDER_TOKEN_TYPE,
-    ProviderHandler,
-    ProviderToken,
-)
-from openhands.app_server.integrations.service_types import ProviderType, TokenResponse
-from openhands.app_server.user_auth import get_access_token
-from openhands.app_server.user_auth.user_auth import AuthType, get_user_auth
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
@@ -811,7 +811,7 @@ async def _should_redirect_to_onboarding(user_id: str, user: User) -> bool:
     - Either:
       - Deployment mode is 'cloud' (all users)
       - Deployment mode is 'self_hosted' AND user is the super admin
-        (first owner in their current org to accept TOS)
+        (first owner in their current org to accept TOS).
 
     Returns False if:
     - User has onboarding_completed=True (already completed)

@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from integrations.github.github_view import get_user_proactive_conversation_setting
 from storage.org import Org
 

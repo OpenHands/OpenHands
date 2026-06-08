@@ -1,4 +1,4 @@
-"""Update conversation_callbacks foreign key to cascade deletes
+"""Update conversation_callbacks foreign key to cascade deletes.
 
 Revision ID: 051
 Revises: 050

@@ -4,6 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+
 from server.sharing.shared_conversation_info_service import (
     SharedConversationInfoService,
 )

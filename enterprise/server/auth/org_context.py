@@ -26,10 +26,10 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import Depends, Header, HTTPException, Request, status
+from openhands.app_server.user_auth import get_user_auth
+
 from server.auth.saas_user_auth import SaasUserAuth
 from server.logger import logger
-
-from openhands.app_server.user_auth import get_user_auth
 
 X_ORG_ID_HEADER = 'X-Org-Id'
 

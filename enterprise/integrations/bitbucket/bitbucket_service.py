@@ -1,11 +1,11 @@
-from pydantic import SecretStr
-from server.auth.token_manager import TokenManager
-
 from openhands.app_server.integrations.bitbucket.bitbucket_service import (
     BitBucketService,
 )
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.utils.logger import openhands_logger as logger
+from pydantic import SecretStr
+
+from server.auth.token_manager import TokenManager
 
 
 class SaaSBitBucketService(BitBucketService):
@@ -19,7 +19,7 @@ class SaaSBitBucketService(BitBucketService):
         base_domain: str | None = None,
     ):
         logger.info(
-            f'SaaSBitBucketService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {'set' if external_auth_token else 'None'}, bitbucket_token {'set' if token else 'None'}, external_token_manager {external_token_manager}'
+            f'SaaSBitBucketService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {"set" if external_auth_token else "None"}, bitbucket_token {"set" if token else "None"}, external_token_manager {external_token_manager}'
         )
         super().__init__(
             user_id=user_id,
@@ -51,10 +51,10 @@ class SaaSBitBucketService(BitBucketService):
                 self.external_auth_id
             )
             if offline_token:
-                bitbucket_token_str: str | None = (
-                    await self.token_manager.get_idp_token_from_offline_token(
-                        offline_token, ProviderType.BITBUCKET
-                    )
+                bitbucket_token_str: (
+                    str | None
+                ) = await self.token_manager.get_idp_token_from_offline_token(
+                    offline_token, ProviderType.BITBUCKET
                 )
                 bitbucket_token = (
                     SecretStr(bitbucket_token_str) if bitbucket_token_str else None

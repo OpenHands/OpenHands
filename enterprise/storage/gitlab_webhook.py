@@ -11,6 +11,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
+
 from storage.base import Base
 
 
@@ -22,9 +23,7 @@ class WebhookStatus(IntEnum):
 
 
 class GitlabWebhook(Base):
-    """
-    Represents a Gitlab webhook configuration for a repository or group.
-    """
+    """Represents a Gitlab webhook configuration for a repository or group."""
 
     __tablename__ = 'gitlab_webhook'
 

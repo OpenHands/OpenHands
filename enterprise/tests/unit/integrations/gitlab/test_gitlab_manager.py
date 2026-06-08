@@ -1,5 +1,4 @@
-"""
-Tests for GitlabManager job creation flow.
+"""Tests for GitlabManager job creation flow.
 
 All conversations now use V1 app conversation system.
 """
@@ -8,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+
 from integrations.gitlab.gitlab_view import GitlabIssue
 from integrations.types import UserData
 

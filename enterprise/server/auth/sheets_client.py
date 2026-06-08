@@ -3,7 +3,6 @@ from typing import Dict, List, Optional, Tuple
 
 import gspread
 from google.auth import default
-
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 
@@ -31,11 +30,12 @@ class GoogleSheetsClient:
         self, spreadsheet_id: str, range_name: str
     ) -> Optional[List[str]]:
         """Get usernames from cache if available and not expired.
+
         Args:
             spreadsheet_id: The ID of the Google Sheet
             range_name: The A1 notation of the range to fetch
         Returns:
-            List of usernames if cache hit and not expired, None otherwise
+            List of usernames if cache hit and not expired, None otherwise.
         """
         cache_key = (spreadsheet_id, range_name)
         if cache_key not in self._cache:
@@ -56,10 +56,11 @@ class GoogleSheetsClient:
         self, spreadsheet_id: str, range_name: str, usernames: List[str]
     ) -> None:
         """Update cache with new usernames and current timestamp.
+
         Args:
             spreadsheet_id: The ID of the Google Sheet
             range_name: The A1 notation of the range to fetch
-            usernames: List of usernames to cache
+            usernames: List of usernames to cache.
         """
         cache_key = (spreadsheet_id, range_name)
         self._cache[cache_key] = (usernames, datetime.now())
@@ -67,11 +68,12 @@ class GoogleSheetsClient:
     def get_usernames(self, spreadsheet_id: str, range_name: str = 'A:A') -> List[str]:
         """Get list of usernames from specified Google Sheet.
         Uses cached data if available and less than 15 seconds old.
+
         Args:
             spreadsheet_id: The ID of the Google Sheet
             range_name: The A1 notation of the range to fetch
         Returns:
-            List of usernames from the sheet
+            List of usernames from the sheet.
         """
         if not self.client:
             logger.error('Google Sheets client not initialized')

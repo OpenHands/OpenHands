@@ -4,17 +4,17 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Callable
 
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.utils.logger import openhands_logger as logger
+from sqlalchemy import and_, delete, select, update
+
 from integrations.github.github_types import (
     WorkflowRun,
     WorkflowRunGroup,
     WorkflowRunStatus,
 )
-from sqlalchemy import and_, delete, select, update
 from storage.database import a_session_maker
 from storage.proactive_convos import ProactiveConversation
-
-from openhands.app_server.integrations.service_types import ProviderType
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass
@@ -31,18 +31,16 @@ class ProactiveConversationStore:
         pr_number: int,
         get_all_workflows: Callable,
     ) -> WorkflowRunGroup | None:
-        """
-        1. Get the workflow based on repo_id, pr_number, commit
+        """1. Get the workflow based on repo_id, pr_number, commit
         2. If the field doesn't exist
             - Fetch the workflow statuses and store them
             - Create a new record
         3. Check the incoming workflow run payload, and update statuses based on its fields
-        4. If all statuses are completed with at least one failure, return WorkflowGroup information else None
+        4. If all statuses are completed with at least one failure, return WorkflowGroup information else None.
 
         This method uses an explicit transaction with row-level locking to ensure
         thread safety when multiple processes access the same database rows.
         """
-
         should_send = False
         provider_repo_id = self.get_repo_id(provider, repo_id)
 
@@ -128,14 +126,12 @@ class ProactiveConversationStore:
         return final_workflow_group
 
     async def clean_old_convos(self, older_than_minutes=30):
-        """
-        Clean up proactive conversation records that are older than the specified time.
+        """Clean up proactive conversation records that are older than the specified time.
 
         Args:
             older_than_minutes: Number of minutes. Records older than this will be deleted.
                                 Defaults to 30 minutes.
         """
-
         # Calculate the cutoff time (current time - older_than_minutes)
         cutoff_time = datetime.now(UTC) - timedelta(minutes=older_than_minutes)
 

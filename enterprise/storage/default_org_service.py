@@ -5,7 +5,9 @@ import re
 from dataclasses import dataclass
 from uuid import UUID
 
+from openhands.app_server.utils.logger import openhands_logger as logger
 from pydantic import SecretStr
+
 from server.constants import ROLE_MEMBER, ROLE_OWNER
 from server.routes.org_models import OrgNameExistsError
 from storage.org import Org
@@ -16,8 +18,6 @@ from storage.org_store import OrgStore
 from storage.role_store import RoleStore
 from storage.user import User
 from storage.user_store import UserStore
-
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 _TRUTHY_VALUES = {'1', 'true', 'yes', 'on'}
 _EMAIL_SPLIT_RE = re.compile(r'[\s,;]+')

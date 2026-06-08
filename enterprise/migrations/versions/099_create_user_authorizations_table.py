@@ -1,4 +1,4 @@
-"""Create user_authorizations table and migrate blocked_email_domains
+"""Create user_authorizations table and migrate blocked_email_domains.
 
 Revision ID: 099
 Revises: 098

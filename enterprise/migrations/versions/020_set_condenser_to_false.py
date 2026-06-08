@@ -1,4 +1,4 @@
-"""set condenser to false for all users
+"""set condenser to false for all users.
 
 Revision ID: 020
 Revises: 019

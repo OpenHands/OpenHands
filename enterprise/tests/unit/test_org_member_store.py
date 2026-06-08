@@ -2,8 +2,10 @@ import uuid
 from unittest.mock import patch
 
 import pytest
+from openhands.app_server.settings.settings_models import Settings
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
+
 from storage.base import Base
 from storage.org import Org
 from storage.org_member import OrgMember
@@ -11,8 +13,6 @@ from storage.org_member_store import OrgMemberStore
 from storage.role import Role
 from storage.user import User
 from storage.user_settings import UserSettings
-
-from openhands.app_server.settings.settings_models import Settings
 
 
 def test_get_kwargs_from_user_settings_uses_agent_settings_as_source_of_truth():
@@ -954,10 +954,9 @@ async def test_get_org_members_paginated_email_filter_case_insensitive(
 async def test_update_all_members_settings_async_with_llm_api_key(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization with members and llm_api_key in member settings
+    """GIVEN: Organization with members and llm_api_key in member settings
     WHEN: update_all_members_settings_async is called with llm_api_key
-    THEN: The llm_api_key is encrypted and stored in _llm_api_key column for all members
+    THEN: The llm_api_key is encrypted and stored in _llm_api_key column for all members.
     """
     from server.routes.org_models import OrgMemberSettingsUpdate
     from storage.encrypt_utils import decrypt_value
@@ -1023,10 +1022,9 @@ async def test_update_all_members_settings_async_with_llm_api_key(
 async def test_update_all_members_settings_async_with_non_encrypted_fields(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization with members
+    """GIVEN: Organization with members
     WHEN: update_all_members_settings_async is called with non-encrypted fields
-    THEN: The fields are updated directly without encryption
+    THEN: The fields are updated directly without encryption.
     """
     from server.routes.org_models import OrgMemberSettingsUpdate
 
@@ -1098,10 +1096,9 @@ async def test_update_all_members_settings_async_with_non_encrypted_fields(
 async def test_update_all_members_settings_async_with_empty_settings(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization with members and empty member settings
+    """GIVEN: Organization with members and empty member settings
     WHEN: update_all_members_settings_async is called with no fields set
-    THEN: No database update is performed
+    THEN: No database update is performed.
     """
     from server.routes.org_models import OrgMemberSettingsUpdate
 
@@ -1161,10 +1158,9 @@ async def test_update_all_members_settings_async_with_empty_settings(
 async def test_update_all_members_settings_async_replaces_mcp_config(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization members with existing mcp_config in agent_settings_diff
+    """GIVEN: Organization members with existing mcp_config in agent_settings_diff
     WHEN: update_all_members_settings_async is called with fewer MCP servers
-    THEN: mcp_config should be replaced (not merged), so deleted servers stay deleted
+    THEN: mcp_config should be replaced (not merged), so deleted servers stay deleted.
 
     This tests the fix for APP-1862: MCP server settings cannot be updated
     or deleted because deep_merge was resurrecting deleted servers.
@@ -1239,19 +1235,18 @@ async def test_update_all_members_settings_async_replaces_mcp_config(
         assert len(mcp_servers) == 2, f'Expected 2 servers, got {len(mcp_servers)}'
         assert 'server1' in mcp_servers
         assert 'server2' in mcp_servers
-        assert (
-            'server3' not in mcp_servers
-        ), 'Deleted server was resurrected by deep_merge'
+        assert 'server3' not in mcp_servers, (
+            'Deleted server was resurrected by deep_merge'
+        )
 
 
 @pytest.mark.asyncio
 async def test_update_all_members_settings_async_mcp_config_not_in_payload(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization members with existing mcp_config
+    """GIVEN: Organization members with existing mcp_config
     WHEN: update_all_members_settings_async is called WITHOUT mcp_config in payload
-    THEN: mcp_config should remain unchanged (not be cleared)
+    THEN: mcp_config should remain unchanged (not be cleared).
 
     This ensures we only replace mcp_config when it's explicitly in the update.
     """
@@ -1324,10 +1319,9 @@ async def test_update_all_members_settings_async_mcp_config_not_in_payload(
 async def test_update_all_members_settings_async_empty_mcp_config(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization members with existing mcp_config
+    """GIVEN: Organization members with existing mcp_config
     WHEN: update_all_members_settings_async is called with empty mcp_config
-    THEN: mcp_config should be cleared (all servers deleted)
+    THEN: mcp_config should be cleared (all servers deleted).
 
     This tests the case where user deletes ALL servers.
     """
@@ -1399,10 +1393,9 @@ async def test_update_all_members_settings_async_empty_mcp_config(
 async def test_update_all_members_settings_async_add_first_mcp_server(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization members with NO existing mcp_config
+    """GIVEN: Organization members with NO existing mcp_config
     WHEN: update_all_members_settings_async is called with mcp_config
-    THEN: mcp_config should be added correctly
+    THEN: mcp_config should be added correctly.
 
     This tests adding the first server when none exist.
     """
@@ -1473,10 +1466,9 @@ async def test_update_all_members_settings_async_add_first_mcp_server(
 async def test_update_all_members_settings_async_update_server_url(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization members with existing mcp_config
+    """GIVEN: Organization members with existing mcp_config
     WHEN: update_all_members_settings_async is called with updated server URL
-    THEN: The server URL should be updated (not duplicated)
+    THEN: The server URL should be updated (not duplicated).
 
     This tests updating an existing server's properties.
     """
@@ -1556,10 +1548,9 @@ async def test_update_all_members_settings_async_update_server_url(
 async def test_update_all_members_settings_async_acp_env_not_in_payload(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization members with existing acp_env
+    """GIVEN: Organization members with existing acp_env
     WHEN: update_all_members_settings_async is called WITHOUT acp_env in payload
-    THEN: acp_env should remain unchanged (not be cleared)
+    THEN: acp_env should remain unchanged (not be cleared).
 
     This ensures we only replace acp_env when it's explicitly in the update.
     """
@@ -1632,10 +1623,9 @@ async def test_update_all_members_settings_async_acp_env_not_in_payload(
 async def test_update_all_members_settings_async_add_first_acp_env_var(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization members with NO existing acp_env
+    """GIVEN: Organization members with NO existing acp_env
     WHEN: update_all_members_settings_async is called with acp_env
-    THEN: acp_env should be added correctly
+    THEN: acp_env should be added correctly.
 
     This tests adding the first env var when none exist.
     """
@@ -1704,10 +1694,9 @@ async def test_update_all_members_settings_async_add_first_acp_env_var(
 async def test_update_all_members_settings_async_update_acp_env_value(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization members with existing acp_env
+    """GIVEN: Organization members with existing acp_env
     WHEN: update_all_members_settings_async is called with updated var value
-    THEN: The var value should be updated
+    THEN: The var value should be updated.
 
     This tests updating an existing env var's value.
     """

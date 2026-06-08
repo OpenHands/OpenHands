@@ -3,10 +3,8 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from server.verified_models.verified_model_models import (
-    VerifiedModel,
-    VerifiedModelPage,
-)
+from openhands.app_server.services.db_session import depends_db_session
+from openhands.app_server.utils.logger import openhands_logger as logger
 from sqlalchemy import (
     DateTime,
     Identity,
@@ -19,10 +17,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
-from storage.base import Base
 
-from openhands.app_server.services.db_session import depends_db_session
-from openhands.app_server.utils.logger import openhands_logger as logger
+from server.verified_models.verified_model_models import (
+    VerifiedModel,
+    VerifiedModelPage,
+)
+from storage.base import Base
 
 
 class StoredVerifiedModel(Base):

@@ -9,12 +9,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from openhands.app_server.utils.logger import openhands_logger as logger
+
 from integrations.types import GitLabResourceType
 from integrations.utils import GITLAB_WEBHOOK_URL
 from storage.gitlab_webhook import GitlabWebhook, WebhookStatus
 from storage.gitlab_webhook_store import GitlabWebhookStore
-
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 if TYPE_CHECKING:
     from integrations.gitlab.gitlab_service import SaaSGitLabService
@@ -43,8 +43,7 @@ async def verify_webhook_conditions(
     webhook_store: GitlabWebhookStore,
     webhook: GitlabWebhook,
 ) -> None:
-    """
-    Verify all conditions are met for webhook installation.
+    """Verify all conditions are met for webhook installation.
     Raises BreakLoopException if any condition fails or rate limited.
 
     Args:
@@ -137,8 +136,7 @@ async def install_webhook_on_resource(
     webhook_store: GitlabWebhookStore,
     webhook: GitlabWebhook,
 ) -> tuple[str | None, WebhookStatus | None]:
-    """
-    Install webhook on a GitLab resource.
+    """Install webhook on a GitLab resource.
 
     Args:
         gitlab_service: GitLab service instance

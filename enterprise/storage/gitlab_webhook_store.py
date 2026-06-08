@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from integrations.types import GitLabResourceType
+from openhands.app_server.utils.logger import openhands_logger as logger
 from sqlalchemy import and_, asc, delete, select, text, update
 from sqlalchemy.dialects.postgresql import insert
+
+from integrations.types import GitLabResourceType
 from storage.database import a_session_maker
 from storage.gitlab_webhook import GitlabWebhook
-
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass
@@ -30,7 +30,7 @@ class GitlabWebhookStore:
         return (GitLabResourceType.PROJECT, webhook.project_id)
 
     async def store_webhooks(self, project_details: list[GitlabWebhook]) -> None:
-        """Store list of project details in db using UPSERT pattern
+        """Store list of project details in db using UPSERT pattern.
 
         Args:
             project_details: List of GitlabWebhook objects to store
@@ -85,7 +85,6 @@ class GitlabWebhookStore:
         Raises:
             ValueError: If neither project_id nor group_id is provided, or if both are provided.
         """
-
         resource_type, resource_id = GitlabWebhookStore.determine_resource_type(webhook)
         async with a_session_maker() as session:
             async with session.begin():
@@ -109,7 +108,6 @@ class GitlabWebhookStore:
         Raises:
             ValueError: If neither project_id nor group_id is provided, or if both are provided.
         """
-
         resource_type, resource_id = GitlabWebhookStore.determine_resource_type(webhook)
 
         logger.info(
@@ -183,7 +181,6 @@ class GitlabWebhookStore:
         Returns:
             List of GitlabWebhook objects that need processing
         """
-
         async with a_session_maker() as session:
             query = (
                 select(GitlabWebhook)
@@ -197,9 +194,7 @@ class GitlabWebhookStore:
             return list(webhooks)
 
     async def get_webhook_secret(self, webhook_uuid: str, user_id: str) -> str | None:
-        """
-        Gets webhook secret given the webhook uuid and admin keycloak user id
-        """
+        """Gets webhook secret given the webhook uuid and admin keycloak user id."""
         async with a_session_maker() as session:
             query = (
                 select(GitlabWebhook)

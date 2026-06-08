@@ -1,4 +1,4 @@
-"""Add git_user_name and git_user_email to user_settings
+"""Add git_user_name and git_user_email to user_settings.
 
 Revision ID: 062
 Revises: 061

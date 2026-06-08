@@ -1,4 +1,4 @@
-"""add enable_sound_notifications column to settings table
+"""add enable_sound_notifications column to settings table.
 
 Revision ID: 007
 Revises: 006

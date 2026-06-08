@@ -4,11 +4,11 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pydantic import SecretStr
-from server.routes.github_proxy import add_github_proxy_routes
-
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.utils.encryption_key import EncryptionKey
+from pydantic import SecretStr
+
+from server.routes.github_proxy import add_github_proxy_routes
 
 
 def _make_jwt_service() -> JwtService:
@@ -38,10 +38,9 @@ def app_with_github_proxy(monkeypatch):
 def test_state_compress_encrypt_and_decrypt_decompress_roundtrip(
     app_with_github_proxy, monkeypatch
 ):
-    """
-    Verify the code path used by github_proxy_start -> github_proxy_callback:
+    """Verify the code path used by github_proxy_start -> github_proxy_callback:
     - compress payload, encrypt, base64-encode (what the start code does)
-    - base64-decode, decrypt, decompress (what the callback code does)
+    - base64-decode, decrypt, decompress (what the callback code does).
 
     This test exercises the actual endpoints to verify the roundtrip works correctly.
     """

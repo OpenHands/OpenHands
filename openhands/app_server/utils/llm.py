@@ -5,8 +5,8 @@ from pydantic import BaseModel
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
     import litellm
-    from litellm import LlmProviders  # type: ignore[reportPrivateImportUsage]
     from litellm import (
+        LlmProviders,  # type: ignore[reportPrivateImportUsage]
         ProviderConfigManager,
         get_llm_provider,
     )

@@ -1,10 +1,10 @@
 from typing import Literal
 
 from fastapi import Request
-from server.constants import IS_FEATURE_ENV, IS_LOCAL_ENV, IS_STAGING_ENV
+from openhands.app_server.config import get_global_config
 from starlette.datastructures import URL
 
-from openhands.app_server.config import get_global_config
+from server.constants import IS_FEATURE_ENV, IS_LOCAL_ENV, IS_STAGING_ENV
 
 
 def get_web_url(request: Request):

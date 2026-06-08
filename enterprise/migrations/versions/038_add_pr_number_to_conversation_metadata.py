@@ -1,4 +1,4 @@
-"""add pr_number to conversation metadata table
+"""add pr_number to conversation metadata table.
 
 Revision ID: 038
 Revises: 037

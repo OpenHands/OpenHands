@@ -4,9 +4,9 @@ import os
 import re
 
 from jinja2 import Environment, FileSystemLoader
-from server.constants import WEB_HOST
-
 from openhands.app_server.integrations.service_types import Repository
+
+from server.constants import WEB_HOST
 
 # ---- DO NOT REMOVE ----
 # WARNING: Langfuse depends on the WEB_HOST environment variable being set to track events.
@@ -252,14 +252,14 @@ def filter_potential_repos_by_user_msg(
 
 
 def markdown_to_jira_markup(markdown_text: str) -> str:
-    """
-    Convert markdown text to Jira Wiki Markup format.
+    """Convert markdown text to Jira Wiki Markup format.
     This function handles common markdown elements and converts them to their
     Jira Wiki Markup equivalents. It's designed to be exception-safe.
+
     Args:
         markdown_text: The markdown text to convert
     Returns:
-        str: The converted Jira Wiki Markup text
+        str: The converted Jira Wiki Markup text.
     """
     if not markdown_text or not isinstance(markdown_text, str):
         return ''

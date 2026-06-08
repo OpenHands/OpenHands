@@ -1,5 +1,4 @@
-"""
-Tests for the GithubManager class.
+"""Tests for the GithubManager class.
 
 Covers:
 - User not found scenario when a GitHub user hasn't created an OpenHands account
@@ -10,6 +9,7 @@ Covers:
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from integrations.github.github_manager import GithubManager
 from integrations.models import Message, SourceType
 from integrations.utils import HOST_URL, get_user_not_found_message

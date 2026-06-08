@@ -1,5 +1,4 @@
-"""
-Unified SQLAlchemy declarative base for all models.
+"""Unified SQLAlchemy declarative base for all models.
 
 Re-exports the core Base to ensure enterprise and core models share the same
 metadata registry. This allows foreign key relationships between enterprise

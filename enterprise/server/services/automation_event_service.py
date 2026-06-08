@@ -1,5 +1,4 @@
-"""
-Service for forwarding Git provider webhook events to the automation service.
+"""Service for forwarding Git provider webhook events to the automation service.
 
 This service is optimized for high-traffic scenarios:
 1. Resolves Git org → OpenHands org_id (via cached OrgGitClaim lookup)
@@ -27,6 +26,9 @@ from typing import Any
 from uuid import UUID
 
 import aiohttp
+from openhands.app_server.integrations.provider import ProviderType
+from openhands.app_server.utils.logger import openhands_logger as logger
+
 from integrations.resolver_org_router import resolve_org_for_repo
 from server.auth.constants import (
     AUTOMATION_SERVICE_TIMEOUT,
@@ -35,9 +37,6 @@ from server.auth.constants import (
 )
 from server.auth.token_manager import TokenManager
 from storage.redis import get_redis_client_async
-
-from openhands.app_server.integrations.provider import ProviderType
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Cache TTL constants
 ORG_CLAIM_CACHE_TTL_SECONDS = 3600  # 1 hour for org claims (rarely change)
@@ -57,8 +56,7 @@ class OrgContext:
 
 
 class AutomationEventService:
-    """
-    Service for forwarding webhook events to the automation service.
+    """Service for forwarding webhook events to the automation service.
 
     Optimized for high traffic with:
     - Redis caching for org claim lookups (1 hour TTL)
@@ -92,8 +90,7 @@ class AutomationEventService:
         payload: dict[str, Any],
         installation_id: int | str,
     ) -> None:
-        """
-        Forward a Git provider webhook event to the automation service.
+        """Forward a Git provider webhook event to the automation service.
 
         This is designed to be called as a fire-and-forget background task.
         The forward path is optimized for speed - only org resolution is done here.
@@ -145,8 +142,7 @@ class AutomationEventService:
         connection_id: int | None = None,
         delivery_id: str | None = None,
     ) -> None:
-        """
-        Forward a Jira Data Center webhook event to the automation service.
+        """Forward a Jira Data Center webhook event to the automation service.
 
         Jira DC workspaces are configured directly in OpenHands, so the route
         resolves the OpenHands org from the workspace instead of using the
@@ -185,8 +181,7 @@ class AutomationEventService:
     async def _resolve_org_context(
         self, provider: ProviderType, payload: dict[str, Any]
     ) -> OrgContext | None:
-        """
-        Resolve the organization context from the webhook payload.
+        """Resolve the organization context from the webhook payload.
 
         Uses Redis caching for both org claims and user ID mappings.
         Returns None if the org cannot be resolved (not claimed, no personal org).
@@ -228,8 +223,7 @@ class AutomationEventService:
     def _extract_owner_info(
         self, provider: ProviderType, payload: dict[str, Any]
     ) -> tuple[str | None, str | None, int | None]:
-        """
-        Extract owner information from the webhook payload.
+        """Extract owner information from the webhook payload.
 
         Different providers structure their payloads differently, so this method
         normalizes the extraction.
@@ -275,8 +269,7 @@ class AutomationEventService:
         org_context: OrgContext,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        """
-        Build the minimal event payload to forward to the automation service.
+        """Build the minimal event payload to forward to the automation service.
 
         Access control is NOT included here - it's deferred to execution time.
         This keeps the forward path fast for high-traffic scenarios.
@@ -296,8 +289,7 @@ class AutomationEventService:
     async def _resolve_git_org(
         self, provider: ProviderType, git_org_name: str
     ) -> UUID | None:
-        """
-        Resolve a Git organization name to an OpenHands org_id.
+        """Resolve a Git organization name to an OpenHands org_id.
 
         Uses Redis caching with 1-hour TTL. Caches both positive and negative
         results to avoid repeated DB queries for unclaimed orgs.
@@ -349,8 +341,7 @@ class AutomationEventService:
     async def _resolve_personal_org(
         self, provider: ProviderType, provider_user_id: int | str | None
     ) -> UUID | None:
-        """
-        Resolve a provider user to their personal OpenHands org.
+        """Resolve a provider user to their personal OpenHands org.
 
         For personal repos (owner type is 'User'), the OpenHands org_id
         is the user's keycloak user ID. This allows users to set up
@@ -375,8 +366,7 @@ class AutomationEventService:
     async def _get_keycloak_user_id_cached(
         self, provider: ProviderType, provider_user_id: int | str
     ) -> str | None:
-        """
-        Convert a provider user ID to a Keycloak user ID.
+        """Convert a provider user ID to a Keycloak user ID.
 
         Uses Redis caching with 24-hour TTL since this mapping never changes.
         Caches negative results to avoid repeated Keycloak queries.
@@ -433,8 +423,7 @@ class AutomationEventService:
     # =========================================================================
 
     async def _get_cached_value(self, cache_key: str) -> str | None:
-        """
-        Get a cached value from Redis.
+        """Get a cached value from Redis.
 
         Returns the cached string value, or None if not cached or Redis unavailable.
         Falls back to DB/API queries if Redis is unavailable (graceful degradation).
@@ -461,8 +450,7 @@ class AutomationEventService:
     async def _set_cached_value(
         self, cache_key: str, value: str, ttl_seconds: int
     ) -> None:
-        """
-        Set a cached value in Redis with TTL.
+        """Set a cached value in Redis with TTL.
 
         Fails silently if Redis is unavailable (graceful degradation).
         """
@@ -474,8 +462,7 @@ class AutomationEventService:
             logger.warning(f'[AutomationEventService] Redis cache write error: {e}')
 
     def _sign_payload(self, payload_bytes: bytes) -> str:
-        """
-        Sign a payload using the dedicated automation shared secret.
+        """Sign a payload using the dedicated automation shared secret.
 
         Uses AUTOMATION_WEBHOOK_SECRET (not GitHub webhook secret) to maintain
         separate trust boundaries between GitHub webhooks and internal services.
@@ -507,8 +494,7 @@ class AutomationEventService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> None:
-        """
-        Send the normalized payload to the automation service.
+        """Send the normalized payload to the automation service.
 
         The payload is signed using AUTOMATION_WEBHOOK_SECRET so the
         automation service can verify it came from the OpenHands server.

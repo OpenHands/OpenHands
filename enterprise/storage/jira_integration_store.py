@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from openhands.app_server.utils.logger import openhands_logger as logger
 from sqlalchemy import and_, select
+
 from storage.database import a_session_maker
 from storage.jira_conversation import JiraConversation
 from storage.jira_user import JiraUser
 from storage.jira_workspace import JiraWorkspace
-
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass
@@ -25,7 +25,6 @@ class JiraIntegrationStore:
         status: str = 'active',
     ) -> JiraWorkspace:
         """Create a new Jira workspace with encrypted sensitive data."""
-
         workspace = JiraWorkspace(
             name=name.lower(),
             jira_cloud_id=jira_cloud_id,
@@ -93,7 +92,6 @@ class JiraIntegrationStore:
         status: str = 'active',
     ) -> JiraUser:
         """Create a new Jira workspace link."""
-
         jira_user = JiraUser(
             keycloak_user_id=keycloak_user_id,
             jira_user_id=jira_user_id,

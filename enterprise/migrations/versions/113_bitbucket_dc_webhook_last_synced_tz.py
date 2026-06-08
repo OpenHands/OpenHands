@@ -1,4 +1,4 @@
-"""bitbucket_dc_webhook.last_synced TIMESTAMP WITHOUT TIME ZONE -> WITH TIME ZONE
+"""bitbucket_dc_webhook.last_synced TIMESTAMP WITHOUT TIME ZONE -> WITH TIME ZONE.
 
 Revision ID: 113
 Revises: 112

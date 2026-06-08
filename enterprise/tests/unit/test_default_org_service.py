@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import SecretStr
+
 from storage.default_org_service import (
     DefaultOrgBootstrapService,
     get_default_org_config,

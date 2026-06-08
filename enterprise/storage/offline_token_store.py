@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from openhands.app_server.utils.logger import openhands_logger as logger
 from sqlalchemy import select
+
 from storage.database import a_session_maker
 from storage.stored_offline_token import StoredOfflineToken
-
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass

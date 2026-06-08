@@ -5,18 +5,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
+from openhands.app_server.utils.jsonpatch_compat import deep_merge
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from server.constants import (
     ORG_SETTINGS_VERSION,
     get_default_llm_base_url,
     get_default_llm_model,
 )
 from server.routes.org_models import OrgAppSettingsUpdate
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from storage.org import Org
 from storage.user import User
-
-from openhands.app_server.utils.jsonpatch_compat import deep_merge
 
 
 @dataclass

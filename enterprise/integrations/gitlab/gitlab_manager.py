@@ -3,6 +3,18 @@ from __future__ import annotations
 from types import MappingProxyType
 from typing import cast
 
+from jinja2 import Environment, FileSystemLoader
+from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.app_server.integrations.provider import ProviderToken, ProviderType
+from openhands.app_server.secrets.secrets_models import Secrets
+from openhands.app_server.types import (
+    LLMAuthenticationError,
+    MissingSettingsError,
+    SessionExpiredError,
+)
+from openhands.app_server.utils.logger import openhands_logger as logger
+from pydantic import SecretStr
+
 from integrations.gitlab.gitlab_view import (
     GitlabFactory,
     GitlabInlineMRComment,
@@ -21,19 +33,7 @@ from integrations.utils import (
     get_session_expired_message,
 )
 from integrations.v1_utils import get_saas_user_auth
-from jinja2 import Environment, FileSystemLoader
-from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
-
-from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
-from openhands.app_server.integrations.provider import ProviderToken, ProviderType
-from openhands.app_server.secrets.secrets_models import Secrets
-from openhands.app_server.types import (
-    LLMAuthenticationError,
-    MissingSettingsError,
-    SessionExpiredError,
-)
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class GitlabManager(Manager[GitlabViewType]):
@@ -52,8 +52,7 @@ class GitlabManager(Manager[GitlabViewType]):
     async def _user_has_write_access_to_repo(
         self, project_id: str, user_id: str
     ) -> bool:
-        """
-        Check if the user has write access to the repository (can pull/push changes and open merge requests).
+        """Check if the user has write access to the repository (can pull/push changes and open merge requests).
 
         Args:
             project_id: The ID of the GitLab project
@@ -63,7 +62,6 @@ class GitlabManager(Manager[GitlabViewType]):
         Returns:
             bool: True if the user has write access to the repository, False otherwise
         """
-
         keycloak_user_id = await self.token_manager.get_user_id_from_idp_user_id(
             user_id, ProviderType.GITLAB
         )

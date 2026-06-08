@@ -15,23 +15,23 @@ from fastapi import (
     status,
 )
 from fastapi.responses import JSONResponse
+from openhands.app_server.config_api.config_models import AppMode
+from openhands.app_server.integrations.provider import ProviderType
+from openhands.app_server.utils.logger import openhands_logger as logger
+from pydantic import BaseModel
+
 from integrations.bitbucket_data_center.bitbucket_dc_manager import BitbucketDCManager
 from integrations.bitbucket_data_center.bitbucket_dc_service import (
     SaaSBitbucketDCService,
 )
 from integrations.models import Message, SourceType
 from integrations.utils import HOST_URL, IS_LOCAL_DEPLOYMENT
-from pydantic import BaseModel
 from server.auth.authorization import Permission, require_permission
 from server.auth.constants import AUTOMATION_EVENT_FORWARDING_ENABLED
 from server.auth.token_manager import TokenManager
 from server.services.automation_event_service import AutomationEventService
 from storage.bitbucket_dc_webhook_store import BitbucketDCWebhookStore
 from storage.redis import get_redis_client_async
-
-from openhands.app_server.config_api.config_models import AppMode
-from openhands.app_server.integrations.provider import ProviderType
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 bitbucket_dc_integration_router = APIRouter(prefix='/integration')
 

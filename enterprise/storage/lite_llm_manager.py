@@ -1,13 +1,14 @@
-"""
-Store class for managing organizational settings.
-"""
+"""Store class for managing organizational settings."""
 
 import functools
 import os
 from typing import Any, Awaitable, Callable
 
 import httpx
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.utils.http_session import httpx_verify_option
 from pydantic import SecretStr
+
 from server.auth.token_manager import TokenManager
 from server.constants import (
     LITE_LLM_API_KEY,
@@ -22,9 +23,6 @@ from server.constants import (
 )
 from server.logger import logger
 from storage.user_settings import UserSettings
-
-from openhands.app_server.settings.settings_models import Settings
-from openhands.app_server.utils.http_session import httpx_verify_option
 
 # Timeout in seconds for key verification requests to LiteLLM
 KEY_VERIFICATION_TIMEOUT = 5.0
@@ -1557,8 +1555,7 @@ class LiteLlmManager:
         client: httpx.AsyncClient,
         team_id: str,
     ) -> dict:
-        """
-        Get financial data for all members in a team.
+        """Get financial data for all members in a team.
 
         Fetches team info from LiteLLM and extracts spending/budget data for each member.
 

@@ -14,6 +14,12 @@ os.environ['SERVE_FRONTEND'] = 'false'
 
 from fastapi import Request, status  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
+from openhands.app_server.app import app as base_app  # noqa: E402
+from openhands.app_server.middleware import (  # noqa: E402
+    CacheControlMiddleware,
+)
+from openhands.app_server.static import SPAStaticFiles  # noqa: E402
+
 from server.auth.auth_error import ExpiredError, NoCredentialsError  # noqa: E402
 from server.auth.constants import (  # noqa: E402
     BITBUCKET_APP_CLIENT_ID,
@@ -63,12 +69,6 @@ from server.sharing.shared_event_router import (  # noqa: E402
 from server.verified_models.verified_model_router import (  # noqa: E402
     api_router as verified_models_router,
 )
-
-from openhands.app_server.app import app as base_app  # noqa: E402
-from openhands.app_server.middleware import (  # noqa: E402
-    CacheControlMiddleware,
-)
-from openhands.app_server.static import SPAStaticFiles  # noqa: E402
 
 directory = os.getenv('FRONTEND_DIRECTORY', './frontend/build')
 

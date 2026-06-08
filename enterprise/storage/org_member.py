@@ -1,6 +1,4 @@
-"""
-SQLAlchemy model for Organization-Member relationship.
-"""
+"""SQLAlchemy model for Organization-Member relationship."""
 
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -8,6 +6,7 @@ from uuid import UUID
 from pydantic import SecretStr
 from sqlalchemy import JSON, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from storage.base import Base
 from storage.encrypt_utils import decrypt_value, encrypt_value
 

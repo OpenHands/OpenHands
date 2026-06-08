@@ -1,4 +1,4 @@
-"""Create maintenance tasks table
+"""Create maintenance tasks table.
 
 Revision ID: 059
 Revises: 058

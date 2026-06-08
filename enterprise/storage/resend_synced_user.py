@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
+
 from storage.base import Base
 
 

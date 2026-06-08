@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import and_, delete, or_, select, update
+
 from storage.bitbucket_dc_webhook import BitbucketDCWebhook
 from storage.database import a_session_maker
 

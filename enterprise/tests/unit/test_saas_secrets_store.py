@@ -4,14 +4,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
-from pydantic import SecretStr
-from storage.saas_secrets_store import SaasSecretsStore
-from storage.stored_custom_secrets import StoredCustomSecrets
-
 from openhands.app_server.integrations.provider import CustomSecret
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.utils.encryption_key import EncryptionKey
+from pydantic import SecretStr
+
+from storage.saas_secrets_store import SaasSecretsStore
+from storage.stored_custom_secrets import StoredCustomSecrets
 
 
 def _make_jwt_service() -> JwtService:
@@ -263,7 +263,8 @@ class TestSaasSecretsStore:
         """Test that secrets from one organization are not deleted when storing
         secrets in another organization. This reproduces a bug where switching
         organizations and creating a secret would delete all secrets from the
-        user's personal workspace."""
+        user's personal workspace.
+        """
         org1_id = UUID('a1111111-1111-1111-1111-111111111111')
         org2_id = UUID('b2222222-2222-2222-2222-222222222222')
 

@@ -1,4 +1,4 @@
-"""Create feedback table
+"""Create feedback table.
 
 Revision ID: 001
 Revises:

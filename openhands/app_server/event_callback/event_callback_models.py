@@ -8,7 +8,13 @@ from enum import Enum
 from typing import TYPE_CHECKING, ClassVar, Literal
 from uuid import UUID, uuid4
 
+from pydantic import Field
+
 from openhands.agent_server.utils import OpenHandsUUID, utc_now
+from openhands.app_server.event_callback.event_callback_result_models import (
+    EventCallbackResult,
+    EventCallbackResultStatus,
+)
 from openhands.sdk import Event
 from openhands.sdk.utils.models import (
     DiscriminatedUnionMixin,
@@ -16,12 +22,6 @@ from openhands.sdk.utils.models import (
     get_known_concrete_subclasses,
 )
 from openhands.sdk.utils.redact import redact_text_secrets
-from pydantic import Field
-
-from openhands.app_server.event_callback.event_callback_result_models import (
-    EventCallbackResult,
-    EventCallbackResultStatus,
-)
 
 _logger = logging.getLogger(__name__)
 if TYPE_CHECKING:

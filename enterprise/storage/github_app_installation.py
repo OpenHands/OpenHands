@@ -2,13 +2,12 @@ from datetime import datetime
 
 from sqlalchemy import DateTime, String, text
 from sqlalchemy.orm import Mapped, mapped_column
+
 from storage.base import Base
 
 
 class GithubAppInstallation(Base):
-    """
-    Represents a Github App Installation with associated token.
-    """
+    """Represents a Github App Installation with associated token."""
 
     __tablename__ = 'github_app_installations'
 

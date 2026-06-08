@@ -3,15 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from sqlalchemy import delete, select
-from storage.database import a_session_maker
-from storage.stored_custom_secrets import StoredCustomSecrets
-from storage.user_store import UserStore
-
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.utils.logger import openhands_logger as logger
+from sqlalchemy import delete, select
+
+from storage.database import a_session_maker
+from storage.stored_custom_secrets import StoredCustomSecrets
+from storage.user_store import UserStore
 
 
 @dataclass

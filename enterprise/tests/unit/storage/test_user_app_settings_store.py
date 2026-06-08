@@ -1,5 +1,4 @@
-"""
-Unit tests for UserAppSettingsStore.
+"""Unit tests for UserAppSettingsStore.
 
 Tests the async database operations for user app settings.
 """
@@ -7,9 +6,10 @@ Tests the async database operations for user app settings.
 import uuid
 
 import pytest
-from server.routes.user_app_settings_models import UserAppSettingsUpdate
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
+
+from server.routes.user_app_settings_models import UserAppSettingsUpdate
 from storage.base import Base
 from storage.org import Org
 from storage.user import User
@@ -39,10 +39,9 @@ async def async_session_maker(async_engine):
 
 @pytest.mark.asyncio
 async def test_get_user_by_id_success(async_session_maker):
-    """
-    GIVEN: A user exists in the database
+    """GIVEN: A user exists in the database
     WHEN: get_user_by_id is called with the user's ID
-    THEN: The user is returned with correct data
+    THEN: The user is returned with correct data.
     """
     # Arrange
     async with async_session_maker() as session:
@@ -79,10 +78,9 @@ async def test_get_user_by_id_success(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_get_user_by_id_not_found(async_session_maker):
-    """
-    GIVEN: A user does not exist in the database
+    """GIVEN: A user does not exist in the database
     WHEN: get_user_by_id is called with a non-existent ID
-    THEN: None is returned
+    THEN: None is returned.
     """
     # Arrange
     non_existent_id = str(uuid.uuid4())
@@ -98,10 +96,9 @@ async def test_get_user_by_id_not_found(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_update_user_app_settings_success(async_session_maker):
-    """
-    GIVEN: A user exists in the database
+    """GIVEN: A user exists in the database
     WHEN: update_user_app_settings is called with new values
-    THEN: The user's settings are updated and returned
+    THEN: The user's settings are updated and returned.
     """
     # Arrange
     async with async_session_maker() as session:
@@ -142,10 +139,9 @@ async def test_update_user_app_settings_success(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_update_user_app_settings_partial(async_session_maker):
-    """
-    GIVEN: A user exists with existing settings
+    """GIVEN: A user exists with existing settings
     WHEN: update_user_app_settings is called with only some fields
-    THEN: Only the provided fields are updated, others remain unchanged
+    THEN: Only the provided fields are updated, others remain unchanged.
     """
     # Arrange
     async with async_session_maker() as session:
@@ -180,10 +176,9 @@ async def test_update_user_app_settings_partial(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_update_user_app_settings_user_not_found(async_session_maker):
-    """
-    GIVEN: A user does not exist in the database
+    """GIVEN: A user does not exist in the database
     WHEN: update_user_app_settings is called
-    THEN: None is returned
+    THEN: None is returned.
     """
     # Arrange
     non_existent_id = str(uuid.uuid4())

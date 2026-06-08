@@ -1,12 +1,12 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pydantic import SecretStr
-from server.auth.token_manager import TokenManager
-
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.utils.encryption_key import EncryptionKey
+from pydantic import SecretStr
+
+from server.auth.token_manager import TokenManager
 
 
 def _make_jwt_service(secret: str = 'test_secret') -> JwtService:

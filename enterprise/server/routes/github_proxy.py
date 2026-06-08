@@ -7,16 +7,15 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import httpx
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import RedirectResponse
-from server.logger import logger
-
 from openhands.app_server.utils.http_session import httpx_verify_option
+
+from server.logger import logger
 
 GITHUB_PROXY_ENDPOINTS = bool(os.environ.get('GITHUB_PROXY_ENDPOINTS'))
 
 
 def add_github_proxy_routes(app: FastAPI):
-    """
-    Authentication endpoints for feature branches.
+    """Authentication endpoints for feature branches.
 
     # Requirements
     * This should never be enabled in prod!

@@ -5,6 +5,19 @@ from urllib.parse import urlparse
 
 import httpx
 from fastapi import Request
+from jinja2 import Environment, FileSystemLoader
+from openhands.app_server.integrations.provider import ProviderHandler
+from openhands.app_server.integrations.service_types import Comment, Repository
+from openhands.app_server.shared import server_config
+from openhands.app_server.types import (
+    LLMAuthenticationError,
+    MissingSettingsError,
+    SessionExpiredError,
+)
+from openhands.app_server.user_auth.user_auth import UserAuth
+from openhands.app_server.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.logger import openhands_logger as logger
+
 from integrations.jira_dc.jira_dc_service_account import (
     resolve_jira_dc_service_account,
 )
@@ -27,25 +40,12 @@ from integrations.utils import (
     infer_repo_from_message,
     markdown_to_jira_markup,
 )
-from jinja2 import Environment, FileSystemLoader
 from server.auth.constants import JIRA_DC_ENABLE_OAUTH
 from server.auth.saas_user_auth import get_user_auth_from_keycloak_id
 from server.auth.token_manager import TokenManager
 from storage.jira_dc_integration_store import JiraDcIntegrationStore
 from storage.jira_dc_user import JiraDcUser
 from storage.jira_dc_workspace import JiraDcWorkspace
-
-from openhands.app_server.integrations.provider import ProviderHandler
-from openhands.app_server.integrations.service_types import Comment, Repository
-from openhands.app_server.shared import server_config
-from openhands.app_server.types import (
-    LLMAuthenticationError,
-    MissingSettingsError,
-    SessionExpiredError,
-)
-from openhands.app_server.user_auth.user_auth import UserAuth
-from openhands.app_server.utils.http_session import httpx_verify_option
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Unicode codepoint of the emoji reaction posted to acknowledge an @openhands
 # mention via Jira's internal reactions API. 1f44d = 👍 (thumbs up). Note:

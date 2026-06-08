@@ -16,6 +16,7 @@ from openhands.agent_server.models import EventPage
 from openhands.sdk.event.conversation_state import ConversationStateUpdateEvent
 from openhands.sdk.event.llm_convertible import MessageEvent
 from openhands.sdk.llm import Message, TextContent
+
 from server.sharing.shared_event_router import (
     _is_viewable,
     batch_get_shared_events,

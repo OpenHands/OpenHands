@@ -1,18 +1,16 @@
-"""
-Unit tests for JiraManager.
-"""
+"""Unit tests for JiraManager."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from integrations.jira.jira_manager import JiraManager
-from integrations.jira.jira_payload import JiraEventType, JiraWebhookPayload
-
 from openhands.app_server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
     SessionExpiredError,
 )
+
+from integrations.jira.jira_manager import JiraManager
+from integrations.jira.jira_payload import JiraEventType, JiraWebhookPayload
 
 
 class TestJiraManagerInit:

@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pytest
 from sqlalchemy import select
+
 from storage.repository_store import RepositoryStore
 from storage.stored_repository import StoredRepository
 

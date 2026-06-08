@@ -1,4 +1,4 @@
-"""Add SETTING_UP_SKILLS to appconversationstarttaskstatus enum
+"""Add SETTING_UP_SKILLS to appconversationstarttaskstatus enum.
 
 Revision ID: 082
 Revises: 081

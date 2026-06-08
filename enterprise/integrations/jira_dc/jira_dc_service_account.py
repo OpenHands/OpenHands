@@ -2,12 +2,12 @@
 
 from dataclasses import dataclass
 
-from server.auth.token_manager import TokenManager
-from storage.jira_dc_workspace import JiraDcWorkspace
-
 from openhands.app_server.integrations.jira_dc.config import (
     get_jira_dc_service_account_env_config,
 )
+
+from server.auth.token_manager import TokenManager
+from storage.jira_dc_workspace import JiraDcWorkspace
 
 
 @dataclass(frozen=True)

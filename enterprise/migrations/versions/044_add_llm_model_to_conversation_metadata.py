@@ -1,4 +1,4 @@
-"""add llm_model to conversation_metadata
+"""add llm_model to conversation_metadata.
 
 Revision ID: 044
 Revises: 043

@@ -1,4 +1,4 @@
-"""create slack users table
+"""create slack users table.
 
 Revision ID: 035
 Revises: 034

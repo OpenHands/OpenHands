@@ -13,16 +13,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
+from openhands.app_server.user_auth import get_user_id
+from sqlalchemy.exc import IntegrityError
+
 from server.routes.orgs import (
     claim_git_organization,
     disconnect_git_organization,
     get_git_claims,
     org_router,
 )
-from sqlalchemy.exc import IntegrityError
 from storage.org_git_claim import OrgGitClaim
-
-from openhands.app_server.user_auth import get_user_id
 
 TEST_USER_ID = str(uuid.uuid4())
 
@@ -64,10 +64,9 @@ class TestGetGitClaims:
 
     @pytest.mark.asyncio
     async def test_returns_empty_list_when_no_claims(self, org_id, user_id):
-        """
-        GIVEN: An organization with no Git claims
+        """GIVEN: An organization with no Git claims
         WHEN: GET /api/organizations/{org_id}/git-claims is called
-        THEN: An empty list is returned
+        THEN: An empty list is returned.
         """
         with patch(
             'server.routes.orgs.OrgGitClaimStore.get_claims_by_org_id',
@@ -80,10 +79,9 @@ class TestGetGitClaims:
 
     @pytest.mark.asyncio
     async def test_returns_claims_for_organization(self, org_id, user_id, make_claim):
-        """
-        GIVEN: An organization with multiple Git claims
+        """GIVEN: An organization with multiple Git claims
         WHEN: GET /api/organizations/{org_id}/git-claims is called
-        THEN: All claims are returned with correct details
+        THEN: All claims are returned with correct details.
         """
         claim1 = make_claim(org_id, provider='github', git_organization='OpenHands')
         claim2 = make_claim(org_id, provider='gitlab', git_organization='AcmeCo')
@@ -107,10 +105,9 @@ class TestGetGitClaims:
 
     @pytest.mark.asyncio
     async def test_returns_500_on_unexpected_error(self, org_id, user_id):
-        """
-        GIVEN: An unexpected error occurs when fetching claims
+        """GIVEN: An unexpected error occurs when fetching claims
         WHEN: GET /api/organizations/{org_id}/git-claims is called
-        THEN: A 500 Internal Server Error is returned
+        THEN: A 500 Internal Server Error is returned.
         """
         with patch(
             'server.routes.orgs.OrgGitClaimStore.get_claims_by_org_id',
@@ -132,10 +129,9 @@ class TestClaimGitOrganization:
 
     @pytest.mark.asyncio
     async def test_claim_succeeds_for_unclaimed_org(self, org_id, user_id, make_claim):
-        """
-        GIVEN: A Git organization that has not been claimed
+        """GIVEN: A Git organization that has not been claimed
         WHEN: POST /api/organizations/{org_id}/git-claims is called
-        THEN: The claim is created and returned with correct details
+        THEN: The claim is created and returned with correct details.
         """
         # Arrange
         mock_claim = make_claim(org_id, claimed_by=uuid.UUID(user_id))
@@ -173,10 +169,9 @@ class TestClaimGitOrganization:
 
     @pytest.mark.asyncio
     async def test_claim_fails_when_already_claimed(self, org_id, user_id, make_claim):
-        """
-        GIVEN: A Git organization already claimed by another OpenHands org
+        """GIVEN: A Git organization already claimed by another OpenHands org
         WHEN: POST /api/organizations/{org_id}/git-claims is called
-        THEN: A 409 Conflict error is returned
+        THEN: A 409 Conflict error is returned.
         """
         # Arrange
         other_org_id = uuid.uuid4()
@@ -201,10 +196,9 @@ class TestClaimGitOrganization:
 
     @pytest.mark.asyncio
     async def test_claim_returns_500_on_unexpected_error(self, org_id, user_id):
-        """
-        GIVEN: An unexpected error occurs during claim creation
+        """GIVEN: An unexpected error occurs during claim creation
         WHEN: POST /api/organizations/{org_id}/git-claims is called
-        THEN: A 500 Internal Server Error is returned
+        THEN: A 500 Internal Server Error is returned.
         """
         # Arrange
         request = MagicMock()
@@ -225,10 +219,9 @@ class TestClaimGitOrganization:
 
     @pytest.mark.asyncio
     async def test_claim_race_condition_returns_409(self, org_id, user_id):
-        """
-        GIVEN: Pre-check passes but a concurrent request claims the org first
+        """GIVEN: Pre-check passes but a concurrent request claims the org first
         WHEN: create_claim raises IntegrityError (DB unique constraint)
-        THEN: A 409 Conflict error is returned instead of 500
+        THEN: A 409 Conflict error is returned instead of 500.
         """
         # Arrange
         request = MagicMock()
@@ -270,10 +263,9 @@ class TestDisconnectGitOrganization:
 
     @pytest.mark.asyncio
     async def test_disconnect_succeeds_for_existing_claim(self, org_id, user_id):
-        """
-        GIVEN: A valid claim belonging to the organization
+        """GIVEN: A valid claim belonging to the organization
         WHEN: DELETE /api/organizations/{org_id}/git-claims/{claim_id} is called
-        THEN: The claim is deleted and a success message is returned
+        THEN: The claim is deleted and a success message is returned.
         """
         # Arrange
         claim_id = uuid.uuid4()
@@ -293,10 +285,9 @@ class TestDisconnectGitOrganization:
 
     @pytest.mark.asyncio
     async def test_disconnect_fails_when_claim_not_found(self, org_id, user_id):
-        """
-        GIVEN: A claim_id that does not exist for this organization
+        """GIVEN: A claim_id that does not exist for this organization
         WHEN: DELETE /api/organizations/{org_id}/git-claims/{claim_id} is called
-        THEN: A 404 Not Found error is returned
+        THEN: A 404 Not Found error is returned.
         """
         # Arrange
         claim_id = uuid.uuid4()
@@ -315,10 +306,9 @@ class TestDisconnectGitOrganization:
 
     @pytest.mark.asyncio
     async def test_disconnect_returns_500_on_unexpected_error(self, org_id, user_id):
-        """
-        GIVEN: An unexpected error occurs during claim deletion
+        """GIVEN: An unexpected error occurs during claim deletion
         WHEN: DELETE /api/organizations/{org_id}/git-claims/{claim_id} is called
-        THEN: A 500 Internal Server Error is returned
+        THEN: A 500 Internal Server Error is returned.
         """
         # Arrange
         claim_id = uuid.uuid4()
@@ -361,6 +351,7 @@ class TestGitOrgClaimRequestValidation:
     def test_invalid_provider_is_rejected(self):
         """An unsupported provider raises a validation error."""
         from pydantic import ValidationError
+
         from server.routes.org_models import GitOrgClaimRequest
 
         with pytest.raises(ValidationError, match='Invalid provider'):
@@ -369,6 +360,7 @@ class TestGitOrgClaimRequestValidation:
     def test_empty_git_organization_is_rejected(self):
         """An empty git_organization raises a validation error."""
         from pydantic import ValidationError
+
         from server.routes.org_models import GitOrgClaimRequest
 
         with pytest.raises(ValidationError, match='git_organization must not be empty'):
@@ -415,10 +407,9 @@ class TestGitClaimsAuthorization:
     """Integration tests verifying authorization through the real HTTP cycle."""
 
     def test_non_member_gets_403_on_get(self, mock_app):
-        """
-        GIVEN: A user who is not a member of the target organization
+        """GIVEN: A user who is not a member of the target organization
         WHEN: GET /api/organizations/{org_id}/git-claims via HTTP
-        THEN: 403 is returned by require_permission
+        THEN: 403 is returned by require_permission.
         """
         org_id = uuid.uuid4()
 
@@ -435,10 +426,9 @@ class TestGitClaimsAuthorization:
     def test_member_without_permission_gets_403_on_post(
         self, mock_app, mock_member_role
     ):
-        """
-        GIVEN: A user with member role (lacks MANAGE_ORG_CLAIMS)
+        """GIVEN: A user with member role (lacks MANAGE_ORG_CLAIMS)
         WHEN: POST /api/organizations/{org_id}/git-claims via HTTP
-        THEN: 403 is returned by require_permission
+        THEN: 403 is returned by require_permission.
         """
         org_id = uuid.uuid4()
 
@@ -458,10 +448,9 @@ class TestGitClaimsAuthorization:
     def test_member_without_permission_gets_403_on_delete(
         self, mock_app, mock_member_role
     ):
-        """
-        GIVEN: A user with member role (lacks MANAGE_ORG_CLAIMS)
+        """GIVEN: A user with member role (lacks MANAGE_ORG_CLAIMS)
         WHEN: DELETE /api/organizations/{org_id}/git-claims/{claim_id} via HTTP
-        THEN: 403 is returned by require_permission
+        THEN: 403 is returned by require_permission.
         """
         org_id = uuid.uuid4()
         claim_id = uuid.uuid4()
@@ -485,10 +474,9 @@ class TestGitClaimsHTTPIntegration:
     def test_post_claim_with_invalid_provider_returns_422(
         self, mock_app, mock_owner_role
     ):
-        """
-        GIVEN: A request with an unsupported provider
+        """GIVEN: A request with an unsupported provider
         WHEN: POST /api/organizations/{org_id}/git-claims via HTTP
-        THEN: 422 is returned by Pydantic validation
+        THEN: 422 is returned by Pydantic validation.
         """
         org_id = uuid.uuid4()
 
@@ -505,10 +493,9 @@ class TestGitClaimsHTTPIntegration:
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     def test_post_claim_success_returns_201(self, mock_app, mock_owner_role):
-        """
-        GIVEN: A valid claim request by an authorized admin/owner
+        """GIVEN: A valid claim request by an authorized admin/owner
         WHEN: POST /api/organizations/{org_id}/git-claims via HTTP
-        THEN: 201 is returned with the claim details
+        THEN: 201 is returned with the claim details.
         """
         org_id = uuid.uuid4()
         mock_claim = MagicMock(spec=OrgGitClaim)
@@ -546,10 +533,9 @@ class TestGitClaimsHTTPIntegration:
         assert data['git_organization'] == 'openhands'
 
     def test_delete_claim_success_returns_200(self, mock_app, mock_owner_role):
-        """
-        GIVEN: A valid disconnect request by an authorized admin/owner
+        """GIVEN: A valid disconnect request by an authorized admin/owner
         WHEN: DELETE /api/organizations/{org_id}/git-claims/{claim_id} via HTTP
-        THEN: 200 is returned with a success message
+        THEN: 200 is returned with a success message.
         """
         org_id = uuid.uuid4()
         claim_id = uuid.uuid4()
@@ -575,10 +561,9 @@ class TestGitClaimsHTTPIntegration:
         )
 
     def test_get_claims_success_returns_200(self, mock_app, mock_owner_role):
-        """
-        GIVEN: An authorized user requests claims for their organization
+        """GIVEN: An authorized user requests claims for their organization
         WHEN: GET /api/organizations/{org_id}/git-claims via HTTP
-        THEN: 200 is returned with the list of claims
+        THEN: 200 is returned with the list of claims.
         """
         org_id = uuid.uuid4()
         mock_claim = MagicMock(spec=OrgGitClaim)

@@ -16,13 +16,16 @@ from fastapi import (
     status,
 )
 from fastapi.responses import JSONResponse, RedirectResponse
+from openhands.app_server.user_auth.user_auth import get_user_auth
+from openhands.app_server.utils.logger import openhands_logger as logger
+from pydantic import BaseModel, Field, field_validator
+
 from integrations.jira_dc.jira_dc_manager import JiraDcManager
 from integrations.jira_dc.jira_dc_service_account import (
     get_jira_dc_managed_service_account,
     get_jira_dc_service_account_config_error,
 )
 from integrations.models import Message, SourceType
-from pydantic import BaseModel, Field, field_validator
 from server.auth.constants import (
     AUTOMATION_EVENT_FORWARDING_ENABLED,
     JIRA_DC_BASE_URL,
@@ -35,9 +38,6 @@ from server.auth.token_manager import TokenManager
 from server.constants import WEB_HOST
 from server.services.automation_event_service import AutomationEventService
 from storage.redis import get_redis_client
-
-from openhands.app_server.user_auth.user_auth import get_user_auth
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Environment variable to disable Jira DC webhooks
 JIRA_DC_WEBHOOKS_ENABLED = os.environ.get('JIRA_DC_WEBHOOKS_ENABLED', '0') in (

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import SecretStr
+
 from server.routes.org_models import (
     CannotModifySelfError,
     InvalidRoleError,
@@ -2250,7 +2251,7 @@ class TestOrgMemberServiceGetMe:
     ):
         """GIVEN: User is a member of the organization
         WHEN: get_me is called
-        THEN: Returns MeResponse with user's membership data
+        THEN: Returns MeResponse with user's membership data.
         """
         # Arrange
         with (
@@ -2288,7 +2289,7 @@ class TestOrgMemberServiceGetMe:
     async def test_get_me_member_not_found_raises_error(self, org_id, current_user_id):
         """GIVEN: User is not a member of the organization
         WHEN: get_me is called
-        THEN: Raises OrgMemberNotFoundError
+        THEN: Raises OrgMemberNotFoundError.
         """
         # Arrange
         with patch(
@@ -2309,7 +2310,7 @@ class TestOrgMemberServiceGetMe:
     ):
         """GIVEN: Member exists but role lookup fails
         WHEN: get_me is called
-        THEN: Raises RoleNotFoundError
+        THEN: Raises RoleNotFoundError.
         """
         # Arrange
         with (
@@ -2337,7 +2338,7 @@ class TestOrgMemberServiceGetMe:
     ):
         """GIVEN: Member exists but user lookup returns None
         WHEN: get_me is called
-        THEN: Returns MeResponse with empty email
+        THEN: Returns MeResponse with empty email.
         """
         # Arrange
         with (

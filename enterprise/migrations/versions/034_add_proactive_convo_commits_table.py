@@ -1,4 +1,4 @@
-"""create proactive conversation starters commits table
+"""create proactive conversation starters commits table.
 
 Revision ID: 034
 Revises: 033

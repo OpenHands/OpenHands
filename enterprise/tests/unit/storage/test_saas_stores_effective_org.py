@@ -21,6 +21,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
+
 from storage.saas_secrets_store import SaasSecretsStore
 from storage.saas_settings_store import SaasSettingsStore
 
@@ -58,7 +59,8 @@ class FakeUser:
 
 def test_settings_store_default_effective_org_id_is_none():
     """The new field must default to None so existing constructions
-    (e.g. ``SaasSettingsStore(user_id)``) keep working unchanged."""
+    (e.g. ``SaasSettingsStore(user_id)``) keep working unchanged.
+    """
     store = SaasSettingsStore(user_id=USER_ID)
     assert store.effective_org_id is None
 
@@ -80,7 +82,8 @@ async def test_settings_store_load_returns_none_when_user_not_member_of_effectiv
     """If the request resolved an effective org the user isn't a member
     of, the store must NOT silently fall back to current_org_id — it
     must refuse the load (the upstream resolver is responsible for
-    rejecting unauthorized X-Org-Id values; this is defense-in-depth)."""
+    rejecting unauthorized X-Org-Id values; this is defense-in-depth).
+    """
     user = FakeUser(
         current_org_id=CURRENT_ORG_ID,
         org_members=[FakeOrgMember(org_id=CURRENT_ORG_ID)],
@@ -109,7 +112,8 @@ async def test_settings_store_get_instance_propagates_effective_org_id():
 @pytest.mark.asyncio
 async def test_settings_store_get_instance_defaults_to_none():
     """Webhook resolvers call ``get_instance(user_id)`` without an org;
-    that path must remain legal."""
+    that path must remain legal.
+    """
     store = await SaasSettingsStore.get_instance(USER_ID)
     assert store.effective_org_id is None
 
@@ -143,7 +147,8 @@ async def test_secrets_store_load_filters_by_resolved_org_id(
 ):
     """``load()`` builds a query of the shape
     ``SELECT … WHERE keycloak_user_id = :u AND org_id = :o`` — assert
-    the org id bound into that filter matches the resolved org."""
+    the org id bound into that filter matches the resolved org.
+    """
     user = FakeUser(current_org_id=CURRENT_ORG_ID)
 
     captured_queries: list[object] = []
@@ -198,8 +203,8 @@ async def test_secrets_store_load_filters_by_resolved_org_id(
 async def test_secrets_store_store_uses_effective_org_id_when_set():
     """``store()`` must delete/insert under the effective org, not the
     user's current org. We capture the org id by intercepting the
-    ``StoredCustomSecrets`` row that would be inserted."""
-
+    ``StoredCustomSecrets`` row that would be inserted.
+    """
     captured_org_ids: list[UUID] = []
     user = FakeUser(current_org_id=CURRENT_ORG_ID)
 
@@ -221,10 +226,9 @@ async def test_secrets_store_store_uses_effective_org_id_when_set():
 
     # Build a Secrets object with one custom secret. We use the real
     # model so encryption / model_dump behave correctly.
-    from pydantic import SecretStr
-
     from openhands.app_server.integrations.provider import CustomSecret
     from openhands.app_server.secrets.secrets_models import Secrets
+    from pydantic import SecretStr
 
     item = Secrets(
         custom_secrets={
@@ -246,15 +250,16 @@ async def test_secrets_store_store_uses_effective_org_id_when_set():
     ):
         await store.store(item)
 
-    assert captured_org_ids == [
-        EFFECTIVE_ORG_ID
-    ], f'store() wrote under {captured_org_ids[0]!s}, expected {EFFECTIVE_ORG_ID!s}'
+    assert captured_org_ids == [EFFECTIVE_ORG_ID], (
+        f'store() wrote under {captured_org_ids[0]!s}, expected {EFFECTIVE_ORG_ID!s}'
+    )
 
 
 @pytest.mark.asyncio
 async def test_secrets_store_store_falls_back_to_current_org_when_unset():
     """The legacy/webhook code path (no effective org supplied) must
-    keep writing under user.current_org_id."""
+    keep writing under user.current_org_id.
+    """
     captured_org_ids: list[UUID] = []
     user = FakeUser(current_org_id=CURRENT_ORG_ID)
 
@@ -274,10 +279,9 @@ async def test_secrets_store_store_falls_back_to_current_org_when_unset():
         async def commit(self):
             return None
 
-    from pydantic import SecretStr
-
     from openhands.app_server.integrations.provider import CustomSecret
     from openhands.app_server.secrets.secrets_models import Secrets
+    from pydantic import SecretStr
 
     item = Secrets(
         custom_secrets={
@@ -329,8 +333,10 @@ async def test_secrets_store_get_instance_defaults_to_none():
 
 def _make_saas_user_auth():
     """``SaasUserAuth`` requires a refresh_token; tests don't exercise
-    it, so a dummy SecretStr is sufficient."""
+    it, so a dummy SecretStr is sufficient.
+    """
     from pydantic import SecretStr
+
     from server.auth.saas_user_auth import SaasUserAuth
 
     return SaasUserAuth(refresh_token=SecretStr('test-refresh'), user_id=USER_ID)
@@ -339,7 +345,8 @@ def _make_saas_user_auth():
 @pytest.mark.asyncio
 async def test_saas_user_auth_get_user_settings_store_passes_effective_org():
     """The auth helper must pull the effective org from
-    ``get_effective_org_id()`` and hand it to the settings store."""
+    ``get_effective_org_id()`` and hand it to the settings store.
+    """
     from server.auth.saas_user_auth import SaasUserAuth
 
     auth = _make_saas_user_auth()

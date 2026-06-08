@@ -5,7 +5,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import jwt
 import pytest
 from fastapi import Request
+from openhands.app_server.integrations.provider import ProviderToken, ProviderType
+from openhands.app_server.secrets.secrets_models import Secrets
 from pydantic import SecretStr
+
 from server.auth.auth_error import (
     AuthError,
     BearerTokenError,
@@ -21,9 +24,6 @@ from server.auth.saas_user_auth import (
 )
 from storage.api_key_store import ApiKeyValidationResult
 from storage.user_authorization import UserAuthorizationType
-
-from openhands.app_server.integrations.provider import ProviderToken, ProviderType
-from openhands.app_server.secrets.secrets_models import Secrets
 
 
 @pytest.fixture
@@ -274,7 +274,7 @@ class TestGetProviderTokensBitbucketDCHost:
 
     @pytest.mark.asyncio
     async def test_host_derived_from_token_url(self):
-        """host is populated from BITBUCKET_DATA_CENTER_HOST when user secrets lack it."""
+        """Host is populated from BITBUCKET_DATA_CENTER_HOST when user secrets lack it."""
         with (
             patch('server.auth.saas_user_auth.token_manager') as mock_tm,
             patch('server.auth.saas_user_auth.a_session_maker') as mock_session_maker,
@@ -328,7 +328,7 @@ class TestGetProviderTokensBitbucketDCHost:
 
     @pytest.mark.asyncio
     async def test_host_remains_none_when_host_empty(self):
-        """host stays None when BITBUCKET_DATA_CENTER_HOST is empty."""
+        """Host stays None when BITBUCKET_DATA_CENTER_HOST is empty."""
         with (
             patch('server.auth.saas_user_auth.token_manager') as mock_tm,
             patch('server.auth.saas_user_auth.a_session_maker') as mock_session_maker,

@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
+from openhands.app_server.utils.logger import openhands_logger as logger
 from sqlalchemy import select, update
+
 from storage.api_key import ApiKey
 from storage.database import a_session_maker
 from storage.user_store import UserStore
-
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass

@@ -1527,12 +1527,12 @@ class TestLiveStatusAppConversationService:
         self.mock_event_service.search_events.assert_called()
         call_kwargs = self.mock_event_service.search_events.call_args[1]
 
-        assert (
-            'conversation_id' in call_kwargs
-        ), "search_events should be called with 'conversation_id' parameter"
-        assert (
-            'conversation_id__eq' not in call_kwargs
-        ), "search_events should NOT be called with 'conversation_id__eq' parameter"
+        assert 'conversation_id' in call_kwargs, (
+            "search_events should be called with 'conversation_id' parameter"
+        )
+        assert 'conversation_id__eq' not in call_kwargs, (
+            "search_events should NOT be called with 'conversation_id__eq' parameter"
+        )
         assert call_kwargs['conversation_id'] == conversation_id
 
     @pytest.mark.asyncio

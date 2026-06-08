@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+
 from storage.database import a_session_maker
 from storage.device_code import DeviceCode
 

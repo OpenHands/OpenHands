@@ -1,4 +1,4 @@
-"""create blocked_email_domains table
+"""create blocked_email_domains table.
 
 Revision ID: 088
 Revises: 087

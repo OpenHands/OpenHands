@@ -4,13 +4,14 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from jinja2 import Environment, FileSystemLoader
+
 from integrations.bitbucket_data_center.bitbucket_dc_view import (
     BitbucketDCFactory,
     BitbucketDCInlinePRComment,
     BitbucketDCPRComment,
 )
 from integrations.models import Message, SourceType
-from jinja2 import Environment, FileSystemLoader
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-"""add search_api_key to user_settings
+"""add search_api_key to user_settings.
 
 Revision ID: 040
 Revises: 039

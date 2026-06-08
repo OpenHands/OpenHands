@@ -1,4 +1,4 @@
-"""add git_provider to conversation_metadata
+"""add git_provider to conversation_metadata.
 
 Revision ID: 042
 Revises: 041

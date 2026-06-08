@@ -1,7 +1,5 @@
 # mypy: disable-error-code="unreachable"
-"""
-Tests for the GitLab resolver.
-"""
+"""Tests for the GitLab resolver."""
 
 import hashlib
 import json
@@ -9,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.responses import JSONResponse
+
 from server.routes.integration.gitlab import gitlab_events
 
 

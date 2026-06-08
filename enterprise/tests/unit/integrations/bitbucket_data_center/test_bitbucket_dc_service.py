@@ -3,13 +3,13 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from openhands.app_server.integrations.service_types import RequestMethod
+from pydantic import SecretStr
+
 from integrations.bitbucket_data_center.bitbucket_dc_service import (
     SaaSBitbucketDCService,
 )
-from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
-
-from openhands.app_server.integrations.service_types import RequestMethod
 
 
 @pytest.fixture
@@ -73,16 +73,19 @@ class TestGetLatestToken:
     ):
         offline_token = 'test_offline_token'
         expected_token = 'test_bitbucket_dc_token'
-        with patch.object(
-            service_with_external_auth_id.token_manager,
-            'load_offline_token',
-            new_callable=AsyncMock,
-            return_value=offline_token,
-        ), patch.object(
-            service_with_external_auth_id.token_manager,
-            'get_idp_token_from_offline_token',
-            new_callable=AsyncMock,
-            return_value=expected_token,
+        with (
+            patch.object(
+                service_with_external_auth_id.token_manager,
+                'load_offline_token',
+                new_callable=AsyncMock,
+                return_value=offline_token,
+            ),
+            patch.object(
+                service_with_external_auth_id.token_manager,
+                'get_idp_token_from_offline_token',
+                new_callable=AsyncMock,
+                return_value=expected_token,
+            ),
         ):
             token = await service_with_external_auth_id.get_latest_token()
 
@@ -116,16 +119,19 @@ class TestGetLatestToken:
             external_auth_token=SecretStr('test_keycloak_token'),
             external_auth_id='test_user_id',
         )
-        with patch.object(
-            service.token_manager,
-            'get_idp_token',
-            new_callable=AsyncMock,
-            return_value=expected_token,
-        ) as mock_get_idp_token, patch.object(
-            service.token_manager,
-            'load_offline_token',
-            new_callable=AsyncMock,
-        ) as mock_load_offline:
+        with (
+            patch.object(
+                service.token_manager,
+                'get_idp_token',
+                new_callable=AsyncMock,
+                return_value=expected_token,
+            ) as mock_get_idp_token,
+            patch.object(
+                service.token_manager,
+                'load_offline_token',
+                new_callable=AsyncMock,
+            ) as mock_load_offline,
+        ):
             token = await service.get_latest_token()
 
         assert token is not None

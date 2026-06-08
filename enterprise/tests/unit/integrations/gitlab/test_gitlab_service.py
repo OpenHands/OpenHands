@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 import pytest
+
 from integrations.gitlab.gitlab_service import SaaSGitLabService
 
 

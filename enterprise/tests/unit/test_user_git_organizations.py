@@ -10,11 +10,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, status
-from pydantic import SecretStr
-
 from openhands.app_server.integrations.provider import ProviderToken
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.user.user_context import UserContext
+from pydantic import SecretStr
 
 
 def _make_user_context(provider_tokens, user_id: str = 'user-1') -> UserContext:

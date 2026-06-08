@@ -1,6 +1,4 @@
-"""
-SQLAlchemy model for User.
-"""
+"""SQLAlchemy model for User."""
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -9,6 +7,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from storage.base import Base
 from storage.encrypt_utils import EncryptedJSON
 

@@ -12,11 +12,13 @@ VERSION_PATTERN = re.compile(r'^\d+\.\d+\.\d+$')
 
 def _write_pyproject(tmp_path: Path, version: str) -> Path:
     pyproject = tmp_path / 'pyproject.toml'
-    pyproject.write_text(textwrap.dedent(f"""\
+    pyproject.write_text(
+        textwrap.dedent(f"""\
             [tool.poetry]
             name = "test-package"
             version = "{version}"
-        """))
+        """)
+    )
     return pyproject
 
 
@@ -25,9 +27,9 @@ class TestGetVersionFromPyproject:
 
     def test_returns_valid_semver_from_real_pyproject(self):
         version = get_version()
-        assert VERSION_PATTERN.match(
-            version
-        ), f"Expected version matching X.Y.Z (positive ints), got '{version}'"
+        assert VERSION_PATTERN.match(version), (
+            f"Expected version matching X.Y.Z (positive ints), got '{version}'"
+        )
 
     def test_reads_first_candidate_path(self, tmp_path):
         _write_pyproject(tmp_path, '1.2.3')
@@ -120,6 +122,6 @@ class TestModuleLevelVersion:
     def test_module_version_matches_pattern(self):
         from openhands.app_server.version import __version__
 
-        assert VERSION_PATTERN.match(
-            __version__
-        ), f"Expected __version__ matching X.Y.Z (positive ints), got '{__version__}'"
+        assert VERSION_PATTERN.match(__version__), (
+            f"Expected __version__ matching X.Y.Z (positive ints), got '{__version__}'"
+        )

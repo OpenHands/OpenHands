@@ -1,13 +1,13 @@
 import asyncio
 
-from integrations.store_repo_utils import store_repositories_in_db
-from pydantic import SecretStr
-from server.auth.token_manager import TokenManager
-
 from openhands.app_server.integrations.github.github_service import GitHubService
 from openhands.app_server.integrations.service_types import ProviderType, Repository
 from openhands.app_server.types import AppMode
 from openhands.app_server.utils.logger import openhands_logger as logger
+from pydantic import SecretStr
+
+from integrations.store_repo_utils import store_repositories_in_db
+from server.auth.token_manager import TokenManager
 
 
 class SaaSGitHubService(GitHubService):
@@ -21,7 +21,7 @@ class SaaSGitHubService(GitHubService):
         base_domain: str | None = None,
     ):
         logger.debug(
-            f'SaaSGitHubService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {'set' if external_auth_token else 'None'}, github_token {'set' if token else 'None'}, external_token_manager {external_token_manager}'
+            f'SaaSGitHubService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {"set" if external_auth_token else "None"}, github_token {"set" if token else "None"}, external_token_manager {external_token_manager}'
         )
         super().__init__(
             user_id=user_id,
@@ -105,8 +105,7 @@ class SaaSGitHubService(GitHubService):
         }
 
     async def get_repository_node_id(self, repo_id: str) -> str:
-        """
-        Get the new GitHub GraphQL node ID for a repository using REST API.
+        """Get the new GitHub GraphQL node ID for a repository using REST API.
 
         Args:
             repo_id: Numeric repository ID as string (e.g., "123456789")

@@ -5,7 +5,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import BackgroundTasks, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.user_auth.user_auth import AuthType
 from pydantic import SecretStr
+
 from server.auth.auth_error import AuthError
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.user.user_authorizer import UserAuthorizationResponse, UserAuthorizer
@@ -17,9 +20,6 @@ from server.routes.auth import (
     logout,
     set_response_cookie,
 )
-
-from openhands.app_server.integrations.service_types import ProviderType
-from openhands.app_server.user_auth.user_auth import AuthType
 
 
 def create_mock_user_authorizer(success: bool = True, error_detail: str | None = None):

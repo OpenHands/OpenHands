@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
+
 from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.auth import (
     OnboardingSubmission,
@@ -296,8 +297,7 @@ class TestGetPostAuthRedirect:
             )
 
         assert result == (
-            'https://example.com/onboarding'
-            '?returnTo=%2Fconversations%2Fabc%3Ffoo%3Dbar'
+            'https://example.com/onboarding?returnTo=%2Fconversations%2Fabc%3Ffoo%3Dbar'
         )
 
 
@@ -323,7 +323,7 @@ class TestBuildOnboardingRedirect:
             'https://example.com/foo?bar=baz&qux=1', 'https://example.com'
         )
         assert result == (
-            'https://example.com/onboarding' '?returnTo=%2Ffoo%3Fbar%3Dbaz%26qux%3D1'
+            'https://example.com/onboarding?returnTo=%2Ffoo%3Fbar%3Dbaz%26qux%3D1'
         )
 
     def test_skips_returnTo_for_bare_home_with_trailing_slash(self):
@@ -390,13 +390,10 @@ class TestBuildOnboardingRedirect:
         query-string layering goes wrong).
         """
         result = _build_onboarding_redirect(
-            'https://example.com/login?returnTo=%2Fsettings%2Fuser'
-            '&login_method=github',
+            'https://example.com/login?returnTo=%2Fsettings%2Fuser&login_method=github',
             'https://example.com',
         )
-        assert result == (
-            'https://example.com/onboarding' '?returnTo=%2Fsettings%2Fuser'
-        )
+        assert result == ('https://example.com/onboarding?returnTo=%2Fsettings%2Fuser')
 
     def test_unwraps_login_returnTo_with_inner_query_string(self):
         """Inner destinations with their own query string survive unwrap.
@@ -411,8 +408,7 @@ class TestBuildOnboardingRedirect:
             'https://example.com',
         )
         assert result == (
-            'https://example.com/onboarding'
-            '?returnTo=%2Fconversations%2Fabc%3Ffoo%3Dbar'
+            'https://example.com/onboarding?returnTo=%2Fconversations%2Fabc%3Ffoo%3Dbar'
         )
 
     def test_unwraps_login_returnTo_to_bare_home_skips_returnTo(self):
@@ -439,7 +435,7 @@ class TestBuildOnboardingRedirect:
             'https://example.com/foo?returnTo=%2Fbar', 'https://example.com'
         )
         assert result == (
-            'https://example.com/onboarding' '?returnTo=%2Ffoo%3FreturnTo%3D%252Fbar'
+            'https://example.com/onboarding?returnTo=%2Ffoo%3FreturnTo%3D%252Fbar'
         )
 
 
@@ -544,7 +540,8 @@ class TestCompleteOnboardingEndpoint:
     ):
         """On success, the endpoint fires `track_onboarding_completed`
         with the selections from the request body and a group_identify on
-        the user's current org."""
+        the user's current org.
+        """
         user_id = str(uuid.uuid4())
         org_id = str(uuid.uuid4())
         selections = {
@@ -639,7 +636,8 @@ class TestCompleteOnboardingEndpoint:
         self, mock_request, mock_user
     ):
         """Telemetry failures must never block the user from finishing
-        onboarding - the endpoint should still return 200."""
+        onboarding - the endpoint should still return 200.
+        """
         user_id = str(uuid.uuid4())
         mock_user_auth = MagicMock(spec=SaasUserAuth)
         mock_user_auth.get_user_id = AsyncMock(return_value=user_id)
@@ -680,7 +678,8 @@ class TestCompleteOnboardingEndpoint:
     @pytest.mark.asyncio
     async def test_no_body_defaults_to_empty_selections(self, mock_request, mock_user):
         """When called with no body (backwards compat), analytics still
-        fires with an empty selections dict."""
+        fires with an empty selections dict.
+        """
         user_id = str(uuid.uuid4())
         mock_user_auth = MagicMock(spec=SaasUserAuth)
         mock_user_auth.get_user_id = AsyncMock(return_value=user_id)

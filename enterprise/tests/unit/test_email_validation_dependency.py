@@ -1,5 +1,4 @@
-"""
-Unit tests for email validation dependency (get_admin_user_id).
+"""Unit tests for email validation dependency (get_admin_user_id).
 
 Tests the FastAPI dependency that validates @openhands.dev email domain.
 """
@@ -8,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request
+
 from server.email_validation import get_admin_user_id
 
 
@@ -27,10 +27,9 @@ def mock_user_auth():
 
 @pytest.mark.asyncio
 async def test_get_openhands_user_id_success(mock_request, mock_user_auth):
-    """
-    GIVEN: Valid user ID and @openhands.dev email
+    """GIVEN: Valid user ID and @openhands.dev email
     WHEN: get_admin_user_id is called
-    THEN: User ID is returned successfully
+    THEN: User ID is returned successfully.
     """
     # Arrange
     user_id = 'test-user-123'
@@ -47,10 +46,9 @@ async def test_get_openhands_user_id_success(mock_request, mock_user_auth):
 
 @pytest.mark.asyncio
 async def test_get_openhands_user_id_no_user_id(mock_request):
-    """
-    GIVEN: No user ID provided (None)
+    """GIVEN: No user ID provided (None)
     WHEN: get_admin_user_id is called
-    THEN: 401 Unauthorized is raised
+    THEN: 401 Unauthorized is raised.
     """
     # Arrange
     user_id = None
@@ -65,10 +63,9 @@ async def test_get_openhands_user_id_no_user_id(mock_request):
 
 @pytest.mark.asyncio
 async def test_get_openhands_user_id_no_email(mock_request, mock_user_auth):
-    """
-    GIVEN: User ID provided but email is None
+    """GIVEN: User ID provided but email is None
     WHEN: get_admin_user_id is called
-    THEN: 401 Unauthorized is raised
+    THEN: 401 Unauthorized is raised.
     """
     # Arrange
     user_id = 'test-user-123'
@@ -85,10 +82,9 @@ async def test_get_openhands_user_id_no_email(mock_request, mock_user_auth):
 
 @pytest.mark.asyncio
 async def test_get_openhands_user_id_invalid_domain(mock_request, mock_user_auth):
-    """
-    GIVEN: User ID and email with non-@openhands.dev domain
+    """GIVEN: User ID and email with non-@openhands.dev domain
     WHEN: get_admin_user_id is called
-    THEN: 403 Forbidden is raised
+    THEN: 403 Forbidden is raised.
     """
     # Arrange
     user_id = 'test-user-123'
@@ -105,10 +101,9 @@ async def test_get_openhands_user_id_invalid_domain(mock_request, mock_user_auth
 
 @pytest.mark.asyncio
 async def test_get_openhands_user_id_empty_string_user_id(mock_request):
-    """
-    GIVEN: Empty string user ID
+    """GIVEN: Empty string user ID
     WHEN: get_admin_user_id is called
-    THEN: 401 Unauthorized is raised
+    THEN: 401 Unauthorized is raised.
     """
     # Arrange
     user_id = ''
@@ -123,10 +118,9 @@ async def test_get_openhands_user_id_empty_string_user_id(mock_request):
 
 @pytest.mark.asyncio
 async def test_get_openhands_user_id_case_sensitivity(mock_request, mock_user_auth):
-    """
-    GIVEN: Email with uppercase @OPENHANDS.DEV domain
+    """GIVEN: Email with uppercase @OPENHANDS.DEV domain
     WHEN: get_admin_user_id is called
-    THEN: 403 Forbidden is raised (case-sensitive check)
+    THEN: 403 Forbidden is raised (case-sensitive check).
     """
     # Arrange
     user_id = 'test-user-123'
@@ -144,10 +138,9 @@ async def test_get_openhands_user_id_case_sensitivity(mock_request, mock_user_au
 async def test_get_openhands_user_id_subdomain_not_allowed(
     mock_request, mock_user_auth
 ):
-    """
-    GIVEN: Email with subdomain like @test.openhands.dev
+    """GIVEN: Email with subdomain like @test.openhands.dev
     WHEN: get_admin_user_id is called
-    THEN: 403 Forbidden is raised
+    THEN: 403 Forbidden is raised.
     """
     # Arrange
     user_id = 'test-user-123'
@@ -165,10 +158,9 @@ async def test_get_openhands_user_id_subdomain_not_allowed(
 async def test_get_openhands_user_id_similar_domain_not_allowed(
     mock_request, mock_user_auth
 ):
-    """
-    GIVEN: Email with similar but different domain like @openhands.dev.fake.com
+    """GIVEN: Email with similar but different domain like @openhands.dev.fake.com
     WHEN: get_admin_user_id is called
-    THEN: 403 Forbidden is raised
+    THEN: 403 Forbidden is raised.
     """
     # Arrange
     user_id = 'test-user-123'
@@ -186,10 +178,9 @@ async def test_get_openhands_user_id_similar_domain_not_allowed(
 async def test_get_openhands_user_id_logs_warning_on_invalid_domain(
     mock_request, mock_user_auth
 ):
-    """
-    GIVEN: User with invalid email domain
+    """GIVEN: User with invalid email domain
     WHEN: get_admin_user_id is called
-    THEN: Warning is logged with user_id and email_domain
+    THEN: Warning is logged with user_id and email_domain.
     """
     # Arrange
     user_id = 'test-user-123'
@@ -214,10 +205,9 @@ async def test_get_openhands_user_id_logs_warning_on_invalid_domain(
 
 @pytest.mark.asyncio
 async def test_get_openhands_user_id_with_plus_addressing(mock_request, mock_user_auth):
-    """
-    GIVEN: Email with plus addressing (test+tag@openhands.dev)
+    """GIVEN: Email with plus addressing (test+tag@openhands.dev)
     WHEN: get_admin_user_id is called
-    THEN: User ID is returned successfully
+    THEN: User ID is returned successfully.
     """
     # Arrange
     user_id = 'test-user-123'
@@ -235,10 +225,9 @@ async def test_get_openhands_user_id_with_plus_addressing(mock_request, mock_use
 async def test_get_openhands_user_id_with_dots_in_local_part(
     mock_request, mock_user_auth
 ):
-    """
-    GIVEN: Email with dots in local part (first.last@openhands.dev)
+    """GIVEN: Email with dots in local part (first.last@openhands.dev)
     WHEN: get_admin_user_id is called
-    THEN: User ID is returned successfully
+    THEN: User ID is returned successfully.
     """
     # Arrange
     user_id = 'test-user-123'
@@ -254,10 +243,9 @@ async def test_get_openhands_user_id_with_dots_in_local_part(
 
 @pytest.mark.asyncio
 async def test_get_openhands_user_id_empty_email(mock_request, mock_user_auth):
-    """
-    GIVEN: Empty string email
+    """GIVEN: Empty string email
     WHEN: get_admin_user_id is called
-    THEN: 401 Unauthorized is raised
+    THEN: 401 Unauthorized is raised.
     """
     # Arrange
     user_id = 'test-user-123'

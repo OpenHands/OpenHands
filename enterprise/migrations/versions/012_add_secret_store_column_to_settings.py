@@ -1,7 +1,7 @@
 """add secret_store column to settings table
 Revision ID: 012
 Revises: 011
-Create Date: 2025-05-01 10:00:00.000
+Create Date: 2025-05-01 10:00:00.000.
 """
 
 from typing import Sequence, Union

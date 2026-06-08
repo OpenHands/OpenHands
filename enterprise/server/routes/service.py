@@ -1,5 +1,4 @@
-"""
-Service API routes for internal service-to-service communication.
+"""Service API routes for internal service-to-service communication.
 
 This module provides endpoints for trusted internal services (e.g., automations service)
 to perform privileged operations like creating API keys on behalf of users.
@@ -12,12 +11,12 @@ import os
 from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, status
+from openhands.app_server.utils.logger import openhands_logger as logger
 from pydantic import BaseModel, field_validator
+
 from storage.api_key_store import ApiKeyStore
 from storage.org_member_store import OrgMemberStore
 from storage.user_store import UserStore
-
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Environment variable for the service API key
 AUTOMATIONS_SERVICE_KEY = os.getenv('AUTOMATIONS_SERVICE_KEY', '').strip()
@@ -57,8 +56,7 @@ class ServiceInfoResponse(BaseModel):
 async def validate_service_api_key(
     x_service_api_key: str | None = Header(default=None, alias='X-Service-API-Key'),
 ) -> str:
-    """
-    Validate the service API key from the request header.
+    """Validate the service API key from the request header.
 
     Args:
         x_service_api_key: The service API key from the X-Service-API-Key header
@@ -115,8 +113,7 @@ async def get_or_create_api_key_for_user(
     request: CreateUserApiKeyRequest,
     x_service_api_key: str | None = Header(default=None, alias='X-Service-API-Key'),
 ) -> CreateUserApiKeyResponse:
-    """
-    Get or create an API key for a user on behalf of the automations service.
+    """Get or create an API key for a user on behalf of the automations service.
 
     If a key with the given name already exists for the user/org and is not expired,
     returns the existing key. Otherwise, creates a new key.
@@ -218,8 +215,7 @@ async def delete_user_api_key(
     key_name: str,
     x_service_api_key: str | None = Header(default=None, alias='X-Service-API-Key'),
 ) -> dict:
-    """
-    Delete a system API key created by the service.
+    """Delete a system API key created by the service.
 
     This endpoint allows the automations service to clean up API keys
     it previously created for users.

@@ -1,5 +1,6 @@
 import pytest
 from sqlalchemy import select
+
 from storage.offline_token_store import OfflineTokenStore
 from storage.stored_offline_token import StoredOfflineToken
 

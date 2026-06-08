@@ -17,6 +17,7 @@ without one.
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
 from server.middleware import ApiKeyAwareCORSMiddleware
 
 ALLOWED_ORIGIN = 'https://app.all-hands.dev'

@@ -393,7 +393,7 @@ class ProcessSandboxService(SandboxService):
             # Clean up the working directory
             import shutil
 
-            if os.path.exists(process_info.working_dir):
+            if os.path.exists(process_info.working_dir):  # noqa: ASYNC240
                 shutil.rmtree(process_info.working_dir, ignore_errors=True)
 
             # Remove from our tracking

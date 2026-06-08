@@ -4,9 +4,6 @@ from datetime import datetime
 from typing import AsyncGenerator
 from uuid import UUID
 
-from openhands.sdk.utils.models import DiscriminatedUnionMixin
-from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
-
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversation,
     AppConversationPage,
@@ -17,6 +14,8 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.services.injector import Injector
+from openhands.sdk.utils.models import DiscriminatedUnionMixin
+from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 
 class AppConversationService(ABC):

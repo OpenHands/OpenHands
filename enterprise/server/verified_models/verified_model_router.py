@@ -4,6 +4,17 @@ import logging
 from typing import Annotated, AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from openhands.app_server.config_api.default_llm_model_service import (
+    DefaultLLMModelService,
+)
+from openhands.app_server.config_api.llm_model_service import (
+    LLMModelService,
+    LLMModelServiceInjector,
+)
+from openhands.app_server.services.db_session import get_db_session
+from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.utils.llm import ModelsResponse, get_supported_llm_models
+
 from server.email_validation import get_admin_user_id
 from server.verified_models.verified_model_models import (
     VerifiedModel,
@@ -15,17 +26,6 @@ from server.verified_models.verified_model_service import (
     VerifiedModelService,
     verified_model_store_dependency,
 )
-
-from openhands.app_server.config_api.default_llm_model_service import (
-    DefaultLLMModelService,
-)
-from openhands.app_server.config_api.llm_model_service import (
-    LLMModelService,
-    LLMModelServiceInjector,
-)
-from openhands.app_server.services.db_session import get_db_session
-from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.utils.llm import ModelsResponse, get_supported_llm_models
 
 _logger = logging.getLogger(__name__)
 

@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 import pytest
+
 from integrations.github.github_view import GithubFactory, GithubIssue, get_oh_labels
 from integrations.models import Message, SourceType
 from integrations.types import UserData
@@ -30,7 +31,7 @@ class TestGithubLabels(TestCase):
         self.assertEqual(inline_oh_label, '@openhands')
 
     def test_labels_with_spaces(self):
-        """Test that spaces are properly stripped"""
+        """Test that spaces are properly stripped."""
         oh_label, inline_oh_label = get_oh_labels('  local  ')
         self.assertEqual(oh_label, 'openhands-exp')
         self.assertEqual(inline_oh_label, '@openhands-exp')

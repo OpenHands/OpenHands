@@ -10,9 +10,6 @@ from typing import Any, cast
 
 from fastapi import APIRouter, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from server.auth.saas_user_auth import SaasUserAuth
-from server.models.user_models import GitOrganizationsResponse, SaasUserInfo
-
 from openhands.app_server.config import (
     depends_user_context,
     resolve_provider_llm_base_url,
@@ -23,6 +20,9 @@ from openhands.app_server.sandbox.session_auth import validate_session_key_owner
 from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import get_dependencies
+
+from server.auth.saas_user_auth import SaasUserAuth
+from server.models.user_models import GitOrganizationsResponse, SaasUserInfo
 
 _logger = logging.getLogger(__name__)
 

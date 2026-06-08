@@ -1,5 +1,4 @@
-"""
-Unit tests for AutomationEventService.
+"""Unit tests for AutomationEventService.
 
 Tests the service that forwards GitHub webhook events to the automation service.
 
@@ -14,7 +13,6 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from openhands.app_server.integrations.service_types import ProviderType
 
 REDIS_PATCH = 'server.services.automation_event_service.get_redis_client_async'
@@ -141,10 +139,9 @@ class TestResolveGitOrg:
     async def test_resolve_git_org_cache_miss_found(
         self, mock_token_manager, mock_org_git_claim
     ):
-        """
-        GIVEN: Cache miss and org claim exists in DB
+        """GIVEN: Cache miss and org claim exists in DB
         WHEN: _resolve_git_org is called
-        THEN: Org ID is returned and cached
+        THEN: Org ID is returned and cached.
         """
         mock_redis = AsyncMock()
         mock_redis.get = AsyncMock(return_value=None)  # Cache miss
@@ -167,10 +164,9 @@ class TestResolveGitOrg:
 
     @pytest.mark.asyncio
     async def test_resolve_git_org_cache_hit(self, mock_token_manager):
-        """
-        GIVEN: Org ID is cached in Redis
+        """GIVEN: Org ID is cached in Redis
         WHEN: _resolve_git_org is called
-        THEN: Cached value is returned without calling resolve_org_for_repo
+        THEN: Cached value is returned without calling resolve_org_for_repo.
         """
         cached_org_id = '12345678-1234-5678-1234-567812345678'
         mock_redis = AsyncMock()
@@ -192,10 +188,9 @@ class TestResolveGitOrg:
 
     @pytest.mark.asyncio
     async def test_resolve_git_org_cache_miss_not_found(self, mock_token_manager):
-        """
-        GIVEN: Cache miss and org claim does NOT exist in DB
+        """GIVEN: Cache miss and org claim does NOT exist in DB
         WHEN: _resolve_git_org is called
-        THEN: None is returned and negative result is cached
+        THEN: None is returned and negative result is cached.
         """
         mock_redis = AsyncMock()
         mock_redis.get = AsyncMock(return_value=None)  # Cache miss
@@ -223,10 +218,9 @@ class TestResolveGitOrg:
 
     @pytest.mark.asyncio
     async def test_resolve_git_org_negative_cache_hit(self, mock_token_manager):
-        """
-        GIVEN: Negative result is cached (org not claimed)
+        """GIVEN: Negative result is cached (org not claimed)
         WHEN: _resolve_git_org is called
-        THEN: None is returned without calling resolve_org_for_repo
+        THEN: None is returned without calling resolve_org_for_repo.
         """
         mock_redis = AsyncMock()
         mock_redis.get = AsyncMock(return_value=b'none')  # Cached negative
@@ -250,10 +244,9 @@ class TestResolveGitOrg:
     async def test_resolve_git_org_includes_provider_in_cache_key(
         self, mock_token_manager, mock_org_git_claim
     ):
-        """
-        GIVEN: GitHub provider with an org name
+        """GIVEN: GitHub provider with an org name
         WHEN: _resolve_git_org is called
-        THEN: Cache key includes the provider name
+        THEN: Cache key includes the provider name.
         """
         mock_redis = AsyncMock()
         mock_redis.get = AsyncMock(return_value=None)
@@ -282,10 +275,9 @@ class TestResolvePersonalOrg:
 
     @pytest.mark.asyncio
     async def test_resolve_personal_org_cache_miss_found(self, mock_token_manager):
-        """
-        GIVEN: Cache miss and user exists in Keycloak
+        """GIVEN: Cache miss and user exists in Keycloak
         WHEN: _resolve_personal_org is called
-        THEN: Keycloak ID is returned and cached
+        THEN: Keycloak ID is returned and cached.
         """
         keycloak_id = '87654321-4321-8765-4321-876543218765'
         mock_token_manager.get_user_id_from_idp_user_id = AsyncMock(
@@ -305,10 +297,9 @@ class TestResolvePersonalOrg:
 
     @pytest.mark.asyncio
     async def test_resolve_personal_org_cache_hit(self, mock_token_manager):
-        """
-        GIVEN: Keycloak ID is cached in Redis
+        """GIVEN: Keycloak ID is cached in Redis
         WHEN: _resolve_personal_org is called
-        THEN: Cached value is returned without Keycloak query
+        THEN: Cached value is returned without Keycloak query.
         """
         keycloak_id = '87654321-4321-8765-4321-876543218765'
         mock_redis = AsyncMock()
@@ -324,10 +315,9 @@ class TestResolvePersonalOrg:
 
     @pytest.mark.asyncio
     async def test_resolve_personal_org_no_user_id(self, mock_token_manager):
-        """
-        GIVEN: No provider user ID provided
+        """GIVEN: No provider user ID provided
         WHEN: _resolve_personal_org is called
-        THEN: None is returned immediately
+        THEN: None is returned immediately.
         """
         service = create_service(mock_token_manager)
         result = await service._resolve_personal_org(ProviderType.GITHUB, None)
@@ -338,10 +328,9 @@ class TestResolvePersonalOrg:
     async def test_resolve_personal_org_includes_provider_in_cache_key(
         self, mock_token_manager
     ):
-        """
-        GIVEN: GitHub provider with a user ID
+        """GIVEN: GitHub provider with a user ID
         WHEN: _resolve_personal_org is called
-        THEN: Cache key includes the provider name
+        THEN: Cache key includes the provider name.
         """
         keycloak_id = '87654321-4321-8765-4321-876543218765'
         mock_token_manager.get_user_id_from_idp_user_id = AsyncMock(
@@ -370,10 +359,9 @@ class TestForwardEvent:
     async def test_forward_org_event_success(
         self, mock_token_manager, github_org_payload, mock_org_git_claim
     ):
-        """
-        GIVEN: A GitHub event from a claimed organization repo
+        """GIVEN: A GitHub event from a claimed organization repo
         WHEN: forward_event is called
-        THEN: Minimal payload is forwarded (no access_control)
+        THEN: Minimal payload is forwarded (no access_control).
         """
         from server.services.automation_event_service import AutomationEventService
 
@@ -417,10 +405,9 @@ class TestForwardEvent:
     async def test_forward_personal_repo_event_success(
         self, mock_token_manager, github_user_payload
     ):
-        """
-        GIVEN: A GitHub event from a personal repo with linked OpenHands account
+        """GIVEN: A GitHub event from a personal repo with linked OpenHands account
         WHEN: forward_event is called
-        THEN: Event is forwarded using the user's personal org (keycloak ID)
+        THEN: Event is forwarded using the user's personal org (keycloak ID).
         """
         from server.services.automation_event_service import AutomationEventService
 
@@ -464,10 +451,9 @@ class TestForwardEvent:
 
     @pytest.mark.asyncio
     async def test_forward_event_no_owner_in_payload(self, mock_token_manager):
-        """
-        GIVEN: A GitHub event with no repository owner in payload
+        """GIVEN: A GitHub event with no repository owner in payload
         WHEN: forward_event is called
-        THEN: Event is skipped with warning log
+        THEN: Event is skipped with warning log.
         """
         from server.services.automation_event_service import AutomationEventService
 
@@ -499,10 +485,9 @@ class TestForwardEvent:
     async def test_forward_event_org_not_claimed_and_not_personal(
         self, mock_token_manager, github_org_payload
     ):
-        """
-        GIVEN: A GitHub event from an org that isn't claimed (and isn't personal)
+        """GIVEN: A GitHub event from an org that isn't claimed (and isn't personal)
         WHEN: forward_event is called
-        THEN: Event is skipped with warning log
+        THEN: Event is skipped with warning log.
         """
         from server.services.automation_event_service import AutomationEventService
 
@@ -539,10 +524,9 @@ class TestForwardEvent:
     async def test_forward_bitbucket_dc_project_event_success(
         self, mock_token_manager, bitbucket_dc_pr_payload, mock_org_git_claim
     ):
-        """
-        GIVEN: A Bitbucket DC event from a claimed project
+        """GIVEN: A Bitbucket DC event from a claimed project
         WHEN: forward_event is called
-        THEN: The project key is used as the git org for routing
+        THEN: The project key is used as the git org for routing.
         """
         from server.services.automation_event_service import AutomationEventService
 
@@ -588,10 +572,9 @@ class TestExtractOwnerInfo:
     """Tests for _extract_owner_info method."""
 
     def test_extract_github_owner_info(self, mock_token_manager, github_org_payload):
-        """
-        GIVEN: A GitHub webhook payload
+        """GIVEN: A GitHub webhook payload
         WHEN: _extract_owner_info is called
-        THEN: GitHub owner info is correctly extracted
+        THEN: GitHub owner info is correctly extracted.
         """
         service = create_service(mock_token_manager)
         git_org, owner_type, owner_id = service._extract_owner_info(
@@ -605,10 +588,9 @@ class TestExtractOwnerInfo:
     def test_extract_github_user_owner_info(
         self, mock_token_manager, github_user_payload
     ):
-        """
-        GIVEN: A GitHub webhook payload from a personal repo
+        """GIVEN: A GitHub webhook payload from a personal repo
         WHEN: _extract_owner_info is called
-        THEN: User owner info is correctly extracted
+        THEN: User owner info is correctly extracted.
         """
         service = create_service(mock_token_manager)
         git_org, owner_type, owner_id = service._extract_owner_info(
@@ -622,10 +604,9 @@ class TestExtractOwnerInfo:
     def test_extract_bitbucket_dc_pr_owner_info(
         self, mock_token_manager, bitbucket_dc_pr_payload
     ):
-        """
-        GIVEN: A Bitbucket DC PR payload
+        """GIVEN: A Bitbucket DC PR payload
         WHEN: _extract_owner_info is called
-        THEN: The target repository project key is used as the org
+        THEN: The target repository project key is used as the org.
         """
         service = create_service(mock_token_manager)
         git_org, owner_type, owner_id = service._extract_owner_info(
@@ -639,10 +620,9 @@ class TestExtractOwnerInfo:
     def test_extract_bitbucket_dc_repo_owner_info(
         self, mock_token_manager, bitbucket_dc_repo_payload
     ):
-        """
-        GIVEN: A Bitbucket DC repository payload
+        """GIVEN: A Bitbucket DC repository payload
         WHEN: _extract_owner_info is called
-        THEN: The repository project key is used as the org
+        THEN: The repository project key is used as the org.
         """
         service = create_service(mock_token_manager)
         git_org, owner_type, owner_id = service._extract_owner_info(
@@ -658,10 +638,9 @@ class TestBuildEventPayload:
     """Tests for _build_event_payload method."""
 
     def test_build_minimal_payload(self, mock_token_manager):
-        """
-        GIVEN: Org context and payload
+        """GIVEN: Org context and payload
         WHEN: _build_event_payload is called
-        THEN: Minimal payload with only org + payload is returned
+        THEN: Minimal payload with only org + payload is returned.
         """
         from server.services.automation_event_service import OrgContext
 
@@ -691,12 +670,10 @@ class TestSendToAutomationService:
 
     @pytest.mark.asyncio
     async def test_send_success(self, mock_token_manager):
-        """
-        GIVEN: AUTOMATION_SERVICE_URL is configured
+        """GIVEN: AUTOMATION_SERVICE_URL is configured
         WHEN: _send_to_automation_service is called
-        THEN: Request is sent with correct signature and provider in URL
+        THEN: Request is sent with correct signature and provider in URL.
         """
-
         org_id = uuid.UUID('12345678-1234-5678-1234-567812345678')
         payload = {'organization': {'git_org': 'test'}, 'payload': {}}
 
@@ -740,10 +717,9 @@ class TestSendToAutomationService:
 
     @pytest.mark.asyncio
     async def test_send_includes_provider_in_url(self, mock_token_manager):
-        """
-        GIVEN: GitHub provider
+        """GIVEN: GitHub provider
         WHEN: _send_to_automation_service is called
-        THEN: The URL includes the provider name
+        THEN: The URL includes the provider name.
         """
         org_id = uuid.UUID('12345678-1234-5678-1234-567812345678')
         payload = {}
@@ -784,10 +760,9 @@ class TestSendToAutomationService:
 
     @pytest.mark.asyncio
     async def test_forward_jira_dc_event_uses_jira_dc_source(self, mock_token_manager):
-        """
-        GIVEN: A Jira DC webhook and resolved OpenHands org
+        """GIVEN: A Jira DC webhook and resolved OpenHands org
         WHEN: forward_jira_dc_event is called
-        THEN: The event is forwarded to the jira_dc automation source
+        THEN: The event is forwarded to the jira_dc automation source.
         """
         org_id = uuid.UUID('12345678-1234-5678-1234-567812345678')
         payload = {'webhookEvent': 'comment_created'}
@@ -819,10 +794,9 @@ class TestSendToAutomationService:
 
     @pytest.mark.asyncio
     async def test_send_no_url_configured(self, mock_token_manager):
-        """
-        GIVEN: AUTOMATION_SERVICE_URL is not configured
+        """GIVEN: AUTOMATION_SERVICE_URL is not configured
         WHEN: _send_to_automation_service is called
-        THEN: Warning is logged and nothing is sent
+        THEN: Warning is logged and nothing is sent.
         """
         org_id = uuid.UUID('12345678-1234-5678-1234-567812345678')
         payload = {}
@@ -846,10 +820,9 @@ class TestSignPayload:
     """Tests for _sign_payload method."""
 
     def test_sign_payload(self, mock_token_manager):
-        """
-        GIVEN: A payload bytes
+        """GIVEN: A payload bytes
         WHEN: _sign_payload is called
-        THEN: HMAC-SHA256 signature is returned in correct format
+        THEN: HMAC-SHA256 signature is returned in correct format.
         """
         with patch(
             'server.services.automation_event_service.AUTOMATION_WEBHOOK_SECRET',
@@ -864,10 +837,9 @@ class TestSignPayload:
             assert len(signature) == 71  # 'sha256=' + 64 hex chars
 
     def test_sign_payload_uses_dedicated_secret(self, mock_token_manager):
-        """
-        GIVEN: AUTOMATION_WEBHOOK_SECRET is configured
+        """GIVEN: AUTOMATION_WEBHOOK_SECRET is configured
         WHEN: _sign_payload is called
-        THEN: The dedicated secret is used (not GitHub webhook secret)
+        THEN: The dedicated secret is used (not GitHub webhook secret).
         """
         import hashlib
         import hmac
@@ -898,10 +870,9 @@ class TestCacheHelpers:
 
     @pytest.mark.asyncio
     async def test_get_cached_value_hit(self, mock_token_manager):
-        """
-        GIVEN: Value exists in Redis cache
+        """GIVEN: Value exists in Redis cache
         WHEN: _get_cached_value is called
-        THEN: Decoded string value is returned
+        THEN: Decoded string value is returned.
         """
         mock_redis = AsyncMock()
         mock_redis.get = AsyncMock(return_value=b'cached-value')
@@ -914,10 +885,9 @@ class TestCacheHelpers:
 
     @pytest.mark.asyncio
     async def test_get_cached_value_miss(self, mock_token_manager):
-        """
-        GIVEN: Value does not exist in Redis cache
+        """GIVEN: Value does not exist in Redis cache
         WHEN: _get_cached_value is called
-        THEN: None is returned
+        THEN: None is returned.
         """
         mock_redis = AsyncMock()
         mock_redis.get = AsyncMock(return_value=None)
@@ -930,10 +900,9 @@ class TestCacheHelpers:
 
     @pytest.mark.asyncio
     async def test_get_cached_value_redis_unavailable(self, mock_token_manager):
-        """
-        GIVEN: Redis is unavailable
+        """GIVEN: Redis is unavailable
         WHEN: _get_cached_value is called
-        THEN: None is returned (graceful degradation)
+        THEN: None is returned (graceful degradation).
         """
         with patch(REDIS_PATCH, return_value=None):
             service = create_service(mock_token_manager)
@@ -943,10 +912,9 @@ class TestCacheHelpers:
 
     @pytest.mark.asyncio
     async def test_set_cached_value_success(self, mock_token_manager):
-        """
-        GIVEN: Redis is available
+        """GIVEN: Redis is available
         WHEN: _set_cached_value is called
-        THEN: Value is stored with TTL
+        THEN: Value is stored with TTL.
         """
         mock_redis = AsyncMock()
         mock_redis.setex = AsyncMock()
@@ -959,10 +927,9 @@ class TestCacheHelpers:
 
     @pytest.mark.asyncio
     async def test_set_cached_value_redis_unavailable(self, mock_token_manager):
-        """
-        GIVEN: Redis is unavailable
+        """GIVEN: Redis is unavailable
         WHEN: _set_cached_value is called
-        THEN: No error is raised (silent failure)
+        THEN: No error is raised (silent failure).
         """
         with patch(REDIS_PATCH, return_value=None):
             service = create_service(mock_token_manager)

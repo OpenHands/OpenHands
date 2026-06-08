@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
 
-from integrations.models import JobContext
 from jinja2 import Environment
+from openhands.app_server.user_auth.user_auth import UserAuth
+
+from integrations.models import JobContext
 from storage.jira_dc_user import JiraDcUser
 from storage.jira_dc_workspace import JiraDcWorkspace
-
-from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 class JiraDcViewInterface(ABC):

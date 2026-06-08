@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
 from server.routes.org_invitation_models import (
     EmailMismatchError,
     InvitationExpiredError,
@@ -67,15 +68,14 @@ class TestAcceptInvitationPostEndpoint:
     @pytest.fixture
     def auth_app(self):
         """Create a FastAPI app with dependency overrides for authenticated tests."""
-
         from openhands.app_server.user_auth import get_user_id
 
         app = FastAPI()
         app.include_router(accept_router)
 
         # Override the get_user_id dependency
-        app.dependency_overrides[get_user_id] = (
-            lambda: '87654321-4321-8765-4321-876543218765'
+        app.dependency_overrides[get_user_id] = lambda: (
+            '87654321-4321-8765-4321-876543218765'
         )
 
         return app
@@ -206,8 +206,8 @@ class TestCreateInvitationBatchEndpoint:
         app.include_router(invitation_router)
 
         # Override the get_user_id dependency
-        app.dependency_overrides[get_user_id] = (
-            lambda: '87654321-4321-8765-4321-876543218765'
+        app.dependency_overrides[get_user_id] = lambda: (
+            '87654321-4321-8765-4321-876543218765'
         )
 
         return app

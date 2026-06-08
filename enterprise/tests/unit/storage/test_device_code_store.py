@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 from sqlalchemy import select
+
 from storage.device_code import DeviceCode
 from storage.device_code_store import DeviceCodeStore
 

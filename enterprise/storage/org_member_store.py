@@ -1,24 +1,22 @@
-"""
-Store class for managing organization-member relationships.
-"""
+"""Store class for managing organization-member relationships."""
 
 from typing import Any, Optional
 from uuid import UUID
-
-from server.routes.org_models import OrgMemberSettingsUpdate
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
-from storage.database import a_session_maker
-from storage.org_member import OrgMember
-from storage.user import User
-from storage.user_settings import UserSettings
 
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.utils.jsonpatch_compat import (
     deep_merge,
     deep_merge_with_wholesale_keys,
 )
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
+
+from server.routes.org_models import OrgMemberSettingsUpdate
+from storage.database import a_session_maker
+from storage.org_member import OrgMember
+from storage.user import User
+from storage.user_settings import UserSettings
 
 
 class OrgMemberStore:

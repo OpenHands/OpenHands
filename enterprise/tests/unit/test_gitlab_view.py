@@ -9,6 +9,7 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
+
 from integrations.gitlab.gitlab_view import GitlabIssue
 from integrations.models import Message, SourceType
 from integrations.types import UserData

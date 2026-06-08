@@ -1,11 +1,10 @@
-"""
-SQLAlchemy model for Role.
-"""
+"""SQLAlchemy model for Role."""
 
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Identity, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from storage.base import Base
 
 if TYPE_CHECKING:

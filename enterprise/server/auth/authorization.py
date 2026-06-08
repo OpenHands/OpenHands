@@ -1,5 +1,4 @@
-"""
-Permission-based authorization dependencies for API endpoints.
+"""Permission-based authorization dependencies for API endpoints.
 
 This module provides FastAPI dependencies for checking user permissions
 within organizations. It uses a permission-based authorization model where
@@ -36,12 +35,12 @@ from enum import Enum
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
+from openhands.app_server.user_auth import get_user_auth, get_user_id
+from openhands.app_server.utils.logger import openhands_logger as logger
+
 from storage.org_member_store import OrgMemberStore
 from storage.role import Role
 from storage.role_store import RoleStore
-
-from openhands.app_server.user_auth import get_user_auth, get_user_id
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class Permission(str, Enum):
@@ -174,8 +173,7 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
 
 
 async def get_user_org_role(user_id: str, org_id: UUID | None) -> Role | None:
-    """
-    Get the user's role in an organization.
+    """Get the user's role in an organization.
 
     Args:
         user_id: User ID (string that will be converted to UUID)
@@ -199,8 +197,7 @@ async def get_user_org_role(user_id: str, org_id: UUID | None) -> Role | None:
 
 
 def get_role_permissions(role_name: str) -> frozenset[Permission]:
-    """
-    Get the permissions for a role.
+    """Get the permissions for a role.
 
     Args:
         role_name: Name of the role
@@ -216,8 +213,7 @@ def get_role_permissions(role_name: str) -> frozenset[Permission]:
 
 
 def has_permission(user_role: Role, permission: Permission) -> bool:
-    """
-    Check if a role has a specific permission.
+    """Check if a role has a specific permission.
 
     Args:
         user_role: User's Role object
@@ -244,8 +240,7 @@ async def get_api_key_org_id_from_request(request: Request) -> UUID | None:
 
 
 def require_permission(permission: Permission):
-    """
-    Factory function that creates a dependency to require a specific permission.
+    """Factory function that creates a dependency to require a specific permission.
 
     This creates a FastAPI dependency that:
     1. Extracts org_id from the path parameter
@@ -346,8 +341,7 @@ async def require_financial_data_access(
     org_id: UUID,
     user_id: str | None = Depends(get_user_id),
 ) -> str:
-    """
-    Authorization dependency for accessing organization financial data.
+    """Authorization dependency for accessing organization financial data.
 
     Allows access if ANY of these conditions are met:
     1. User has Admin or Owner role in the organization

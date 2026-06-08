@@ -1,5 +1,4 @@
-"""
-Tests for JiraIntegrationStore async methods.
+"""Tests for JiraIntegrationStore async methods.
 
 The store uses async database sessions (a_session_maker) for all operations,
 which is critical for avoiding asyncpg event loop issues when called from
@@ -10,6 +9,7 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+
 from storage.jira_integration_store import JiraIntegrationStore
 from storage.jira_user import JiraUser
 from storage.jira_workspace import JiraWorkspace

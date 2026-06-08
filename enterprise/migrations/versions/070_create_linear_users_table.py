@@ -1,4 +1,4 @@
-"""create linear_users table
+"""create linear_users table.
 
 Revision ID: 070
 Revises: 069

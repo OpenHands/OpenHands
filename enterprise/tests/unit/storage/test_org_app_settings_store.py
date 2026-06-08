@@ -1,5 +1,4 @@
-"""
-Unit tests for OrgAppSettingsStore.
+"""Unit tests for OrgAppSettingsStore.
 
 Tests the async database operations for organization app settings.
 """
@@ -7,9 +6,10 @@ Tests the async database operations for organization app settings.
 import uuid
 
 import pytest
-from server.routes.org_models import OrgAppSettingsUpdate
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
+
+from server.routes.org_models import OrgAppSettingsUpdate
 from storage.base import Base
 from storage.org import Org
 from storage.org_app_settings_store import OrgAppSettingsStore
@@ -39,10 +39,9 @@ async def async_session_maker(async_engine):
 
 @pytest.mark.asyncio
 async def test_get_current_org_by_user_id_success(async_session_maker):
-    """
-    GIVEN: A user exists with a current organization
+    """GIVEN: A user exists with a current organization
     WHEN: get_current_org_by_user_id is called with the user's ID
-    THEN: The organization is returned with correct data
+    THEN: The organization is returned with correct data.
     """
     # Arrange
     async with async_session_maker() as session:
@@ -75,10 +74,9 @@ async def test_get_current_org_by_user_id_success(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_get_current_org_by_user_id_user_not_found(async_session_maker):
-    """
-    GIVEN: A user does not exist in the database
+    """GIVEN: A user does not exist in the database
     WHEN: get_current_org_by_user_id is called with a non-existent ID
-    THEN: None is returned
+    THEN: None is returned.
     """
     # Arrange
     non_existent_id = str(uuid.uuid4())
@@ -94,10 +92,9 @@ async def test_get_current_org_by_user_id_user_not_found(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_update_org_app_settings_success(async_session_maker):
-    """
-    GIVEN: An organization exists in the database
+    """GIVEN: An organization exists in the database
     WHEN: update_org_app_settings is called with new values
-    THEN: The organization's settings are updated and returned
+    THEN: The organization's settings are updated and returned.
     """
     # Arrange
     async with async_session_maker() as session:
@@ -127,10 +124,9 @@ async def test_update_org_app_settings_success(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_update_org_app_settings_partial(async_session_maker):
-    """
-    GIVEN: An organization exists with existing settings
+    """GIVEN: An organization exists with existing settings
     WHEN: update_org_app_settings is called with only some fields
-    THEN: Only the provided fields are updated, others remain unchanged
+    THEN: Only the provided fields are updated, others remain unchanged.
     """
     # Arrange
     async with async_session_maker() as session:
@@ -158,10 +154,9 @@ async def test_update_org_app_settings_partial(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_update_org_app_settings_org_not_found(async_session_maker):
-    """
-    GIVEN: An organization does not exist in the database
+    """GIVEN: An organization does not exist in the database
     WHEN: update_org_app_settings is called
-    THEN: None is returned
+    THEN: None is returned.
     """
     # Arrange
     non_existent_id = uuid.uuid4()

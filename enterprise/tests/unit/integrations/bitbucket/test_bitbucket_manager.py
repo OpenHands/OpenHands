@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
 from integrations.bitbucket.bitbucket_manager import BitbucketManager
 from integrations.bitbucket.bitbucket_view import (
     BitbucketInlinePRComment,
@@ -90,13 +91,13 @@ def _inline_view() -> BitbucketInlinePRComment:
 async def test_receive_message_dispatches_when_commenter_has_write_access() -> None:
     manager = BitbucketManager(AsyncMock())
 
-    with patch.object(
-        manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
-    ), patch.object(
-        manager, '_commenter_has_write_access', return_value=True
-    ), patch.object(
-        manager, 'start_job', new=AsyncMock()
-    ) as mock_start:
+    with (
+        patch.object(
+            manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
+        ),
+        patch.object(manager, '_commenter_has_write_access', return_value=True),
+        patch.object(manager, 'start_job', new=AsyncMock()) as mock_start,
+    ):
         await manager.receive_message(_comment_message())
 
     mock_start.assert_awaited_once()
@@ -106,13 +107,13 @@ async def test_receive_message_dispatches_when_commenter_has_write_access() -> N
 async def test_receive_message_skips_when_commenter_lacks_write_access() -> None:
     manager = BitbucketManager(AsyncMock())
 
-    with patch.object(
-        manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
-    ), patch.object(
-        manager, '_commenter_has_write_access', return_value=False
-    ), patch.object(
-        manager, 'start_job', new=AsyncMock()
-    ) as mock_start:
+    with (
+        patch.object(
+            manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
+        ),
+        patch.object(manager, '_commenter_has_write_access', return_value=False),
+        patch.object(manager, 'start_job', new=AsyncMock()) as mock_start,
+    ):
         await manager.receive_message(_comment_message())
 
     mock_start.assert_not_called()
@@ -122,9 +123,10 @@ async def test_receive_message_skips_when_commenter_lacks_write_access() -> None
 async def test_receive_message_skips_when_no_installer_recorded_for_webhook() -> None:
     manager = BitbucketManager(AsyncMock())
 
-    with patch.object(
-        manager.webhook_store, 'get_webhook_user_id', return_value=None
-    ), patch.object(manager, 'start_job', new=AsyncMock()) as mock_start:
+    with (
+        patch.object(manager.webhook_store, 'get_webhook_user_id', return_value=None),
+        patch.object(manager, 'start_job', new=AsyncMock()) as mock_start,
+    ):
         await manager.receive_message(_comment_message())
 
     mock_start.assert_not_called()

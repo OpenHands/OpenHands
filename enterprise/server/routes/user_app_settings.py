@@ -6,6 +6,8 @@ Provides endpoints for managing user-level app preferences:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from openhands.app_server.utils.logger import openhands_logger as logger
+
 from server.routes.user_app_settings_models import (
     UserAppSettingsResponse,
     UserAppSettingsUpdate,
@@ -15,8 +17,6 @@ from server.services.user_app_settings_service import (
     UserAppSettingsService,
     UserAppSettingsServiceInjector,
 )
-
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 user_app_settings_router = APIRouter(prefix='/api/users')
 

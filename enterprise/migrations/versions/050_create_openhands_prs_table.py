@@ -1,4 +1,4 @@
-"""Create openhands_prs table
+"""Create openhands_prs table.
 
 Revision ID: 050
 Revises: 049

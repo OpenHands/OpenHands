@@ -1,4 +1,4 @@
-"""add parent_id column and index to slack conversation table
+"""add parent_id column and index to slack conversation table.
 
 Revision ID: 043
 Revises: 042

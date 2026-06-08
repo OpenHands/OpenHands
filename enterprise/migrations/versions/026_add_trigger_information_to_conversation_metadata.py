@@ -1,4 +1,4 @@
-"""add branch column to convo metadata table
+"""add branch column to convo metadata table.
 
 Revision ID: 026
 Revises: 025

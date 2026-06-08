@@ -19,6 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
+
 from server.routes.analytics_events import (
     CreatePrButtonClickedEvent,
     track_frontend_event,
@@ -28,7 +29,8 @@ from server.routes.analytics_events import (
 @pytest.mark.asyncio
 async def test_returns_ok_and_forwards_event_on_happy_path():
     """Endpoint forwards the event to capture() with the right event name
-    and properties (event_type is stripped from properties)."""
+    and properties (event_type is stripped from properties).
+    """
     mock_analytics = MagicMock()
     mock_ctx = MagicMock(org_id='org-123')
 
@@ -143,7 +145,8 @@ async def test_swallows_analytics_exceptions():
 @pytest.mark.asyncio
 async def test_accepts_missing_git_provider():
     """Properties default to None when the payload omits them; the event
-    still fires with the default included in properties."""
+    still fires with the default included in properties.
+    """
     mock_analytics = MagicMock()
 
     with (
@@ -173,7 +176,8 @@ async def test_accepts_missing_git_provider():
 
 def test_payload_rejects_unknown_event_type():
     """Pydantic must reject event_type values not in the allow-list so
-    unknown events never reach PostHog."""
+    unknown events never reach PostHog.
+    """
     with pytest.raises(ValidationError):
         CreatePrButtonClickedEvent.model_validate(
             {'event_type': 'attacker_event', 'git_provider': 'github'}
@@ -182,7 +186,8 @@ def test_payload_rejects_unknown_event_type():
 
 def test_payload_rejects_unknown_git_provider():
     """Provider Literal must reject unknown values so arbitrary
-    client-controlled strings never become PostHog properties."""
+    client-controlled strings never become PostHog properties.
+    """
     with pytest.raises(ValidationError):
         CreatePrButtonClickedEvent.model_validate(
             {
@@ -194,7 +199,8 @@ def test_payload_rejects_unknown_git_provider():
 
 def test_payload_accepts_all_known_git_providers():
     """Sanity check that every Provider value the frontend can produce
-    is accepted by the typed payload (kept in sync with ProviderOptions)."""
+    is accepted by the typed payload (kept in sync with ProviderOptions).
+    """
     for provider in (
         'github',
         'gitlab',

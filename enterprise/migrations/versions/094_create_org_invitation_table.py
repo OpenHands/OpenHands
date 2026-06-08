@@ -1,4 +1,4 @@
-"""create org_invitation table
+"""create org_invitation table.
 
 Revision ID: 094
 Revises: 093

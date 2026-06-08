@@ -1,4 +1,4 @@
-"""create linear_workspaces table
+"""create linear_workspaces table.
 
 Revision ID: 069
 Revises: 068
