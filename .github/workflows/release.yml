@@ -21,6 +21,16 @@ name: release
 # push isn't suppressed by GitHub's recursion guard). The existing tag-driven
 # workflows then fire: tag-image.yml retags the images, and pypi-release.yml
 # publishes the PyPI package for bare (non-`cloud-`, non-`-cli`) tags.
+#
+# BOOTSTRAP — remove after the first release PR of each line is merged:
+# Both release-please-config*.json carry a top-level `last-release-sha`. The
+# pre-existing 1.7.0 / cloud-1.37.3 tags live on the old release branches
+# (oss-rel-*, saas-rel-*) and aren't reachable from main, so release-please
+# can't bound the first release and would re-announce months of already-shipped
+# commits as new. Each `last-release-sha` pins the start to that line's last
+# divergence from main. It is evaluated on EVERY run (never ignored), so once the
+# first release PR merges and release-please has an on-main release to anchor on,
+# DELETE both `last-release-sha` lines — otherwise they keep capping future runs.
 on:
   push:
     branches:
