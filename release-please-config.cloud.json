@@ -4,26 +4,13 @@
   "packages": {
     ".": {
       "release-type": "simple",
-      "changelog-type": "default",
+      "changelog-type": "github",
       "skip-changelog": true,
       "component": "cloud",
       "include-component-in-tag": true,
       "include-v-in-tag": false,
       "include-v-in-release-name": false,
-      "tag-separator": "-",
-      "changelog-sections": [
-        { "type": "feat", "section": "Features" },
-        { "type": "fix", "section": "Bug Fixes" },
-        { "type": "perf", "section": "Performance Improvements" },
-        { "type": "revert", "section": "Reverts" },
-        { "type": "docs", "section": "Documentation" },
-        { "type": "refactor", "section": "Code Refactoring" },
-        { "type": "test", "section": "Tests" },
-        { "type": "build", "section": "Build System" },
-        { "type": "ci", "section": "Continuous Integration" },
-        { "type": "chore", "section": "Miscellaneous Chores" },
-        { "type": "style", "section": "Styles" }
-      ]
+      "tag-separator": "-"
     }
   }
 }
