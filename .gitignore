@@ -260,3 +260,6 @@ runtime_*.tar
 test-results
 .sessions
 .eval_sessions
+
+# slop-mop working directory (machine-local state)
+.slopmop/
