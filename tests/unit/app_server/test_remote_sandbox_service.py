@@ -1023,131 +1023,17 @@ class TestGetSandboxBySessionApiKey:
     async def test_get_sandbox_by_session_api_key_not_found(
         self, remote_sandbox_service
     ):
-        """Test finding sandbox when no matching hash exists and legacy fallback fails."""
-        # Setup - no hash match
-        mock_result_no_hash = MagicMock()
-        mock_result_no_hash.scalar_one_or_none.return_value = None
-
-        # Setup - legacy fallback: /list API fails, then no stored sandboxes
-        mock_response = MagicMock()
-        mock_response.raise_for_status.side_effect = Exception('API error')
-        remote_sandbox_service.httpx_client.request = AsyncMock(
-            return_value=mock_response
-        )
-
-        mock_result_legacy = MagicMock()
-        mock_result_legacy.scalars.return_value.all.return_value = []
-
-        remote_sandbox_service.db_session.execute = AsyncMock(
-            side_effect=[mock_result_no_hash, mock_result_legacy]
-        )
+        """Test that None is returned when no sandbox matches the session API key hash."""
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
         remote_sandbox_service.user_context.get_user_id.return_value = 'test-user-123'
 
-        # Execute
         result = await remote_sandbox_service.get_sandbox_by_session_api_key(
             'unknown-key'
         )
 
-        # Verify
         assert result is None
-
-    @pytest.mark.asyncio
-    async def test_get_sandbox_by_session_api_key_legacy_via_list_api(
-        self, remote_sandbox_service
-    ):
-        """Test legacy fallback finding sandbox via /list API and backfilling hash."""
-        from openhands.app_server.sandbox.remote_sandbox_service import (
-            _hash_session_api_key,
-        )
-
-        # Setup
-        session_api_key = 'test-session-key'
-        stored_sandbox = create_stored_sandbox(
-            session_api_key_hash=None
-        )  # Legacy sandbox
-        runtime_data = create_runtime_data(session_api_key=session_api_key)
-
-        # First call returns None (no hash match)
-        mock_result_no_match = MagicMock()
-        mock_result_no_match.scalar_one_or_none.return_value = None
-
-        # Legacy fallback: /list API returns the runtime
-        mock_response = MagicMock()
-        mock_response.raise_for_status.return_value = None
-        mock_response.json.return_value = {'runtimes': [runtime_data]}
-        remote_sandbox_service.httpx_client.request = AsyncMock(
-            return_value=mock_response
-        )
-
-        # Query for sandbox by session_id returns the stored sandbox
-        mock_result_sandbox = MagicMock()
-        mock_result_sandbox.scalar_one_or_none.return_value = stored_sandbox
-
-        remote_sandbox_service.db_session.execute = AsyncMock(
-            side_effect=[mock_result_no_match, mock_result_sandbox]
-        )
-        remote_sandbox_service.user_context.get_user_id.return_value = 'test-user-123'
-
-        # Execute
-        result = await remote_sandbox_service.get_sandbox_by_session_api_key(
-            session_api_key
-        )
-
-        # Verify
-        assert result is not None
-        assert result.id == 'test-sandbox-123'
-        # Verify the hash was backfilled
-        expected_hash = _hash_session_api_key(session_api_key)
-        assert stored_sandbox.session_api_key_hash == expected_hash
-
-    @pytest.mark.asyncio
-    async def test_get_sandbox_by_session_api_key_legacy_via_runtime_check(
-        self, remote_sandbox_service
-    ):
-        """Test legacy fallback checking each sandbox's runtime when /list API fails."""
-        from openhands.app_server.sandbox.remote_sandbox_service import (
-            _hash_session_api_key,
-        )
-
-        # Setup
-        session_api_key = 'test-session-key'
-        stored_sandbox = create_stored_sandbox(
-            session_api_key_hash=None
-        )  # Legacy sandbox
-        runtime_data = create_runtime_data(session_api_key=session_api_key)
-
-        # First call returns None (no hash match)
-        mock_result_no_match = MagicMock()
-        mock_result_no_match.scalar_one_or_none.return_value = None
-
-        # Legacy fallback: /list API fails
-        mock_response = MagicMock()
-        mock_response.raise_for_status.side_effect = Exception('API error')
-        remote_sandbox_service.httpx_client.request = AsyncMock(
-            return_value=mock_response
-        )
-
-        # Get all stored sandboxes returns the legacy sandbox
-        mock_result_all = MagicMock()
-        mock_result_all.scalars.return_value.all.return_value = [stored_sandbox]
-
-        remote_sandbox_service.db_session.execute = AsyncMock(
-            side_effect=[mock_result_no_match, mock_result_all]
-        )
-        remote_sandbox_service._get_runtime = AsyncMock(return_value=runtime_data)
-        remote_sandbox_service.user_context.get_user_id.return_value = 'test-user-123'
-
-        # Execute
-        result = await remote_sandbox_service.get_sandbox_by_session_api_key(
-            session_api_key
-        )
-
-        # Verify
-        assert result is not None
-        assert result.id == 'test-sandbox-123'
-        # Verify the hash was backfilled
-        expected_hash = _hash_session_api_key(session_api_key)
-        assert stored_sandbox.session_api_key_hash == expected_hash
 
     @pytest.mark.asyncio
     async def test_get_sandbox_by_session_api_key_runtime_error(

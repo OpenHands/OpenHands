@@ -1191,6 +1191,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     def _configure_llm(self, user: UserInfo, llm_model: str | None) -> LLM:
         """Configure LLM settings.
 
+        Starts from the user's saved LLM configuration and overrides only
+        the fields that the server needs to resolve (model name, base URL,
+        and usage ID).  All other user-configured fields (e.g.
+        ``reasoning_effort``, ``extended_thinking_budget``, ``drop_params``)
+        are preserved so that they reach the agent-server unchanged.
+
         Args:
             user: User information containing LLM preferences
             llm_model: Optional specific model to use, falls back to user default
@@ -1210,11 +1216,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             provider_base_url=self.openhands_provider_base_url,
         )
 
-        return LLM(
-            model=model,
-            base_url=base_url,
-            api_key=user.agent_settings.llm.api_key,
-            usage_id='agent',
+        return user.agent_settings.llm.model_copy(
+            update={
+                'model': model,
+                'base_url': base_url,
+                'api_key': user.agent_settings.llm.api_key,
+                'usage_id': 'agent',
+            }
         )
 
     async def _add_system_mcp_servers(
