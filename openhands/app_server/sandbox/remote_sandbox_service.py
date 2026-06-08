@@ -11,16 +11,17 @@ from uuid import UUID
 import base62
 import httpx
 from fastapi import Request
-from pydantic import Field
-from sqlalchemy import String, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column
-
 from openhands.agent_server.models import (
     ConversationInfo,
     EventPage,
 )
 from openhands.agent_server.utils import utc_now
+from openhands.sdk.utils.paging import page_iterator
+from pydantic import Field
+from sqlalchemy import String, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column
+
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
@@ -47,7 +48,6 @@ from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.sql_utils import Base, UtcDateTime
-from openhands.sdk.utils.paging import page_iterator
 
 _logger = logging.getLogger(__name__)
 polling_task: asyncio.Task | None = None
@@ -651,7 +651,9 @@ async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):
     This is because webhook callbacks cannot be invoked.
 
     IMPORTANT: DB sessions are scoped tightly to avoid holding connections across
-    network I/O. We use a "fetch -> release -> network -> re-acquire -> write" pattern.
+    network I/O. Services are imported locally inside the function bodies to
+    ensure they are resolved in the correct context. We use a
+    "fetch -> release -> network -> re-acquire -> write" pattern.
     """
     from openhands.app_server.config import (
         get_app_conversation_info_service,
