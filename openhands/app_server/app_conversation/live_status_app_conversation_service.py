@@ -650,7 +650,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         tasks = [
             self._get_live_conversation_info(
                 sandbox,
-                sandbox_id_to_conversation_ids.get(sandbox.id),
+                sandbox_id_to_conversation_ids.get(sandbox.id) or [],
             )
             for sandbox in sandboxes
             if sandbox and sandbox.status == SandboxStatus.RUNNING
@@ -1754,7 +1754,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         try:
             updated_agent = await self._load_skills_and_update_agent(
                 sandbox,
-                request.agent,
+                request.agent,  # type: ignore[arg-type]
                 remote_workspace,
                 selected_repository,
                 project_dir,

@@ -9,7 +9,7 @@ from typing import AsyncGenerator, Iterator
 
 from fastapi import Request
 from google.api_core.exceptions import NotFound
-from google.cloud import storage
+from google.cloud import storage  # type: ignore[attr-defined]
 from google.cloud.storage.blob import Blob
 from google.cloud.storage.bucket import Bucket
 from google.cloud.storage.client import Client
@@ -59,14 +59,14 @@ class GoogleCloudEventService(EventServiceBase):
         blob: Blob = self.bucket.blob(str(path))
         data = event.model_dump(mode='json')
         with blob.open('w') as f:
-            f.write(json.dumps(data, indent=2))
+            f.write(json.dumps(data, indent=2))  # type: ignore[arg-type]
 
     def _search_paths(self, prefix: Path, page_id: str | None = None) -> list[Path]:
         """Search paths."""
         blobs: Iterator[Blob] = self.bucket.list_blobs(
             page_token=page_id, prefix=str(prefix)
         )
-        paths = list(Path(blob.name) for blob in blobs)
+        paths = list(Path(blob.name or '') for blob in blobs)
         return paths
 
 

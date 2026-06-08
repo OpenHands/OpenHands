@@ -247,9 +247,9 @@ async def _handle_workspace_link_creation(  # noqa: ambiguity-mine
         )
 
 
-async def _validate_workspace_update_permissions(
+async def _validate_workspace_update_permissions(  # noqa: ambiguity-mine
     user_id: str, target_workspace: str
-):  # noqa: ambiguity-mine
+):
     """Validate that user can update the target workspace."""
     workspace = await jira_manager.integration_store.get_workspace_by_name(
         target_workspace
@@ -401,9 +401,9 @@ async def create_jira_workspace(request: Request, workspace_data: JiraWorkspaceC
 
 
 @jira_integration_router.post('/workspaces/link')
-async def create_workspace_link(
+async def create_workspace_link(  # noqa: ambiguity-mine
     request: Request, link_data: JiraLinkCreate
-):  # noqa: ambiguity-mine
+):
     """Register a user mapping to a Jira workspace."""
     try:
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
@@ -718,9 +718,9 @@ async def unlink_workspace(request: Request):  # noqa: ambiguity-mine
     '/workspaces/validate/{workspace_name}',
     response_model=JiraValidateWorkspaceResponse,
 )
-async def validate_workspace_integration(
+async def validate_workspace_integration(  # noqa: ambiguity-mine
     request: Request, workspace_name: str
-):  # noqa: ambiguity-mine
+):
     """Validate if the user's organization has an active Jira integration."""
     try:
         # Validate workspace_name format

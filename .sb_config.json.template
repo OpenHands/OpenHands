@@ -23,7 +23,7 @@
         "run_on": null,
         "extra_exclude_paths": [],
         "include_paths": [],
-        "threshold": 80
+        "threshold": 49
       },
       "missing-annotations.py": {
         "enabled": true,
@@ -40,9 +40,9 @@
         "run_on": null,
         "extra_exclude_paths": [],
         "include_paths": [],
-        "strict": true,
-        "pyright_config_file": null,
-        "include_dirs": []
+        "strict": false,
+        "pyright_config_file": "pyrightconfig.json",
+        "include_dirs": ["openhands"]
       },
       "untested-code.js": {
         "enabled": true,

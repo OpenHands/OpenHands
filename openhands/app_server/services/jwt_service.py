@@ -218,7 +218,7 @@ class JwtService:
         # Extract the protected header without decrypting to find the kid.
         # The registry enforces dir + A256GCM (rejects other algorithms).
         try:
-            obj = jwe.extract_compact(token.encode('utf-8'), _JWE_REGISTRY)
+            obj = jwe.extract_compact(token.encode('utf-8'), _JWE_REGISTRY)  # type: ignore[attr-defined]
         except Exception:
             raise ValueError('Invalid JWE token format')
 

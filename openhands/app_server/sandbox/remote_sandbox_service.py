@@ -125,6 +125,7 @@ class RemoteSandboxService(SandboxService):
         self, method: str, path: str, **kwargs: Any
     ) -> httpx.Response:
         """Send a request to the remote runtime API."""
+        url = ''
         try:
             url = self.api_url + path
             return await self.httpx_client.request(

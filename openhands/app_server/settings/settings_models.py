@@ -357,7 +357,7 @@ class Settings(BaseModel):
                 _coerce_dict_secrets(agent_settings)
             ).model_dump(mode='json', context={'expose_secrets': True})
         elif isinstance(agent_settings, (OpenHandsAgentSettings, ACPAgentSettings)):
-            data['agent_settings'] = agent_settings.model_dump(
+            data['agent_settings'] = agent_settings.model_dump(  # type: ignore[reportOptionalMemberAccess]
                 mode='json', context={'expose_secrets': True}
             )
 
@@ -368,7 +368,7 @@ class Settings(BaseModel):
                 conversation_settings
             ).model_dump(mode='json')
         elif isinstance(conversation_settings, ConversationSettings):
-            data['conversation_settings'] = conversation_settings.model_dump(
+            data['conversation_settings'] = conversation_settings.model_dump(  # type: ignore[reportOptionalMemberAccess]
                 mode='json'
             )
 

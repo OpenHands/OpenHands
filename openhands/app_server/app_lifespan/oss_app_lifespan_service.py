@@ -12,7 +12,7 @@ from openhands.app_server.app_lifespan.app_lifespan_service import AppLifespanSe
 class OssAppLifespanService(AppLifespanService):
     run_alembic_on_startup: bool = True
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> OssAppLifespanService:
         if self.run_alembic_on_startup:
             self.run_alembic()
         return self

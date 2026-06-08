@@ -436,7 +436,7 @@ class TestDockerSandboxService:
         assert (
             call_args[1]['environment']['OH_SESSION_API_KEYS_0'] == 'test_session_key'
         )
-        assert call_args[1]['ports'] == {8000: 12345, 8001: 12346}
+        assert call_args[1]['ports'] == {'8000': 12345, '8001': 12346}
         assert call_args[1]['working_dir'] == '/workspace'
         assert call_args[1]['detach'] is True
 

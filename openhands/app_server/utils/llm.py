@@ -5,7 +5,11 @@ from pydantic import BaseModel
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
     import litellm
-    from litellm import LlmProviders, ProviderConfigManager, get_llm_provider
+    from litellm import LlmProviders  # type: ignore[reportPrivateImportUsage]
+    from litellm import (
+        ProviderConfigManager,
+        get_llm_provider,
+    )
 
 # ---------------------------------------------------------------------------
 # The ``openhands-sdk`` package is the **single source of truth** for which

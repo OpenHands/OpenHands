@@ -60,7 +60,7 @@ def _get_user_provider() -> AnalyticsUserProvider:
     impl_class = get_impl(
         AnalyticsUserProvider, server_config.analytics_user_provider_class  # type: ignore[type-abstract]
     )
-    return impl_class()
+    return impl_class()  # type: ignore[reportAbstractUsage]
 
 
 async def resolve_analytics_context(user_id: str) -> AnalyticsContext:

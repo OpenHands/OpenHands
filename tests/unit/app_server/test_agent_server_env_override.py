@@ -958,4 +958,4 @@ class TestDockerSandboxServiceEnvIntegration:
             assert call_kwargs['network_mode'] is None
             # Port mappings should be present in bridge mode
             assert call_kwargs['ports'] is not None
-            assert 8000 in call_kwargs['ports']
+            assert '8000' in call_kwargs['ports']

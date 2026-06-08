@@ -12,7 +12,7 @@ class AppLifespanService(DiscriminatedUnionMixin, ABC):
         return self
 
     @abstractmethod
-    async def __aenter__(self):
+    async def __aenter__(self) -> AppLifespanService:
         """Open lifespan."""
 
     @abstractmethod

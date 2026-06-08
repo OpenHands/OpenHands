@@ -50,7 +50,9 @@ class AzureDevOpsMixinBase(BaseGitService, HTTPClient):
         """Parse repository string into organization, project, and repo name."""
         raise NotImplementedError('Implemented in AzureDevOpsServiceImpl')
 
-    def _truncate_comment(self, comment: str, max_length: int = 1000) -> str:
+    def _truncate_comment(
+        self, comment_body: str, max_comment_length: int = 1000
+    ) -> str:
         """Truncate comment to max length."""
         raise NotImplementedError('Implemented in AzureDevOpsServiceImpl')
 

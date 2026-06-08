@@ -116,10 +116,11 @@ class Secrets(BaseModel):
         if not isinstance(data, dict):
             raise ValueError('Secrets must be initialized with a dictionary')
 
+        dict_data: dict[str, Any] = data  # type: ignore[assignment]
         new_data: dict[str, MappingProxyType | None] = {}
 
-        if 'provider_tokens' in data:
-            tokens = data['provider_tokens']
+        if 'provider_tokens' in dict_data:
+            tokens = dict_data['provider_tokens']
             if isinstance(
                 tokens, dict
             ):  # Ensure conversion happens only for dict inputs
@@ -141,8 +142,8 @@ class Secrets(BaseModel):
             elif isinstance(tokens, MappingProxyType):
                 new_data['provider_tokens'] = tokens
 
-        if 'custom_secrets' in data:
-            secrets = data['custom_secrets']
+        if 'custom_secrets' in dict_data:
+            secrets = dict_data['custom_secrets']
             if isinstance(secrets, dict):
                 converted_secrets = {}
                 for key, value in secrets.items():

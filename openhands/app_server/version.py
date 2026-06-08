@@ -22,10 +22,10 @@ def get_version():
         pass
 
     try:
-        from importlib.metadata import PackageNotFoundError, version
+        import importlib.metadata
 
-        return version(__package_name__)
-    except (ImportError, PackageNotFoundError):
+        return importlib.metadata.version(__package_name__)
+    except Exception:
         pass
 
     try:

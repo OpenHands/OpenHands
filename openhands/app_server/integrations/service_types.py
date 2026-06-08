@@ -285,19 +285,23 @@ class GitService(Protocol):
         self, repository: str
     ) -> Repository:
         """Gets all repository details from repository name"""
+        ...
 
     async def get_branches(self, repository: str) -> list[Branch]:
         """Get branches for a repository"""
+        ...
 
     async def get_paginated_branches(
         self, repository: str, page: int = 1, per_page: int = 30
     ) -> PaginatedBranchesResponse:
         """Get branches for a repository with pagination"""
+        ...
 
     async def search_branches(
         self, repository: str, query: str, per_page: int = 30
     ) -> list[Branch]:
         """Search for branches within a repository"""
+        ...
 
     async def get_pr_details(self, repository: str, pr_number: int) -> dict:
         """Get detailed information about a specific pull request/merge request

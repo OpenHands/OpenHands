@@ -233,19 +233,19 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
         return None
 
     async def save_app_conversation_start_task(
-        self, task: AppConversationStartTask
+        self, info: AppConversationStartTask
     ) -> AppConversationStartTask:
         if self.user_id:
             query = select(StoredAppConversationStartTask).where(
-                StoredAppConversationStartTask.id == task.id
+                StoredAppConversationStartTask.id == info.id
             )
             result = await self.session.execute(query)
             existing = result.scalar_one_or_none()
             assert existing is None or existing.created_by_user_id == self.user_id
-        task.updated_at = utc_now()
-        await self.session.merge(StoredAppConversationStartTask(**task.model_dump()))
+        info.updated_at = utc_now()
+        await self.session.merge(StoredAppConversationStartTask(**info.model_dump()))
         await self.session.commit()
-        return task
+        return info
 
     async def delete_app_conversation_start_tasks(self, conversation_id: UUID) -> bool:
         """Delete all start tasks associated with a conversation.

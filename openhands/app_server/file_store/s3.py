@@ -2,7 +2,7 @@ import os
 from typing import Any, TypedDict
 
 import boto3
-import botocore
+import botocore.exceptions
 from pydantic import Field, PrivateAttr
 
 from openhands.app_server.file_store.files import FileStore

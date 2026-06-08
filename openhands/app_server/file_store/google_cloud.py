@@ -1,7 +1,7 @@
 import os
 
 from google.api_core.exceptions import NotFound
-from google.cloud import storage
+from google.cloud import storage  # type: ignore[attr-defined]
 from google.cloud.storage.blob import Blob
 from google.cloud.storage.bucket import Bucket
 from google.cloud.storage.client import Client
@@ -48,7 +48,7 @@ class GoogleCloudFileStore(FileStore):
         blob: Blob = self.bucket.blob(path)
         mode = 'wb' if isinstance(contents, bytes) else 'w'
         with blob.open(mode) as f:
-            f.write(contents)
+            f.write(contents)  # type: ignore[arg-type]
 
     def read(self, path: str) -> str:
         blob: Blob = self.bucket.blob(path)

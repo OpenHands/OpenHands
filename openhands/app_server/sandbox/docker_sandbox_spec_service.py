@@ -3,6 +3,7 @@ import logging
 from typing import AsyncGenerator
 
 import docker
+from docker.errors import APIError, ImageNotFound
 from fastapi import Request
 from pydantic import Field
 
@@ -84,11 +85,11 @@ class DockerSandboxSpecServiceInjector(SandboxSpecServiceInjector):
             docker_client = get_docker_client()
             try:
                 docker_client.images.get(spec.id)
-            except docker.errors.ImageNotFound:
+            except ImageNotFound:
                 _logger.info(f'⬇️  Pulling Docker Image: {spec.id}')
                 await self._pull_with_progress_logging(docker_client, spec.id)
                 _logger.info(f'⬇️  Finished Pulling Docker Image: {spec.id}')
-        except docker.errors.APIError as exc:
+        except APIError as exc:
             raise SandboxError(f'Error Getting Docker Image: {spec.id}') from exc
 
     async def _pull_with_progress_logging(
