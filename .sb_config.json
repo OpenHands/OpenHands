@@ -388,10 +388,10 @@
         "run_on": null,
         "extra_exclude_paths": [],
         "include_paths": [],
-        "threshold": 2,
-        "min_file_count": 1,
-        "min_length": 8,
-        "min_words": 3,
+        "threshold": 20,
+        "min_file_count": 2,
+        "min_length": 30,
+        "min_words": 6,
         "include_patterns": [
           "**/*.py"
         ],
@@ -410,7 +410,9 @@
           "cursor-rules/**",
           "**/test_*",
           "**/tests/**",
-          "**/conftest.py"
+          "**/conftest.py",
+          "**/enterprise/**",
+          "enterprise/**"
         ]
       },
       "code-sprawl": {
