@@ -5,7 +5,7 @@ project:
   type: application
 metadata:
   ota:
-    minimum_version: "1.6.18"
+    minimum_version: "1.6.20"
 execution:
   default_context: host
   contexts:
@@ -132,9 +132,6 @@ tasks:
     execution:
       default_mode: native
       modes:
-        native:
-          context: host-dev
-          run: make build
         container:
           context: app
           env:
@@ -154,9 +151,6 @@ tasks:
     execution:
       default_mode: native
       modes:
-        native:
-          context: host-dev
-          run: make build-frontend
         container:
           context: app
           env:
@@ -187,9 +181,6 @@ tasks:
     execution:
       default_mode: native
       modes:
-        native:
-          context: host-dev
-          run: make lint-backend
         container:
           context: app
           env:
@@ -210,9 +201,6 @@ tasks:
     execution:
       default_mode: native
       modes:
-        native:
-          context: host-dev
-          run: make lint-frontend
         container:
           context: app
           env:
@@ -222,27 +210,14 @@ tasks:
       - build
     safe_for_agent: true
   lint:
-    context: host-dev
     description: Run the repository aggregate lint surface
     notes: |
       This is the documented aggregate lint entrypoint and covers both backend and frontend checks.
     category: test
-    env:
-      INSTALL_DOCKER: "0"
-    run: make lint
-    execution:
-      default_mode: native
-      modes:
-        native:
-          context: host-dev
-          run: make lint
-        container:
-          context: app
-          env:
-            INSTALL_DOCKER: "0"
-          run: make lint
-    depends_on:
-      - build
+    aggregate:
+      tasks:
+        - lint:backend
+        - lint:frontend
     safe_for_agent: true
   test:frontend:
     context: host-dev
@@ -256,9 +231,6 @@ tasks:
     execution:
       default_mode: native
       modes:
-        native:
-          context: host-dev
-          run: make test
         container:
           context: app
           env:
@@ -278,9 +250,6 @@ tasks:
     execution:
       default_mode: native
       modes:
-        native:
-          context: host-dev
-          run: poetry run pytest ./tests/unit/test_*.py
         container:
           context: app
           env:
@@ -290,28 +259,15 @@ tasks:
       - build
     safe_for_agent: true
   test:
-    context: host-dev
     description: Run the documented frontend and backend test surfaces
     notes: |
       OpenHands documents frontend tests through `make test` and backend tests through pytest.
       This aggregate task composes those two documented test surfaces.
     category: test
-    env:
-      INSTALL_DOCKER: "0"
-    run: sh -c 'make test && poetry run pytest ./tests/unit/test_*.py'
-    execution:
-      default_mode: native
-      modes:
-        native:
-          context: host-dev
-          run: sh -c 'make test && poetry run pytest ./tests/unit/test_*.py'
-        container:
-          context: app
-          env:
-            INSTALL_DOCKER: "0"
-          run: sh -c 'make test && poetry run pytest ./tests/unit/test_*.py'
-    depends_on:
-      - build
+    aggregate:
+      tasks:
+        - test:frontend
+        - test:backend
   setup:config-basic:
     context: host
     description: Create a basic config.toml for headless local runtime flows
@@ -333,7 +289,10 @@ tasks:
     env:
       INSTALL_DOCKER: "0"
       RUNTIME: local
-    run: make run
+    launch:
+      kind: command
+      exe: make
+      args: [run]
     depends_on:
       - build
     requirements:
@@ -356,7 +315,10 @@ tasks:
     category: dev
     env:
       RUNTIME: local
-    run: make start-backend
+    launch:
+      kind: command
+      exe: make
+      args: [start-backend]
     depends_on:
       - build
     runtime:
@@ -371,7 +333,10 @@ tasks:
       This maps directly to the documented split frontend path on port 3001.
       It is most useful when the backend is already running separately.
     category: dev
-    run: make start-frontend
+    launch:
+      kind: command
+      exe: make
+      args: [start-frontend]
     depends_on:
       - build
     runtime:
@@ -386,7 +351,10 @@ tasks:
       This maps directly to `make docker-run`, the repo's supported container runtime path when
       you want to run OpenHands without installing host dependencies.
     category: dev
-    run: make docker-run
+    launch:
+      kind: command
+      exe: make
+      args: [docker-run]
     effects:
       external_state:
         - docker
@@ -568,8 +536,8 @@ agent:
   bootstrap:
     ota:
       note: Install ota when missing so contributors and agents can run the declared readiness workflows in this contract.
-      sh: curl -fsSL https://dist.ota.run/install.sh | OTA_VERSION=v1.6.18 sh
-      powershell: $env:OTA_VERSION='v1.6.18'; irm https://dist.ota.run/install.ps1 | iex
+      sh: curl -fsSL https://dist.ota.run/install.sh | OTA_GIT_BRANCH=1.6.20-implementation sh -s -- --from-git
+      powershell: $env:OTA_GIT_BRANCH='1.6.20-implementation'; & ([scriptblock]::Create((irm https://dist.ota.run/install.ps1))) -FromGit
   notes: |
     Use `ota tasks --use .` to list runnable tasks and review the agent-safe surface before execution.
     Use `ota up --workflow app --native .` for the canonical local GUI development loop.

@@ -10,7 +10,7 @@ on:
       ota_ref:
         description: Ota branch, tag, or commit to build for this matrix run
         required: false
-        default: v1.6.18
+        default: 1.6.20-implementation
       run_runtime_proof:
         description: Run runtime proof steps (native app workflow)
         required: false
@@ -92,13 +92,21 @@ jobs:
         uses: ota-run/ota/.github/actions/install-ota-from-source@v1.6.18
         with:
           repository: ${{ github.event.inputs.ota_repository || 'ota-run/ota' }}
-          ref: ${{ github.event.inputs.ota_ref || 'v1.6.18' }}
+          ref: ${{ github.event.inputs.ota_ref || '1.6.20-implementation' }}
 
       - name: Validate contract
         shell: bash
         run: |
           ota validate --json . > ota-validate.json
           ota validate .
+
+      - name: List runnable task usage
+        shell: bash
+        run: ota tasks --use .
+
+      - name: List agent-safe task usage
+        shell: bash
+        run: ota tasks --safe --use .
 
       - name: List app workflow tasks
         shell: bash
