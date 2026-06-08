@@ -66,7 +66,7 @@ class MockUserAuth(UserAuth):
 
 
 @pytest.fixture
-def test_client():
+def client():
     with (
         patch.dict(os.environ, {'SESSION_API_KEY': ''}, clear=False),
         patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
@@ -79,8 +79,8 @@ def test_client():
             AsyncMock(return_value=FileSettingsStore(InMemoryFileStore())),
         ),
     ):
-        client = TestClient(app)
-        yield client
+        client_instance = TestClient(app)
+        yield client_instance
 
 
 def _write_skill_file(
@@ -106,7 +106,7 @@ def _write_skill_file(
 
 
 @pytest.mark.asyncio
-async def test_skills_search_returns_skills(test_client, tmp_path):
+async def test_skills_search_returns_skills(client, tmp_path):
     """Test that GET /api/v1/skills/search returns a paginated list of skills."""
     global_dir = tmp_path / 'global'
     _write_skill_file(global_dir, 'test_repo', skill_type='repo')
@@ -121,7 +121,7 @@ async def test_skills_search_returns_skills(test_client, tmp_path):
             tmp_path / 'nonexistent',
         ),
     ):
-        response = test_client.get('/api/v1/skills/search')
+        response = client.get('/api/v1/skills/search')
 
     assert response.status_code == 200
     data = response.json()
@@ -149,7 +149,7 @@ async def test_skills_search_returns_skills(test_client, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_skills_search_handles_missing_dirs(test_client, tmp_path):
+async def test_skills_search_handles_missing_dirs(client, tmp_path):
     """Test that the endpoint handles missing directories gracefully."""
     with (
         patch(
@@ -161,7 +161,7 @@ async def test_skills_search_handles_missing_dirs(test_client, tmp_path):
             tmp_path / 'also_missing',
         ),
     ):
-        response = test_client.get('/api/v1/skills/search')
+        response = client.get('/api/v1/skills/search')
 
     assert response.status_code == 200
     data = response.json()
@@ -170,7 +170,7 @@ async def test_skills_search_handles_missing_dirs(test_client, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_skills_search_sorted_by_source_then_name(test_client, tmp_path):
+async def test_skills_search_sorted_by_source_then_name(client, tmp_path):
     """Test that skills are sorted by source (global first) then by name."""
     global_dir = tmp_path / 'global'
     user_dir = tmp_path / 'user'
@@ -183,7 +183,7 @@ async def test_skills_search_sorted_by_source_then_name(test_client, tmp_path):
         patch('openhands.app_server.user.skills_router.GLOBAL_SKILLS_DIR', global_dir),
         patch('openhands.app_server.user.skills_router.USER_SKILLS_DIR', user_dir),
     ):
-        response = test_client.get('/api/v1/skills/search')
+        response = client.get('/api/v1/skills/search')
 
     assert response.status_code == 200
     data = response.json()
@@ -200,7 +200,7 @@ async def test_skills_search_sorted_by_source_then_name(test_client, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_skills_search_pagination(test_client, tmp_path):
+async def test_skills_search_pagination(client, tmp_path):
     """Test cursor-based pagination."""
     global_dir = tmp_path / 'global'
     _write_skill_file(global_dir, 'skill_a', skill_type='repo')
@@ -215,7 +215,7 @@ async def test_skills_search_pagination(test_client, tmp_path):
         ),
     ):
         # First page with limit=2
-        response = test_client.get('/api/v1/skills/search', params={'limit': 2})
+        response = client.get('/api/v1/skills/search', params={'limit': 2})
         assert response.status_code == 200
         data = response.json()
         assert len(data['items']) == 2
@@ -224,7 +224,7 @@ async def test_skills_search_pagination(test_client, tmp_path):
         assert data['next_page_id'] == 'skill_b'
 
         # Second page using next_page_id
-        response = test_client.get(
+        response = client.get(
             '/api/v1/skills/search',
             params={'limit': 2, 'page_id': data['next_page_id']},
         )

@@ -63,7 +63,7 @@ class MockUserAuth(UserAuth):
 
 
 @pytest.fixture
-def test_client():
+def client():
     # Create a test client
     with (
         patch(
@@ -75,19 +75,19 @@ def test_client():
             AsyncMock(return_value=FileSettingsStore(InMemoryFileStore())),
         ),
     ):
-        client = TestClient(app)
-        yield client
+        client_instance = TestClient(app)
+        yield client_instance
 
 
 @pytest.mark.asyncio
-async def test_openapi_schema_generation(test_client):
+async def test_openapi_schema_generation(client):
     """Test that the OpenAPI schema can be generated without errors.
 
     This test ensures that the FastAPI app can generate a valid OpenAPI schema,
     which is important for API documentation and client generation.
     """
     # Get the OpenAPI schema from the /openapi.json endpoint
-    response = test_client.get('/openapi.json')
+    response = client.get('/openapi.json')
 
     # Check that the response is successful
     assert response.status_code == 200

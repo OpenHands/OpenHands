@@ -73,20 +73,20 @@ class TestValidateSecretsDict:
 
     def test_none_secrets(self):
         """None should be accepted without error."""
-        validate_secrets_dict(None)
+        assert validate_secrets_dict(None) is None
 
     def test_empty_dict(self):
         """Empty dict should be accepted."""
-        validate_secrets_dict({})
+        assert validate_secrets_dict({}) is None
 
     def test_valid_secrets(self):
         """Valid secrets dict should not raise."""
-        validate_secrets_dict(
+        assert validate_secrets_dict(
             {
                 'KEY1': 'value1',
                 'KEY2': 'value2',
             }
-        )
+        ) is None
 
     def test_too_many_secrets(self):
         """Exceeding max count should raise."""

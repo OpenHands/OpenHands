@@ -89,7 +89,7 @@ class MockUserAuth(UserAuth):
 
 
 @pytest.fixture
-def test_client():
+def client():
     # Create a test client
     with (
         patch.dict(
@@ -107,12 +107,12 @@ def test_client():
             AsyncMock(return_value=FileSettingsStore(InMemoryFileStore())),
         ),
     ):
-        client = TestClient(app)
-        yield client
+        client_instance = TestClient(app)
+        yield client_instance
 
 
-def test_get_agent_settings_schema_includes_critic_verification_fields(test_client):
-    response = test_client.get('/api/v1/settings/agent-schema')
+def test_get_agent_settings_schema_includes_critic_verification_fields(client):
+    response = client.get('/api/v1/settings/agent-schema')
 
     assert response.status_code == 200
     schema = response.json()
@@ -129,8 +129,8 @@ def test_get_agent_settings_schema_includes_critic_verification_fields(test_clie
     assert 'security_analyzer' not in field_keys
 
 
-def test_get_conversation_settings_schema_endpoint(test_client):
-    response = test_client.get('/api/v1/settings/conversation-schema')
+def test_get_conversation_settings_schema_endpoint(client):
+    response = client.get('/api/v1/settings/conversation-schema')
 
     assert response.status_code == 200
     schema = response.json()
@@ -146,7 +146,7 @@ def test_get_conversation_settings_schema_endpoint(test_client):
 
 
 @pytest.mark.asyncio
-async def test_settings_api_endpoints(test_client):
+async def test_settings_api_endpoints(client):
     """Test that the settings API endpoints work with the new auth system."""
     settings = Settings(
         language='en',
@@ -176,13 +176,13 @@ async def test_settings_api_endpoints(test_client):
     )
 
     # Make the POST request to store settings (V1 endpoint)
-    response = test_client.post('/api/v1/settings', json=_dump_update(settings))
+    response = client.post('/api/v1/settings', json=_dump_update(settings))
 
     # We're not checking the exact response, just that it doesn't error
     assert response.status_code == 200
 
     # Test the GET settings endpoint (V1 endpoint)
-    response = test_client.get('/api/v1/settings')
+    response = client.get('/api/v1/settings')
     assert response.status_code == 200
     response_data = response.json()
     assert 'agent_settings_schema' not in response_data
@@ -210,17 +210,17 @@ async def test_settings_api_endpoints(test_client):
         'llm_api_key': None,
     }
 
-    response = test_client.post('/api/v1/settings', json=partial_settings)
+    response = client.post('/api/v1/settings', json=partial_settings)
     assert response.status_code == 200
 
-    response = test_client.get('/api/v1/settings')
+    response = client.get('/api/v1/settings')
     assert response.status_code == 200
     assert response.json()['agent_settings']['llm']['timeout'] == 123
 
 
 @pytest.mark.asyncio
-async def test_store_settings_rejects_legacy_nested_payload_keys(test_client):
-    response = test_client.post(
+async def test_store_settings_rejects_legacy_nested_payload_keys(client):
+    response = client.post(
         '/api/v1/settings',
         json={
             'agent_settings': {'llm': {'model': 'legacy-model'}},
@@ -236,7 +236,7 @@ async def test_store_settings_rejects_legacy_nested_payload_keys(test_client):
 
 
 @pytest.mark.asyncio
-async def test_saving_settings_with_frozen_secrets_store(test_client):
+async def test_saving_settings_with_frozen_secrets_store(client):
     """Regression: POSTing settings must not fail with `secrets_store`.
 
     See https://github.com/OpenHands/OpenHands/issues/13306.
@@ -249,14 +249,14 @@ async def test_saving_settings_with_frozen_secrets_store(test_client):
     )
     # Inject an extra key the API should ignore gracefully
     payload['secrets_store'] = {'provider_tokens': {}}
-    response = test_client.post('/api/v1/settings', json=payload)
+    response = client.post('/api/v1/settings', json=payload)
     assert response.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_search_api_key_explicit_clear(test_client):
+async def test_search_api_key_explicit_clear(client):
     """Explicit empty search_api_key payloads should clear the stored secret."""
-    response = test_client.post(
+    response = client.post(
         '/api/v1/settings',
         json=_dump_update(
             Settings(
@@ -267,11 +267,11 @@ async def test_search_api_key_explicit_clear(test_client):
     )
     assert response.status_code == 200
 
-    response = test_client.get('/api/v1/settings')
+    response = client.get('/api/v1/settings')
     assert response.status_code == 200
     assert response.json()['search_api_key_set'] is True
 
-    response = test_client.post(
+    response = client.post(
         '/api/v1/settings',
         json=_dump_update(
             Settings(
@@ -282,16 +282,16 @@ async def test_search_api_key_explicit_clear(test_client):
     )
     assert response.status_code == 200
 
-    response = test_client.get('/api/v1/settings')
+    response = client.get('/api/v1/settings')
     assert response.status_code == 200
     assert response.json()['search_api_key_set'] is False
     assert response.json()['agent_settings']['llm']['model'] == 'claude-3-opus'
 
 
 @pytest.mark.asyncio
-async def test_disabled_skills_persistence(test_client):
+async def test_disabled_skills_persistence(client):
     """Test that disabled_skills can be saved and retrieved via the settings API."""
-    response = test_client.post(
+    response = client.post(
         '/api/v1/settings',
         json=_dump_update(
             Settings(
@@ -302,29 +302,29 @@ async def test_disabled_skills_persistence(test_client):
     )
     assert response.status_code == 200
 
-    response = test_client.get('/api/v1/settings')
+    response = client.get('/api/v1/settings')
     assert response.status_code == 200
     data = response.json()
     assert data['disabled_skills'] == ['skill_a', 'skill_b']
 
-    response = test_client.post(
+    response = client.post(
         '/api/v1/settings',
         json=_dump(Settings(disabled_skills=['skill_c'])),
     )
     assert response.status_code == 200
 
-    response = test_client.get('/api/v1/settings')
+    response = client.get('/api/v1/settings')
     assert response.status_code == 200
     data = response.json()
     assert data['disabled_skills'] == ['skill_c']
 
-    response = test_client.post(
+    response = client.post(
         '/api/v1/settings',
         json=_dump(Settings(disabled_skills=[])),
     )
     assert response.status_code == 200
 
-    response = test_client.get('/api/v1/settings')
+    response = client.get('/api/v1/settings')
     assert response.status_code == 200
     data = response.json()
     assert data['disabled_skills'] == []
