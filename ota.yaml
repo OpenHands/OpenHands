@@ -6,6 +6,15 @@ project:
 metadata:
   ota:
     minimum_version: "1.6.20"
+toolchains:
+  python:
+    version: ">=3.12,<3.14"
+    package_managers:
+      poetry: ">=1.8"
+  node:
+    version: "^22.12.0"
+    package_managers:
+      npm: ">=10.5.0"
 execution:
   default_context: host
   contexts:
@@ -17,12 +26,9 @@ execution:
     host-dev:
       extends: host
       requirements:
-        runtimes:
-          python: ">=3.12,<3.14"
-          node: "^22.12.0"
-        tools:
-          poetry: ">=1.8"
-          npm: ">=10.5.0"
+        toolchains:
+          - python
+          - node
     docker-host:
       extends: host
       requirements:
@@ -31,20 +37,17 @@ execution:
     host-ui:
       extends: host
       requirements:
-        runtimes:
-          node: ">=22.0.0"
+        toolchains:
+          - node
         tools:
           bun: ">=1.2.17"
     app:
       backend: container
       lifecycle: ephemeral
       requirements:
-        runtimes:
-          python: ">=3.12,<3.14"
-          node: "^22.12.0"
-        tools:
-          poetry: ">=1.8"
-          npm: ">=10.5.0"
+        toolchains:
+          - python
+          - node
       attachments:
         isolated_paths:
           - .venv
