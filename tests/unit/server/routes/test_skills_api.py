@@ -245,20 +245,20 @@ def test_global_skills_dir_points_to_repo_root():
     from openhands.app_server.user.skills_router import GLOBAL_SKILLS_DIR
 
     # The directory should exist
-    assert GLOBAL_SKILLS_DIR.exists(), (
-        f'GLOBAL_SKILLS_DIR does not exist: {GLOBAL_SKILLS_DIR}'
-    )
+    assert (
+        GLOBAL_SKILLS_DIR.exists()
+    ), f'GLOBAL_SKILLS_DIR does not exist: {GLOBAL_SKILLS_DIR}'
 
     # It should be named 'skills'
-    assert GLOBAL_SKILLS_DIR.name == 'skills', (
-        f"Expected directory name 'skills', got '{GLOBAL_SKILLS_DIR.name}'"
-    )
+    assert (
+        GLOBAL_SKILLS_DIR.name == 'skills'
+    ), f"Expected directory name 'skills', got '{GLOBAL_SKILLS_DIR.name}'"
 
     # It should contain at least one .md file (skill definition)
     md_files = list(GLOBAL_SKILLS_DIR.glob('*.md'))
-    assert len(md_files) > 0, (
-        f'GLOBAL_SKILLS_DIR contains no .md files: {GLOBAL_SKILLS_DIR}'
-    )
+    assert (
+        len(md_files) > 0
+    ), f'GLOBAL_SKILLS_DIR contains no .md files: {GLOBAL_SKILLS_DIR}'
 
     # Verify it's at repo root by checking for known skill files
     # (github.md is a core skill that should always exist)

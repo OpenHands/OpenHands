@@ -3,7 +3,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from fastapi import FastAPI
-
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 

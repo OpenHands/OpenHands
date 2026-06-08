@@ -11,14 +11,13 @@ from types import TracebackType
 from typing import Any, Literal, Mapping, MutableMapping, TextIO
 
 import litellm
-from pythonjsonlogger.json import JsonFormatter
-from termcolor import colored
-
 from openhands.sdk.utils.redact import (
     redact_api_key_literals,
     redact_text_secrets,
     redact_url_params,
 )
+from pythonjsonlogger.json import JsonFormatter
+from termcolor import colored
 
 warnings.filterwarnings('ignore', category=SyntaxWarning, module=r'pydub\.utils')
 
@@ -559,9 +558,11 @@ class RedactURLParamsFilter(logging.Filter):
         if record.args:
             if isinstance(record.args, (tuple, list)):
                 record.args = tuple(
-                    redact_url_params(arg)
-                    if isinstance(arg, str) and '?' in arg
-                    else arg
+                    (
+                        redact_url_params(arg)
+                        if isinstance(arg, str) and '?' in arg
+                        else arg
+                    )
                     for arg in record.args
                 )
             elif isinstance(record.args, dict):

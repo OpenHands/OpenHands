@@ -124,7 +124,6 @@ class TestMaintenanceTaskRunnerStandalone:
             async def _process_pending_tasks(self):
                 """Process pending tasks."""
                 # Mock processing
-                pass
 
         runner = MockMaintenanceTaskRunner()
         runner._running = True
@@ -719,7 +718,6 @@ class TestMaintenanceTaskRunnerIntegration:
         6. Verify proper logging and error handling
         7. Test the complete start/stop lifecycle
         """
-        pass
 
     def test_database_integration_description(self):
         """
@@ -732,7 +730,6 @@ class TestMaintenanceTaskRunnerIntegration:
         4. Verify that only appropriate tasks are selected and processed
         5. Verify database transactions and status updates work correctly
         """
-        pass
 
     def test_processor_integration_description(self):
         """
@@ -745,7 +742,6 @@ class TestMaintenanceTaskRunnerIntegration:
         4. Test with both successful and failing processors
         5. Verify result storage and error handling
         """
-        pass
 
     def test_performance_and_scalability_description(self):
         """
@@ -758,4 +754,3 @@ class TestMaintenanceTaskRunnerIntegration:
         4. Test memory usage and cleanup
         5. Verify proper handling of long-running processors
         """
-        pass

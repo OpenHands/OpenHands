@@ -10,8 +10,6 @@ from storage.role_store import RoleStore
 class InvitationError(Exception):
     """Base exception for invitation errors."""
 
-    pass
-
 
 class InvitationAlreadyExistsError(InvitationError):
     """Raised when a pending invitation already exists for the email."""

@@ -15,9 +15,11 @@ from uuid import UUID
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
+from openhands.agent_server.models import Success
+from openhands.sdk.skills import KeywordTrigger, TaskTrigger
+from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openhands.agent_server.models import Success
 from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
@@ -84,8 +86,6 @@ from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
-from openhands.sdk.skills import KeywordTrigger, TaskTrigger
-from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 # Handle anext compatibility for Python < 3.10
 if sys.version_info >= (3, 10):
@@ -385,12 +385,16 @@ async def start_app_conversation(
                     ctx = await resolve_analytics_context(user_id)
                     analytics.track_conversation_created(
                         ctx=ctx,
-                        conversation_id=str(result.app_conversation_id)
-                        if result.app_conversation_id
-                        else result.id,
-                        trigger=start_request.trigger.value
-                        if start_request.trigger
-                        else None,
+                        conversation_id=(
+                            str(result.app_conversation_id)
+                            if result.app_conversation_id
+                            else result.id
+                        ),
+                        trigger=(
+                            start_request.trigger.value
+                            if start_request.trigger
+                            else None
+                        ),
                         llm_model=None,  # Not available at start time
                         agent_type='default',
                         has_repository=start_request.selected_repository is not None,
@@ -1395,9 +1399,11 @@ async def get_conversation_hooks(
                     for matcher in matchers:
                         hook_defs = [
                             HookDefinitionResponse(
-                                type=hook.type.value
-                                if hasattr(hook.type, 'value')
-                                else str(hook.type),
+                                type=(
+                                    hook.type.value
+                                    if hasattr(hook.type, 'value')
+                                    else str(hook.type)
+                                ),
                                 command=hook.command,
                                 timeout=hook.timeout,
                                 async_=hook.async_,
@@ -1468,9 +1474,12 @@ async def export_conversation(
                 user_info = await user_context.get_user_info()
                 ctx = AnalyticsContext(
                     user_id=user_id,
-                    consented=user_info.user_consents_to_analytics
-                    if user_info and user_info.user_consents_to_analytics is not None
-                    else False,
+                    consented=(
+                        user_info.user_consents_to_analytics
+                        if user_info
+                        and user_info.user_consents_to_analytics is not None
+                        else False
+                    ),
                     org_id=None,
                     user=None,
                 )

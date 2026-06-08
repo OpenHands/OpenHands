@@ -44,12 +44,10 @@ def upgrade() -> None:
     )
 
     # 1. Create default roles
-    op.execute(
-        sa.text("""
+    op.execute(sa.text("""
         INSERT INTO role (name, rank) VALUES ('owner', 10), ('admin', 20), ('user', 1000)
         ON CONFLICT (name) DO NOTHING;
-    """)
-    )
+    """))
 
     # Create org table with settings fields
     op.create_table(

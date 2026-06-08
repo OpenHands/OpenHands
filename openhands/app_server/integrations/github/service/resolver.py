@@ -206,16 +206,20 @@ class GitHubResolverMixin(GitHubMixinBase):
                     id=str(comment.get('id', 'unknown')),
                     body=self._truncate_comment(comment.get('body', '')),
                     author=author,
-                    created_at=datetime.fromisoformat(
-                        comment.get('createdAt', '').replace('Z', '+00:00')
-                    )
-                    if comment.get('createdAt')
-                    else datetime.fromtimestamp(0),
-                    updated_at=datetime.fromisoformat(
-                        comment.get('updatedAt', '').replace('Z', '+00:00')
-                    )
-                    if comment.get('updatedAt')
-                    else datetime.fromtimestamp(0),
+                    created_at=(
+                        datetime.fromisoformat(
+                            comment.get('createdAt', '').replace('Z', '+00:00')
+                        )
+                        if comment.get('createdAt')
+                        else datetime.fromtimestamp(0)
+                    ),
+                    updated_at=(
+                        datetime.fromisoformat(
+                            comment.get('updatedAt', '').replace('Z', '+00:00')
+                        )
+                        if comment.get('updatedAt')
+                        else datetime.fromtimestamp(0)
+                    ),
                     system=False,
                 )
             )

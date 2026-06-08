@@ -242,7 +242,6 @@ async def test_get_provider_tokens(mock_token_manager):
         access_token, idp=ProviderType.GITHUB
     )
     """
-    pass
 
 
 class TestGetProviderTokensBitbucketDCHost:

@@ -12,9 +12,9 @@ from cryptography.fernet import Fernet, InvalidToken
 from fastapi import Request
 from joserfc import jwe
 from joserfc.jwk import OctKey
+from openhands.agent_server.utils import utc_now
 from pydantic import BaseModel, PrivateAttr
 
-from openhands.agent_server.utils import utc_now
 from openhands.app_server.services.injector import Injector, InjectorState
 from openhands.app_server.utils.encryption_key import (
     EncryptionKey,

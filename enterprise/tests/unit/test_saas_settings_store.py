@@ -260,9 +260,7 @@ async def test_load_returns_default_when_not_found(settings_store, async_session
     file_store = MagicMock()
     file_store.read.side_effect = FileNotFoundError()
 
-    with (
-        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
-    ):
+    with (patch('storage.saas_settings_store.a_session_maker', async_session_maker),):
         loaded_settings = await settings_store.load()
         assert loaded_settings is not None
         assert loaded_settings.language == 'en'
@@ -1012,10 +1010,9 @@ async def test_llm_profiles_are_encrypted_at_rest(
     a JSON dict — profile api_keys would otherwise leak in DB dumps,
     replicas, and backups. Mirrors the encryption invariant org and
     org_member already enforce on _llm_api_key."""
+    from openhands.sdk.llm import LLM
     from sqlalchemy import select, text
     from storage.user import User
-
-    from openhands.sdk.llm import LLM
 
     fixture = org_with_multiple_members_fixture
     admin_user_id = fixture['admin_user_id']

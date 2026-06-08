@@ -11,9 +11,9 @@ import docker
 import httpx
 from docker.errors import APIError, NotFound
 from fastapi import Request
+from openhands.agent_server.utils import utc_now
 from pydantic import BaseModel, ConfigDict, Field
 
-from openhands.agent_server.utils import utc_now
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.docker_sandbox_spec_service import get_docker_client
 from openhands.app_server.sandbox.sandbox_models import (
@@ -477,9 +477,11 @@ class DockerSandboxService(SandboxService):
                 # Allow agent-server containers to resolve host.docker.internal
                 # and other custom hostnames for LAN deployments
                 # Note: extra_hosts is not needed with host network mode
-                extra_hosts=self.extra_hosts
-                if self.extra_hosts and not self.use_host_network
-                else None,
+                extra_hosts=(
+                    self.extra_hosts
+                    if self.extra_hosts and not self.use_host_network
+                    else None
+                ),
                 # Network mode: 'host' for host networking, None for default bridge
                 network_mode=network_mode,
                 # Device passthrough for KVM hardware virtualization

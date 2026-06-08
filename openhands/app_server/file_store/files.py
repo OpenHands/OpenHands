@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 
-from pydantic import ConfigDict
-
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
+from pydantic import ConfigDict
 
 
 class FileStore(DiscriminatedUnionMixin, ABC):

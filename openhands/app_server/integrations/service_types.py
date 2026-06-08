@@ -171,31 +171,21 @@ class Comment(BaseModel):
 class AuthenticationError(ValueError):
     """Raised when there is an issue with GitHub authentication."""
 
-    pass
-
 
 class UnknownException(ValueError):
     """Raised when there is an issue with GitHub communication."""
-
-    pass
 
 
 class RateLimitError(ValueError):
     """Raised when the git provider's API rate limits are exceeded."""
 
-    pass
-
 
 class ProviderTimeoutError(ValueError):
     """Raised when a request to a git provider times out."""
 
-    pass
-
 
 class ResourceNotFoundError(ValueError):
     """Raised when a requested resource (file, directory, etc.) is not found."""
-
-    pass
 
 
 class RequestMethod(Enum):

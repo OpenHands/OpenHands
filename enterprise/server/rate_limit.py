@@ -90,9 +90,9 @@ class RateLimiter:
             description=str(lim),
             remaining=stats.remaining,
             reset_time=int(stats.reset_time),
-            retry_after=int(stats.reset_time - time.time())
-            if stats.remaining == 0
-            else None,
+            retry_after=(
+                int(stats.reset_time - time.time()) if stats.remaining == 0 else None
+            ),
         )
 
 

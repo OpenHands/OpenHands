@@ -1,5 +1,10 @@
 from typing import Annotated, Any
 
+from openhands.sdk.settings import (
+    AgentSettingsConfig,
+    ConversationSettings,
+    OpenHandsAgentSettings,
+)
 from pydantic import (
     BaseModel,
     EmailStr,
@@ -19,17 +24,10 @@ from openhands.app_server.settings.settings_models import (
     _load_persisted_conversation_settings,
 )
 from openhands.app_server.utils.llm import MASKED_API_KEY, resolve_llm_base_url
-from openhands.sdk.settings import (
-    AgentSettingsConfig,
-    ConversationSettings,
-    OpenHandsAgentSettings,
-)
 
 
 class OrgCreationError(Exception):
     """Base exception for organization creation errors."""
-
-    pass
 
 
 class OrgNameExistsError(OrgCreationError):
@@ -43,19 +41,13 @@ class OrgNameExistsError(OrgCreationError):
 class LiteLLMIntegrationError(OrgCreationError):
     """Raised when LiteLLM integration fails."""
 
-    pass
-
 
 class OrgDatabaseError(OrgCreationError):
     """Raised when database operations fail."""
 
-    pass
-
 
 class OrgDeletionError(Exception):
     """Base exception for organization deletion errors."""
-
-    pass
 
 
 class OrgAuthorizationError(OrgDeletionError):
@@ -197,9 +189,11 @@ class OrgResponse(BaseModel):
             conversation_expiration=org.conversation_expiration,
             remote_runtime_resource_factor=org.remote_runtime_resource_factor,
             billing_margin=org.billing_margin,
-            enable_proactive_conversation_starters=org.enable_proactive_conversation_starters
-            if org.enable_proactive_conversation_starters is not None
-            else True,
+            enable_proactive_conversation_starters=(
+                org.enable_proactive_conversation_starters
+                if org.enable_proactive_conversation_starters is not None
+                else True
+            ),
             sandbox_base_container_image=org.sandbox_base_container_image,
             sandbox_runtime_container_image=org.sandbox_runtime_container_image,
             org_version=org.org_version if org.org_version is not None else 0,
@@ -577,9 +571,11 @@ class OrgAppSettingsResponse(BaseModel):
             OrgAppSettingsResponse with app settings
         """
         return cls(
-            enable_proactive_conversation_starters=org.enable_proactive_conversation_starters
-            if org.enable_proactive_conversation_starters is not None
-            else True,
+            enable_proactive_conversation_starters=(
+                org.enable_proactive_conversation_starters
+                if org.enable_proactive_conversation_starters is not None
+                else True
+            ),
             max_budget_per_task=org.max_budget_per_task,
         )
 

@@ -73,13 +73,9 @@ class ResendUser:
 class ResendSyncError(Exception):
     """Base exception for Resend sync errors."""
 
-    pass
-
 
 class ResendAPIError(ResendSyncError):
     """Exception for Resend API errors."""
-
-    pass
 
 
 # Email validation regex pattern - matches standard email format

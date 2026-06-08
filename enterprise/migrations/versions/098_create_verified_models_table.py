@@ -75,14 +75,10 @@ def upgrade() -> None:
     ]
 
     for model_name, provider in models:
-        op.execute(
-            sa.text(
-                """
+        op.execute(sa.text("""
                 INSERT INTO verified_models (model_name, provider)
                 VALUES (:model_name, :provider)
-                """
-            ).bindparams(model_name=model_name, provider=provider)
-        )
+                """).bindparams(model_name=model_name, provider=provider))
 
 
 def downgrade() -> None:

@@ -10,6 +10,12 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from fastapi.responses import JSONResponse
+from openhands.sdk.llm import LLM
+from openhands.sdk.settings import (
+    ConversationSettings,
+    OpenHandsAgentSettings,
+    export_agent_settings_schema,
+)
 from pydantic import BaseModel, Field
 
 from openhands.analytics import get_analytics_service
@@ -45,12 +51,6 @@ from openhands.app_server.utils.llm import (
     resolve_llm_base_url,
 )
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.sdk.llm import LLM
-from openhands.sdk.settings import (
-    ConversationSettings,
-    OpenHandsAgentSettings,
-    export_agent_settings_schema,
-)
 
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'

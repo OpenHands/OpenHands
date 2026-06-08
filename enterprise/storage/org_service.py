@@ -4,9 +4,11 @@ Separates business logic from route handlers.
 """
 
 from typing import NoReturn
-from uuid import UUID, uuid4
+from uuid import UUID
 from uuid import UUID as parse_uuid
+from uuid import uuid4
 
+from openhands.sdk.settings import ConversationSettings, default_agent_settings
 from server.constants import (
     ORG_SETTINGS_VERSION,
     get_default_llm_base_url,
@@ -31,7 +33,6 @@ from storage.user_store import UserStore
 
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.sdk.settings import ConversationSettings, default_agent_settings
 
 
 class OrgService:

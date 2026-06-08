@@ -8,9 +8,14 @@ from pydantic import SecretStr
 from openhands.app_server.integrations.bitbucket.bitbucket_service import (
     BitBucketService,
 )
-from openhands.app_server.integrations.service_types import OwnerType, Repository
+from openhands.app_server.integrations.service_types import (
+    OwnerType,
+)
 from openhands.app_server.integrations.service_types import (
     ProviderType as ServiceProviderType,
+)
+from openhands.app_server.integrations.service_types import (
+    Repository,
 )
 from openhands.app_server.types import AppMode
 

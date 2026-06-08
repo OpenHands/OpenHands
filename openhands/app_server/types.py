@@ -19,19 +19,13 @@ class ServerConfigInterface(ABC):
 class MissingSettingsError(ValueError):
     """Raised when settings are missing or not found."""
 
-    pass
-
 
 class LLMAuthenticationError(ValueError):
     """Raised when there is an issue with LLM authentication."""
 
-    pass
-
 
 class SessionExpiredError(ValueError):
     """Raised when the user's authentication session has expired."""
-
-    pass
 
 
 __all__ = [

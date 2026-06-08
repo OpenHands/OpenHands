@@ -97,9 +97,11 @@ class Secrets(BaseModel):
         if custom_secrets:
             for secret_name, secret_value in custom_secrets.items():
                 secrets[secret_name] = {
-                    'secret': secret_value.secret.get_secret_value()
-                    if expose_secrets
-                    else pydantic_encoder(secret_value.secret),
+                    'secret': (
+                        secret_value.secret.get_secret_value()
+                        if expose_secrets
+                        else pydantic_encoder(secret_value.secret)
+                    ),
                     'description': secret_value.description,
                 }
 

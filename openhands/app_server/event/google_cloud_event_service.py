@@ -13,12 +13,12 @@ from google.cloud import storage
 from google.cloud.storage.blob import Blob
 from google.cloud.storage.bucket import Bucket
 from google.cloud.storage.client import Client
+from openhands.sdk import Event
 
 from openhands.app_server.config import get_app_conversation_info_service
 from openhands.app_server.event.event_service import EventService, EventServiceInjector
 from openhands.app_server.event.event_service_base import EventServiceBase
 from openhands.app_server.services.injector import InjectorState
-from openhands.sdk import Event
 
 _logger = logging.getLogger(__name__)
 

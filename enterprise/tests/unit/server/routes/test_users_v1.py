@@ -269,11 +269,11 @@ class TestSdkCompatFields:
         """Non-expose response should include llm_model and llm_base_url."""
         from unittest.mock import patch
 
+        from openhands.sdk.llm import LLM
+        from openhands.sdk.settings import OpenHandsAgentSettings
         from server.routes.users_v1 import get_current_user_saas
 
         from openhands.app_server.user.user_models import UserInfo
-        from openhands.sdk.llm import LLM
-        from openhands.sdk.settings import OpenHandsAgentSettings
 
         base_user_info = UserInfo(
             id='user-123',
@@ -303,11 +303,11 @@ class TestSdkCompatFields:
         """Expose-secrets response should include llm_api_key."""
         from unittest.mock import patch
 
+        from openhands.sdk.llm import LLM
+        from openhands.sdk.settings import OpenHandsAgentSettings
         from server.routes.users_v1 import get_current_user_saas
 
         from openhands.app_server.user.user_models import UserInfo
-        from openhands.sdk.llm import LLM
-        from openhands.sdk.settings import OpenHandsAgentSettings
 
         base_user_info = UserInfo(
             id='user-123',
@@ -370,11 +370,11 @@ class TestSdkCompatFields:
         """Flat fields should not remove the nested agent_settings."""
         from unittest.mock import patch
 
+        from openhands.sdk.llm import LLM
+        from openhands.sdk.settings import OpenHandsAgentSettings
         from server.routes.users_v1 import get_current_user_saas
 
         from openhands.app_server.user.user_models import UserInfo
-        from openhands.sdk.llm import LLM
-        from openhands.sdk.settings import OpenHandsAgentSettings
 
         base_user_info = UserInfo(
             id='user-123',

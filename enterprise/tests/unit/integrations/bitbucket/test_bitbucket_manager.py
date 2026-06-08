@@ -94,7 +94,9 @@ async def test_receive_message_dispatches_when_commenter_has_write_access() -> N
         manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
     ), patch.object(
         manager, '_commenter_has_write_access', return_value=True
-    ), patch.object(manager, 'start_job', new=AsyncMock()) as mock_start:
+    ), patch.object(
+        manager, 'start_job', new=AsyncMock()
+    ) as mock_start:
         await manager.receive_message(_comment_message())
 
     mock_start.assert_awaited_once()
@@ -108,7 +110,9 @@ async def test_receive_message_skips_when_commenter_lacks_write_access() -> None
         manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
     ), patch.object(
         manager, '_commenter_has_write_access', return_value=False
-    ), patch.object(manager, 'start_job', new=AsyncMock()) as mock_start:
+    ), patch.object(
+        manager, 'start_job', new=AsyncMock()
+    ) as mock_start:
         await manager.receive_message(_comment_message())
 
     mock_start.assert_not_called()

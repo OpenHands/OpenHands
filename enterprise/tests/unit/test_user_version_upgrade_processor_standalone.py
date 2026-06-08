@@ -355,7 +355,6 @@ class TestUserVersionUpgradeProcessorIntegration:
         8. Verify proper logging occurred
         """
         # This would be the actual test implementation when dependencies are available
-        pass
 
     def test_database_integration_description(self):
         """
@@ -368,7 +367,6 @@ class TestUserVersionUpgradeProcessorIntegration:
         4. Verify that only users with version < CURRENT_USER_SETTINGS_VERSION are processed
         5. Verify database transactions are handled correctly
         """
-        pass
 
     def test_saas_settings_store_integration_description(self):
         """
@@ -380,4 +378,3 @@ class TestUserVersionUpgradeProcessorIntegration:
         3. Verify the processor handles SaasSettingsStore exceptions correctly
         4. Verify the processor passes the correct UserSettings objects
         """
-        pass

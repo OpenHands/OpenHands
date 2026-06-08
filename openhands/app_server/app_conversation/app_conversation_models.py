@@ -3,8 +3,6 @@ from enum import Enum
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, SecretStr
-
 from openhands.agent_server.models import (
     ImageContent,
     OpenHandsModel,
@@ -12,6 +10,11 @@ from openhands.agent_server.models import (
     TextContent,
 )
 from openhands.agent_server.utils import OpenHandsUUID, utc_now
+from openhands.sdk.conversation import ConversationExecutionStatus
+from openhands.sdk.llm import MetricsSnapshot
+from openhands.sdk.plugin import PluginSource
+from pydantic import BaseModel, Field, SecretStr
+
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallbackProcessor,
 )
@@ -20,9 +23,6 @@ from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 
 # Import from new location and re-export for backward compatibility
 from openhands.app_server.settings.settings_models import SandboxGroupingStrategy
-from openhands.sdk.conversation import ConversationExecutionStatus
-from openhands.sdk.llm import MetricsSnapshot
-from openhands.sdk.plugin import PluginSource
 
 __all__ = ['SandboxGroupingStrategy']
 

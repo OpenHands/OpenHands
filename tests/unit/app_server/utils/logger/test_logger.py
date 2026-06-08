@@ -392,7 +392,7 @@ def test_sensitive_filter_applied_to_handler_catches_child_logger_records():
     child.info(f'Token: {secret}')
 
     output = stream.getvalue()
-    assert secret not in output, (
-        'Child logger record was not redacted by handler filter'
-    )
+    assert (
+        secret not in output
+    ), 'Child logger record was not redacted by handler filter'
     assert '<redacted>' in output

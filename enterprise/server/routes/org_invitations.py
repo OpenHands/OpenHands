@@ -121,9 +121,11 @@ async def create_invitation(
                 user_obj = await UserStore.get_user_by_id(user_id)
                 ctx = AnalyticsContext(
                     user_id=user_id,
-                    consented=user_obj.user_consents_to_analytics is True
-                    if user_obj
-                    else False,
+                    consented=(
+                        user_obj.user_consents_to_analytics is True
+                        if user_obj
+                        else False
+                    ),
                     org_id=str(org_id),
                     user=user_obj,
                 )

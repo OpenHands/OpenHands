@@ -782,16 +782,15 @@ def test_get_org_kwargs_for_migration_preserves_existing_llm_when_not_custom():
 
 
 def test_get_org_kwargs_for_migration_uses_minimal_org_defaults_for_custom_llm():
+    # Use the SDK's current schema version - migration logic should always
+    # output settings matching the SDK's expected schema, regardless of input version
+    from openhands.sdk.settings import AGENT_SETTINGS_SCHEMA_VERSION
     from server.constants import (
         LITE_LLM_API_URL,
         ORG_SETTINGS_VERSION,
         get_default_litellm_model,
     )
     from storage.user_settings import UserSettings
-
-    # Use the SDK's current schema version - migration logic should always
-    # output settings matching the SDK's expected schema, regardless of input version
-    from openhands.sdk.settings import AGENT_SETTINGS_SCHEMA_VERSION
 
     user_settings = UserSettings(
         keycloak_user_id='test',
@@ -1121,12 +1120,10 @@ async def test_migrate_user_sql_type_handling(async_session_maker):
             text('ALTER TABLE conversation_metadata ADD COLUMN user_id VARCHAR')
         )
         await session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO conversation_metadata (conversation_id, user_id, conversation_version, created_at, last_updated_at)
                 VALUES (:conv_id, :user_id, 'V0', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                """
-            ),
+                """),
             {'conv_id': 'test-conv-1', 'user_id': user_id},
         )
 
@@ -1205,8 +1202,7 @@ async def test_migrate_user_sql_type_handling(async_session_maker):
         # The fix uses user_uuid (UUID) for inserting into user_id/org_id (UUID columns)
         # and user_id_text (string) for comparing with user_id in conversation_metadata (string column)
         await session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO conversation_metadata_saas (conversation_id, user_id, org_id)
                 SELECT
                     conversation_id,
@@ -1214,8 +1210,7 @@ async def test_migrate_user_sql_type_handling(async_session_maker):
                     :user_uuid
                 FROM conversation_metadata
                 WHERE user_id = :user_id_text
-                """
-            ),
+                """),
             {'user_uuid': user_uuid_str, 'user_id_text': user_id},
         )
 
@@ -1366,12 +1361,10 @@ async def test_migrate_user_sql_no_matching_records(async_session_maker):
             text('ALTER TABLE conversation_metadata ADD COLUMN user_id VARCHAR')
         )
         await session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO conversation_metadata (conversation_id, user_id, conversation_version, created_at, last_updated_at)
                 VALUES (:conv_id, :user_id, 'V0', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                """
-            ),
+                """),
             {'conv_id': 'other-conv-1', 'user_id': other_user_id},
         )
 
@@ -1384,8 +1377,7 @@ async def test_migrate_user_sql_no_matching_records(async_session_maker):
 
         # Execute migration SQL for our user (no data should match)
         await session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO conversation_metadata_saas (conversation_id, user_id, org_id)
                 SELECT
                     conversation_id,
@@ -1393,8 +1385,7 @@ async def test_migrate_user_sql_no_matching_records(async_session_maker):
                     :user_uuid
                 FROM conversation_metadata
                 WHERE user_id = :user_id_text
-                """
-            ),
+                """),
             {'user_uuid': user_uuid_str, 'user_id_text': user_id},
         )
         await session.commit()
@@ -1441,12 +1432,10 @@ async def test_migrate_user_sql_multiple_conversations(async_session_maker):
         # Insert multiple conversations for the same user
         for i in range(3):
             await session.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO conversation_metadata (conversation_id, user_id, conversation_version, created_at, last_updated_at)
                     VALUES (:conv_id, :user_id, 'V0', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    """
-                ),
+                    """),
                 {'conv_id': f'test-conv-{i}', 'user_id': user_id},
             )
 
@@ -1463,8 +1452,7 @@ async def test_migrate_user_sql_multiple_conversations(async_session_maker):
 
         # Execute migration SQL
         await session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO conversation_metadata_saas (conversation_id, user_id, org_id)
                 SELECT
                     conversation_id,
@@ -1472,8 +1460,7 @@ async def test_migrate_user_sql_multiple_conversations(async_session_maker):
                     :user_uuid
                 FROM conversation_metadata
                 WHERE user_id = :user_id_text
-                """
-            ),
+                """),
             {'user_uuid': user_uuid_str, 'user_id_text': user_id},
         )
         await session.commit()

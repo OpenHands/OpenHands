@@ -10,7 +10,6 @@ All hook loading is handled by the agent-server.
 import logging
 
 import httpx
-
 from openhands.sdk.hooks import HookConfig
 
 _logger = logging.getLogger(__name__)

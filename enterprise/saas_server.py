@@ -153,8 +153,8 @@ if ENABLE_JIRA:
 if ENABLE_JIRA_DC:
     base_app.include_router(jira_dc_integration_router)
 if BITBUCKET_DATA_CENTER_HOST:
-    from server.routes.bitbucket_dc_proxy import (
-        router as bitbucket_dc_proxy_router,  # noqa: E402
+    from server.routes.bitbucket_dc_proxy import (  # noqa: E402
+        router as bitbucket_dc_proxy_router,
     )
 
     base_app.include_router(bitbucket_dc_proxy_router)

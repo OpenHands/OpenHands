@@ -4,6 +4,7 @@ from types import MappingProxyType
 from typing import Any, AsyncGenerator
 
 from fastapi import Request
+from openhands.sdk.secret import SecretSource, StaticSecret
 from pydantic import PrivateAttr, SecretStr
 
 from openhands.app_server.errors import AuthError
@@ -18,7 +19,6 @@ from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext, UserContextInjector
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.user_auth.user_auth import UserAuth, get_user_auth
-from openhands.sdk.secret import SecretSource, StaticSecret
 
 USER_AUTH_ATTR = 'user_auth'
 _logger = logging.getLogger(__name__)
@@ -131,9 +131,9 @@ class AuthUserContext(UserContext):
             for name, custom_secret in secrets.custom_secrets.items():
                 results[name] = StaticSecret(
                     value=custom_secret.secret,
-                    description=custom_secret.description
-                    if custom_secret.description
-                    else None,
+                    description=(
+                        custom_secret.description if custom_secret.description else None
+                    ),
                 )
 
         return results

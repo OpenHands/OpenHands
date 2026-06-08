@@ -8,9 +8,8 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
-
 from openhands.agent_server.utils import OpenHandsUUID, utc_now
+from pydantic import BaseModel, Field
 
 ProviderType = Any
 MetricsSnapshot = Any

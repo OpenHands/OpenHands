@@ -4,6 +4,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import Request
 from fastapi.testclient import TestClient
+from openhands.sdk.llm import LLM
+from openhands.sdk.settings import (
+    ConversationSettings,
+    OpenHandsAgentSettings,
+    VerificationSettings,
+)
 from pydantic import SecretStr
 
 from openhands.app_server.app import app
@@ -16,12 +22,6 @@ from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.user_auth.user_auth import UserAuth
-from openhands.sdk.llm import LLM
-from openhands.sdk.settings import (
-    ConversationSettings,
-    OpenHandsAgentSettings,
-    VerificationSettings,
-)
 
 _EXPOSE = {'expose_secrets': True}
 

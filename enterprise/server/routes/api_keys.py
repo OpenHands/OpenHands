@@ -362,9 +362,9 @@ async def get_llm_api_key_for_byor(
                     'BYOR key found in database but invalid in LiteLLM - regenerating',
                     extra={
                         'user_id': user_id,
-                        'key_prefix': byor_key[:10] + '...'
-                        if len(byor_key) > 10
-                        else byor_key,
+                        'key_prefix': (
+                            byor_key[:10] + '...' if len(byor_key) > 10 else byor_key
+                        ),
                     },
                 )
                 # Delete the invalid key from LiteLLM (best effort, don't fail if it doesn't exist)

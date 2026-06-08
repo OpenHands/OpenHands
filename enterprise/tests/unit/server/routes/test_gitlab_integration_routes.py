@@ -287,9 +287,9 @@ class TestReinstallGitLabWebhook:
 
         mock_gitlab_service_impl.return_value = mock_gitlab_service
         mock_isinstance.return_value = True
-        mock_webhook_store.reset_webhook_for_reinstallation_by_resource = (
-            AsyncMock(return_value=False)  # No existing webhook to reset
-        )
+        mock_webhook_store.reset_webhook_for_reinstallation_by_resource = AsyncMock(
+            return_value=False
+        )  # No existing webhook to reset
         mock_webhook_store.get_webhook_by_resource_only = AsyncMock(
             side_effect=[
                 None,

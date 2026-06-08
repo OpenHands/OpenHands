@@ -260,9 +260,11 @@ class GitHubDataCollector:
                 commit_data = {
                     'sha': commit.sha,
                     'authors': commit.author.login if commit.author else None,
-                    'committed_date': commit.commit.committer.date.isoformat()
-                    if commit.commit and commit.commit.committer
-                    else None,
+                    'committed_date': (
+                        commit.commit.committer.date.isoformat()
+                        if commit.commit and commit.commit.committer
+                        else None
+                    ),
                 }
                 commits.append(commit_data)
 

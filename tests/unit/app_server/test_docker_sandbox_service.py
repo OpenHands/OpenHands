@@ -1284,9 +1284,9 @@ class TestDockerSandboxServiceInjector:
             env_vars = {'AGENT_SERVER_USE_HOST_NETWORK': true_value}
             with patch.dict(os.environ, env_vars, clear=True):
                 injector = DockerSandboxServiceInjector()
-                assert injector.use_host_network is True, (
-                    f'Failed for value: {true_value}'
-                )
+                assert (
+                    injector.use_host_network is True
+                ), f'Failed for value: {true_value}'
 
     def test_use_host_network_env_var_defaults_to_false(self):
         """Test that unset or empty env var defaults to False."""

@@ -406,9 +406,9 @@ class LiteLlmManager:
                             extra={
                                 'org_id': org_id,
                                 'user_id': keycloak_user_id,
-                                'key_prefix': db_key[:10] + '...'
-                                if len(db_key) > 10
-                                else db_key,
+                                'key_prefix': (
+                                    db_key[:10] + '...' if len(db_key) > 10 else db_key
+                                ),
                             },
                         )
                         # Generate a new key for the user

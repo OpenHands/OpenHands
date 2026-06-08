@@ -119,11 +119,7 @@ class TestDeepMergeWithWholesaleKeys:
                 }
             }
         }
-        updates = {
-            'mcp_config': {
-                'mcpServers': {}  # delete all servers
-            }
-        }
+        updates = {'mcp_config': {'mcpServers': {}}}  # delete all servers
 
         result = deep_merge_with_wholesale_keys(base, updates)
 
@@ -132,9 +128,7 @@ class TestDeepMergeWithWholesaleKeys:
     def test_custom_wholesale_keys(self):
         """Should support custom wholesale keys via parameter."""
         base = {'custom_dict': {'a': 1, 'b': 2, 'c': 3}}
-        updates = {
-            'custom_dict': {'a': 1, 'b': 2}  # c deleted
-        }
+        updates = {'custom_dict': {'a': 1, 'b': 2}}  # c deleted
 
         # Without custom keys, c would be preserved (deep merge)
         result_default = deep_merge_with_wholesale_keys(base, updates)

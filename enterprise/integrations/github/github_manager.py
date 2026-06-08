@@ -208,7 +208,9 @@ class GithubManager(Manager[GithubViewType]):
             message
         ) and GithubFailingAction.unqiue_suggestions_header in payload.get(
             'comment', {}
-        ).get('body', ''):
+        ).get(
+            'body', ''
+        ):
             return False
 
         # Check event types before making expensive API calls (e.g., _user_has_write_access_to_repo)

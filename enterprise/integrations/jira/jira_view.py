@@ -26,12 +26,13 @@ from integrations.utils import (
     infer_repo_from_message,
 )
 from jinja2 import Environment
+from openhands.agent_server.models import SendMessageRequest
+from openhands.sdk import TextContent
 from storage.jira_conversation import JiraConversation
 from storage.jira_integration_store import JiraIntegrationStore
 from storage.jira_user import JiraUser
 from storage.jira_workspace import JiraWorkspace
 
-from openhands.agent_server.models import SendMessageRequest
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTaskStatus,
@@ -44,7 +45,6 @@ from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.app_server.utils.http_session import httpx_verify_option
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.sdk import TextContent
 
 JIRA_CLOUD_API_URL = 'https://api.atlassian.com/ex/jira'
 

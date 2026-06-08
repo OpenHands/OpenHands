@@ -21,20 +21,15 @@ class JiraDcViewInterface(ABC):
     @abstractmethod
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         """Get initial instructions for the conversation."""
-        pass
 
     @abstractmethod
     async def create_or_update_conversation(self, jinja_env: Environment) -> str:
         """Create or update a conversation and return the conversation ID."""
-        pass
 
     @abstractmethod
     def get_response_msg(self) -> str:
         """Get the response message to send back to Jira DC."""
-        pass
 
 
 class StartingConvoException(Exception):
     """Exception raised when starting a conversation fails."""
-
-    pass

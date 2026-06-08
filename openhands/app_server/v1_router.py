@@ -11,12 +11,8 @@ from openhands.app_server.pending_messages.pending_message_router import (
     router as pending_message_router,
 )
 from openhands.app_server.sandbox import sandbox_router, sandbox_spec_router
-from openhands.app_server.secrets.secrets_router import (
-    router as secrets_router,
-)
-from openhands.app_server.settings.settings_router import (
-    router as settings_router,
-)
+from openhands.app_server.secrets.secrets_router import router as secrets_router
+from openhands.app_server.settings.settings_router import router as settings_router
 from openhands.app_server.user import skills_router, user_router
 from openhands.app_server.web_client import web_client_router
 

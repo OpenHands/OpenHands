@@ -12,9 +12,9 @@ from openhands.app_server.utils.import_utils import get_impl
 load_dotenv()
 
 server_config_interface: ServerConfigInterface = load_server_config()
-assert isinstance(server_config_interface, ServerConfig), (
-    'Loaded server config interface is not a ServerConfig, despite this being assumed'
-)
+assert isinstance(
+    server_config_interface, ServerConfig
+), 'Loaded server config interface is not a ServerConfig, despite this being assumed'
 server_config: ServerConfig = server_config_interface
 
 # Note: socketio is no longer used. Redis access should use the standard redis package directly.

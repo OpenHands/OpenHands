@@ -6,8 +6,8 @@ from uuid import UUID
 import pytest
 from server.auth.token_manager import KeycloakUserInfo
 from server.constants import ORG_SETTINGS_VERSION
-from server.verified_models.verified_model_service import (
-    StoredVerifiedModel,  # noqa: F401
+from server.verified_models.verified_model_service import (  # noqa: F401
+    StoredVerifiedModel,
 )
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import (

@@ -3,14 +3,15 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
+from openhands.sdk.event import ConversationStateUpdateEvent
+from openhands.sdk.utils.models import DiscriminatedUnionMixin
+
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
     AppConversationInfoPage,
     AppConversationSortOrder,
 )
 from openhands.app_server.services.injector import Injector
-from openhands.sdk.event import ConversationStateUpdateEvent
-from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 
 class AppConversationInfoService(ABC):

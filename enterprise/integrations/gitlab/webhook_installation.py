@@ -35,8 +35,6 @@ SCOPES: list[str] = [
 class BreakLoopException(Exception):
     """Exception raised when webhook installation conditions are not met or rate limited."""
 
-    pass
-
 
 async def verify_webhook_conditions(
     gitlab_service: SaaSGitLabService,

@@ -7,8 +7,6 @@ with warnings.catch_warnings():
     import litellm
     from litellm import LlmProviders, ProviderConfigManager, get_llm_provider
 
-from openhands.app_server.utils.logger import openhands_logger as logger
-
 # ---------------------------------------------------------------------------
 # The ``openhands-sdk`` package is the **single source of truth** for which
 # models are verified and how bare LiteLLM names map to providers.
@@ -32,6 +30,8 @@ from openhands.sdk.llm.utils.verified_models import (
 from openhands.sdk.llm.utils.verified_models import (
     VERIFIED_OPENHANDS_MODELS as _SDK_OPENHANDS,
 )
+
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Build the ``openhands/…`` model list from the SDK.
 OPENHANDS_MODELS: list[str] = [f'openhands/{m}' for m in _SDK_OPENHANDS]

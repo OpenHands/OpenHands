@@ -16,8 +16,6 @@ class Base(DeclarativeBase):
     gradual migration to mapped_column() with Mapped[T] type annotations.
     """
 
-    pass
-
 
 T = TypeVar('T', bound=Enum)
 

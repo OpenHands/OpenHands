@@ -125,7 +125,9 @@ async def test_receive_message_runs_job_as_mentioner_when_linked_in_keycloak():
         manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
     ), patch.object(
         manager, '_commenter_has_write_access', return_value=True
-    ), patch.object(manager, 'start_job', new=fake_start_job):
+    ), patch.object(
+        manager, 'start_job', new=fake_start_job
+    ):
         await manager.receive_message(_comment_message())
 
     view = captured['view']
@@ -156,7 +158,9 @@ async def test_receive_message_asks_unenrolled_mentioner_to_sign_up():
         manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
     ), patch.object(
         manager, '_commenter_has_write_access', return_value=True
-    ), patch.object(manager, 'start_job', new=AsyncMock()) as mock_start, patch.object(
+    ), patch.object(
+        manager, 'start_job', new=AsyncMock()
+    ) as mock_start, patch.object(
         manager, '_send_user_not_found_message', new=AsyncMock()
     ) as mock_not_found:
         await manager.receive_message(_comment_message())
@@ -186,7 +190,9 @@ async def test_receive_message_drops_event_when_keycloak_lookup_raises():
         manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
     ), patch.object(
         manager, '_commenter_has_write_access', return_value=True
-    ), patch.object(manager, 'start_job', new=AsyncMock()) as mock_start, patch.object(
+    ), patch.object(
+        manager, 'start_job', new=AsyncMock()
+    ) as mock_start, patch.object(
         manager, '_send_user_not_found_message', new=AsyncMock()
     ) as mock_not_found:
         await manager.receive_message(_comment_message())
@@ -235,7 +241,9 @@ async def test_receive_message_skips_when_commenter_lacks_write_access():
         manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
     ), patch.object(
         manager, '_commenter_has_write_access', return_value=False
-    ), patch.object(manager, 'start_job', new=AsyncMock()) as mock_start:
+    ), patch.object(
+        manager, 'start_job', new=AsyncMock()
+    ) as mock_start:
         await manager.receive_message(_comment_message())
 
     mock_start.assert_not_called()

@@ -928,9 +928,9 @@ async def accept_tos(request: Request):
                 )
                 analytics.track_user_signed_up(
                     ctx=ctx,
-                    email_domain=email.split('@')[1]
-                    if email and '@' in email
-                    else None,
+                    email_domain=(
+                        email.split('@')[1] if email and '@' in email else None
+                    ),
                 )
                 analytics.set_person_properties(
                     ctx=ctx,

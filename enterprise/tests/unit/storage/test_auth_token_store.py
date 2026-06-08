@@ -208,13 +208,11 @@ class TestLoadTokensSlowPath:
     @pytest.mark.asyncio
     async def test_slow_path_successful_refresh(self, async_session_maker):
         """Test slow path successfully refreshes expired tokens."""
-        pass
 
     @pytest.mark.skip(reason='SQLite does not support PostgreSQL lock_timeout syntax')
     @pytest.mark.asyncio
     async def test_refresh_callback_returns_none(self, async_session_maker):
         """Test behavior when refresh callback returns None (no refresh performed)."""
-        pass
 
     @pytest.mark.asyncio
     async def test_slow_path_double_check_avoids_refresh(self, async_session_maker):

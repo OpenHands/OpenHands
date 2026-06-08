@@ -9,8 +9,6 @@ from storage.user import User
 class UserAppSettingsError(Exception):
     """Base exception for user app settings errors."""
 
-    pass
-
 
 class UserNotFoundError(UserAppSettingsError):
     """Raised when user is not found."""
@@ -22,8 +20,6 @@ class UserNotFoundError(UserAppSettingsError):
 
 class UserAppSettingsUpdateError(UserAppSettingsError):
     """Raised when user app settings update fails."""
-
-    pass
 
 
 class UserAppSettingsResponse(BaseModel):

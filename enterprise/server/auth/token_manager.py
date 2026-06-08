@@ -241,10 +241,16 @@ class TokenManager:
                 parsed = parse_qs(response.text)
                 # Convert lists to strings and specific keys to integers
                 data = {
-                    key: int(value[0])
-                    if key
-                    in {'expires_in', 'refresh_token_expires_in', 'refresh_expires_in'}
-                    else value[0]
+                    key: (
+                        int(value[0])
+                        if key
+                        in {
+                            'expires_in',
+                            'refresh_token_expires_in',
+                            'refresh_expires_in',
+                        }
+                        else value[0]
+                    )
                     for key, value in parsed.items()
                 }
 
@@ -395,10 +401,12 @@ class TokenManager:
 
             # Convert lists to strings and specific keys to integers
             data = {
-                key: int(value[0])
-                if key
-                in {'expires_in', 'refresh_token_expires_in', 'refresh_expires_in'}
-                else value[0]
+                key: (
+                    int(value[0])
+                    if key
+                    in {'expires_in', 'refresh_token_expires_in', 'refresh_expires_in'}
+                    else value[0]
+                )
                 for key, value in parsed.items()
             }
             return await self._parse_refresh_response(data)

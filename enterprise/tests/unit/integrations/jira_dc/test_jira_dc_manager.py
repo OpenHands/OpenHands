@@ -291,9 +291,9 @@ class TestValidateRequest:
             return_value=sample_jira_dc_workspace
         )
         payload = json.loads(json.dumps(sample_issue_created_webhook_payload))
-        payload['issue']['self'] = (
-            'https://other-jira.company.com/rest/api/2/issue/12345'
-        )
+        payload['issue'][
+            'self'
+        ] = 'https://other-jira.company.com/rest/api/2/issue/12345'
         body = json.dumps(payload).encode()
         signature = hmac.new('test_secret'.encode(), body, hashlib.sha256).hexdigest()
 

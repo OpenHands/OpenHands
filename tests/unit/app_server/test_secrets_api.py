@@ -1,4 +1,5 @@
 """Tests for the custom secrets API endpoints."""
+
 # flake8: noqa: E501
 
 import os
@@ -17,9 +18,7 @@ from openhands.app_server.integrations.provider import (
 )
 from openhands.app_server.secrets.file_secrets_store import FileSecretsStore
 from openhands.app_server.secrets.secrets_models import Secrets
-from openhands.app_server.secrets.secrets_router import (
-    router as secrets_router,
-)
+from openhands.app_server.secrets.secrets_router import router as secrets_router
 
 
 @pytest.fixture

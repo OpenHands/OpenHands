@@ -37,17 +37,14 @@ class JiraViewInterface(ABC):
         Returns:
             Tuple of (issue_title, issue_description)
         """
-        pass
 
     @abstractmethod
     async def create_or_update_conversation(self, jinja_env: Environment) -> str:
         """Create or update a conversation and return the conversation ID."""
-        pass
 
     @abstractmethod
     def get_response_msg(self) -> str:
         """Get the response message to send back to Jira."""
-        pass
 
 
 class StartingConvoException(Exception):
@@ -55,8 +52,6 @@ class StartingConvoException(Exception):
 
     This provides user-friendly error messages that can be sent back to Jira.
     """
-
-    pass
 
 
 class RepositoryNotFoundError(Exception):
@@ -67,5 +62,3 @@ class RepositoryNotFoundError(Exception):
     creation failure. The manager catches this and converts it to a user-friendly
     message.
     """
-
-    pass

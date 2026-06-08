@@ -5,8 +5,8 @@ from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.security import APIKeyHeader
-
 from openhands.agent_server.models import Success
+
 from openhands.app_server.config import depends_sandbox_service, depends_user_context
 from openhands.app_server.sandbox.sandbox_models import (
     SandboxInfo,

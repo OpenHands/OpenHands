@@ -13,11 +13,12 @@ is tracked as a follow-up.
 
 from __future__ import annotations
 
+from openhands.sdk.settings.model import AGENT_SETTINGS_SCHEMA_VERSION
+
 from openhands.app_server.settings.settings_models import (
     Settings,
     _load_persisted_agent_settings,
 )
-from openhands.sdk.settings.model import AGENT_SETTINGS_SCHEMA_VERSION
 
 
 def _set_acp(

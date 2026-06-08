@@ -5,11 +5,11 @@ from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import Request
+from openhands.sdk import Event
 
 from openhands.app_server.event.event_service import EventService, EventServiceInjector
 from openhands.app_server.event.event_service_base import EventServiceBase
 from openhands.app_server.services.injector import InjectorState
-from openhands.sdk import Event
 
 _logger = logging.getLogger(__name__)
 

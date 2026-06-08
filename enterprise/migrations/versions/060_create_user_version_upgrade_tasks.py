@@ -70,14 +70,12 @@ def upgrade():
 
             # Insert maintenance task directly
             session.execute(
-                sa.text(
-                    """
+                sa.text("""
                     INSERT INTO maintenance_tasks
                     (status, processor_type, processor_json, delay, created_at, updated_at)
                     VALUES
                     ('PENDING', :processor_type, :processor_json, :delay, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    """
-                ),
+                    """),
                 {
                     'processor_type': processor_type,
                     'processor_json': processor_json,
