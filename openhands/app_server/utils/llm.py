@@ -19,6 +19,7 @@ with warnings.catch_warnings():
 # ``VERIFIED_OPENHANDS_MODELS``.  SaaS mode overrides it with the database
 # (via ``get_openhands_models``).
 # ---------------------------------------------------------------------------
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk.llm.utils.verified_models import (  # noqa: E402
     VERIFIED_ANTHROPIC_MODELS as _SDK_ANTHROPIC,
 )
@@ -34,8 +35,6 @@ from openhands.sdk.llm.utils.verified_models import (
 from openhands.sdk.llm.utils.verified_models import (
     VERIFIED_OPENHANDS_MODELS as _SDK_OPENHANDS,
 )
-
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Build the ``openhands/…`` model list from the SDK.
 OPENHANDS_MODELS: list[str] = [f'openhands/{m}' for m in _SDK_OPENHANDS]

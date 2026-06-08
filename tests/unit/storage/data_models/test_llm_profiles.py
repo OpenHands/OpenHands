@@ -5,7 +5,6 @@ through ``Settings``) live in ``test_settings.py``.
 """
 
 import pytest
-from openhands.sdk.llm import LLM
 from pydantic import SecretStr, ValidationError
 
 from openhands.app_server.settings.llm_profiles import (
@@ -16,6 +15,7 @@ from openhands.app_server.settings.llm_profiles import (
     ProfileNotFoundError,
     StrictLLM,
 )
+from openhands.sdk.llm import LLM
 
 
 def _make_llm(model: str = 'openai/gpt-4o', api_key: str | None = None) -> LLM:

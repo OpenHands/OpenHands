@@ -5,11 +5,10 @@ from datetime import datetime
 from uuid import UUID
 
 from openhands.agent_server.models import EventPage, EventSortOrder
-from openhands.sdk import Event
-from openhands.sdk.utils.models import DiscriminatedUnionMixin
-
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.app_server.services.injector import Injector
+from openhands.sdk import Event
+from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 _logger = logging.getLogger(__name__)
 

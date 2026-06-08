@@ -2417,7 +2417,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 for root, dirs, files in os.walk(temp_dir):
                     for file in files:
                         file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, temp_dir)  # noqa: ASYNC240
+                        arcname = os.path.relpath(file_path, temp_dir)
                         zipf.write(file_path, arcname)
 
             # Read the zip file content

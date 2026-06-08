@@ -12,13 +12,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from openhands.agent_server.models import ConversationInfo, Success
-from openhands.sdk import Agent
-from openhands.sdk.agent.acp_agent import ACPAgent
-from openhands.sdk.llm import LLM
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from openhands.agent_server.models import ConversationInfo, Success
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
@@ -28,6 +25,9 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
 from openhands.app_server.event_callback.webhook_router import on_conversation_update
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
+from openhands.sdk import Agent
+from openhands.sdk.agent.acp_agent import ACPAgent
+from openhands.sdk.llm import LLM
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -3,13 +3,13 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
-from openhands.sdk.llm import LLM
-from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
 from pydantic import SecretStr
 
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_models import Settings
+from openhands.sdk.llm import LLM
+from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
 
 
 @pytest.fixture(autouse=True)

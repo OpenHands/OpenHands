@@ -9,10 +9,10 @@ from typing import AsyncGenerator
 from uuid import uuid4
 
 import pytest
-from openhands.agent_server.models import TextContent
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from openhands.agent_server.models import TextContent
 from openhands.app_server.pending_messages.pending_message_models import (
     PendingMessageResponse,
 )

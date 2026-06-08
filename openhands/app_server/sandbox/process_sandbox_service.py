@@ -20,9 +20,9 @@ import base62
 import httpx
 import psutil
 from fastapi import Request
-from openhands.agent_server.utils import utc_now
 from pydantic import BaseModel, ConfigDict, Field
 
+from openhands.agent_server.utils import utc_now
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
@@ -393,7 +393,7 @@ class ProcessSandboxService(SandboxService):
             # Clean up the working directory
             import shutil
 
-            if os.path.exists(process_info.working_dir):  # noqa: ASYNC240
+            if os.path.exists(process_info.working_dir):
                 shutil.rmtree(process_info.working_dir, ignore_errors=True)
 
             # Remove from our tracking
