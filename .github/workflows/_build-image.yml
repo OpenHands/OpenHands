@@ -99,6 +99,7 @@ jobs:
     runs-on: ubuntu-22.04
     needs: build
     permissions:
+      contents: read
       packages: write
     steps:
       - name: Checkout
