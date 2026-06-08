@@ -73,4 +73,21 @@ describe("rate limit retry helpers", () => {
       getRateLimitRetryDelayMs(createAxiosError(429, { "retry-after": "0" })),
     ).toBe(0);
   });
+
+  it("clamps large Retry-After seconds to max 60 seconds", () => {
+    expect(
+      getRateLimitRetryDelayMs(createAxiosError(429, { "retry-after": "120" })),
+    ).toBe(60_000);
+  });
+
+  it("clamps far-future Retry-After dates to max 60 seconds", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-04T20:00:00.000Z"));
+
+    const farFuture = new Date("2026-06-04T21:00:00.000Z").toUTCString();
+
+    expect(
+      getRateLimitRetryDelayMs(createAxiosError(429, { "retry-after": farFuture })),
+    ).toBe(60_000);
+  });
 });
