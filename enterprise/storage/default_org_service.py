@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 from uuid import UUID
 
+from pydantic import SecretStr
 from server.constants import ROLE_MEMBER, ROLE_OWNER
 from server.routes.org_models import OrgNameExistsError
 from storage.org import Org
@@ -252,8 +253,10 @@ class DefaultOrgBootstrapService:
     async def _create_member_litellm_api_key(org_id: UUID, user_id: UUID) -> str:
         """Provision org-scoped LiteLLM access and return the member API key."""
         settings = await OrgService.create_litellm_integration(org_id, str(user_id))
-        llm_api_key_secret = settings.agent_settings.llm.api_key
-        return llm_api_key_secret.get_secret_value() if llm_api_key_secret else ''
+        llm_api_key = settings.agent_settings.llm.api_key
+        if isinstance(llm_api_key, SecretStr):
+            return llm_api_key.get_secret_value()
+        return llm_api_key or ''
 
     @staticmethod
     async def _promote_to_owner_if_needed(
