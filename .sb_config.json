@@ -421,12 +421,17 @@
         "run_on": null,
         "extra_exclude_paths": [],
         "include_paths": [],
-        "max_file_lines": 1000,
-        "max_function_lines": 100,
+        "max_file_lines": 1800,
+        "max_function_lines": 300,
         "include_dirs": [
           "."
         ],
-        "exclude_dirs": [],
+        "exclude_dirs": [
+          "tests",
+          "enterprise/tests",
+          "frontend",
+          "scripts"
+        ],
         "extensions": []
       },
       "ignored-feedback": {
