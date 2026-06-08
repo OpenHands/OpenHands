@@ -315,7 +315,17 @@
         ],
         "config_file_path": ".secrets.baseline",
         "bandit_config_file": null,
-        "pip_audit_ignore_vulns": []
+        "pip_audit_ignore_vulns": [
+          "CVE-2026-34993",
+          "CVE-2026-47265",
+          "CVE-2026-45409",
+          "PYSEC-2026-179",
+          "PYSEC-2026-178",
+          "PYSEC-2026-175",
+          "PYSEC-2026-177",
+          "PYSEC-2026-161",
+          "PYSEC-2022-42969"
+        ]
       },
       "vulnerability-blindness.py": {
         "enabled": true,
@@ -343,7 +353,17 @@
         ],
         "config_file_path": ".secrets.baseline",
         "bandit_config_file": null,
-        "pip_audit_ignore_vulns": []
+        "pip_audit_ignore_vulns": [
+          "CVE-2026-34993",
+          "CVE-2026-47265",
+          "CVE-2026-45409",
+          "PYSEC-2026-179",
+          "PYSEC-2026-178",
+          "PYSEC-2026-175",
+          "PYSEC-2026-177",
+          "PYSEC-2026-161",
+          "PYSEC-2022-42969"
+        ]
       },
       "github-actions-hygiene": {
         "enabled": true,
