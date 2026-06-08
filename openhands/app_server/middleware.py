@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
@@ -13,6 +14,8 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from openhands.app_server.config import get_global_config
+
+_RESUME_RE = re.compile(r'^/api/v1/sandboxes/[^/]+/resume/?$')
 
 
 class LocalhostCORSMiddleware(CORSMiddleware):
@@ -135,9 +138,4 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         )
 
     def _is_sandbox_resume_request(self, request: StarletteRequest) -> bool:
-        path = request.url.path.rstrip('/')
-        return (
-            request.method == 'POST'
-            and path.startswith('/api/v1/sandboxes/')
-            and path.endswith('/resume')
-        )
+        return request.method == 'POST' and bool(_RESUME_RE.match(request.url.path))
