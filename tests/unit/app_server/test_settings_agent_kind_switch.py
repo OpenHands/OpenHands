@@ -13,7 +13,11 @@ is tracked as a follow-up.
 
 from __future__ import annotations
 
-from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_models import (
+    Settings,
+    _load_persisted_agent_settings,
+)
+from openhands.sdk.settings.model import AGENT_SETTINGS_SCHEMA_VERSION
 
 
 def _set_acp(
@@ -99,3 +103,44 @@ def test_replace_mcp_config_in_kind_switch():
     s.update(_set_openhands(mcp_config={'mcpServers': {'foo': {'command': 'foo-bin'}}}))
     assert s.agent_settings.mcp_config is not None
     assert 'foo' in s.agent_settings.mcp_config.mcpServers
+
+
+def test_loader_normalizes_legacy_llm_tag_at_current_schema_version():
+    """A persisted ``agent_kind: 'llm'`` row already at the current
+    ``schema_version`` must read back as ``openhands``.
+
+    The SDK's ``llm -> openhands`` rename only fires while advancing the
+    schema version, so an ``'llm'`` payload already at the current version is
+    not migrated and would otherwise validate as the deprecated
+    ``LLMAgentSettings`` (``agent_kind == 'llm'``). The loader normalizes it so
+    every read stays on the canonical ``{openhands, acp}`` variants — this is
+    the one legitimate job the deleted force-cast used to do.
+    """
+    loaded = _load_persisted_agent_settings(
+        {
+            'agent_kind': 'llm',
+            'schema_version': AGENT_SETTINGS_SCHEMA_VERSION,
+            'llm': {'model': 'anthropic/claude-sonnet-4-5'},
+        }
+    )
+
+    assert loaded.agent_kind == 'openhands'
+    assert loaded.llm.model == 'anthropic/claude-sonnet-4-5'
+
+
+def test_loader_preserves_acp_variant_without_coercion():
+    """The loader must leave ``agent_kind: 'acp'`` alone — the ``llm``
+    normalization must not regress into the cross-variant coercion that 500'd
+    ACP settings (``ACPAgentSettings.agent_context`` is nullable; the OpenHands
+    shape rejects ``None``).
+    """
+    loaded = _load_persisted_agent_settings(
+        {
+            'agent_kind': 'acp',
+            'acp_server': 'claude-code',
+            'llm': {'model': 'litellm_proxy/anthropic/claude-sonnet-4'},
+        }
+    )
+
+    assert loaded.agent_kind == 'acp'
+    assert loaded.agent_context is None

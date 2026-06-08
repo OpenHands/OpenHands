@@ -59,6 +59,7 @@ from server.utils.rate_limit_utils import (
 from server.utils.url_utils import get_cookie_domain, get_cookie_samesite, get_web_url
 from sqlalchemy import select
 from storage.database import a_session_maker
+from storage.default_org_service import DefaultOrgBootstrapService
 from storage.user import User
 from storage.user_store import UserStore
 
@@ -70,7 +71,7 @@ from openhands.app_server.integrations.provider import (
 )
 from openhands.app_server.integrations.service_types import ProviderType, TokenResponse
 from openhands.app_server.user_auth import get_access_token
-from openhands.app_server.user_auth.user_auth import get_user_auth
+from openhands.app_server.user_auth.user_auth import AuthType, get_user_auth
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 with warnings.catch_warnings():
@@ -330,8 +331,10 @@ async def keycloak_callback(
     user_id = user_info.sub
     user_info_dict = user_info.model_dump(exclude_none=True)
     user = await UserStore.get_user_by_id(user_id)
+    is_new_user: bool = False
     if not user:
         user = await UserStore.create_user(user_id, user_info_dict)
+        is_new_user = True
     else:
         # Existing user — gradually backfill contact_name if it still has a username-style value
         await UserStore.backfill_contact_name(user_id, user_info_dict)
@@ -578,6 +581,17 @@ async def keycloak_callback(
                 redirect_url = f'{redirect_url}&invitation_error=true'
             else:
                 redirect_url = f'{redirect_url}?invitation_error=true'
+
+    try:
+        user = await DefaultOrgBootstrapService.apply_for_user(
+            user,
+            is_new_user=is_new_user,
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error applying default organization bootstrap',
+            extra={'user_id': user_id, 'error': str(e)},
+        )
 
     # If the user hasn't accepted the TOS, redirect to the TOS page
     if not has_accepted_tos:
@@ -1075,10 +1089,25 @@ async def logout(request: Request):
         samesite=get_cookie_samesite(),
     )
 
-    # Try to properly logout from Keycloak, but don't fail if it doesn't work
+    # Try to properly logout from Keycloak, but don't fail if it doesn't work.
+    #
+    # IMPORTANT: only terminate the Keycloak session when the resolved
+    # auth is the *cookie* (browser session). ``get_user_auth`` resolves
+    # bearer tokens before cookies, so a request that carries both an
+    # ``Authorization: Bearer <api-key>`` header *and* a
+    # ``keycloak_auth`` cookie would otherwise have its API-key-bound
+    # *offline_token* terminated when the user clicked "logout" in the
+    # browser. The browser intent is to drop the cookie session, not to
+    # revoke a long-lived API key. The cookie itself is always deleted
+    # above; we just must not nuke an offline session that belongs to a
+    # different auth surface.
     try:
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
-        if user_auth and user_auth.refresh_token:
+        if (
+            user_auth
+            and user_auth.refresh_token
+            and user_auth.auth_type == AuthType.COOKIE
+        ):
             refresh_token = user_auth.refresh_token.get_secret_value()
             await token_manager.logout(refresh_token)
     except Exception as e:

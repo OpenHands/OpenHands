@@ -35,7 +35,12 @@ from openhands.app_server.settings.settings_models import (
 from openhands.app_server.utils.jsonpatch_compat import deep_merge
 from openhands.app_server.utils.llm import is_openhands_model
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
+from openhands.sdk.settings import (
+    AgentSettingsConfig,
+    ConversationSettings,
+    OpenHandsAgentSettings,
+    validate_agent_settings,
+)
 
 _ORG_SETTINGS_EXCLUDED_FIELDS = {
     'id',
@@ -56,16 +61,13 @@ class OrgStore:
     """Store for managing organizations."""
 
     @staticmethod
-    def get_agent_settings_from_org(org: Org) -> OpenHandsAgentSettings:
-        # Apply persisted-settings migrations via the shared SDK loader,
-        # then coerce the legacy ``agent_kind: 'llm'`` discriminator onto
-        # the canonical class. Some saved entries still carry that
-        # pre-rename shape and would otherwise validate as
-        # ``LLMAgentSettings``.
-        loaded = _load_persisted_agent_settings(dict(org.agent_settings))
-        payload = loaded.model_dump(mode='json', context={'expose_secrets': True})
-        payload['agent_kind'] = 'openhands'
-        return OpenHandsAgentSettings.model_validate(payload)
+    def get_agent_settings_from_org(org: Org) -> AgentSettingsConfig:
+        # Route through the shared SDK loader: it applies persisted-settings
+        # migrations (incl. the legacy ``agent_kind: 'llm'`` -> ``'openhands'``
+        # rename) and returns the actual variant. ACP settings are returned as
+        # ``ACPAgentSettings``, not coerced into the OpenHands shape — that
+        # coercion 500s on ACP's nullable ``agent_context``.
+        return _load_persisted_agent_settings(dict(org.agent_settings))
 
     @staticmethod
     def get_conversation_settings_from_org(org: Org) -> ConversationSettings:
@@ -259,22 +261,31 @@ class OrgStore:
         current_settings: dict[str, Any],
         settings_diff: dict[str, Any],
         settings_type: type[OpenHandsAgentSettings] | type[ConversationSettings],
-    ) -> OpenHandsAgentSettings | ConversationSettings:
+    ) -> AgentSettingsConfig | ConversationSettings:
         """Deep-merge a sparse settings diff and validate the merged result.
 
-        The persisted base is routed through the SDK ``from_persisted`` loader
-        first so any registered schema migrations are applied before the diff
-        is merged. Agent settings additionally coerce the legacy
-        ``agent_kind: 'llm'`` discriminator onto the canonical class.
+        The persisted base is routed through the SDK loader first so any
+        registered schema migrations are applied before the diff is merged.
+        Agent settings are validated against the discriminated union, so the
+        result is the correct variant (OpenHands or ACP) rather than a coerced
+        OpenHands shape.
         """
         if settings_type is OpenHandsAgentSettings:
             base_settings = _load_persisted_agent_settings(current_settings or {})
-            merged_settings = deep_merge(
-                base_settings.model_dump(mode='json', context={'expose_secrets': True}),
-                settings_diff,
-            )
-            merged_settings['agent_kind'] = 'openhands'
-            return OpenHandsAgentSettings.model_validate(merged_settings)
+            new_kind = settings_diff.get('agent_kind')
+            if new_kind and new_kind != base_settings.agent_kind:
+                # Variant switch: deep-merging the new kind's fields onto the
+                # outgoing kind's dump yields an invalid mongrel. Start from a
+                # fresh base and let the diff populate it.
+                merged_settings = {'agent_kind': new_kind, **settings_diff}
+            else:
+                merged_settings = deep_merge(
+                    base_settings.model_dump(
+                        mode='json', context={'expose_secrets': True}
+                    ),
+                    settings_diff,
+                )
+            return validate_agent_settings(merged_settings)
 
         base_settings = _load_persisted_conversation_settings(current_settings)  # type: ignore[assignment]
         merged_settings = deep_merge(

@@ -67,8 +67,19 @@ def _load_persisted_agent_settings(
     Routes the raw payload through :func:`validate_agent_settings` so any
     schema migrations registered with the SDK are applied before validation
     against the discriminated :data:`AgentSettingsConfig` union.
+
+    The legacy ``agent_kind: 'llm'`` tag (pre-rename, field-compatible with
+    ``openhands``) is normalized to ``'openhands'`` first. The SDK migration
+    only rewrites it while advancing ``schema_version``, so an ``'llm'`` payload
+    already at the current version would otherwise validate as the deprecated
+    ``LLMAgentSettings``. Doing it here keeps every read on the canonical
+    ``{openhands, acp}`` variants, without the cross-variant coercion that 500'd
+    ACP settings (``agent_kind: 'acp'`` is left untouched).
     """
-    return validate_agent_settings(data or {})
+    payload = data or {}
+    if isinstance(payload, dict) and payload.get('agent_kind') == 'llm':
+        payload = {**payload, 'agent_kind': 'openhands'}
+    return validate_agent_settings(payload)
 
 
 def _load_persisted_conversation_settings(data: Any) -> ConversationSettings:
