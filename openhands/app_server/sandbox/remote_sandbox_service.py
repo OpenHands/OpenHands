@@ -11,17 +11,16 @@ from uuid import UUID
 import base62
 import httpx
 from fastapi import Request
-from openhands.agent_server.models import (
-    ConversationInfo,
-    EventPage,
-)
-from openhands.agent_server.utils import utc_now
-from openhands.sdk.utils.paging import page_iterator
 from pydantic import Field
 from sqlalchemy import String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
+from openhands.agent_server.models import (
+    ConversationInfo,
+    EventPage,
+)
+from openhands.agent_server.utils import utc_now
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
@@ -48,6 +47,7 @@ from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.sql_utils import Base, UtcDateTime
+from openhands.sdk.utils.paging import page_iterator
 
 _logger = logging.getLogger(__name__)
 polling_task: asyncio.Task | None = None
