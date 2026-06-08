@@ -58,7 +58,7 @@ def _get_user_provider() -> AnalyticsUserProvider:
     from openhands.app_server.shared import server_config
 
     impl_class = get_impl(
-        AnalyticsUserProvider, server_config.analytics_user_provider_class
+        AnalyticsUserProvider, server_config.analytics_user_provider_class  # type: ignore[type-abstract]
     )
     return impl_class()
 

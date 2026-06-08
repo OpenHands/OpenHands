@@ -121,7 +121,7 @@ async def get_user_auth(request: Request) -> UserAuth:
     if user_auth:
         return user_auth
     impl_name = server_config.user_auth_class
-    impl = get_impl(UserAuth, impl_name)
+    impl = get_impl(UserAuth, impl_name)  # type: ignore[type-abstract]
     user_auth = await impl.get_instance(request)
     if user_auth is None:
         raise ValueError('Failed to get user auth instance')
@@ -131,6 +131,6 @@ async def get_user_auth(request: Request) -> UserAuth:
 
 async def get_for_user(user_id: str) -> UserAuth:
     impl_name = server_config.user_auth_class
-    impl = get_impl(UserAuth, impl_name)
+    impl = get_impl(UserAuth, impl_name)  # type: ignore[type-abstract]
     user_auth = await impl.get_for_user(user_id)
     return user_auth

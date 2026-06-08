@@ -253,7 +253,9 @@ async def _handle_workspace_link_creation(  # noqa: ambiguity-mine
         )
 
 
-async def _validate_workspace_update_permissions(user_id: str, target_workspace: str):  # noqa: ambiguity-mine
+async def _validate_workspace_update_permissions(
+    user_id: str, target_workspace: str
+):  # noqa: ambiguity-mine
     """Validate that user can update the target workspace."""
     workspace = await jira_dc_manager.integration_store.get_workspace_by_name(
         target_workspace
@@ -710,7 +712,9 @@ async def update_jira_dc_workspace_status(
 
 
 @jira_dc_integration_router.post('/workspaces/link')
-async def create_workspace_link(request: Request, link_data: JiraDcLinkCreate):  # noqa: ambiguity-mine
+async def create_workspace_link(
+    request: Request, link_data: JiraDcLinkCreate
+):  # noqa: ambiguity-mine
     """Register a user mapping to a Jira DC workspace."""
     try:
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
@@ -825,7 +829,9 @@ async def jira_dc_callback(request: Request, code: str, state: str):
     if target_workspace != urlparse(JIRA_DC_BASE_URL).hostname:
         raise HTTPException(status_code=400, detail='Target workspace mismatch.')
 
-    jira_dc_user_response = requests.get(JIRA_DC_USER_INFO_URL, headers=headers, timeout=10)
+    jira_dc_user_response = requests.get(
+        JIRA_DC_USER_INFO_URL, headers=headers, timeout=10
+    )
     if jira_dc_user_response.status_code != 200:
         raise HTTPException(
             status_code=400,
@@ -1089,7 +1095,9 @@ async def unlink_workspace(request: Request):  # noqa: ambiguity-mine
     '/workspaces/validate/{workspace_name}',
     response_model=JiraDcValidateWorkspaceResponse,
 )
-async def validate_workspace_integration(request: Request, workspace_name: str):  # noqa: ambiguity-mine
+async def validate_workspace_integration(
+    request: Request, workspace_name: str
+):  # noqa: ambiguity-mine
     """Validate if the workspace has an active Jira DC integration."""
     try:
         await get_user_auth(request)

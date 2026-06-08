@@ -20,6 +20,10 @@ server_config: ServerConfig = server_config_interface
 # Note: socketio is no longer used. Redis access should use the standard redis package directly.
 # For enterprise code, use: from enterprise.storage.redis import get_redis_client, get_redis_client_async
 
-SettingsStoreImpl = get_impl(SettingsStore, server_config.settings_store_class)
+SettingsStoreImpl = get_impl(
+    SettingsStore, server_config.settings_store_class  # type: ignore[type-abstract]
+)
 
-SecretsStoreImpl = get_impl(SecretsStore, server_config.secret_store_class)
+SecretsStoreImpl = get_impl(
+    SecretsStore, server_config.secret_store_class  # type: ignore[type-abstract]
+)

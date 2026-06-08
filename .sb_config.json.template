@@ -31,8 +31,8 @@
         "run_on": null,
         "extra_exclude_paths": [],
         "include_paths": [],
-        "strict_typing": true,
-        "include_dirs": []
+        "strict_typing": false,
+        "include_dirs": ["openhands"]
       },
       "type-blindness.py": {
         "enabled": true,

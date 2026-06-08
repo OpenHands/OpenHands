@@ -81,12 +81,15 @@ class TestValidateSecretsDict:
 
     def test_valid_secrets(self):
         """Valid secrets dict should not raise."""
-        assert validate_secrets_dict(
-            {
-                'KEY1': 'value1',
-                'KEY2': 'value2',
-            }
-        ) is None
+        assert (
+            validate_secrets_dict(
+                {
+                    'KEY1': 'value1',
+                    'KEY2': 'value2',
+                }
+            )
+            is None
+        )
 
     def test_too_many_secrets(self):
         """Exceeding max count should raise."""

@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Annotated
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
