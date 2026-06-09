@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Coroutine
 
 from integrations.store_repo_utils import store_repositories_in_db
 from pydantic import SecretStr
@@ -8,6 +9,19 @@ from openhands.app_server.integrations.github.github_service import GitHubServic
 from openhands.app_server.integrations.service_types import ProviderType, Repository
 from openhands.app_server.types import AppMode
 from openhands.app_server.utils.logger import openhands_logger as logger
+
+# Module-level set to keep background tasks alive until completion.
+# Without this, tasks could be garbage-collected mid-execution.
+# See: https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _create_safe_task(coro: Coroutine) -> asyncio.Task:
+    """Create a task that won't be garbage-collected before completion."""
+    task = asyncio.create_task(coro)
+    task.add_done_callback(_background_tasks.discard)
+    _background_tasks.add(task)
+    return task
 
 
 class SaaSGitHubService(GitHubService):
@@ -159,7 +173,7 @@ class SaaSGitHubService(GitHubService):
         )
         external_auth_id = await self._get_external_auth_id()
         if external_auth_id:
-            _ = asyncio.create_task(
+            _create_safe_task(
                 store_repositories_in_db(repositories, external_auth_id)
             )
         return repositories
@@ -171,7 +185,7 @@ class SaaSGitHubService(GitHubService):
         # Schedule the background task without awaiting it
         external_auth_id = await self._get_external_auth_id()
         if external_auth_id:
-            _ = asyncio.create_task(
+            _create_safe_task(
                 store_repositories_in_db(repositories, external_auth_id)
             )
         # Return repositories immediately
