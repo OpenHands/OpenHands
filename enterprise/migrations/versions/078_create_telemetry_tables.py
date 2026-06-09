@@ -1,4 +1,4 @@
-"""create telemetry tables.
+"""create telemetry tables
 
 Revision ID: 078
 Revises: 077

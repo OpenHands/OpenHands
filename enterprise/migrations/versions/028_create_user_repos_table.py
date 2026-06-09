@@ -1,4 +1,4 @@
-"""create user-repos table.
+"""create user-repos table
 
 Revision ID: 027
 Revises: 026

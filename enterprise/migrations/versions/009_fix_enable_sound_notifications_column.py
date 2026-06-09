@@ -1,4 +1,4 @@
-"""fix enable_sound_notifications settings to not be nullable.
+"""fix enable_sound_notifications settings to not be nullable
 
 Revision ID: 009
 Revises: 008

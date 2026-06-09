@@ -1,4 +1,4 @@
-"""add public column to conversation_metadata.
+"""add public column to conversation_metadata
 
 Revision ID: 085
 Revises: 084

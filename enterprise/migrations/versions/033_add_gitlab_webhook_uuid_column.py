@@ -1,4 +1,4 @@
-"""add status column to gitlab-webhook table.
+"""add status column to gitlab-webhook table
 
 Revision ID: 033
 Revises: 032

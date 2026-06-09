@@ -1,4 +1,4 @@
-"""create jira_dc_users table.
+"""create jira_dc_users table
 
 Revision ID: 067
 Revises: 066

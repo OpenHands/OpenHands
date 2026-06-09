@@ -1,4 +1,4 @@
-"""Create device_codes table for OAuth 2.0 Device Flow.
+"""Create device_codes table for OAuth 2.0 Device Flow
 
 Revision ID: 084
 Revises: 083

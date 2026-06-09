@@ -1,4 +1,4 @@
-"""drop settings table.
+"""drop settings table
 
 Revision ID: 077
 Revises: 076

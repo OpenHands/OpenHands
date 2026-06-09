@@ -1,4 +1,4 @@
-"""Create API keys table.
+"""Create API keys table
 
 Revision ID: 022
 Revises: 021

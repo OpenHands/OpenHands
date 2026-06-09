@@ -23,7 +23,8 @@ INDEX_NAME = 'uq_jira_dc_users_one_active_per_user'
 def upgrade() -> None:
     # Keep the newest active link per user before adding the uniqueness guard.
     op.execute(
-        sa.text("""
+        sa.text(
+            """
             UPDATE jira_dc_users
             SET status = 'inactive'
             WHERE status = 'active'
@@ -41,7 +42,8 @@ def upgrade() -> None:
                 ) ranked
                 WHERE row_num = 1
               )
-            """)
+            """
+        )
     )
 
     dialect_name = op.get_bind().dialect.name

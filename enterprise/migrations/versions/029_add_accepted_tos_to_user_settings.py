@@ -1,4 +1,4 @@
-"""add accepted_tos to user_settings.
+"""add accepted_tos to user_settings
 
 Revision ID: 029
 Revises: 028

@@ -1,4 +1,4 @@
-"""create saas settings table.
+"""create saas settings table
 
 Revision ID: 002
 Revises: 001

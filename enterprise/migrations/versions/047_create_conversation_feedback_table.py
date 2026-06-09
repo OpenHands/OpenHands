@@ -1,4 +1,4 @@
-"""Create conversation feedback table.
+"""Create conversation feedback table
 
 Revision ID: 046
 Revises: 045

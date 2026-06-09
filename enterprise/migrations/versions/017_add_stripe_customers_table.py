@@ -1,4 +1,4 @@
-"""Add a stripe customers table.
+"""Add a stripe customers table
 
 Revision ID: 017
 Revises: 016

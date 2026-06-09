@@ -1,4 +1,4 @@
-"""Sync DB with Models.
+"""Sync DB with Models
 
 Revision ID: 076
 Revises: 075

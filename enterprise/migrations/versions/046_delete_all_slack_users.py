@@ -1,4 +1,4 @@
-"""delete all slack users.
+"""delete all slack users
 
 Revision ID: 046
 Revises: 045

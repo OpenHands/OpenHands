@@ -1,4 +1,4 @@
-"""create user settings table.
+"""create user settings table
 
 Revision ID: 011
 Revises: 010

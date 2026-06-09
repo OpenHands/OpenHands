@@ -1,4 +1,4 @@
-"""create jira_users table.
+"""create jira_users table
 
 Revision ID: 064
 Revises: 063

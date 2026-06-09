@@ -1,4 +1,4 @@
-"""create subscription_access table.
+"""create subscription_access table
 
 Revision ID: 074
 Revises: 073

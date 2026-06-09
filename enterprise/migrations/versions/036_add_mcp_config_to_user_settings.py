@@ -1,4 +1,4 @@
-"""add mcp_config to user_settings.
+"""add mcp_config to user_settings
 
 Revision ID: 036
 Revises: 035

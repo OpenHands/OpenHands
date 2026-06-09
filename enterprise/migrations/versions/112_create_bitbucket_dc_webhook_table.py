@@ -1,4 +1,4 @@
-"""create bitbucket dc webhook table.
+"""create bitbucket dc webhook table
 
 Revision ID: 112
 Revises: 111

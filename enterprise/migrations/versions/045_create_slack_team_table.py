@@ -1,4 +1,4 @@
-"""create slack team table.
+"""create slack team table
 
 Revision ID: 045
 Revises: 044

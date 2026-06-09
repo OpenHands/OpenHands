@@ -1,4 +1,4 @@
-"""Add pending_messages table for server-side message queuing.
+"""Add pending_messages table for server-side message queuing
 
 Revision ID: 101
 Revises: 100

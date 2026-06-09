@@ -1,4 +1,4 @@
-"""create jira_conversations table.
+"""create jira_conversations table
 
 Revision ID: 065
 Revises: 064

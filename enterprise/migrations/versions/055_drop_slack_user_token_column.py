@@ -1,4 +1,4 @@
-"""drop slack_user_token column from slack_users table.
+"""drop slack_user_token column from slack_users table
 
 Revision ID: 055
 Revises: 054

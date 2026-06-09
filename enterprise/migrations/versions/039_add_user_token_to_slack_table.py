@@ -1,4 +1,4 @@
-"""add user token to conversation metadata table.
+"""add user token to conversation metadata table
 
 Revision ID: 039
 Revises: 038

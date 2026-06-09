@@ -1,4 +1,4 @@
-"""create saas conversations table.
+"""create saas conversations table
 
 Revision ID: 004
 Revises: 003

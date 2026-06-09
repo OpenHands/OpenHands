@@ -1,4 +1,4 @@
-"""add margin column.
+"""add margin column
 
 Revision ID: 005
 Revises: 004

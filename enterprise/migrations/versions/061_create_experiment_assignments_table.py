@@ -1,4 +1,4 @@
-"""Create experiment assignments table.
+"""Create experiment assignments table
 
 Revision ID: 061
 Revises: 060

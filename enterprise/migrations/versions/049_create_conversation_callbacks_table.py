@@ -1,4 +1,4 @@
-"""Create conversation callbacks table.
+"""Create conversation callbacks table
 
 Revision ID: 049
 Revises: 048

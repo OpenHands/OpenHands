@@ -1,4 +1,4 @@
-"""Add composite index on event_callback for execute_callbacks query.
+"""Add composite index on event_callback for execute_callbacks query
 
 The execute_callbacks query filters on (conversation_id, status, event_kind)
 but none of these columns were indexed, causing full sequential scans on the

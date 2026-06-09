@@ -1,4 +1,4 @@
-"""add condenser_max_size to user_settings.
+"""add condenser_max_size to user_settings
 
 Revision ID: 072
 Revises: 071

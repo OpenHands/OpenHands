@@ -1,4 +1,4 @@
-"""create linear_conversations table.
+"""create linear_conversations table
 
 Revision ID: 071
 Revises: 070

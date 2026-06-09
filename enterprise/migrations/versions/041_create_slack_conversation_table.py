@@ -1,4 +1,4 @@
-"""create slack conversation table.
+"""create slack conversation table
 
 Revision ID: 041
 Revises: 040

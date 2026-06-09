@@ -1,4 +1,4 @@
-"""add cancellation fields to subscription_access.
+"""add cancellation fields to subscription_access
 
 Revision ID: 075
 Revises: 074

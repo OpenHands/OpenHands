@@ -1,4 +1,4 @@
-"""add max_budget_per_task to user_settings.
+"""add max_budget_per_task to user_settings
 
 Revision ID: 048
 Revises: 047

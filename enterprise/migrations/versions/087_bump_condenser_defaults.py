@@ -1,4 +1,4 @@
-"""bump condenser defaults: max_size 120->240.
+"""bump condenser defaults: max_size 120->240
 
 Revision ID: 087
 Revises: 086

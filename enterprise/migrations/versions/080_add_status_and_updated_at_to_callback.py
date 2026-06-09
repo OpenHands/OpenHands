@@ -1,4 +1,4 @@
-"""add status and updated_at to callback.
+"""add status and updated_at to callback
 
 Revision ID: 080
 Revises: 079

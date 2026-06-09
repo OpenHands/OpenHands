@@ -1,4 +1,4 @@
-"""create conversation_work table.
+"""create conversation_work table
 
 Revision ID: 058
 Revises: 057

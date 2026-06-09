@@ -1,4 +1,4 @@
-"""make user secrets table one row per secret.
+"""make user secrets table one row per secret
 
 Revision ID: 037
 Revises: 036

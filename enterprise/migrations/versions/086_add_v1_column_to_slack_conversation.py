@@ -1,4 +1,4 @@
-"""add v1 column to slack conversation table.
+"""add v1 column to slack conversation table
 
 Revision ID: 086
 Revises: 085

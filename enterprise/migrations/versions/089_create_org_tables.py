@@ -1,4 +1,4 @@
-"""create org tables from pgerd schema.
+"""create org tables from pgerd schema
 
 Revision ID: 089
 Revises: 088

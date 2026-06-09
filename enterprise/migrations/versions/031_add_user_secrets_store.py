@@ -1,4 +1,4 @@
-"""create user secrets table.
+"""create user secrets table
 
 Revision ID: 031
 Revises: 030
