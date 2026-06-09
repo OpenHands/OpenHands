@@ -33,10 +33,17 @@ export interface WebClientFeatureFlags {
   enable_onboarding: boolean;
 }
 
+export interface ACPModelOption {
+  id: string;
+  label: string;
+}
+
 export interface ACPProviderConfig {
   key: string;
   display_name: string;
   default_command: string[];
+  default_model?: string | null;
+  available_models?: ACPModelOption[];
 }
 
 export interface WebClientConfig {

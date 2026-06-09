@@ -32,10 +32,17 @@ class WebClientFeatureFlags(BaseModel):
         return self
 
 
+class ACPModelOption(BaseModel):
+    id: str
+    label: str
+
+
 class ACPProviderConfig(BaseModel):
     key: str
     display_name: str
     default_command: list[str]
+    default_model: str | None = None
+    available_models: list[ACPModelOption] = Field(default_factory=list)
 
 
 class WebClientConfig(DiscriminatedUnionMixin):

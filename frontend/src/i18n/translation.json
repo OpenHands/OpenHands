@@ -26433,5 +26433,26 @@
     "ca": "Acció",
     "tr": "Eylem",
     "uk": "Дія"
+  },
+  "SETTINGS$AGENT_MODEL": {
+    "en": "Model"
+  },
+  "SETTINGS$AGENT_CUSTOM_MODEL": {
+    "en": "Custom model"
+  },
+  "SETTINGS$ACP_CREDENTIALS_TITLE": {
+    "en": "Credentials"
+  },
+  "SETTINGS$ACP_CREDENTIALS_DESCRIPTION": {
+    "en": "API key and optional base URL for this provider. Saved as global secrets and injected into the agent subprocess at runtime."
+  },
+  "SETTINGS$ACP_SECRET_ALREADY_SET": {
+    "en": "already saved — type to replace"
+  },
+  "SETTINGS$ACP_SECRET_API_KEY_HINT": {
+    "en": "API key for this provider. Leave blank to use a subscription login or an env var already set on the backend."
+  },
+  "SETTINGS$ACP_SECRET_BASE_URL_HINT": {
+    "en": "Optional base URL override for proxies or alternative API gateways."
   }
 }
