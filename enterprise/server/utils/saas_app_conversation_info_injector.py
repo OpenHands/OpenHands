@@ -360,7 +360,6 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         # Get current user_id for SAAS metadata
         # Fall back to info.created_by_user_id for webhook callbacks (which use ADMIN context)
         user_id_str = await self.user_context.get_user_id()
-        is_admin_context = not user_id_str
         if not user_id_str and info.created_by_user_id:
             user_id_str = info.created_by_user_id
         if user_id_str:
@@ -394,17 +393,11 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             saas_result = await self.db_session.execute(saas_query)
             existing_saas_metadata = saas_result.scalar_one_or_none()
 
-            # On the ADMIN path the user_context carries no org, so org_id was derived
-            # from user.current_org_id which may differ from the org the conversation
-            # was originally created under. Use the existing metadata's org_id so the
-            # assertion below passes and ownership is not accidentally mutated.
-            if is_admin_context and existing_saas_metadata is not None:
-                org_id = existing_saas_metadata.org_id
-
-            assert existing_saas_metadata is None or (
-                existing_saas_metadata.user_id == user_id_uuid
-                and existing_saas_metadata.org_id == org_id
-            )
+            # Only assert on user_id: org_id can legitimately differ from the stored
+            # value whenever it falls back to user.current_org_id (which is mutable),
+            # both on the ADMIN path and on normal requests made after the user switches
+            # orgs. Ownership integrity is enforced by user_id alone.
+            assert existing_saas_metadata is None or existing_saas_metadata.user_id == user_id_uuid
 
             if not existing_saas_metadata:
                 # Create new SAAS metadata with the determined org_id
