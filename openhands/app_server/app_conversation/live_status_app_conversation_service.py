@@ -1647,9 +1647,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # (sdk#3464). Pass SecretSource objects verbatim — the SDK resolves them
         # at subprocess launch, not here, to avoid eager LookupSecret calls.
         agent_context = AgentContext(secrets=secrets) if secrets else None
-        settings_update = (
-            {'agent_context': agent_context} if agent_context is not None else {}
-        )
+        # Isolate the CLI data dir onto the durable /workspace tree so the SDK
+        # self-resumes the provider session (session/load from base_state.json)
+        # across pause/resume — matching the regular-agent lifecycle (#1274).
+        settings_update: dict[str, object] = {'acp_isolate_data_dir': True}
+        if agent_context is not None:
+            settings_update['agent_context'] = agent_context
         acp_agent = acp_settings.model_copy(update=settings_update).create_agent()
 
         sdk_plugins: list[PluginSource] | None = None

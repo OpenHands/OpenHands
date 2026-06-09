@@ -3344,6 +3344,8 @@ class TestBuildAcpStartConversationRequestSecrets:
         ctx = request.agent.agent_context.secrets
         assert ctx.get('GITHUB_TOKEN') is github_secret
         assert ctx.get('MY_API_KEY') is api_secret
+        # Isolation is enabled regardless of whether secrets are present.
+        assert request.agent.acp_isolate_data_dir is True
 
     @pytest.mark.asyncio
     async def test_lookup_secret_forwarded_as_source(self, service, tmp_path):
@@ -3395,6 +3397,18 @@ class TestBuildAcpStartConversationRequestSecrets:
         request = await self._call_build(service, user, tmp_path)
 
         assert request.agent.agent_context is None
+
+    @pytest.mark.asyncio
+    async def test_isolate_data_dir_enabled(self, service, tmp_path):
+        """The cloud start path builds the ACP agent with data-dir isolation on
+        so the CLI session subtree lives on /workspace and the SDK self-resumes
+        across pause/resume (#1274)."""
+        user = self._make_acp_user()
+        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+
+        request = await self._call_build(service, user, tmp_path)
+
+        assert request.agent.acp_isolate_data_dir is True
 
     @pytest.mark.asyncio
     async def test_acp_env_overrides_provider_env(self, service, tmp_path):
