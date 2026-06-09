@@ -32,6 +32,11 @@ execution:
         toolchains:
           - python
           - node
+    host-frontend:
+      extends: host
+      requirements:
+        toolchains:
+          - node
     docker-host:
       extends: host
       requirements:
@@ -185,7 +190,7 @@ tasks:
     effects:
       network: true
   build:frontend:
-    context: host-dev
+    context: host-frontend
     description: Build the frontend assets only
     notes: |
       This maps directly to the repo's dedicated frontend asset build target.
@@ -237,7 +242,7 @@ tasks:
         - backend-python-dependencies-installed
     safe_for_agent: true
   lint:frontend:
-    context: host-dev
+    context: host-frontend
     description: Run the frontend lint and typecheck surface
     notes: |
       This maps directly to the documented frontend lint path.
@@ -268,7 +273,7 @@ tasks:
         - lint:frontend
     safe_for_agent: true
   test:frontend:
-    context: host-dev
+    context: host-frontend
     description: Run the frontend test suite
     notes: |
       This maps directly to the current top-level `make test` target, which runs frontend tests.
@@ -590,8 +595,8 @@ agent:
   bootstrap:
     ota:
       note: Install ota when missing so contributors and agents can run the declared readiness workflows in this contract.
-      sh: curl -fsSL https://dist.ota.run/install.sh | OTA_GIT_REV=c37990ba7574706edbcd4c5df1d41b96f3725400 sh -s -- --from-git
-      powershell: $env:OTA_GIT_REV='c37990ba7574706edbcd4c5df1d41b96f3725400'; & ([scriptblock]::Create((irm https://dist.ota.run/install.ps1))) -FromGit
+      sh: curl -fsSL https://dist.ota.run/install.sh | OTA_GIT_REV=bdf4ffdde949ca62203c4e430ce87684ec75e65d sh -s -- --from-git
+      powershell: $env:OTA_GIT_REV='bdf4ffdde949ca62203c4e430ce87684ec75e65d'; & ([scriptblock]::Create((irm https://dist.ota.run/install.ps1))) -FromGit
   notes: |
     Use `ota tasks --use .` to list runnable tasks and review the modeled execution surface before execution.
     Use `ota up --workflow app --native .` for the canonical local GUI development loop.
