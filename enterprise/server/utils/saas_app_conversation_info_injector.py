@@ -5,11 +5,6 @@ from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import ColumnElement, func, select
-from storage.stored_conversation_metadata import StoredConversationMetadata
-from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
-from storage.user import User
-
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
     AppConversationInfoServiceInjector,
@@ -25,6 +20,11 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
 from openhands.app_server.errors import AuthError
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import ADMIN
+from sqlalchemy import ColumnElement, func, select
+
+from storage.stored_conversation_metadata import StoredConversationMetadata
+from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
+from storage.user import User
 
 
 class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
@@ -394,7 +394,10 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             existing_saas_metadata = saas_result.scalar_one_or_none()
 
             # org_id is not asserted: it falls back to user.current_org_id, which changes when the user switches orgs.
-            assert existing_saas_metadata is None or existing_saas_metadata.user_id == user_id_uuid
+            assert (
+                existing_saas_metadata is None
+                or existing_saas_metadata.user_id == user_id_uuid
+            )
 
             if not existing_saas_metadata:
                 # Create new SAAS metadata with the determined org_id
