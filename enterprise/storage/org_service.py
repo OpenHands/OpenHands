@@ -858,6 +858,9 @@ class OrgService:
         if org.byor_export_enabled:
             return True
 
+        if await OrgStore.has_completed_billing_session(org_id):
+            return False
+
         credits = await OrgService.get_org_credits(user_id, org_id)
         return credits is not None and credits > 0
 
