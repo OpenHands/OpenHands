@@ -8,9 +8,12 @@ metadata:
     minimum_version: "1.6.20"
 toolchains:
   python:
-    version: ">=3.12,<3.14"
+    version: "3.12"
     package_managers:
       poetry: ">=1.8"
+    fulfillment:
+      source: uv
+      mode: run
   node:
     version: "^22.12.0"
     package_managers:
@@ -63,6 +66,18 @@ checks:
     kind: precondition
     severity: error
     run: sh -c "command -v nc >/dev/null"
+    timeout: 10000
+  - name: backend-python-dependencies-installed
+    kind: file
+    severity: error
+    path: .venv/pyvenv.cfg
+    expect: file
+    timeout: 10000
+  - name: frontend-dependencies-installed
+    kind: file
+    severity: error
+    path: frontend/node_modules
+    expect: directory
     timeout: 10000
 surfaces:
   backend:
@@ -121,6 +136,33 @@ surfaces:
       retries: 20
       start_period: 15s
 tasks:
+  install:backend:
+    context: host-dev
+    description: Hydrate backend Python dependencies through the repo's Poetry install lane
+    notes: |
+      This models the documented `poetry install --with dev,test,runtime` path directly instead of
+      hiding it behind the broader `make build` wrapper. Ota uses the Python toolchain fulfillment
+      lane to ensure the declared Poetry version is available before hydration.
+    category: setup
+    prepare:
+      kind: dependency_hydration
+      medium: package_dependencies
+      source:
+        kind: poetry
+        cwd: .
+        groups:
+          - dev
+          - test
+          - runtime
+        group_mode: with
+    requirements:
+      toolchains:
+        - python
+    effects:
+      writes:
+        - .venv
+      network: true
+      network_kind: dependency_hydration
   build:
     context: host-dev
     description: Build and bootstrap the local OpenHands development environment
@@ -150,7 +192,7 @@ tasks:
     category: setup
     env:
       INSTALL_DOCKER: "0"
-    run: make build-frontend
+    run: sh -c 'cd frontend && npm run prepare && npm run build'
     execution:
       default_mode: native
       modes:
@@ -158,9 +200,10 @@ tasks:
           context: app
           env:
             INSTALL_DOCKER: "0"
-          run: make build-frontend
-    depends_on:
-      - build
+          run: sh -c 'cd frontend && npm run prepare && npm run build'
+    requirements:
+      checks:
+        - frontend-dependencies-installed
     safe_for_agent: true
   build:ui:
     context: host-ui
@@ -180,7 +223,7 @@ tasks:
     category: test
     env:
       INSTALL_DOCKER: "0"
-    run: make lint-backend
+    run: poetry run pre-commit run --all-files --show-diff-on-failure --config ./dev_config/python/.pre-commit-config.yaml
     execution:
       default_mode: native
       modes:
@@ -188,9 +231,10 @@ tasks:
           context: app
           env:
             INSTALL_DOCKER: "0"
-          run: make lint-backend
-    depends_on:
-      - build
+          run: poetry run pre-commit run --all-files --show-diff-on-failure --config ./dev_config/python/.pre-commit-config.yaml
+    requirements:
+      checks:
+        - backend-python-dependencies-installed
     safe_for_agent: true
   lint:frontend:
     context: host-dev
@@ -200,7 +244,7 @@ tasks:
     category: test
     env:
       INSTALL_DOCKER: "0"
-    run: make lint-frontend
+    run: sh -c 'cd frontend && npm run lint'
     execution:
       default_mode: native
       modes:
@@ -208,9 +252,10 @@ tasks:
           context: app
           env:
             INSTALL_DOCKER: "0"
-          run: make lint-frontend
-    depends_on:
-      - build
+          run: sh -c 'cd frontend && npm run lint'
+    requirements:
+      checks:
+        - frontend-dependencies-installed
     safe_for_agent: true
   lint:
     description: Run the repository aggregate lint surface
@@ -230,7 +275,7 @@ tasks:
     category: test
     env:
       INSTALL_DOCKER: "0"
-    run: make test
+    run: sh -c 'cd frontend && npm run test'
     execution:
       default_mode: native
       modes:
@@ -238,9 +283,11 @@ tasks:
           context: app
           env:
             INSTALL_DOCKER: "0"
-          run: make test
-    depends_on:
-      - build
+          run: sh -c 'cd frontend && npm run test'
+    requirements:
+      checks:
+        - frontend-dependencies-installed
+    safe_for_agent: true
   test:backend:
     context: host-dev
     description: Run the backend Python unit tests
@@ -258,8 +305,9 @@ tasks:
           env:
             INSTALL_DOCKER: "0"
           run: poetry run pytest ./tests/unit/test_*.py
-    depends_on:
-      - build
+    requirements:
+      checks:
+        - backend-python-dependencies-installed
     safe_for_agent: true
   test:
     description: Run the documented frontend and backend test surfaces
@@ -271,6 +319,7 @@ tasks:
       tasks:
         - test:frontend
         - test:backend
+    safe_for_agent: true
   setup:config-basic:
     context: host
     description: Create a basic config.toml for headless local runtime flows
@@ -510,12 +559,14 @@ agent:
     - lint:backend
     - lint:frontend
     - lint
+    - test:frontend
     - test:backend
+    - test
   verify_after_changes:
-    - lint:backend
-    - lint:frontend
+    - lint
     - test:backend
   writable_paths:
+    - .venv
     - openhands
     - frontend
     - openhands-ui
@@ -539,10 +590,10 @@ agent:
   bootstrap:
     ota:
       note: Install ota when missing so contributors and agents can run the declared readiness workflows in this contract.
-      sh: curl -fsSL https://dist.ota.run/install.sh | OTA_GIT_BRANCH=1.6.20-implementation sh -s -- --from-git
-      powershell: $env:OTA_GIT_BRANCH='1.6.20-implementation'; & ([scriptblock]::Create((irm https://dist.ota.run/install.ps1))) -FromGit
+      sh: curl -fsSL https://dist.ota.run/install.sh | OTA_GIT_REV=e71931d6a41cc52a15966e0125725b67a05cc073 sh -s -- --from-git
+      powershell: $env:OTA_GIT_REV='e71931d6a41cc52a15966e0125725b67a05cc073'; & ([scriptblock]::Create((irm https://dist.ota.run/install.ps1))) -FromGit
   notes: |
-    Use `ota tasks --use .` to list runnable tasks and review the agent-safe surface before execution.
+    Use `ota tasks --use .` to list runnable tasks and review the modeled execution surface before execution.
     Use `ota up --workflow app --native .` for the canonical local GUI development loop.
     Use `ota up --workflow backend --native .` or `ota up --workflow frontend --native .`
     for focused service loops.
