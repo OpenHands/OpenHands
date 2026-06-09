@@ -12,8 +12,6 @@ import httpx
 import pytest
 from fastapi import HTTPException, status
 from fastapi.responses import JSONResponse
-from openhands.sdk.llm import LLM
-from openhands.sdk.settings import OpenHandsAgentSettings
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversation,
@@ -33,6 +31,8 @@ from openhands.app_server.app_conversation.app_conversation_router import (
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.settings.settings_models import Settings
+from openhands.sdk.llm import LLM
+from openhands.sdk.settings import OpenHandsAgentSettings
 
 
 def _make_mock_app_conversation(

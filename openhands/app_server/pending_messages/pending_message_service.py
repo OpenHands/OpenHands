@@ -6,19 +6,19 @@ from datetime import datetime
 from typing import Any, AsyncGenerator
 
 from fastapi import Request
-from openhands.agent_server.models import ImageContent, TextContent
-from openhands.sdk.utils.models import DiscriminatedUnionMixin
 from pydantic import TypeAdapter
 from sqlalchemy import JSON, String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
+from openhands.agent_server.models import ImageContent, TextContent
 from openhands.app_server.pending_messages.pending_message_models import (
     PendingMessage,
     PendingMessageResponse,
 )
 from openhands.app_server.services.injector import Injector, InjectorState
 from openhands.app_server.utils.sql_utils import Base, UtcDateTime
+from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 # Type adapter for deserializing content from JSON
 _content_type_adapter = TypeAdapter(list[TextContent | ImageContent])

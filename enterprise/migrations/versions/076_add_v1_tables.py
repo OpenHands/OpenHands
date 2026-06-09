@@ -10,6 +10,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartTaskStatus,
 )

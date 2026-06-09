@@ -109,9 +109,9 @@ def test_settings_immutability():
     )
 
     with pytest.raises(ValidationError):
-        new_settings.secrets_store.provider_tokens[ProviderType.GITHUB].token = (
-            SecretStr('')
-        )
+        new_settings.secrets_store.provider_tokens[
+            ProviderType.GITHUB
+        ].token = SecretStr('')
 
 
 def test_provider_handler_immutability():

@@ -11,7 +11,6 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import uuid4
 
 import pytest
-from openhands.sdk.skills import Skill
 
 from openhands.app_server.app_conversation.app_conversation_models import AgentType
 from openhands.app_server.app_conversation.app_conversation_service_base import (
@@ -20,6 +19,7 @@ from openhands.app_server.app_conversation.app_conversation_service_base import 
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxStatus
 from openhands.app_server.user.user_context import UserContext
+from openhands.sdk.skills import Skill
 
 
 class MockUserInfo:

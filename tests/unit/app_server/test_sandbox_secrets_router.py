@@ -14,9 +14,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from openhands.sdk.llm import LLM
-from openhands.sdk.secret import StaticSecret
-from openhands.sdk.settings import OpenHandsAgentSettings
 from pydantic import SecretStr
 
 from openhands.app_server.integrations.provider import ProviderHandler, ProviderToken
@@ -37,6 +34,9 @@ from openhands.app_server.sandbox.session_auth import (
 from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.user.user_router import get_current_user
+from openhands.sdk.llm import LLM
+from openhands.sdk.secret import StaticSecret
+from openhands.sdk.settings import OpenHandsAgentSettings
 
 SANDBOX_ID = 'sb-test-123'
 USER_ID = 'test-user-id'

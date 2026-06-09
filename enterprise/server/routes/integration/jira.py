@@ -157,9 +157,9 @@ async def verify_jira_signature(body: bytes, signature: str, payload: dict):
             status_code=403, detail='Workspace name not found in payload'
         )
 
-    workspace: JiraWorkspace | None = (
-        await jira_manager.integration_store.get_workspace_by_name(workspace_name)
-    )
+    workspace: (
+        JiraWorkspace | None
+    ) = await jira_manager.integration_store.get_workspace_by_name(workspace_name)
 
     if workspace is None:
         logger.warning(f'[Jira] Could not identify workspace {workspace_name}')

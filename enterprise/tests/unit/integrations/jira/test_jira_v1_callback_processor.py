@@ -13,12 +13,12 @@ from integrations.jira.jira_v1_callback_processor import (
     JIRA_CLOUD_API_URL,
     JiraV1CallbackProcessor,
 )
-from openhands.sdk.event import ConversationStateUpdateEvent
 
 from openhands.app_server.event_callback.event_callback_models import EventCallback
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResultStatus,
 )
+from openhands.sdk.event import ConversationStateUpdateEvent
 
 
 @pytest.fixture

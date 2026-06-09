@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Final
 
-from openhands.sdk.llm import LLM
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -17,6 +16,7 @@ from pydantic import (
 
 from openhands.app_server.utils.llm import resolve_llm_base_url
 from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk.llm import LLM
 
 
 def has_real_api_key(api_key: Any) -> bool:

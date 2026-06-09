@@ -2,7 +2,6 @@
 
 from unittest.mock import MagicMock
 
-from openhands.sdk.settings import ACPAgentSettings
 from pydantic import SecretStr
 from server.constants import LITE_LLM_API_URL
 from server.routes.org_models import (
@@ -11,6 +10,8 @@ from server.routes.org_models import (
     OrgUpdate,
 )
 from storage.org import Org
+
+from openhands.sdk.settings import ACPAgentSettings
 
 
 def test_org_update_keeps_sparse_diff_dicts():

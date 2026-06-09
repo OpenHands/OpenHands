@@ -10,7 +10,6 @@ from typing import Any, AsyncGenerator
 
 import httpx
 from fastapi import Request
-from openhands.sdk.llm.utils.verified_models import VERIFIED_MODELS
 from pydantic import Field, SecretStr
 
 from openhands.app_server.config_api.config_models import (
@@ -30,6 +29,7 @@ from openhands.app_server.utils.llm import (
     get_supported_llm_models,
 )
 from openhands.app_server.utils.paging_utils import paginate_results
+from openhands.sdk.llm.utils.verified_models import VERIFIED_MODELS
 
 _logger = logging.getLogger(__name__)
 

@@ -13,16 +13,16 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from openhands.agent_server.models import EventPage, EventSortOrder
-from openhands.sdk import Event
-from openhands.sdk.event.conversation_state import ConversationStateUpdateEvent
 from server.sharing.shared_event_service import (
     SharedEventService,
     SharedEventServiceInjector,
 )
 
+from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.app_server.utils.environment import StorageProvider, get_storage_provider
+from openhands.sdk import Event
+from openhands.sdk.event.conversation_state import ConversationStateUpdateEvent
 
 
 def _is_viewable(event: Event) -> bool:

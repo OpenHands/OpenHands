@@ -2,7 +2,6 @@ from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
-from openhands.sdk import Event
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
@@ -17,6 +16,7 @@ from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
     EventCallbackResultStatus,
 )
+from openhands.sdk import Event
 
 
 @pytest.mark.asyncio

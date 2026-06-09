@@ -8,9 +8,6 @@ from unittest.mock import AsyncMock
 from uuid import UUID
 
 import pytest
-
-# Import the SDK types we need for testing
-from openhands.sdk.secret import SecretSource, StaticSecret
 from pydantic import SecretStr
 
 from enterprise.integrations.resolver_context import ResolverUserContext
@@ -19,6 +16,9 @@ from enterprise.integrations.resolver_context import ResolverUserContext
 from openhands.app_server.integrations.provider import CustomSecret, ProviderToken
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.secrets.secrets_models import Secrets
+
+# Import the SDK types we need for testing
+from openhands.sdk.secret import SecretSource, StaticSecret
 
 
 @pytest.fixture

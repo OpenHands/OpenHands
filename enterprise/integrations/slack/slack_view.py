@@ -16,7 +16,6 @@ from integrations.utils import (
     CONVERSATION_URL,
 )
 from jinja2 import Environment
-from openhands.sdk import TextContent
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from storage.slack_conversation import SlackConversation
@@ -38,6 +37,7 @@ from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.app_server.utils.async_utils import GENERAL_TIMEOUT
 from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk import TextContent
 
 # =================================================
 # SECTION: Slack view types
@@ -316,7 +316,6 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
         """Send a message to a v1 conversation using the agent server API."""
         # Import services within the method to avoid circular imports
         from openhands.agent_server.models import SendMessageRequest
-
         from openhands.app_server.config import (
             get_app_conversation_info_service,
             get_httpx_client,

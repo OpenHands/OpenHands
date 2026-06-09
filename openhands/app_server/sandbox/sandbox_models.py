@@ -1,8 +1,9 @@
 from datetime import datetime
 from enum import Enum
 
-from openhands.agent_server.utils import utc_now
 from pydantic import BaseModel, Field
+
+from openhands.agent_server.utils import utc_now
 
 
 class SandboxStatus(Enum):

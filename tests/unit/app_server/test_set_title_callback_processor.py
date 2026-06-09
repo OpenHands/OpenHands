@@ -6,7 +6,6 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from openhands.sdk import Message, MessageEvent, TextContent
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversation,
@@ -21,6 +20,7 @@ from openhands.app_server.event_callback.set_title_callback_processor import (
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
+from openhands.sdk import Message, MessageEvent, TextContent
 
 
 class _FakeHttpxClient:

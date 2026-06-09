@@ -11,12 +11,10 @@ from openhands.app_server.integrations.bitbucket.bitbucket_service import (
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.integrations.service_types import (
     OwnerType,
+    Repository,
 )
 from openhands.app_server.integrations.service_types import (
     ProviderType as ServiceProviderType,
-)
-from openhands.app_server.integrations.service_types import (
-    Repository,
 )
 from openhands.app_server.integrations.utils import validate_provider_token
 from openhands.app_server.secrets.secrets_router import check_provider_tokens

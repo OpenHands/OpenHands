@@ -4,8 +4,6 @@ from typing import ClassVar
 from uuid import UUID
 
 import httpx
-from openhands.sdk import Event, MessageEvent
-from openhands.sdk.utils.redact import redact_text_secrets
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
@@ -25,6 +23,8 @@ from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
+from openhands.sdk import Event, MessageEvent
+from openhands.sdk.utils.redact import redact_text_secrets
 
 _logger = logging.getLogger(__name__)
 

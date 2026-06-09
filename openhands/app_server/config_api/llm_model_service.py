@@ -7,10 +7,9 @@ database-backed verified models for SaaS, etc.).
 
 from abc import ABC, abstractmethod
 
-from openhands.sdk.utils.models import DiscriminatedUnionMixin
-
 from openhands.app_server.config_api.config_models import LLMModelPage, ProviderPage
 from openhands.app_server.services.injector import Injector
+from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 
 class LLMModelService(ABC):

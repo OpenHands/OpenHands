@@ -63,7 +63,7 @@ def _get_user_provider() -> AnalyticsUserProvider:
         server_config.analytics_user_provider_class,
     )
     # If the resolved class is abstract, fall back to a concrete default implementation
-    if getattr(impl_class, "__abstractmethods__", None):
+    if getattr(impl_class, '__abstractmethods__', None):
         return DefaultAnalyticsUserProvider()
     return impl_class()  # type: ignore[reportAbstractUsage]
 

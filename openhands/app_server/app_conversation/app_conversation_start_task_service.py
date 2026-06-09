@@ -3,14 +3,13 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
-from openhands.sdk.utils.models import DiscriminatedUnionMixin
-
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartTask,
     AppConversationStartTaskPage,
     AppConversationStartTaskSortOrder,
 )
 from openhands.app_server.services.injector import Injector
+from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 
 class AppConversationStartTaskService(ABC):

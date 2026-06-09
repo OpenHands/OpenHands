@@ -277,9 +277,7 @@ async def keycloak_callback(  # noqa: ambiguity-mine
 
 
 @slack_router.post('/on-event')
-async def on_event(
-    request: Request, background_tasks: BackgroundTasks
-):  # noqa: ambiguity-mine
+async def on_event(request: Request, background_tasks: BackgroundTasks):  # noqa: ambiguity-mine
     if not SLACK_WEBHOOKS_ENABLED:
         return JSONResponse({'success': 'slack_webhooks_disabled'})
     body = await request.body()

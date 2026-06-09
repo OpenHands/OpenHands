@@ -13,13 +13,11 @@ from integrations.jira_dc.jira_dc_service_account import (
     resolve_jira_dc_service_account,
 )
 from integrations.utils import get_summary_instruction, markdown_to_jira_markup
-from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
-from openhands.sdk import Event
-from openhands.sdk.event import ConversationStateUpdateEvent
 from pydantic import Field
 from server.auth.token_manager import TokenManager
 from storage.jira_dc_integration_store import JiraDcIntegrationStore
 
+from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
@@ -35,6 +33,8 @@ from openhands.app_server.event_callback.util import (
     get_agent_server_url_from_sandbox,
 )
 from openhands.app_server.utils.http_session import httpx_verify_option
+from openhands.sdk import Event
+from openhands.sdk.event import ConversationStateUpdateEvent
 
 _logger = logging.getLogger(__name__)
 

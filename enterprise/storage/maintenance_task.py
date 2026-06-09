@@ -6,9 +6,8 @@ from enum import Enum
 from typing import Any, Type
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import DateTime
+from sqlalchemy import DateTime, String, Text, text
 from sqlalchemy import Enum as SQLEnum
-from sqlalchemy import String, Text, text
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base

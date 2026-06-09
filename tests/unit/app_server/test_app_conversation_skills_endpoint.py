@@ -9,7 +9,6 @@ from uuid import uuid4
 
 import pytest
 from fastapi import status
-from openhands.sdk.skills import KeywordTrigger, Skill, TaskTrigger
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversation,
@@ -28,6 +27,7 @@ from openhands.app_server.sandbox.sandbox_models import (
 )
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
 from openhands.app_server.user.user_context import UserContext
+from openhands.sdk.skills import KeywordTrigger, Skill, TaskTrigger
 
 
 def _make_service_mock(

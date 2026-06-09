@@ -6,12 +6,11 @@ from typing import AsyncContextManager
 
 import httpx
 from fastapi import Depends, Request
-from openhands.agent_server.env_parser import from_env
-from openhands.sdk.utils.models import OpenHandsModel
 from pydantic import Field, SecretStr
 
 # Import the event_callback module to ensure all processors are registered
 import openhands.app_server.event_callback  # noqa: F401
+from openhands.agent_server.env_parser import from_env
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
     AppConversationInfoServiceInjector,
@@ -70,6 +69,7 @@ from openhands.app_server.web_client.default_web_client_config_injector import (
 from openhands.app_server.web_client.web_client_config_injector import (
     WebClientConfigInjector,
 )
+from openhands.sdk.utils.models import OpenHandsModel
 
 
 def get_default_persistence_dir() -> Path:

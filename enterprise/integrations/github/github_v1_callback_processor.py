@@ -6,12 +6,10 @@ import httpx
 from github import Auth, Github, GithubException, GithubIntegration
 from integrations.utils import get_summary_instruction
 from integrations.v1_utils import handle_callback_error
-from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
-from openhands.sdk import Event
-from openhands.sdk.event import ConversationStateUpdateEvent
 from pydantic import Field
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 
+from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
@@ -26,6 +24,8 @@ from openhands.app_server.event_callback.util import (
     ensure_running_sandbox,
     get_agent_server_url_from_sandbox,
 )
+from openhands.sdk import Event
+from openhands.sdk.event import ConversationStateUpdateEvent
 
 _logger = logging.getLogger(__name__)
 

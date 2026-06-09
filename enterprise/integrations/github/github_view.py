@@ -20,14 +20,13 @@ from integrations.utils import (
     has_exact_mention,
 )
 from jinja2 import Environment
-from openhands.agent_server.models import SendMessageRequest
-from openhands.sdk import TextContent
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from server.auth.token_manager import TokenManager
 from storage.org_store import OrgStore
 from storage.proactive_conversation_store import ProactiveConversationStore
 from storage.saas_secrets_store import SaasSecretsStore
 
+from openhands.agent_server.models import SendMessageRequest
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTaskStatus,
@@ -42,6 +41,7 @@ from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.app_server.utils.async_utils import call_sync_from_async
 from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk import TextContent
 
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
 
