@@ -1901,10 +1901,6 @@ async def test_check_byor_export_enabled_returns_true_when_enabled():
             return_value=mock_org,
         ),
         patch(
-            'storage.org_service.OrgStore.has_completed_billing_session',
-            new_callable=AsyncMock,
-        ) as mock_has_completed_billing,
-        patch(
             'storage.org_service.OrgService.get_org_credits',
             new_callable=AsyncMock,
         ) as mock_get_credits,
@@ -1914,7 +1910,6 @@ async def test_check_byor_export_enabled_returns_true_when_enabled():
 
         # Assert
         assert result is True
-        mock_has_completed_billing.assert_not_called()
         mock_get_credits.assert_not_called()
 
 
@@ -1946,10 +1941,6 @@ async def test_check_byor_export_enabled_returns_false_when_disabled_without_cre
             return_value=mock_org,
         ),
         patch(
-            'storage.org_service.OrgStore.has_completed_billing_session',
-            AsyncMock(return_value=False),
-        ) as mock_has_completed_billing,
-        patch(
             'storage.org_service.OrgService.get_org_credits',
             AsyncMock(return_value=0),
         ) as mock_get_credits,
@@ -1959,14 +1950,13 @@ async def test_check_byor_export_enabled_returns_false_when_disabled_without_cre
 
         # Assert
         assert result is False
-        mock_has_completed_billing.assert_called_once_with(org_id)
         mock_get_credits.assert_called_once_with(user_id, org_id)
 
 
 @pytest.mark.asyncio
-async def test_check_byor_export_enabled_returns_true_when_credited_without_billing():
+async def test_check_byor_export_enabled_returns_true_when_disabled_with_credits():
     """
-    GIVEN: User has current_org with byor_export_enabled=False, credits, and no completed billing
+    GIVEN: User has current_org with byor_export_enabled=False and credits
     WHEN: check_byor_export_enabled is called
     THEN: Returns True
     """
@@ -1991,10 +1981,6 @@ async def test_check_byor_export_enabled_returns_true_when_credited_without_bill
             return_value=mock_org,
         ),
         patch(
-            'storage.org_service.OrgStore.has_completed_billing_session',
-            AsyncMock(return_value=False),
-        ) as mock_has_completed_billing,
-        patch(
             'storage.org_service.OrgService.get_org_credits',
             AsyncMock(return_value=25.0),
         ) as mock_get_credits,
@@ -2004,53 +1990,7 @@ async def test_check_byor_export_enabled_returns_true_when_credited_without_bill
 
         # Assert
         assert result is True
-        mock_has_completed_billing.assert_called_once_with(org_id)
         mock_get_credits.assert_called_once_with(user_id, org_id)
-
-
-@pytest.mark.asyncio
-async def test_check_byor_export_enabled_returns_false_when_disabled_after_billing():
-    """
-    GIVEN: User has current_org with byor_export_enabled=False, completed billing, and credits
-    WHEN: check_byor_export_enabled is called
-    THEN: Returns False
-    """
-    # Arrange
-    user_id = 'test-user-123'
-    org_id = uuid.uuid4()
-
-    mock_user = MagicMock()
-    mock_user.current_org_id = org_id
-
-    mock_org = MagicMock()
-    mock_org.byor_export_enabled = False
-
-    with (
-        patch(
-            'storage.org_service.UserStore.get_user_by_id',
-            AsyncMock(return_value=mock_user),
-        ),
-        patch(
-            'storage.org_service.OrgStore.get_org_by_id',
-            new_callable=AsyncMock,
-            return_value=mock_org,
-        ),
-        patch(
-            'storage.org_service.OrgStore.has_completed_billing_session',
-            AsyncMock(return_value=True),
-        ) as mock_has_completed_billing,
-        patch(
-            'storage.org_service.OrgService.get_org_credits',
-            new_callable=AsyncMock,
-        ) as mock_get_credits,
-    ):
-        # Act
-        result = await OrgService.check_byor_export_enabled(user_id)
-
-        # Assert
-        assert result is False
-        mock_has_completed_billing.assert_called_once_with(org_id)
-        mock_get_credits.assert_not_called()
 
 
 @pytest.mark.asyncio

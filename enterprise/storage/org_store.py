@@ -18,7 +18,6 @@ from server.routes.org_models import (
 )
 from sqlalchemy import delete, select, text
 from sqlalchemy.orm import joinedload
-from storage.billing_session import BillingSession
 from storage.database import a_session_maker
 from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
 from storage.org import Org
@@ -116,20 +115,6 @@ class OrgStore:
             result = await session.execute(select(Org).filter(Org.id == org_id))
             org = result.scalars().first()
         return await OrgStore._validate_org_version(org)
-
-    @staticmethod
-    async def has_completed_billing_session(org_id: UUID) -> bool:
-        """Check whether an organization has completed Stripe billing."""
-        async with a_session_maker() as session:
-            result = await session.execute(
-                select(BillingSession.id)
-                .filter(
-                    BillingSession.org_id == org_id,
-                    BillingSession.status == 'completed',
-                )
-                .limit(1)
-            )
-            return result.scalar_one_or_none() is not None
 
     @staticmethod
     async def get_orgs_by_ids(org_ids: list[UUID]) -> list[Org]:
