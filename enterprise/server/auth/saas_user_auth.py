@@ -6,20 +6,7 @@ from uuid import UUID
 import jwt
 from fastapi import HTTPException, Request
 from keycloak.exceptions import KeycloakError
-from openhands.app_server.integrations.provider import (
-    PROVIDER_TOKEN_TYPE,
-    CustomSecret,
-    ProviderToken,
-    ProviderType,
-)
-from openhands.app_server.secrets.secrets_models import Secrets
-from openhands.app_server.settings.settings_models import Settings
-from openhands.app_server.settings.settings_store import SettingsStore
-from openhands.app_server.user_auth.user_auth import AuthType, UserAuth
 from pydantic import SecretStr
-from sqlalchemy import delete, select
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
-
 from server.auth.auth_error import (
     AuthError,
     BearerTokenError,
@@ -37,6 +24,7 @@ from server.auth.token_manager import TokenManager
 from server.logger import logger
 from server.rate_limit import RateLimiter, create_redis_rate_limiter
 from server.utils.rate_limit_utils import RATE_LIMIT_AUTH_WINDOWS
+from sqlalchemy import delete, select
 from storage.api_key_store import ApiKeyStore
 from storage.auth_tokens import AuthTokens
 from storage.database import a_session_maker
@@ -46,6 +34,18 @@ from storage.saas_settings_store import SaasSettingsStore
 from storage.user_authorization import UserAuthorizationType
 from storage.user_authorization_store import UserAuthorizationStore
 from storage.user_store import UserStore
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
+
+from openhands.app_server.integrations.provider import (
+    PROVIDER_TOKEN_TYPE,
+    CustomSecret,
+    ProviderToken,
+    ProviderType,
+)
+from openhands.app_server.secrets.secrets_models import Secrets
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_store import SettingsStore
+from openhands.app_server.user_auth.user_auth import AuthType, UserAuth
 
 token_manager = TokenManager()
 
@@ -125,7 +125,6 @@ class SaasUserAuth(UserAuth):
 
         # Import locally to avoid a circular import via authorization.py.
         from fastapi import status
-
         from storage.org_member_store import OrgMemberStore
 
         override_org_id = self.effective_org_id_override
@@ -194,7 +193,6 @@ class SaasUserAuth(UserAuth):
             return self._effective_org_id
 
         from fastapi import status
-
         from storage.org_member_store import OrgMemberStore
 
         override_org_id = await self._resolve_and_verify_override_org()

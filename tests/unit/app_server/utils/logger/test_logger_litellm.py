@@ -86,20 +86,20 @@ def test_litellm_loggers_suppressed_with_uvicorn_json_config(reset_litellm):
     # Verify that the fix is present in the source code
     litellm_loggers = ['LiteLLM', 'LiteLLM Router', 'LiteLLM Proxy']
     for logger_name in litellm_loggers:
-        assert f"'{logger_name}'" in source or f'"{logger_name}"' in source, (
-            f'{logger_name} logger configuration should be present in logger.py source'
-        )
+        assert (
+            f"'{logger_name}'" in source or f'"{logger_name}"' in source
+        ), f'{logger_name} logger configuration should be present in logger.py source'
 
     # Verify the fix has the correct settings by checking for key phrases
-    assert "'handlers': []" in source or '"handlers": []' in source, (
-        'Fix should set handlers to empty list'
-    )
-    assert "'propagate': False" in source or '"propagate": False' in source, (
-        'Fix should set propagate to False'
-    )
-    assert "'level': 'CRITICAL'" in source or '"level": "CRITICAL"' in source, (
-        'Fix should set level to CRITICAL'
-    )
+    assert (
+        "'handlers': []" in source or '"handlers": []' in source
+    ), 'Fix should set handlers to empty list'
+    assert (
+        "'propagate': False" in source or '"propagate": False' in source
+    ), 'Fix should set propagate to False'
+    assert (
+        "'level': 'CRITICAL'" in source or '"level": "CRITICAL"' in source
+    ), 'Fix should set level to CRITICAL'
 
     # Note: We don't do a functional test here because pytest's module caching
     # means the imported function may not reflect the fix we just verified in the source.

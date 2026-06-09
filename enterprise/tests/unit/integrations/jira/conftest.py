@@ -3,10 +3,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from jinja2 import DictLoader, Environment
-from openhands.app_server.integrations.service_types import ProviderType, Repository
-from openhands.app_server.user_auth.user_auth import UserAuth
-
 from integrations.jira.jira_manager import JiraManager
 from integrations.jira.jira_payload import (
     JiraEventType,
@@ -15,9 +11,13 @@ from integrations.jira.jira_payload import (
 from integrations.jira.jira_view import (
     JiraNewConversationView,
 )
+from jinja2 import DictLoader, Environment
 from storage.jira_conversation import JiraConversation
 from storage.jira_user import JiraUser
 from storage.jira_workspace import JiraWorkspace
+
+from openhands.app_server.integrations.service_types import ProviderType, Repository
+from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 @pytest.fixture

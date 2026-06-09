@@ -5,6 +5,10 @@ from uuid import UUID
 
 from fastapi import Request
 from openhands.agent_server.models import ImageContent, TextContent
+from sqlalchemy import select
+from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
+from storage.user import User
+
 from openhands.app_server.errors import AuthError
 from openhands.app_server.pending_messages.pending_message_models import (
     PendingMessageResponse,
@@ -17,10 +21,6 @@ from openhands.app_server.pending_messages.pending_message_service import (
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import ADMIN
 from openhands.app_server.user.user_context import UserContext
-from sqlalchemy import select
-
-from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
-from storage.user import User
 
 
 class SaasSQLPendingMessageService(SQLPendingMessageService):

@@ -5,7 +5,6 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
-
 from storage.base import Base
 from storage.user_authorization import UserAuthorization, UserAuthorizationType
 from storage.user_authorization_store import UserAuthorizationStore

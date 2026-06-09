@@ -9,14 +9,13 @@ from http.cookies import SimpleCookie
 from types import SimpleNamespace
 
 import pytest
-from starlette.responses import Response
-
 from server.auth.cookie_chunking import (
     CHUNK_SIZE,
     delete_chunked_cookie,
     read_chunked_cookie,
     set_chunked_cookie,
 )
+from starlette.responses import Response
 
 
 def _cookie_jar(response: Response) -> dict[str, str]:

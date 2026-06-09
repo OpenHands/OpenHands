@@ -4,11 +4,11 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
+from server.routes.github_proxy import add_github_proxy_routes
+
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.utils.encryption_key import EncryptionKey
-from pydantic import SecretStr
-
-from server.routes.github_proxy import add_github_proxy_routes
 
 
 def _make_jwt_service() -> JwtService:

@@ -5,7 +5,6 @@ from uuid import UUID
 
 from sqlalchemy import DECIMAL, DateTime, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 from storage.base import Base
 
 if TYPE_CHECKING:

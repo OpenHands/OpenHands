@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import select
-
 from storage.api_key import ApiKey
 from storage.api_key_store import ApiKeyStore, ApiKeyValidationResult
 

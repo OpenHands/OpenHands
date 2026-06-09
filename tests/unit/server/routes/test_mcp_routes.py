@@ -32,9 +32,9 @@ def test_mcp_server_no_stateless_http_deprecation_warning():
             and 'stateless_http' in str(warning.message)
         ]
 
-        assert len(stateless_http_warnings) == 0, (
-            f'Unexpected stateless_http deprecation warning: {stateless_http_warnings}'
-        )
+        assert (
+            len(stateless_http_warnings) == 0
+        ), f'Unexpected stateless_http deprecation warning: {stateless_http_warnings}'
 
         # Verify mcp_server was created successfully
         assert mcp_server is not None

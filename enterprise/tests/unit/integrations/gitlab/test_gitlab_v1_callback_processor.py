@@ -11,6 +11,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from integrations.gitlab.gitlab_v1_callback_processor import (
+    GitlabV1CallbackProcessor,
+)
+from openhands.sdk.event import ConversationStateUpdateEvent
+
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
@@ -22,11 +27,6 @@ from openhands.app_server.sandbox.sandbox_models import (
     ExposedUrl,
     SandboxInfo,
     SandboxStatus,
-)
-from openhands.sdk.event import ConversationStateUpdateEvent
-
-from integrations.gitlab.gitlab_v1_callback_processor import (
-    GitlabV1CallbackProcessor,
 )
 
 # ---------------------------------------------------------------------------

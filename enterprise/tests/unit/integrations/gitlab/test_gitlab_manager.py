@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-
 from integrations.gitlab.gitlab_view import GitlabIssue
 from integrations.types import UserData
 

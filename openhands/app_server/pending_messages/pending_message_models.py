@@ -3,10 +3,9 @@
 from datetime import datetime
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
-
 from openhands.agent_server.models import ImageContent, TextContent
 from openhands.agent_server.utils import utc_now
+from pydantic import BaseModel, Field
 
 
 class PendingMessage(BaseModel):

@@ -19,16 +19,8 @@ from uuid import UUID
 from fastapi import Request
 from google.cloud.storage.bucket import Bucket
 from openhands.agent_server.models import EventPage, EventSortOrder
-from openhands.app_server.event.event_service import EventService
-from openhands.app_server.event.google_cloud_event_service import (
-    GoogleCloudEventService,
-    _get_shared_storage_client,
-)
-from openhands.app_server.event_callback.event_callback_models import EventKind
-from openhands.app_server.services.injector import InjectorState
 from openhands.sdk import Event
 from pydantic import Field
-
 from server.sharing.shared_conversation_info_service import (
     SharedConversationInfoService,
 )
@@ -39,6 +31,14 @@ from server.sharing.shared_event_service import (
 from server.sharing.sql_shared_conversation_info_service import (
     SQLSharedConversationInfoService,
 )
+
+from openhands.app_server.event.event_service import EventService
+from openhands.app_server.event.google_cloud_event_service import (
+    GoogleCloudEventService,
+    _get_shared_storage_client,
+)
+from openhands.app_server.event_callback.event_callback_models import EventKind
+from openhands.app_server.services.injector import InjectorState
 
 logger = logging.getLogger(__name__)
 

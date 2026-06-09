@@ -9,8 +9,8 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException, status
-
 from openhands.agent_server.models import TextContent
+
 from openhands.app_server.pending_messages.pending_message_models import (
     PendingMessageResponse,
 )

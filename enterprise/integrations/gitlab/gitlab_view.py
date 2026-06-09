@@ -1,8 +1,21 @@
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
+from integrations.models import Message
+from integrations.resolver_context import ResolverUserContext
+from integrations.resolver_org_router import resolve_org_for_repo
+from integrations.types import ResolverViewInterface, UserData
+from integrations.utils import (
+    HOST,
+    get_oh_labels,
+    has_exact_mention,
+)
 from jinja2 import Environment
 from openhands.agent_server.models import SendMessageRequest
+from openhands.sdk import TextContent
+from server.auth.token_manager import TokenManager
+from storage.saas_secrets_store import SaasSecretsStore
+
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTaskStatus,
@@ -16,19 +29,6 @@ from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.sdk import TextContent
-
-from integrations.models import Message
-from integrations.resolver_context import ResolverUserContext
-from integrations.resolver_org_router import resolve_org_for_repo
-from integrations.types import ResolverViewInterface, UserData
-from integrations.utils import (
-    HOST,
-    get_oh_labels,
-    has_exact_mention,
-)
-from server.auth.token_manager import TokenManager
-from storage.saas_secrets_store import SaasSecretsStore
 
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
 CONFIDENTIAL_NOTE = 'confidential_note'

@@ -3,8 +3,6 @@
 import asyncio
 from uuid import UUID
 
-from openhands.app_server.utils.logger import openhands_logger as logger
-
 from server.auth.token_manager import TokenManager
 from server.constants import ROLE_ADMIN, ROLE_OWNER
 from server.routes.org_invitation_models import (
@@ -22,6 +20,8 @@ from storage.org_service import OrgService
 from storage.org_store import OrgStore
 from storage.role_store import RoleStore
 from storage.user_store import UserStore
+
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class OrgInvitationService:

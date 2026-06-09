@@ -3,7 +3,12 @@ from typing import ClassVar
 from uuid import UUID
 
 import httpx
+from integrations.utils import format_jira_comment_body, get_summary_instruction
 from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
+from openhands.sdk import Event
+from openhands.sdk.event import ConversationStateUpdateEvent
+from pydantic import Field
+
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
@@ -19,11 +24,6 @@ from openhands.app_server.event_callback.util import (
     get_agent_server_url_from_sandbox,
 )
 from openhands.app_server.utils.http_session import httpx_verify_option
-from openhands.sdk import Event
-from openhands.sdk.event import ConversationStateUpdateEvent
-from pydantic import Field
-
-from integrations.utils import format_jira_comment_body, get_summary_instruction
 
 _logger = logging.getLogger(__name__)
 
@@ -131,9 +131,9 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
                 app_conversation_info.sandbox_id,
             )
 
-            assert sandbox.session_api_key is not None, (
-                f'No session API key for sandbox: {sandbox.id}'
-            )
+            assert (
+                sandbox.session_api_key is not None
+            ), f'No session API key for sandbox: {sandbox.id}'
 
             # 3. URL + instruction
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)

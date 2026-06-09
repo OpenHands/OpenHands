@@ -7,10 +7,10 @@ from jinja2 import Environment
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
+    from integrations.models import Message
+
     from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE
     from openhands.app_server.user_auth.user_auth import UserAuth
-
-    from integrations.models import Message
 
 
 class GitLabResourceType(Enum):

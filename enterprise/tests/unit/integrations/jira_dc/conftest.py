@@ -3,19 +3,19 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from jinja2 import DictLoader, Environment
-from openhands.app_server.integrations.service_types import ProviderType, Repository
-from openhands.app_server.user_auth.user_auth import UserAuth
-
 from integrations.jira_dc.jira_dc_manager import JiraDcManager
 from integrations.jira_dc.jira_dc_view import (
     JiraDcExistingConversationView,
     JiraDcNewConversationView,
 )
 from integrations.models import JobContext
+from jinja2 import DictLoader, Environment
 from storage.jira_dc_conversation import JiraDcConversation
 from storage.jira_dc_user import JiraDcUser
 from storage.jira_dc_workspace import JiraDcWorkspace
+
+from openhands.app_server.integrations.service_types import ProviderType, Repository
+from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 @pytest.fixture

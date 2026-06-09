@@ -35,12 +35,12 @@ from enum import Enum
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
-from openhands.app_server.user_auth import get_user_auth, get_user_id
-from openhands.app_server.utils.logger import openhands_logger as logger
-
 from storage.org_member_store import OrgMemberStore
 from storage.role import Role
 from storage.role_store import RoleStore
+
+from openhands.app_server.user_auth import get_user_auth, get_user_id
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class Permission(str, Enum):

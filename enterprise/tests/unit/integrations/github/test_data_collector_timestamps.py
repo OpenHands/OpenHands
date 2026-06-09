@@ -1,7 +1,6 @@
 from datetime import datetime
 
 import pytest
-
 from integrations.github.data_collector import _github_ts_to_naive_utc
 
 

@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from server.routes.org_invitation_models import (
     EmailMismatchError,
     InvitationExpiredError,

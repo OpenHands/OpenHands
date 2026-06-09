@@ -4,10 +4,10 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from jinja2 import Environment
-from openhands.app_server.user_auth.user_auth import UserAuth
-
 from storage.jira_user import JiraUser
 from storage.jira_workspace import JiraWorkspace
+
+from openhands.app_server.user_auth.user_auth import UserAuth
 
 if TYPE_CHECKING:
     from integrations.jira.jira_payload import JiraWebhookPayload

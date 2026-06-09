@@ -4,9 +4,6 @@ import jwt
 from fastapi import Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from openhands.app_server.user_auth.user_auth import AuthType, UserAuth, get_user_auth
-from openhands.app_server.utils.logger import openhands_logger as logger
-
 from server.auth.auth_error import (
     AuthError,
     EmailNotVerifiedError,
@@ -18,6 +15,9 @@ from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.saas_user_auth import SaasUserAuth, token_manager
 from server.routes.auth import set_response_cookie
 from server.utils.url_utils import get_cookie_domain, get_cookie_samesite
+
+from openhands.app_server.user_auth.user_auth import AuthType, UserAuth, get_user_auth
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class SetAuthCookieMiddleware:

@@ -1,8 +1,9 @@
 """SAAS-specific user models that extend OSS UserInfo with organization fields."""
 
+from pydantic import BaseModel
+
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.user.user_models import UserInfo
-from pydantic import BaseModel
 
 
 class SaasUserInfo(UserInfo):

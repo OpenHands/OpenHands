@@ -24,7 +24,7 @@ const createConversation = (): V1AppConversation => ({
   sandbox_status: "PAUSED",
   execution_status: null,
   conversation_url: "http://localhost:3000/api/conversations/conversation-1",
-  session_api_key: "session-key",
+  session_api_key: "dummy-session-key",
   sub_conversation_ids: [],
 });
 

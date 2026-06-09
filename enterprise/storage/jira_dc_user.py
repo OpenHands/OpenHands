@@ -2,7 +2,6 @@ from datetime import datetime
 
 from sqlalchemy import DateTime, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
-
 from storage.base import Base
 
 

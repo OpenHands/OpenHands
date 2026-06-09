@@ -4,11 +4,11 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from openhands.app_server.utils.logger import openhands_logger as logger
 from sqlalchemy import and_, select
-
 from storage.database import a_session_maker
 from storage.org_git_claim import OrgGitClaim
+
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class OrgGitClaimStore:

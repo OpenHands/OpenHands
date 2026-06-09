@@ -8,7 +8,6 @@ from unittest.mock import patch
 
 import pytest
 from sqlalchemy.exc import IntegrityError
-
 from storage.org import Org
 from storage.org_git_claim_store import OrgGitClaimStore
 from storage.org_member import OrgMember

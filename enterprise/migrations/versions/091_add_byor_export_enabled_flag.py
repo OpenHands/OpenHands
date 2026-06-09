@@ -31,15 +31,13 @@ def upgrade() -> None:
     )
 
     # Set byor_export_enabled to true for orgs that have completed billing sessions
-    op.execute(
-        sa.text("""
+    op.execute(sa.text("""
             UPDATE org SET byor_export_enabled = TRUE
             WHERE id IN (
                 SELECT DISTINCT org_id FROM billing_sessions
                 WHERE status = 'completed' AND org_id IS NOT NULL
             )
-        """)
-    )
+        """))
 
 
 def downgrade() -> None:

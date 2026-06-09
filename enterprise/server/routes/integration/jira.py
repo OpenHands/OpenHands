@@ -10,18 +10,18 @@ from urllib.parse import urlencode, urlparse
 import requests
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
-from openhands.app_server.user_auth.user_auth import get_user_auth
-from openhands.app_server.utils.logger import openhands_logger as logger
-from pydantic import BaseModel, Field, field_validator
-
 from integrations.jira.jira_manager import JiraManager
 from integrations.models import Message, SourceType
 from integrations.utils import HOST_URL
+from pydantic import BaseModel, Field, field_validator
 from server.auth.constants import JIRA_CLIENT_ID, JIRA_CLIENT_SECRET
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
 from storage.jira_workspace import JiraWorkspace
 from storage.redis import get_redis_client
+
+from openhands.app_server.user_auth.user_auth import get_user_auth
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Environment variable to disable Jira webhooks
 JIRA_WEBHOOKS_ENABLED = os.environ.get('JIRA_WEBHOOKS_ENABLED', '0') in (
@@ -157,9 +157,9 @@ async def verify_jira_signature(body: bytes, signature: str, payload: dict):
             status_code=403, detail='Workspace name not found in payload'
         )
 
-    workspace: (
-        JiraWorkspace | None
-    ) = await jira_manager.integration_store.get_workspace_by_name(workspace_name)
+    workspace: JiraWorkspace | None = (
+        await jira_manager.integration_store.get_workspace_by_name(workspace_name)
+    )
 
     if workspace is None:
         logger.warning(f'[Jira] Could not identify workspace {workspace_name}')

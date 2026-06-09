@@ -21,7 +21,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
-
 from storage.saas_secrets_store import SaasSecretsStore
 from storage.saas_settings_store import SaasSettingsStore
 
@@ -226,9 +225,10 @@ async def test_secrets_store_store_uses_effective_org_id_when_set():
 
     # Build a Secrets object with one custom secret. We use the real
     # model so encryption / model_dump behave correctly.
+    from pydantic import SecretStr
+
     from openhands.app_server.integrations.provider import CustomSecret
     from openhands.app_server.secrets.secrets_models import Secrets
-    from pydantic import SecretStr
 
     item = Secrets(
         custom_secrets={
@@ -250,9 +250,9 @@ async def test_secrets_store_store_uses_effective_org_id_when_set():
     ):
         await store.store(item)
 
-    assert captured_org_ids == [EFFECTIVE_ORG_ID], (
-        f'store() wrote under {captured_org_ids[0]!s}, expected {EFFECTIVE_ORG_ID!s}'
-    )
+    assert captured_org_ids == [
+        EFFECTIVE_ORG_ID
+    ], f'store() wrote under {captured_org_ids[0]!s}, expected {EFFECTIVE_ORG_ID!s}'
 
 
 @pytest.mark.asyncio
@@ -279,9 +279,10 @@ async def test_secrets_store_store_falls_back_to_current_org_when_unset():
         async def commit(self):
             return None
 
+    from pydantic import SecretStr
+
     from openhands.app_server.integrations.provider import CustomSecret
     from openhands.app_server.secrets.secrets_models import Secrets
-    from pydantic import SecretStr
 
     item = Secrets(
         custom_secrets={
@@ -336,7 +337,6 @@ def _make_saas_user_auth():
     it, so a dummy SecretStr is sufficient.
     """
     from pydantic import SecretStr
-
     from server.auth.saas_user_auth import SaasUserAuth
 
     return SaasUserAuth(refresh_token=SecretStr('test-refresh'), user_id=USER_ID)

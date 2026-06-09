@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import SecretStr
-
 from server.routes.org_models import (
     CannotModifySelfError,
     InvalidRoleError,

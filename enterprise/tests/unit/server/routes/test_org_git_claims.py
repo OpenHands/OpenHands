@@ -13,16 +13,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
-from openhands.app_server.user_auth import get_user_id
-from sqlalchemy.exc import IntegrityError
-
 from server.routes.orgs import (
     claim_git_organization,
     disconnect_git_organization,
     get_git_claims,
     org_router,
 )
+from sqlalchemy.exc import IntegrityError
 from storage.org_git_claim import OrgGitClaim
+
+from openhands.app_server.user_auth import get_user_id
 
 TEST_USER_ID = str(uuid.uuid4())
 
@@ -351,7 +351,6 @@ class TestGitOrgClaimRequestValidation:
     def test_invalid_provider_is_rejected(self):
         """An unsupported provider raises a validation error."""
         from pydantic import ValidationError
-
         from server.routes.org_models import GitOrgClaimRequest
 
         with pytest.raises(ValidationError, match='Invalid provider'):
@@ -360,7 +359,6 @@ class TestGitOrgClaimRequestValidation:
     def test_empty_git_organization_is_rejected(self):
         """An empty git_organization raises a validation error."""
         from pydantic import ValidationError
-
         from server.routes.org_models import GitOrgClaimRequest
 
         with pytest.raises(ValidationError, match='git_organization must not be empty'):

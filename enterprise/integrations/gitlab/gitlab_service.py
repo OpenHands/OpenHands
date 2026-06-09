@@ -1,5 +1,12 @@
 import asyncio
 
+from integrations.store_repo_utils import store_repositories_in_db
+from integrations.types import GitLabResourceType
+from pydantic import SecretStr
+from server.auth.token_manager import TokenManager
+from storage.gitlab_webhook import GitlabWebhook, WebhookStatus
+from storage.gitlab_webhook_store import GitlabWebhookStore
+
 from openhands.app_server.integrations.gitlab.gitlab_service import GitLabService
 from openhands.app_server.integrations.service_types import (
     ProviderType,
@@ -9,13 +16,6 @@ from openhands.app_server.integrations.service_types import (
 )
 from openhands.app_server.types import AppMode
 from openhands.app_server.utils.logger import openhands_logger as logger
-from pydantic import SecretStr
-
-from integrations.store_repo_utils import store_repositories_in_db
-from integrations.types import GitLabResourceType
-from server.auth.token_manager import TokenManager
-from storage.gitlab_webhook import GitlabWebhook, WebhookStatus
-from storage.gitlab_webhook_store import GitlabWebhookStore
 
 
 class SaaSGitLabService(GitLabService):

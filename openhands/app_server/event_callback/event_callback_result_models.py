@@ -2,10 +2,9 @@ from datetime import datetime
 from enum import Enum
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
-
 from openhands.agent_server.utils import OpenHandsUUID, utc_now
 from openhands.sdk.event import EventID
+from pydantic import BaseModel, Field
 
 
 class EventCallbackResultStatus(Enum):

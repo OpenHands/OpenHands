@@ -4,7 +4,6 @@ from unittest.mock import MagicMock
 
 from openhands.sdk.settings import ACPAgentSettings
 from pydantic import SecretStr
-
 from server.constants import LITE_LLM_API_URL
 from server.routes.org_models import (
     MASKED_API_KEY,

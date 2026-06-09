@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from storage.org_invitation import OrgInvitation
 from storage.org_invitation_store import (
     INVITATION_TOKEN_LENGTH,

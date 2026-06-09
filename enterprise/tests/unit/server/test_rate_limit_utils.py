@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request, status
-
 from server.utils.rate_limit_utils import (
     RATE_LIMIT_IP_SECONDS,
     RATE_LIMIT_USER_SECONDS,

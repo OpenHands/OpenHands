@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from sqlalchemy import select
-
 from storage.database import a_session_maker
 from storage.stored_repository import StoredRepository
 

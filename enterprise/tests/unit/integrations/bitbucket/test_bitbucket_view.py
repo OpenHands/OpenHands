@@ -1,7 +1,6 @@
 """Tests for the Bitbucket Cloud resolver factory and view dispatch."""
 
 import pytest
-
 from integrations.bitbucket.bitbucket_view import (
     BitbucketFactory,
     BitbucketInlinePRComment,

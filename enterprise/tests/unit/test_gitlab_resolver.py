@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.responses import JSONResponse
-
 from server.routes.integration.gitlab import gitlab_events
 
 

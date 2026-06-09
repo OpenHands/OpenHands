@@ -26,9 +26,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
-from openhands.app_server.user_auth.user_auth import AuthType
-
 from server.routes.auth import keycloak_offline_callback, logout
+
+from openhands.app_server.user_auth.user_auth import AuthType
 
 
 @pytest.fixture

@@ -3,13 +3,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import BackgroundTasks
-from openhands.app_server.integrations.service_types import (
-    ProviderTimeoutError,
-    ProviderType,
-    Repository,
-)
-from openhands.app_server.user_auth.user_auth import UserAuth
-
 from integrations.slack.slack_manager import (
     SLACK_USER_MSG_EXPIRATION,
     SLACK_USER_MSG_KEY_PREFIX,
@@ -17,6 +10,13 @@ from integrations.slack.slack_manager import (
 )
 from integrations.slack.slack_view import SlackNewConversationView
 from storage.slack_user import SlackUser
+
+from openhands.app_server.integrations.service_types import (
+    ProviderTimeoutError,
+    ProviderType,
+    Repository,
+)
+from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 @pytest.fixture
@@ -778,7 +778,6 @@ class TestOnOptionsLoadEndpoint:
     ):
         """Test that invalid Slack signature raises 403 HTTPException."""
         from fastapi import HTTPException
-
         from server.routes.integration.slack import on_options_load
 
         payload_str = json.dumps(valid_block_suggestion_payload)

@@ -26,9 +26,6 @@ from typing import Any
 from uuid import UUID
 
 import aiohttp
-from openhands.app_server.integrations.provider import ProviderType
-from openhands.app_server.utils.logger import openhands_logger as logger
-
 from integrations.resolver_org_router import resolve_org_for_repo
 from server.auth.constants import (
     AUTOMATION_SERVICE_TIMEOUT,
@@ -37,6 +34,9 @@ from server.auth.constants import (
 )
 from server.auth.token_manager import TokenManager
 from storage.redis import get_redis_client_async
+
+from openhands.app_server.integrations.provider import ProviderType
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Cache TTL constants
 ORG_CLAIM_CACHE_TTL_SECONDS = 3600  # 1 hour for org claims (rarely change)

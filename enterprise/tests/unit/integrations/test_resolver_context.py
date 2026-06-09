@@ -9,16 +9,16 @@ from uuid import UUID
 
 import pytest
 
-# Import the real classes we want to test
-from openhands.app_server.integrations.provider import CustomSecret, ProviderToken
-from openhands.app_server.integrations.service_types import ProviderType
-from openhands.app_server.secrets.secrets_models import Secrets
-
 # Import the SDK types we need for testing
 from openhands.sdk.secret import SecretSource, StaticSecret
 from pydantic import SecretStr
 
 from enterprise.integrations.resolver_context import ResolverUserContext
+
+# Import the real classes we want to test
+from openhands.app_server.integrations.provider import CustomSecret, ProviderToken
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.secrets.secrets_models import Secrets
 
 
 @pytest.fixture
@@ -232,9 +232,9 @@ async def test_get_latest_token_returns_string_for_multiple_providers(
         (ProviderType.BITBUCKET, 'bitbucket_token'),
     ]:
         result = await resolver_context.get_latest_token(provider_type)
-        assert isinstance(result, str), (
-            f'Expected str for {provider_type.name}, got {type(result).__name__}'
-        )
+        assert isinstance(
+            result, str
+        ), f'Expected str for {provider_type.name}, got {type(result).__name__}'
         assert result == expected_token
 
 

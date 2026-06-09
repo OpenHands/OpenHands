@@ -7,9 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from openhands.app_server.settings.settings_models import Settings
 from pydantic import SecretStr
-
 from server.constants import (
     get_default_litellm_model,
 )
@@ -19,6 +17,8 @@ from storage.lite_llm_manager import (
     get_openhands_cloud_key_alias,
 )
 from storage.user_settings import UserSettings
+
+from openhands.app_server.settings.settings_models import Settings
 
 
 def _agent_value(settings: Settings, key: str):
@@ -2523,9 +2523,9 @@ class TestBudgetPayloadHandling:
 
         # Verify that max_budget IS in the JSON payload with the correct value
         json_payload = call_args[1]['json']
-        assert 'max_budget' in json_payload, (
-            'max_budget should be in payload when set to a value'
-        )
+        assert (
+            'max_budget' in json_payload
+        ), 'max_budget should be in payload when set to a value'
         assert json_payload['max_budget'] == 100.0
 
     @pytest.mark.asyncio
@@ -2584,9 +2584,9 @@ class TestBudgetPayloadHandling:
 
         # Verify that max_budget_in_team IS in the JSON payload
         json_payload = call_args[1]['json']
-        assert 'max_budget_in_team' in json_payload, (
-            'max_budget_in_team should be in payload when set to a value'
-        )
+        assert (
+            'max_budget_in_team' in json_payload
+        ), 'max_budget_in_team should be in payload when set to a value'
         assert json_payload['max_budget_in_team'] == 50.0
 
     @pytest.mark.asyncio
@@ -2645,9 +2645,9 @@ class TestBudgetPayloadHandling:
 
         # Verify that max_budget_in_team IS in the JSON payload
         json_payload = call_args[1]['json']
-        assert 'max_budget_in_team' in json_payload, (
-            'max_budget_in_team should be in payload when set to a value'
-        )
+        assert (
+            'max_budget_in_team' in json_payload
+        ), 'max_budget_in_team should be in payload when set to a value'
         assert json_payload['max_budget_in_team'] == 75.0
 
 

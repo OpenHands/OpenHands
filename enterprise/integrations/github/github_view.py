@@ -3,24 +3,6 @@ from uuid import UUID, uuid4
 
 from github import Auth, Github, GithubIntegration
 from github.Issue import Issue
-from jinja2 import Environment
-from openhands.agent_server.models import SendMessageRequest
-from openhands.app_server.app_conversation.app_conversation_models import (
-    AppConversationStartRequest,
-    AppConversationStartTaskStatus,
-    ConversationTrigger,
-)
-from openhands.app_server.config import get_app_conversation_service
-from openhands.app_server.integrations.github.github_service import GithubServiceImpl
-from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
-from openhands.app_server.integrations.service_types import Comment
-from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
-from openhands.app_server.user_auth.user_auth import UserAuth
-from openhands.app_server.utils.async_utils import call_sync_from_async
-from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.sdk import TextContent
-
 from integrations.github.github_types import (
     WorkflowRun,
     WorkflowRunGroup,
@@ -37,11 +19,29 @@ from integrations.utils import (
     get_oh_labels,
     has_exact_mention,
 )
+from jinja2 import Environment
+from openhands.agent_server.models import SendMessageRequest
+from openhands.sdk import TextContent
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from server.auth.token_manager import TokenManager
 from storage.org_store import OrgStore
 from storage.proactive_conversation_store import ProactiveConversationStore
 from storage.saas_secrets_store import SaasSecretsStore
+
+from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversationStartRequest,
+    AppConversationStartTaskStatus,
+    ConversationTrigger,
+)
+from openhands.app_server.config import get_app_conversation_service
+from openhands.app_server.integrations.github.github_service import GithubServiceImpl
+from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
+from openhands.app_server.integrations.service_types import Comment
+from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
+from openhands.app_server.user_auth.user_auth import UserAuth
+from openhands.app_server.utils.async_utils import call_sync_from_async
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
 

@@ -5,10 +5,9 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+from server.routes.user_app_settings_models import UserAppSettingsUpdate
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from server.routes.user_app_settings_models import UserAppSettingsUpdate
 from storage.user import User
 
 

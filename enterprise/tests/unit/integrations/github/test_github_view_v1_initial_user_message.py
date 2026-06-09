@@ -6,17 +6,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
-from jinja2 import Environment, FileSystemLoader
-from openhands.app_server.app_conversation.app_conversation_models import (
-    AppConversationStartTaskStatus,
-)
-
 from integrations.github.github_view import (
     GithubInlinePRComment,
     GithubIssueComment,
     GithubPRComment,
 )
 from integrations.types import UserData
+from jinja2 import Environment, FileSystemLoader
+
+from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversationStartTaskStatus,
+)
 
 
 @pytest.fixture

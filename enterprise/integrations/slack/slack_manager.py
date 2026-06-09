@@ -1,24 +1,5 @@
 from typing import Any
 
-from jinja2 import Environment, FileSystemLoader
-from openhands.app_server.integrations.provider import ProviderHandler
-from openhands.app_server.integrations.service_types import (
-    AuthenticationError,
-    ProviderTimeoutError,
-    Repository,
-)
-from openhands.app_server.shared import server_config
-from openhands.app_server.types import (
-    LLMAuthenticationError,
-    MissingSettingsError,
-    SessionExpiredError,
-)
-from openhands.app_server.user_auth.user_auth import UserAuth
-from openhands.app_server.utils.logger import openhands_logger as logger
-from slack_sdk.oauth import AuthorizeUrlGenerator
-from slack_sdk.web.async_client import AsyncWebClient
-from sqlalchemy import select
-
 from integrations.manager import Manager
 from integrations.models import Message, SourceType
 from integrations.slack.slack_errors import SlackError, SlackErrorCode
@@ -40,10 +21,29 @@ from integrations.utils import (
     infer_repo_from_message,
 )
 from integrations.v1_utils import get_saas_user_auth
+from jinja2 import Environment, FileSystemLoader
 from server.constants import SLACK_CLIENT_ID
+from slack_sdk.oauth import AuthorizeUrlGenerator
+from slack_sdk.web.async_client import AsyncWebClient
+from sqlalchemy import select
 from storage.database import a_session_maker
 from storage.redis import get_redis_client_async
 from storage.slack_user import SlackUser
+
+from openhands.app_server.integrations.provider import ProviderHandler
+from openhands.app_server.integrations.service_types import (
+    AuthenticationError,
+    ProviderTimeoutError,
+    Repository,
+)
+from openhands.app_server.shared import server_config
+from openhands.app_server.types import (
+    LLMAuthenticationError,
+    MissingSettingsError,
+    SessionExpiredError,
+)
+from openhands.app_server.user_auth.user_auth import UserAuth
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 authorize_url_generator = AuthorizeUrlGenerator(
     client_id=SLACK_CLIENT_ID,

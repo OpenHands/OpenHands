@@ -10,6 +10,7 @@ from typing import AsyncGenerator
 from uuid import uuid4
 
 import pytest
+from openhands.sdk import Message, MessageEvent, TextContent
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -28,7 +29,6 @@ from openhands.app_server.event_callback.sql_event_callback_service import (
     StoredEventCallbackResult,
 )
 from openhands.app_server.utils.sql_utils import Base
-from openhands.sdk import Message, MessageEvent, TextContent
 
 
 @pytest.fixture

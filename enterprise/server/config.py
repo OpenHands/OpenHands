@@ -7,10 +7,6 @@ import typing
 import jwt
 import requests  # type: ignore
 from fastapi import HTTPException
-from openhands.app_server.integrations.service_types import ProviderType
-from openhands.app_server.server_config.server_config import ServerConfig
-from openhands.app_server.types import AppMode
-
 from server.auth.constants import (
     AZURE_DEVOPS_CLIENT_ID,
     BITBUCKET_APP_CLIENT_ID,
@@ -26,6 +22,10 @@ from server.auth.constants import (
     RECAPTCHA_SITE_KEY,
 )
 from server.constants import DEPLOYMENT_MODE
+
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.server_config.server_config import ServerConfig
+from openhands.app_server.types import AppMode
 
 
 def sign_token(payload: dict[str, object], jwt_secret: str, algorithm='HS256') -> str:

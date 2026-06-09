@@ -12,7 +12,6 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
-
 from storage.jira_dc_integration_store import JiraDcIntegrationStore
 from storage.jira_dc_user import JiraDcUser
 
@@ -89,13 +88,11 @@ def test_active_link_migration_deduplicates_and_enforces_one_active_link_per_use
         with patch.object(migration, 'op', operations):
             migration.upgrade()
 
-        rows = connection.execute(
-            sa.text("""
+        rows = connection.execute(sa.text("""
                 SELECT id, keycloak_user_id, status
                 FROM jira_dc_users
                 ORDER BY id
-                """)
-        ).all()
+                """)).all()
         assert rows == [
             (1, 'user-1', 'inactive'),
             (2, 'user-1', 'active'),

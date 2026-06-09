@@ -4,10 +4,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
-from openhands.analytics import get_analytics_service
-from openhands.app_server.user_auth import get_user_id
-from openhands.app_server.utils.logger import openhands_logger as logger
-
 from server.auth.org_context import REJECT_X_ORG_ID_PATH_MISMATCH
 from server.routes.org_invitation_models import (
     AcceptInvitationRequest,
@@ -29,6 +25,10 @@ from server.utils.rate_limit_utils import (
 )
 from storage.org_store import OrgStore
 from storage.role_store import RoleStore
+
+from openhands.analytics import get_analytics_service
+from openhands.app_server.user_auth import get_user_id
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Router for invitation operations on an organization (requires org_id).
 # Every route under this prefix has ``{org_id}`` in its path, so we
@@ -114,9 +114,9 @@ async def create_invitation(
         try:
             analytics = get_analytics_service()
             if analytics and user_id:
-                from openhands.analytics.analytics_context import AnalyticsContext
-
                 from storage.user_store import UserStore
+
+                from openhands.analytics.analytics_context import AnalyticsContext
 
                 user_obj = await UserStore.get_user_by_id(user_id)
                 ctx = AnalyticsContext(

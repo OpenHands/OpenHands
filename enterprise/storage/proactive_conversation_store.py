@@ -4,17 +4,17 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Callable
 
-from openhands.app_server.integrations.service_types import ProviderType
-from openhands.app_server.utils.logger import openhands_logger as logger
-from sqlalchemy import and_, delete, select, update
-
 from integrations.github.github_types import (
     WorkflowRun,
     WorkflowRunGroup,
     WorkflowRunStatus,
 )
+from sqlalchemy import and_, delete, select, update
 from storage.database import a_session_maker
 from storage.proactive_convos import ProactiveConversation
+
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass

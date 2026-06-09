@@ -4,7 +4,6 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from server.routes.org_models import OrgMemberFinancialPage
 from server.services.org_member_financial_service import OrgMemberFinancialService
 from storage.org_member import OrgMember

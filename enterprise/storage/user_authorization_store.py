@@ -4,7 +4,6 @@ from typing import Optional
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from storage.database import a_session_maker
 from storage.user_authorization import UserAuthorization, UserAuthorizationType
 

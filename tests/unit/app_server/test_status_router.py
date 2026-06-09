@@ -79,6 +79,6 @@ class TestAllStatusEndpoints:
 
         for endpoint in endpoints:
             response = test_client.get(endpoint)
-            assert response.status_code == 200, (
-                f'Endpoint {endpoint} returned {response.status_code}'
-            )
+            assert (
+                response.status_code == 200
+            ), f'Endpoint {endpoint} returned {response.status_code}'

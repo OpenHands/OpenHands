@@ -7,13 +7,6 @@ from enum import Enum
 from typing import Any
 
 from github import Auth, Github, GithubIntegration
-from openhands.app_server.config import get_global_config
-from openhands.app_server.conversation_paths import get_conversation_dir
-from openhands.app_server.integrations.github.github_service import GithubServiceImpl
-from openhands.app_server.integrations.service_types import ProviderType
-from openhands.app_server.utils.logger import openhands_logger as logger
-from pydantic import SecretStr
-
 from integrations.github.github_view import (
     GithubIssue,
 )
@@ -21,9 +14,16 @@ from integrations.github.queries import PR_QUERY_BY_NODE_ID
 from integrations.models import Message
 from integrations.types import PRStatus, ResolverViewInterface
 from integrations.utils import HOST
+from pydantic import SecretStr
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from storage.openhands_pr import OpenhandsPR
 from storage.openhands_pr_store import OpenhandsPRStore
+
+from openhands.app_server.config import get_global_config
+from openhands.app_server.conversation_paths import get_conversation_dir
+from openhands.app_server.integrations.github.github_service import GithubServiceImpl
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 file_store = get_global_config().file_store
 

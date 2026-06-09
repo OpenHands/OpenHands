@@ -9,13 +9,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
-from openhands.app_server.user_auth import get_user_id
-
 from server.routes.user_app_settings import user_app_settings_router
 from server.routes.user_app_settings_models import (
     UserAppSettingsResponse,
     UserNotFoundError,
 )
+
+from openhands.app_server.user_auth import get_user_id
 
 TEST_USER_ID = str(uuid.uuid4())
 

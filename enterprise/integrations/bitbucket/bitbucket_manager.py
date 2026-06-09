@@ -2,17 +2,6 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
-from jinja2 import Environment, FileSystemLoader
-from openhands.app_server.integrations.provider import ProviderToken, ProviderType
-from openhands.app_server.secrets.secrets_models import Secrets
-from openhands.app_server.types import (
-    LLMAuthenticationError,
-    MissingSettingsError,
-    SessionExpiredError,
-)
-from openhands.app_server.utils.logger import openhands_logger as logger
-from pydantic import SecretStr
-
 from integrations.bitbucket.bitbucket_view import (
     BitbucketFactory,
     BitbucketInlinePRComment,
@@ -29,8 +18,19 @@ from integrations.utils import (
     get_session_expired_message,
 )
 from integrations.v1_utils import get_saas_user_auth
+from jinja2 import Environment, FileSystemLoader
+from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 from storage.bitbucket_webhook_store import BitbucketWebhookStore
+
+from openhands.app_server.integrations.provider import ProviderToken, ProviderType
+from openhands.app_server.secrets.secrets_models import Secrets
+from openhands.app_server.types import (
+    LLMAuthenticationError,
+    MissingSettingsError,
+    SessionExpiredError,
+)
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class BitbucketManager(Manager[BitbucketViewType]):

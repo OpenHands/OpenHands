@@ -3,13 +3,13 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from openhands.app_server.integrations.service_types import RequestMethod
-from pydantic import SecretStr
-
 from integrations.bitbucket_data_center.bitbucket_dc_service import (
     SaaSBitbucketDCService,
 )
+from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
+
+from openhands.app_server.integrations.service_types import RequestMethod
 
 
 @pytest.fixture

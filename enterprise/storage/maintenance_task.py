@@ -5,14 +5,15 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Type
 
-from openhands.app_server.utils.import_utils import get_impl
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import DateTime, String, Text, text
+from sqlalchemy import DateTime
 from sqlalchemy import Enum as SQLEnum
+from sqlalchemy import String, Text, text
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column
-
 from storage.base import Base
+
+from openhands.app_server.utils.import_utils import get_impl
 
 
 class MaintenanceTaskProcessor(BaseModel, ABC):

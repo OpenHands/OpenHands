@@ -6,9 +6,6 @@ from typing import Optional
 from uuid import UUID
 
 from openhands.sdk.settings import AGENT_SETTINGS_SCHEMA_VERSION
-from sqlalchemy import select, text
-from sqlalchemy.orm import selectinload
-
 from server.auth.token_manager import TokenManager
 from server.constants import (
     DEFAULT_V1_ENABLED,
@@ -19,6 +16,8 @@ from server.constants import (
     get_default_llm_model,
 )
 from server.logger import logger
+from sqlalchemy import select, text
+from sqlalchemy.orm import selectinload
 from storage.database import a_session_maker
 from storage.encrypt_utils import (
     decrypt_legacy_model,

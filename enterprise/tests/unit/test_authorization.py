@@ -8,7 +8,6 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-
 from server.auth.authorization import (
     ROLE_PERMISSIONS,
     Permission,

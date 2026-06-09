@@ -3,10 +3,6 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, cast
 
-from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
-from openhands.app_server.utils.logger import openhands_logger as logger
-from sqlalchemy import text
-
 from integrations.gitlab.webhook_installation import (
     BreakLoopException,
     install_webhook_on_resource,
@@ -14,9 +10,13 @@ from integrations.gitlab.webhook_installation import (
 )
 from integrations.types import GitLabResourceType
 from integrations.utils import GITLAB_WEBHOOK_URL
+from sqlalchemy import text
 from storage.database import a_session_maker
 from storage.gitlab_webhook import GitlabWebhook, WebhookStatus
 from storage.gitlab_webhook_store import GitlabWebhookStore
+
+from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 if TYPE_CHECKING:
     from integrations.gitlab.gitlab_service import SaaSGitLabService

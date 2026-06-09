@@ -6,14 +6,14 @@ import json
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
-from openhands.app_server.utils.logger import openhands_logger as logger
-
 from integrations.bitbucket.bitbucket_manager import BitbucketManager
 from integrations.models import Message, SourceType
 from integrations.utils import IS_LOCAL_DEPLOYMENT
 from server.auth.token_manager import TokenManager
 from storage.bitbucket_webhook_store import BitbucketWebhookStore
 from storage.redis import get_redis_client_async
+
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 bitbucket_integration_router = APIRouter(prefix='/integration')
 

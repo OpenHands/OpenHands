@@ -2,17 +2,6 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
-from jinja2 import Environment, FileSystemLoader
-from openhands.app_server.integrations.provider import ProviderToken, ProviderType
-from openhands.app_server.secrets.secrets_models import Secrets
-from openhands.app_server.types import (
-    LLMAuthenticationError,
-    MissingSettingsError,
-    SessionExpiredError,
-)
-from openhands.app_server.utils.logger import openhands_logger as logger
-from pydantic import SecretStr
-
 from integrations.bitbucket_data_center.bitbucket_dc_view import (
     BitbucketDCFactory,
     BitbucketDCInlinePRComment,
@@ -31,9 +20,20 @@ from integrations.utils import (
     get_user_not_found_message,
 )
 from integrations.v1_utils import get_saas_user_auth
+from jinja2 import Environment, FileSystemLoader
+from pydantic import SecretStr
 from server.auth.constants import BITBUCKET_DATA_CENTER_BOT_TOKEN
 from server.auth.token_manager import TokenManager
 from storage.bitbucket_dc_webhook_store import BitbucketDCWebhookStore
+
+from openhands.app_server.integrations.provider import ProviderToken, ProviderType
+from openhands.app_server.secrets.secrets_models import Secrets
+from openhands.app_server.types import (
+    LLMAuthenticationError,
+    MissingSettingsError,
+    SessionExpiredError,
+)
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class BitbucketDCManager(Manager[BitbucketDCViewType]):

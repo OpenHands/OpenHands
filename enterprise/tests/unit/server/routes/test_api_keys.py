@@ -6,9 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 from fastapi import HTTPException
-from openhands.app_server.user_auth.user_auth import AuthType
 from pydantic import SecretStr
-
 from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.api_keys import (
     ByorPermittedResponse,
@@ -20,6 +18,8 @@ from server.routes.api_keys import (
     get_llm_api_key_for_byor,
 )
 from storage.lite_llm_manager import LiteLlmManager
+
+from openhands.app_server.user_auth.user_auth import AuthType
 
 
 class TestVerifyByorKeyInLitellm:

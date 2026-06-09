@@ -2,9 +2,10 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
+
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_models import Settings as DataSettings
-from pydantic import SecretStr
 
 
 def _agent_value(settings: Settings, key: str):
@@ -259,9 +260,7 @@ async def test_load_returns_default_when_not_found(settings_store, async_session
     file_store = MagicMock()
     file_store.read.side_effect = FileNotFoundError()
 
-    with (
-        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
-    ):
+    with (patch('storage.saas_settings_store.a_session_maker', async_session_maker),):
         loaded_settings = await settings_store.load()
         assert loaded_settings is not None
         assert loaded_settings.language == 'en'
@@ -455,7 +454,6 @@ async def test_store_updates_org_defaults_and_all_members_for_shared_keys(
 ):
     """External provider keys should still sync as an org-wide shared snapshot."""
     from sqlalchemy import select
-
     from storage.org import Org
     from storage.org_member import OrgMember
 
@@ -510,7 +508,6 @@ async def test_store_keeps_openhands_managed_keys_member_specific(
 ):
     """Managed OpenHands keys should not be copied from one member to everyone else."""
     from sqlalchemy import select
-
     from storage.org import Org
     from storage.org_member import OrgMember
 
@@ -586,7 +583,6 @@ async def test_store_keeps_mcp_config_private_to_acting_member(
     new joiners don't inherit them via the org defaults.
     """
     from sqlalchemy import select
-
     from storage.org import Org
     from storage.org_member import OrgMember
 
@@ -776,7 +772,6 @@ async def test_load_drops_legacy_org_level_mcp_config(
     even if the org row still carries a stale value in the database.
     """
     from sqlalchemy import select
-
     from storage.org import Org
     from storage.user import User
 
@@ -914,7 +909,6 @@ async def test_load_with_null_or_empty_llm_profiles_seeds_default_profile(
     behaviour), with that profile marked active.
     """
     from sqlalchemy import update
-
     from storage.user import User
 
     fixture = org_with_multiple_members_fixture
@@ -963,7 +957,6 @@ async def test_load_persists_seeded_default_profile_onto_org(
     profile on first use of LLM profiles.
     """
     from sqlalchemy import select, update
-
     from storage.org import Org
 
     fixture = org_with_multiple_members_fixture
@@ -1022,7 +1015,6 @@ async def test_llm_profiles_are_encrypted_at_rest(
     """
     from openhands.sdk.llm import LLM
     from sqlalchemy import select, text
-
     from storage.user import User
 
     fixture = org_with_multiple_members_fixture
@@ -1092,7 +1084,6 @@ async def test_store_replaces_mcp_config_on_delete(
     resurrected by deep_merge) with the per-member privacy contract.
     """
     from sqlalchemy import select
-
     from storage.org_member import OrgMember
 
     # Arrange — Member 1 (admin) starts with 3 MCP servers

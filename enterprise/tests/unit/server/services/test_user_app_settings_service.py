@@ -7,7 +7,6 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from server.routes.user_app_settings_models import (
     UserAppSettingsResponse,
     UserAppSettingsUpdate,

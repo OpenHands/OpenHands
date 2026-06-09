@@ -6,12 +6,12 @@ from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID
 
-from openhands.app_server.utils.logger import openhands_logger as logger
 from sqlalchemy import and_, select
 from sqlalchemy.orm import joinedload
-
 from storage.database import a_session_maker
 from storage.org_invitation import OrgInvitation
+
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Invitation token configuration
 INVITATION_TOKEN_PREFIX = 'inv-'

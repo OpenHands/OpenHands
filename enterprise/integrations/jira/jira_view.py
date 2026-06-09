@@ -10,22 +10,6 @@ from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 
 import httpx
-from jinja2 import Environment
-from openhands.agent_server.models import SendMessageRequest
-from openhands.app_server.app_conversation.app_conversation_models import (
-    AppConversationStartRequest,
-    AppConversationStartTaskStatus,
-    ConversationTrigger,
-)
-from openhands.app_server.config import get_app_conversation_service
-from openhands.app_server.integrations.provider import ProviderHandler, ProviderType
-from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
-from openhands.app_server.user_auth.user_auth import UserAuth
-from openhands.app_server.utils.http_session import httpx_verify_option
-from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.sdk import TextContent
-
 from integrations.jira.jira_payload import JiraWebhookPayload
 from integrations.jira.jira_types import (
     JiraViewInterface,
@@ -41,10 +25,26 @@ from integrations.utils import (
     CONVERSATION_URL,
     infer_repo_from_message,
 )
+from jinja2 import Environment
+from openhands.agent_server.models import SendMessageRequest
+from openhands.sdk import TextContent
 from storage.jira_conversation import JiraConversation
 from storage.jira_integration_store import JiraIntegrationStore
 from storage.jira_user import JiraUser
 from storage.jira_workspace import JiraWorkspace
+
+from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversationStartRequest,
+    AppConversationStartTaskStatus,
+    ConversationTrigger,
+)
+from openhands.app_server.config import get_app_conversation_service
+from openhands.app_server.integrations.provider import ProviderHandler, ProviderType
+from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
+from openhands.app_server.user_auth.user_auth import UserAuth
+from openhands.app_server.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 JIRA_CLOUD_API_URL = 'https://api.atlassian.com/ex/jira'
 

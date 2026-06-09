@@ -3,14 +3,14 @@
 from uuid import UUID
 
 import httpx
-from openhands.app_server.utils.logger import openhands_logger as logger
-
 from server.routes.org_models import (
     OrgMemberFinancialPage,
     OrgMemberFinancialResponse,
 )
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org_member_store import OrgMemberStore
+
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class OrgMemberFinancialService:

@@ -5,7 +5,6 @@ from uuid import UUID
 
 import pytest
 from pydantic import SecretStr
-
 from server.routes.org_invitation_models import (
     EmailMismatchError,
 )

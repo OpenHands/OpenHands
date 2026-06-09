@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sqlalchemy
 from sqlalchemy import select
-
 from storage.database import a_session_maker
 from storage.user_repo_map import UserRepositoryMap
 

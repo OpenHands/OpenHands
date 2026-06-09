@@ -5,21 +5,13 @@ from pydantic import BaseModel
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
     import litellm
+    from litellm import LlmProviders  # type: ignore[reportPrivateImportUsage]
     from litellm import (
-        LlmProviders,  # type: ignore[reportPrivateImportUsage]
         ProviderConfigManager,
         get_llm_provider,
     )
 
 # ---------------------------------------------------------------------------
-# The ``openhands-sdk`` package is the **single source of truth** for which
-# models are verified and how bare LiteLLM names map to providers.
-#
-# Self-hosted mode builds the ``openhands/…`` model list from the SDK's
-# ``VERIFIED_OPENHANDS_MODELS``.  SaaS mode overrides it with the database
-# (via ``get_openhands_models``).
-# ---------------------------------------------------------------------------
-from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk.llm.utils.verified_models import (  # noqa: E402
     VERIFIED_ANTHROPIC_MODELS as _SDK_ANTHROPIC,
 )
@@ -35,6 +27,15 @@ from openhands.sdk.llm.utils.verified_models import (
 from openhands.sdk.llm.utils.verified_models import (
     VERIFIED_OPENHANDS_MODELS as _SDK_OPENHANDS,
 )
+
+# The ``openhands-sdk`` package is the **single source of truth** for which
+# models are verified and how bare LiteLLM names map to providers.
+#
+# Self-hosted mode builds the ``openhands/…`` model list from the SDK's
+# ``VERIFIED_OPENHANDS_MODELS``.  SaaS mode overrides it with the database
+# (via ``get_openhands_models``).
+# ---------------------------------------------------------------------------
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Build the ``openhands/…`` model list from the SDK.
 OPENHANDS_MODELS: list[str] = [f'openhands/{m}' for m in _SDK_OPENHANDS]

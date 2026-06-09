@@ -9,7 +9,6 @@ Covers:
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from integrations.github.github_manager import GithubManager
 from integrations.models import Message, SourceType
 from integrations.utils import HOST_URL, get_user_not_found_message

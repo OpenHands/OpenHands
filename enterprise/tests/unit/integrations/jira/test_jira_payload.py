@@ -6,7 +6,6 @@ may not be present in webhook payloads from Jira.
 """
 
 import pytest
-
 from integrations.jira.jira_payload import (
     JiraEventType,
     JiraPayloadError,

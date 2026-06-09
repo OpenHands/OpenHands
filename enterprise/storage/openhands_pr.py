@@ -1,9 +1,8 @@
 from datetime import datetime
 
+from integrations.types import PRStatus
 from sqlalchemy import DateTime, Enum, Identity, String, text
 from sqlalchemy.orm import Mapped, mapped_column
-
-from integrations.types import PRStatus
 from storage.base import Base
 
 

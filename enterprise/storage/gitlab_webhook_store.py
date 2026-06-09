@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from openhands.app_server.utils.logger import openhands_logger as logger
+from integrations.types import GitLabResourceType
 from sqlalchemy import and_, asc, delete, select, text, update
 from sqlalchemy.dialects.postgresql import insert
-
-from integrations.types import GitLabResourceType
 from storage.database import a_session_maker
 from storage.gitlab_webhook import GitlabWebhook
+
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass

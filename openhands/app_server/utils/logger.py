@@ -11,14 +11,13 @@ from types import TracebackType
 from typing import Any, Literal, Mapping, MutableMapping, TextIO
 
 import litellm
-from pythonjsonlogger.json import JsonFormatter
-from termcolor import colored
-
 from openhands.sdk.utils.redact import (
     redact_api_key_literals,
     redact_text_secrets,
     redact_url_params,
 )
+from pythonjsonlogger.json import JsonFormatter
+from termcolor import colored
 
 warnings.filterwarnings('ignore', category=SyntaxWarning, module=r'pydub\.utils')
 

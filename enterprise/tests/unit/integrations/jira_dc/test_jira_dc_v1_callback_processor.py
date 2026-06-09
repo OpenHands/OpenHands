@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from integrations.jira_dc.jira_dc_v1_callback_processor import (
     JiraDcV1CallbackProcessor,
 )

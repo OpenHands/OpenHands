@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlalchemy import select
-
 from storage.bitbucket_webhook import BitbucketWebhook
 from storage.database import a_session_maker
 

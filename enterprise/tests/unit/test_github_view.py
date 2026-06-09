@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 import pytest
-
 from integrations.github.github_view import GithubFactory, GithubIssue, get_oh_labels
 from integrations.models import Message, SourceType
 from integrations.types import UserData

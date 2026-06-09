@@ -3,7 +3,6 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
 from storage.device_code import DeviceCode, DeviceCodeStatus
 
 

@@ -1,8 +1,7 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
-
 from openhands.agent_server.utils import utc_now
+from pydantic import BaseModel, Field
 
 
 class SandboxSpecInfo(BaseModel):

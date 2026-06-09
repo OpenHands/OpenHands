@@ -8,7 +8,6 @@ import pytest
 from fastapi import HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import ValidationError
-
 from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.integration.jira import (
     JiraLinkCreate,
@@ -1223,7 +1222,9 @@ async def test_handle_workspace_link_creation_reactivate_existing_link(mock_mana
 
     mock_manager.integration_store.get_workspace_by_name.return_value = mock_workspace
     mock_manager.integration_store.get_user_by_active_workspace.return_value = None
-    mock_manager.integration_store.get_user_by_keycloak_id_and_workspace.return_value = mock_existing_link
+    mock_manager.integration_store.get_user_by_keycloak_id_and_workspace.return_value = (
+        mock_existing_link
+    )
 
     await _handle_workspace_link_creation('user1', 'jira_user_123', 'test-workspace')
 
@@ -1240,7 +1241,9 @@ async def test_handle_workspace_link_creation_create_new_link(mock_manager):
 
     mock_manager.integration_store.get_workspace_by_name.return_value = mock_workspace
     mock_manager.integration_store.get_user_by_active_workspace.return_value = None
-    mock_manager.integration_store.get_user_by_keycloak_id_and_workspace.return_value = None
+    mock_manager.integration_store.get_user_by_keycloak_id_and_workspace.return_value = (
+        None
+    )
 
     await _handle_workspace_link_creation('user1', 'jira_user_123', 'test-workspace')
 

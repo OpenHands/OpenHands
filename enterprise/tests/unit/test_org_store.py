@@ -3,22 +3,22 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from openhands.app_server.settings.settings_models import Settings
 from openhands.sdk.settings import (
     ACPAgentSettings,
     ConversationSettings,
     OpenHandsAgentSettings,
 )
+from server.routes.org_models import OrgUpdate
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-
-from server.routes.org_models import OrgUpdate
 from storage.org import Org
 from storage.org_invitation import OrgInvitation
 from storage.org_member import OrgMember
 from storage.org_store import OrgStore
 from storage.role import Role
 from storage.user import User
+
+from openhands.app_server.settings.settings_models import Settings
 
 
 @pytest.fixture
@@ -58,9 +58,7 @@ async def test_get_org_by_id(async_session_maker, mock_litellm_api):
         org_id = org.id
 
     # Test retrieval
-    with (
-        patch('storage.org_store.a_session_maker', async_session_maker),
-    ):
+    with (patch('storage.org_store.a_session_maker', async_session_maker),):
         retrieved_org = await OrgStore.get_org_by_id(org_id)
         assert retrieved_org is not None
         assert retrieved_org.id == org_id
@@ -87,9 +85,7 @@ async def test_list_orgs(async_session_maker, mock_litellm_api):
         await session.commit()
 
     # Test listing
-    with (
-        patch('storage.org_store.a_session_maker', async_session_maker),
-    ):
+    with (patch('storage.org_store.a_session_maker', async_session_maker),):
         orgs = await OrgStore.list_orgs()
         assert len(orgs) >= 2
         org_names = [org.name for org in orgs]
@@ -213,9 +209,7 @@ async def test_update_org_not_found(async_session_maker):
 @pytest.mark.asyncio
 async def test_create_org(async_session_maker, mock_litellm_api):
     # Test creating a new org
-    with (
-        patch('storage.org_store.a_session_maker', async_session_maker),
-    ):
+    with (patch('storage.org_store.a_session_maker', async_session_maker),):
         org = await OrgStore.create_org(
             kwargs={
                 'name': 'new-org',
@@ -315,9 +309,7 @@ async def test_get_org_by_name(async_session_maker, mock_litellm_api):
         await session.commit()
 
     # Test retrieval
-    with (
-        patch('storage.org_store.a_session_maker', async_session_maker),
-    ):
+    with (patch('storage.org_store.a_session_maker', async_session_maker),):
         retrieved_org = await OrgStore.get_org_by_name('test-org-by-name')
         assert retrieved_org is not None
         assert retrieved_org.name == 'test-org-by-name'
@@ -343,9 +335,7 @@ async def test_get_current_org_from_keycloak_user_id(
         await session.refresh(org)
 
     # Test retrieval
-    with (
-        patch('storage.org_store.a_session_maker', async_session_maker),
-    ):
+    with (patch('storage.org_store.a_session_maker', async_session_maker),):
         retrieved_org = await OrgStore.get_current_org_from_keycloak_user_id(
             str(test_user_id)
         )

@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlalchemy import select
-
 from storage.database import a_session_maker
 from storage.slack_conversation import SlackConversation
 

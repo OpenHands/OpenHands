@@ -8,8 +8,23 @@ Views are responsible for:
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
+from integrations.jira_dc.jira_dc_types import (
+    JiraDcViewInterface,
+    StartingConvoException,
+)
+from integrations.jira_dc.jira_dc_v1_callback_processor import JiraDcV1CallbackProcessor
+from integrations.models import JobContext
+from integrations.resolver_context import ResolverUserContext
+from integrations.resolver_org_router import resolve_org_for_repo
+from integrations.utils import CONVERSATION_URL
 from jinja2 import Environment
 from openhands.agent_server.models import SendMessageRequest
+from openhands.sdk import TextContent
+from storage.jira_dc_conversation import JiraDcConversation
+from storage.jira_dc_integration_store import JiraDcIntegrationStore
+from storage.jira_dc_user import JiraDcUser
+from storage.jira_dc_workspace import JiraDcWorkspace
+
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTaskStatus,
@@ -21,21 +36,6 @@ from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.sdk import TextContent
-
-from integrations.jira_dc.jira_dc_types import (
-    JiraDcViewInterface,
-    StartingConvoException,
-)
-from integrations.jira_dc.jira_dc_v1_callback_processor import JiraDcV1CallbackProcessor
-from integrations.models import JobContext
-from integrations.resolver_context import ResolverUserContext
-from integrations.resolver_org_router import resolve_org_for_repo
-from integrations.utils import CONVERSATION_URL
-from storage.jira_dc_conversation import JiraDcConversation
-from storage.jira_dc_integration_store import JiraDcIntegrationStore
-from storage.jira_dc_user import JiraDcUser
-from storage.jira_dc_workspace import JiraDcWorkspace
 
 integration_store = JiraDcIntegrationStore.get_instance()
 
@@ -245,6 +245,7 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
     async def _send_message_to_v1_conversation(self, jinja_env: Environment):
         """Send a message to an existing V1 conversation using the agent server API."""
         import httpx
+
         from openhands.app_server.config import (
             get_app_conversation_info_service,
             get_httpx_client,

@@ -13,14 +13,7 @@ from keycloak.exceptions import (
     KeycloakError,
     KeycloakPostError,
 )
-from openhands.app_server.integrations.service_types import ProviderType
-from openhands.app_server.types import SessionExpiredError
-from openhands.app_server.utils.http_session import httpx_verify_option
 from pydantic import BaseModel
-from sqlalchemy import String as SQLString
-from sqlalchemy import select, type_coerce
-from tenacity import RetryCallState, retry, retry_if_exception_type, stop_after_attempt
-
 from server.auth.auth_error import ExpiredError
 from server.auth.constants import (
     AZURE_DEVOPS_CLIENT_ID,
@@ -51,10 +44,17 @@ from server.auth.email_validation import (
 )
 from server.auth.keycloak_manager import get_keycloak_admin, get_keycloak_openid
 from server.logger import logger
+from sqlalchemy import String as SQLString
+from sqlalchemy import select, type_coerce
 from storage.auth_token_store import AuthTokenStore
 from storage.database import a_session_maker
 from storage.github_app_installation import GithubAppInstallation
 from storage.offline_token_store import OfflineTokenStore
+from tenacity import RetryCallState, retry, retry_if_exception_type, stop_after_attempt
+
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.types import SessionExpiredError
+from openhands.app_server.utils.http_session import httpx_verify_option
 
 
 class KeycloakUserInfo(BaseModel):

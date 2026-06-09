@@ -9,10 +9,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import APIKeyHeader
 from jwt import InvalidTokenError
+from openhands.agent_server.models import ConversationInfo, Success
+from openhands.sdk import ConversationExecutionStatus, Event
+from openhands.sdk.event import ConversationStateUpdateEvent, ObservationEvent
+from openhands.sdk.tool.builtins import SwitchLLMObservation
 from pydantic import SecretStr
 
 from openhands import tools  # type: ignore[attr-defined]
-from openhands.agent_server.models import ConversationInfo, Success
 from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
@@ -50,9 +53,6 @@ from openhands.app_server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.app_server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
 )
-from openhands.sdk import ConversationExecutionStatus, Event
-from openhands.sdk.event import ConversationStateUpdateEvent, ObservationEvent
-from openhands.sdk.tool.builtins import SwitchLLMObservation
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
 event_service_dependency = depends_event_service()

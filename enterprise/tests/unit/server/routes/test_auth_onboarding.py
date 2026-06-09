@@ -14,7 +14,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
-
 from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.auth import (
     OnboardingSubmission,

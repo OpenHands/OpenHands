@@ -55,12 +55,16 @@ def _get_user_provider() -> AnalyticsUserProvider:
     server_config.analytics_user_provider_class. Defaults to
     DefaultAnalyticsUserProvider if not configured.
     """
+    from openhands.analytics.user_provider import DefaultAnalyticsUserProvider
     from openhands.app_server.shared import server_config
 
     impl_class = get_impl(
-        AnalyticsUserProvider,
-        server_config.analytics_user_provider_class,  # type: ignore[type-abstract]
+        AnalyticsUserProvider,  # type: ignore[type-abstract]
+        server_config.analytics_user_provider_class,
     )
+    # If the resolved class is abstract, fall back to a concrete default implementation
+    if getattr(impl_class, "__abstractmethods__", None):
+        return DefaultAnalyticsUserProvider()
     return impl_class()  # type: ignore[reportAbstractUsage]
 
 

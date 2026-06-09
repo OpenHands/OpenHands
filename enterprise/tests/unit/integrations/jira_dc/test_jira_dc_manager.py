@@ -8,13 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 from fastapi import Request
-from openhands.app_server.integrations.service_types import ProviderType, Repository
-from openhands.app_server.types import (
-    LLMAuthenticationError,
-    MissingSettingsError,
-    SessionExpiredError,
-)
-
 from integrations.jira_dc.jira_dc_manager import JIRA_DC_WEBHOOK_EVENTS, JiraDcManager
 from integrations.jira_dc.jira_dc_types import JiraDcViewInterface
 from integrations.jira_dc.jira_dc_view import (
@@ -22,6 +15,13 @@ from integrations.jira_dc.jira_dc_view import (
     JiraDcNewConversationView,
 )
 from integrations.models import Message, SourceType
+
+from openhands.app_server.integrations.service_types import ProviderType, Repository
+from openhands.app_server.types import (
+    LLMAuthenticationError,
+    MissingSettingsError,
+    SessionExpiredError,
+)
 
 
 class TestJiraDcManagerInit:
@@ -291,9 +291,9 @@ class TestValidateRequest:
             return_value=sample_jira_dc_workspace
         )
         payload = json.loads(json.dumps(sample_issue_created_webhook_payload))
-        payload['issue']['self'] = (
-            'https://other-jira.company.com/rest/api/2/issue/12345'
-        )
+        payload['issue'][
+            'self'
+        ] = 'https://other-jira.company.com/rest/api/2/issue/12345'
         body = json.dumps(payload).encode()
         signature = hmac.new('test_secret'.encode(), body, hashlib.sha256).hexdigest()
 

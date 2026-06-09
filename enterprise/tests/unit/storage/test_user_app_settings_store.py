@@ -6,10 +6,9 @@ Tests the async database operations for user app settings.
 import uuid
 
 import pytest
+from server.routes.user_app_settings_models import UserAppSettingsUpdate
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
-
-from server.routes.user_app_settings_models import UserAppSettingsUpdate
 from storage.base import Base
 from storage.org import Org
 from storage.user import User

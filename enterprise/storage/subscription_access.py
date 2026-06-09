@@ -3,7 +3,6 @@ from decimal import Decimal
 
 from sqlalchemy import DECIMAL, DateTime, Enum, String
 from sqlalchemy.orm import Mapped, mapped_column
-
 from storage.base import Base
 
 

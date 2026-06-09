@@ -7,7 +7,6 @@ from uuid import UUID, uuid4
 from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 from storage.base import Base
 from storage.encrypt_utils import EncryptedJSON
 

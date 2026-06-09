@@ -3,7 +3,13 @@ from typing import Any, ClassVar
 from uuid import UUID
 
 import httpx
+from integrations.utils import get_summary_instruction
+from integrations.v1_utils import handle_callback_error
 from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
+from openhands.sdk import Event
+from openhands.sdk.event import ConversationStateUpdateEvent
+from pydantic import Field
+
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
@@ -18,12 +24,6 @@ from openhands.app_server.event_callback.util import (
     ensure_running_sandbox,
     get_agent_server_url_from_sandbox,
 )
-from openhands.sdk import Event
-from openhands.sdk.event import ConversationStateUpdateEvent
-from pydantic import Field
-
-from integrations.utils import get_summary_instruction
-from integrations.v1_utils import handle_callback_error
 
 _logger = logging.getLogger(__name__)
 

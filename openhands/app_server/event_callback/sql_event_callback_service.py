@@ -11,11 +11,12 @@ from typing import AsyncGenerator
 from uuid import UUID, uuid4
 
 from fastapi import Request
+from openhands.agent_server.utils import utc_now
+from openhands.sdk import Event
 from sqlalchemy import Enum, Index, String, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
-from openhands.agent_server.utils import utc_now
 from openhands.app_server.event_callback.event_callback_models import (
     CreateEventCallbackRequest,
     EventCallback,
@@ -38,7 +39,6 @@ from openhands.app_server.utils.sql_utils import (
     create_json_type_decorator,
     row2dict,
 )
-from openhands.sdk import Event
 
 _logger = logging.getLogger(__name__)
 

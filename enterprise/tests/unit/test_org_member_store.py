@@ -2,10 +2,8 @@ import uuid
 from unittest.mock import patch
 
 import pytest
-from openhands.app_server.settings.settings_models import Settings
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
-
 from storage.base import Base
 from storage.org import Org
 from storage.org_member import OrgMember
@@ -13,6 +11,8 @@ from storage.org_member_store import OrgMemberStore
 from storage.role import Role
 from storage.user import User
 from storage.user_settings import UserSettings
+
+from openhands.app_server.settings.settings_models import Settings
 
 
 def test_get_kwargs_from_user_settings_uses_agent_settings_as_source_of_truth():
@@ -1235,9 +1235,9 @@ async def test_update_all_members_settings_async_replaces_mcp_config(
         assert len(mcp_servers) == 2, f'Expected 2 servers, got {len(mcp_servers)}'
         assert 'server1' in mcp_servers
         assert 'server2' in mcp_servers
-        assert 'server3' not in mcp_servers, (
-            'Deleted server was resurrected by deep_merge'
-        )
+        assert (
+            'server3' not in mcp_servers
+        ), 'Deleted server was resurrected by deep_merge'
 
 
 @pytest.mark.asyncio

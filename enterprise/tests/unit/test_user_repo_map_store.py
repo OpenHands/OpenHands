@@ -3,7 +3,6 @@ from unittest.mock import patch
 
 import pytest
 from sqlalchemy import select
-
 from storage.user_repo_map import UserRepositoryMap
 from storage.user_repo_map_store import UserRepositoryMapStore
 

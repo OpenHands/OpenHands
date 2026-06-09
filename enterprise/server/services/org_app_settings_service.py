@@ -10,11 +10,6 @@ from dataclasses import dataclass
 from typing import AsyncGenerator
 
 from fastapi import Request
-from openhands.app_server.errors import AuthError
-from openhands.app_server.services.injector import Injector, InjectorState
-from openhands.app_server.user.user_context import UserContext
-from openhands.app_server.utils.logger import openhands_logger as logger
-
 from server.routes.org_models import (
     OrgAppSettingsResponse,
     OrgAppSettingsUpdate,
@@ -22,6 +17,11 @@ from server.routes.org_models import (
 )
 from storage.org import Org
 from storage.org_app_settings_store import OrgAppSettingsStore
+
+from openhands.app_server.errors import AuthError
+from openhands.app_server.services.injector import Injector, InjectorState
+from openhands.app_server.user.user_context import UserContext
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass

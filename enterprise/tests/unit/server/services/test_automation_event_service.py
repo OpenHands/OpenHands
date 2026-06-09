@@ -13,6 +13,7 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from openhands.app_server.integrations.service_types import ProviderType
 
 REDIS_PATCH = 'server.services.automation_event_service.get_redis_client_async'

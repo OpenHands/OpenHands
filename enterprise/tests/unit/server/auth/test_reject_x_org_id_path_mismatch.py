@@ -18,7 +18,6 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from server.auth.org_context import (
     REJECT_X_ORG_ID_PATH_MISMATCH,
     X_ORG_ID_HEADER,

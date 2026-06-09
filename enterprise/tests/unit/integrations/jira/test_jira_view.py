@@ -3,7 +3,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from integrations.jira.jira_payload import (
     JiraEventType,
     JiraPayloadError,

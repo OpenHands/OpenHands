@@ -4,11 +4,6 @@ import json
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
-from openhands.app_server.user_auth import get_user_id
-from openhands.app_server.utils.logger import openhands_logger as logger
-from pydantic import BaseModel
-
 from integrations.gitlab.gitlab_manager import GitlabManager
 from integrations.gitlab.gitlab_service import SaaSGitLabService
 from integrations.gitlab.webhook_installation import (
@@ -19,10 +14,15 @@ from integrations.gitlab.webhook_installation import (
 from integrations.models import Message, SourceType
 from integrations.types import GitLabResourceType
 from integrations.utils import GITLAB_WEBHOOK_URL, IS_LOCAL_DEPLOYMENT
+from pydantic import BaseModel
 from server.auth.token_manager import TokenManager
 from storage.gitlab_webhook import GitlabWebhook
 from storage.gitlab_webhook_store import GitlabWebhookStore
 from storage.redis import get_redis_client_async
+
+from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.app_server.user_auth import get_user_id
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 gitlab_integration_router = APIRouter(prefix='/integration')
 webhook_store = GitlabWebhookStore()

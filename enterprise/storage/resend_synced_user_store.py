@@ -7,7 +7,6 @@ from typing import Optional, Set
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
-
 from storage.resend_synced_user import ResendSyncedUser
 
 

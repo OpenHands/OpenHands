@@ -3,7 +3,6 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from integrations.bitbucket_data_center.bitbucket_dc_manager import BitbucketDCManager
 from integrations.bitbucket_data_center.bitbucket_dc_view import (
     BitbucketDCInlinePRComment,

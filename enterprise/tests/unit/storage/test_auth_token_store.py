@@ -4,11 +4,9 @@ import time
 from unittest.mock import patch
 
 import pytest
-from openhands.app_server.integrations.service_types import ProviderType
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
-
 from storage.auth_token_store import (
     ACCESS_TOKEN_EXPIRY_BUFFER,
     LOCK_TIMEOUT_SECONDS,
@@ -16,6 +14,8 @@ from storage.auth_token_store import (
 )
 from storage.auth_tokens import AuthTokens
 from storage.base import Base
+
+from openhands.app_server.integrations.service_types import ProviderType
 
 
 @pytest.fixture

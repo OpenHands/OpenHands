@@ -3,7 +3,6 @@ from typing import Any
 
 from sqlalchemy import JSON, Enum, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
-
 from storage.base import Base
 
 

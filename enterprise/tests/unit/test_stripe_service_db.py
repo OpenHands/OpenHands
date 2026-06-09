@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import stripe
-
 from integrations.stripe_service import (
     find_customer_id_by_user_id,
     find_or_create_customer_by_user_id,

@@ -1,7 +1,6 @@
 """Pydantic models for user app settings API."""
 
 from pydantic import BaseModel, EmailStr
-
 from storage.user import User
 
 

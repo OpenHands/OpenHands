@@ -14,8 +14,6 @@ from uuid import UUID, uuid4
 
 import httpx
 from fastapi import Request
-from pydantic import Field, SecretStr, TypeAdapter
-
 from openhands.agent_server.models import (
     ConversationInfo,
     EventSortOrder,
@@ -23,6 +21,34 @@ from openhands.agent_server.models import (
     StartConversationRequest,
     TextContent,
 )
+from openhands.sdk import Agent, AgentContext, LocalWorkspace
+from openhands.sdk.event import RESUME_CONTEXT_MARKER, render_resume_transcript
+from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
+from openhands.sdk.hooks import HookConfig
+from openhands.sdk.llm import LLM
+from openhands.sdk.llm.llm_profile_store import PROFILE_NAME_REGEX
+from openhands.sdk.plugin import PluginSource
+from openhands.sdk.secret import LookupSecret, StaticSecret
+from openhands.sdk.settings import ACPAgentSettings
+from openhands.sdk.subagent import get_registered_agent_definitions
+from openhands.sdk.tool.builtins import SwitchLLMTool
+from openhands.sdk.utils.paging import page_iterator
+from openhands.sdk.utils.redact import (
+    redact_api_key_literals,
+    redact_text_secrets,
+    sanitize_config,
+)
+from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
+from openhands.tools.preset.default import (
+    get_default_tools,
+    register_builtins_agents,
+)
+from openhands.tools.preset.planning import (
+    format_plan_structure,
+    get_planning_tools,
+)
+from pydantic import Field, SecretStr, TypeAdapter
+
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -95,32 +121,6 @@ from openhands.app_server.utils.git import ensure_valid_git_branch_name
 from openhands.app_server.utils.llm_metadata import (
     get_llm_metadata,
     should_set_litellm_extra_body,
-)
-from openhands.sdk import Agent, AgentContext, LocalWorkspace
-from openhands.sdk.event import RESUME_CONTEXT_MARKER, render_resume_transcript
-from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
-from openhands.sdk.hooks import HookConfig
-from openhands.sdk.llm import LLM
-from openhands.sdk.llm.llm_profile_store import PROFILE_NAME_REGEX
-from openhands.sdk.plugin import PluginSource
-from openhands.sdk.secret import LookupSecret, StaticSecret
-from openhands.sdk.settings import ACPAgentSettings
-from openhands.sdk.subagent import get_registered_agent_definitions
-from openhands.sdk.tool.builtins import SwitchLLMTool
-from openhands.sdk.utils.paging import page_iterator
-from openhands.sdk.utils.redact import (
-    redact_api_key_literals,
-    redact_text_secrets,
-    sanitize_config,
-)
-from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
-from openhands.tools.preset.default import (
-    get_default_tools,
-    register_builtins_agents,
-)
-from openhands.tools.preset.planning import (
-    format_plan_structure,
-    get_planning_tools,
 )
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
@@ -2105,12 +2105,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         sandbox = await self.sandbox_service.get_sandbox(
             app_conversation_info.sandbox_id
         )
-        assert sandbox is not None, (
-            f'Sandbox {app_conversation_info.sandbox_id} not found for conversation {conversation_id}'
-        )
-        assert sandbox.exposed_urls is not None, (
-            f'Sandbox {app_conversation_info.sandbox_id} has no exposed URLs for conversation {conversation_id}'
-        )
+        assert (
+            sandbox is not None
+        ), f'Sandbox {app_conversation_info.sandbox_id} not found for conversation {conversation_id}'
+        assert (
+            sandbox.exposed_urls is not None
+        ), f'Sandbox {app_conversation_info.sandbox_id} has no exposed URLs for conversation {conversation_id}'
 
         # Use the existing method to get the agent-server URL
         agent_server_url = self._get_agent_server_url(sandbox)

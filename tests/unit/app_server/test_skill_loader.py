@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import httpx
 import pytest
+from openhands.sdk.skills import KeywordTrigger, Skill, TaskTrigger
 
 from openhands.app_server.app_conversation.skill_loader import (
     OrgConfig,
@@ -32,7 +33,6 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.user.user_context import UserContext
-from openhands.sdk.skills import KeywordTrigger, Skill, TaskTrigger
 
 # ===== Test Fixtures =====
 

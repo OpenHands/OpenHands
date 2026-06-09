@@ -6,10 +6,10 @@ that queries the actual UserStore to look up user information for analytics.
 
 from __future__ import annotations
 
+from storage.user_store import UserStore
+
 from openhands.analytics.user_base import UserBase
 from openhands.analytics.user_provider import AnalyticsUserProvider
-
-from storage.user_store import UserStore
 
 
 class SaasAnalyticsUserProvider(AnalyticsUserProvider):

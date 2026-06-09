@@ -5,7 +5,6 @@ import hmac
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from server.auth.recaptcha_service import AssessmentResult, RecaptchaService
 
 

@@ -21,8 +21,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.add_column('jira_dc_workspaces', sa.Column('org_id', sa.UUID(), nullable=True))
     if op.get_bind().dialect.name == 'postgresql':
-        op.execute(
-            sa.text("""
+        op.execute(sa.text("""
                 UPDATE jira_dc_workspaces AS j
                 SET org_id = u.current_org_id
                 FROM "user" AS u
@@ -30,8 +29,7 @@ def upgrade() -> None:
                   AND j.admin_user_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
                   AND u.id = j.admin_user_id::uuid
                   AND u.current_org_id IS NOT NULL
-                """)
-        )
+                """))
     op.create_foreign_key(
         'fk_jira_dc_workspaces_org_id',
         'jira_dc_workspaces',

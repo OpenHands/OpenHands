@@ -2,7 +2,6 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from integrations.jira_dc.jira_dc_service_account import (
     JiraDcServiceAccountConfigError,
     JiraDcServiceAccountResolutionError,

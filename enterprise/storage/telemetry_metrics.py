@@ -10,7 +10,6 @@ from typing import Any
 
 from sqlalchemy import JSON, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
-
 from storage.base import Base
 
 
