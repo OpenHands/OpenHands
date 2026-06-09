@@ -26,7 +26,7 @@ RUN apt-get update -y \
     && apt-get install -y curl make git build-essential jq gettext \
     && python3 -m pip install "poetry==${POETRY_VERSION}" --break-system-packages
 
-COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml poetry.lock poetry.toml ./
 RUN touch README.md
 RUN export POETRY_CACHE_DIR && poetry install --no-root && rm -rf $POETRY_CACHE_DIR
 
