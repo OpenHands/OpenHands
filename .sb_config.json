@@ -32,7 +32,9 @@
         "extra_exclude_paths": [],
         "include_paths": [],
         "strict_typing": false,
-        "include_dirs": ["openhands"]
+        "include_dirs": [
+          "openhands"
+        ]
       },
       "type-blindness.py": {
         "enabled": true,
@@ -42,7 +44,9 @@
         "include_paths": [],
         "strict": false,
         "pyright_config_file": "pyrightconfig.json",
-        "include_dirs": ["openhands"]
+        "include_dirs": [
+          "openhands"
+        ]
       },
       "untested-code.js": {
         "enabled": false,
@@ -143,7 +147,7 @@
         "short_test_severity": "fail"
       },
       "gate-dodging": {
-        "enabled": false,
+        "enabled": true,
         "auto_fix": false,
         "run_on": null,
         "extra_exclude_paths": [],
@@ -263,7 +267,7 @@
         "exclude_dirs": []
       },
       "silenced-gates": {
-        "enabled": false,
+        "enabled": true,
         "auto_fix": false,
         "run_on": null,
         "extra_exclude_paths": [],
