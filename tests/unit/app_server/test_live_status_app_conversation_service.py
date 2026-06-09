@@ -725,27 +725,24 @@ class TestLiveStatusAppConversationService:
         assert llm.base_url == 'https://llm-proxy.app.all-hands.dev/'
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_litellm_proxy_model_uses_provider_default(
+    async def test_configure_llm_and_mcp_litellm_proxy_model_keeps_empty_base_url(
         self,
     ):
-        """litellm_proxy/* model (inherited by sub-conversations) falls back to provider base URL."""
-        # Arrange — simulates a sub-conversation inheriting the SDK-transformed model name
+        """litellm_proxy/* is not treated as an OpenHands provider model."""
         self.mock_user.llm_base_url = None
         self.mock_user_context.get_mcp_api_key.return_value = None
 
-        # Act
         llm, _ = await self.service._configure_llm_and_mcp(
             self.mock_user, 'litellm_proxy/minimax-2.5', self.conversation_id
         )
 
-        # Assert
-        assert llm.base_url == 'https://provider.example.com'
+        assert llm.base_url is None
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_litellm_proxy_model_prefers_user_base_url(
+    async def test_configure_llm_and_mcp_litellm_proxy_model_preserves_user_base_url(
         self,
     ):
-        """litellm_proxy/* model uses user.llm_base_url when provided."""
+        """litellm_proxy/* model preserves an explicitly configured base_url."""
         # Arrange
         self.mock_user.llm_base_url = 'https://user-llm.example.com'
         self.mock_user_context.get_mcp_api_key.return_value = None
