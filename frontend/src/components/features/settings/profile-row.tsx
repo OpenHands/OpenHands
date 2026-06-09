@@ -14,6 +14,7 @@ interface ProfileRowProps {
   onRename: (profile: LlmProfileSummary) => void;
   onDelete: (profile: LlmProfileSummary) => void;
   isActivating: boolean;
+  canManage?: boolean;
 }
 
 export function ProfileRow({
@@ -24,6 +25,7 @@ export function ProfileRow({
   onRename,
   onDelete,
   isActivating,
+  canManage = true,
 }: ProfileRowProps) {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -57,28 +59,30 @@ export function ProfileRow({
           </Typography.Text>
         )}
       </div>
-      <div className="relative shrink-0">
-        <button
-          type="button"
-          onClick={() => setMenuOpen((open) => !open)}
-          aria-label={t(I18nKey.SETTINGS$PROFILE_MENU)}
-          className="cursor-pointer text-gray-300 hover:text-white p-2 border border-tertiary rounded-md"
-          data-testid="profile-menu-trigger"
-        >
-          <ThreeDotsVerticalIcon width={16} height={16} />
-        </button>
-        {menuOpen && (
-          <ProfileActionsMenu
-            onEdit={() => onEdit(profile)}
-            onRename={() => onRename(profile)}
-            onSetActive={() => onActivate(profile.name)}
-            onDelete={() => onDelete(profile)}
-            isActive={isActive}
-            isActivating={isActivating}
-            onClose={() => setMenuOpen(false)}
-          />
-        )}
-      </div>
+      {canManage ? (
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((open) => !open)}
+            aria-label={t(I18nKey.SETTINGS$PROFILE_MENU)}
+            className="cursor-pointer text-gray-300 hover:text-white p-2 border border-tertiary rounded-md"
+            data-testid="profile-menu-trigger"
+          >
+            <ThreeDotsVerticalIcon width={16} height={16} />
+          </button>
+          {menuOpen && (
+            <ProfileActionsMenu
+              onEdit={() => onEdit(profile)}
+              onRename={() => onRename(profile)}
+              onSetActive={() => onActivate(profile.name)}
+              onDelete={() => onDelete(profile)}
+              isActive={isActive}
+              isActivating={isActivating}
+              onClose={() => setMenuOpen(false)}
+            />
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

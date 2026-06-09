@@ -86,4 +86,26 @@ describe("ProfilesBody", () => {
     expect(rows[0]).toHaveTextContent("SETTINGS$PROFILE_ACTIVE_BADGE");
     expect(rows[1]).not.toHaveTextContent("SETTINGS$PROFILE_ACTIVE_BADGE");
   });
+
+  it("renders profiles without action menus when management is disabled", () => {
+    render(
+      <ProfilesBody
+        isLoading={false}
+        loadError={null}
+        profiles={profiles}
+        active="p1"
+        onActivate={vi.fn()}
+        onEdit={vi.fn()}
+        onRename={vi.fn()}
+        onDelete={vi.fn()}
+        isActivating={false}
+        canManage={false}
+      />,
+    );
+
+    expect(screen.getAllByTestId("profile-row")).toHaveLength(2);
+    expect(
+      screen.queryByTestId("profile-menu-trigger"),
+    ).not.toBeInTheDocument();
+  });
 });

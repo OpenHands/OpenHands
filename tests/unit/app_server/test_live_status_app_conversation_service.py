@@ -637,6 +637,41 @@ class TestLiveStatusAppConversationService:
         assert llm.base_url == 'https://sdk-llm.example.com'
 
     @pytest.mark.asyncio
+    async def test_configure_llm_preserves_reasoning_effort(self):
+        """User-configured reasoning_effort must survive _configure_llm.
+
+        Previously _configure_llm created a bare LLM() which reset every
+        field to its Pydantic default (reasoning_effort='high').  Users who
+        set reasoning_effort=None (to disable thinking parameters for models
+        whose litellm version cannot handle them) had their override silently
+        discarded.
+        """
+        from pydantic import SecretStr as _SecretStr
+
+        user_llm = LLM(
+            model='anthropic/claude-opus-4-7',
+            api_key=_SecretStr('test-key'),
+            reasoning_effort=None,
+            extended_thinking_budget=None,
+        )
+        agent_settings = self.mock_user.agent_settings.model_copy(
+            update={'llm': user_llm}
+        )
+        self.mock_user.agent_settings = agent_settings
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, None, self.conversation_id
+        )
+
+        assert llm.model == 'anthropic/claude-opus-4-7'
+        assert llm.reasoning_effort is None, (
+            '_configure_llm must preserve reasoning_effort=None '
+            'instead of resetting it to the SDK default'
+        )
+        assert llm.extended_thinking_budget is None
+
+    @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_openhands_model_uses_user_base_url(
         self,
     ):
