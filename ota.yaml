@@ -615,8 +615,8 @@ agent:
   bootstrap:
     ota:
       note: Install ota when missing so contributors and agents can run the declared readiness workflows in this contract.
-      sh: curl -fsSL https://dist.ota.run/install.sh | OTA_GIT_REV=7f2c92c4a3322fcac1b3ced67643a7fe46e20df0 sh -s -- --from-git
-      powershell: $env:OTA_GIT_REV='7f2c92c4a3322fcac1b3ced67643a7fe46e20df0'; & ([scriptblock]::Create((irm https://dist.ota.run/install.ps1))) -FromGit
+      sh: curl -fsSL https://dist.ota.run/install.sh | OTA_GIT_REV=7f2c92c4842927c60509140175b7809dc21caca4 sh -s -- --from-git
+      powershell: $env:OTA_GIT_REV='7f2c92c4842927c60509140175b7809dc21caca4'; & ([scriptblock]::Create((irm https://dist.ota.run/install.ps1))) -FromGit
   notes: |
     Use `ota tasks --use .` to list runnable tasks and review the modeled execution surface before execution.
     Use `ota up --workflow app --native .` for the canonical local GUI development loop.
