@@ -21,7 +21,7 @@ class FileSecretsStore(SecretsStore):
             provider_tokens = {
                 k: v
                 for k, v in (kwargs.get('provider_tokens') or {}).items()
-                if v.get('token')
+                if isinstance(v, dict) and v.get('token')
             }
             kwargs['provider_tokens'] = provider_tokens
             secrets = Secrets(**kwargs)
