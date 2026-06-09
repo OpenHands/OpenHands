@@ -520,13 +520,12 @@ jobs:
             - name: Summarize skipped good first issue check
               if: steps.precheck.outputs.should_run != 'true'
               env:
-                  ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
                   SKIP_REASON: ${{ steps.precheck.outputs.skip_reason }}
               run: |
                   {
                     echo "## Good first issue check"
                     echo
-                    echo "- Issue: #$ISSUE_NUMBER"
+                    echo "- Issue: #${{ github.event.issue.number || inputs.issue_number }}"
                     echo "- Skipped: $SKIP_REASON"
                   } >> "$GITHUB_STEP_SUMMARY"
 
