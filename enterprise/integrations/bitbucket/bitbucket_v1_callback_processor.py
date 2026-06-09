@@ -113,7 +113,7 @@ class BitbucketV1CallbackProcessor(EventCallbackProcessor):
     ) -> str:
         send_message_request = AskAgentRequest(question=message_content)
         url = (
-            f"{agent_server_url.rstrip('/')}"
+            f'{agent_server_url.rstrip("/")}'
             f'/api/conversations/{conversation_id}/ask_agent'
         )
         headers = {'X-Session-API-Key': session_api_key}

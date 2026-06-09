@@ -392,7 +392,7 @@ class LiteLlmManager:
                 llm_base_url = llm_cfg.get('base_url')
                 if llm_base_url == LITE_LLM_API_URL:
                     db_key = llm_cfg.get('api_key')
-                    if hasattr(db_key, 'get_secret_value'):
+                    if db_key is not None and hasattr(db_key, 'get_secret_value'):
                         db_key = db_key.get_secret_value()
 
                 if db_key:

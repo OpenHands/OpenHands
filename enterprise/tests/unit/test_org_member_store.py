@@ -1239,9 +1239,9 @@ async def test_update_all_members_settings_async_replaces_mcp_config(
         assert len(mcp_servers) == 2, f'Expected 2 servers, got {len(mcp_servers)}'
         assert 'server1' in mcp_servers
         assert 'server2' in mcp_servers
-        assert (
-            'server3' not in mcp_servers
-        ), 'Deleted server was resurrected by deep_merge'
+        assert 'server3' not in mcp_servers, (
+            'Deleted server was resurrected by deep_merge'
+        )
 
 
 @pytest.mark.asyncio

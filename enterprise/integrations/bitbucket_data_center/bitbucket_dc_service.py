@@ -19,7 +19,7 @@ class SaaSBitbucketDCService(BitbucketDCService):
         base_domain: str | None = None,
     ):
         logger.debug(
-            f'SaaSBitbucketDCService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {'set' if external_auth_token else 'None'}, token {'set' if token else 'None'}, external_token_manager {external_token_manager}'
+            f'SaaSBitbucketDCService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {"set" if external_auth_token else "None"}, token {"set" if token else "None"}, external_token_manager {external_token_manager}'
         )
         super().__init__(
             user_id=user_id,
