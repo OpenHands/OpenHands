@@ -34,6 +34,7 @@ JIRA_AUTH_URL = 'https://auth.atlassian.com/authorize'
 JIRA_TOKEN_URL = 'https://auth.atlassian.com/oauth/token'
 JIRA_RESOURCES_URL = 'https://api.atlassian.com/oauth/token/accessible-resources'
 JIRA_USER_INFO_URL = 'https://api.atlassian.com/me'
+JIRA_TIMEOUT = httpx.Timeout(30.0)
 
 
 # Request/Response models
@@ -480,7 +481,7 @@ async def jira_callback(request: Request, code: str, state: str):
         'code': code,
         'redirect_uri': JIRA_REDIRECT_URI,
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=JIRA_TIMEOUT) as client:
         response = await client.post(JIRA_TOKEN_URL, json=token_payload)
     if response.status_code != 200:
         raise HTTPException(
@@ -491,7 +492,7 @@ async def jira_callback(request: Request, code: str, state: str):
     access_token = token_data['access_token']
 
     headers = {'Authorization': f'Bearer {access_token}'}
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=JIRA_TIMEOUT) as client:
         response = await client.get(JIRA_RESOURCES_URL, headers=headers)
 
     if response.status_code != 200:
@@ -522,7 +523,7 @@ async def jira_callback(request: Request, code: str, state: str):
 
     jira_cloud_id = target_workspace_data.get('id', '')
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=JIRA_TIMEOUT) as client:
         jira_user_response = await client.get(JIRA_USER_INFO_URL, headers=headers)
     if jira_user_response.status_code != 200:
         raise HTTPException(
