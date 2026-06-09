@@ -173,7 +173,7 @@ class SaaSGitHubService(GitHubService):
         )
         external_auth_id = await self._get_external_auth_id()
         if external_auth_id:
-            _create_safe_task(
+            _ = _create_safe_task(
                 store_repositories_in_db(repositories, external_auth_id)
             )
         return repositories
@@ -185,7 +185,7 @@ class SaaSGitHubService(GitHubService):
         # Schedule the background task without awaiting it
         external_auth_id = await self._get_external_auth_id()
         if external_auth_id:
-            _create_safe_task(
+            _ = _create_safe_task(
                 store_repositories_in_db(repositories, external_auth_id)
             )
         # Return repositories immediately
