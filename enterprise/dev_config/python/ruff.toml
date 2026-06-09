@@ -19,12 +19,12 @@ ignore = [
     "B904",
     "B018",
     # Ignore async rules that may have false positives or are informational
-    "ASYNC109",  # `yield from` in async function
-    "ASYNC110",  # `await` outside async context
-    "ASYNC220",  # bare `yield` in async function
-    "ASYNC221",  # `yield` with `await` in async function
-    "ASYNC230",  # `return` in async function returning non-Awaitable
-    "ASYNC251",  # `await` in bare `yield` outside async gen
+    "ASYNC109",  # async function with timeout parameter, use asyncio.timeout instead
+    "ASYNC110",  # async busy-wait, use Event.wait() instead of while loop with sleep
+    "ASYNC220",  # create subprocess in async function with blocking methods
+    "ASYNC221",  # run process in async function with blocking methods
+    "ASYNC230",  # blocking open() call in async function
+    "ASYNC251",  # blocking time.sleep() call in async function
 ]
 
 exclude = [
