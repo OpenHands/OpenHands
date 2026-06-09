@@ -8,6 +8,11 @@ from the page_id contents, as this may change in the future.
 
 import base64
 
+# Shared FastAPI Query() titles for paginated endpoints (deduplicated
+# across routers; see myopia:string-duplication).
+PAGE_ID_QUERY_TITLE = 'Optional next_page_id from the previously returned page'
+PAGE_LIMIT_QUERY_TITLE = 'The max number of results in the page'
+
 
 def encode_page_id(value: int) -> str:
     """Encode an integer page identifier as an opaque base64 string.

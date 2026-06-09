@@ -26,6 +26,10 @@ from openhands.app_server.config_api.llm_model_service import (
 from openhands.app_server.services.db_session import get_db_session
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.utils.llm import ModelsResponse, get_supported_llm_models
+from openhands.app_server.utils.paging_utils import (
+    PAGE_ID_QUERY_TITLE,
+    PAGE_LIMIT_QUERY_TITLE,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -37,11 +41,9 @@ async def search_verified_models(
     provider: str | None = None,
     page_id: Annotated[
         str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
+        Query(title=PAGE_ID_QUERY_TITLE),
     ] = None,
-    limit: Annotated[
-        int, Query(title='The max number of results in the page', gt=0, le=100)
-    ] = 100,
+    limit: Annotated[int, Query(title=PAGE_LIMIT_QUERY_TITLE, gt=0, le=100)] = 100,
     user_id: str = Depends(get_admin_user_id),
     verified_model_service: VerifiedModelService = Depends(
         verified_model_store_dependency

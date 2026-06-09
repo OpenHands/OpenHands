@@ -54,6 +54,10 @@ from storage.user_store import UserStore
 from openhands.analytics import get_analytics_service
 from openhands.app_server.user_auth import get_user_id
 from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.app_server.utils.paging_utils import (
+    PAGE_ID_QUERY_TITLE,
+    PAGE_LIMIT_QUERY_TITLE,
+)
 
 # Initialize API router
 org_router = APIRouter(
@@ -71,11 +75,11 @@ org_app_settings_service_dependency = Depends(_org_app_settings_injector.depends
 async def list_user_orgs(
     page_id: Annotated[
         str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
+        Query(title=PAGE_ID_QUERY_TITLE),
     ] = None,
     limit: Annotated[
         int,
-        Query(title='The max number of results in the page', gt=0, le=100),
+        Query(title=PAGE_LIMIT_QUERY_TITLE, gt=0, le=100),
     ] = 100,
     user_id: str = Depends(get_user_id),
 ) -> OrgPage:
@@ -795,7 +799,7 @@ async def get_org_members(
     limit: Annotated[
         int,
         Query(
-            title='The max number of results in the page',
+            title=PAGE_LIMIT_QUERY_TITLE,
             gt=0,
             le=100,
         ),

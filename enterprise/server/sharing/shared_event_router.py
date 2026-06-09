@@ -21,6 +21,10 @@ from server.sharing.shared_event_service import (
 from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.app_server.utils.environment import StorageProvider, get_storage_provider
+from openhands.app_server.utils.paging_utils import (
+    PAGE_ID_QUERY_TITLE,
+    PAGE_LIMIT_QUERY_TITLE,
+)
 from openhands.sdk import Event
 from openhands.sdk.event.conversation_state import ConversationStateUpdateEvent
 
@@ -93,11 +97,11 @@ async def search_shared_events(
     ] = EventSortOrder.TIMESTAMP,
     page_id: Annotated[
         str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
+        Query(title=PAGE_ID_QUERY_TITLE),
     ] = None,
     limit: Annotated[
         int,
-        Query(title='The max number of results in the page', gt=0, le=100),
+        Query(title=PAGE_LIMIT_QUERY_TITLE, gt=0, le=100),
     ] = 100,
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> EventPage:

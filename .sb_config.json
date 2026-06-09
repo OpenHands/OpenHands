@@ -409,7 +409,7 @@
         "run_on": null,
         "extra_exclude_paths": [],
         "include_paths": [],
-        "threshold": 20,
+        "threshold": 4,
         "min_file_count": 2,
         "min_length": 30,
         "min_words": 6,

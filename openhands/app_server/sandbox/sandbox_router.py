@@ -24,6 +24,10 @@ from openhands.app_server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
 )
 from openhands.app_server.utils.dependencies import get_dependencies
+from openhands.app_server.utils.paging_utils import (
+    PAGE_ID_QUERY_TITLE,
+    PAGE_LIMIT_QUERY_TITLE,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -42,11 +46,11 @@ user_context_dependency = depends_user_context()
 async def search_sandboxes(
     page_id: Annotated[
         str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
+        Query(title=PAGE_ID_QUERY_TITLE),
     ] = None,
     limit: Annotated[
         int,
-        Query(title='The max number of results in the page', gt=0, le=100),
+        Query(title=PAGE_LIMIT_QUERY_TITLE, gt=0, le=100),
     ] = 100,
     sandbox_service: SandboxService = sandbox_service_dependency,
 ) -> SandboxPage:

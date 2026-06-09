@@ -30,6 +30,10 @@ from openhands.app_server.user_auth import (
 )
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.models import EditResponse
+from openhands.app_server.utils.paging_utils import (
+    PAGE_ID_QUERY_TITLE,
+    PAGE_LIMIT_QUERY_TITLE,
+)
 
 # Create router with /api/v1/secrets prefix
 router = APIRouter(
@@ -188,12 +192,12 @@ async def search_custom_secrets(
     ] = None,
     page_id: Annotated[
         str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
+        Query(title=PAGE_ID_QUERY_TITLE),
     ] = None,
     limit: Annotated[
         int,
         Query(
-            title='The max number of results in the page',
+            title=PAGE_LIMIT_QUERY_TITLE,
             gt=0,
             le=100,
         ),

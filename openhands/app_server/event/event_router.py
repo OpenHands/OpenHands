@@ -11,6 +11,10 @@ from openhands.app_server.config import depends_event_service
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.app_server.utils.dependencies import get_dependencies
+from openhands.app_server.utils.paging_utils import (
+    PAGE_ID_QUERY_TITLE,
+    PAGE_LIMIT_QUERY_TITLE,
+)
 from openhands.sdk import Event
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
@@ -47,11 +51,11 @@ async def search_events(
     ] = EventSortOrder.TIMESTAMP,
     page_id: Annotated[
         str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
+        Query(title=PAGE_ID_QUERY_TITLE),
     ] = None,
     limit: Annotated[
         int,
-        Query(title='The max number of results in the page', gt=0, le=100),
+        Query(title=PAGE_LIMIT_QUERY_TITLE, gt=0, le=100),
     ] = 100,
     event_service: EventService = event_service_dependency,
 ) -> EventPage:

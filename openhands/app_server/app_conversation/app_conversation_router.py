@@ -84,6 +84,10 @@ from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
+from openhands.app_server.utils.paging_utils import (
+    PAGE_ID_QUERY_TITLE,
+    PAGE_LIMIT_QUERY_TITLE,
+)
 from openhands.sdk.skills import KeywordTrigger, TaskTrigger
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
@@ -243,12 +247,12 @@ async def search_app_conversations(
     ] = None,
     page_id: Annotated[
         str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
+        Query(title=PAGE_ID_QUERY_TITLE),
     ] = None,
     limit: Annotated[
         int,
         Query(
-            title='The max number of results in the page',
+            title=PAGE_LIMIT_QUERY_TITLE,
             gt=0,
             le=100,
         ),
@@ -901,12 +905,12 @@ async def search_app_conversation_start_tasks(
     ] = AppConversationStartTaskSortOrder.CREATED_AT_DESC,
     page_id: Annotated[
         str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
+        Query(title=PAGE_ID_QUERY_TITLE),
     ] = None,
     limit: Annotated[
         int,
         Query(
-            title='The max number of results in the page',
+            title=PAGE_LIMIT_QUERY_TITLE,
             gt=0,
             le=100,
         ),
