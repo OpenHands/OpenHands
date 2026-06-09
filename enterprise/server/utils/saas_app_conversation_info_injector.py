@@ -75,7 +75,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         user_id_str = await self.user_context.get_user_id()
         if not user_id_str:
             # Secure default: no user means no access, not "show everything"
-            raise AuthError("User authentication required")
+            raise AuthError('User authentication required')
 
         user_id_uuid = UUID(user_id_str)
         query = query.where(StoredConversationMetadataSaas.user_id == user_id_uuid)
@@ -97,8 +97,8 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         user.current_org_id) when the user is authenticated via SAAS auth,
         otherwise falls back to the user's persisted current_org_id.
         """
-        user_auth = getattr(self.user_context, "user_auth", None)
-        if user_auth is not None and hasattr(user_auth, "get_effective_org_id"):
+        user_auth = getattr(self.user_context, 'user_auth', None)
+        if user_auth is not None and hasattr(user_auth, 'get_effective_org_id'):
             return await user_auth.get_effective_org_id()
         user = await self._get_current_user()
         return user.current_org_id if user else None
@@ -111,7 +111,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == "V1")
+            .where(StoredConversationMetadata.conversation_version == 'V1')
         )
         return await self._apply_user_and_org_filter(query)
 
@@ -124,7 +124,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == "V1")
+            .where(StoredConversationMetadata.conversation_version == 'V1')
         )
         return await self._apply_user_and_org_filter(query)
 
@@ -226,7 +226,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == "V1")
+            .where(StoredConversationMetadata.conversation_version == 'V1')
         )
 
         # Apply user and organization filtering
@@ -261,7 +261,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         conditions: list[ColumnElement[bool]] = []
         if title__contains is not None:
             conditions.append(
-                StoredConversationMetadata.title.like(f"%{title__contains}%")
+                StoredConversationMetadata.title.like(f'%{title__contains}%')
             )
 
         if created_at__gte is not None:
@@ -383,7 +383,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             # This intentionally trumps the effective org because resolver
             # conversations are authored against a webhook-resolved org,
             # not the caller's session org.
-            resolver_org_id = getattr(self.user_context, "resolver_org_id", None)
+            resolver_org_id = getattr(self.user_context, 'resolver_org_id', None)
             if resolver_org_id is not None:
                 org_id = resolver_org_id
 
