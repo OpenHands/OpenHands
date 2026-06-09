@@ -215,21 +215,13 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
         return users[0] if users else None
 
     async def _get_authenticated_username(self) -> str | None:
-        """Resolve the authenticated user's username.
+        """Resolve the authenticated user's username, or None for credentials
+        not tied to a user (e.g. project/repo-scoped HTTP access tokens).
 
-        OAuth 2.0 bearer tokens (e.g. the SaaS/Keycloak broker flow) carry no
-        username, so the service may be constructed with ``user_id=None``.
         Bitbucket Data Center has no ``/user`` (myself) REST resource, so try
-        two techniques:
-
-        1. The applinks whoami servlet, which returns the username for OAuth
-           credentials. Some servers answer it with 200 and an *empty* body
-           for HTTP access tokens, so an empty response is not an error.
-        2. A cheap REST call, reading the URL-encoded ``X-AUSERNAME`` response
-           header Bitbucket sets on authenticated requests.
-
-        Credentials not tied to a user (e.g. project/repo-scoped HTTP access
-        tokens) yield no username from either, in which case this returns None.
+        the applinks whoami servlet first (some servers answer it with 200 and
+        an *empty* body for HTTP access tokens), then fall back to the
+        URL-encoded ``X-AUSERNAME`` header from a cheap REST call.
         """
         if not self.BASE_URL:
             return None
