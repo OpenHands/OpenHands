@@ -1,5 +1,6 @@
 import base64
 from typing import Any
+from urllib.parse import unquote
 
 import httpx
 from pydantic import SecretStr
@@ -214,14 +215,21 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
         return users[0] if users else None
 
     async def _get_authenticated_username(self) -> str | None:
-        """Resolve the authenticated user's username via the whoami servlet.
+        """Resolve the authenticated user's username.
 
         OAuth 2.0 bearer tokens (e.g. the SaaS/Keycloak broker flow) carry no
         username, so the service may be constructed with ``user_id=None``.
-        Bitbucket Data Center has no ``/user`` (myself) REST resource; the
-        applinks whoami servlet returns the username for any user-bound
-        credential. Credentials not tied to a user (e.g. project/repo-scoped
-        HTTP access tokens) yield no username, in which case this returns None.
+        Bitbucket Data Center has no ``/user`` (myself) REST resource, so try
+        two techniques:
+
+        1. The applinks whoami servlet, which returns the username for OAuth
+           credentials. Some servers answer it with 200 and an *empty* body
+           for HTTP access tokens, so an empty response is not an error.
+        2. A cheap REST call, reading the URL-encoded ``X-AUSERNAME`` response
+           header Bitbucket sets on authenticated requests.
+
+        Credentials not tied to a user (e.g. project/repo-scoped HTTP access
+        tokens) yield no username from either, in which case this returns None.
         """
         if not self.BASE_URL:
             return None
@@ -231,9 +239,23 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
             data, _ = await self._make_request(whoami_url)
         except Exception as e:
             logger.warning(f'Bitbucket data center whoami lookup failed: {e}')
-            return None
+            data = None
         if isinstance(data, str) and data.strip():
             return data.strip()
+
+        # Fall back to the X-AUSERNAME header from a cheap REST call.
+        try:
+            _, headers = await self._make_request(
+                f'{self.BASE_URL}/projects', {'limit': '0'}
+            )
+        except Exception as e:
+            logger.warning(f'Bitbucket data center username lookup failed: {e}')
+            return None
+        username = next(
+            (v for k, v in headers.items() if k.lower() == 'x-ausername'), None
+        )
+        if username:
+            return unquote(username)
         return None
 
     async def get_user(self) -> User:
@@ -260,6 +282,17 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
         )
         user_data = self._select_user_data(data.get('values', []), user_id)
         if not user_data:
+            if not self.user_id:
+                # The username was auto-resolved; degrade to the empty user
+                # rather than failing the whole user-info request.
+                logger.warning(f'Bitbucket data center user not found: {user_id}')
+                return User(
+                    id='',
+                    login='',
+                    avatar_url='',
+                    name=None,
+                    email=None,
+                )
             raise AuthenticationError(f'User not found: {user_id}')
 
         avatar = user_data.get('avatarUrl', '')
