@@ -5585,7 +5585,7 @@ wsproto = ">=1.2.0"
 
 [[package]]
 name = "openhands-sdk"
-version = "1.26.0"
+version = "1.27.0"
 description = "OpenHands SDK - Core functionality for building AI agents"
 optional = false
 python-versions = ">=3.12"
@@ -5618,8 +5618,8 @@ boto3 = ["boto3 (>=1.35.0)"]
 [package.source]
 type = "git"
 url = "https://github.com/OpenHands/software-agent-sdk.git"
-reference = "2e3e5e17c70eb4822e290596a8de8ec37a8cdf46"
-resolved_reference = "2e3e5e17c70eb4822e290596a8de8ec37a8cdf46"
+reference = "02f2a08807a77c3d1552e8e8bc3e07b27d4a164a"
+resolved_reference = "02f2a08807a77c3d1552e8e8bc3e07b27d4a164a"
 subdirectory = "openhands-sdk"
 
 [[package]]
@@ -13809,4 +13809,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "53f4c13222de145c50db2033600090498baffaaf99e36c2bd02a5f944c04d8ac"
+content-hash = "46fc3d13a537b805c495e27a41a2f5a8ba6de65d801012e1951600b3109282f6"
