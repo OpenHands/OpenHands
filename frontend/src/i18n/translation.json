@@ -25347,7 +25347,7 @@
     "uk": "Не вдалося завантажити профілі. Спробуйте ще раз."
   },
   "SETTINGS$PROFILE_ACTIVE_BADGE": {
-    "en": "Active",
+    "en": "Default",
     "ja": "アクティブ",
     "zh-CN": "活动",
     "zh-TW": "使用中",
@@ -25483,7 +25483,7 @@
     "uk": "Профіль \"{{name}}\" видалено"
   },
   "SETTINGS$PROFILE_ACTIVATED": {
-    "en": "Switched to profile \"{{name}}\"",
+    "en": "Default profile set to \"{{name}}\"",
     "ja": "プロファイル\"{{name}}\"に切り替えました",
     "zh-CN": "已切换到配置文件 \"{{name}}\"",
     "zh-TW": "已切換到設定檔 \"{{name}}\"",
@@ -25568,7 +25568,7 @@
     "uk": "Редагувати"
   },
   "SETTINGS$PROFILE_SET_ACTIVE": {
-    "en": "Set as active",
+    "en": "Set as default",
     "ja": "アクティブに設定",
     "zh-CN": "设为活动",
     "zh-TW": "設為使用中",
