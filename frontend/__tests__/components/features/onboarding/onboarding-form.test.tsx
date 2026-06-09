@@ -5,7 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "i18next";
-import OnboardingForm, { clientLoader } from "#/routes/onboarding-form";
+import OnboardingForm, {
+  clientLoader,
+  sanitizeReturnTo,
+} from "#/routes/onboarding-form";
 import AuthService from "#/api/auth-service/auth-service.api";
 import { onboardingService } from "#/api/onboarding-service/onboarding-service.api";
 
@@ -14,7 +17,9 @@ const mockNavigate = vi.fn();
 const mockUseMe = vi.fn();
 
 // Loader data set in beforeEach for each test suite
-let loaderData: { config: { app_mode: string; feature_flags: { deployment_mode: string } } };
+let loaderData: {
+  config: { app_mode: string; feature_flags: { deployment_mode: string } };
+};
 
 vi.mock("react-router", async (importOriginal) => {
   const original = await importOriginal<typeof import("react-router")>();
@@ -51,9 +56,7 @@ vi.mock("#/api/option-service/option-service.api", () => ({
   },
 }));
 
-
-
-const renderOnboardingForm = async () => {
+const renderOnboardingForm = async (initialEntry: string = "/") => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -69,7 +72,7 @@ const renderOnboardingForm = async () => {
   const result = render(
     <I18nextProvider i18n={i18n}>
       <QueryClientProvider client={queryClient}>
-        <RouterStub initialEntries={["/"]} />
+        <RouterStub initialEntries={[initialEntry]} />
       </QueryClientProvider>
     </I18nextProvider>,
   );
@@ -177,13 +180,15 @@ describe("OnboardingForm - Cloud Mode", () => {
     await user.click(screen.getByRole("button", { name: /finish/i }));
 
     expect(mockMutate).toHaveBeenCalledTimes(1);
-    expect(mockMutate).toHaveBeenCalledWith({
-      selections: {
-        org_size: "org_2_10",
-        use_case: ["new_features"],
-        role: "software_engineer",
-      },
-    });
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selections: {
+          org_size: "org_2_10",
+          use_case: ["new_features"],
+          role: "software_engineer",
+        },
+      }),
+    );
   });
 
   it("should render 5 options on step 1 (org size question)", async () => {
@@ -214,13 +219,15 @@ describe("OnboardingForm - Cloud Mode", () => {
     await user.click(screen.getByRole("button", { name: /finish/i }));
 
     // Verify all selections were preserved
-    expect(mockMutate).toHaveBeenCalledWith({
-      selections: {
-        org_size: "solo",
-        use_case: ["fixing_bugs"],
-        role: "cto_founder",
-      },
-    });
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selections: {
+          org_size: "solo",
+          use_case: ["fixing_bugs"],
+          role: "cto_founder",
+        },
+      }),
+    );
   });
 
   it("should allow selecting multiple options on multi-select steps", async () => {
@@ -241,13 +248,15 @@ describe("OnboardingForm - Cloud Mode", () => {
     await user.click(screen.getByTestId("step-option-software_engineer"));
     await user.click(screen.getByRole("button", { name: /finish/i }));
 
-    expect(mockMutate).toHaveBeenCalledWith({
-      selections: {
-        org_size: "solo",
-        use_case: ["new_features", "fixing_bugs", "refactoring"],
-        role: "software_engineer",
-      },
-    });
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selections: {
+          org_size: "solo",
+          use_case: ["new_features", "fixing_bugs", "refactoring"],
+          role: "software_engineer",
+        },
+      }),
+    );
   });
 
   it("should allow deselecting options on multi-select steps", async () => {
@@ -269,13 +278,15 @@ describe("OnboardingForm - Cloud Mode", () => {
     await user.click(screen.getByTestId("step-option-software_engineer"));
     await user.click(screen.getByRole("button", { name: /finish/i }));
 
-    expect(mockMutate).toHaveBeenCalledWith({
-      selections: {
-        org_size: "solo",
-        use_case: ["fixing_bugs"],
-        role: "software_engineer",
-      },
-    });
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selections: {
+          org_size: "solo",
+          use_case: ["fixing_bugs"],
+          role: "software_engineer",
+        },
+      }),
+    );
   });
 
   it("should show all progress bars filled on the last step", async () => {
@@ -397,14 +408,16 @@ describe("OnboardingForm - Self-Hosted Mode", () => {
     await user.click(screen.getByRole("button", { name: /finish/i }));
 
     expect(mockMutate).toHaveBeenCalledTimes(1);
-    expect(mockMutate).toHaveBeenCalledWith({
-      selections: {
-        org_name: "Acme Corp",
-        org_domain: "acme.com",
-        org_size: "org_2_10",
-        use_case: ["new_features"],
-      },
-    });
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selections: {
+          org_name: "Acme Corp",
+          org_domain: "acme.com",
+          org_size: "org_2_10",
+          use_case: ["new_features"],
+        },
+      }),
+    );
   });
 
   it("should show all 3 progress bars filled on the last step", async () => {
@@ -446,7 +459,6 @@ describe("OnboardingForm - Self-Hosted Mode", () => {
     const nextButton = screen.getByRole("button", { name: /next/i });
     expect(nextButton).not.toBeDisabled();
   });
-
 });
 
 describe("OnboardingForm - redirect when already onboarded", () => {
@@ -481,9 +493,98 @@ describe("OnboardingForm - redirect when already onboarded", () => {
       expect(mockNavigate).toHaveBeenCalledWith("/", { replace: true });
     });
   });
+
+  it("should restore the returnTo destination when onboarding is already complete", async () => {
+    // Regression: a stale ``/onboarding`` link must still respect
+    // a ``returnTo`` query param so post-login deep links survive.
+    vi.spyOn(onboardingService, "getStatus").mockResolvedValue({
+      should_complete_onboarding: false,
+    });
+
+    await renderOnboardingForm(
+      `/?returnTo=${encodeURIComponent("/conversations/abc?foo=bar")}`,
+    );
+
+    await vi.waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/conversations/abc?foo=bar", {
+        replace: true,
+      });
+    });
+    expect(mockNavigate).not.toHaveBeenCalledWith("/", { replace: true });
+  });
+
+  it("should reject absolute URL returnTo and redirect to / when onboarding is already complete", async () => {
+    // Security: a hand-crafted ``?returnTo=https://evil.example`` must
+    // never turn the component redirect into an open-redirect vector.
+    vi.spyOn(onboardingService, "getStatus").mockResolvedValue({
+      should_complete_onboarding: false,
+    });
+
+    await renderOnboardingForm(
+      `/?returnTo=${encodeURIComponent("https://evil.example.com/pwn")}`,
+    );
+
+    await vi.waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/", { replace: true });
+    });
+  });
+
+  it("should reject protocol-relative returnTo and redirect to / when onboarding is already complete", async () => {
+    // Security: protocol-relative URLs (``//evil.example.com``) are
+    // also open-redirect vectors and must be rejected.
+    vi.spyOn(onboardingService, "getStatus").mockResolvedValue({
+      should_complete_onboarding: false,
+    });
+
+    await renderOnboardingForm(
+      `/?returnTo=${encodeURIComponent("//evil.example.com/pwn")}`,
+    );
+
+    await vi.waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/", { replace: true });
+    });
+  });
+
+  it("should forward returnTo to submitOnboarding so the post-submit redirect respects it", async () => {
+    // Regression: ``OnboardingGuard`` saves the originally requested
+    // URL as ``?returnTo=...``. ``OnboardingForm`` must thread that
+    // value through the submit mutation so the post-submit fallback
+    // (when the server response has no ``redirect_url``) sends the
+    // user back to where they started.
+    const user = userEvent.setup();
+    await renderOnboardingForm(
+      `/?returnTo=${encodeURIComponent("/conversations/abc?foo=bar")}`,
+    );
+
+    // Step 1 - org size
+    await user.click(screen.getByTestId("step-option-solo"));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    // Step 2 - use case
+    await user.click(screen.getByTestId("step-option-new_features"));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    // Step 3 - role
+    await user.click(screen.getByTestId("step-option-software_engineer"));
+    await user.click(screen.getByRole("button", { name: /finish/i }));
+
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        returnTo: "/conversations/abc?foo=bar",
+      }),
+    );
+  });
 });
 
 describe("onboarding-form clientLoader", () => {
+  // The loader takes a ``{ request }`` arg from react-router. Most of
+  // the existing tests don't care about the URL, so build a default
+  // request pointing at bare ``/onboarding`` and let returnTo-aware
+  // tests override it.
+  const makeArgs = (url = "https://app.example.com/onboarding") => ({
+    request: new Request(url),
+  });
+
   beforeEach(() => {
     mockQueryClientGetData.mockReset();
     mockQueryClientSetData.mockReset();
@@ -498,7 +599,7 @@ describe("onboarding-form clientLoader", () => {
       };
       mockQueryClientGetData.mockReturnValue(saasConfig);
 
-      const result = await clientLoader();
+      const result = await clientLoader(makeArgs());
 
       expect(result).toBeDefined();
       expect((result as Response).status).toBe(302);
@@ -512,7 +613,7 @@ describe("onboarding-form clientLoader", () => {
       };
       mockQueryClientGetData.mockReturnValue(ossConfig);
 
-      const result = await clientLoader();
+      const result = await clientLoader(makeArgs());
 
       expect(result).toBeDefined();
       expect((result as Response).status).toBe(302);
@@ -526,7 +627,7 @@ describe("onboarding-form clientLoader", () => {
       };
       mockQueryClientGetData.mockReturnValue(undefinedConfig);
 
-      const result = await clientLoader();
+      const result = await clientLoader(makeArgs());
 
       expect(result).toBeDefined();
       expect((result as Response).status).toBe(302);
@@ -537,7 +638,7 @@ describe("onboarding-form clientLoader", () => {
       mockQueryClientGetData.mockReturnValue(null);
       mockGetConfig.mockResolvedValue(null);
 
-      const result = await clientLoader();
+      const result = await clientLoader(makeArgs());
 
       expect(result).toBeDefined();
       expect((result as Response).status).toBe(302);
@@ -551,7 +652,7 @@ describe("onboarding-form clientLoader", () => {
       };
       mockQueryClientGetData.mockReturnValue(saasCloudConfig);
 
-      const result = await clientLoader();
+      const result = await clientLoader(makeArgs());
 
       expect(result).toEqual({ config: saasCloudConfig });
     });
@@ -559,13 +660,113 @@ describe("onboarding-form clientLoader", () => {
     it("should allow access and return config when app_mode is saas with self_hosted deployment and enable_onboarding is true", async () => {
       const saasSelfHostedConfig = {
         app_mode: "saas",
-        feature_flags: { deployment_mode: "self_hosted", enable_onboarding: true },
+        feature_flags: {
+          deployment_mode: "self_hosted",
+          enable_onboarding: true,
+        },
       };
       mockQueryClientGetData.mockReturnValue(saasSelfHostedConfig);
 
-      const result = await clientLoader();
+      const result = await clientLoader(makeArgs());
 
       expect(result).toEqual({ config: saasSelfHostedConfig });
+    });
+  });
+
+  describe("returnTo handling on redirect", () => {
+    // The frontend can disagree with the backend about whether
+    // onboarding applies (e.g. the backend gates on
+    // ``DEPLOYMENT_MODE='cloud'`` while the frontend gates on
+    // ``feature_flags.enable_onboarding``). When the frontend
+    // redirects users away from /onboarding because the flag is
+    // off, it must still honor the ``?returnTo=`` query parameter
+    // so deep links survive the disagreement.
+    it("should honor returnTo when enable_onboarding is false", async () => {
+      const saasConfig = {
+        app_mode: "saas",
+        feature_flags: { deployment_mode: "cloud", enable_onboarding: false },
+      };
+      mockQueryClientGetData.mockReturnValue(saasConfig);
+
+      const result = await clientLoader(
+        makeArgs(
+          "https://app.example.com/onboarding?returnTo=%2Fsettings%2Fuser",
+        ),
+      );
+
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe(
+        "/settings/user",
+      );
+    });
+
+    it("should honor returnTo with query string when app_mode is oss", async () => {
+      const ossConfig = {
+        app_mode: "oss",
+        feature_flags: { deployment_mode: undefined, enable_onboarding: true },
+      };
+      mockQueryClientGetData.mockReturnValue(ossConfig);
+
+      const result = await clientLoader(
+        makeArgs(
+          "https://app.example.com/onboarding" +
+            "?returnTo=%2Fconversations%2Fabc%3Ffoo%3Dbar",
+        ),
+      );
+
+      expect((result as Response).headers.get("Location")).toBe(
+        "/conversations/abc?foo=bar",
+      );
+    });
+
+    it("should reject absolute URL returnTo and fall back to /", async () => {
+      // Safety: never let a hand-crafted ``?returnTo=https://evil.example``
+      // turn the loader's redirect into an open-redirect vector.
+      const ossConfig = {
+        app_mode: "oss",
+        feature_flags: { deployment_mode: undefined, enable_onboarding: true },
+      };
+      mockQueryClientGetData.mockReturnValue(ossConfig);
+
+      const result = await clientLoader(
+        makeArgs(
+          "https://app.example.com/onboarding" +
+            "?returnTo=https%3A%2F%2Fevil.example.com%2Fpwn",
+        ),
+      );
+
+      expect((result as Response).headers.get("Location")).toBe("/");
+    });
+
+    it("should reject protocol-relative returnTo and fall back to /", async () => {
+      const ossConfig = {
+        app_mode: "oss",
+        feature_flags: { deployment_mode: undefined, enable_onboarding: true },
+      };
+      mockQueryClientGetData.mockReturnValue(ossConfig);
+
+      const result = await clientLoader(
+        makeArgs(
+          "https://app.example.com/onboarding" +
+            "?returnTo=%2F%2Fevil.example.com%2Fpwn",
+        ),
+      );
+
+      expect((result as Response).headers.get("Location")).toBe("/");
+    });
+
+    it("should fall back to / when returnTo is missing", async () => {
+      const ossConfig = {
+        app_mode: "oss",
+        feature_flags: { deployment_mode: undefined, enable_onboarding: true },
+      };
+      mockQueryClientGetData.mockReturnValue(ossConfig);
+
+      const result = await clientLoader(
+        makeArgs("https://app.example.com/onboarding"),
+      );
+
+      expect((result as Response).headers.get("Location")).toBe("/");
     });
   });
 
@@ -577,9 +778,11 @@ describe("onboarding-form clientLoader", () => {
       };
       mockQueryClientGetData.mockReturnValue(cachedConfig);
 
-      await clientLoader();
+      await clientLoader(makeArgs());
 
-      expect(mockQueryClientGetData).toHaveBeenCalledWith(["web-client-config"]);
+      expect(mockQueryClientGetData).toHaveBeenCalledWith([
+        "web-client-config",
+      ]);
       expect(mockGetConfig).not.toHaveBeenCalled();
     });
 
@@ -591,7 +794,7 @@ describe("onboarding-form clientLoader", () => {
       mockQueryClientGetData.mockReturnValue(null);
       mockGetConfig.mockResolvedValue(fetchedConfig);
 
-      const result = await clientLoader();
+      const result = await clientLoader(makeArgs());
 
       expect(mockGetConfig).toHaveBeenCalled();
       expect(mockQueryClientSetData).toHaveBeenCalledWith(
@@ -600,5 +803,41 @@ describe("onboarding-form clientLoader", () => {
       );
       expect(result).toEqual({ config: fetchedConfig });
     });
+  });
+});
+
+describe("sanitizeReturnTo", () => {
+  it("should return / for null", () => {
+    expect(sanitizeReturnTo(null)).toBe("/");
+  });
+
+  it("should return / for empty string", () => {
+    expect(sanitizeReturnTo("")).toBe("/");
+  });
+
+  it("should allow same-origin absolute paths", () => {
+    expect(sanitizeReturnTo("/conversations/abc")).toBe("/conversations/abc");
+  });
+
+  it("should allow paths with query strings", () => {
+    expect(sanitizeReturnTo("/conversations/abc?foo=bar")).toBe(
+      "/conversations/abc?foo=bar",
+    );
+  });
+
+  it("should prepend / to relative paths that lack one", () => {
+    expect(sanitizeReturnTo("conversations/abc")).toBe("/conversations/abc");
+  });
+
+  it("should reject http:// URLs and fall back to /", () => {
+    expect(sanitizeReturnTo("http://evil.example.com/pwn")).toBe("/");
+  });
+
+  it("should reject https:// URLs and fall back to /", () => {
+    expect(sanitizeReturnTo("https://evil.example.com/pwn")).toBe("/");
+  });
+
+  it("should reject protocol-relative URLs and fall back to /", () => {
+    expect(sanitizeReturnTo("//evil.example.com/pwn")).toBe("/");
   });
 });

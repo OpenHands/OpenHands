@@ -392,7 +392,7 @@ class LiteLlmManager:
                 llm_base_url = llm_cfg.get('base_url')
                 if llm_base_url == LITE_LLM_API_URL:
                     db_key = llm_cfg.get('api_key')
-                    if hasattr(db_key, 'get_secret_value'):
+                    if db_key is not None and hasattr(db_key, 'get_secret_value'):
                         db_key = db_key.get_secret_value()
 
                 if db_key:
@@ -644,7 +644,7 @@ class LiteLlmManager:
             json=json_data,
         )
 
-        # Team failed to create in litellm - this is an unforseen error state...
+        # Team failed to create in litellm - this is an unforeseen error state...
         if not response.is_success:
             if (
                 response.status_code == 400
@@ -707,7 +707,7 @@ class LiteLlmManager:
             json=json_data,
         )
 
-        # Team failed to update in litellm - this is an unforseen error state...
+        # Team failed to update in litellm - this is an unforeseen error state...
         if not response.is_success:
             logger.error(
                 'error_updating_litellm_team',
@@ -802,7 +802,7 @@ class LiteLlmManager:
                 },
             )
 
-            # User failed to create in litellm - this is an unforseen error state...
+            # User failed to create in litellm - this is an unforeseen error state...
             if not response.is_success:
                 if (
                     response.status_code in (400, 409)
@@ -1088,7 +1088,7 @@ class LiteLlmManager:
             json=json_data,
         )
 
-        # Failed to add user to team - this is an unforseen error state...
+        # Failed to add user to team - this is an unforeseen error state...
         if not response.is_success:
             if (
                 response.status_code == 400
@@ -1183,7 +1183,7 @@ class LiteLlmManager:
             json=json_data,
         )
 
-        # Failed to update user in team - this is an unforseen error state...
+        # Failed to update user in team - this is an unforeseen error state...
         if not response.is_success:
             logger.error(
                 'error_updating_litellm_user_in_team',
@@ -1264,7 +1264,7 @@ class LiteLlmManager:
             f'{LITE_LLM_API_URL}/key/generate',
             json=json_data,
         )
-        # Failed to generate user key for team - this is an unforseen error state...
+        # Failed to generate user key for team - this is an unforeseen error state...
         if not response.is_success:
             logger.error(
                 'error_generate_user_team_key',

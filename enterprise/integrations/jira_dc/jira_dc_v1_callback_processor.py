@@ -5,16 +5,23 @@ summaries back to Jira DC issues when the agent finishes work.
 """
 
 import logging
+from typing import ClassVar
 from uuid import UUID
 
 import httpx
+from integrations.jira_dc.jira_dc_service_account import (
+    resolve_jira_dc_service_account,
+)
 from integrations.utils import get_summary_instruction, markdown_to_jira_markup
 from pydantic import Field
+from server.auth.token_manager import TokenManager
+from storage.jira_dc_integration_store import JiraDcIntegrationStore
 
 from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
+    EventKind,
 )
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
@@ -35,11 +42,12 @@ _logger = logging.getLogger(__name__)
 class JiraDcV1CallbackProcessor(EventCallbackProcessor):
     """Callback processor for Jira Data Center V1 integrations."""
 
+    event_kind: ClassVar[EventKind] = 'ConversationStateUpdateEvent'
+
     should_request_summary: bool = Field(default=True)
     issue_key: str
     workspace_name: str
     base_api_url: str
-    svc_acc_api_key: str  # Decrypted API key
 
     async def __call__(
         self,
@@ -133,9 +141,9 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
                 app_conversation_info.sandbox_id,
             )
 
-            assert (
-                sandbox.session_api_key is not None
-            ), f'No session API key for sandbox: {sandbox.id}'
+            assert sandbox.session_api_key is not None, (
+                f'No session API key for sandbox: {sandbox.id}'
+            )
 
             # 3. URL + instruction
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)
@@ -164,8 +172,8 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
         send_message_request = AskAgentRequest(question=message_content)
 
         url = (
-            f"{agent_server_url.rstrip('/')}"
-            f"/api/conversations/{conversation_id}/ask_agent"
+            f'{agent_server_url.rstrip("/")}'
+            f'/api/conversations/{conversation_id}/ask_agent'
         )
         headers = {'X-Session-API-Key': session_api_key}
         payload = send_message_request.model_dump()
@@ -216,13 +224,25 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
         """Post the summary back to the Jira DC issue."""
         if not all(
             [
-                self.svc_acc_api_key,
                 self.issue_key,
+                self.workspace_name,
                 self.base_api_url,
             ]
         ):
             _logger.warning('[Jira DC] Missing required data for posting summary')
             return
+
+        workspace = await JiraDcIntegrationStore.get_instance().get_workspace_by_name(
+            self.workspace_name
+        )
+        if not workspace:
+            _logger.warning(
+                '[Jira DC] Workspace %s not found for posting summary',
+                self.workspace_name,
+            )
+            return
+
+        service_account = resolve_jira_dc_service_account(workspace, TokenManager())
 
         # Add a comment to the Jira DC issue with the summary
         comment_url = f'{self.base_api_url}/rest/api/2/issue/{self.issue_key}/comment'
@@ -231,7 +251,7 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
         # Convert standard Markdown to Jira Wiki Markup for proper rendering
         comment_body = {'body': markdown_to_jira_markup(message)}
 
-        headers = {'Authorization': f'Bearer {self.svc_acc_api_key}'}
+        headers = {'Authorization': f'Bearer {service_account.api_key}'}
 
         async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.post(

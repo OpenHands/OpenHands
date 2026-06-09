@@ -68,6 +68,7 @@ def _pr_comment_view(parent_id: int | None = 42) -> BitbucketDCPRComment:
         previous_comments=[],
         branch_name='feature/x',
         installer_keycloak_user_id='kc-installer',
+        comment_id=99,
         comment_body='Hey @openhands fix',
         parent_comment_id=parent_id,
     )
@@ -93,6 +94,7 @@ def _inline_view() -> BitbucketDCInlinePRComment:
         previous_comments=[],
         branch_name='feature/x',
         installer_keycloak_user_id='kc-installer',
+        comment_id=99,
         comment_body='@openhands rename',
         parent_comment_id=None,
         file_location='src/x.py',
@@ -104,9 +106,11 @@ def _inline_view() -> BitbucketDCInlinePRComment:
 
 @pytest.mark.asyncio
 async def test_receive_message_runs_job_as_mentioner_when_linked_in_keycloak():
-    """When the @-mentioning user has an OHE account, the view's
-    ``user_info.keycloak_user_id`` is the mentioner and the installer's
-    id is carried alongside on ``installer_keycloak_user_id``.
+    """Use the linked mentioner as the resolver user.
+
+    When the @-mentioning user has an OHE account, the view's
+    ``user_info.keycloak_user_id`` is the mentioner and the installer's id is
+    carried alongside on ``installer_keycloak_user_id``.
     """
     token_manager = AsyncMock()
     token_manager.get_user_id_from_idp_user_id = AsyncMock(return_value='kc-alice')
@@ -117,11 +121,13 @@ async def test_receive_message_runs_job_as_mentioner_when_linked_in_keycloak():
     async def fake_start_job(view):
         captured['view'] = view
 
-    with patch.object(
-        manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
-    ), patch.object(
-        manager, '_commenter_has_write_access', return_value=True
-    ), patch.object(manager, 'start_job', new=fake_start_job):
+    with (
+        patch.object(
+            manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
+        ),
+        patch.object(manager, '_commenter_has_write_access', return_value=True),
+        patch.object(manager, 'start_job', new=fake_start_job),
+    ):
         await manager.receive_message(_comment_message())
 
     view = captured['view']
@@ -138,21 +144,26 @@ async def test_receive_message_runs_job_as_mentioner_when_linked_in_keycloak():
 
 @pytest.mark.asyncio
 async def test_receive_message_asks_unenrolled_mentioner_to_sign_up():
-    """A mentioner with no OHE account is NOT run as the installer. We mirror
-    the GitHub manager: refuse the job and reply asking them to sign up, so
-    every job runs as (and is billed to) the actual requester.
+    """Ask unenrolled mentioners to sign up.
+
+    A mentioner with no OHE account is not run as the installer. We mirror the
+    GitHub manager: refuse the job and reply asking them to sign up, so every
+    job runs as (and is billed to) the actual requester.
     """
     token_manager = AsyncMock()
     token_manager.get_user_id_from_idp_user_id = AsyncMock(return_value=None)
     manager = BitbucketDCManager(token_manager)
 
-    with patch.object(
-        manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
-    ), patch.object(
-        manager, '_commenter_has_write_access', return_value=True
-    ), patch.object(manager, 'start_job', new=AsyncMock()) as mock_start, patch.object(
-        manager, '_send_user_not_found_message', new=AsyncMock()
-    ) as mock_not_found:
+    with (
+        patch.object(
+            manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
+        ),
+        patch.object(manager, '_commenter_has_write_access', return_value=True),
+        patch.object(manager, 'start_job', new=AsyncMock()) as mock_start,
+        patch.object(
+            manager, '_send_user_not_found_message', new=AsyncMock()
+        ) as mock_not_found,
+    ):
         await manager.receive_message(_comment_message())
 
     mock_start.assert_not_called()
@@ -164,9 +175,11 @@ async def test_receive_message_asks_unenrolled_mentioner_to_sign_up():
 
 @pytest.mark.asyncio
 async def test_receive_message_drops_event_when_keycloak_lookup_raises():
-    """A transient Keycloak error leaves enrollment status unknown. We drop
-    the event rather than guess — neither silently running as the installer
-    nor wrongly telling a (possibly enrolled) user to sign up.
+    """Drop events when mentioner lookup fails.
+
+    A transient Keycloak error leaves enrollment status unknown. We drop the
+    event rather than guess: neither silently running as the installer nor
+    wrongly telling a possibly enrolled user to sign up.
     """
     token_manager = AsyncMock()
     token_manager.get_user_id_from_idp_user_id = AsyncMock(
@@ -174,13 +187,16 @@ async def test_receive_message_drops_event_when_keycloak_lookup_raises():
     )
     manager = BitbucketDCManager(token_manager)
 
-    with patch.object(
-        manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
-    ), patch.object(
-        manager, '_commenter_has_write_access', return_value=True
-    ), patch.object(manager, 'start_job', new=AsyncMock()) as mock_start, patch.object(
-        manager, '_send_user_not_found_message', new=AsyncMock()
-    ) as mock_not_found:
+    with (
+        patch.object(
+            manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
+        ),
+        patch.object(manager, '_commenter_has_write_access', return_value=True),
+        patch.object(manager, 'start_job', new=AsyncMock()) as mock_start,
+        patch.object(
+            manager, '_send_user_not_found_message', new=AsyncMock()
+        ) as mock_not_found,
+    ):
         await manager.receive_message(_comment_message())
 
     mock_start.assert_not_called()
@@ -189,18 +205,21 @@ async def test_receive_message_drops_event_when_keycloak_lookup_raises():
 
 @pytest.mark.asyncio
 async def test_send_user_not_found_message_replies_as_installer():
-    """The sign-up reply is built from the payload with the installer as the
+    """Post the sign-up reply as the installer.
+
+    The sign-up reply is built from the payload with the installer as the
     posting identity and carries the user-not-found copy.
     """
     manager = BitbucketDCManager(AsyncMock())
     sentinel_view = object()
 
-    with patch(
-        'integrations.bitbucket_data_center.bitbucket_dc_manager.BitbucketDCFactory.create_bitbucket_dc_view_from_payload',
-        new=AsyncMock(return_value=sentinel_view),
-    ) as mock_factory, patch.object(
-        manager, 'send_message', new=AsyncMock()
-    ) as mock_send:
+    with (
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BitbucketDCFactory.create_bitbucket_dc_view_from_payload',
+            new=AsyncMock(return_value=sentinel_view),
+        ) as mock_factory,
+        patch.object(manager, 'send_message', new=AsyncMock()) as mock_send,
+    ):
         await manager._send_user_not_found_message(
             _comment_message(), 'kc-installer', 'alice'
         )
@@ -221,11 +240,13 @@ async def test_send_user_not_found_message_replies_as_installer():
 async def test_receive_message_skips_when_commenter_lacks_write_access():
     manager = BitbucketDCManager(AsyncMock())
 
-    with patch.object(
-        manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
-    ), patch.object(
-        manager, '_commenter_has_write_access', return_value=False
-    ), patch.object(manager, 'start_job', new=AsyncMock()) as mock_start:
+    with (
+        patch.object(
+            manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
+        ),
+        patch.object(manager, '_commenter_has_write_access', return_value=False),
+        patch.object(manager, 'start_job', new=AsyncMock()) as mock_start,
+    ):
         await manager.receive_message(_comment_message())
 
     mock_start.assert_not_called()
@@ -235,9 +256,10 @@ async def test_receive_message_skips_when_commenter_lacks_write_access():
 async def test_receive_message_skips_when_no_installer_recorded_for_repo():
     manager = BitbucketDCManager(AsyncMock())
 
-    with patch.object(
-        manager.webhook_store, 'get_webhook_user_id', return_value=None
-    ), patch.object(manager, 'start_job', new=AsyncMock()) as mock_start:
+    with (
+        patch.object(manager.webhook_store, 'get_webhook_user_id', return_value=None),
+        patch.object(manager, 'start_job', new=AsyncMock()) as mock_start,
+    ):
         await manager.receive_message(_comment_message())
 
     mock_start.assert_not_called()
@@ -287,9 +309,11 @@ def test_confirm_incoming_source_type_raises_on_wrong_source():
 
 @pytest.mark.asyncio
 async def test_send_message_uses_view_user_info_keycloak_id():
-    """send_message constructs the BBDC service with the view's
-    user_info.keycloak_user_id (the mentioner) rather than the
-    installer, so replies post under the mentioner's BBDC account.
+    """Post replies with the view user auth id.
+
+    send_message constructs the BBDC service with the view's
+    ``user_info.keycloak_user_id`` (the mentioner) rather than the installer,
+    so replies post under the mentioner's BBDC account.
     """
     manager = BitbucketDCManager(AsyncMock())
 
@@ -303,17 +327,22 @@ async def test_send_message_uses_view_user_info_keycloak_id():
 
 
 def test_posting_service_uses_bot_token_when_set():
-    """With BITBUCKET_DATA_CENTER_BOT_TOKEN set, the posting service auths as
-    the bot (token=...) and does NOT fall back to the per-user token.
+    """Use the bot token when it is configured.
+
+    With ``BITBUCKET_DATA_CENTER_BOT_TOKEN`` set, the posting service auths as
+    the bot and does not fall back to the per-user token.
     """
     manager = BitbucketDCManager(AsyncMock())
 
-    with patch(
-        'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
-        'bot-pat-123',
-    ), patch(
-        'integrations.bitbucket_data_center.bitbucket_dc_service.SaaSBitbucketDCService'
-    ) as service_cls:
+    with (
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            'bot-pat-123',
+        ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_service.SaaSBitbucketDCService'
+        ) as service_cls,
+    ):
         svc = manager._posting_service('kc-alice')
 
     # Built with no per-user auth; the raw bot token is set directly so the
@@ -325,17 +354,22 @@ def test_posting_service_uses_bot_token_when_set():
 
 
 def test_posting_service_falls_back_to_user_token_when_bot_unset():
-    """Without a bot token, the posting service uses the per-user/installer
-    OAuth token (current behavior).
+    """Use the per-user token when no bot token is configured.
+
+    Without a bot token, the posting service uses the per-user/installer OAuth
+    token.
     """
     manager = BitbucketDCManager(AsyncMock())
 
-    with patch(
-        'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
-        '',
-    ), patch(
-        'integrations.bitbucket_data_center.bitbucket_dc_service.SaaSBitbucketDCService'
-    ) as service_cls:
+    with (
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            '',
+        ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_service.SaaSBitbucketDCService'
+        ) as service_cls,
+    ):
         manager._posting_service('kc-alice')
 
     service_cls.assert_called_once_with(external_auth_id='kc-alice')

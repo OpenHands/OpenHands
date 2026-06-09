@@ -10,6 +10,8 @@ from typing import AsyncGenerator
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -17,12 +19,16 @@ from openhands.app_server.event_callback.event_callback_models import (
     CreateEventCallbackRequest,
     EventCallback,
     EventCallbackProcessor,
+    EventCallbackStatus,
     LoggingCallbackProcessor,
 )
 from openhands.app_server.event_callback.sql_event_callback_service import (
     SQLEventCallbackService,
+    StoredEventCallback,
+    StoredEventCallbackResult,
 )
 from openhands.app_server.utils.sql_utils import Base
+from openhands.sdk import Message, MessageEvent, TextContent
 
 
 @pytest.fixture
@@ -267,31 +273,38 @@ class TestSQLEventCallbackService:
         assert len(next_result.items) == 2
         assert next_result.next_page_id is None
 
-    async def test_search_callbacks_with_null_filters(
-        self,
-        service: SQLEventCallbackService,
-        sample_processor: EventCallbackProcessor,
+    def test_event_callback_request_requires_conversation_id(
+        self, sample_processor: EventCallbackProcessor
     ):
-        """Test searching callbacks with null conversation_id and event_kind."""
-        # Create callbacks with null values
-        callback1_request = CreateEventCallbackRequest(
-            conversation_id=None,
-            processor=sample_processor,
-            event_kind=None,
-        )
-        callback2_request = CreateEventCallbackRequest(
+        """Callbacks must be scoped to a concrete conversation."""
+        with pytest.raises(ValidationError):
+            CreateEventCallbackRequest(
+                conversation_id=None,
+                processor=sample_processor,
+                event_kind='MessageEvent',
+            )
+
+    def test_event_callback_request_rejects_null_event_kind(
+        self, sample_processor: EventCallbackProcessor
+    ):
+        """Callbacks must be scoped to a concrete event kind."""
+        with pytest.raises(ValidationError):
+            CreateEventCallbackRequest(
+                conversation_id=uuid4(),
+                processor=sample_processor,
+                event_kind=None,
+            )
+
+    def test_event_callback_request_defaults_event_kind_to_message_event(
+        self, sample_processor: EventCallbackProcessor
+    ):
+        """MessageEvent is the default callback event kind."""
+        callback_request = CreateEventCallbackRequest(
             conversation_id=uuid4(),
             processor=sample_processor,
-            event_kind='ActionEvent',
         )
 
-        await service.create_event_callback(callback1_request)
-        await service.create_event_callback(callback2_request)
-
-        # Search should return both callbacks
-        result = await service.search_event_callbacks()
-
-        assert len(result.items) == 2
+        assert callback_request.event_kind == 'MessageEvent'
 
     async def test_callback_timestamps(
         self,
@@ -372,6 +385,89 @@ class TestSQLEventCallbackService:
         assert len(result.items) == 2
         assert result.items[0].id == callback2.id
         assert result.items[1].id == callback1.id
+
+    async def test_execute_callbacks_runs_conversation_specific_callback(
+        self,
+        service: SQLEventCallbackService,
+        sample_processor: EventCallbackProcessor,
+    ):
+        """Test executing callbacks for the matching conversation."""
+        conversation_id = uuid4()
+        callback = await service.create_event_callback(
+            CreateEventCallbackRequest(
+                conversation_id=conversation_id,
+                processor=sample_processor,
+                event_kind='MessageEvent',
+            )
+        )
+        event = MessageEvent(
+            source='user',
+            llm_message=Message(role='user', content=[TextContent(text='hi')]),
+        )
+
+        await service.execute_callbacks(conversation_id, event)
+
+        result = await service.db_session.execute(select(StoredEventCallbackResult))
+        callback_results = result.scalars().all()
+        assert len(callback_results) == 1
+        assert callback_results[0].event_callback_id == callback.id
+        assert callback_results[0].conversation_id == conversation_id
+
+    async def test_execute_callbacks_ignores_legacy_null_conversation_callback(
+        self,
+        service: SQLEventCallbackService,
+        sample_processor: EventCallbackProcessor,
+    ):
+        """Legacy callbacks without a conversation_id should not execute globally."""
+        conversation_id = uuid4()
+        service.db_session.add(
+            StoredEventCallback(
+                id=uuid4(),
+                conversation_id=None,
+                status=EventCallbackStatus.ACTIVE,
+                processor=sample_processor,
+                event_kind='MessageEvent',
+            )
+        )
+        await service.db_session.commit()
+        event = MessageEvent(
+            source='user',
+            llm_message=Message(role='user', content=[TextContent(text='hi')]),
+        )
+
+        await service.execute_callbacks(conversation_id, event)
+
+        result = await service.db_session.execute(select(StoredEventCallbackResult))
+        callback_results = result.scalars().all()
+        assert callback_results == []
+
+    async def test_execute_callbacks_ignores_legacy_null_event_kind_callback(
+        self,
+        service: SQLEventCallbackService,
+        sample_processor: EventCallbackProcessor,
+    ):
+        """Legacy callbacks without an event_kind should not execute as event wildcards."""
+        conversation_id = uuid4()
+        service.db_session.add(
+            StoredEventCallback(
+                id=uuid4(),
+                conversation_id=conversation_id,
+                status=EventCallbackStatus.ACTIVE,
+                processor=sample_processor,
+                event_kind=None,
+            )
+        )
+        await service.db_session.commit()
+        event = MessageEvent(
+            source='user',
+            llm_message=Message(role='user', content=[TextContent(text='hi')]),
+        )
+
+        await service.execute_callbacks(conversation_id, event)
+
+        result = await service.db_session.execute(select(StoredEventCallbackResult))
+        callback_results = result.scalars().all()
+        assert callback_results == []
 
     async def test_save_event_callback_new(
         self,
@@ -498,34 +594,24 @@ class TestSQLEventCallbackService:
         time_diff = now - saved_utc
         assert time_diff.total_seconds() < 60
 
-    async def test_save_event_callback_with_null_values(
+    def test_event_callback_rejects_null_values(
         self,
-        service: SQLEventCallbackService,
         sample_processor: EventCallbackProcessor,
     ):
-        """Test saving a callback with null conversation_id and event_kind."""
-        # Create a callback with null values
-        callback = EventCallback(
-            conversation_id=None,
-            processor=sample_processor,
-            event_kind=None,
-        )
+        """EventCallback should not allow null conversation_id or event_kind."""
+        with pytest.raises(ValidationError):
+            EventCallback(
+                conversation_id=None,
+                processor=sample_processor,
+                event_kind='MessageEvent',
+            )
 
-        # Save the callback
-        saved_callback = await service.save_event_callback(callback)
-
-        # Verify the callback was saved correctly
-        assert saved_callback.id == callback.id
-        assert saved_callback.conversation_id is None
-        assert saved_callback.event_kind is None
-        assert saved_callback.processor == sample_processor
-
-        # Commit and verify persistence
-        await service.db_session.commit()
-        retrieved_callback = await service.get_event_callback(callback.id)
-        assert retrieved_callback is not None
-        assert retrieved_callback.conversation_id is None
-        assert retrieved_callback.event_kind is None
+        with pytest.raises(ValidationError):
+            EventCallback(
+                conversation_id=uuid4(),
+                processor=sample_processor,
+                event_kind=None,
+            )
 
     async def test_save_event_callback_preserves_created_at(
         self,
