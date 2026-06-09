@@ -11,9 +11,6 @@ toolchains:
     version: "3.12"
     package_managers:
       poetry: ">=1.8"
-    fulfillment:
-      source: uv
-      mode: run
   node:
     version: "^22.12.0"
     package_managers:
@@ -146,8 +143,8 @@ tasks:
     description: Hydrate backend Python dependencies through the repo's Poetry install lane
     notes: |
       This models the documented `poetry install --with dev,test,runtime` path directly instead of
-      hiding it behind the broader `make build` wrapper. Ota uses the Python toolchain fulfillment
-      lane to ensure the declared Poetry version is available before hydration.
+      hiding it behind the broader `make build` wrapper. The host lane relies on runner-provided
+      Python and Poetry rather than asking ota to provision Python through `uv` on the run path.
     category: setup
     prepare:
       kind: dependency_hydration
