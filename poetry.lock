@@ -5590,10 +5590,8 @@ description = "OpenHands SDK - Core functionality for building AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
-files = [
-    {file = "openhands_sdk-1.26.0-py3-none-any.whl", hash = "sha256:e172360e7e3e4da7a6008fc027119f97ecb7396477093060ddec0b7addf258c6"},
-    {file = "openhands_sdk-1.26.0.tar.gz", hash = "sha256:6fe121528e43b0db99acf784b2c9dd9266874f03816443e5b920d698e8f35832"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 agent-client-protocol = ">=0.8.1"
@@ -5616,6 +5614,13 @@ websockets = ">=12"
 
 [package.extras]
 boto3 = ["boto3 (>=1.35.0)"]
+
+[package.source]
+type = "git"
+url = "https://github.com/OpenHands/software-agent-sdk.git"
+reference = "2e3e5e17c70eb4822e290596a8de8ec37a8cdf46"
+resolved_reference = "2e3e5e17c70eb4822e290596a8de8ec37a8cdf46"
+subdirectory = "openhands-sdk"
 
 [[package]]
 name = "openhands-tools"
@@ -13804,4 +13809,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "2ebce9ecb65bfb2cad710b19bb5bd8d1cc90bee1f267e406d73f3ea462639688"
+content-hash = "53f4c13222de145c50db2033600090498baffaaf99e36c2bd02a5f944c04d8ac"

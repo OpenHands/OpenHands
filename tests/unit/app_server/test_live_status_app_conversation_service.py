@@ -709,7 +709,7 @@ class TestLiveStatusAppConversationService:
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_openhands_model_no_base_urls(self):
-        """openhands/* model still uses the SDK proxy when no other URLs exist."""
+        """openhands/* model is kept public when no explicit base URL exists."""
         # Arrange
         self.mock_user.llm_model = 'openhands/default'
         self.mock_user.llm_base_url = None
@@ -722,7 +722,8 @@ class TestLiveStatusAppConversationService:
         )
 
         # Assert
-        assert llm.base_url == 'https://llm-proxy.app.all-hands.dev/'
+        assert llm.model == 'openhands/default'
+        assert llm.base_url is None
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_litellm_proxy_model_keeps_empty_base_url(

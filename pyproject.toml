@@ -58,7 +58,7 @@ dependencies = [
   "numpy",
   "openai==2.33.0",
   "openhands-agent-server==1.26.0",
-  "openhands-sdk==1.26.0",
+  "openhands-sdk @ git+https://github.com/OpenHands/software-agent-sdk.git@2e3e5e17c70eb4822e290596a8de8ec37a8cdf46#subdirectory=openhands-sdk",
   "openhands-tools==1.26.0",
   "opentelemetry-api>=1.33.1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
@@ -246,7 +246,7 @@ e2b-code-interpreter = { version = "^2.0.0", optional = true }
 pybase62 = "^1.0.0"
 
 # V1 dependencies
-openhands-sdk = "==1.26.0"
+openhands-sdk = { git = "https://github.com/OpenHands/software-agent-sdk.git", rev = "2e3e5e17c70eb4822e290596a8de8ec37a8cdf46", subdirectory = "openhands-sdk" }
 openhands-agent-server = "==1.26.0"
 openhands-tools = "==1.26.0"
 joserfc = ">=1.0.0"
