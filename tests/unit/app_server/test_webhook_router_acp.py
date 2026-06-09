@@ -114,7 +114,9 @@ def _make_acp_conversation_info(acp_command: list[str]) -> ConversationInfo:
 
 
 @pytest.mark.asyncio
-async def test_llm_conversation_stores_llm_model(async_session, service, sandbox_record):
+async def test_llm_conversation_stores_llm_model(
+    async_session, service, sandbox_record
+):
     """LLM path stores the real model in llm_model and sets agent_kind='openhands'."""
     llm_info = _make_llm_conversation_info()
     conversation_id = llm_info.id
