@@ -393,10 +393,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             saas_result = await self.db_session.execute(saas_query)
             existing_saas_metadata = saas_result.scalar_one_or_none()
 
-            # Only assert on user_id: org_id can legitimately differ from the stored
-            # value whenever it falls back to user.current_org_id (which is mutable),
-            # both on the ADMIN path and on normal requests made after the user switches
-            # orgs. Ownership integrity is enforced by user_id alone.
+            # org_id is not asserted: it falls back to user.current_org_id, which changes when the user switches orgs.
             assert existing_saas_metadata is None or existing_saas_metadata.user_id == user_id_uuid
 
             if not existing_saas_metadata:
