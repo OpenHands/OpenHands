@@ -168,6 +168,29 @@ tasks:
         - .venv
       network: true
       network_kind: dependency_hydration
+  install:frontend:
+    context: host-frontend
+    description: Hydrate frontend Node dependencies through the repo's npm install lane
+    notes: |
+      This models the dedicated `frontend/` dependency install path directly so frontend-only
+      verification and build tasks do not depend on the broader `make build` wrapper.
+    category: setup
+    prepare:
+      kind: dependency_hydration
+      medium: package_dependencies
+      source:
+        kind: node_package_manager
+        cwd: frontend
+        manager: npm
+        mode: ci
+    requirements:
+      toolchains:
+        - node
+    effects:
+      writes:
+        - frontend/node_modules
+      network: true
+      network_kind: dependency_hydration
   build:
     context: host-dev
     description: Build and bootstrap the local OpenHands development environment

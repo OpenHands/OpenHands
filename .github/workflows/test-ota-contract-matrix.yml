@@ -182,6 +182,7 @@ jobs:
         timeout-minutes: 45
         shell: bash
         run: |
+          ota run install:frontend --native --stream .
           ota run build:frontend --native --stream .
 
       - name: Execute safe verification tasks
@@ -189,6 +190,8 @@ jobs:
         timeout-minutes: 60
         shell: bash
         run: |
+          ota run install:backend --native --stream .
+          ota run install:frontend --native --stream .
           ota run lint:backend --native --stream .
           ota run lint:frontend --native --stream .
           ota run test:backend --native --stream .
