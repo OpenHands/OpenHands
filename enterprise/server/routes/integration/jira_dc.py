@@ -7,7 +7,7 @@ from typing import cast
 from urllib.parse import urlencode, urlparse
 from uuid import UUID
 
-import requests
+import httpx
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -811,7 +811,8 @@ async def jira_dc_callback(request: Request, code: str, state: str):
         'code': code,
         'redirect_uri': JIRA_DC_REDIRECT_URI,
     }
-    response = requests.post(JIRA_DC_TOKEN_URL, data=token_payload)
+    async with httpx.AsyncClient() as client:
+        response = await client.post(JIRA_DC_TOKEN_URL, data=token_payload)
     if response.status_code != 200:
         raise HTTPException(
             status_code=400, detail=f'Error fetching token: {response.text}'
@@ -825,7 +826,8 @@ async def jira_dc_callback(request: Request, code: str, state: str):
     if target_workspace != urlparse(JIRA_DC_BASE_URL).hostname:
         raise HTTPException(status_code=400, detail='Target workspace mismatch.')
 
-    jira_dc_user_response = requests.get(JIRA_DC_USER_INFO_URL, headers=headers)
+    async with httpx.AsyncClient() as client:
+        jira_dc_user_response = await client.get(JIRA_DC_USER_INFO_URL, headers=headers)
     if jira_dc_user_response.status_code != 200:
         raise HTTPException(
             status_code=400,

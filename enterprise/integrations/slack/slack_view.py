@@ -366,9 +366,9 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
                 httpx_client=httpx_client,
             )
 
-            assert (
-                running_sandbox.session_api_key is not None
-            ), f'No session API key for sandbox: {running_sandbox.id}'
+            assert running_sandbox.session_api_key is not None, (
+                f'No session API key for sandbox: {running_sandbox.id}'
+            )
 
             # 3. Get the agent server URL
             agent_server_url = get_agent_server_url_from_sandbox(running_sandbox)

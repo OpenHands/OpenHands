@@ -519,12 +519,14 @@ jobs:
 
             - name: Summarize skipped good first issue check
               if: steps.precheck.outputs.should_run != 'true'
+              env:
+                  SKIP_REASON: ${{ steps.precheck.outputs.skip_reason }}
               run: |
                   {
                     echo "## Good first issue check"
                     echo
                     echo "- Issue: #${{ github.event.issue.number || inputs.issue_number }}"
-                    echo "- Skipped: ${{ steps.precheck.outputs.skip_reason }}"
+                    echo "- Skipped: $SKIP_REASON"
                   } >> "$GITHUB_STEP_SUMMARY"
 
             - name: Run OpenHands good first issue conversation
