@@ -859,7 +859,11 @@ class OrgService:
             return True
 
         credits = await OrgService.get_org_credits(user_id, org_id)
-        return credits is not None and credits > 0
+        if credits is None or credits <= 0:
+            return False
+
+        org = await OrgStore.enable_byor_export(org_id)
+        return bool(org and org.byor_export_enabled)
 
     @staticmethod
     async def switch_org(user_id: str, org_id: UUID) -> Org:

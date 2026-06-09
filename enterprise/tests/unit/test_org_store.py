@@ -77,6 +77,28 @@ async def test_get_org_by_id_not_found(async_session_maker):
 
 
 @pytest.mark.asyncio
+async def test_enable_byor_export_persists_flag(async_session_maker):
+    async with async_session_maker() as session:
+        org = Org(name=f'test-org-{uuid.uuid4()}')
+        session.add(org)
+        await session.commit()
+        await session.refresh(org)
+        org_id = org.id
+        assert org.byor_export_enabled is False
+
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        updated_org = await OrgStore.enable_byor_export(org_id)
+
+    assert updated_org is not None
+    assert updated_org.byor_export_enabled is True
+
+    async with async_session_maker() as session:
+        persisted_org = await session.get(Org, org_id)
+        assert persisted_org is not None
+        assert persisted_org.byor_export_enabled is True
+
+
+@pytest.mark.asyncio
 async def test_list_orgs(async_session_maker, mock_litellm_api):
     # Test listing all orgs
     async with async_session_maker() as session:
