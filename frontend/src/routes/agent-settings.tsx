@@ -159,7 +159,9 @@ export default function AgentSettingsScreen() {
   const commandTokens = tokenizeCommand(commandText);
   const isAcpInvalid = isAcp && commandTokens.length === 0;
   const selectedPreset = detectPreset(commandText, acpProviders);
-  const selectedProvider = acpProviders.find(({ key }) => key === selectedPreset);
+  const selectedProvider = acpProviders.find(
+    ({ key }) => key === selectedPreset,
+  );
   const isDefaultProviderCommand =
     !!selectedProvider &&
     commandTokens.join(" ") === selectedProvider.default_command.join(" ");
@@ -336,7 +338,9 @@ export default function AgentSettingsScreen() {
               onSelectionChange={(key) => {
                 if (!key) return;
                 const preset = String(key);
-                const provider = acpProviders.find(({ key: k }) => k === preset);
+                const provider = acpProviders.find(
+                  ({ key: k }) => k === preset,
+                );
                 if (provider) {
                   setCommandText(formatCommand(provider.default_command));
                   setAcpModel(provider.default_model || "");

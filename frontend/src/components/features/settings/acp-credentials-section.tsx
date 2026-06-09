@@ -11,11 +11,7 @@ import type { AcpCredentialForm } from "#/hooks/use-acp-credential-form";
  * for both agent settings and credentials. Returns null for providers with no
  * credential fields (Gemini CLI, custom preset).
  */
-export function AcpCredentialsSection({
-  form,
-}: {
-  form: AcpCredentialForm;
-}) {
+export function AcpCredentialsSection({ form }: { form: AcpCredentialForm }) {
   const { t } = useTranslation();
   const { fields, values, setValue, secretExists } = form;
 

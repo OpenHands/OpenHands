@@ -40,8 +40,7 @@ export function useAcpCredentialForm(
   }, [providerKey]);
 
   const secretExists = React.useCallback(
-    (name: string) =>
-      (existingSecrets ?? []).some((s) => s.name === name),
+    (name: string) => (existingSecrets ?? []).some((s) => s.name === name),
     [existingSecrets],
   );
 

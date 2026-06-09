@@ -26,7 +26,9 @@ export function AcpSecretField({
   showOptionalTag,
 }: AcpSecretFieldProps) {
   const { t } = useTranslation();
-  const placeholder = alreadySet ? t(I18nKey.SETTINGS$ACP_SECRET_ALREADY_SET) : "";
+  const placeholder = alreadySet
+    ? t(I18nKey.SETTINGS$ACP_SECRET_ALREADY_SET)
+    : "";
 
   return (
     <div className="flex flex-col gap-1.5">
