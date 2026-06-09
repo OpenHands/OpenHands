@@ -6,6 +6,7 @@ for a given query (e.g. edit draft produced by the agent).
 
 from pydantic import BaseModel
 from rapidfuzz.distance import LCSseq
+from tree_sitter import Node, Tree
 from tree_sitter_language_pack import get_parser
 
 from openhands.app_server.utils.logger import openhands_logger as logger
@@ -25,9 +26,9 @@ class Chunk(BaseModel):
         return ret
 
 
-def _create_chunks_from_raw_string(content: str, size: int):
+def _create_chunks_from_raw_string(content: str, size: int) -> list[Chunk]:
     lines = content.split('\n')
-    ret = []
+    ret: list[Chunk] = []
     for i in range(0, len(lines), size):
         _cur_lines = lines[i : i + size]
         ret.append(
@@ -40,55 +41,55 @@ def _create_chunks_from_raw_string(content: str, size: int):
 
 
 def _chunk_sibling_nodes(
-    nodes: list,
+    nodes: list[Node],
     text_lines: list[str],
     max_chunk_lines: int,
-    range_start_0: int,
-    range_end_0: int,
+    start_line_idx: int,
+    end_line_idx: int,
 ) -> list[Chunk]:
     """Greedy-merge a list of sibling AST nodes into Chunks.
 
     Args:
         nodes: Sibling tree-sitter "Node" objects to merge.
-        text_lines: Source text already split on '\\n'.
+        text_lines: Source text already split on '\n'.
         max_chunk_lines: Upper bound on lines per emitted chunk.
-        range_start_0: 0-indexed first line of the region these nodes occupy.
-        range_end_0: 0-indexed last line of the region.
+        start_line_idx: 0-indexed first line index of the region these nodes occupy.
+        end_line_idx: 0-indexed last line index of the region.
 
     Returns:
         A list of class Chunk objects.
     """
     if not nodes:
         # Defensive: emit the whole range as one chunk.
-        chunk_text = '\n'.join(text_lines[range_start_0 : range_end_0 + 1])
+        chunk_text = '\n'.join(text_lines[start_line_idx : end_line_idx + 1])
         return [
             Chunk(
                 text=chunk_text,
-                line_range=(range_start_0 + 1, range_end_0 + 1),
+                line_range=(start_line_idx + 1, end_line_idx + 1),
             )
         ]
 
-    groups: list[list] = []
-    current_group: list = []
-    current_group_start_0: int = 0
+    groups: list[list[Node]] = []
+    current_group: list[Node] = []
+    current_group_start_line_idx: int = 0
 
     for node in nodes:
         # both are 0-indexed row
-        node_start_0: int = node.start_point[0]
-        node_end_0: int = node.end_point[0]
+        node_start_line_idx: int = node.start_point[0]
+        node_end_line_idx: int = node.end_point[0]
 
         if not current_group:
             current_group = [node]
-            current_group_start_0 = node_start_0
+            current_group_start_line_idx = node_start_line_idx
         else:
             # Lines the merged group would span
-            merged_line_count = node_end_0 - current_group_start_0 + 1
+            merged_line_count = node_end_line_idx - current_group_start_line_idx + 1
             if merged_line_count <= max_chunk_lines:
                 current_group.append(node)
             else:
                 groups.append(current_group)
                 current_group = [node]
-                current_group_start_0 = node_start_0
+                current_group_start_line_idx = node_start_line_idx
 
     if current_group:
         groups.append(current_group)
@@ -96,40 +97,42 @@ def _chunk_sibling_nodes(
     result: list[Chunk] = []
 
     for i, group in enumerate(groups):
-        group_ast_start_0: int = group[0].start_point[0]
-        group_ast_end_0: int = group[-1].end_point[0]
+        group_ast_start_line_idx: int = group[0].start_point[0]
+        group_ast_end_line_idx: int = group[-1].end_point[0]
 
         # Expand boundaries so blank lines are absorbed (full contiguity).
-        actual_start_0 = range_start_0 if i == 0 else group_ast_start_0
+        actual_start_line_idx = start_line_idx if i == 0 else group_ast_start_line_idx
         if i < len(groups) - 1:
-            next_group_ast_start_0: int = groups[i + 1][0].start_point[0]
-            actual_end_0 = next_group_ast_start_0 - 1
+            next_group_ast_start_line_idx: int = groups[i + 1][0].start_point[0]
+            actual_end_line_idx = next_group_ast_start_line_idx - 1
         else:
-            actual_end_0 = range_end_0
+            actual_end_line_idx = end_line_idx
 
         # If a single node is oversized AND has children, recurse.
         if len(group) == 1:
             node = group[0]
-            ast_line_count = group_ast_end_0 - group_ast_start_0 + 1
+            ast_line_count = group_ast_end_line_idx - group_ast_start_line_idx + 1
             if ast_line_count > max_chunk_lines and node.children:
                 sub_chunks = _chunk_sibling_nodes(
                     nodes=node.children,
                     text_lines=text_lines,
                     max_chunk_lines=max_chunk_lines,
-                    range_start_0=actual_start_0,
-                    range_end_0=actual_end_0,
+                    start_line_idx=actual_start_line_idx,
+                    end_line_idx=actual_end_line_idx,
                 )
                 result.extend(sub_chunks)
                 continue
 
         # Emit the group as a single Chunk.
-        chunk_text = '\n'.join(text_lines[actual_start_0 : actual_end_0 + 1])
+        chunk_text = '\n'.join(
+            text_lines[actual_start_line_idx : actual_end_line_idx + 1]
+        )
         result.append(
             Chunk(
                 text=chunk_text,
                 line_range=(
-                    actual_start_0 + 1,
-                    actual_end_0 + 1,
+                    actual_start_line_idx + 1,
+                    actual_end_line_idx + 1,
                 ),  # 1-indexed, inclusive
             )
         )
@@ -138,7 +141,7 @@ def _chunk_sibling_nodes(
 
 
 def _create_chunks_from_tree_sitter(
-    tree,
+    tree: Tree,
     text: str,
     max_chunk_lines: int,
 ) -> list[Chunk]:
@@ -164,8 +167,8 @@ def _create_chunks_from_tree_sitter(
         nodes=root.children,
         text_lines=text_lines,
         max_chunk_lines=max_chunk_lines,
-        range_start_0=0,
-        range_end_0=total_lines - 1,
+        start_line_idx=0,
+        end_line_idx=total_lines - 1,
     )
 
 
@@ -225,7 +228,7 @@ def get_top_k_chunk_matches(
     ]
     sorted_chunks = sorted(
         chunks_with_lcs,
-        key=lambda x: x.normalized_lcs,  # type: ignore
+        key=lambda x: x.normalized_lcs if x.normalized_lcs is not None else 0.0,
         reverse=True,
     )
     return sorted_chunks[:k]
