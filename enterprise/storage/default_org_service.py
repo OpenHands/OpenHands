@@ -74,6 +74,11 @@ def get_default_org_config() -> DefaultOrgConfig:
     )
 
 
+def is_personal_workspace_org(org: Org) -> bool:
+    """A personal workspace org is auto-created and named after its user."""
+    return org.name == f'user_{org.id}_org'
+
+
 class DefaultOrgBootstrapService:
     """Apply additive default organization membership rules on user login."""
 
@@ -185,7 +190,7 @@ class DefaultOrgBootstrapService:
 
     @staticmethod
     def _is_personal_workspace_org(org: Org) -> bool:
-        return org.name == f'user_{org.id}_org'
+        return is_personal_workspace_org(org)
 
     @staticmethod
     async def _find_existing_owner_user(owner_emails: frozenset[str]) -> User | None:

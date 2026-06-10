@@ -34,7 +34,10 @@ from server.auth.constants import (
     AUTOMATION_WEBHOOK_SECRET,
 )
 from server.auth.token_manager import TokenManager
-from storage.default_org_service import get_default_org_config
+from storage.default_org_service import (
+    get_default_org_config,
+    is_personal_workspace_org,
+)
 from storage.org_store import OrgStore
 from storage.redis import get_redis_client_async
 
@@ -242,10 +245,12 @@ class AutomationEventService:
         """Resolve unclaimed events to the bootstrapped default org.
 
         Applies only when a default org is configured (OPENHANDS_DEFAULT_ORG_*)
-        and it is the only team org in the install. The moment a second team
-        org exists the fallback switches off (within the cache TTL) and
-        routing reverts to explicit claims, so events can never cross org
-        boundaries in multi-org installs.
+        and exactly one team org exists in the install — the default org
+        itself (with zero team orgs the default org has not been created yet,
+        so nothing resolves). The moment a second team org exists the
+        fallback switches off (within the cache TTL) and routing reverts to
+        explicit claims, so events can never cross org boundaries in
+        multi-org installs.
         """
         config = get_default_org_config()
         if not (config.enabled and config.org_name):
@@ -257,7 +262,7 @@ class AutomationEventService:
 
         org_id: UUID | None = None
         org = await OrgStore.get_org_by_name(config.org_name)
-        is_personal = org is not None and org.name == f'user_{org.id}_org'
+        is_personal = org is not None and is_personal_workspace_org(org)
         if org and not is_personal and await OrgStore.count_team_orgs() == 1:
             org_id = org.id
 
