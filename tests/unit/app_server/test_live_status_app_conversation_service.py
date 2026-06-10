@@ -3338,7 +3338,9 @@ class TestBuildAcpStartConversationRequestSecrets:
         user = self._make_acp_user()
 
         request = await self._call_build(
-            service, user, tmp_path,
+            service,
+            user,
+            tmp_path,
             secrets={'GITHUB_TOKEN': github_secret, 'MY_API_KEY': api_secret},
         )
 
@@ -3354,7 +3356,9 @@ class TestBuildAcpStartConversationRequestSecrets:
         user = self._make_acp_user()
 
         request = await self._call_build(
-            service, user, tmp_path,
+            service,
+            user,
+            tmp_path,
             secrets={'GITHUB_TOKEN': lookup},
         )
 
@@ -3367,7 +3371,9 @@ class TestBuildAcpStartConversationRequestSecrets:
         other_secret = StaticSecret(value=SecretStr('other-value'))
 
         request = await self._call_build(
-            service, user, tmp_path,
+            service,
+            user,
+            tmp_path,
             secrets={'OTHER': other_secret},
         )
 
@@ -3432,7 +3438,9 @@ class TestBuildAcpStartConversationRequestSecrets:
         user = self._make_acp_user()
 
         request = await self._call_build(
-            service, user, tmp_path,
+            service,
+            user,
+            tmp_path,
             secrets={'GH_TOKEN': gh_secret},
         )
 
@@ -3440,9 +3448,7 @@ class TestBuildAcpStartConversationRequestSecrets:
         assert request.secrets.get('GH_TOKEN') is gh_secret
 
     @pytest.mark.asyncio
-    async def test_panel_secret_is_sole_credentials_channel(
-        self, service, tmp_path
-    ):
+    async def test_panel_secret_is_sole_credentials_channel(self, service, tmp_path):
         """Panel secret is the only credentials channel; llm.api_key is ignored.
 
         When a panel secret and llm.api_key both target the same env var, only
@@ -3452,7 +3458,9 @@ class TestBuildAcpStartConversationRequestSecrets:
         panel_secret = StaticSecret(value=SecretStr('sk-from-secrets-panel'))
 
         request = await self._call_build(
-            service, user, tmp_path,
+            service,
+            user,
+            tmp_path,
             secrets={'ANTHROPIC_API_KEY': panel_secret},
         )
 
@@ -3470,7 +3478,9 @@ class TestBuildAcpStartConversationRequestSecrets:
         user = self._make_acp_user(acp_env={'GH_TOKEN': 'explicit-token'})
 
         request = await self._call_build(
-            service, user, tmp_path,
+            service,
+            user,
+            tmp_path,
             secrets={'GH_TOKEN': panel_secret},
         )
 
