@@ -17,6 +17,11 @@ export interface ACPProviderSecretField {
 const ACP_PROVIDER_SECRETS: Record<string, ACPProviderSecretField[]> = {
   "claude-code": [
     {
+      name: "CLAUDE_CODE_OAUTH_TOKEN",
+      secret: true,
+      hint_key: I18nKey.SETTINGS$ACP_SECRET_OAUTH_TOKEN_HINT,
+    },
+    {
       name: "ANTHROPIC_API_KEY",
       secret: true,
       hint_key: I18nKey.SETTINGS$ACP_SECRET_API_KEY_HINT,
@@ -28,6 +33,13 @@ const ACP_PROVIDER_SECRETS: Record<string, ACPProviderSecretField[]> = {
   ],
   codex: [
     {
+      name: "CODEX_AUTH_JSON",
+      secret: true,
+      multiline: true,
+      hint_key: I18nKey.SETTINGS$ACP_SECRET_FILE_BLOB_HINT,
+      hint_values: { file: "~/.codex/auth.json" },
+    },
+    {
       name: "OPENAI_API_KEY",
       secret: true,
       hint_key: I18nKey.SETTINGS$ACP_SECRET_API_KEY_HINT,
@@ -37,12 +49,34 @@ const ACP_PROVIDER_SECRETS: Record<string, ACPProviderSecretField[]> = {
       hint_key: I18nKey.SETTINGS$ACP_SECRET_BASE_URL_HINT,
     },
   ],
+  "gemini-cli": [
+    {
+      name: "GOOGLE_APPLICATION_CREDENTIALS_JSON",
+      secret: true,
+      multiline: true,
+      hint_key: I18nKey.SETTINGS$ACP_SECRET_FILE_BLOB_HINT,
+      hint_values: {
+        file: "~/.config/gcloud/application_default_credentials.json",
+      },
+    },
+    {
+      name: "GOOGLE_CLOUD_PROJECT",
+      hint_key: I18nKey.SETTINGS$ACP_SECRET_GCP_PROJECT_HINT,
+    },
+    {
+      name: "GOOGLE_CLOUD_LOCATION",
+      hint_key: I18nKey.SETTINGS$ACP_SECRET_GCP_LOCATION_HINT,
+    },
+    {
+      name: "GOOGLE_GENAI_USE_VERTEXAI",
+      hint_key: I18nKey.SETTINGS$ACP_SECRET_VERTEXAI_FLAG_HINT,
+    },
+  ],
 };
 
 /**
  * Returns credential fields for the given ACP provider key.
- * Returns [] for providers with no API-key credential (Gemini CLI),
- * custom presets, and unknown keys.
+ * Returns [] for custom presets and unknown keys.
  */
 export function getAcpProviderSecrets(
   key: string | null | undefined,
@@ -53,10 +87,12 @@ export function getAcpProviderSecrets(
 
 /**
  * Returns [credential, conflicting] pairs where both are set (typed or saved).
- * Used to warn users about conflicting credential combinations.
+ * Claude's OAuth token authenticates against Anthropic directly; an
+ * ANTHROPIC_BASE_URL set alongside it silently routes requests elsewhere
+ * and breaks the token's bearer auth.
  */
 const ACP_CREDENTIAL_CONFLICTS: Record<string, [string, string][]> = {
-  "claude-code": [["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"]],
+  "claude-code": [["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_BASE_URL"]],
 };
 
 export function getAcpCredentialConflicts(
