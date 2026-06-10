@@ -1672,21 +1672,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             update={'acp_isolate_data_dir': True}
         ).create_agent()
 
-        # create_agent() folds provider credentials (e.g. ANTHROPIC_API_KEY)
-        # into acp_agent.agent_context.secrets as StaticSecrets.
-        # _start_request_kwargs auto-lifts agent_context.secrets into
-        # request.secrets ONLY when no explicit secrets= is passed, so we must
-        # merge them here; passing secrets= would otherwise skip the lift and
-        # leave the provider without its credentials.
-        acp_context = getattr(acp_agent, 'agent_context', None)
-        provider_secrets: dict = (
-            dict(acp_context.secrets)
-            if acp_context is not None and acp_context.secrets
-            else {}
-        )
-        # User/git secrets override provider defaults on key collision.
-        secrets = {**provider_secrets, **secrets}
-
         sdk_plugins: list[PluginSource] | None = None
         if plugins:
             sdk_plugins = [
