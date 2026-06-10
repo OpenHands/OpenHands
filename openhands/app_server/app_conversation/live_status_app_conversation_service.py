@@ -960,7 +960,25 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         Returns:
             Dictionary of secrets for the conversation
         """
-        secrets = await self.user_context.get_secrets()
+        raw_secrets = await self.user_context.get_secrets()
+
+        if self.web_url:
+            # Convert custom secrets to LookupSecret so values are never
+            # materialised in this process.  Each token is scoped to a single
+            # secret name, limiting blast radius if a token leaks.
+            secrets: dict = {}
+            for name, source in raw_secrets.items():
+                access_token = self.jwt_service.create_jws_token(
+                    payload={'user_id': user.id, 'secret_name': name},
+                    expires_in=self.access_token_hard_timeout,
+                )
+                secrets[name] = LookupSecret(
+                    url=self.web_url + '/api/v1/webhooks/custom-secret',
+                    headers={'X-Access-Token': access_token},
+                    description=source.description,
+                )
+        else:
+            secrets = raw_secrets
 
         # Get all provider tokens from user authentication
         provider_tokens = cast(
@@ -1601,11 +1619,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     ) -> StartConversationRequest:
         """Build a StartConversationRequest for ACP agent conversations.
 
-        Provider creds (``llm.api_key`` / ``base_url``) and user secrets both
-        flow through ``AgentContext.secrets``. ``acp_settings.create_agent()``
-        folds the provider creds (keyed by env-var name, sdk#3464) into
-        ``agent_context.secrets``; the SDK gap-fills them into the subprocess
-        env at launch.
+        User secrets (Secrets panel + git provider tokens) flow through
+        ``request.secrets`` — the canonical cipher-protected wire channel.
+        In SaaS mode each secret is a ``LookupSecret`` pointing at
+        ``/api/v1/webhooks/custom-secret`` with a per-secret scoped JWT, so
+        values are never materialised in this process.  In OSS mode (no
+        ``web_url``) they remain ``StaticSecret``.  Secrets are passed
+        directly as ``secrets=`` to ``create_request()``; no ``AgentContext``
+        relay is needed.  This avoids the deprecated ``acp_env`` channel
+        (software-agent-sdk #3464; OpenHands/agent-canvas#1039).
 
         Args:
             sandbox: Sandbox information
@@ -1643,17 +1665,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         acp_settings = user.agent_settings  # already verified to be ACPAgentSettings
         assert isinstance(acp_settings, ACPAgentSettings)
 
-        # acp_settings.create_agent() folds provider creds into agent_context.secrets
-        # (sdk#3464). Pass SecretSource objects verbatim — the SDK resolves them
-        # at subprocess launch, not here, to avoid eager LookupSecret calls.
-        agent_context = AgentContext(secrets=secrets) if secrets else None
         # Isolate the CLI data dir onto the durable /workspace tree so the SDK
         # self-resumes the provider session (session/load from base_state.json)
         # across pause/resume — matching the regular-agent lifecycle (#1274).
-        settings_update: dict[str, object] = {'acp_isolate_data_dir': True}
-        if agent_context is not None:
-            settings_update['agent_context'] = agent_context
-        acp_agent = acp_settings.model_copy(update=settings_update).create_agent()
+        acp_agent = acp_settings.model_copy(
+            update={'acp_isolate_data_dir': True}
+        ).create_agent()
 
         sdk_plugins: list[PluginSource] | None = None
         if plugins:
@@ -1681,7 +1698,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # attributable, falling back to ``user.id`` when no email is available.
         laminar_user_id = await self.user_context.get_user_email() or user.id
         return conv_settings.create_request(
-            StartConversationRequest, agent=acp_agent, user_id=laminar_user_id
+            StartConversationRequest,
+            agent=acp_agent,
+            user_id=laminar_user_id,
+            secrets=secrets or None,
         )
 
     async def _process_pending_messages(

@@ -513,6 +513,42 @@ async def get_secret(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
 
+@router.get('/custom-secret')
+async def get_custom_secret(
+    access_token: str = Depends(APIKeyHeader(name='X-Access-Token', auto_error=False)),
+    jwt_service: JwtService = jwt_dependency,
+) -> Response:
+    """Retrieve a named custom secret value given a scoped JWT access token.
+
+    The token is issued per secret in ``_setup_secrets_for_git_providers`` with
+    payload ``{user_id, secret_name}``.  Scoping the token to a single secret
+    name limits the blast radius of a leaked token to exactly that one secret.
+    """
+    try:
+        payload = jwt_service.verify_jws_token(access_token)
+        user_id = payload['user_id']
+        secret_name = payload['secret_name']
+
+        if user_id:
+            user_auth = await get_user_auth_for_user(user_id)
+        else:
+            user_auth = DefaultUserAuth()
+
+        user_context = AuthUserContext(user_auth=user_auth)
+        secrets = await user_context.get_secrets()
+        source = secrets.get(secret_name)
+        if source is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, 'No such secret')
+
+        value = source.get_value()
+        if value is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, 'Secret has no value')
+
+        return Response(content=value, media_type='text/plain')
+    except InvalidTokenError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
+
+
 async def _run_callbacks_in_bg_and_close(
     conversation_id: UUID,
     user_id: str | None,
