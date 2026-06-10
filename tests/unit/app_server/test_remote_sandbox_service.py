@@ -11,9 +11,12 @@ This module tests the RemoteSandboxService implementation, focusing on:
 - Error handling for HTTP failures and edge cases
 """
 
+import asyncio
+from contextlib import ExitStack, asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -1152,3 +1155,377 @@ class TestConstants:
         """Test that environment variable constants are defined."""
         assert WEBHOOK_CALLBACK_VARIABLE == 'OH_WEBHOOKS_0_BASE_URL'
         assert ALLOW_CORS_ORIGINS_VARIABLE == 'OH_ALLOW_CORS_ORIGINS_0'
+
+
+def _async_cm_factory(value):
+    """Return a callable that yields ``value`` as an async context manager.
+
+    Mirrors ``get_*_service(state)``, which is used as
+    ``async with get_x(state) as y``.
+    """
+
+    @asynccontextmanager
+    async def _cm(*args, **kwargs):
+        yield value
+
+    return _cm
+
+
+def _make_page(items, next_page_id=None):
+    """Build a minimal object satisfying the page_iterator protocol."""
+    page = MagicMock()
+    page.items = items
+    page.next_page_id = next_page_id
+    return page
+
+
+class _SessionTracker:
+    """Counts how many mocked DB sessions are open at any instant.
+
+    Used as the ``side_effect`` for a patched ``get_db_session``: every
+    ``async with get_db_session(state)`` increments ``open`` on enter and
+    decrements it on exit. Network-call probes record ``open`` at the moment
+    they fire, so the regression guard ``open == 0 during network I/O`` can be
+    asserted directly.
+    """
+
+    def __init__(self):
+        self.open = 0
+        self.enter_count = 0
+        self.max_open = 0
+
+    def __call__(self, *args, **kwargs):
+        tracker = self
+
+        class _Session:
+            async def __aenter__(self):
+                tracker.open += 1
+                tracker.enter_count += 1
+                tracker.max_open = max(tracker.max_open, tracker.open)
+                return MagicMock()
+
+            async def __aexit__(self, *exc):
+                tracker.open -= 1
+                return False
+
+        return _Session()
+
+
+class TestPollAgentServersSessionScoping:
+    """Test cases for DB session scoping in poll_agent_servers and refresh_conversation.
+
+    These tests verify that DB sessions are released before network I/O to
+    prevent 'idle in transaction' issues. The key invariant:
+
+    - No DB session/transaction is held open across an await'ed agent-server
+      network call.
+
+    A shared :class:`_SessionTracker` counts how many DB sessions are open at
+    any instant, and every mocked agent-server network call records the count
+    it observes. The regression guard is that this count is always ``0`` during
+    network I/O. The mocks deliberately drive the *real* poll/refresh code
+    paths (including the DB-write phases) so the assertions are not vacuous.
+    """
+
+    def _patches(
+        self,
+        tracker,
+        httpx_client,
+        conv_service,
+        event_service,
+        callback_service,
+        validated_conv,
+        event_pages,
+    ):
+        """Common patches shared by the tests in this class.
+
+        Returns a list of ``patch`` context managers. ``ConversationInfo`` and
+        ``EventPage`` validation is stubbed so the refresh code reaches its
+        DB-write phases without needing fully-formed agent-server payloads.
+        """
+        mock_conv_info = MagicMock()
+        mock_conv_info.model_validate.return_value = validated_conv
+        mock_event_page = MagicMock()
+        mock_event_page.model_validate.side_effect = list(event_pages)
+        return [
+            patch('openhands.app_server.config.get_db_session', side_effect=tracker),
+            patch(
+                'openhands.app_server.config.get_app_conversation_info_service',
+                side_effect=_async_cm_factory(conv_service),
+            ),
+            patch(
+                'openhands.app_server.config.get_event_service',
+                side_effect=_async_cm_factory(event_service),
+            ),
+            patch(
+                'openhands.app_server.config.get_event_callback_service',
+                side_effect=_async_cm_factory(callback_service),
+            ),
+            patch(
+                'openhands.app_server.config.get_httpx_client',
+                side_effect=_async_cm_factory(httpx_client),
+            ),
+            patch(
+                'openhands.app_server.sandbox.remote_sandbox_service.ConversationInfo',
+                mock_conv_info,
+            ),
+            patch(
+                'openhands.app_server.sandbox.remote_sandbox_service.EventPage',
+                mock_event_page,
+            ),
+            patch('openhands.app_server.sandbox.remote_sandbox_service.InjectorState'),
+            patch('openhands.app_server.sandbox.remote_sandbox_service.ADMIN'),
+            patch(
+                'openhands.app_server.sandbox.remote_sandbox_service.USER_CONTEXT_ATTR',
+                'user_context',
+            ),
+        ]
+
+    @staticmethod
+    def _validated_conv():
+        validated_conv = MagicMock()
+        validated_conv.updated_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        validated_conv.stats.get_combined_metrics.return_value = MagicMock()
+        return validated_conv
+
+    @staticmethod
+    def _app_conv(sandbox_id='sandbox-1'):
+        app_conv = MagicMock()
+        app_conv.id = MagicMock(hex='c0ffee')
+        app_conv.sandbox_id = sandbox_id
+        app_conv.metrics = None
+        return app_conv
+
+    @pytest.mark.asyncio
+    async def test_poll_agent_servers_releases_db_before_network_io(self):
+        """poll_agent_servers must release the read session before network I/O."""
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            poll_agent_servers,
+        )
+
+        tracker = _SessionTracker()
+        network_open_counts: list[int] = []
+
+        app_conv = self._app_conv()
+        list_payload = {
+            'runtimes': [
+                {
+                    'session_id': 'sandbox-1',
+                    'status': 'running',
+                    'url': 'https://sandbox.example.com',
+                    'session_api_key': 'key1',
+                }
+            ]
+        }
+
+        async def probe_get(url, *args, **kwargs):
+            # Record open DB sessions at the moment of every agent-server call.
+            network_open_counts.append(tracker.open)
+            resp = MagicMock()
+            resp.raise_for_status = MagicMock()
+            if url.endswith('/list'):
+                resp.json.return_value = list_payload
+            else:
+                resp.json.return_value = {}
+            return resp
+
+        httpx_client = AsyncMock()
+        httpx_client.get.side_effect = probe_get
+
+        conv_service = AsyncMock()
+        conv_service.search_app_conversation_info = AsyncMock(
+            return_value=_make_page([app_conv])
+        )
+        conv_service.save_app_conversation_info = AsyncMock()
+        event_service = AsyncMock()
+        event_service.get_event = AsyncMock(return_value=None)
+        callback_service = AsyncMock()
+
+        patches = self._patches(
+            tracker,
+            httpx_client,
+            conv_service,
+            event_service,
+            callback_service,
+            self._validated_conv(),
+            event_pages=[_make_page([], None)],
+        )
+        with ExitStack() as stack:
+            for patch_cm in patches:
+                stack.enter_context(patch_cm)
+            task = asyncio.create_task(
+                poll_agent_servers(
+                    api_url='https://api.example.com',
+                    api_key='test-key',
+                    sleep_interval=3600,  # long, so cancellation ends the loop
+                )
+            )
+            await asyncio.sleep(0.1)
+            task.cancel()
+            await task  # poll swallows CancelledError and returns
+
+        # The runtime-list call and the per-conversation refresh both ran.
+        assert network_open_counts, 'expected agent-server network calls to fire'
+        assert len(network_open_counts) >= 2, (
+            'expected at least the /list call plus a conversation refresh, '
+            f'got {len(network_open_counts)} calls'
+        )
+        # Core regression guard: no DB session may be open during network I/O.
+        assert all(count == 0 for count in network_open_counts), (
+            'DB session held during network I/O (idle-in-transaction risk); '
+            f'observed open-session counts at network calls: {network_open_counts}'
+        )
+        # Non-vacuous: the read session (Phase 1) and a write session were used.
+        assert tracker.enter_count >= 2, (
+            'expected the read session plus at least one write session to open'
+        )
+        assert tracker.max_open >= 1, 'expected at least one DB session to open'
+        assert tracker.open == 0, 'all DB sessions must be released after polling'
+        conv_service.save_app_conversation_info.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_refresh_conversation_acquires_own_db_session(self):
+        """refresh_conversation must open its own short-lived write sessions."""
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            refresh_conversation,
+        )
+
+        tracker = _SessionTracker()
+        network_open_counts: list[int] = []
+
+        async def probe_get(url, *args, **kwargs):
+            network_open_counts.append(tracker.open)
+            resp = MagicMock()
+            resp.raise_for_status = MagicMock()
+            resp.json.return_value = {}
+            return resp
+
+        httpx_client = AsyncMock()
+        httpx_client.get.side_effect = probe_get
+
+        conv_service = AsyncMock()
+        conv_service.save_app_conversation_info = AsyncMock()
+        event_service = AsyncMock()
+        event_service.get_event = AsyncMock(return_value=None)
+        event_service.save_event = AsyncMock()
+        callback_service = AsyncMock()
+        callback_service.execute_callbacks = AsyncMock()
+
+        # One event on the first page, then an empty page to end pagination.
+        event = MagicMock()
+        event.id = str(uuid4())
+        event_pages = [_make_page([event], 'page-2'), _make_page([], None)]
+
+        patches = self._patches(
+            tracker,
+            httpx_client,
+            conv_service,
+            event_service,
+            callback_service,
+            self._validated_conv(),
+            event_pages=event_pages,
+        )
+        runtime = {
+            'url': 'https://sandbox.example.com',
+            'session_api_key': 'test-key',
+        }
+        with ExitStack() as stack:
+            for patch_cm in patches:
+                stack.enter_context(patch_cm)
+            await refresh_conversation(
+                app_conversation_info=self._app_conv(),
+                runtime=runtime,
+                httpx_client=httpx_client,
+            )
+
+        # The write paths actually ran (otherwise the assertions are vacuous).
+        conv_service.save_app_conversation_info.assert_awaited_once()
+        event_service.save_event.assert_awaited_once()
+        callback_service.execute_callbacks.assert_awaited_once()
+        # refresh_conversation opened its own sessions: one for the conversation
+        # save, one for the single new event.
+        assert tracker.enter_count >= 2, (
+            'refresh_conversation should acquire its own DB sessions for writes'
+        )
+        # Those sessions were short-lived and never overlapped network I/O.
+        assert all(count == 0 for count in network_open_counts), (
+            'DB session held during network I/O; observed open counts: '
+            f'{network_open_counts}'
+        )
+        assert tracker.open == 0, 'all DB sessions must be released afterwards'
+
+    @pytest.mark.asyncio
+    async def test_db_session_not_held_across_network_call(self):
+        """The key regression test: no DB session is open during a network call.
+
+        Uses an artificial network delay so a held session would visibly span
+        the await; the open-session count is sampled inside that window.
+        """
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            refresh_conversation,
+        )
+
+        tracker = _SessionTracker()
+        open_counts_during_network: list[int] = []
+
+        async def slow_get(url, *args, **kwargs):
+            # Sample the open-session count while the "network call" is mid-flight.
+            await asyncio.sleep(0.01)
+            open_counts_during_network.append(tracker.open)
+            await asyncio.sleep(0.01)
+            resp = MagicMock()
+            resp.raise_for_status = MagicMock()
+            resp.json.return_value = {}
+            return resp
+
+        httpx_client = AsyncMock()
+        httpx_client.get.side_effect = slow_get
+
+        conv_service = AsyncMock()
+        conv_service.save_app_conversation_info = AsyncMock()
+        event_service = AsyncMock()
+        event_service.get_event = AsyncMock(return_value=None)
+        event_service.save_event = AsyncMock()
+        callback_service = AsyncMock()
+        callback_service.execute_callbacks = AsyncMock()
+
+        event = MagicMock()
+        event.id = str(uuid4())
+        event_pages = [_make_page([event], 'page-2'), _make_page([], None)]
+
+        patches = self._patches(
+            tracker,
+            httpx_client,
+            conv_service,
+            event_service,
+            callback_service,
+            self._validated_conv(),
+            event_pages=event_pages,
+        )
+        runtime = {
+            'url': 'https://sandbox.example.com',
+            'session_api_key': 'test-key',
+        }
+        with ExitStack() as stack:
+            for patch_cm in patches:
+                stack.enter_context(patch_cm)
+            await refresh_conversation(
+                app_conversation_info=self._app_conv(),
+                runtime=runtime,
+                httpx_client=httpx_client,
+            )
+
+        # The conversation fetch and at least one events fetch happened...
+        assert len(open_counts_during_network) >= 2, (
+            'expected the conversation fetch and an events fetch'
+        )
+        # ...and no DB session was open during any of them.
+        assert all(count == 0 for count in open_counts_during_network), (
+            'DB session must NOT be active during network I/O to prevent '
+            f"'idle in transaction' issues; observed: {open_counts_during_network}"
+        )
+        # Non-vacuous: a write session really did open at some point.
+        assert tracker.max_open >= 1, (
+            'expected refresh_conversation to open a write session'
+        )
+        assert tracker.open == 0

@@ -70,6 +70,9 @@ class Org(Base):
     llm_profiles: Mapped[dict[str, Any] | None] = mapped_column(
         EncryptedJSON, nullable=True
     )
+    # Marks the bootstrapped default org on OHE installs; a partial unique
+    # index allows at most one default org per install.
+    is_default: Mapped[bool] = mapped_column(nullable=False, default=False)
 
     # Relationships
     org_members: Mapped[list['OrgMember']] = relationship(

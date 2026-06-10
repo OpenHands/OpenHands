@@ -1514,3 +1514,20 @@ async def test_update_org_defaults_async_org_not_found():
 
     # Assert
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_count_team_orgs_excludes_personal_workspaces(async_session_maker):
+    user_id = uuid.uuid4()
+    async with async_session_maker() as session:
+        # Personal workspace: org id matches the user id
+        personal_org = Org(id=user_id, name=f'user_{user_id}_org')
+        session.add(personal_org)
+        await session.commit()
+        session.add(User(id=user_id, current_org_id=user_id))
+        team_org = Org(name='team-org')
+        session.add(team_org)
+        await session.commit()
+
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        assert await OrgStore.count_team_orgs() == 1
