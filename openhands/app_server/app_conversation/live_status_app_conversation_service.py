@@ -1673,9 +1673,22 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Isolate the CLI data dir onto the durable /workspace tree so the SDK
         # self-resumes the provider session (session/load from base_state.json)
         # across pause/resume — matching the regular-agent lifecycle (#1274).
-        acp_agent = acp_settings.model_copy(
+        acp_settings_for_agent = acp_settings.model_copy(
             update={'acp_isolate_data_dir': True}
-        ).create_agent()
+        )
+        # Canvas never sends llm for ACP agents (ACP_SETTINGS_KEYS has no llm
+        # entry). ACP credentials flow through agent_context.secrets (keyed by
+        # api_key_env_var), not through llm. Stripping api_key and base_url
+        # here prevents llm proxy settings from leaking into the subprocess env
+        # as OPENAI_API_KEY / OPENAI_BASE_URL / ANTHROPIC_API_KEY etc.
+        acp_settings_for_agent = acp_settings_for_agent.model_copy(
+            update={
+                'llm': acp_settings_for_agent.llm.model_copy(
+                    update={'api_key': None, 'base_url': None}
+                )
+            }
+        )
+        acp_agent = acp_settings_for_agent.create_agent()
 
         sdk_plugins: list[PluginSource] | None = None
         if plugins:
