@@ -137,11 +137,9 @@ class DefaultOrgBootstrapService:
             auto_add_users=config.auto_add_users,
         )
 
-        # Move the user into the default org when they first join it: on
-        # signup, on first auto-add of an existing user, or when they just
-        # created the org as its configured owner. Joining is a one-time
-        # event, so this never re-fires on later logins — a user who
-        # deliberately switches back to their personal workspace stays there.
+        # Move the user into the default org on their first join (signup,
+        # first auto-add, or owner-created org); never on later logins, so a
+        # deliberate switch back to the personal workspace sticks.
         should_set_current_org = outcome is MembershipOutcome.ADDED or (
             (is_new_user or org_created_by_user)
             and await OrgMemberStore.get_org_member(org.id, user.id) is not None
