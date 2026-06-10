@@ -63,6 +63,7 @@ export function AcpSecretField({
           onChange={onChange}
           showOptionalTag={showOptionalTag}
           placeholder={placeholder}
+          autoComplete={field.secret ? "new-password" : "off"}
         />
       )}
       <span className="text-xs text-[#717888]">

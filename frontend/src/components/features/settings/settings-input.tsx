@@ -21,6 +21,7 @@ interface SettingsInputProps {
   step?: number;
   pattern?: string;
   labelClassName?: string;
+  autoComplete?: string;
 }
 
 export function SettingsInput({
@@ -43,6 +44,7 @@ export function SettingsInput({
   step,
   pattern,
   labelClassName,
+  autoComplete,
 }: SettingsInputProps) {
   return (
     <label className={cn("flex flex-col gap-2.5 w-fit", className)}>
@@ -66,6 +68,7 @@ export function SettingsInput({
         step={step}
         required={required}
         pattern={pattern}
+        autoComplete={autoComplete}
         className={cn(
           "bg-tertiary border border-[#717888] h-10 w-full max-w-[680px] rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt",
           "disabled:bg-[#2D2F36] disabled:border-[#2D2F36] disabled:cursor-not-allowed",
