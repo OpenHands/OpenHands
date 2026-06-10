@@ -341,6 +341,16 @@ class SwitchProfileRequest(BaseModel):
     )
 
 
+class SwitchAcpModelRequest(BaseModel):
+    """Request to switch a running ACP conversation's model in place."""
+
+    model: str = Field(
+        ...,
+        description='Model identifier to switch to (must be supported by the provider).',
+        min_length=1,
+    )
+
+
 class AppSendMessageResponse(BaseModel):
     """Response from sending a message to a conversation."""
 
