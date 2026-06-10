@@ -756,9 +756,13 @@ async def switch_conversation_profile(
 @router.post(
     '/{conversation_id}/switch_acp_model',
     responses={
-        400: {'description': 'Agent is not ACP, or provider does not support model switching'},
+        400: {
+            'description': 'Agent is not ACP, or provider does not support model switching'
+        },
         404: {'description': 'Conversation or sandbox not found'},
-        409: {'description': 'ACP session not initialised yet; send the first message first'},
+        409: {
+            'description': 'ACP session not initialised yet; send the first message first'
+        },
         502: {'description': 'Agent server returned an error'},
         504: {'description': 'ACP server did not respond to the model switch in time'},
     },
