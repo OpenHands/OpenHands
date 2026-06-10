@@ -25499,6 +25499,23 @@
     "tr": "\"{{name}}\" profiline geçildi",
     "uk": "Перемкнуто на профіль \"{{name}}\""
   },
+  "SETTINGS$AVAILABLE_MODELS": {
+    "en": "Available Models",
+    "ja": "利用可能なモデル",
+    "zh-CN": "可用模型",
+    "zh-TW": "可用模型",
+    "ko-KR": "사용 가능한 모델",
+    "no": "Tilgjengelige modeller",
+    "ar": "النماذج المتاحة",
+    "de": "Verfügbare Modelle",
+    "fr": "Modèles disponibles",
+    "it": "Modelli disponibili",
+    "pt": "Modelos disponíveis",
+    "es": "Modelos disponibles",
+    "ca": "Models disponibles",
+    "tr": "Kullanılabilir Modeller",
+    "uk": "Доступні моделі"
+  },
   "SETTINGS$AVAILABLE_PROFILES": {
     "en": "Available Profiles",
     "ja": "利用可能なプロファイル",
