@@ -228,6 +228,8 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
                     ACPModelOption(id=m.id, label=m.label)
                     for m in (provider.available_models or [])
                 ],
+                api_key_env_var=provider.api_key_env_var,
+                base_url_env_var=provider.base_url_env_var,
             )
             for provider in ACP_PROVIDERS.values()
         ]

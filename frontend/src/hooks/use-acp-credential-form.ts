@@ -6,6 +6,7 @@ import {
   getAcpCredentialConflicts,
   type ACPProviderSecretField,
 } from "#/constants/acp-provider-secrets";
+import type { ACPProviderConfig } from "#/api/option-service/option.types";
 
 export interface AcpCredentialForm {
   fields: ACPProviderSecretField[];
@@ -22,15 +23,18 @@ export interface AcpCredentialForm {
 
 /**
  * Manages credential form state for a built-in ACP provider.
+ * ``providerConfig`` is the SDK-sourced config used to derive api_key and
+ * base_url field names; pass the matching ACPProviderConfig when available.
  * Resets typed values whenever ``providerKey`` changes.
  */
 export function useAcpCredentialForm(
   providerKey: string | null | undefined,
+  providerConfig?: ACPProviderConfig,
 ): AcpCredentialForm {
   const { data: existingSecrets } = useSearchSecrets();
   const fields = React.useMemo(
-    () => getAcpProviderSecrets(providerKey),
-    [providerKey],
+    () => getAcpProviderSecrets(providerKey, providerConfig),
+    [providerKey, providerConfig],
   );
   const [values, setValues] = React.useState<Record<string, string>>({});
   const { saveFilled, isSaving } = useSaveAcpSecrets(fields);

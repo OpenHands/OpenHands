@@ -1,4 +1,5 @@
 import { I18nKey } from "#/i18n/declaration";
+import type { ACPProviderConfig } from "#/api/option-service/option.types";
 
 /**
  * A credential an ACP provider authenticates with. The {@link name} is both
@@ -14,21 +15,16 @@ export interface ACPProviderSecretField {
   hint_values?: Record<string, string>;
 }
 
-const ACP_PROVIDER_SECRETS: Record<string, ACPProviderSecretField[]> = {
+// Provider-specific extras that are NOT in the SDK registry:
+// OAuth/subscription tokens and file-content secrets (auth.json blobs, Vertex SA).
+// The api_key and base_url fields are derived from the SDK-sourced provider config
+// (ACPProviderConfig.api_key_env_var / base_url_env_var) to avoid duplication.
+const ACP_PROVIDER_SECRETS_EXTRA: Record<string, ACPProviderSecretField[]> = {
   "claude-code": [
     {
       name: "CLAUDE_CODE_OAUTH_TOKEN",
       secret: true,
       hint_key: I18nKey.SETTINGS$ACP_SECRET_OAUTH_TOKEN_HINT,
-    },
-    {
-      name: "ANTHROPIC_API_KEY",
-      secret: true,
-      hint_key: I18nKey.SETTINGS$ACP_SECRET_API_KEY_HINT,
-    },
-    {
-      name: "ANTHROPIC_BASE_URL",
-      hint_key: I18nKey.SETTINGS$ACP_SECRET_BASE_URL_HINT,
     },
   ],
   codex: [
@@ -38,15 +34,6 @@ const ACP_PROVIDER_SECRETS: Record<string, ACPProviderSecretField[]> = {
       multiline: true,
       hint_key: I18nKey.SETTINGS$ACP_SECRET_FILE_BLOB_HINT,
       hint_values: { file: "~/.codex/auth.json" },
-    },
-    {
-      name: "OPENAI_API_KEY",
-      secret: true,
-      hint_key: I18nKey.SETTINGS$ACP_SECRET_API_KEY_HINT,
-    },
-    {
-      name: "OPENAI_BASE_URL",
-      hint_key: I18nKey.SETTINGS$ACP_SECRET_BASE_URL_HINT,
     },
   ],
   "gemini-cli": [
@@ -76,13 +63,31 @@ const ACP_PROVIDER_SECRETS: Record<string, ACPProviderSecretField[]> = {
 
 /**
  * Returns credential fields for the given ACP provider key.
+ * ``providerConfig`` is the SDK-sourced config for the provider; when supplied,
+ * api_key and base_url fields are derived from it rather than hardcoded here.
  * Returns [] for custom presets and unknown keys.
  */
 export function getAcpProviderSecrets(
   key: string | null | undefined,
+  providerConfig?: ACPProviderConfig,
 ): ACPProviderSecretField[] {
   if (!key) return [];
-  return ACP_PROVIDER_SECRETS[key] ?? [];
+  const extra = ACP_PROVIDER_SECRETS_EXTRA[key] ?? [];
+  const sdkFields: ACPProviderSecretField[] = [];
+  if (providerConfig?.api_key_env_var) {
+    sdkFields.push({
+      name: providerConfig.api_key_env_var,
+      secret: true,
+      hint_key: I18nKey.SETTINGS$ACP_SECRET_API_KEY_HINT,
+    });
+  }
+  if (providerConfig?.base_url_env_var) {
+    sdkFields.push({
+      name: providerConfig.base_url_env_var,
+      hint_key: I18nKey.SETTINGS$ACP_SECRET_BASE_URL_HINT,
+    });
+  }
+  return [...extra, ...sdkFields];
 }
 
 /**

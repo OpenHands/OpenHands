@@ -44,6 +44,8 @@ export interface ACPProviderConfig {
   default_command: string[];
   default_model?: string | null;
   available_models?: ACPModelOption[];
+  api_key_env_var?: string | null;
+  base_url_env_var?: string | null;
 }
 
 export interface WebClientConfig {

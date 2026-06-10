@@ -43,6 +43,8 @@ class ACPProviderConfig(BaseModel):
     default_command: list[str]
     default_model: str | None = None
     available_models: list[ACPModelOption] = Field(default_factory=list)
+    api_key_env_var: str | None = None
+    base_url_env_var: str | None = None
 
 
 class WebClientConfig(DiscriminatedUnionMixin):
