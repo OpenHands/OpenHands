@@ -136,8 +136,8 @@ export function SwitchAcpModelButton() {
           // 409 means the ACP session is not yet initialised (no first run()).
           // Fall back to a settings update so the model is applied when the
           // conversation actually starts.
-          const status =
-            (err as { response?: { status?: number } })?.response?.status;
+          const status = (err as { response?: { status?: number } })?.response
+            ?.status;
           if (status === 409) {
             saveSettings(
               { agent_settings_diff: { acp_model: modelId } },

@@ -179,7 +179,10 @@ export default function AgentSettingsScreen() {
   // Called unconditionally for hook-order stability; null arg → empty form.
   const credentialPreset =
     isAcp && selectedPreset !== CUSTOM_PRESET ? selectedPreset : null;
-  const credentialForm = useAcpCredentialForm(credentialPreset, selectedProvider);
+  const credentialForm = useAcpCredentialForm(
+    credentialPreset,
+    selectedProvider,
+  );
 
   const subAgentsDirty = isSubAgentsEnabled !== initialSubAgentsEnabled;
   const settingsDirty = isDirty || (!isAcp && subAgentsDirty);
