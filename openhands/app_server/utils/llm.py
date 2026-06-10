@@ -65,7 +65,7 @@ _BARE_OPENAI_MODELS: set[str] = set(_SDK_OPENAI)
 _BARE_ANTHROPIC_MODELS: set[str] = set(_SDK_ANTHROPIC)
 _BARE_MISTRAL_MODELS: set[str] = set(_SDK_MISTRAL)
 
-DEFAULT_OPENHANDS_MODEL = 'openhands/claude-opus-4-5-20251101'
+DEFAULT_OPENHANDS_MODEL = 'openhands/minimax-m2.7'
 
 
 # ---------------------------------------------------------------------------

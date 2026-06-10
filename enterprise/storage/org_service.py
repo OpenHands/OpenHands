@@ -19,6 +19,7 @@ from server.routes.org_models import (
     OrgNameExistsError,
     OrgNotFoundError,
     OrgUpdate,
+    OrphanedUserError,
 )
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org import Org
@@ -799,7 +800,9 @@ class OrgService:
 
         # Step 2: Perform database cascade deletion with LiteLLM cleanup in transaction
         try:
-            deleted_org = await OrgStore.delete_org_cascade(org_id)
+            deleted_org = await OrgStore.delete_org_cascade(
+                org_id, requester_user_id=user_id
+            )
             if not deleted_org:
                 # This shouldn't happen since we verified existence above
                 raise OrgDatabaseError('Organization not found during deletion')
@@ -815,6 +818,11 @@ class OrgService:
 
             return deleted_org
 
+        except OrphanedUserError:
+            # Propagate as-is so the route can return a 400 with the affected
+            # user list. Wrapping into OrgDatabaseError below would mask the
+            # specific failure mode and force a 500.
+            raise
         except Exception as e:
             logger.error(
                 'Organization deletion failed',

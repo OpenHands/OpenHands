@@ -1155,3 +1155,618 @@ async def test_update_all_members_settings_async_with_empty_settings(
         assert member.agent_settings_diff['llm']['model'] == 'original-model'
         # Original key should still be there (encrypted)
         assert member._llm_api_key is not None
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_replaces_mcp_config(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization members with existing mcp_config in agent_settings_diff
+    WHEN: update_all_members_settings_async is called with fewer MCP servers
+    THEN: mcp_config should be replaced (not merged), so deleted servers stay deleted
+
+    This tests the fix for APP-1862: MCP server settings cannot be updated
+    or deleted because deep_merge was resurrecting deleted servers.
+    """
+    from server.routes.org_models import OrgMemberSettingsUpdate
+
+    # Arrange - Create org with member that has 3 MCP servers
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'mcp_config': {
+                    'mcpServers': {
+                        'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+                        'server2': {'url': 'https://server2.com', 'transport': 'sse'},
+                        'server3': {'url': 'https://server3.com', 'transport': 'sse'},
+                    },
+                },
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Update with only 2 servers (delete server3)
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'mcp_config': {
+                'mcpServers': {
+                    'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+                    'server2': {'url': 'https://server2.com', 'transport': 'sse'},
+                    # server3 is deleted
+                },
+            },
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - Only 2 servers should remain, server3 should NOT be resurrected
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        mcp_servers = member.agent_settings_diff.get('mcp_config', {}).get(
+            'mcpServers', {}
+        )
+        assert len(mcp_servers) == 2, f'Expected 2 servers, got {len(mcp_servers)}'
+        assert 'server1' in mcp_servers
+        assert 'server2' in mcp_servers
+        assert 'server3' not in mcp_servers, (
+            'Deleted server was resurrected by deep_merge'
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_mcp_config_not_in_payload(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization members with existing mcp_config
+    WHEN: update_all_members_settings_async is called WITHOUT mcp_config in payload
+    THEN: mcp_config should remain unchanged (not be cleared)
+
+    This ensures we only replace mcp_config when it's explicitly in the update.
+    """
+    from server.routes.org_models import OrgMemberSettingsUpdate
+
+    # Arrange - Create org with member that has MCP servers
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'mcp_config': {
+                    'mcpServers': {
+                        'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+                    },
+                },
+                'llm': {'model': 'old-model'},
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Update only llm settings, NOT mcp_config
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'llm': {'model': 'new-model'},
+            # mcp_config is NOT in the payload
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - mcp_config should still exist with server1
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        # LLM should be updated
+        assert member.agent_settings_diff['llm']['model'] == 'new-model'
+        # mcp_config should be unchanged
+        mcp_config = member.agent_settings_diff.get('mcp_config', {})
+        assert 'server1' in mcp_config.get('mcpServers', {})
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_empty_mcp_config(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization members with existing mcp_config
+    WHEN: update_all_members_settings_async is called with empty mcp_config
+    THEN: mcp_config should be cleared (all servers deleted)
+
+    This tests the case where user deletes ALL servers.
+    """
+    from server.routes.org_models import OrgMemberSettingsUpdate
+
+    # Arrange - Create org with member that has MCP servers
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'mcp_config': {
+                    'mcpServers': {
+                        'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+                        'server2': {'url': 'https://server2.com', 'transport': 'sse'},
+                    },
+                },
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Update with empty mcp_config (delete all servers)
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'mcp_config': {
+                'mcpServers': {},  # Empty - all servers deleted
+            },
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - mcp_config should be empty
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        mcp_config = member.agent_settings_diff.get('mcp_config', {})
+        mcp_servers = mcp_config.get('mcpServers', {})
+        assert len(mcp_servers) == 0, f'Expected 0 servers, got {len(mcp_servers)}'
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_add_first_mcp_server(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization members with NO existing mcp_config
+    WHEN: update_all_members_settings_async is called with mcp_config
+    THEN: mcp_config should be added correctly
+
+    This tests adding the first server when none exist.
+    """
+    from server.routes.org_models import OrgMemberSettingsUpdate
+
+    # Arrange - Create org with member that has NO mcp_config
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'llm': {'model': 'some-model'},
+                # No mcp_config
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Add first MCP server
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'mcp_config': {
+                'mcpServers': {
+                    'first-server': {'url': 'https://first.com', 'transport': 'sse'},
+                },
+            },
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - Server should be added
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        mcp_config = member.agent_settings_diff.get('mcp_config', {})
+        mcp_servers = mcp_config.get('mcpServers', {})
+        assert len(mcp_servers) == 1
+        assert 'first-server' in mcp_servers
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_update_server_url(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization members with existing mcp_config
+    WHEN: update_all_members_settings_async is called with updated server URL
+    THEN: The server URL should be updated (not duplicated)
+
+    This tests updating an existing server's properties.
+    """
+    from server.routes.org_models import OrgMemberSettingsUpdate
+
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'mcp_config': {
+                    'mcpServers': {
+                        'myserver': {
+                            'url': 'https://old-url.com',
+                            'transport': 'sse',
+                        },
+                    },
+                },
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Update server URL
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'mcp_config': {
+                'mcpServers': {
+                    'myserver': {
+                        'url': 'https://new-url.com',
+                        'transport': 'sse',
+                    },
+                },
+            },
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - URL should be updated
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        mcp_config = member.agent_settings_diff.get('mcp_config', {})
+        mcp_servers = mcp_config.get('mcpServers', {})
+        assert len(mcp_servers) == 1
+        assert mcp_servers['myserver']['url'] == 'https://new-url.com'
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_acp_env_not_in_payload(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization members with existing acp_env
+    WHEN: update_all_members_settings_async is called WITHOUT acp_env in payload
+    THEN: acp_env should remain unchanged (not be cleared)
+
+    This ensures we only replace acp_env when it's explicitly in the update.
+    """
+    from server.routes.org_models import OrgMemberSettingsUpdate
+
+    # Arrange - Create org with member that has env vars
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'acp_env': {
+                    'SECRET_KEY': 'secret-value',
+                    'API_TOKEN': 'token-value',
+                },
+                'llm': {'model': 'old-model'},
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Update only llm settings, NOT acp_env
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'llm': {'model': 'new-model'},
+            # acp_env is NOT in the payload
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - acp_env should still exist with both vars
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        # LLM should be updated
+        assert member.agent_settings_diff['llm']['model'] == 'new-model'
+        # acp_env should be unchanged
+        acp_env = member.agent_settings_diff.get('acp_env', {})
+        assert 'SECRET_KEY' in acp_env
+        assert 'API_TOKEN' in acp_env
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_add_first_acp_env_var(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization members with NO existing acp_env
+    WHEN: update_all_members_settings_async is called with acp_env
+    THEN: acp_env should be added correctly
+
+    This tests adding the first env var when none exist.
+    """
+    from server.routes.org_models import OrgMemberSettingsUpdate
+
+    # Arrange - Create org with member that has NO acp_env
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'llm': {'model': 'some-model'},
+                # No acp_env
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Add first env var
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'acp_env': {
+                'FIRST_VAR': 'first-value',
+            },
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - Env var should be added
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        acp_env = member.agent_settings_diff.get('acp_env', {})
+        assert len(acp_env) == 1
+        assert 'FIRST_VAR' in acp_env
+        assert acp_env['FIRST_VAR'] == 'first-value'
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_update_acp_env_value(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization members with existing acp_env
+    WHEN: update_all_members_settings_async is called with updated var value
+    THEN: The var value should be updated
+
+    This tests updating an existing env var's value.
+    """
+    from server.routes.org_models import OrgMemberSettingsUpdate
+
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'acp_env': {
+                    'MY_SECRET': 'old-secret-value',
+                },
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Update env var value
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'acp_env': {
+                'MY_SECRET': 'new-secret-value',
+            },
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - Value should be updated
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        acp_env = member.agent_settings_diff.get('acp_env', {})
+        assert len(acp_env) == 1
+        assert acp_env['MY_SECRET'] == 'new-secret-value'

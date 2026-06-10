@@ -2,7 +2,7 @@ import base64
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -26,6 +26,25 @@ from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 file_store = get_global_config().file_store
+
+
+def _github_ts_to_naive_utc(value: str | None) -> datetime | None:
+    """Normalize a GitHub ISO-8601 timestamp to a naive UTC datetime.
+
+    GitHub sends timestamps like ``"2025-06-19T21:19:36Z"``. Parsing the
+    trailing ``Z`` produces a timezone-aware datetime, which asyncpg refuses to
+    bind to the ``TIMESTAMP WITHOUT TIME ZONE`` columns on ``openhands_prs``
+    (``DataError: can't subtract offset-naive and offset-aware datetimes``).
+    Converting to UTC and dropping ``tzinfo`` keeps the stored value consistent
+    with how naive UTC timestamps are already persisted on that table.
+    """
+    if not value:
+        return None
+    return (
+        datetime.fromisoformat(value.replace('Z', '+00:00'))
+        .astimezone(timezone.utc)
+        .replace(tzinfo=None)
+    )
 
 
 COLLECT_GITHUB_INTERACTIONS = (
@@ -636,12 +655,13 @@ class GitHubDataCollector:
         num_deletions = pr_data.get('deletions', 0)
         merged = pr_data.get('merged', False)
 
-        # Extract closed_at timestamp
-        # Example: "closed_at":"2025-06-19T21:19:36Z"
-        closed_at_str = pr_data.get('closed_at')
-        created_at = pr_data.get('created_at')
-
-        closed_at = datetime.fromisoformat(closed_at_str.replace('Z', '+00:00'))
+        # Extract timestamps. Example: "closed_at":"2025-06-19T21:19:36Z".
+        # Both are normalized to naive UTC so they can be bound to the naive
+        # TIMESTAMP columns on openhands_prs (see _github_ts_to_naive_utc).
+        # Previously created_at was passed as a raw string; it is now
+        # consistently a naive-UTC datetime like closed_at.
+        closed_at = _github_ts_to_naive_utc(pr_data.get('closed_at'))
+        created_at = _github_ts_to_naive_utc(pr_data.get('created_at'))
 
         # Determine status based on whether it was merged
         status = PRStatus.MERGED if merged else PRStatus.CLOSED

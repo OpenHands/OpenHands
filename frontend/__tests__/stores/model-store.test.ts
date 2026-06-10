@@ -15,9 +15,15 @@ const profile = (name: string): LlmProfileSummary => ({
 const entriesFor = (conv: string) =>
   useModelStore.getState().entriesByConversation[conv] ?? [];
 
+const activeProfileFor = (conv: string) =>
+  useModelStore.getState().activeProfileByConversation[conv] ?? null;
+
 describe("model store", () => {
   beforeEach(() => {
-    useModelStore.setState({ entriesByConversation: {} });
+    useModelStore.setState({
+      entriesByConversation: {},
+      activeProfileByConversation: {},
+    });
   });
 
   it("show appends an entry scoped to the given conversation", () => {
@@ -72,5 +78,26 @@ describe("model store", () => {
     expect(entriesFor(CONV_A)[0].profiles).toEqual([profile("default")]);
     expect(entriesFor(CONV_A)[1].switchedTo).toBe("gpt-5");
     expect(entriesFor(CONV_A)[1].profiles).toEqual([]);
+  });
+
+  it("recordSwitch tracks the active profile by name, per conversation, last-write-wins", () => {
+    useModelStore.getState().recordSwitch(CONV_A, null, "gpt-5");
+    expect(activeProfileFor(CONV_A)).toBe("gpt-5");
+    expect(activeProfileFor(CONV_B)).toBeNull();
+
+    // A later switch in the same conversation supersedes the previous one.
+    useModelStore.getState().recordSwitch(CONV_A, null, "default");
+    expect(activeProfileFor(CONV_A)).toBe("default");
+
+    // Other conversations are unaffected.
+    useModelStore.getState().recordSwitch(CONV_B, null, "claude");
+    expect(activeProfileFor(CONV_A)).toBe("default");
+    expect(activeProfileFor(CONV_B)).toBe("claude");
+  });
+
+  it("show does not change the tracked active profile", () => {
+    useModelStore.getState().recordSwitch(CONV_A, null, "gpt-5");
+    useModelStore.getState().show(CONV_A, null, [profile("default")]);
+    expect(activeProfileFor(CONV_A)).toBe("gpt-5");
   });
 });

@@ -5,6 +5,7 @@ This test focuses on testing the actual ResolverUserContext implementation.
 
 from types import MappingProxyType
 from unittest.mock import AsyncMock
+from uuid import UUID
 
 import pytest
 from pydantic import SecretStr
@@ -45,13 +46,29 @@ def test_resolver_org_id_defaults_to_none(mock_saas_user_auth):
 
 def test_resolver_org_id_can_be_set_via_constructor(mock_saas_user_auth):
     """Test that resolver_org_id can be set via constructor for org routing."""
-    from uuid import UUID
-
     org_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
     ctx = ResolverUserContext(
         saas_user_auth=mock_saas_user_auth, resolver_org_id=org_id
     )
     assert ctx.resolver_org_id == org_id
+
+
+def test_resolver_org_id_scopes_saas_auth_when_supported():
+    """Resolver orgs should scope runtime settings, secrets, and API keys."""
+
+    class FakeSaasUserAuth:
+        def __init__(self):
+            self.effective_org_id_override = None
+
+        def set_effective_org_id_override(self, org_id):
+            self.effective_org_id_override = org_id
+
+    org_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+    auth = FakeSaasUserAuth()
+
+    ResolverUserContext(saas_user_auth=auth, resolver_org_id=org_id)
+
+    assert auth.effective_org_id_override == org_id
 
 
 def create_custom_secret(value: str, description: str = 'Test secret') -> CustomSecret:
@@ -215,9 +232,9 @@ async def test_get_latest_token_returns_string_for_multiple_providers(
         (ProviderType.BITBUCKET, 'bitbucket_token'),
     ]:
         result = await resolver_context.get_latest_token(provider_type)
-        assert isinstance(
-            result, str
-        ), f'Expected str for {provider_type.name}, got {type(result).__name__}'
+        assert isinstance(result, str), (
+            f'Expected str for {provider_type.name}, got {type(result).__name__}'
+        )
         assert result == expected_token
 
 

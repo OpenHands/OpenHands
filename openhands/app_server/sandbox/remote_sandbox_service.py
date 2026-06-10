@@ -4,7 +4,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, AsyncGenerator, Union
+from typing import Any, AsyncGenerator
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -40,6 +40,7 @@ from openhands.app_server.sandbox.sandbox_models import (
     ExposedUrl,
     SandboxInfo,
     SandboxPage,
+    SandboxRecord,
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import (
@@ -336,7 +337,7 @@ class RemoteSandboxService(SandboxService):
 
         return SandboxPage(items=items, next_page_id=next_page_id)
 
-    async def get_sandbox(self, sandbox_id: str) -> Union[SandboxInfo, None]:
+    async def get_sandbox(self, sandbox_id: str) -> SandboxInfo | None:
         """Get a single sandbox by checking its corresponding runtime."""
         stored_sandbox = await self._get_stored_sandbox(sandbox_id)
         if stored_sandbox is None:
@@ -352,74 +353,12 @@ class RemoteSandboxService(SandboxService):
 
         return self._to_sandbox_info(stored_sandbox, runtime)
 
-    async def _get_sandbox_by_session_api_key_legacy(
-        self, session_api_key: str
-    ) -> Union[SandboxInfo, None]:
-        """Legacy method to get sandbox by session API key via runtime API.
-
-        This is the fallback for sandboxes created before the session_api_key_hash
-        column was added. It calls the remote runtime API which is less efficient.
-        """
-        try:
-            response = await self._send_runtime_api_request(
-                'GET',
-                '/list',
-            )
-            response.raise_for_status()
-            content = response.json()
-            for runtime in content['runtimes']:
-                if session_api_key == runtime['session_api_key']:
-                    query = await self._secure_select()
-                    query = query.filter(
-                        StoredRemoteSandbox.id == runtime.get('session_id')
-                    )
-                    result = await self.db_session.execute(query)
-                    sandbox = result.scalar_one_or_none()
-                    if sandbox is None:
-                        raise ValueError('sandbox_not_found')
-                    # Backfill the hash for future lookups (Auto committed at end of request)
-                    sandbox.session_api_key_hash = _hash_session_api_key(
-                        session_api_key
-                    )
-                    return self._to_sandbox_info(sandbox, runtime)
-        except Exception:
-            _logger.exception(
-                'Error getting sandbox from session_api_key', stack_info=True
-            )
-
-        # Get all stored sandboxes for the current user
-        stmt = await self._secure_select()
-        result = await self.db_session.execute(stmt)
-        stored_sandboxes = result.scalars().all()
-
-        # Check each sandbox's runtime data for matching session_api_key
-        for stored_sandbox in stored_sandboxes:
-            try:
-                runtime = await self._get_runtime(stored_sandbox.id)
-                if runtime and runtime.get('session_api_key') == session_api_key:
-                    # Backfill the hash for future lookups (Auto committed at end of request)
-                    stored_sandbox.session_api_key_hash = _hash_session_api_key(
-                        session_api_key
-                    )
-                    return self._to_sandbox_info(stored_sandbox, runtime)
-            except Exception:
-                # Continue checking other sandboxes if one fails
-                continue
-
-        return None
-
     async def get_sandbox_by_session_api_key(
         self, session_api_key: str
-    ) -> Union[SandboxInfo, None]:
-        """Get a single sandbox by session API key.
-
-        Uses the stored session_api_key_hash for efficient database lookup instead
-        of calling the remote runtime API. Falls back to legacy API-based lookup
-        for sandboxes created before the hash column was added.
-        """
+    ) -> SandboxInfo | None:
+        """Get a single sandbox by session API key using the stored hash."""
         session_api_key_hash = _hash_session_api_key(session_api_key)
 
-        # First try to find sandbox by hash in the database
         stmt = await self._secure_select()
         stmt = stmt.where(
             StoredRemoteSandbox.session_api_key_hash == session_api_key_hash
@@ -427,19 +366,39 @@ class RemoteSandboxService(SandboxService):
         result = await self.db_session.execute(stmt)
         stored_sandbox = result.scalar_one_or_none()
 
-        if stored_sandbox:
-            try:
-                runtime = await self._get_runtime(stored_sandbox.id)
-                return self._to_sandbox_info(stored_sandbox, runtime)
-            except Exception:
-                _logger.exception(
-                    f'Error getting runtime for sandbox {stored_sandbox.id}',
-                    stack_info=True,
-                )
-                return self._to_sandbox_info(stored_sandbox, None)
+        if stored_sandbox is None:
+            return None
 
-        # Fallback for sandboxes created before the hash column was added
-        return await self._get_sandbox_by_session_api_key_legacy(session_api_key)
+        try:
+            runtime = await self._get_runtime(stored_sandbox.id)
+            return self._to_sandbox_info(stored_sandbox, runtime)
+        except Exception:
+            _logger.exception(
+                f'Error getting runtime for sandbox {stored_sandbox.id}',
+                stack_info=True,
+            )
+            return self._to_sandbox_info(stored_sandbox, None)
+
+    async def get_sandbox_record_by_session_api_key(
+        self, session_api_key: str
+    ) -> SandboxRecord | None:
+        """Get persisted sandbox identity by session API key — DB lookup only, no runtime call."""
+        session_api_key_hash = _hash_session_api_key(session_api_key)
+
+        stmt = await self._secure_select()
+        stmt = stmt.where(
+            StoredRemoteSandbox.session_api_key_hash == session_api_key_hash
+        )
+        result = await self.db_session.execute(stmt)
+        stored_sandbox = result.scalar_one_or_none()
+
+        if stored_sandbox is None:
+            return None
+
+        return SandboxRecord(
+            id=stored_sandbox.id,
+            created_by_user_id=stored_sandbox.created_by_user_id,
+        )
 
     async def start_sandbox(
         self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None

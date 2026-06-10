@@ -1,6 +1,11 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, redirect, useLoaderData } from "react-router";
+import {
+  useNavigate,
+  redirect,
+  useLoaderData,
+  useSearchParams,
+} from "react-router";
 import StepHeader from "#/components/features/onboarding/step-header";
 import { StepContent } from "#/components/features/onboarding/step-content";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -21,22 +26,68 @@ import {
 import { queryClient } from "#/query-client-config";
 import OptionService from "#/api/option-service/option-service.api";
 
-export const clientLoader = async () => {
+/**
+ * Sanitize a raw ``returnTo`` value, returning a safe same-origin path.
+ *
+ * Absolute URLs and protocol-relative URLs fall back to ``"/"`` to
+ * prevent open-redirect attacks. Relative paths that don't start with
+ * ``"/"`` are prepended with one.
+ */
+export function sanitizeReturnTo(raw: string | null): string {
+  if (!raw) return "/";
+  // Same-origin paths only — reject protocol-bearing or
+  // protocol-relative targets.
+  if (
+    raw.startsWith("http://") ||
+    raw.startsWith("https://") ||
+    raw.startsWith("//")
+  ) {
+    return "/";
+  }
+  return raw.startsWith("/") ? raw : `/${raw}`;
+}
+
+/**
+ * Compute a safe redirect target from the URL's ``returnTo`` query
+ * parameter, defaulting to ``"/"``.
+ *
+ * This loader intentionally redirects same-origin only — absolute URLs
+ * are dropped to ``"/"`` rather than being followed, since the loader
+ * This loader intentionally redirects to same-origin paths only. Absolute
+ * URLs are silently dropped to "/" because a loader's `redirect()` performs
+ * a client-side navigation — following an external URL would break the SPA.
+ * URL here would break the SPA.
+ */
+function safeReturnToFromRequest(request: Request): string {
+  const url = new URL(request.url);
+  return sanitizeReturnTo(url.searchParams.get("returnTo"));
+}
+
+export const clientLoader = async ({ request }: { request: Request }) => {
   let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
   if (!config) {
     config = await OptionService.getConfig();
     queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
   }
 
+  // The deployment's frontend may have ``enable_onboarding=false`` or
+  // a non-SaaS ``app_mode`` even when the backend OAuth callback has
+  // just sent the user here (the backend gates on ``DEPLOYMENT_MODE``,
+  // not on the frontend feature flag, so the two can disagree). When
+  // we redirect away in those cases, honor the user's deep-link
+  // ``?returnTo=`` so they don't lose their original destination at
+  // the onboarding interstitial.
+  const fallback = safeReturnToFromRequest(request);
+
   // Check server feature flag to block access
   if (!config?.feature_flags?.enable_onboarding) {
-    return redirect("/");
+    return redirect(fallback);
   }
 
   // Only allow access to onboarding for SaaS mode (cloud or self-hosted)
   // OSS users should never reach /onboarding
   if (config?.app_mode !== "saas") {
-    return redirect("/");
+    return redirect(fallback);
   }
 
   return { config };
@@ -85,6 +136,12 @@ function OnboardingForm() {
   const navigate = useNavigate();
   const loaderData = useLoaderData<typeof clientLoader>();
   const config = loaderData?.config;
+  const [searchParams] = useSearchParams();
+  // ``OnboardingGuard`` forwards the user's originally requested URL
+  // here so we can restore it after they finish the form. Sanitize to
+  // prevent open-redirect attacks — absolute/protocol-relative URLs
+  // fall back to ``"/"``.
+  const returnTo = sanitizeReturnTo(searchParams.get("returnTo"));
   const { data: onboardingStatus, isLoading: isOnboardingStatusLoading } =
     useOnboardingStatus();
   const { mutate: submitOnboarding } = useSubmitOnboarding();
@@ -92,12 +149,17 @@ function OnboardingForm() {
   React.useEffect(() => {
     if (isOnboardingStatusLoading) return;
     if (onboardingStatus?.should_complete_onboarding === false) {
-      navigate("/", { replace: true });
+      // Honor returnTo if the user already completed onboarding so a
+      // stale ``/onboarding`` link still respects their deep-link
+      // destination. ``returnTo`` is already sanitized above so it is
+      // always a safe same-origin path.
+      navigate(returnTo, { replace: true });
     }
   }, [
     onboardingStatus?.should_complete_onboarding,
     isOnboardingStatusLoading,
     navigate,
+    returnTo,
   ]);
 
   const onboardingAppMode: OnboardingAppMode = getOnboardingAppMode(
@@ -181,7 +243,7 @@ function OnboardingForm() {
 
   const handleNext = () => {
     if (isLastStep) {
-      submitOnboarding({ selections: answers });
+      submitOnboarding({ selections: answers, returnTo });
     } else {
       setCurrentStepIndex((prev) => prev + 1);
     }

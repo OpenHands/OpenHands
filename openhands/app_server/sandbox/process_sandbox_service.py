@@ -29,6 +29,7 @@ from openhands.app_server.sandbox.sandbox_models import (
     ExposedUrl,
     SandboxInfo,
     SandboxPage,
+    SandboxRecord,
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import (
@@ -285,6 +286,18 @@ class ProcessSandboxService(SandboxService):
             if process_info.session_api_key == session_api_key:
                 return await self._process_to_sandbox_info(sandbox_id, process_info)
 
+        return None
+
+    async def get_sandbox_record_by_session_api_key(
+        self, session_api_key: str
+    ) -> SandboxRecord | None:
+        """Get persisted sandbox identity by session API key."""
+        for sandbox_id, process_info in _processes.items():
+            if process_info.session_api_key == session_api_key:
+                return SandboxRecord(
+                    id=sandbox_id,
+                    created_by_user_id=process_info.user_id,
+                )
         return None
 
     async def start_sandbox(
