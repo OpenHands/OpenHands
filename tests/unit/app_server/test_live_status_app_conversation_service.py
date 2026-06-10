@@ -3254,11 +3254,11 @@ class TestAgentKindConversationUrl:
 
 
 class TestBuildAcpStartConversationRequestSecrets:
-    """Tests for user-secret injection in ``_build_acp_start_conversation_request``.
+    """Tests for secret injection in ``_build_acp_start_conversation_request``.
 
-    Covers issue #14167: secrets from the Secrets panel and git provider
-    tokens must be available to ACP subprocesses as environment variables,
-    mirroring how they flow into the regular OpenHands sandbox.
+    Secrets from the Secrets panel and git provider tokens flow through
+    ``request.secrets`` as the sole canonical channel.  ``llm.api_key`` is
+    never read for ACP (the CLI subprocess handles its own LLM calls).
     """
 
     @pytest.fixture
@@ -3329,8 +3329,8 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
 
     @pytest.mark.asyncio
-    async def test_secrets_passed_via_agent_context(self, service, tmp_path):
-        """Secrets are forwarded via agent_context.secrets as SecretSource objects."""
+    async def test_secrets_passed_via_request_secrets(self, service, tmp_path):
+        """Secrets are forwarded via request.secrets as SecretSource objects."""
         github_secret = StaticSecret(value=SecretStr('ghp_test123'))
         api_secret = StaticSecret(value=SecretStr('secret-value'))
         user = self._make_acp_user()
@@ -3340,10 +3340,8 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        assert request.agent.agent_context is not None
-        ctx = request.agent.agent_context.secrets
-        assert ctx.get('GITHUB_TOKEN') is github_secret
-        assert ctx.get('MY_API_KEY') is api_secret
+        assert request.secrets.get('GITHUB_TOKEN') is github_secret
+        assert request.secrets.get('MY_API_KEY') is api_secret
         # Isolation is enabled regardless of whether secrets are present.
         assert request.agent.acp_isolate_data_dir is True
 
@@ -3358,45 +3356,49 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        assert request.agent.agent_context is not None
-        assert request.agent.agent_context.secrets.get('GITHUB_TOKEN') is lookup
+        assert request.secrets.get('GITHUB_TOKEN') is lookup
 
     @pytest.mark.asyncio
     async def test_explicit_acp_env_preserved(self, service, tmp_path):
         """Explicit acp_env entries survive when secrets also present."""
         user = self._make_acp_user(acp_env={'MY_TOKEN': 'explicit-override'})
+        other_secret = StaticSecret(value=SecretStr('other-value'))
         service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'OTHER': StaticSecret(value=SecretStr('other-value'))}
+            return_value={'OTHER': other_secret}
         )
 
         request = await self._call_build(service, user, tmp_path)
 
         assert request.agent.acp_env.get('MY_TOKEN') == 'explicit-override'
+        assert request.secrets.get('OTHER') is other_secret
 
     @pytest.mark.asyncio
-    async def test_provider_env_in_agent_context_not_acp_env(self, service, tmp_path):
-        """Provider cred lands in agent_context.secrets, not acp_env."""
+    async def test_llm_api_key_not_forwarded_to_request_secrets(
+        self, service, tmp_path
+    ):
+        """llm.api_key must not bleed into request.secrets for ACP.
+
+        ACP does not use the SDK's LLM layer — the CLI subprocess handles its
+        own model calls.  Credentials must be supplied via the Secrets panel
+        (request.secrets channel), not via llm.api_key.
+        """
         user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
         service._setup_secrets_for_git_providers = AsyncMock(return_value={})
 
         request = await self._call_build(service, user, tmp_path)
 
         assert request.agent.acp_env.get('ANTHROPIC_API_KEY') is None
-        assert request.agent.agent_context is not None
-        assert (
-            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY').get_value()
-            == 'sk-ui-key'
-        )
+        assert 'ANTHROPIC_API_KEY' not in request.secrets
 
     @pytest.mark.asyncio
-    async def test_no_secrets_no_agent_context(self, service, tmp_path):
-        """When there are no secrets, agent_context is not set."""
+    async def test_no_secrets_request_secrets_empty(self, service, tmp_path):
+        """When there are no panel secrets, request.secrets is empty."""
         user = self._make_acp_user()
         service._setup_secrets_for_git_providers = AsyncMock(return_value={})
 
         request = await self._call_build(service, user, tmp_path)
 
-        assert request.agent.agent_context is None
+        assert request.secrets == {}
 
     @pytest.mark.asyncio
     async def test_isolate_data_dir_enabled(self, service, tmp_path):
@@ -3411,28 +3413,23 @@ class TestBuildAcpStartConversationRequestSecrets:
         assert request.agent.acp_isolate_data_dir is True
 
     @pytest.mark.asyncio
-    async def test_acp_env_overrides_provider_env(self, service, tmp_path):
-        """Explicit acp_env entry beats the provider cred (acp_env > agent_context.secrets at launch)."""
+    async def test_acp_env_explicit_override(self, service, tmp_path):
+        """Explicit acp_env is independent of request.secrets — both are preserved."""
         user = self._make_acp_user(
             acp_server='claude-code',
             acp_env={'ANTHROPIC_API_KEY': 'sk-explicit-override'},
-            api_key='sk-ui-key',
         )
         service._setup_secrets_for_git_providers = AsyncMock(return_value={})
 
         request = await self._call_build(service, user, tmp_path)
 
         assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-explicit-override'
-        # Provider cred still lands in agent_context.secrets; acp_env wins at launch.
-        assert request.agent.agent_context is not None
-        assert (
-            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY').get_value()
-            == 'sk-ui-key'
-        )
+        # No panel secrets → request.secrets is empty (acp_env is a separate channel).
+        assert 'ANTHROPIC_API_KEY' not in request.secrets
 
     @pytest.mark.asyncio
-    async def test_secrets_forwarded_via_agent_context(self, service, tmp_path):
-        """Panel secrets flow through agent_context.secrets; not pre-resolved into acp_env."""
+    async def test_secrets_forwarded_via_request_secrets(self, service, tmp_path):
+        """Panel secrets flow through request.secrets; not pre-resolved into acp_env."""
         gh_secret = StaticSecret(value=SecretStr('ghp_test123'))
         user = self._make_acp_user()
         service._setup_secrets_for_git_providers = AsyncMock(
@@ -3442,17 +3439,16 @@ class TestBuildAcpStartConversationRequestSecrets:
         request = await self._call_build(service, user, tmp_path)
 
         assert request.agent.acp_env.get('GH_TOKEN') is None
-        assert request.agent.agent_context is not None
-        assert request.agent.agent_context.secrets.get('GH_TOKEN') is gh_secret
+        assert request.secrets.get('GH_TOKEN') is gh_secret
 
     @pytest.mark.asyncio
-    async def test_panel_secret_overrides_provider_env_when_conflicting(
+    async def test_panel_secret_is_sole_credentials_channel(
         self, service, tmp_path
     ):
-        """Panel secret beats provider-derived cred when both name the same key.
+        """Panel secret is the only credentials channel; llm.api_key is ignored.
 
-        SDK merge order: {**provider_secrets, **existing} → existing (panel) wins.
-        Priority is now panel > provider, reversed from the old workaround.
+        When a panel secret and llm.api_key both target the same env var, only
+        the panel secret appears in request.secrets — llm.api_key is not read.
         """
         user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
         panel_secret = StaticSecret(value=SecretStr('sk-from-secrets-panel'))
@@ -3463,20 +3459,22 @@ class TestBuildAcpStartConversationRequestSecrets:
         request = await self._call_build(service, user, tmp_path)
 
         assert request.agent.acp_env.get('ANTHROPIC_API_KEY') is None
-        assert request.agent.agent_context is not None
-        assert (
-            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY').get_value()
-            == 'sk-from-secrets-panel'
-        )
+        assert request.secrets.get('ANTHROPIC_API_KEY') is panel_secret
 
     @pytest.mark.asyncio
-    async def test_explicit_acp_env_wins_over_panel_secret(self, service, tmp_path):
-        """Same-named explicit acp_env overrides a panel secret of the same name."""
+    async def test_explicit_acp_env_and_panel_secret_coexist(self, service, tmp_path):
+        """acp_env and request.secrets are independent channels.
+
+        An explicit acp_env entry takes precedence at subprocess launch, but
+        the panel secret still flows through request.secrets unchanged.
+        """
+        panel_secret = StaticSecret(value=SecretStr('panel-token'))
         user = self._make_acp_user(acp_env={'GH_TOKEN': 'explicit-token'})
         service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'GH_TOKEN': StaticSecret(value=SecretStr('panel-token'))}
+            return_value={'GH_TOKEN': panel_secret}
         )
 
         request = await self._call_build(service, user, tmp_path)
 
         assert request.agent.acp_env.get('GH_TOKEN') == 'explicit-token'
+        assert request.secrets.get('GH_TOKEN') is panel_secret
