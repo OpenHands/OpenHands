@@ -5,6 +5,7 @@ import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useConfig } from "#/hooks/query/use-config";
 import { useSwitchAcpModel } from "#/hooks/mutation/use-switch-acp-model";
+import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { ACP_SERVER_TAG } from "#/utils/agent-display-label";
 import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
@@ -109,13 +110,21 @@ export function SwitchAcpModelButton() {
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
   const { data: config } = useConfig();
-  const { mutate, isPending } = useSwitchAcpModel();
+  const { mutate, isPending: isSwitchPending } = useSwitchAcpModel();
+  const { mutate: saveSettings, isPending: isSavePending } = useSaveSettings();
+  const isPending = isSwitchPending || isSavePending;
 
   const isAcp = conversation?.agent_kind === "acp";
   const acpServerKey = conversation?.tags?.[ACP_SERVER_TAG] ?? null;
   const provider = config?.acp_providers?.find((p) => p.key === acpServerKey);
   const availableModels = provider?.available_models ?? [];
   const currentModelId = conversation?.llm_model ?? null;
+
+  // Live switching requires an active ACP session (first run() must have
+  // completed).  execution_status is null until the first run() fires.
+  // Before that, persist the choice via settings so the conversation picks
+  // it up when it starts.
+  const isSessionLive = conversation?.execution_status != null;
 
   if (!isAcp || availableModels.length === 0) return null;
 
@@ -126,18 +135,33 @@ export function SwitchAcpModelButton() {
 
   const handleSelect = (modelId: string) => {
     if (modelId === currentModelId) return;
-    mutate(
-      { conversationId, model: modelId },
-      {
-        onError: (err) =>
-          displayErrorToast(
-            extractErrorMessage(
-              err,
-              t(I18nKey.MODEL$SWITCH_FAILED, { name: modelId }),
+    if (isSessionLive) {
+      mutate(
+        { conversationId, model: modelId },
+        {
+          onError: (err) =>
+            displayErrorToast(
+              extractErrorMessage(
+                err,
+                t(I18nKey.MODEL$SWITCH_FAILED, { name: modelId }),
+              ),
             ),
-          ),
-      },
-    );
+        },
+      );
+    } else {
+      saveSettings(
+        { agent_settings_diff: { acp_model: modelId } },
+        {
+          onError: (err) =>
+            displayErrorToast(
+              extractErrorMessage(
+                err,
+                t(I18nKey.MODEL$SWITCH_FAILED, { name: modelId }),
+              ),
+            ),
+        },
+      );
+    }
   };
 
   return (
