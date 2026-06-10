@@ -5822,8 +5822,10 @@ description = "OpenHands Agent Server - REST/WebSocket interface for OpenHands A
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
-files = []
-develop = false
+files = [
+    {file = "openhands_agent_server-1.28.0-py3-none-any.whl", hash = "sha256:21c7d53a708d1fb8ef62375f3db0014040a356a635e0fb4a8b02608793771453"},
+    {file = "openhands_agent_server-1.28.0.tar.gz", hash = "sha256:e6bc4c98fe09ba8ce3587a11ae9bf0b550a373c35bce35fd84528485255313aa"},
+]
 
 [package.dependencies]
 aiosqlite = ">=0.19"
@@ -5837,13 +5839,6 @@ sqlalchemy = ">=2"
 uvicorn = ">=0.31.1"
 websockets = ">=12"
 wsproto = ">=1.2.0"
-
-[package.source]
-type = "git"
-url = "https://github.com/OpenHands/software-agent-sdk.git"
-reference = "4be257376072b4c7e61f78a38da66452340f45f9"
-resolved_reference = "4be257376072b4c7e61f78a38da66452340f45f9"
-subdirectory = "openhands-agent-server"
 
 [[package]]
 name = "openhands-ai"
@@ -5892,9 +5887,9 @@ mcp = ">=1.25"
 memory-profiler = ">=0.61"
 numpy = "*"
 openai = "2.33.0"
-openhands-agent-server = {git = "https://github.com/OpenHands/software-agent-sdk.git", rev = "4be257376072b4c7e61f78a38da66452340f45f9", subdirectory = "openhands-agent-server"}
-openhands-sdk = {git = "https://github.com/OpenHands/software-agent-sdk.git", rev = "4be257376072b4c7e61f78a38da66452340f45f9", subdirectory = "openhands-sdk"}
-openhands-tools = {git = "https://github.com/OpenHands/software-agent-sdk.git", rev = "4be257376072b4c7e61f78a38da66452340f45f9", subdirectory = "openhands-tools"}
+openhands-agent-server = "1.28.0"
+openhands-sdk = "1.28.0"
+openhands-tools = "1.28.0"
 opentelemetry-api = ">=1.33.1"
 opentelemetry-exporter-otlp-proto-grpc = ">=1.33.1"
 orjson = ">=3.11.6"
@@ -5952,8 +5947,10 @@ description = "OpenHands SDK - Core functionality for building AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
-files = []
-develop = false
+files = [
+    {file = "openhands_sdk-1.28.0-py3-none-any.whl", hash = "sha256:22f947ba012caf071678e524daf10df3e9863496e86978a71b718d3cd4058906"},
+    {file = "openhands_sdk-1.28.0.tar.gz", hash = "sha256:ee083743b70c27a0e36fcc23bda3da7b22fc6cb6fcc77a5bf94a22b06ab84a20"},
+]
 
 [package.dependencies]
 agent-client-protocol = ">=0.8.1"
@@ -5977,13 +5974,6 @@ websockets = ">=12"
 [package.extras]
 boto3 = ["boto3 (>=1.35.0)"]
 
-[package.source]
-type = "git"
-url = "https://github.com/OpenHands/software-agent-sdk.git"
-reference = "4be257376072b4c7e61f78a38da66452340f45f9"
-resolved_reference = "4be257376072b4c7e61f78a38da66452340f45f9"
-subdirectory = "openhands-sdk"
-
 [[package]]
 name = "openhands-tools"
 version = "1.28.0"
@@ -5991,8 +5981,10 @@ description = "OpenHands Tools - Runtime tools for AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
-files = []
-develop = false
+files = [
+    {file = "openhands_tools-1.28.0-py3-none-any.whl", hash = "sha256:6f84c383e29862c2ba6441cd16036ee90b26e8f68d3994cfb2022ced4e643feb"},
+    {file = "openhands_tools-1.28.0.tar.gz", hash = "sha256:7873df6ff3a0ccea92c21523f3c7da81bb088ff38cda3dbe705f751e06ea1406"},
+]
 
 [package.dependencies]
 binaryornot = ">=0.4.4"
@@ -6005,13 +5997,6 @@ pydantic = ">=2.11.7"
 tom-swe = ">=1.0.3"
 tree-sitter = ">=0.24"
 tree-sitter-bash = ">=0.23"
-
-[package.source]
-type = "git"
-url = "https://github.com/OpenHands/software-agent-sdk.git"
-reference = "4be257376072b4c7e61f78a38da66452340f45f9"
-resolved_reference = "4be257376072b4c7e61f78a38da66452340f45f9"
-subdirectory = "openhands-tools"
 
 [[package]]
 name = "opentelemetry-api"

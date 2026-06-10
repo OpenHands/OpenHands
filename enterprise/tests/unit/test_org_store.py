@@ -135,7 +135,7 @@ async def test_update_org(async_session_maker, mock_litellm_api):
         assert updated_org is not None
         assert updated_org.name == 'updated-org'
         agent_settings = OrgStore.get_agent_settings_from_org(updated_org)
-        assert agent_settings.llm.model == 'litellm_proxy/claude-3'
+        assert agent_settings.llm.model == 'openhands/claude-3'
 
 
 def test_get_org_settings_from_org_use_persisted_loaders():
@@ -1427,7 +1427,7 @@ async def test_update_org_defaults_async_propagates_managed_key_reset():
 
     assert result is not None
     agent_settings = OrgStore.get_agent_settings_from_org(result)
-    assert agent_settings.llm.model == 'litellm_proxy/claude-3'
+    assert agent_settings.llm.model == 'openhands/claude-3'
     mock_member_update.assert_called_once()
     member_settings = mock_member_update.call_args[0][2]
     assert member_settings.llm_api_key.get_secret_value() == 'managed-key'

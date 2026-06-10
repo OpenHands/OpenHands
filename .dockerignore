@@ -5,7 +5,6 @@ frontend/node_modules
 *.ini
 *.toml
 !pyproject.toml
-!poetry.toml
 *.yml
 
 # Documentation (except README.md)
