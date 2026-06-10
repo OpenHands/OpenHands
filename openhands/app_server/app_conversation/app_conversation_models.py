@@ -346,7 +346,7 @@ class SwitchAcpModelRequest(BaseModel):
 
     model: str = Field(
         ...,
-        description='Model ID to switch to (must be in the provider\'s available_models list).',
+        description="Model ID to switch to (must be in the provider's available_models list).",
         min_length=1,
     )
 

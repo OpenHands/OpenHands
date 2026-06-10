@@ -312,15 +312,21 @@ class TestLiveStatusAppConversationService:
     async def test_setup_secrets_for_git_providers_no_provider_tokens(self):
         """Test _setup_secrets_for_git_providers with no provider tokens."""
         # Arrange
-        base_secrets = {'existing': 'secret'}
+        # get_secrets returns StaticSecret objects (plain strings are not valid)
+        base_secrets = {
+            'existing': StaticSecret(value=SecretStr('secret'), description='')
+        }
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
+        self.mock_jwt_service.create_jws_token.return_value = 'test_access_token'
 
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
-        # Assert
-        assert result == base_secrets
+        # Assert — with web_url set, custom secrets are wrapped as LookupSecret
+        assert 'existing' in result
+        assert isinstance(result['existing'], LookupSecret)
+        assert result['existing'].description == ''
         self.mock_user_context.get_secrets.assert_called_once()
         self.mock_user_context.get_provider_tokens.assert_called_once()
 
@@ -543,23 +549,18 @@ class TestLiveStatusAppConversationService:
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
-        # Assert - verify custom secrets are preserved with their descriptions
+        # Assert — with web_url set, custom secrets are wrapped as LookupSecret;
+        # descriptions are preserved from the original StaticSecret.
         assert 'CUSTOM_API_KEY' in result
-        assert isinstance(result['CUSTOM_API_KEY'], StaticSecret)
+        assert isinstance(result['CUSTOM_API_KEY'], LookupSecret)
         assert (
             result['CUSTOM_API_KEY'].description
             == 'Custom API key for external service'
         )
-        assert (
-            result['CUSTOM_API_KEY'].value.get_secret_value() == 'custom_secret_value'
-        )
 
         assert 'ANOTHER_SECRET' in result
-        assert isinstance(result['ANOTHER_SECRET'], StaticSecret)
+        assert isinstance(result['ANOTHER_SECRET'], LookupSecret)
         assert result['ANOTHER_SECRET'].description is None
-        assert (
-            result['ANOTHER_SECRET'].value.get_secret_value() == 'another_secret_value'
-        )
 
         # Verify git provider token is also included
         assert 'GITHUB_TOKEN' in result
@@ -578,14 +579,14 @@ class TestLiveStatusAppConversationService:
         base_secrets = {'MY_SECRET': custom_secret_empty_desc}
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
+        self.mock_jwt_service.create_jws_token.return_value = 'test_access_token'
 
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
-        # Assert - empty description should be preserved as-is
+        # Assert — with web_url set, wrapped as LookupSecret; empty description preserved
         assert 'MY_SECRET' in result
-        assert isinstance(result['MY_SECRET'], StaticSecret)
-        # Empty string description is preserved
+        assert isinstance(result['MY_SECRET'], LookupSecret)
         assert result['MY_SECRET'].description == ''
 
     @pytest.mark.asyncio
