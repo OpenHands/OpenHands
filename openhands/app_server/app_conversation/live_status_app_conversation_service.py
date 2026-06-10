@@ -1716,7 +1716,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             StartConversationRequest,
             agent=acp_agent,
             user_id=laminar_user_id,
-            secrets=secrets or None,
+            secrets=secrets,
         )
 
     async def _process_pending_messages(
