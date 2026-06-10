@@ -1,4 +1,5 @@
 import React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -107,6 +108,7 @@ function AcpModelMenu({
 export function SwitchAcpModelButton() {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const queryClient = useQueryClient();
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
   const { data: config } = useConfig();
@@ -142,6 +144,11 @@ export function SwitchAcpModelButton() {
             saveSettings(
               { agent_settings_diff: { acp_model: modelId } },
               {
+                onSuccess: () => {
+                  queryClient.invalidateQueries({
+                    queryKey: ["user", "conversation", conversationId],
+                  });
+                },
                 onError: (saveErr) =>
                   displayErrorToast(
                     extractErrorMessage(

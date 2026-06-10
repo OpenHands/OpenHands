@@ -61,13 +61,18 @@ export function useAcpCredentialForm(
 
   const reset = React.useCallback(() => setValues({}), []);
 
+  const conflicts = React.useMemo(
+    () => getAcpCredentialConflicts(providerKey, hasValueFor),
+    [providerKey, hasValueFor],
+  );
+
   return {
     fields,
     values,
     setValue,
     secretExists,
     hasValueFor,
-    conflicts: getAcpCredentialConflicts(providerKey, hasValueFor),
+    conflicts,
     isDirty: fields.some((f) => Boolean(values[f.name]?.trim())),
     save: (options) => saveFilled(values, options),
     reset,

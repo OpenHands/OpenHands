@@ -323,9 +323,9 @@ class TestLiveStatusAppConversationService:
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
-        # Assert — with web_url set, custom secrets are wrapped as LookupSecret
+        # Assert — custom secrets are passed through as-is (no LookupSecret wrapping)
         assert 'existing' in result
-        assert isinstance(result['existing'], LookupSecret)
+        assert isinstance(result['existing'], StaticSecret)
         assert result['existing'].description == ''
         self.mock_user_context.get_secrets.assert_called_once()
         self.mock_user_context.get_provider_tokens.assert_called_once()
@@ -549,17 +549,18 @@ class TestLiveStatusAppConversationService:
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
-        # Assert — with web_url set, custom secrets are wrapped as LookupSecret;
-        # descriptions are preserved from the original StaticSecret.
+        # Assert — custom secrets are passed through as-is; descriptions preserved.
         assert 'CUSTOM_API_KEY' in result
-        assert isinstance(result['CUSTOM_API_KEY'], LookupSecret)
+        assert isinstance(result['CUSTOM_API_KEY'], StaticSecret)
+        assert result['CUSTOM_API_KEY'].value.get_secret_value() == 'custom_secret_value'
         assert (
             result['CUSTOM_API_KEY'].description
             == 'Custom API key for external service'
         )
 
         assert 'ANOTHER_SECRET' in result
-        assert isinstance(result['ANOTHER_SECRET'], LookupSecret)
+        assert isinstance(result['ANOTHER_SECRET'], StaticSecret)
+        assert result['ANOTHER_SECRET'].value.get_secret_value() == 'another_secret_value'
         assert result['ANOTHER_SECRET'].description is None
 
         # Verify git provider token is also included
@@ -584,9 +585,9 @@ class TestLiveStatusAppConversationService:
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
-        # Assert — with web_url set, wrapped as LookupSecret; empty description preserved
+        # Assert — custom secrets are passed through as-is; empty description preserved
         assert 'MY_SECRET' in result
-        assert isinstance(result['MY_SECRET'], LookupSecret)
+        assert isinstance(result['MY_SECRET'], StaticSecret)
         assert result['MY_SECRET'].description == ''
 
     @pytest.mark.asyncio
@@ -3321,6 +3322,7 @@ class TestBuildAcpStartConversationRequestSecrets:
         service.user_context.get_user_info = AsyncMock(return_value=user)
         service.user_context.get_user_email = AsyncMock(return_value=None)
         service.user_context.get_secrets = AsyncMock(return_value=secrets or {})
+        service.user_context.get_provider_tokens = AsyncMock(return_value=None)
         sandbox = Mock(spec=SandboxInfo)
         return service._build_acp_start_conversation_request(
             sandbox=sandbox,

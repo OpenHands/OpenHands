@@ -36,10 +36,9 @@ export function useSaveAcpSecrets(fields: ACPProviderSecretField[]) {
 
     setIsSaving(true);
     try {
-      for (const { name, value } of toSave) {
-        // eslint-disable-next-line no-await-in-loop
-        await createSecret({ name, value });
-      }
+      await Promise.all(
+        toSave.map(({ name, value }) => createSecret({ name, value })),
+      );
       await queryClient.invalidateQueries({ queryKey: ["secrets-search"] });
       await queryClient.invalidateQueries({ queryKey: ["secrets"] });
       if (!silent) displaySuccessToast(t(I18nKey.SETTINGS$SAVED));

@@ -114,7 +114,6 @@ export default function AgentSettingsScreen() {
   const [agentType, setAgentType] = useState<"openhands" | "acp">("openhands");
   const [commandText, setCommandText] = useState("");
   const [acpModel, setAcpModel] = useState("");
-  const [isCustomModel, setIsCustomModel] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
   const lastInitializedSettingsRef = useRef<unknown>(null);
@@ -142,14 +141,10 @@ export default function AgentSettingsScreen() {
       const normalizedModel =
         typeof savedModel === "string" ? savedModel.trim() : "";
       setAcpModel(normalizedModel || provider?.default_model || "");
-      setIsCustomModel(
-        !!normalizedModel && !isKnownModel(provider, normalizedModel),
-      );
     } else {
       setAgentType("openhands");
       setCommandText("");
       setAcpModel("");
-      setIsCustomModel(false);
     }
     setIsDirty(false);
   }, [settings, acpProviders, isConfigLoading]);
@@ -172,8 +167,7 @@ export default function AgentSettingsScreen() {
   const modelSuggestions = selectedProvider?.available_models ?? [];
   const hasModelSuggestions = modelSuggestions.length > 0;
   const selectedModelIsSuggestion = isKnownModel(selectedProvider, acpModel);
-  const selectedModelKey =
-    isCustomModel || !selectedModelIsSuggestion ? CUSTOM_MODEL_KEY : acpModel;
+  const selectedModelKey = selectedModelIsSuggestion ? acpModel : CUSTOM_MODEL_KEY;
 
   // ── Credential form ───────────────────────────────────────────────────────
   // Called unconditionally for hook-order stability; null arg → empty form.
@@ -271,10 +265,7 @@ export default function AgentSettingsScreen() {
                   if (preferred) {
                     setCommandText(formatCommand(preferred.default_command));
                     setAcpModel(preferred.default_model || "");
-                    setIsCustomModel(false);
                   }
-                } else if (newType === "openhands") {
-                  setIsCustomModel(false);
                 }
                 setIsDirty(true);
               }}
@@ -347,11 +338,9 @@ export default function AgentSettingsScreen() {
                 if (provider) {
                   setCommandText(formatCommand(provider.default_command));
                   setAcpModel(provider.default_model || "");
-                  setIsCustomModel(false);
                 } else if (preset === CUSTOM_PRESET) {
                   setCommandText("");
                   setAcpModel("");
-                  setIsCustomModel(true);
                 }
                 setIsDirty(true);
               }}
@@ -376,7 +365,6 @@ export default function AgentSettingsScreen() {
                       ({ key }) => key === nextPreset,
                     );
                     setAcpModel(nextProvider?.default_model || "");
-                    setIsCustomModel(false);
                   }
                   setCommandText(next);
                   setIsDirty(true);
@@ -409,10 +397,8 @@ export default function AgentSettingsScreen() {
                     if (!key) return;
                     const mk = String(key);
                     if (mk === CUSTOM_MODEL_KEY) {
-                      setIsCustomModel(true);
                       setAcpModel("");
                     } else {
-                      setIsCustomModel(false);
                       setAcpModel(mk);
                     }
                     setIsDirty(true);

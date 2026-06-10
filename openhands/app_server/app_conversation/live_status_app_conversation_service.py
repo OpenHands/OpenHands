@@ -960,25 +960,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         Returns:
             Dictionary of secrets for the conversation
         """
-        raw_secrets = await self.user_context.get_secrets()
-
-        if self.web_url:
-            # Convert custom secrets to LookupSecret so values are never
-            # materialised in this process.  Each token is scoped to a single
-            # secret name, limiting blast radius if a token leaks.
-            secrets: dict = {}
-            for name, source in raw_secrets.items():
-                access_token = self.jwt_service.create_jws_token(
-                    payload={'user_id': user.id, 'secret_name': name},
-                    expires_in=self.access_token_hard_timeout,
-                )
-                secrets[name] = LookupSecret(
-                    url=self.web_url + '/api/v1/webhooks/custom-secret',
-                    headers={'X-Access-Token': access_token},
-                    description=source.description,
-                )
-        else:
-            secrets = raw_secrets
+        secrets = await self.user_context.get_secrets()
 
         # Get all provider tokens from user authentication
         provider_tokens = cast(
@@ -1648,8 +1630,25 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # (e.g. X-Access-Token) are redacted by the SDK serializer because
         # "TOKEN" matches SECRET_KEY_PATTERNS, leaving headers: {} and
         # causing provider auth to silently fail at subprocess launch.
-        # Use the raw secrets (already StaticSecrets in OSS) directly.
+        # Use the raw custom secrets directly, then fold in git provider tokens
+        # as StaticSecrets (bypassing the LookupSecret wrapping that
+        # _setup_secrets_for_git_providers does for non-ACP paths).
         secrets: dict = await self.user_context.get_secrets()
+        provider_tokens = cast(
+            PROVIDER_TOKEN_TYPE | None,
+            await self.user_context.get_provider_tokens(),
+        )
+        if provider_tokens:
+            for provider_type, provider_token in provider_tokens.items():
+                if not provider_token.token:
+                    continue
+                secret_name = f'{provider_type.name}_TOKEN'
+                static_token = await self.user_context.get_latest_token(provider_type)
+                if static_token:
+                    secrets[secret_name] = StaticSecret(
+                        value=SecretStr(static_token),
+                        description=f'{provider_type.name} authentication token',
+                    )
 
         if api_secrets:
             from openhands.app_server.constants import (
@@ -1673,19 +1672,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Isolate the CLI data dir onto the durable /workspace tree so the SDK
         # self-resumes the provider session (session/load from base_state.json)
         # across pause/resume — matching the regular-agent lifecycle (#1274).
+        # Strip llm.api_key/base_url to prevent proxy settings from leaking
+        # into the subprocess env (ACP CLIs handle their own LLM calls).
         acp_settings_for_agent = acp_settings.model_copy(
-            update={'acp_isolate_data_dir': True}
-        )
-        # Canvas never sends llm for ACP agents (ACP_SETTINGS_KEYS has no llm
-        # entry). ACP credentials flow through agent_context.secrets (keyed by
-        # api_key_env_var), not through llm. Stripping api_key and base_url
-        # here prevents llm proxy settings from leaking into the subprocess env
-        # as OPENAI_API_KEY / OPENAI_BASE_URL / ANTHROPIC_API_KEY etc.
-        acp_settings_for_agent = acp_settings_for_agent.model_copy(
             update={
-                'llm': acp_settings_for_agent.llm.model_copy(
+                'acp_isolate_data_dir': True,
+                'llm': acp_settings.llm.model_copy(
                     update={'api_key': None, 'base_url': None}
-                )
+                ),
             }
         )
         acp_agent = acp_settings_for_agent.create_agent()
