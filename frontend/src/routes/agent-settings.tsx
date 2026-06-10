@@ -167,7 +167,9 @@ export default function AgentSettingsScreen() {
   const modelSuggestions = selectedProvider?.available_models ?? [];
   const hasModelSuggestions = modelSuggestions.length > 0;
   const selectedModelIsSuggestion = isKnownModel(selectedProvider, acpModel);
-  const selectedModelKey = selectedModelIsSuggestion ? acpModel : CUSTOM_MODEL_KEY;
+  const selectedModelKey = selectedModelIsSuggestion
+    ? acpModel
+    : CUSTOM_MODEL_KEY;
 
   // ── Credential form ───────────────────────────────────────────────────────
   // Called unconditionally for hook-order stability; null arg → empty form.

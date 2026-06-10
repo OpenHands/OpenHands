@@ -479,9 +479,7 @@ async def on_event(
 
 async def _resolve_user_context(user_id: str | None) -> AuthUserContext:
     """Resolve a UserContext from a user_id, falling back to DefaultUserAuth in OSS mode."""
-    user_auth = (
-        await get_user_auth_for_user(user_id) if user_id else DefaultUserAuth()
-    )
+    user_auth = await get_user_auth_for_user(user_id) if user_id else DefaultUserAuth()
     return AuthUserContext(user_auth=user_auth)
 
 

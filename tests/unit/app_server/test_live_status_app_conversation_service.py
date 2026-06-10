@@ -552,7 +552,9 @@ class TestLiveStatusAppConversationService:
         # Assert — custom secrets are passed through as-is; descriptions preserved.
         assert 'CUSTOM_API_KEY' in result
         assert isinstance(result['CUSTOM_API_KEY'], StaticSecret)
-        assert result['CUSTOM_API_KEY'].value.get_secret_value() == 'custom_secret_value'
+        assert (
+            result['CUSTOM_API_KEY'].value.get_secret_value() == 'custom_secret_value'
+        )
         assert (
             result['CUSTOM_API_KEY'].description
             == 'Custom API key for external service'
@@ -560,7 +562,9 @@ class TestLiveStatusAppConversationService:
 
         assert 'ANOTHER_SECRET' in result
         assert isinstance(result['ANOTHER_SECRET'], StaticSecret)
-        assert result['ANOTHER_SECRET'].value.get_secret_value() == 'another_secret_value'
+        assert (
+            result['ANOTHER_SECRET'].value.get_secret_value() == 'another_secret_value'
+        )
         assert result['ANOTHER_SECRET'].description is None
 
         # Verify git provider token is also included

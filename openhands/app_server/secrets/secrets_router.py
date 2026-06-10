@@ -266,9 +266,10 @@ async def create_custom_secret(
     secret_value = incoming_secret.value
     secret_description = incoming_secret.description
 
+    existing_description = custom_secrets[secret_name].description if secret_name in custom_secrets else ''
     custom_secrets[secret_name] = CustomSecret(
         secret=secret_value,
-        description=secret_description or '',
+        description=secret_description if secret_description is not None else existing_description,
     )
 
     # Create a new Secrets that preserves provider tokens
