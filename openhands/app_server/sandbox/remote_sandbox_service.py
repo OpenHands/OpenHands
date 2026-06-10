@@ -95,6 +95,15 @@ class StoredRemoteSandbox(Base):
     )
 
 
+@dataclass(frozen=True)
+class _StoredRemoteSandboxSnapshot:
+    id: str
+    created_by_user_id: str | None
+    sandbox_spec_id: str
+    session_api_key_hash: str | None
+    created_at: datetime
+
+
 @dataclass
 class RemoteSandboxService(SandboxService):
     """Sandbox service that uses HTTP to communicate with a remote runtime API.
@@ -115,6 +124,22 @@ class RemoteSandboxService(SandboxService):
     httpx_client: httpx.AsyncClient
     db_session: AsyncSession
 
+    @staticmethod
+    def _snapshot_stored_sandbox(
+        stored: StoredRemoteSandbox,
+    ) -> _StoredRemoteSandboxSnapshot:
+        return _StoredRemoteSandboxSnapshot(
+            id=stored.id,
+            created_by_user_id=stored.created_by_user_id,
+            sandbox_spec_id=stored.sandbox_spec_id,
+            session_api_key_hash=stored.session_api_key_hash,
+            created_at=stored.created_at,
+        )
+
+    async def _end_read_transaction(self) -> None:
+        if self.db_session.in_transaction():
+            await self.db_session.rollback()
+
     async def _send_runtime_api_request(
         self, method: str, path: str, **kwargs: Any
     ) -> httpx.Response:
@@ -132,7 +157,9 @@ class RemoteSandboxService(SandboxService):
             raise
 
     def _to_sandbox_info(
-        self, stored: StoredRemoteSandbox, runtime: dict[str, Any] | None = None
+        self,
+        stored: StoredRemoteSandbox | _StoredRemoteSandboxSnapshot,
+        runtime: dict[str, Any] | None = None,
     ):
         status = self._get_sandbox_status_from_runtime(runtime)
 
@@ -333,6 +360,12 @@ class RemoteSandboxService(SandboxService):
         if has_more:
             next_page_id = str(offset + limit)
 
+        stored_sandboxes = [
+            self._snapshot_stored_sandbox(stored_sandbox)
+            for stored_sandbox in stored_sandboxes
+        ]
+        await self._end_read_transaction()
+
         # Batch fetch runtime data for all sandboxes
         sandbox_ids = [stored_sandbox.id for stored_sandbox in stored_sandboxes]
         runtimes_by_id = await self._get_runtimes_batch(sandbox_ids)
@@ -350,16 +383,18 @@ class RemoteSandboxService(SandboxService):
         stored_sandbox = await self._get_stored_sandbox(sandbox_id)
         if stored_sandbox is None:
             return None
+        stored_sandbox_snapshot = self._snapshot_stored_sandbox(stored_sandbox)
+        await self._end_read_transaction()
 
         runtime = None
         try:
-            runtime = await self._get_runtime(stored_sandbox.id)
+            runtime = await self._get_runtime(stored_sandbox_snapshot.id)
         except Exception:
             _logger.exception(
-                f'Error getting runtime: {stored_sandbox.id}', stack_info=True
+                f'Error getting runtime: {stored_sandbox_snapshot.id}', stack_info=True
             )
 
-        return self._to_sandbox_info(stored_sandbox, runtime)
+        return self._to_sandbox_info(stored_sandbox_snapshot, runtime)
 
     async def get_sandbox_by_session_api_key(
         self, session_api_key: str
@@ -376,16 +411,18 @@ class RemoteSandboxService(SandboxService):
 
         if stored_sandbox is None:
             return None
+        stored_sandbox_snapshot = self._snapshot_stored_sandbox(stored_sandbox)
+        await self._end_read_transaction()
 
         try:
-            runtime = await self._get_runtime(stored_sandbox.id)
-            return self._to_sandbox_info(stored_sandbox, runtime)
+            runtime = await self._get_runtime(stored_sandbox_snapshot.id)
+            return self._to_sandbox_info(stored_sandbox_snapshot, runtime)
         except Exception:
             _logger.exception(
-                f'Error getting runtime for sandbox {stored_sandbox.id}',
+                f'Error getting runtime for sandbox {stored_sandbox_snapshot.id}',
                 stack_info=True,
             )
-            return self._to_sandbox_info(stored_sandbox, None)
+            return self._to_sandbox_info(stored_sandbox_snapshot, None)
 
     async def _get_user_running_sandboxes(self) -> list[StoredRemoteSandbox]:
         """Return the DB records for sandboxes that are actually running right now.
@@ -655,13 +692,18 @@ class RemoteSandboxService(SandboxService):
         if len(running) <= max_num_sandboxes:
             return []
 
-        # running is sorted oldest-first; pause the oldest to make room
+        # running is sorted oldest-first; pause the oldest to make room.
+        # Snapshot the ids and end the read transaction before the pause loop
+        # so the slow runtime /pause calls don't hold a DB transaction open.
         num_to_pause = len(running) - max_num_sandboxes
+        sandbox_ids_to_pause = [sandbox.id for sandbox in running[:num_to_pause]]
+        await self._end_read_transaction()
+
         paused_ids: list[str] = []
-        for sandbox in running[:num_to_pause]:
+        for sandbox_id in sandbox_ids_to_pause:
             try:
-                if await self.pause_sandbox(sandbox.id):
-                    paused_ids.append(sandbox.id)
+                if await self.pause_sandbox(sandbox_id):
+                    paused_ids.append(sandbox_id)
             except Exception:
                 pass
         return paused_ids
@@ -680,9 +722,12 @@ class RemoteSandboxService(SandboxService):
         query = query.filter(StoredRemoteSandbox.id.in_(sandbox_ids))
         stored_remote_sandboxes = await self.db_session.execute(query)
         stored_remote_sandboxes_by_id = {
-            stored_remote_sandbox[0].id: stored_remote_sandbox[0]
+            stored_remote_sandbox[0].id: self._snapshot_stored_sandbox(
+                stored_remote_sandbox[0]
+            )
             for stored_remote_sandbox in stored_remote_sandboxes
         }
+        await self._end_read_transaction()
 
         # Gracefully handle runtime API failures by falling back to empty runtimes.
         # This mirrors the behavior of get_sandbox which falls back to runtime=None.
@@ -696,7 +741,6 @@ class RemoteSandboxService(SandboxService):
                 stack_info=True,
             )
             runtimes_by_id = {}
-
         results = []
         for sandbox_id in sandbox_ids:
             stored_remote_sandbox = stored_remote_sandboxes_by_id.get(sandbox_id)

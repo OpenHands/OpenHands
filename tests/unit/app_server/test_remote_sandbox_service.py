@@ -716,6 +716,43 @@ class TestSandboxSearch:
         )
 
     @pytest.mark.asyncio
+    async def test_search_sandboxes_ends_read_transaction_before_runtime_fetch(
+        self, remote_sandbox_service
+    ):
+        events = []
+        stored_sandboxes = [create_stored_sandbox('sb1')]
+
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = stored_sandboxes
+        mock_result = MagicMock()
+        mock_result.scalars.return_value = mock_scalars
+
+        async def execute(_stmt):
+            events.append('db')
+            return mock_result
+
+        async def rollback():
+            events.append('rollback')
+
+        mock_batch_response = MagicMock()
+        mock_batch_response.raise_for_status.return_value = None
+        mock_batch_response.json.return_value = [create_runtime_data('sb1')]
+
+        async def request(*_args, **_kwargs):
+            events.append('runtime')
+            return mock_batch_response
+
+        remote_sandbox_service.db_session.execute = AsyncMock(side_effect=execute)
+        remote_sandbox_service.db_session.in_transaction.return_value = True
+        remote_sandbox_service.db_session.rollback = AsyncMock(side_effect=rollback)
+        remote_sandbox_service.httpx_client.request = AsyncMock(side_effect=request)
+
+        result = await remote_sandbox_service.search_sandboxes()
+
+        assert [item.id for item in result.items] == ['sb1']
+        assert events == ['db', 'rollback', 'runtime']
+
+    @pytest.mark.asyncio
     async def test_search_sandboxes_with_pagination(self, remote_sandbox_service):
         """Test sandbox search with pagination."""
         # Setup - return limit + 1 items to trigger pagination
@@ -844,6 +881,55 @@ class TestSandboxSearch:
         assert 'sb1' in result
         assert 'sb2' not in result  # Missing from response
         assert 'sb3' in result
+
+    @pytest.mark.asyncio
+    async def test_pause_old_sandboxes_ends_read_transaction_before_pause(
+        self, remote_sandbox_service
+    ):
+        events = []
+
+        list_response = MagicMock()
+        list_response.json.return_value = {
+            'runtimes': [
+                {'session_id': 'sb1'},
+                {'session_id': 'sb2'},
+            ]
+        }
+
+        async def runtime_request(*_args, **_kwargs):
+            events.append('list')
+            return list_response
+
+        async def execute(_stmt):
+            events.append('db')
+            scalars_result = MagicMock()
+            scalars_result.all.return_value = [
+                create_stored_sandbox('sb1'),
+                create_stored_sandbox('sb2'),
+            ]
+            result = MagicMock()
+            result.scalars.return_value = scalars_result
+            return result
+
+        async def rollback():
+            events.append('rollback')
+
+        async def pause_sandbox(sandbox_id):
+            events.append(f'pause:{sandbox_id}')
+            return True
+
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            side_effect=runtime_request
+        )
+        remote_sandbox_service.db_session.execute = AsyncMock(side_effect=execute)
+        remote_sandbox_service.db_session.in_transaction.return_value = True
+        remote_sandbox_service.db_session.rollback = AsyncMock(side_effect=rollback)
+        remote_sandbox_service.pause_sandbox = AsyncMock(side_effect=pause_sandbox)
+
+        result = await remote_sandbox_service.pause_old_sandboxes(max_num_sandboxes=1)
+
+        assert result == ['sb1']
+        assert events == ['list', 'db', 'rollback', 'pause:sb1']
 
     @pytest.mark.asyncio
     async def test_get_sandbox_exists(self, remote_sandbox_service):
