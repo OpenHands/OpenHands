@@ -1644,7 +1644,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         workspace = LocalWorkspace(working_dir=project_dir)
 
         # --- secrets --------------------------------------------------------
-        secrets = await self._setup_secrets_for_git_providers(user)
+        # ACP secrets must be StaticSecrets — LookupSecrets with JWT headers
+        # (e.g. X-Access-Token) are redacted by the SDK serializer because
+        # "TOKEN" matches SECRET_KEY_PATTERNS, leaving headers: {} and
+        # causing provider auth to silently fail at subprocess launch.
+        # Use the raw secrets (already StaticSecrets in OSS) directly.
+        secrets: dict = await self.user_context.get_secrets()
 
         if api_secrets:
             from openhands.app_server.constants import (

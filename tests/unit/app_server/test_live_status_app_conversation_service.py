@@ -3315,10 +3315,11 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
         return user
 
-    def _call_build(self, service, user, tmp_path):
+    def _call_build(self, service, user, tmp_path, *, secrets=None):
         """Wire user_context and call _build_acp_start_conversation_request."""
         service.user_context.get_user_info = AsyncMock(return_value=user)
         service.user_context.get_user_email = AsyncMock(return_value=None)
+        service.user_context.get_secrets = AsyncMock(return_value=secrets or {})
         sandbox = Mock(spec=SandboxInfo)
         return service._build_acp_start_conversation_request(
             sandbox=sandbox,
@@ -3334,11 +3335,11 @@ class TestBuildAcpStartConversationRequestSecrets:
         github_secret = StaticSecret(value=SecretStr('ghp_test123'))
         api_secret = StaticSecret(value=SecretStr('secret-value'))
         user = self._make_acp_user()
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'GITHUB_TOKEN': github_secret, 'MY_API_KEY': api_secret}
-        )
 
-        request = await self._call_build(service, user, tmp_path)
+        request = await self._call_build(
+            service, user, tmp_path,
+            secrets={'GITHUB_TOKEN': github_secret, 'MY_API_KEY': api_secret},
+        )
 
         assert request.secrets.get('GITHUB_TOKEN') is github_secret
         assert request.secrets.get('MY_API_KEY') is api_secret
@@ -3347,14 +3348,14 @@ class TestBuildAcpStartConversationRequestSecrets:
 
     @pytest.mark.asyncio
     async def test_lookup_secret_forwarded_as_source(self, service, tmp_path):
-        """LookupSecrets are forwarded as-is; the SDK resolves them at start time."""
+        """LookupSecrets from user_context are forwarded as-is."""
         lookup = LookupSecret(url='https://example.com/token', headers={})
         user = self._make_acp_user()
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'GITHUB_TOKEN': lookup}
-        )
 
-        request = await self._call_build(service, user, tmp_path)
+        request = await self._call_build(
+            service, user, tmp_path,
+            secrets={'GITHUB_TOKEN': lookup},
+        )
 
         assert request.secrets.get('GITHUB_TOKEN') is lookup
 
@@ -3363,11 +3364,11 @@ class TestBuildAcpStartConversationRequestSecrets:
         """Explicit acp_env entries survive when secrets also present."""
         user = self._make_acp_user(acp_env={'MY_TOKEN': 'explicit-override'})
         other_secret = StaticSecret(value=SecretStr('other-value'))
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'OTHER': other_secret}
-        )
 
-        request = await self._call_build(service, user, tmp_path)
+        request = await self._call_build(
+            service, user, tmp_path,
+            secrets={'OTHER': other_secret},
+        )
 
         assert request.agent.acp_env.get('MY_TOKEN') == 'explicit-override'
         assert request.secrets.get('OTHER') is other_secret
@@ -3383,7 +3384,6 @@ class TestBuildAcpStartConversationRequestSecrets:
         (request.secrets channel), not via llm.api_key.
         """
         user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
-        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
 
         request = await self._call_build(service, user, tmp_path)
 
@@ -3394,7 +3394,6 @@ class TestBuildAcpStartConversationRequestSecrets:
     async def test_no_secrets_request_secrets_empty(self, service, tmp_path):
         """When there are no panel secrets, request.secrets is empty."""
         user = self._make_acp_user()
-        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
 
         request = await self._call_build(service, user, tmp_path)
 
@@ -3406,7 +3405,6 @@ class TestBuildAcpStartConversationRequestSecrets:
         so the CLI session subtree lives on /workspace and the SDK self-resumes
         across pause/resume (#1274)."""
         user = self._make_acp_user()
-        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
 
         request = await self._call_build(service, user, tmp_path)
 
@@ -3419,7 +3417,6 @@ class TestBuildAcpStartConversationRequestSecrets:
             acp_server='claude-code',
             acp_env={'ANTHROPIC_API_KEY': 'sk-explicit-override'},
         )
-        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
 
         request = await self._call_build(service, user, tmp_path)
 
@@ -3432,11 +3429,11 @@ class TestBuildAcpStartConversationRequestSecrets:
         """Panel secrets flow through request.secrets; not pre-resolved into acp_env."""
         gh_secret = StaticSecret(value=SecretStr('ghp_test123'))
         user = self._make_acp_user()
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'GH_TOKEN': gh_secret}
-        )
 
-        request = await self._call_build(service, user, tmp_path)
+        request = await self._call_build(
+            service, user, tmp_path,
+            secrets={'GH_TOKEN': gh_secret},
+        )
 
         assert request.agent.acp_env.get('GH_TOKEN') is None
         assert request.secrets.get('GH_TOKEN') is gh_secret
@@ -3452,11 +3449,11 @@ class TestBuildAcpStartConversationRequestSecrets:
         """
         user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
         panel_secret = StaticSecret(value=SecretStr('sk-from-secrets-panel'))
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'ANTHROPIC_API_KEY': panel_secret}
-        )
 
-        request = await self._call_build(service, user, tmp_path)
+        request = await self._call_build(
+            service, user, tmp_path,
+            secrets={'ANTHROPIC_API_KEY': panel_secret},
+        )
 
         assert request.agent.acp_env.get('ANTHROPIC_API_KEY') is None
         assert request.secrets.get('ANTHROPIC_API_KEY') is panel_secret
@@ -3470,11 +3467,11 @@ class TestBuildAcpStartConversationRequestSecrets:
         """
         panel_secret = StaticSecret(value=SecretStr('panel-token'))
         user = self._make_acp_user(acp_env={'GH_TOKEN': 'explicit-token'})
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'GH_TOKEN': panel_secret}
-        )
 
-        request = await self._call_build(service, user, tmp_path)
+        request = await self._call_build(
+            service, user, tmp_path,
+            secrets={'GH_TOKEN': panel_secret},
+        )
 
         assert request.agent.acp_env.get('GH_TOKEN') == 'explicit-token'
         assert request.secrets.get('GH_TOKEN') is panel_secret

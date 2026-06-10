@@ -120,12 +120,6 @@ export function SwitchAcpModelButton() {
   const availableModels = provider?.available_models ?? [];
   const currentModelId = conversation?.llm_model ?? null;
 
-  // Live switching requires an active ACP session (first run() must have
-  // completed).  execution_status is null until the first run() fires.
-  // Before that, persist the choice via settings so the conversation picks
-  // it up when it starts.
-  const isSessionLive = conversation?.execution_status != null;
-
   if (!isAcp || availableModels.length === 0) return null;
 
   const currentLabel =
@@ -135,33 +129,39 @@ export function SwitchAcpModelButton() {
 
   const handleSelect = (modelId: string) => {
     if (modelId === currentModelId) return;
-    if (isSessionLive) {
-      mutate(
-        { conversationId, model: modelId },
-        {
-          onError: (err) =>
+    mutate(
+      { conversationId, model: modelId },
+      {
+        onError: (err) => {
+          // 409 means the ACP session is not yet initialised (no first run()).
+          // Fall back to a settings update so the model is applied when the
+          // conversation actually starts.
+          const status =
+            (err as { response?: { status?: number } })?.response?.status;
+          if (status === 409) {
+            saveSettings(
+              { agent_settings_diff: { acp_model: modelId } },
+              {
+                onError: (saveErr) =>
+                  displayErrorToast(
+                    extractErrorMessage(
+                      saveErr,
+                      t(I18nKey.MODEL$SWITCH_FAILED, { name: modelId }),
+                    ),
+                  ),
+              },
+            );
+          } else {
             displayErrorToast(
               extractErrorMessage(
                 err,
                 t(I18nKey.MODEL$SWITCH_FAILED, { name: modelId }),
               ),
-            ),
+            );
+          }
         },
-      );
-    } else {
-      saveSettings(
-        { agent_settings_diff: { acp_model: modelId } },
-        {
-          onError: (err) =>
-            displayErrorToast(
-              extractErrorMessage(
-                err,
-                t(I18nKey.MODEL$SWITCH_FAILED, { name: modelId }),
-              ),
-            ),
-        },
-      );
-    }
+      },
+    );
   };
 
   return (
