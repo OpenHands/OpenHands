@@ -18,8 +18,18 @@ export const useOrganizations = () => {
     staleTime: 1000 * 60 * 5, // 5 minutes
     enabled: !!userIsAuthenticated && !isOssMode,
     select: (data) => {
+      // In org-only installs, hide personal workspaces — but only when the
+      // user belongs to at least one team org, so a user whose only
+      // workspace is personal (e.g. the default org isn't created yet) is
+      // never left with zero workspaces.
+      const hasTeamOrg = data.items.some((org) => !(org.is_personal ?? false));
+      const visible =
+        hidePersonalWorkspaces && hasTeamOrg
+          ? data.items.filter((org) => !(org.is_personal ?? false))
+          : data.items;
+
       // Sort organizations with personal workspace first, then alphabetically by name
-      const sorted = [...data.items].sort((a, b) => {
+      const organizations = [...visible].sort((a, b) => {
         const aIsPersonal = a.is_personal ?? false;
         const bIsPersonal = b.is_personal ?? false;
         if (aIsPersonal && !bIsPersonal) return -1;
@@ -28,16 +38,6 @@ export const useOrganizations = () => {
           sensitivity: "base",
         });
       });
-
-      // In org-only installs, hide personal workspaces — but only when the
-      // user belongs to at least one team org, so a user whose only
-      // workspace is personal (e.g. the default org isn't created yet) is
-      // never left with zero workspaces.
-      const hasTeamOrg = sorted.some((org) => !(org.is_personal ?? false));
-      const organizations =
-        hidePersonalWorkspaces && hasTeamOrg
-          ? sorted.filter((org) => !(org.is_personal ?? false))
-          : sorted;
 
       return {
         organizations,
