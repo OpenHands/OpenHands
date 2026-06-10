@@ -4,7 +4,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import SecretStr
+from server.routes.org_models import OrgNameExistsError
 from storage.default_org_service import (
+    DEFAULT_ORG_NAME,
     DefaultOrgBootstrapService,
     get_default_org_config,
 )
@@ -26,33 +28,30 @@ def _user(email: str) -> User:
     return User(id=user_id, email=email, current_org_id=user_id)
 
 
-def _org(name: str = 'Acme') -> Org:
+def _org(name: str = DEFAULT_ORG_NAME) -> Org:
     return Org(id=uuid.uuid4(), name=name)
 
 
-def _personal_org() -> Org:
-    org_id = uuid.uuid4()
-    return Org(id=org_id, name=f'user_{org_id}_org')
-
-
-def test_default_org_config_accepts_one_as_truthy(monkeypatch):
+def test_default_org_config_defaults_org_name(monkeypatch):
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', '1')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'Acme')
-    monkeypatch.setenv(
-        'OPENHANDS_DEFAULT_ORG_OWNER_EMAILS',
-        'Owner@Example.com, second@example.com\nthird@example.com',
-    )
+    monkeypatch.delenv('OPENHANDS_DEFAULT_ORG_NAME', raising=False)
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_AUTO_ADD_USERS', 'true')
 
     config = get_default_org_config()
 
     assert config.enabled is True
-    assert config.org_name == 'Acme'
-    assert config.owner_emails == frozenset(
-        {'owner@example.com', 'second@example.com', 'third@example.com'}
-    )
+    assert config.org_name == DEFAULT_ORG_NAME
     assert config.auto_add_users is True
     assert config.hide_personal_workspaces is False
+
+
+def test_default_org_config_allows_org_name_override(monkeypatch):
+    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', '1')
+    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'Acme')
+
+    config = get_default_org_config()
+
+    assert config.org_name == 'Acme'
 
 
 def test_default_org_config_reads_hide_personal_workspaces(monkeypatch):
@@ -69,7 +68,7 @@ async def test_disabled_default_org_does_nothing(monkeypatch):
     user = _user('member@example.com')
 
     with patch(
-        'storage.default_org_service.OrgStore.get_org_by_name',
+        'storage.default_org_service.OrgStore.get_default_org',
         new_callable=AsyncMock,
     ) as mock_get_org:
         result = await DefaultOrgBootstrapService.apply_for_user(
@@ -82,23 +81,202 @@ async def test_disabled_default_org_does_nothing(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_non_owner_waits_when_no_configured_owner_exists(monkeypatch):
+async def test_first_user_creates_default_org_and_becomes_owner(monkeypatch):
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'Acme')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_OWNER_EMAILS', 'owner@example.com')
+    monkeypatch.delenv('OPENHANDS_DEFAULT_ORG_NAME', raising=False)
+    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_AUTO_ADD_USERS', 'true')
+    user = _user('first@example.com')
+    org = _org()
+    owner_membership = SimpleNamespace(role_id=1)
+    updated_user = _user('first@example.com')
+    updated_user.id = user.id
+    updated_user.current_org_id = org.id
+
+    with (
+        patch(
+            'storage.default_org_service.OrgStore.get_default_org',
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            'storage.default_org_service.OrgStore.list_team_orgs',
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            'storage.default_org_service.OrgService.create_org_with_owner',
+            new_callable=AsyncMock,
+            return_value=org,
+        ) as mock_create_org,
+        patch(
+            'storage.default_org_service.OrgStore.mark_org_as_default',
+            new_callable=AsyncMock,
+            return_value=org,
+        ) as mock_mark_default,
+        patch(
+            'storage.default_org_service.OrgMemberStore.get_org_member',
+            new_callable=AsyncMock,
+            return_value=owner_membership,
+        ),
+        patch(
+            'storage.default_org_service.UserStore.update_current_org',
+            new_callable=AsyncMock,
+            return_value=updated_user,
+        ) as mock_update_current_org,
+        patch(
+            'storage.default_org_service.UserStore.get_user_by_id',
+            new_callable=AsyncMock,
+            return_value=updated_user,
+        ),
+    ):
+        result = await DefaultOrgBootstrapService.apply_for_user(
+            user,
+            is_new_user=True,
+        )
+
+    mock_create_org.assert_awaited_once_with(
+        name=DEFAULT_ORG_NAME,
+        contact_name='first@example.com',
+        contact_email='first@example.com',
+        user_id=str(user.id),
+    )
+    mock_mark_default.assert_awaited_once_with(org.id)
+    mock_update_current_org.assert_awaited_once_with(str(user.id), org.id)
+    assert result.current_org_id == org.id
+
+
+@pytest.mark.asyncio
+async def test_first_user_creates_org_even_with_auto_add_disabled(monkeypatch):
+    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
+    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_AUTO_ADD_USERS', 'false')
+    user = _user('first@example.com')
+    org = _org()
+    owner_membership = SimpleNamespace(role_id=1)
+
+    with (
+        patch(
+            'storage.default_org_service.OrgStore.get_default_org',
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            'storage.default_org_service.OrgStore.list_team_orgs',
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            'storage.default_org_service.OrgService.create_org_with_owner',
+            new_callable=AsyncMock,
+            return_value=org,
+        ) as mock_create_org,
+        patch(
+            'storage.default_org_service.OrgStore.mark_org_as_default',
+            new_callable=AsyncMock,
+            return_value=org,
+        ),
+        patch(
+            'storage.default_org_service.OrgMemberStore.get_org_member',
+            new_callable=AsyncMock,
+            return_value=owner_membership,
+        ),
+        patch(
+            'storage.default_org_service.UserStore.update_current_org',
+            new_callable=AsyncMock,
+            return_value=user,
+        ) as mock_update_current_org,
+        patch(
+            'storage.default_org_service.UserStore.get_user_by_id',
+            new_callable=AsyncMock,
+            return_value=user,
+        ),
+    ):
+        await DefaultOrgBootstrapService.apply_for_user(user, is_new_user=False)
+
+    # Auto-add gates *other* users; the creating user always owns the org.
+    mock_create_org.assert_awaited_once()
+    mock_update_current_org.assert_awaited_once_with(str(user.id), org.id)
+
+
+@pytest.mark.asyncio
+async def test_sole_existing_team_org_is_adopted(monkeypatch):
+    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
+    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_AUTO_ADD_USERS', 'true')
+    member = _user('member@example.com')
+    org = _org('Acme')
+
+    with (
+        patch(
+            'storage.default_org_service.OrgStore.get_default_org',
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            'storage.default_org_service.OrgStore.list_team_orgs',
+            new_callable=AsyncMock,
+            return_value=[org],
+        ),
+        patch(
+            'storage.default_org_service.OrgStore.mark_org_as_default',
+            new_callable=AsyncMock,
+            return_value=org,
+        ) as mock_mark_default,
+        patch(
+            'storage.default_org_service.OrgService.create_org_with_owner',
+            new_callable=AsyncMock,
+        ) as mock_create_org,
+        patch(
+            'storage.default_org_service.OrgMemberStore.get_org_member',
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            'storage.default_org_service.RoleStore.get_role_by_name',
+            new_callable=AsyncMock,
+            return_value=Role(id=3, name='member', rank=3),
+        ),
+        patch(
+            'storage.default_org_service.OrgService.create_litellm_integration',
+            new_callable=AsyncMock,
+            return_value=_settings(),
+        ),
+        patch(
+            'storage.default_org_service.OrgMemberStore.add_user_to_org',
+            new_callable=AsyncMock,
+        ) as mock_add_member,
+        patch(
+            'storage.default_org_service.UserStore.update_current_org',
+            new_callable=AsyncMock,
+            return_value=member,
+        ),
+        patch(
+            'storage.default_org_service.UserStore.get_user_by_id',
+            new_callable=AsyncMock,
+            return_value=member,
+        ),
+    ):
+        await DefaultOrgBootstrapService.apply_for_user(member, is_new_user=False)
+
+    mock_mark_default.assert_awaited_once_with(org.id)
+    mock_create_org.assert_not_called()
+    mock_add_member.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_multiple_unflagged_team_orgs_skip_bootstrap(monkeypatch):
+    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_AUTO_ADD_USERS', 'true')
     user = _user('member@example.com')
 
     with (
         patch(
-            'storage.default_org_service.OrgStore.get_org_by_name',
+            'storage.default_org_service.OrgStore.get_default_org',
             new_callable=AsyncMock,
             return_value=None,
         ),
         patch(
-            'storage.default_org_service.UserStore.get_user_by_email',
+            'storage.default_org_service.OrgStore.list_team_orgs',
             new_callable=AsyncMock,
-            return_value=None,
+            return_value=[_org('A'), _org('B')],
         ),
         patch(
             'storage.default_org_service.OrgService.create_org_with_owner',
@@ -120,93 +298,66 @@ async def test_non_owner_waits_when_no_configured_owner_exists(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_first_configured_owner_creates_default_org_and_switches_new_user(
-    monkeypatch,
-):
+async def test_concurrent_creation_race_adopts_winner(monkeypatch):
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'Acme')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_OWNER_EMAILS', 'owner@example.com')
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_AUTO_ADD_USERS', 'true')
-    user = _user('owner@example.com')
+    user = _user('second@example.com')
     org = _org()
-    owner_membership = SimpleNamespace(role_id=1)
-    updated_user = _user('owner@example.com')
-    updated_user.id = user.id
-    updated_user.current_org_id = org.id
+    existing_membership = SimpleNamespace(role_id=3)
 
     with (
         patch(
-            'storage.default_org_service.OrgStore.get_org_by_name',
+            'storage.default_org_service.OrgStore.get_default_org',
             new_callable=AsyncMock,
-            return_value=None,
+            # First lookup misses; after the create collides, the winner's
+            # flagged org is found.
+            side_effect=[None, org],
+        ),
+        patch(
+            'storage.default_org_service.OrgStore.list_team_orgs',
+            new_callable=AsyncMock,
+            return_value=[],
         ),
         patch(
             'storage.default_org_service.OrgService.create_org_with_owner',
             new_callable=AsyncMock,
-            return_value=org,
-        ) as mock_create_org,
+            side_effect=OrgNameExistsError('exists'),
+        ),
         patch(
             'storage.default_org_service.OrgMemberStore.get_org_member',
             new_callable=AsyncMock,
-            side_effect=[owner_membership, owner_membership],
-        ),
-        patch(
-            'storage.default_org_service.RoleStore.get_role_by_id',
-            new_callable=AsyncMock,
-            return_value=Role(id=1, name='owner', rank=1),
+            return_value=existing_membership,
         ),
         patch(
             'storage.default_org_service.UserStore.update_current_org',
             new_callable=AsyncMock,
-            return_value=updated_user,
         ) as mock_update_current_org,
         patch(
             'storage.default_org_service.UserStore.get_user_by_id',
             new_callable=AsyncMock,
-            return_value=updated_user,
+            return_value=user,
         ),
     ):
-        result = await DefaultOrgBootstrapService.apply_for_user(
-            user,
-            is_new_user=True,
-        )
+        await DefaultOrgBootstrapService.apply_for_user(user, is_new_user=False)
 
-    mock_create_org.assert_awaited_once_with(
-        name='Acme',
-        contact_name='owner@example.com',
-        contact_email='owner@example.com',
-        user_id=str(user.id),
-    )
-    mock_update_current_org.assert_awaited_once_with(str(user.id), org.id)
-    assert result.current_org_id == org.id
+    # The loser of the race is already a member (or treated as existing);
+    # no new org is created and no workspace move is forced.
+    mock_update_current_org.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_existing_owner_user_can_create_org_for_member_auto_join(monkeypatch):
+async def test_existing_user_auto_added_is_moved_into_default_org(monkeypatch):
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'Acme')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_OWNER_EMAILS', 'owner@example.com')
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_AUTO_ADD_USERS', 'true')
     member = _user('member@example.com')
-    owner = _user('owner@example.com')
     org = _org()
 
     with (
         patch(
-            'storage.default_org_service.OrgStore.get_org_by_name',
-            new_callable=AsyncMock,
-            return_value=None,
-        ),
-        patch(
-            'storage.default_org_service.UserStore.get_user_by_email',
-            new_callable=AsyncMock,
-            return_value=owner,
-        ),
-        patch(
-            'storage.default_org_service.OrgService.create_org_with_owner',
+            'storage.default_org_service.OrgStore.get_default_org',
             new_callable=AsyncMock,
             return_value=org,
-        ) as mock_create_org,
+        ),
         patch(
             'storage.default_org_service.OrgMemberStore.get_org_member',
             new_callable=AsyncMock,
@@ -239,12 +390,6 @@ async def test_existing_owner_user_can_create_org_for_member_auto_join(monkeypat
     ):
         await DefaultOrgBootstrapService.apply_for_user(member, is_new_user=False)
 
-    mock_create_org.assert_awaited_once_with(
-        name='Acme',
-        contact_name='owner@example.com',
-        contact_email='owner@example.com',
-        user_id=str(owner.id),
-    )
     mock_add_member.assert_awaited_once_with(
         org_id=org.id,
         user_id=member.id,
@@ -258,40 +403,23 @@ async def test_existing_owner_user_can_create_org_for_member_auto_join(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_configured_owner_is_promoted_without_demoting_others(monkeypatch):
+async def test_auto_add_disabled_leaves_later_users_alone(monkeypatch):
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'Acme')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_OWNER_EMAILS', 'owner@example.com')
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_AUTO_ADD_USERS', 'false')
-    user = _user('owner@example.com')
+    user = _user('member@example.com')
     org = _org()
-    existing_membership = SimpleNamespace(role_id=3)
 
     with (
         patch(
-            'storage.default_org_service.OrgStore.get_org_by_name',
+            'storage.default_org_service.OrgStore.get_default_org',
             new_callable=AsyncMock,
             return_value=org,
         ),
         patch(
             'storage.default_org_service.OrgMemberStore.get_org_member',
             new_callable=AsyncMock,
-            return_value=existing_membership,
+            return_value=None,
         ),
-        patch(
-            'storage.default_org_service.RoleStore.get_role_by_id',
-            new_callable=AsyncMock,
-            return_value=Role(id=3, name='member', rank=3),
-        ),
-        patch(
-            'storage.default_org_service.RoleStore.get_role_by_name',
-            new_callable=AsyncMock,
-            return_value=Role(id=1, name='owner', rank=1),
-        ),
-        patch(
-            'storage.default_org_service.OrgMemberStore.update_user_role_in_org',
-            new_callable=AsyncMock,
-        ) as mock_update_role,
         patch(
             'storage.default_org_service.OrgMemberStore.add_user_to_org',
             new_callable=AsyncMock,
@@ -306,76 +434,19 @@ async def test_configured_owner_is_promoted_without_demoting_others(monkeypatch)
             return_value=user,
         ),
     ):
-        await DefaultOrgBootstrapService.apply_for_user(user, is_new_user=False)
+        result = await DefaultOrgBootstrapService.apply_for_user(
+            user,
+            is_new_user=False,
+        )
 
-    mock_update_role.assert_awaited_once_with(
-        org_id=org.id,
-        user_id=user.id,
-        role_id=1,
-        status='active',
-    )
+    assert result is user
     mock_add_member.assert_not_called()
-    # Promotion means the user was already a member; their workspace choice
-    # is preserved.
     mock_update_current_org.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_existing_user_auto_added_is_moved_into_default_org(monkeypatch):
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'Acme')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_OWNER_EMAILS', 'owner@example.com')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_AUTO_ADD_USERS', 'true')
-    member = _user('member@example.com')
-    org = _org()
-
-    with (
-        patch(
-            'storage.default_org_service.OrgStore.get_org_by_name',
-            new_callable=AsyncMock,
-            return_value=org,
-        ),
-        patch(
-            'storage.default_org_service.OrgMemberStore.get_org_member',
-            new_callable=AsyncMock,
-            return_value=None,
-        ),
-        patch(
-            'storage.default_org_service.RoleStore.get_role_by_name',
-            new_callable=AsyncMock,
-            return_value=Role(id=3, name='member', rank=3),
-        ),
-        patch(
-            'storage.default_org_service.OrgService.create_litellm_integration',
-            new_callable=AsyncMock,
-            return_value=_settings(),
-        ),
-        patch(
-            'storage.default_org_service.OrgMemberStore.add_user_to_org',
-            new_callable=AsyncMock,
-        ) as mock_add_member,
-        patch(
-            'storage.default_org_service.UserStore.update_current_org',
-            new_callable=AsyncMock,
-            return_value=member,
-        ) as mock_update_current_org,
-        patch(
-            'storage.default_org_service.UserStore.get_user_by_id',
-            new_callable=AsyncMock,
-            return_value=member,
-        ),
-    ):
-        await DefaultOrgBootstrapService.apply_for_user(member, is_new_user=False)
-
-    mock_add_member.assert_awaited_once()
-    mock_update_current_org.assert_awaited_once_with(str(member.id), org.id)
 
 
 @pytest.mark.asyncio
 async def test_existing_member_login_keeps_current_workspace(monkeypatch):
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'Acme')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_OWNER_EMAILS', 'owner@example.com')
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_AUTO_ADD_USERS', 'true')
     member = _user('member@example.com')
     org = _org()
@@ -383,7 +454,7 @@ async def test_existing_member_login_keeps_current_workspace(monkeypatch):
 
     with (
         patch(
-            'storage.default_org_service.OrgStore.get_org_by_name',
+            'storage.default_org_service.OrgStore.get_default_org',
             new_callable=AsyncMock,
             return_value=org,
         ),
@@ -416,58 +487,8 @@ async def test_existing_member_login_keeps_current_workspace(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_existing_owner_creating_org_is_moved_into_it(monkeypatch):
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'Acme')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_OWNER_EMAILS', 'owner@example.com')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_AUTO_ADD_USERS', 'false')
-    owner = _user('owner@example.com')
-    org = _org()
-    owner_membership = SimpleNamespace(role_id=1)
-
-    with (
-        patch(
-            'storage.default_org_service.OrgStore.get_org_by_name',
-            new_callable=AsyncMock,
-            return_value=None,
-        ),
-        patch(
-            'storage.default_org_service.OrgService.create_org_with_owner',
-            new_callable=AsyncMock,
-            return_value=org,
-        ),
-        patch(
-            'storage.default_org_service.OrgMemberStore.get_org_member',
-            new_callable=AsyncMock,
-            return_value=owner_membership,
-        ),
-        patch(
-            'storage.default_org_service.RoleStore.get_role_by_id',
-            new_callable=AsyncMock,
-            return_value=Role(id=1, name='owner', rank=1),
-        ),
-        patch(
-            'storage.default_org_service.UserStore.update_current_org',
-            new_callable=AsyncMock,
-            return_value=owner,
-        ) as mock_update_current_org,
-        patch(
-            'storage.default_org_service.UserStore.get_user_by_id',
-            new_callable=AsyncMock,
-            return_value=owner,
-        ),
-    ):
-        await DefaultOrgBootstrapService.apply_for_user(owner, is_new_user=False)
-
-    # The configured owner just bootstrapped the org by logging in; land them in it.
-    mock_update_current_org.assert_awaited_once_with(str(owner.id), org.id)
-
-
-@pytest.mark.asyncio
 async def test_hide_personal_workspaces_moves_member_parked_on_personal(monkeypatch):
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'Acme')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_OWNER_EMAILS', 'owner@example.com')
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_AUTO_ADD_USERS', 'true')
     monkeypatch.setenv('HIDE_PERSONAL_WORKSPACES', 'true')
     # _user() parks the user on their personal org (current_org_id == id)
@@ -477,7 +498,7 @@ async def test_hide_personal_workspaces_moves_member_parked_on_personal(monkeypa
 
     with (
         patch(
-            'storage.default_org_service.OrgStore.get_org_by_name',
+            'storage.default_org_service.OrgStore.get_default_org',
             new_callable=AsyncMock,
             return_value=org,
         ),
@@ -509,8 +530,6 @@ async def test_hide_personal_workspaces_does_not_move_user_in_another_team_org(
     monkeypatch,
 ):
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'Acme')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_OWNER_EMAILS', 'owner@example.com')
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_AUTO_ADD_USERS', 'true')
     monkeypatch.setenv('HIDE_PERSONAL_WORKSPACES', 'true')
     member = _user('member@example.com')
@@ -521,7 +540,7 @@ async def test_hide_personal_workspaces_does_not_move_user_in_another_team_org(
 
     with (
         patch(
-            'storage.default_org_service.OrgStore.get_org_by_name',
+            'storage.default_org_service.OrgStore.get_default_org',
             new_callable=AsyncMock,
             return_value=org,
         ),
@@ -548,8 +567,6 @@ async def test_hide_personal_workspaces_does_not_move_user_in_another_team_org(
 @pytest.mark.asyncio
 async def test_hide_personal_workspaces_leaves_non_member_on_personal(monkeypatch):
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'Acme')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_OWNER_EMAILS', 'owner@example.com')
     monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_AUTO_ADD_USERS', 'false')
     monkeypatch.setenv('HIDE_PERSONAL_WORKSPACES', 'true')
     member = _user('member@example.com')
@@ -557,7 +574,7 @@ async def test_hide_personal_workspaces_leaves_non_member_on_personal(monkeypatc
 
     with (
         patch(
-            'storage.default_org_service.OrgStore.get_org_by_name',
+            'storage.default_org_service.OrgStore.get_default_org',
             new_callable=AsyncMock,
             return_value=org,
         ),
@@ -581,37 +598,3 @@ async def test_hide_personal_workspaces_leaves_non_member_on_personal(monkeypatc
     # Not a member of the default org (auto-add off): never strand the user
     # with zero workspaces — they stay on personal and the UI keeps showing it.
     mock_update_current_org.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_existing_personal_workspace_org_is_not_adopted(monkeypatch):
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
-    personal_org = _personal_org()
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', personal_org.name)
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_OWNER_EMAILS', 'owner@example.com')
-    monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_AUTO_ADD_USERS', 'true')
-    user = _user('owner@example.com')
-
-    with (
-        patch(
-            'storage.default_org_service.OrgStore.get_org_by_name',
-            new_callable=AsyncMock,
-            return_value=personal_org,
-        ),
-        patch(
-            'storage.default_org_service.OrgMemberStore.get_org_member',
-            new_callable=AsyncMock,
-        ) as mock_get_member,
-        patch(
-            'storage.default_org_service.OrgService.create_org_with_owner',
-            new_callable=AsyncMock,
-        ) as mock_create_org,
-    ):
-        result = await DefaultOrgBootstrapService.apply_for_user(
-            user,
-            is_new_user=True,
-        )
-
-    assert result is user
-    mock_get_member.assert_not_called()
-    mock_create_org.assert_not_called()

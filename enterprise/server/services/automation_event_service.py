@@ -34,10 +34,7 @@ from server.auth.constants import (
     AUTOMATION_WEBHOOK_SECRET,
 )
 from server.auth.token_manager import TokenManager
-from storage.default_org_service import (
-    get_default_org_config,
-    is_personal_workspace_org,
-)
+from storage.default_org_service import get_default_org_config
 from storage.org_store import OrgStore
 from storage.redis import get_redis_client_async
 
@@ -244,16 +241,16 @@ class AutomationEventService:
     ) -> UUID | None:
         """Resolve unclaimed events to the bootstrapped default org.
 
-        Applies only when a default org is configured (OPENHANDS_DEFAULT_ORG_*)
+        Applies only when the default org is enabled (OPENHANDS_DEFAULT_ORG_*)
         and exactly one team org exists in the install — the default org
-        itself (with zero team orgs the default org has not been created yet,
-        so nothing resolves). The moment a second team org exists the
-        fallback switches off (within the cache TTL) and routing reverts to
-        explicit claims, so events can never cross org boundaries in
-        multi-org installs.
+        itself, located by its is_default flag (with zero team orgs the
+        default org has not been created yet, so nothing resolves). The
+        moment a second team org exists the fallback switches off (within
+        the cache TTL) and routing reverts to explicit claims, so events can
+        never cross org boundaries in multi-org installs.
         """
         config = get_default_org_config()
-        if not (config.enabled and config.org_name):
+        if not config.enabled:
             return None
 
         cached = await self._get_cached_value(DEFAULT_ORG_FALLBACK_CACHE_KEY)
@@ -261,9 +258,8 @@ class AutomationEventService:
             return None if cached == 'none' else UUID(cached)
 
         org_id: UUID | None = None
-        org = await OrgStore.get_org_by_name(config.org_name)
-        is_personal = org is not None and is_personal_workspace_org(org)
-        if org and not is_personal and await OrgStore.count_team_orgs() == 1:
+        org = await OrgStore.get_default_org()
+        if org and await OrgStore.count_team_orgs() == 1:
             org_id = org.id
 
         await self._set_cached_value(

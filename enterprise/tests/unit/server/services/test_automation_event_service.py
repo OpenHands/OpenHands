@@ -990,7 +990,6 @@ class TestResolveDefaultOrgFallback:
         THEN: The default org id is returned and cached
         """
         monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
-        monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'AcmeOrg')
         org = self._team_org()
         mock_redis = AsyncMock()
         mock_redis.get = AsyncMock(return_value=None)
@@ -1002,7 +1001,7 @@ class TestResolveDefaultOrgFallback:
             ) as mock_org_store,
             patch(REDIS_PATCH, return_value=mock_redis),
         ):
-            mock_org_store.get_org_by_name = AsyncMock(return_value=org)
+            mock_org_store.get_default_org = AsyncMock(return_value=org)
             mock_org_store.count_team_orgs = AsyncMock(return_value=1)
             service = create_service(mock_token_manager)
             result = await service._resolve_default_org_fallback(
@@ -1030,14 +1029,14 @@ class TestResolveDefaultOrgFallback:
             ) as mock_org_store,
             patch(REDIS_PATCH, return_value=mock_redis),
         ):
-            mock_org_store.get_org_by_name = AsyncMock()
+            mock_org_store.get_default_org = AsyncMock()
             service = create_service(mock_token_manager)
             result = await service._resolve_default_org_fallback(
                 ProviderType.BITBUCKET_DATA_CENTER, 'proj'
             )
 
             assert result is None
-            mock_org_store.get_org_by_name.assert_not_called()
+            mock_org_store.get_default_org.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_fallback_off_with_multiple_team_orgs(
@@ -1049,7 +1048,6 @@ class TestResolveDefaultOrgFallback:
         THEN: None is returned (multi-org installs require explicit claims)
         """
         monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
-        monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'AcmeOrg')
         org = self._team_org()
         mock_redis = AsyncMock()
         mock_redis.get = AsyncMock(return_value=None)
@@ -1061,7 +1059,7 @@ class TestResolveDefaultOrgFallback:
             ) as mock_org_store,
             patch(REDIS_PATCH, return_value=mock_redis),
         ):
-            mock_org_store.get_org_by_name = AsyncMock(return_value=org)
+            mock_org_store.get_default_org = AsyncMock(return_value=org)
             mock_org_store.count_team_orgs = AsyncMock(return_value=2)
             service = create_service(mock_token_manager)
             result = await service._resolve_default_org_fallback(
@@ -1078,7 +1076,6 @@ class TestResolveDefaultOrgFallback:
         THEN: The cached org id is returned without DB lookups
         """
         monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
-        monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'AcmeOrg')
         cached_id = '87654321-4321-8765-4321-876543218765'
         mock_redis = AsyncMock()
         mock_redis.get = AsyncMock(return_value=cached_id.encode())
@@ -1089,14 +1086,14 @@ class TestResolveDefaultOrgFallback:
             ) as mock_org_store,
             patch(REDIS_PATCH, return_value=mock_redis),
         ):
-            mock_org_store.get_org_by_name = AsyncMock()
+            mock_org_store.get_default_org = AsyncMock()
             service = create_service(mock_token_manager)
             result = await service._resolve_default_org_fallback(
                 ProviderType.BITBUCKET_DATA_CENTER, 'proj'
             )
 
             assert result == uuid.UUID(cached_id)
-            mock_org_store.get_org_by_name.assert_not_called()
+            mock_org_store.get_default_org.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_unclaimed_bitbucket_dc_event_routes_to_default_org(
@@ -1108,7 +1105,6 @@ class TestResolveDefaultOrgFallback:
         THEN: The event resolves to the default org instead of being dropped
         """
         monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
-        monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_NAME', 'AcmeOrg')
         org = self._team_org()
         mock_redis = AsyncMock()
         mock_redis.get = AsyncMock(return_value=None)
@@ -1125,7 +1121,7 @@ class TestResolveDefaultOrgFallback:
             ) as mock_org_store,
             patch(REDIS_PATCH, return_value=mock_redis),
         ):
-            mock_org_store.get_org_by_name = AsyncMock(return_value=org)
+            mock_org_store.get_default_org = AsyncMock(return_value=org)
             mock_org_store.count_team_orgs = AsyncMock(return_value=1)
             service = create_service(mock_token_manager)
             context = await service._resolve_org_context(

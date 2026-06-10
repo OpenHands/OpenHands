@@ -17,6 +17,7 @@ from server.routes.org_models import (
     OrphanedUserError,
 )
 from sqlalchemy import delete, func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker
 from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
@@ -170,6 +171,46 @@ class OrgStore:
             result = await session.execute(select(Org).filter(Org.name == name))
             org = result.scalars().first()
         return await OrgStore._validate_org_version(org)
+
+    @staticmethod
+    async def get_default_org() -> Org | None:
+        """Get the org flagged as the install's bootstrapped default org."""
+        async with a_session_maker() as session:
+            result = await session.execute(select(Org).filter(Org.is_default))
+            org = result.scalars().first()
+        return await OrgStore._validate_org_version(org)
+
+    @staticmethod
+    async def mark_org_as_default(org_id: UUID) -> Org | None:
+        """Flag an org as the install's default org.
+
+        Returns the org on success (or if already flagged). Returns None if
+        the org does not exist or another org is already flagged (the partial
+        unique index allows at most one default org).
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(select(Org).filter(Org.id == org_id))
+            org = result.scalars().first()
+            if not org:
+                return None
+            if not org.is_default:
+                org.is_default = True
+                try:
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    return None
+        return org
+
+    @staticmethod
+    async def list_team_orgs(limit: int | None = None) -> list[Org]:
+        """List orgs that are not personal workspaces (see count_team_orgs)."""
+        async with a_session_maker() as session:
+            stmt = select(Org).where(~select(User.id).where(User.id == Org.id).exists())
+            if limit is not None:
+                stmt = stmt.limit(limit)
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
 
     @staticmethod
     async def count_team_orgs() -> int:
