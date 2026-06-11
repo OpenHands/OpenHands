@@ -14,6 +14,7 @@ import { GitConversationRouting } from "#/components/features/org/git-conversati
 import { ChangeOrgNameModal } from "#/components/features/org/change-org-name-modal";
 import { AddCreditsModal } from "#/components/features/org/add-credits-modal";
 import { useBalance } from "#/hooks/query/use-balance";
+import { useOrganizations } from "#/hooks/query/use-organizations";
 import { cn } from "#/utils/utils";
 
 export const clientLoader = createPermissionGuard("view_billing");
@@ -24,6 +25,7 @@ function ManageOrg() {
   const { data: organization } = useOrganization();
   const { data: balance } = useBalance();
   const { data: config } = useConfig();
+  const { data: orgsData } = useOrganizations();
 
   const role = me?.role ?? "member";
   const { hasPermission } = usePermission(role);
@@ -39,6 +41,15 @@ function ManageOrg() {
   const canDeleteOrg = !!me && hasPermission("delete_organization");
   const canAddCredits = !!me && hasPermission("add_credits");
   const canManageOrgClaims = !!me && hasPermission("manage_org_claims");
+  // In org-only installs with a single visible org, git claims are not
+  // needed: resolver conversations follow the user's current org and
+  // unclaimed automation events fall back to the default org. The section
+  // reappears as soon as a second org exists, when claims become the
+  // routing mechanism again.
+  const hideGitConversationRouting =
+    config?.feature_flags?.hide_personal_workspaces === true &&
+    orgsData?.organizations?.length === 1 &&
+    orgsData.organizations[0]?.is_personal !== true;
   const shouldHideBilling = isBillingHidden(
     config,
     hasPermission("view_billing"),
@@ -116,7 +127,9 @@ function ManageOrg() {
         </button>
       )}
 
-      {canManageOrgClaims && <GitConversationRouting />}
+      {canManageOrgClaims && !hideGitConversationRouting && (
+        <GitConversationRouting />
+      )}
     </div>
   );
 }

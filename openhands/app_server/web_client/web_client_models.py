@@ -20,6 +20,12 @@ class WebClientFeatureFlags(BaseModel):
     hide_users_page: bool = False
     hide_billing_page: bool = False
     hide_integrations_page: bool = False
+    # When true, the web client hides personal workspaces from the org list
+    # and selector for users who belong to at least one team org. Used by
+    # OHE installs that bootstrap a default org and want it to be the only
+    # workspace users see. UI-level only — the orgs API still returns
+    # personal orgs, and disabling the flag restores them.
+    hide_personal_workspaces: bool = False
     enable_acp: bool = False
     deployment_mode: DeploymentMode | None = None
     enable_onboarding: bool = False
