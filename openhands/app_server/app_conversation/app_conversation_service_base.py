@@ -50,6 +50,30 @@ PRE_COMMIT_HOOK = '.git/hooks/pre-commit'
 PRE_COMMIT_LOCAL = '.git/hooks/pre-commit.local'
 
 
+def _build_git_config_global_command(config_key: str, value: str) -> str:
+    quoted_config_key = shlex.quote(config_key)
+    quoted_value = shlex.quote(value)
+    return ' '.join(
+        [
+            f'git config --global {quoted_config_key} {quoted_value};',
+            'config_exit_code=$?;',
+            'if [ $config_exit_code -eq 0 ]; then',
+            'passwd_home=$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6 || true);',
+            'if [ -n "$passwd_home" ] && [ "$passwd_home" != "$HOME" ]; then',
+            'mkdir -p "$passwd_home" &&',
+            f'git config --file "$passwd_home/.gitconfig" {quoted_config_key} {quoted_value};',
+            'config_exit_code=$?;',
+            'fi;',
+            'fi;',
+            'if [ $config_exit_code -eq 0 ]; then',
+            f'test "$(git config --global --get {quoted_config_key})" = {quoted_value};',
+            'config_exit_code=$?;',
+            'fi;',
+            'exit $config_exit_code',
+        ]
+    )
+
+
 def get_project_dir(
     working_dir: str,
     selected_repository: str | None = None,
@@ -295,7 +319,9 @@ class AppConversationServiceBase(AppConversationService, ABC):
             user_info = await self.user_context.get_user_info()
 
             if user_info.git_user_name:
-                cmd = f'git config --global user.name "{user_info.git_user_name}"'
+                cmd = _build_git_config_global_command(
+                    'user.name', user_info.git_user_name
+                )
                 result = await workspace.execute_command(cmd, workspace.working_dir)
                 if result.exit_code:
                     _logger.warning(f'Git config user.name failed: {result.stderr}')
@@ -305,7 +331,9 @@ class AppConversationServiceBase(AppConversationService, ABC):
                     )
 
             if user_info.git_user_email:
-                cmd = f'git config --global user.email "{user_info.git_user_email}"'
+                cmd = _build_git_config_global_command(
+                    'user.email', user_info.git_user_email
+                )
                 result = await workspace.execute_command(cmd, workspace.working_dir)
                 if result.exit_code:
                     _logger.warning(f'Git config user.email failed: {result.stderr}')
