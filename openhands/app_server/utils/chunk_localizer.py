@@ -40,6 +40,40 @@ def _create_chunks_from_raw_string(content: str, size: int) -> list[Chunk]:
     return ret
 
 
+def _lines_to_chunks(
+    text_lines: list[str],
+    start_line_idx: int,
+    end_line_idx: int,
+    max_chunk_lines: int,
+) -> list[Chunk]:
+    """Split a contiguous range of text lines into fixed-size chunks.
+
+    This is a low-level helper used when padding lines (blank lines,
+    comments between AST nodes, etc.) cannot be absorbed into an adjacent
+    AST-backed chunk without exceeding max_chunk_lines.
+
+    Args:
+        text_lines: The full source text already split on '\\n'.
+        start_line_idx: 0-indexed first line of the range (inclusive).
+        end_line_idx: 0-indexed last line of the range (inclusive).
+        max_chunk_lines: Maximum lines per emitted chunk.
+
+    Returns:
+        A list of Chunk objects with 1-indexed, inclusive line_range.
+    """
+    chunks: list[Chunk] = []
+    for chunk_start in range(start_line_idx, end_line_idx + 1, max_chunk_lines):
+        chunk_end = min(chunk_start + max_chunk_lines - 1, end_line_idx)
+        chunk_text = '\n'.join(text_lines[chunk_start : chunk_end + 1])
+        chunks.append(
+            Chunk(
+                text=chunk_text,
+                line_range=(chunk_start + 1, chunk_end + 1),
+            )
+        )
+    return chunks
+
+
 def _chunk_sibling_nodes(
     nodes: list[Node],
     text_lines: list[str],
@@ -49,32 +83,32 @@ def _chunk_sibling_nodes(
 ) -> list[Chunk]:
     """Greedy-merge a list of sibling AST nodes into Chunks.
 
+    Boundary expansion (absorbing blank lines / comments between AST
+    nodes) is constrained by max_chunk_lines so that no emitted chunk
+    silently exceeds the size limit.
+
     Args:
-        nodes: Sibling tree-sitter "Node" objects to merge.
-        text_lines: Source text already split on '\n'.
+        nodes: Sibling tree-sitter Node objects to merge.
+        text_lines: Source text already split on '\\n'.
         max_chunk_lines: Upper bound on lines per emitted chunk.
-        start_line_idx: 0-indexed first line index of the region these nodes occupy.
-        end_line_idx: 0-indexed last line index of the region.
+        start_line_idx: 0-indexed first line of the region (inclusive).
+        end_line_idx: 0-indexed last line of the region (inclusive).
 
     Returns:
-        A list of class Chunk objects.
+        A list of Chunk objects.
     """
     if not nodes:
-        # Defensive: emit the whole range as one chunk.
-        chunk_text = '\n'.join(text_lines[start_line_idx : end_line_idx + 1])
-        return [
-            Chunk(
-                text=chunk_text,
-                line_range=(start_line_idx + 1, end_line_idx + 1),
-            )
-        ]
+        return _lines_to_chunks(
+            text_lines, start_line_idx, end_line_idx, max_chunk_lines
+        )
 
+    # greedy-merge sibling nodes into groups that fit within
+    # max_chunk_lines (measured by AST span only).
     groups: list[list[Node]] = []
     current_group: list[Node] = []
     current_group_start_line_idx: int = 0
 
     for node in nodes:
-        # both are 0-indexed row
         node_start_line_idx: int = node.start_point[0]
         node_end_line_idx: int = node.end_point[0]
 
@@ -82,7 +116,6 @@ def _chunk_sibling_nodes(
             current_group = [node]
             current_group_start_line_idx = node_start_line_idx
         else:
-            # Lines the merged group would span
             merged_line_count = node_end_line_idx - current_group_start_line_idx + 1
             if merged_line_count <= max_chunk_lines:
                 current_group.append(node)
@@ -94,47 +127,78 @@ def _chunk_sibling_nodes(
     if current_group:
         groups.append(current_group)
 
+    # emit chunks, absorbing inter-group padding only when it
+    # does not violate max_chunk_lines.
     result: list[Chunk] = []
+    cursor: int = start_line_idx
 
     for i, group in enumerate(groups):
-        group_ast_start_line_idx: int = group[0].start_point[0]
-        group_ast_end_line_idx: int = group[-1].end_point[0]
+        group_ast_start: int = group[0].start_point[0]
+        group_ast_end: int = group[-1].end_point[0]
+        group_line_count: int = group_ast_end - group_ast_start + 1
 
-        # Expand boundaries so blank lines are absorbed (full contiguity).
-        actual_start_line_idx = start_line_idx if i == 0 else group_ast_start_line_idx
+        # The farthest line this group could claim (for suffix absorption).
         if i < len(groups) - 1:
-            next_group_ast_start_line_idx: int = groups[i + 1][0].start_point[0]
-            actual_end_line_idx = next_group_ast_start_line_idx - 1
+            group_region_end: int = groups[i + 1][0].start_point[0] - 1
         else:
-            actual_end_line_idx = end_line_idx
+            group_region_end = end_line_idx
 
-        # If a single node is oversized AND has children, recurse.
-        if len(group) == 1:
-            node = group[0]
-            ast_line_count = group_ast_end_line_idx - group_ast_start_line_idx + 1
-            if ast_line_count > max_chunk_lines and node.children:
-                sub_chunks = _chunk_sibling_nodes(
-                    nodes=node.children,
-                    text_lines=text_lines,
-                    max_chunk_lines=max_chunk_lines,
-                    start_line_idx=actual_start_line_idx,
-                    end_line_idx=actual_end_line_idx,
+        # prefix absorption
+        prefix_line_count: int = group_ast_start - cursor
+        if prefix_line_count > 0:
+            if prefix_line_count + group_line_count <= max_chunk_lines:
+                chunk_start = cursor  # absorb prefix
+            else:
+                # Prefix too large
+                result.extend(
+                    _lines_to_chunks(
+                        text_lines,
+                        cursor,
+                        group_ast_start - 1,
+                        max_chunk_lines,
+                    )
                 )
-                result.extend(sub_chunks)
-                continue
+                chunk_start = group_ast_start
+        else:
+            chunk_start = cursor
 
-        # Emit the group as a single Chunk.
-        chunk_text = '\n'.join(
-            text_lines[actual_start_line_idx : actual_end_line_idx + 1]
-        )
-        result.append(
-            Chunk(
-                text=chunk_text,
-                line_range=(
-                    actual_start_line_idx + 1,
-                    actual_end_line_idx + 1,
-                ),  # 1-indexed, inclusive
+        # suffix / inter-group gap absorption
+        current_chunk_line_count: int = group_ast_end - chunk_start + 1
+        suffix_line_count: int = group_region_end - group_ast_end
+        if (
+            suffix_line_count > 0
+            and current_chunk_line_count + suffix_line_count <= max_chunk_lines
+        ):
+            chunk_end = group_region_end
+        else:
+            chunk_end = group_ast_end
+
+        # emit the chunk
+        if len(group) == 1 and group_line_count > max_chunk_lines and group[0].children:
+            # Single oversized node with children — recurse.
+            sub_chunks = _chunk_sibling_nodes(
+                nodes=group[0].children,
+                text_lines=text_lines,
+                max_chunk_lines=max_chunk_lines,
+                start_line_idx=chunk_start,
+                end_line_idx=chunk_end,
             )
+            result.extend(sub_chunks)
+        else:
+            chunk_text = '\n'.join(text_lines[chunk_start : chunk_end + 1])
+            result.append(
+                Chunk(
+                    text=chunk_text,
+                    line_range=(chunk_start + 1, chunk_end + 1),
+                )
+            )
+
+        cursor = chunk_end + 1
+
+    # Handle any trailing lines not covered by the last group.
+    if cursor <= end_line_idx:
+        result.extend(
+            _lines_to_chunks(text_lines, cursor, end_line_idx, max_chunk_lines)
         )
 
     return result

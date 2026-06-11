@@ -170,3 +170,60 @@ def test_create_chunks_tree_sitter_python_oversized():
 
     assert chunks[0].line_range[0] == 1
     assert chunks[-1].line_range[1] == len(text.split('\n'))
+
+
+def test_create_chunks_tree_sitter_prefix_respects_max_lines():
+    """Prefix lines before the first AST node must not cause chunks to exceed max_chunk_lines."""
+    text = (
+        '# comment 1\n# comment 2\n# comment 3\n'
+        '# comment 4\n# comment 5\ndef foo():\n    pass'
+    )
+    chunks = create_chunks(text, size=3, language='python')
+    # Every chunk must respect the size constraint.
+    for chunk in chunks:
+        line_count = chunk.line_range[1] - chunk.line_range[0] + 1
+        assert line_count <= 3, f'Chunk exceeded max size: {chunk.line_range}'
+    # Full contiguity.
+    assert chunks[0].line_range[0] == 1
+    for i in range(len(chunks) - 1):
+        assert chunks[i].line_range[1] + 1 == chunks[i + 1].line_range[0]
+    assert chunks[-1].line_range[1] == len(text.split('\n'))
+
+
+def test_create_chunks_tree_sitter_gap_respects_max_lines():
+    """Inter-group gaps must not cause chunks to exceed max_chunk_lines."""
+    lines = [
+        'def foo():',
+        '    pass',
+        '',
+        '',
+        '',
+        '',
+        '',
+        'def bar():',
+        '    pass',
+    ]
+    text = '\n'.join(lines)
+    chunks = create_chunks(text, size=3, language='python')
+    for chunk in chunks:
+        line_count = chunk.line_range[1] - chunk.line_range[0] + 1
+        assert line_count <= 3, f'Chunk exceeded max size: {chunk.line_range}'
+    # Full contiguity.
+    assert chunks[0].line_range[0] == 1
+    for i in range(len(chunks) - 1):
+        assert chunks[i].line_range[1] + 1 == chunks[i + 1].line_range[0]
+    assert chunks[-1].line_range[1] == len(lines)
+
+
+def test_create_chunks_tree_sitter_suffix_respects_max_lines():
+    """Trailing lines after the last AST node must not cause chunks to exceed max_chunk_lines."""
+    text = 'def foo():\n    pass\n\n\n\n\n'
+    chunks = create_chunks(text, size=3, language='python')
+    for chunk in chunks:
+        line_count = chunk.line_range[1] - chunk.line_range[0] + 1
+        assert line_count <= 3, f'Chunk exceeded max size: {chunk.line_range}'
+    # Full contiguity.
+    assert chunks[0].line_range[0] == 1
+    for i in range(len(chunks) - 1):
+        assert chunks[i].line_range[1] + 1 == chunks[i + 1].line_range[0]
+    assert chunks[-1].line_range[1] == len(text.split('\n'))
