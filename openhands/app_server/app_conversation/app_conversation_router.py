@@ -38,6 +38,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     HookEventResponse,
     HookMatcherResponse,
     SkillResponse,
+    SwitchAcpModelRequest,
     SwitchProfileRequest,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
@@ -746,6 +747,113 @@ async def switch_conversation_profile(
         logger.exception(
             'Failed to persist new llm_model on conversation %s after profile '
             'switch — header may be stale until the next refresh.',
+            conversation_id,
+        )
+
+    return Success()
+
+
+@router.post(
+    '/{conversation_id}/switch_acp_model',
+    responses={
+        400: {
+            'description': 'Agent is not ACP, or provider does not support model switching'
+        },
+        404: {'description': 'Conversation or sandbox not found'},
+        409: {
+            'description': 'ACP session not initialised yet; send the first message first'
+        },
+        502: {'description': 'Agent server returned an error'},
+        504: {'description': 'ACP server did not respond to the model switch in time'},
+    },
+)
+async def switch_conversation_acp_model(
+    conversation_id: UUID,
+    request: SwitchAcpModelRequest,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    app_conversation_info_service: AppConversationInfoService = (
+        app_conversation_info_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> Success:
+    """Switch the model of a running ACP conversation in place.
+
+    Proxies to the agent-server's ``switch_acp_model`` endpoint, which issues
+    a protocol-level ``session/set_model`` call to the ACP subprocess so the
+    new model applies to subsequent turns without losing context. Persists the
+    new model on the conversation record so the UI chip stays current.
+    """
+    ctx = await _get_agent_server_context(
+        conversation_id,
+        app_conversation_service,
+        sandbox_service,
+        sandbox_spec_service,
+    )
+    if isinstance(ctx, JSONResponse):
+        raise HTTPException(
+            status_code=ctx.status_code,
+            detail=f'Conversation {conversation_id} is not reachable',
+        )
+    if ctx is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail='Sandbox is paused; resume it before switching models.',
+        )
+
+    headers = {'X-Session-API-Key': ctx.session_api_key} if ctx.session_api_key else {}
+
+    try:
+        switch_response = await httpx_client.post(
+            f'{ctx.agent_server_url}/api/conversations/{conversation_id}/switch_acp_model',
+            json={'model': request.model},
+            headers=headers,
+            timeout=30.0,
+        )
+        switch_response.raise_for_status()
+        logger.info(
+            'Switched ACP conversation %s to model %r',
+            conversation_id,
+            request.model,
+        )
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            'Agent server returned error during switch_acp_model: '
+            f'{e.response.status_code} - {e.response.text}'
+        )
+        # Surface agent-server's 400/409/504 directly — they carry semantics
+        # (not-ACP, no-session, timeout) that the client can act on.
+        if e.response.status_code in (400, 409, 504):
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=f'Agent server error: {e.response.status_code}',
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f'Agent server error: {e.response.status_code}',
+        )
+    except httpx.RequestError as e:
+        logger.error(f'Failed to reach agent server during switch_acp_model: {e}')
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Failed to reach agent server.',
+        )
+
+    # Persist so the conversation's model chip reflects the switch on next load.
+    try:
+        info = await app_conversation_info_service.get_app_conversation_info(
+            conversation_id,
+        )
+        if info is not None and info.llm_model != request.model:
+            info.llm_model = request.model
+            await app_conversation_info_service.save_app_conversation_info(info)
+    except Exception:
+        logger.exception(
+            'Failed to persist new llm_model on conversation %s after ACP model '
+            'switch — chip may be stale until the next refresh.',
             conversation_id,
         )
 
