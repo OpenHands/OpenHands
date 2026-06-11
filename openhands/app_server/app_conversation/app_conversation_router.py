@@ -829,7 +829,7 @@ async def switch_conversation_acp_model(
         if e.response.status_code in (400, 409, 504):
             raise HTTPException(
                 status_code=e.response.status_code,
-                detail=e.response.text,
+                detail=f'Agent server error: {e.response.status_code}',
             )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
