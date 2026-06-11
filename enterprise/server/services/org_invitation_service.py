@@ -19,6 +19,7 @@ from storage.org_member_store import OrgMemberStore
 from storage.org_service import OrgService
 from storage.org_store import OrgStore
 from storage.role_store import RoleStore
+from storage.user import User
 from storage.user_store import UserStore
 
 from openhands.app_server.utils.logger import openhands_logger as logger
@@ -253,6 +254,100 @@ class OrgInvitationService:
         )
 
         return successful, failed
+
+    @staticmethod
+    async def accept_pending_invitations_for_user(user: User) -> list[OrgInvitation]:
+        """Accept pending invitations matching the user's email at sign-in.
+
+        SSO-native acceptance: the IdP verified the address an invitation was
+        sent to, which is the same assurance as clicking the emailed token
+        link — so the token never needs delivering. Also marks invitations
+        accepted when the user is already a member (e.g. default-org auto-add
+        joined them first), so they stop showing as pending.
+
+        Returns:
+            The invitations this call newly accepted with a membership.
+        """
+        user_email = (user.email or '').strip().lower()
+        if not user_email:
+            return []
+
+        invitations = await OrgInvitationStore.get_pending_invitations_for_email(
+            user_email
+        )
+        accepted: list[OrgInvitation] = []
+        for invitation in invitations:
+            if OrgInvitationStore.is_token_expired(invitation):
+                await OrgInvitationStore.update_invitation_status(
+                    invitation.id, OrgInvitation.STATUS_EXPIRED
+                )
+                continue
+
+            existing_member = await OrgMemberStore.get_org_member(
+                invitation.org_id, user.id
+            )
+            if existing_member:
+                await OrgInvitationStore.update_invitation_status(
+                    invitation.id,
+                    OrgInvitation.STATUS_ACCEPTED,
+                    accepted_by_user_id=user.id,
+                )
+                continue
+
+            org = await OrgStore.get_org_by_id(invitation.org_id)
+            if not org:
+                continue
+
+            try:
+                settings = await OrgService.create_litellm_integration(
+                    invitation.org_id, str(user.id)
+                )
+            except Exception:
+                logger.exception(
+                    'Failed to create LiteLLM integration for login-time '
+                    'invitation acceptance',
+                    extra={
+                        'invitation_id': invitation.id,
+                        'user_id': str(user.id),
+                        'org_id': str(invitation.org_id),
+                    },
+                )
+                continue
+
+            llm_api_key_secret = settings.agent_settings.llm.api_key
+            llm_api_key = (
+                llm_api_key_secret.get_secret_value() if llm_api_key_secret else ''  # type: ignore[union-attr]
+            )
+            await OrgMemberStore.add_user_to_org(
+                org_id=invitation.org_id,
+                user_id=user.id,
+                role_id=invitation.role_id,
+                llm_api_key=llm_api_key,
+                status='active',
+                agent_settings_diff={},
+                conversation_settings_diff={},
+            )
+            await OrgInvitationStore.update_invitation_status(
+                invitation.id,
+                OrgInvitation.STATUS_ACCEPTED,
+                accepted_by_user_id=user.id,
+            )
+            accepted.append(invitation)
+            logger.info(
+                'Organization invitation accepted via email match at login',
+                extra={
+                    'invitation_id': invitation.id,
+                    'user_id': str(user.id),
+                    'org_id': str(invitation.org_id),
+                },
+            )
+
+        # Land the user in the first newly joined org when they're parked on
+        # their personal workspace; a deliberately chosen team org is kept.
+        if accepted and user.current_org_id == user.id:
+            await UserStore.update_current_org(str(user.id), accepted[0].org_id)
+
+        return accepted
 
     @staticmethod
     async def accept_invitation(token: str, user_id: UUID) -> OrgInvitation:
