@@ -1550,7 +1550,7 @@ describe("LlmSettingsScreen", () => {
     });
   });
 
-  it("does not reveal all-only fields after save when refetch returns a litellm_proxy model with the managed proxy base URL", async () => {
+  it("does not reveal all-only fields after save when refetch returns an OpenHands managed model", async () => {
     const schema = structuredClone(
       MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
     );
@@ -1591,8 +1591,7 @@ describe("LlmSettingsScreen", () => {
         agent_settings_schema: schema,
         agent_settings: {
           llm: {
-            model: "litellm_proxy/claude-opus-4-5-20251101",
-            base_url: "https://llm-proxy.app.all-hands.dev",
+            model: "openhands/claude-opus-4-5-20251101",
           },
         },
       });
