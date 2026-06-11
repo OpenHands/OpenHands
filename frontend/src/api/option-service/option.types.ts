@@ -28,6 +28,9 @@ export interface WebClientFeatureFlags {
   hide_users_page: boolean;
   hide_billing_page: boolean;
   hide_integrations_page: boolean;
+  /** Hide personal workspaces from the org list/selector for users who
+   *  belong to at least one team org (OHE "org-only" installs). */
+  hide_personal_workspaces?: boolean;
   enable_acp?: boolean;
   deployment_mode?: DeploymentMode;
   enable_onboarding: boolean;

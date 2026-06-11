@@ -37,7 +37,7 @@ from openhands.app_server.event_callback.set_title_callback_processor import (
     SetTitleCallbackProcessor,
 )
 from openhands.app_server.integrations.provider import ProviderType
-from openhands.app_server.sandbox.sandbox_models import SandboxInfo
+from openhands.app_server.sandbox.sandbox_models import SandboxRecord
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.user.auth_user_context import AuthUserContext
@@ -232,8 +232,8 @@ async def valid_sandbox(
     session_api_key: str = Depends(
         APIKeyHeader(name='X-Session-API-Key', auto_error=False)
     ),
-) -> SandboxInfo:
-    """Use a session api key for validation, and get a sandbox. Subsequent actions
+) -> SandboxRecord:
+    """Use a session api key for validation, and get a sandbox record. Subsequent actions
     are executed in the context of the owner of the sandbox"""
     if not session_api_key:
         raise HTTPException(
@@ -246,36 +246,36 @@ async def valid_sandbox(
     # Since we need access to all sandboxes, this is executed in the context of the admin.
     setattr(state, USER_CONTEXT_ATTR, ADMIN)
     async with get_sandbox_service(state) as sandbox_service:
-        sandbox_info = await sandbox_service.get_sandbox_by_session_api_key(
+        sandbox_record = await sandbox_service.get_sandbox_record_by_session_api_key(
             session_api_key
         )
-        if sandbox_info is None:
+        if sandbox_record is None:
             raise HTTPException(
                 status.HTTP_401_UNAUTHORIZED, detail='Invalid session API key'
             )
 
         # In SAAS Mode there is always a user, so we set the owner of the sandbox
         # as the current user (Validated by the session_api_key they provided)
-        if sandbox_info.created_by_user_id:
+        if sandbox_record.created_by_user_id:
             setattr(
                 request.state,
                 USER_CONTEXT_ATTR,
-                SpecifyUserContext(sandbox_info.created_by_user_id),
+                SpecifyUserContext(sandbox_record.created_by_user_id),
             )
         elif app_mode == AppMode.SAAS:
             _logger.error(
-                'Sandbox had no user specified', extra={'sandbox_id': sandbox_info.id}
+                'Sandbox had no user specified', extra={'sandbox_id': sandbox_record.id}
             )
             raise HTTPException(
                 status.HTTP_401_UNAUTHORIZED, detail='Sandbox had no user specified'
             )
 
-        return sandbox_info
+        return sandbox_record
 
 
 async def valid_conversation(
     conversation_id: UUID,
-    sandbox_info: SandboxInfo = Depends(valid_sandbox),
+    sandbox_record: SandboxRecord = Depends(valid_sandbox),
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
 ) -> AppConversationInfo:
     app_conversation_info = (
@@ -285,12 +285,12 @@ async def valid_conversation(
         # Conversation does not yet exist - create a stub
         return AppConversationInfo(
             id=conversation_id,
-            sandbox_id=sandbox_info.id,
-            created_by_user_id=sandbox_info.created_by_user_id,
+            sandbox_id=sandbox_record.id,
+            created_by_user_id=sandbox_record.created_by_user_id,
         )
 
     # Sanity check - Make sure that the conversation and sandbox were created by the same user
-    if app_conversation_info.created_by_user_id != sandbox_info.created_by_user_id:
+    if app_conversation_info.created_by_user_id != sandbox_record.created_by_user_id:
         raise AuthError()
 
     return app_conversation_info
@@ -299,7 +299,7 @@ async def valid_conversation(
 @router.post('/conversations')
 async def on_conversation_update(
     conversation_info: ConversationInfo,
-    sandbox_info: SandboxInfo = Depends(valid_sandbox),
+    sandbox_record: SandboxRecord = Depends(valid_sandbox),
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
 ) -> Success:
     """Webhook callback for when a conversation starts, pauses, resumes, or deletes.
@@ -309,7 +309,7 @@ async def on_conversation_update(
     accepted on this single endpoint.
     """
     existing = await valid_conversation(
-        conversation_info.id, sandbox_info, app_conversation_info_service
+        conversation_info.id, sandbox_record, app_conversation_info_service
     )
 
     # If the conversation is being deleted, no action is required...
@@ -329,7 +329,7 @@ async def on_conversation_update(
         existing.trigger,
         merged_tags,
         conversation_id=str(conversation_info.id),
-        sandbox_id=sandbox_info.id,
+        sandbox_id=sandbox_record.id,
     )
 
     # Trust the discriminated-union payload over any stored ``agent_kind``
@@ -350,8 +350,8 @@ async def on_conversation_update(
     app_conversation_info = AppConversationInfo(
         id=conversation_info.id,
         title=existing.title or f'Conversation {conversation_info.id.hex}',
-        sandbox_id=sandbox_info.id,
-        created_by_user_id=sandbox_info.created_by_user_id,
+        sandbox_id=sandbox_record.id,
+        created_by_user_id=sandbox_record.created_by_user_id,
         llm_model=llm_model,
         agent_kind=agent_kind,
         # Git parameters
@@ -378,7 +378,7 @@ async def on_conversation_update(
         setattr(
             state,
             USER_CONTEXT_ATTR,
-            SpecifyUserContext(sandbox_info.created_by_user_id),
+            SpecifyUserContext(sandbox_record.created_by_user_id),
         )
         async with get_event_callback_service(state) as event_callback_service:
             await event_callback_service.save_event_callback(
@@ -391,8 +391,8 @@ async def on_conversation_update(
 
     # Analytics: conversation created
     analytics = get_analytics_service()
-    if analytics and sandbox_info.created_by_user_id:
-        ctx = await resolve_analytics_context(sandbox_info.created_by_user_id)
+    if analytics and sandbox_record.created_by_user_id:
+        ctx = await resolve_analytics_context(sandbox_record.created_by_user_id)
         analytics.track_conversation_created(
             ctx=ctx,
             conversation_id=str(conversation_info.id),

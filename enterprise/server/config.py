@@ -114,7 +114,7 @@ class SaaSServerConfig(ServerConfig):
         # Check if the response is successful
         if response.status_code != 200:
             raise ValueError(
-                f'Failed to retrieve app info, status code:{response.status_code}, message:{response.content.decode('utf-8')}'
+                f'Failed to retrieve app info, status code:{response.status_code}, message:{response.content.decode("utf-8")}'
             )
 
         # Extract the app slug from the response

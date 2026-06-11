@@ -208,8 +208,7 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
             )
         if not installer_user_id:
             logger.warning(
-                f'[Bitbucket DC] No installer recorded for '
-                f'{project_key}/{repo_slug}'
+                f'[Bitbucket DC] No installer recorded for {project_key}/{repo_slug}'
             )
             return
 
@@ -344,8 +343,7 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
             )
         else:
             logger.warning(
-                f'[Bitbucket DC] Unsupported view type: '
-                f'{type(bitbucket_view).__name__}'
+                f'[Bitbucket DC] Unsupported view type: {type(bitbucket_view).__name__}'
             )
 
     async def start_job(self, bitbucket_view: BitbucketDCViewType) -> None:
