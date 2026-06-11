@@ -77,6 +77,28 @@ async def test_get_org_by_id_not_found(async_session_maker):
 
 
 @pytest.mark.asyncio
+async def test_enable_byor_export_persists_flag(async_session_maker):
+    async with async_session_maker() as session:
+        org = Org(name=f'test-org-{uuid.uuid4()}')
+        session.add(org)
+        await session.commit()
+        await session.refresh(org)
+        org_id = org.id
+        assert org.byor_export_enabled is False
+
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        updated_org = await OrgStore.enable_byor_export(org_id)
+
+    assert updated_org is not None
+    assert updated_org.byor_export_enabled is True
+
+    async with async_session_maker() as session:
+        persisted_org = await session.get(Org, org_id)
+        assert persisted_org is not None
+        assert persisted_org.byor_export_enabled is True
+
+
+@pytest.mark.asyncio
 async def test_list_orgs(async_session_maker, mock_litellm_api):
     # Test listing all orgs
     async with async_session_maker() as session:
@@ -135,7 +157,7 @@ async def test_update_org(async_session_maker, mock_litellm_api):
         assert updated_org is not None
         assert updated_org.name == 'updated-org'
         agent_settings = OrgStore.get_agent_settings_from_org(updated_org)
-        assert agent_settings.llm.model == 'litellm_proxy/claude-3'
+        assert agent_settings.llm.model == 'openhands/claude-3'
 
 
 def test_get_org_settings_from_org_use_persisted_loaders():
@@ -1427,7 +1449,7 @@ async def test_update_org_defaults_async_propagates_managed_key_reset():
 
     assert result is not None
     agent_settings = OrgStore.get_agent_settings_from_org(result)
-    assert agent_settings.llm.model == 'litellm_proxy/claude-3'
+    assert agent_settings.llm.model == 'openhands/claude-3'
     mock_member_update.assert_called_once()
     member_settings = mock_member_update.call_args[0][2]
     assert member_settings.llm_api_key.get_secret_value() == 'managed-key'

@@ -348,6 +348,74 @@ describe("LlmSettingsScreen", () => {
     expect(screen.getByTestId("base-url-input")).toBeInTheDocument();
   });
 
+  it("defaults to basic view when an OpenHands managed model has no base URL", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithAdvancedToggle({
+        llm_model: "openhands/claude-opus-4-5-20251101",
+        llm_base_url: "",
+        agent_settings: {
+          llm: {
+            model: "openhands/claude-opus-4-5-20251101",
+          },
+        },
+      }),
+    );
+
+    await renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+    expect(
+      screen.queryByTestId("llm-settings-form-advanced"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens advanced view when an OpenHands model has a custom base URL", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithAdvancedToggle({
+        llm_model: "openhands/claude-opus-4-5-20251101",
+        llm_base_url: "https://custom.example/v1",
+        agent_settings: {
+          llm: {
+            model: "openhands/claude-opus-4-5-20251101",
+            base_url: "https://custom.example/v1",
+          },
+        },
+      }),
+    );
+
+    await renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-advanced");
+    expect(screen.getByTestId("base-url-input")).toHaveValue(
+      "https://custom.example/v1",
+    );
+  });
+
+  it("treats a litellm_proxy model with the managed proxy URL as an explicit custom endpoint", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithAdvancedToggle({
+        llm_model: "litellm_proxy/claude-opus-4-5-20251101",
+        llm_base_url: "https://llm-proxy.app.all-hands.dev",
+        agent_settings: {
+          llm: {
+            model: "litellm_proxy/claude-opus-4-5-20251101",
+            base_url: "https://llm-proxy.app.all-hands.dev",
+          },
+        },
+      }),
+    );
+
+    await renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-advanced");
+    expect(screen.getByTestId("llm-custom-model-input")).toHaveValue(
+      "litellm_proxy/claude-opus-4-5-20251101",
+    );
+    expect(
+      screen.queryByTestId("openhands-api-key-help-2"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows Advanced and All toggles in OSS mode for the default LLM route schema", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
 
@@ -1550,7 +1618,7 @@ describe("LlmSettingsScreen", () => {
     });
   });
 
-  it("does not reveal all-only fields after save when refetch returns a litellm_proxy model with the managed proxy base URL", async () => {
+  it("does not reveal all-only fields after save when refetch returns an OpenHands managed model", async () => {
     const schema = structuredClone(
       MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
     );
@@ -1591,8 +1659,7 @@ describe("LlmSettingsScreen", () => {
         agent_settings_schema: schema,
         agent_settings: {
           llm: {
-            model: "litellm_proxy/claude-opus-4-5-20251101",
-            base_url: "https://llm-proxy.app.all-hands.dev",
+            model: "openhands/claude-opus-4-5-20251101",
           },
         },
       });
