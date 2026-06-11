@@ -19,6 +19,7 @@ from server.routes.auth import (
 )
 
 from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.user_auth.user_auth import AuthType
 
 
 def create_mock_user_authorizer(success: bool = True, error_detail: str | None = None):
@@ -871,7 +872,12 @@ async def test_authenticate_failure():
     with patch('server.routes.auth.get_access_token') as mock_get_token:
         mock_get_token.side_effect = AuthError()
 
-        result = await authenticate(MagicMock())
+        # request.cookies is a real Mapping[str, str] in production; give the
+        # mock a concrete dict so the cookie-clearing path (which now
+        # reassembles chunked cookies) reads strings rather than MagicMocks.
+        request = MagicMock()
+        request.cookies = {'keycloak_auth': 'some-token'}
+        result = await authenticate(request)
 
         assert isinstance(result, JSONResponse)
         assert result.status_code == status.HTTP_401_UNAUTHORIZED
@@ -921,6 +927,61 @@ async def test_logout_without_refresh_token():
 
             mock_token_manager.logout.assert_not_called()
             assert 'set-cookie' in result.headers
+
+
+@pytest.mark.asyncio
+async def test_logout_with_bearer_auth_does_not_revoke_offline_token():
+    """``/api/logout`` must not revoke the offline_token for bearer auth.
+
+    A logout call that resolves to a *bearer* auth user (e.g., the
+    browser also carried an ``Authorization: Bearer <api-key>`` header)
+    must NOT invoke Keycloak's logout — that would revoke the user's
+    offline session and break every API key minted for them. The cookie
+    itself must still be deleted.
+    """
+    mock_request = MagicMock()
+    mock_request.state.user_auth = SaasUserAuth(
+        refresh_token=SecretStr('the-users-offline-token'),
+        user_id='test_user_id',
+        auth_type=AuthType.BEARER,
+    )
+
+    with patch('server.routes.auth.token_manager') as mock_token_manager:
+        mock_token_manager.logout = AsyncMock()
+        result = await logout(mock_request)
+
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == status.HTTP_200_OK
+        assert 'User logged out' in result.body.decode()
+
+        # The offline token must NOT be revoked by a browser logout click.
+        mock_token_manager.logout.assert_not_called()
+        # The cookie itself is always removed.
+        assert 'set-cookie' in result.headers
+
+
+@pytest.mark.asyncio
+async def test_logout_with_cookie_auth_terminates_keycloak_session():
+    """Cookie-auth logout still terminates the Keycloak session.
+
+    The bearer-auth guard added to ``/api/logout`` must not regress this
+    common case.
+    """
+    mock_request = MagicMock()
+    mock_request.state.user_auth = SaasUserAuth(
+        refresh_token=SecretStr('cookie-refresh-token'),
+        user_id='test_user_id',
+        auth_type=AuthType.COOKIE,
+    )
+
+    with patch('server.routes.auth.token_manager') as mock_token_manager:
+        mock_token_manager.logout = AsyncMock()
+        result = await logout(mock_request)
+
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == status.HTTP_200_OK
+        mock_token_manager.logout.assert_awaited_once_with('cookie-refresh-token')
+        assert 'set-cookie' in result.headers
 
 
 @pytest.mark.asyncio

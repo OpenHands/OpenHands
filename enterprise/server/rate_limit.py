@@ -127,7 +127,7 @@ def _rate_limit_exceeded_handler(request: Request, exc: Exception) -> Response:
     logger.info(exc.__class__.__name__)
     if isinstance(exc, RateLimitException):
         response = JSONResponse(
-            {'error': f'Rate limit exceeded: { exc.detail}'}, status_code=429
+            {'error': f'Rate limit exceeded: {exc.detail}'}, status_code=429
         )
         if exc.result:
             exc.result.add_headers(response)

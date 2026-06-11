@@ -65,7 +65,7 @@ def service(async_session) -> SQLAppConversationInfoService:
 
 
 @pytest.fixture
-def sandbox_info():
+def sandbox_record():
     sandbox = MagicMock()
     sandbox.id = 'sandbox_acp_test'
     sandbox.created_by_user_id = 'user_123'
@@ -114,7 +114,9 @@ def _make_acp_conversation_info(acp_command: list[str]) -> ConversationInfo:
 
 
 @pytest.mark.asyncio
-async def test_llm_conversation_stores_llm_model(async_session, service, sandbox_info):
+async def test_llm_conversation_stores_llm_model(
+    async_session, service, sandbox_record
+):
     """LLM path stores the real model in llm_model and sets agent_kind='openhands'."""
     llm_info = _make_llm_conversation_info()
     conversation_id = llm_info.id
@@ -122,8 +124,8 @@ async def test_llm_conversation_stores_llm_model(async_session, service, sandbox
     existing = AppConversationInfo(
         id=conversation_id,
         title='Test',
-        sandbox_id=sandbox_info.id,
-        created_by_user_id=sandbox_info.created_by_user_id,
+        sandbox_id=sandbox_record.id,
+        created_by_user_id=sandbox_record.created_by_user_id,
     )
 
     with patch(
@@ -132,7 +134,7 @@ async def test_llm_conversation_stores_llm_model(async_session, service, sandbox
     ):
         result = await on_conversation_update(
             conversation_info=llm_info,
-            sandbox_info=sandbox_info,
+            sandbox_record=sandbox_record,
             app_conversation_info_service=service,
         )
 
@@ -145,7 +147,7 @@ async def test_llm_conversation_stores_llm_model(async_session, service, sandbox
 
 
 @pytest.mark.asyncio
-async def test_acp_conversation_sets_agent_kind(async_session, service, sandbox_info):
+async def test_acp_conversation_sets_agent_kind(async_session, service, sandbox_record):
     """ACP path sets agent_kind='acp' and leaves llm_model null."""
     acp_info = _make_acp_conversation_info(
         acp_command=['npx', '-y', '@agentclientprotocol/claude-agent-acp']
@@ -155,8 +157,8 @@ async def test_acp_conversation_sets_agent_kind(async_session, service, sandbox_
     existing = AppConversationInfo(
         id=conversation_id,
         title='Test',
-        sandbox_id=sandbox_info.id,
-        created_by_user_id=sandbox_info.created_by_user_id,
+        sandbox_id=sandbox_record.id,
+        created_by_user_id=sandbox_record.created_by_user_id,
     )
 
     with patch(
@@ -165,7 +167,7 @@ async def test_acp_conversation_sets_agent_kind(async_session, service, sandbox_
     ):
         result = await on_conversation_update(
             conversation_info=acp_info,
-            sandbox_info=sandbox_info,
+            sandbox_record=sandbox_record,
             app_conversation_info_service=service,
         )
 
@@ -179,7 +181,7 @@ async def test_acp_conversation_sets_agent_kind(async_session, service, sandbox_
 
 @pytest.mark.asyncio
 async def test_acp_server_tag_preserved_on_webhook_update(
-    async_session, service, sandbox_info
+    async_session, service, sandbox_record
 ):
     """``tags['acp_server']`` set during creation must survive a webhook update.
 
@@ -194,8 +196,8 @@ async def test_acp_server_tag_preserved_on_webhook_update(
     existing = AppConversationInfo(
         id=conversation_id,
         title='Test',
-        sandbox_id=sandbox_info.id,
-        created_by_user_id=sandbox_info.created_by_user_id,
+        sandbox_id=sandbox_record.id,
+        created_by_user_id=sandbox_record.created_by_user_id,
         tags={'acp_server': 'claude-code'},
     )
 
@@ -205,7 +207,7 @@ async def test_acp_server_tag_preserved_on_webhook_update(
     ):
         await on_conversation_update(
             conversation_info=acp_info,
-            sandbox_info=sandbox_info,
+            sandbox_record=sandbox_record,
             app_conversation_info_service=service,
         )
 
@@ -221,7 +223,7 @@ async def test_acp_server_tag_preserved_on_webhook_update(
 
 @pytest.mark.asyncio
 async def test_acp_conversation_analytics_llm_model_is_null(
-    async_session, service, sandbox_info
+    async_session, service, sandbox_record
 ):
     """``track_conversation_created`` must receive ``llm_model=None`` for ACP.
 
@@ -234,8 +236,8 @@ async def test_acp_conversation_analytics_llm_model_is_null(
     existing = AppConversationInfo(
         id=acp_info.id,
         title='Test',
-        sandbox_id=sandbox_info.id,
-        created_by_user_id=sandbox_info.created_by_user_id,
+        sandbox_id=sandbox_record.id,
+        created_by_user_id=sandbox_record.created_by_user_id,
     )
     analytics = MagicMock()
 
@@ -255,7 +257,7 @@ async def test_acp_conversation_analytics_llm_model_is_null(
     ):
         await on_conversation_update(
             conversation_info=acp_info,
-            sandbox_info=sandbox_info,
+            sandbox_record=sandbox_record,
             app_conversation_info_service=service,
         )
 

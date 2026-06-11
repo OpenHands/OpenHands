@@ -65,7 +65,7 @@ _BARE_OPENAI_MODELS: set[str] = set(_SDK_OPENAI)
 _BARE_ANTHROPIC_MODELS: set[str] = set(_SDK_ANTHROPIC)
 _BARE_MISTRAL_MODELS: set[str] = set(_SDK_MISTRAL)
 
-DEFAULT_OPENHANDS_MODEL = 'openhands/claude-opus-4-5-20251101'
+DEFAULT_OPENHANDS_MODEL = 'openhands/minimax-m2.7'
 
 
 # ---------------------------------------------------------------------------
@@ -90,22 +90,8 @@ class ModelsResponse(BaseModel):
 
 
 def is_openhands_model(model: str | None) -> bool:
-    """Check if the model uses the OpenHands provider.
-
-    The SDK's ``AgentSettings`` validator automatically transforms
-    ``openhands/X`` to ``litellm_proxy/X`` (the internal proxy name),
-    so both prefixes must be recognised.
-
-    Args:
-        model: The model name to check.
-
-    Returns:
-        True if the model starts with 'openhands/' or 'litellm_proxy/',
-        False otherwise.
-    """
-    return bool(
-        model and (model.startswith('openhands/') or model.startswith('litellm_proxy/'))
-    )
+    """Return True when the model uses the public OpenHands provider prefix."""
+    return bool(model and model.startswith('openhands/'))
 
 
 # Canonical masked placeholder for LLM API keys. Matches pydantic's

@@ -17,8 +17,9 @@ export const ACP_SERVER_TAG = "acp_server";
  *   "Gemini CLI", …) looked up via the SDK registry that the server exposes
  *   at ``/api/v1/web-client/config``. Falls back to plain "ACP" when the
  *   provider key is unknown (custom commands, or registry not yet loaded).
- * - OpenHands conversations show the harness brand "OpenHands" — the raw
- *   ``llm_model`` is preserved on hover via the ``title`` attribute.
+ * - OpenHands conversations show the raw ``llm_model`` string verbatim
+ *   (e.g. ``"anthropic/claude-sonnet-4-5-20250929"``), matching the
+ *   pre-ACP behavior of the model chip.
  */
 export function agentDisplayLabel(
   agentKind: AgentKind | undefined,
@@ -34,6 +35,5 @@ export function agentDisplayLabel(
     }
     return "ACP";
   }
-  if (llmModel) return "OpenHands";
-  return null;
+  return llmModel ?? null;
 }

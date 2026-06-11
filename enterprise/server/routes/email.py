@@ -9,7 +9,11 @@ from server.auth.keycloak_manager import get_keycloak_admin
 from server.auth.saas_user_auth import SaasUserAuth
 from server.constants import IS_LOCAL_ENV
 from server.routes.auth import set_response_cookie
-from server.utils.rate_limit_utils import check_rate_limit_by_user_id
+from server.utils.rate_limit_utils import (
+    RATE_LIMIT_EMAIL_RESEND_IP_SECONDS,
+    RATE_LIMIT_EMAIL_RESEND_USER_SECONDS,
+    check_rate_limit_by_user_id,
+)
 from server.utils.url_utils import get_web_url
 from storage.user_store import UserStore
 
@@ -130,14 +134,15 @@ async def resend_email_verification(
             detail='user_id is required in request body or user must be authenticated',
         )
 
-    # Check rate limit (uses user_id if available, otherwise falls back to IP)
-    # Use 30 seconds for user-based rate limiting to match frontend cooldown
+    # Check rate limit (uses user_id if available, otherwise falls back to IP).
+    # Defaults: 30s per user (matches frontend cooldown), 60s per IP (more
+    # lenient); configurable via RATE_LIMIT_EMAIL_RESEND_* env vars.
     await check_rate_limit_by_user_id(
         request=request,
         key_prefix='email_resend',
         user_id=user_id,
-        user_rate_limit_seconds=30,
-        ip_rate_limit_seconds=60,  # 1 minute for IP-based limiting (more lenient)
+        user_rate_limit_seconds=RATE_LIMIT_EMAIL_RESEND_USER_SECONDS,
+        ip_rate_limit_seconds=RATE_LIMIT_EMAIL_RESEND_IP_SECONDS,
     )
 
     # Get is_auth_flow from body if provided, default to False

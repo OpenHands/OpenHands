@@ -10,9 +10,11 @@ import { GitLabTokenInput } from "#/components/features/settings/git-settings/gi
 import { GitLabWebhookManager } from "#/components/features/settings/git-settings/gitlab-webhook-manager";
 import { BitbucketTokenInput } from "#/components/features/settings/git-settings/bitbucket-token-input";
 import { BitbucketDCTokenInput } from "#/components/features/settings/git-settings/bitbucket-dc-token-help-input";
+import { BitbucketDCWebhookManager } from "#/components/features/settings/git-settings/bitbucket-dc-webhook-manager";
 import { AzureDevOpsTokenInput } from "#/components/features/settings/git-settings/azure-devops-token-input";
 import { ForgejoTokenInput } from "#/components/features/settings/git-settings/forgejo-token-input";
 import { ConfigureGitHubRepositoriesAnchor } from "#/components/features/settings/git-settings/configure-github-repositories-anchor";
+import { ConfigureAzureDevOpsAnchor } from "#/components/features/settings/git-settings/configure-azure-devops-anchor";
 import { InstallSlackAppAnchor } from "#/components/features/settings/git-settings/install-slack-app-anchor";
 import DebugStackframeDot from "#/icons/debug-stackframe-dot.svg?react";
 import { I18nKey } from "#/i18n/declaration";
@@ -40,6 +42,34 @@ function GitSettingsScreen() {
   const { providers } = useUserProviders();
 
   const { data: config } = useConfig();
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const jiraDcWebhookStatus = params.get("jira_dc_webhook");
+    if (!jiraDcWebhookStatus) {
+      return;
+    }
+
+    if (jiraDcWebhookStatus === "install_failed") {
+      displayErrorToast(
+        t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_INSTALL_FAILED),
+      );
+    } else if (jiraDcWebhookStatus === "installed") {
+      displaySuccessToast(
+        t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_SETUP_SAVED),
+      );
+    }
+
+    params.delete("jira_dc_webhook");
+    const query = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}${
+        window.location.hash
+      }`,
+    );
+  }, [t]);
 
   const [githubTokenInputHasValue, setGithubTokenInputHasValue] =
     React.useState(false);
@@ -192,6 +222,11 @@ function GitSettingsScreen() {
     !forgejoHostInputHasValue;
   const shouldRenderGitHubConfigureButton = isSaas && config?.github_app_slug;
   const shouldRenderGitLabSection = isSaas && Boolean(config?.gitlab_enabled);
+  const shouldRenderBitbucketDCSection =
+    isSaas &&
+    Boolean(config?.providers_configured?.includes("bitbucket_data_center"));
+  const shouldRenderAzureDevOpsSection =
+    isSaas && Boolean(config?.providers_configured?.includes("azure_devops"));
   const shouldRenderSlackSection = isSaas && Boolean(config?.slack_enabled);
   const shouldRenderProjectManagementIntegrations =
     config?.feature_flags?.enable_jira ||
@@ -242,6 +277,60 @@ function GitSettingsScreen() {
                   </Typography.Text>
                 </div>
                 {isGitLabTokenSet && <GitLabWebhookManager />}
+              </div>
+              <div className="w-1/2 border-b border-gray-200" />
+            </>
+          )}
+
+          {shouldRenderBitbucketDCSection && (
+            <>
+              <div className="mt-6 flex flex-col gap-4 pb-8">
+                <Typography.H3 className="text-xl">
+                  {t(I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_SECTION_TITLE)}
+                </Typography.H3>
+                <div className="flex items-center">
+                  <DebugStackframeDot
+                    className="w-6 h-6 shrink-0"
+                    color={isBitbucketDCTokenSet ? "#BCFF8C" : "#FF684E"}
+                  />
+                  <Typography.Text
+                    className="text-sm text-gray-400"
+                    testId="bitbucket-dc-status-text"
+                  >
+                    {t(I18nKey.COMMON$STATUS)}:{" "}
+                    {isBitbucketDCTokenSet
+                      ? t(I18nKey.STATUS$CONNECTED)
+                      : t(I18nKey.BITBUCKET_DATA_CENTER$NOT_CONNECTED)}
+                  </Typography.Text>
+                </div>
+                {isBitbucketDCTokenSet && <BitbucketDCWebhookManager />}
+              </div>
+              <div className="w-1/2 border-b border-gray-200" />
+            </>
+          )}
+
+          {shouldRenderAzureDevOpsSection && (
+            <>
+              <div className="mt-6 flex flex-col gap-4 pb-8">
+                <Typography.H3 className="text-xl">
+                  {t(I18nKey.SETTINGS$AZURE_DEVOPS)}
+                </Typography.H3>
+                <div className="flex items-center">
+                  <DebugStackframeDot
+                    className="w-6 h-6 shrink-0"
+                    color={isAzureDevOpsTokenSet ? "#BCFF8C" : "#FF684E"}
+                  />
+                  <Typography.Text
+                    className="text-sm text-gray-400"
+                    testId="azure-devops-status-text"
+                  >
+                    {t(I18nKey.COMMON$STATUS)}:{" "}
+                    {isAzureDevOpsTokenSet
+                      ? t(I18nKey.STATUS$CONNECTED)
+                      : t(I18nKey.AZURE_DEVOPS$NOT_CONNECTED)}
+                  </Typography.Text>
+                </div>
+                <ConfigureAzureDevOpsAnchor />
               </div>
               <div className="w-1/2 border-b border-gray-200" />
             </>

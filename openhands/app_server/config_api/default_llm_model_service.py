@@ -61,7 +61,9 @@ def _to_llm_models(models_response: ModelsResponse) -> list[LLMModel]:
 
 
 def _to_providers(models_response: ModelsResponse) -> list[Provider]:
-    """Extract unique providers, sorted verified-first then alphabetically."""
+    """Extract unique providers, sorted with ``openhands`` first, then other
+    verified providers alphabetically, then unverified providers alphabetically.
+    """
     verified_set = set(models_response.verified_providers)
     seen: set[str] = set()
     providers: list[Provider] = []
@@ -73,7 +75,10 @@ def _to_providers(models_response: ModelsResponse) -> list[Provider]:
         if name not in seen:
             seen.add(name)
             providers.append(Provider(name=name, verified=name in verified_set))
-    providers.sort(key=lambda p: (not p.verified, p.name))
+    # ``openhands`` is the managed provider and should always appear first,
+    # followed by other verified providers (alphabetical), then unverified
+    # providers (alphabetical).
+    providers.sort(key=lambda p: (not p.verified, p.name != 'openhands', p.name))
     return providers
 
 

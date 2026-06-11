@@ -140,6 +140,44 @@ def sample_issue_update_webhook_payload():
 
 
 @pytest.fixture
+def sample_issue_created_webhook_payload():
+    """Sample issue created webhook payload."""
+    return {
+        'webhookEvent': 'jira:issue_created',
+        'issue': {
+            'id': '12345',
+            'key': 'PROJ-123',
+            'self': 'https://jira.company.com/rest/api/2/issue/12345',
+        },
+        'user': {
+            'emailAddress': 'user@company.com',
+            'displayName': 'Test User',
+            'key': 'testuser',
+            'accountId': 'user456',
+            'self': 'https://jira.company.com/rest/api/2/user?username=testuser',
+        },
+    }
+
+
+@pytest.fixture
+def sample_comment_updated_webhook_payload():
+    """Sample comment updated webhook payload."""
+    return {
+        'webhookEvent': 'comment_updated',
+        'comment': {
+            'id': '10001',
+            'body': 'Edited comment',
+            'self': 'https://jira.company.com/rest/api/2/issue/12345/comment/10001',
+        },
+        'issue': {
+            'id': '12345',
+            'key': 'PROJ-123',
+            'self': 'https://jira.company.com/rest/api/2/issue/12345',
+        },
+    }
+
+
+@pytest.fixture
 def sample_repositories():
     """Create sample repositories for testing."""
     return [

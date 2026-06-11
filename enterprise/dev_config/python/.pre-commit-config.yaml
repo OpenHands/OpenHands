@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v5.0.0
     hooks:
       - id: trailing-whitespace
         exclude: docs/modules/python
@@ -13,7 +13,7 @@ repos:
       - id: debug-statements
         files: ^enterprise/
   - repo: https://github.com/abravalheri/validate-pyproject
-    rev: v0.16
+    rev: v0.24.1
     hooks:
       - id: validate-pyproject
         types: [toml]
@@ -21,7 +21,7 @@ repos:
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.4.1
+    rev: v0.12.5
     hooks:
       # Run the linter.
       - id: ruff
@@ -36,7 +36,7 @@ repos:
         files: ^enterprise/
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.9.0
+    rev: v1.15.0
     hooks:
       - id: mypy
         additional_dependencies:
@@ -50,6 +50,8 @@ repos:
           - ./
           - stripe==11.5.0
           - pygithub==2.6.1
+          - openhands-sdk==1.25.0
+          - openhands-tools==1.25.0
           - sqlalchemy>=2.0
         # Use -p (package) to avoid dual module name conflict when using MYPYPATH
         # MYPYPATH=enterprise allows resolving bare imports like "from integrations.xxx"

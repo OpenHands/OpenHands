@@ -7,7 +7,6 @@ from typing import AsyncContextManager
 import httpx
 from fastapi import Depends, Request
 from pydantic import Field, SecretStr
-from sqlalchemy.ext.asyncio import AsyncSession
 
 # Import the event_callback module to ensure all processors are registered
 import openhands.app_server.event_callback  # noqa: F401
@@ -51,6 +50,10 @@ from openhands.app_server.sandbox.sandbox_service import (
 from openhands.app_server.sandbox.sandbox_spec_service import (
     SandboxSpecService,
     SandboxSpecServiceInjector,
+)
+from openhands.app_server.services.db_session import (  # noqa: F401  (re-exported)
+    depends_db_session,
+    get_db_session,
 )
 from openhands.app_server.services.db_session_injector import (
     DbSessionInjector,
@@ -126,9 +129,9 @@ def get_default_tavily_api_key() -> str | None:
     return os.getenv('TAVILY_API_KEY') or os.getenv('SEARCH_API_KEY') or None
 
 
-# The SDK auto-fills this URL as the default for openhands/ and litellm_proxy/
-# models.  Deployments (e.g. staging) may use a different LLM proxy, configured
-# via OPENHANDS_PROVIDER_BASE_URL.
+# OpenHands provider models use this proxy at the SDK transport boundary.
+# Deployments (e.g. staging) may use a different LLM proxy, configured via
+# OPENHANDS_PROVIDER_BASE_URL.
 _SDK_DEFAULT_PROXY = 'https://llm-proxy.app.all-hands.dev/'
 
 
@@ -139,21 +142,19 @@ def resolve_provider_llm_base_url(
 ) -> str | None:
     """Apply deployment-specific LLM proxy override when needed.
 
-    When the model uses ``openhands/`` or ``litellm_proxy/`` prefix and the
-    stored ``base_url`` is the SDK default, replace it with the deployment's
-    provider URL.
+    When the model uses the public ``openhands/`` prefix and the stored
+    ``base_url`` is the SDK default, replace it with the deployment's provider
+    URL.
 
     Priority: user-explicit URL > deployment provider URL > SDK default.
 
     Args:
-        model: LLM model name (e.g. ``litellm_proxy/gpt-4``).
+        model: LLM model name (e.g. ``openhands/gpt-5.5``).
         base_url: The base URL from user/org settings.
         provider_base_url: Deployment provider URL.  Falls back to
             ``get_openhands_provider_base_url()`` when *None*.
     """
-    if not model or not (
-        model.startswith('openhands/') or model.startswith('litellm_proxy/')
-    ):
+    if not model or not model.startswith('openhands/'):
         return base_url
 
     user_set_custom = base_url and base_url.rstrip('/') != _SDK_DEFAULT_PROXY.rstrip(
@@ -518,12 +519,6 @@ def get_jwt_service(
     return injector.context(state, request)
 
 
-def get_db_session(
-    state: InjectorState, request: Request | None = None
-) -> AsyncContextManager[AsyncSession]:
-    return get_global_config().db_session.context(state, request)
-
-
 def get_app_lifespan_service() -> AppLifespanService | None:
     config = get_global_config()
     return config.lifespan
@@ -591,10 +586,6 @@ def depends_jwt_service():
     injector = get_global_config().jwt
     assert injector is not None
     return Depends(injector.depends)
-
-
-def depends_db_session():
-    return Depends(get_global_config().db_session.depends)
 
 
 def get_llm_model_service(

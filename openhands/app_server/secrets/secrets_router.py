@@ -251,14 +251,13 @@ async def create_custom_secret(
     incoming_secret: CustomSecretCreate,
     secrets_store: SecretsStore = Depends(get_secrets_store),
 ) -> EditResponse:
-    """Create a custom secret.
+    """Create or update a custom secret.
 
-    Creates a new custom secret for the authenticated user.
+    Creates a new custom secret, or overwrites it if it already exists.
 
     Returns:
-        201: Secret created successfully
-        400: Secret already exists
-        500: Error creating secret
+        201: Secret saved successfully
+        500: Error saving secret
     """
     existing_secrets = await secrets_store.load()
     custom_secrets = dict(existing_secrets.custom_secrets) if existing_secrets else {}
@@ -267,15 +266,14 @@ async def create_custom_secret(
     secret_value = incoming_secret.value
     secret_description = incoming_secret.description
 
-    if secret_name in custom_secrets:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f'Secret {secret_name} already exists',
-        )
-
+    existing_description = (
+        custom_secrets[secret_name].description if secret_name in custom_secrets else ''
+    )
     custom_secrets[secret_name] = CustomSecret(
         secret=secret_value,
-        description=secret_description or '',
+        description=secret_description
+        if secret_description is not None
+        else existing_description,
     )
 
     # Create a new Secrets that preserves provider tokens

@@ -28,15 +28,27 @@ export interface WebClientFeatureFlags {
   hide_users_page: boolean;
   hide_billing_page: boolean;
   hide_integrations_page: boolean;
+  /** Hide personal workspaces from the org list/selector for users who
+   *  belong to at least one team org (OHE "org-only" installs). */
+  hide_personal_workspaces?: boolean;
   enable_acp?: boolean;
   deployment_mode?: DeploymentMode;
   enable_onboarding: boolean;
+}
+
+export interface ACPModelOption {
+  id: string;
+  label: string;
 }
 
 export interface ACPProviderConfig {
   key: string;
   display_name: string;
   default_command: string[];
+  default_model?: string | null;
+  available_models?: ACPModelOption[];
+  api_key_env_var?: string | null;
+  base_url_env_var?: string | null;
 }
 
 export interface WebClientConfig {
@@ -55,4 +67,13 @@ export interface WebClientConfig {
   provider_default_hosts?: Partial<Record<Provider, string>>;
   slack_enabled?: boolean;
   acp_providers?: ACPProviderConfig[];
+  /** Jira DC host when DC OAuth is configured; used to pre-fill + lock the
+   *  configure form's host field. Null/absent in email-match mode. */
+  jira_dc_oauth_host?: string | null;
+  /** True when Jira DC service-account credentials are managed by OHE/KOTS. */
+  jira_dc_service_account_managed?: boolean;
+  /** Non-secret service-account email when managed by OHE/KOTS. */
+  jira_dc_service_account_email?: string | null;
+  /** Non-secret Jira DC service-account env config error, if any. */
+  jira_dc_service_account_config_error?: string | null;
 }
