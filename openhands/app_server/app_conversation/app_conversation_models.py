@@ -342,11 +342,11 @@ class SwitchProfileRequest(BaseModel):
 
 
 class SwitchAcpModelRequest(BaseModel):
-    """Request to switch a running ACP conversation's model mid-conversation."""
+    """Request to switch a running ACP conversation's model in place."""
 
     model: str = Field(
         ...,
-        description="Model ID to switch to (must be in the provider's available_models list).",
+        description='Model identifier to switch to (must be supported by the provider).',
         min_length=1,
     )
 
