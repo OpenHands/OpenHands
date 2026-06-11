@@ -29,6 +29,9 @@ export const useInviteMembersBatch = () => {
       queryClient.invalidateQueries({
         queryKey: ["organizations", "members", organizationId],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", "pending-invitations", organizationId],
+      });
     },
     onError: (error) => {
       const errorMessage = retrieveAxiosErrorMessage(error);

@@ -1,4 +1,6 @@
 import {
+  PendingInvitationsPage,
+  BatchInvitationResult,
   GitOrgClaim,
   Organization,
   OrganizationMember,
@@ -143,11 +145,19 @@ export const organizationService = {
     orgId: string;
     emails: string[];
   }) => {
-    const { data } = await openHands.post<OrganizationMember[]>(
+    const { data } = await openHands.post<BatchInvitationResult>(
       `/api/organizations/${orgId}/members/invite`,
       {
         emails,
       },
+    );
+
+    return data;
+  },
+
+  getPendingInvitations: async ({ orgId }: { orgId: string }) => {
+    const { data } = await openHands.get<PendingInvitationsPage>(
+      `/api/organizations/${orgId}/members/invite`,
     );
 
     return data;

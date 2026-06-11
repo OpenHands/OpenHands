@@ -9,6 +9,7 @@ import { useOrganizationMembers } from "#/hooks/query/use-organization-members";
 import { useOrganizationMembersCount } from "#/hooks/query/use-organization-members-count";
 import { OrganizationMember, OrganizationUserRole } from "#/types/org";
 import { OrganizationMemberListItem } from "#/components/features/org/organization-member-list-item";
+import { PendingInvitationsList } from "#/components/features/org/pending-invitations-list";
 import { useUpdateMemberRole } from "#/hooks/mutation/use-update-member-role";
 import { useRemoveMember } from "#/hooks/mutation/use-remove-member";
 import { useMe } from "#/hooks/query/use-me";
@@ -233,6 +234,8 @@ function ManageOrganizationMembers() {
             </div>
           )}
       </div>
+
+      {hasPermissionToInvite && <PendingInvitationsList />}
 
       {/* Pagination */}
       {totalPages > 1 && (

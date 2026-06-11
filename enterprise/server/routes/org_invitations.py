@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
+from server.auth.authorization import Permission, require_permission
 from server.auth.org_context import REJECT_X_ORG_ID_PATH_MISMATCH
 from server.routes.org_invitation_models import (
     AcceptInvitationRequest,
@@ -16,8 +17,10 @@ from server.routes.org_invitation_models import (
     InvitationFailure,
     InvitationInvalidError,
     InvitationResponse,
+    PendingInvitationsResponse,
     UserAlreadyMemberError,
 )
+from server.services.email_service import EmailService
 from server.services.org_invitation_service import OrgInvitationService
 from server.utils.rate_limit_utils import (
     RATE_LIMIT_ORG_INVITATION_USER_SECONDS,
@@ -145,6 +148,7 @@ async def create_invitation(
             failed=[
                 InvitationFailure(email=email, error=error) for email, error in failed
             ],
+            email_delivery_configured=EmailService.is_configured(),
         )
 
     except InsufficientPermissionError as e:
@@ -165,6 +169,42 @@ async def create_invitation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='An unexpected error occurred',
+        )
+
+
+@invitation_router.get(
+    '/invite',
+    response_model=PendingInvitationsResponse,
+)
+async def list_pending_invitations(
+    org_id: UUID,
+    user_id: str = Depends(require_permission(Permission.INVITE_USER_TO_ORGANIZATION)),
+):
+    """List an organization's pending invitations, including invite links.
+
+    Gated on the invite permission (admins/owners): responses include each
+    invitation's acceptance link so inviters can share it directly when no
+    email provider is configured.
+    """
+    try:
+        from storage.org_invitation_store import OrgInvitationStore
+
+        invitations = await OrgInvitationStore.get_pending_invitations_for_org(org_id)
+        items = [await InvitationResponse.from_invitation(inv) for inv in invitations]
+        return PendingInvitationsResponse(
+            items=items,
+            email_delivery_configured=EmailService.is_configured(),
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            'Error listing pending invitations',
+            extra={'org_id': str(org_id)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to list pending invitations',
         )
 
 

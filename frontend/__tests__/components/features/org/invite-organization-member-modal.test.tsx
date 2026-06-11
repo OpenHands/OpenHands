@@ -138,4 +138,43 @@ describe("InviteOrganizationMemberModal", () => {
     );
     expect(inviteMembersSpy).not.toHaveBeenCalled();
   });
+
+  it("should show invite links instead of closing when email delivery is not configured", async () => {
+    vi.spyOn(organizationService, "inviteMembers").mockResolvedValue({
+      successful: [
+        {
+          id: 1,
+          email: "someone@acme.org",
+          role: "member",
+          status: "pending",
+          created_at: "2026-01-01T00:00:00Z",
+          expires_at: "2026-01-08T00:00:00Z",
+          invite_url:
+            "https://app.example.com/api/organizations/members/invite/accept?token=inv-abc",
+        },
+      ],
+      failed: [],
+      email_delivery_configured: false,
+    });
+    const onCloseMock = vi.fn();
+
+    renderInviteOrganizationMemberModal({ onClose: onCloseMock });
+
+    const modal = screen.getByTestId("invite-modal");
+    const badgeInput = within(modal).getByTestId("emails-badge-input");
+    await userEvent.type(badgeInput, "someone@acme.org ");
+    const submitButton = within(modal).getByRole("button", { name: /add/i });
+    await userEvent.click(submitButton);
+
+    // The links are the only way the invitee can join, so the modal stays
+    // open showing them with copy buttons instead of closing.
+    const linksModal = await screen.findByTestId("invite-links-modal");
+    expect(onCloseMock).not.toHaveBeenCalled();
+    expect(
+      within(linksModal).getByTestId("copy-invite-link-button"),
+    ).toBeInTheDocument();
+    expect(
+      within(linksModal).getByText("someone@acme.org"),
+    ).toBeInTheDocument();
+  });
 });

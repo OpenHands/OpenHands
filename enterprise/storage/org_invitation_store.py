@@ -118,6 +118,30 @@ class OrgInvitationStore:
             return result.scalars().first()
 
     @staticmethod
+    async def get_pending_invitations_for_org(org_id: UUID) -> list[OrgInvitation]:
+        """Get all pending invitations for an organization, newest first.
+
+        Args:
+            org_id: Organization UUID
+
+        Returns:
+            List of pending OrgInvitation rows
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(OrgInvitation)
+                .options(joinedload(OrgInvitation.role))
+                .filter(
+                    and_(
+                        OrgInvitation.org_id == org_id,
+                        OrgInvitation.status == OrgInvitation.STATUS_PENDING,
+                    )
+                )
+                .order_by(OrgInvitation.created_at.desc())
+            )
+            return list(result.scalars().all())
+
+    @staticmethod
     async def get_pending_invitation(
         org_id: UUID, email: str
     ) -> Optional[OrgInvitation]:
