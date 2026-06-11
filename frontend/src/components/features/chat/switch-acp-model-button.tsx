@@ -121,16 +121,19 @@ export function SwitchAcpModelButton() {
   const provider = config?.acp_providers?.find((p) => p.key === acpServerKey);
   const availableModels = provider?.available_models ?? [];
   const currentModelId = conversation?.llm_model ?? null;
+  // Fall back to the provider's default so the button shows a meaningful label
+  // even before the user or conversation has set an explicit model.
+  const effectiveModelId = currentModelId ?? provider?.default_model ?? null;
 
   if (!isAcp || availableModels.length === 0) return null;
 
   const currentLabel =
-    availableModels.find((m) => m.id === currentModelId)?.label ??
-    currentModelId ??
+    availableModels.find((m) => m.id === effectiveModelId)?.label ??
+    effectiveModelId ??
     t(I18nKey.LLM$SELECT_MODEL_PLACEHOLDER);
 
   const handleSelect = (modelId: string) => {
-    if (modelId === currentModelId) return;
+    if (modelId === effectiveModelId) return;
     mutate(
       { conversationId, model: modelId },
       {
@@ -200,7 +203,7 @@ export function SwitchAcpModelButton() {
       {menuOpen && (
         <AcpModelMenu
           models={availableModels}
-          activeModelId={currentModelId}
+          activeModelId={effectiveModelId}
           onSelect={handleSelect}
           onClose={() => setMenuOpen(false)}
         />
