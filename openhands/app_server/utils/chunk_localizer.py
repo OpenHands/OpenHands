@@ -241,7 +241,7 @@ def create_chunks(
 ) -> list[Chunk]:
     try:
         parser = get_parser(language) if language is not None else None
-    except AttributeError:
+    except (AttributeError, LookupError):
         logger.debug(f'Language {language} not supported. Falling back to raw string.')
         parser = None
 

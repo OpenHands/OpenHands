@@ -227,3 +227,152 @@ def test_create_chunks_tree_sitter_suffix_respects_max_lines():
     for i in range(len(chunks) - 1):
         assert chunks[i].line_range[1] + 1 == chunks[i + 1].line_range[0]
     assert chunks[-1].line_range[1] == len(text.split('\n'))
+
+
+def test_create_chunks_unsupported_language_fallback():
+    """Unsupported language falls back to raw string chunking."""
+    text = 'line1\nline2\nline3\nline4'
+    chunks = create_chunks(text, size=2, language='brainfuck_not_real')
+    # Should produce the same result as no-language (raw) chunking.
+    assert len(chunks) == 2
+    assert chunks[0].text == 'line1\nline2'
+    assert chunks[0].line_range == (1, 2)
+    assert chunks[1].text == 'line3\nline4'
+    assert chunks[1].line_range == (3, 4)
+
+
+def test_create_chunks_no_language_uses_raw():
+    """When language=None the raw string chunker is used."""
+    text = 'a\nb\nc\nd\ne'
+    chunks = create_chunks(text, size=2, language=None)
+    assert len(chunks) == 3
+    assert chunks[0].line_range == (1, 2)
+    assert chunks[1].line_range == (3, 4)
+    assert chunks[2].line_range == (5, 5)
+
+
+def test_create_chunks_empty_file():
+    """An empty string should produce a single empty chunk."""
+    chunks = create_chunks('', size=10, language='python')
+    assert len(chunks) == 1
+    assert chunks[0].text == ''
+    assert chunks[0].line_range == (1, 1)
+
+
+def test_create_chunks_empty_file_raw():
+    """An empty string with raw chunking should produce a single empty chunk."""
+    chunks = create_chunks('', size=10)
+    assert len(chunks) == 1
+    assert chunks[0].text == ''
+    assert chunks[0].line_range == (1, 1)
+
+
+def test_create_chunks_tree_sitter_deeply_nested():
+    """Deeply nested code should recurse into children and still produce valid chunks."""
+    text = '\n'.join(
+        [
+            'class Outer:',
+            '    class Inner:',
+            '        def method(self):',
+            '            if True:',
+            '                for i in range(10):',
+            '                    x = i',
+            '                    y = i + 1',
+            '                    z = i + 2',
+        ]
+    )
+    chunks = create_chunks(text, size=3, language='python')
+    assert len(chunks) > 0
+    # Every chunk must respect the size constraint.
+    for chunk in chunks:
+        line_count = chunk.line_range[1] - chunk.line_range[0] + 1
+        assert line_count <= 3, f'Chunk exceeded max size: {chunk.line_range}'
+    # Full contiguity.
+    assert chunks[0].line_range[0] == 1
+    for i in range(len(chunks) - 1):
+        assert chunks[i].line_range[1] + 1 == chunks[i + 1].line_range[0]
+    assert chunks[-1].line_range[1] == len(text.split('\n'))
+
+
+def test_create_chunks_tree_sitter_single_huge_function():
+    """A single large function with no child structure that can be split further.
+
+    When the AST node is oversized but has only leaf children (expressions),
+    it should still be emitted without crashing, even if the chunk exceeds
+    max_chunk_lines (no further AST split is possible).
+    """
+    body_lines = [f'    x{i} = {i}' for i in range(20)]
+    text = 'def big():\n' + '\n'.join(body_lines)
+    chunks = create_chunks(text, size=5, language='python')
+    assert len(chunks) > 0
+    # Full contiguity.
+    assert chunks[0].line_range[0] == 1
+    for i in range(len(chunks) - 1):
+        assert chunks[i].line_range[1] + 1 == chunks[i + 1].line_range[0]
+    assert chunks[-1].line_range[1] == len(text.split('\n'))
+    # All text is covered.
+    reconstructed = '\n'.join(chunk.text for chunk in chunks)
+    assert reconstructed == text
+
+
+@pytest.mark.parametrize('size', [1, 2, 3, 5, 10])
+def test_create_chunks_tree_sitter_max_chunk_lines_enforced(size):
+    """max_chunk_lines must be respected for various chunk sizes."""
+    text = '\n'.join(
+        [
+            'import os',
+            'import sys',
+            '',
+            'def foo():',
+            '    return 1',
+            '',
+            'def bar():',
+            '    return 2',
+            '',
+            'class Baz:',
+            '    def method(self):',
+            '        pass',
+        ]
+    )
+    chunks = create_chunks(text, size=size, language='python')
+    assert len(chunks) > 0
+    for chunk in chunks:
+        line_count = chunk.line_range[1] - chunk.line_range[0] + 1
+        # Allow leaf AST nodes that are inherently larger than size,
+        # but padding-expanded chunks must not exceed size.
+        assert line_count <= max(size, 3), (
+            f'Chunk {chunk.line_range} has {line_count} lines, '
+            f'expected at most {max(size, 3)}'
+        )
+    # Full contiguity.
+    assert chunks[0].line_range[0] == 1
+    for i in range(len(chunks) - 1):
+        assert chunks[i].line_range[1] + 1 == chunks[i + 1].line_range[0]
+    assert chunks[-1].line_range[1] == len(text.split('\n'))
+
+
+def test_create_chunks_tree_sitter_single_line_functions():
+    """Multiple single-line statements should be grouped up to max_chunk_lines."""
+    text = 'a = 1\nb = 2\nc = 3\nd = 4\ne = 5\nf = 6'
+    chunks = create_chunks(text, size=2, language='python')
+    assert len(chunks) > 0
+    for chunk in chunks:
+        line_count = chunk.line_range[1] - chunk.line_range[0] + 1
+        assert line_count <= 2
+    # Full contiguity.
+    assert chunks[0].line_range[0] == 1
+    for i in range(len(chunks) - 1):
+        assert chunks[i].line_range[1] + 1 == chunks[i + 1].line_range[0]
+    assert chunks[-1].line_range[1] == 6
+
+
+def test_create_chunks_tree_sitter_whitespace_only():
+    """A file containing only whitespace should chunk without errors."""
+    text = '\n\n\n\n\n'
+    chunks = create_chunks(text, size=2, language='python')
+    assert len(chunks) > 0
+    # Full contiguity.
+    assert chunks[0].line_range[0] == 1
+    for i in range(len(chunks) - 1):
+        assert chunks[i].line_range[1] + 1 == chunks[i + 1].line_range[0]
+    assert chunks[-1].line_range[1] == len(text.split('\n'))
