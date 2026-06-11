@@ -31,6 +31,9 @@ from openhands.app_server.utils.jsonpatch_compat import (
     deep_merge_with_wholesale_keys,
 )
 from openhands.app_server.utils.llm import is_openhands_model
+from openhands.sdk.llm.utils.openhands_provider import (
+    canonicalize_openhands_llm_payload,
+)
 
 # Agent-settings keys that are private to each org member and must never
 # be written to org-level defaults or broadcast across the org. Today this
@@ -214,7 +217,16 @@ class SaasSettingsStore(SettingsStore):
         # the org has none — handles older personal accounts whose profiles
         # never moved to the org column.
         if org.llm_profiles:
-            kwargs['llm_profiles'] = org.llm_profiles
+            profiles_data = dict(org.llm_profiles)
+            raw_profiles = profiles_data.get('profiles')
+            if isinstance(raw_profiles, dict):
+                profiles_data['profiles'] = {
+                    name: canonicalize_openhands_llm_payload(prof)
+                    if isinstance(prof, dict)
+                    else prof
+                    for name, prof in raw_profiles.items()
+                }
+            kwargs['llm_profiles'] = profiles_data
         # When no profiles exist yet, seed a Default profile from the legacy
         # LLM config so users (and orgs) upgrading from pre-llm_profiles
         # settings keep their previous LLM as the active profile instead of
