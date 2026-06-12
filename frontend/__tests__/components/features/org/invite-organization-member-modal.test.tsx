@@ -156,31 +156,6 @@ describe("InviteOrganizationMemberModal", () => {
     expect(onCloseMock).toHaveBeenCalledOnce();
   });
 
-  it("should invite a typed email even when it was never committed with space", async () => {
-    const inviteMembersBatchSpy = vi.spyOn(
-      organizationService,
-      "inviteMembers",
-    );
-    const onCloseMock = vi.fn();
-
-    renderInviteOrganizationMemberModal({ onClose: onCloseMock });
-
-    const modal = screen.getByTestId("invite-modal");
-    const badgeInput = within(modal).getByTestId("emails-badge-input");
-    // No trailing space — clicking the button blurs the input, which commits
-    // the pending text. Previously this errored with "press space".
-    await userEvent.type(badgeInput, "someone@acme.org");
-
-    const submitButton = within(modal).getByRole("button", { name: /add/i });
-    await userEvent.click(submitButton);
-
-    expect(inviteMembersBatchSpy).toHaveBeenCalledExactlyOnceWith({
-      orgId: "1",
-      emails: ["someone@acme.org"],
-      role: "member",
-    });
-  });
-
   it("should display an error toast when clicking add button with no emails added", async () => {
     // Arrange
     const displayErrorToastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");

@@ -393,9 +393,7 @@ class TestOrgAutoAddsUsers:
             return_value=config,
         ):
             assert (
-                await _org_auto_adds_users(
-                    UUID('12345678-1234-5678-1234-567812345678')
-                )
+                await _org_auto_adds_users(UUID('12345678-1234-5678-1234-567812345678'))
                 is False
             )
 
@@ -421,8 +419,6 @@ class TestOrgAutoAddsUsers:
             ),
         ):
             assert (
-                await _org_auto_adds_users(
-                    UUID('12345678-1234-5678-1234-567812345678')
-                )
+                await _org_auto_adds_users(UUID('12345678-1234-5678-1234-567812345678'))
                 is False
             )
