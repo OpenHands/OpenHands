@@ -28,6 +28,11 @@ const renderInviteOrganizationMemberModal = (config?: {
 describe("InviteOrganizationMemberModal", () => {
   beforeEach(() => {
     useSelectedOrganizationStore.setState({ organizationId: "1" });
+    vi.spyOn(organizationService, "getPendingInvitations").mockResolvedValue({
+      items: [],
+      email_delivery_configured: false,
+      auto_add_enabled: false,
+    });
   });
 
   afterEach(() => {
@@ -172,6 +177,7 @@ describe("InviteOrganizationMemberModal", () => {
     expect(inviteMembersBatchSpy).toHaveBeenCalledExactlyOnceWith({
       orgId: "1",
       emails: ["someone@acme.org"],
+      role: "member",
     });
   });
 
@@ -229,6 +235,20 @@ describe("InviteOrganizationMemberModal", () => {
     ).toBeInTheDocument();
     expect(
       within(linksModal).getByText("someone@acme.org"),
+    ).toBeInTheDocument();
+  });
+
+  it("should show the auto-add hint when sign-in already adds users to the org", async () => {
+    vi.spyOn(organizationService, "getPendingInvitations").mockResolvedValue({
+      items: [],
+      email_delivery_configured: false,
+      auto_add_enabled: true,
+    });
+
+    renderInviteOrganizationMemberModal();
+
+    expect(
+      await screen.findByTestId("auto-add-enabled-hint"),
     ).toBeInTheDocument();
   });
 });

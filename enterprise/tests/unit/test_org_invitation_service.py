@@ -742,3 +742,81 @@ class TestAcceptInvitationAlreadyAccepted:
 
             with pytest.raises(InvitationInvalidError):
                 await OrgInvitationService.accept_invitation('inv-token', user_id)
+
+
+class TestRevokeInvitation:
+    """Revoking pending invitations."""
+
+    def _invitation(self, status=OrgInvitation.STATUS_PENDING):
+        invitation = MagicMock(spec=OrgInvitation)
+        invitation.id = 7
+        invitation.org_id = UUID('12345678-1234-5678-1234-567812345678')
+        invitation.status = status
+        return invitation
+
+    @pytest.mark.asyncio
+    async def test_revoke_pending_invitation(self):
+        invitation = self._invitation()
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_id',
+                new_callable=AsyncMock,
+                return_value=invitation,
+            ),
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore.update_invitation_status',
+                new_callable=AsyncMock,
+            ) as mock_update,
+        ):
+            mock_update.return_value = invitation
+            result = await OrgInvitationService.revoke_invitation(
+                invitation.org_id, invitation.id
+            )
+
+        assert result is invitation
+        mock_update.assert_awaited_once_with(
+            invitation.id, OrgInvitation.STATUS_REVOKED
+        )
+
+    @pytest.mark.asyncio
+    async def test_revoke_unknown_invitation_returns_none(self):
+        with patch(
+            'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_id',
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            result = await OrgInvitationService.revoke_invitation(
+                UUID('12345678-1234-5678-1234-567812345678'), 999
+            )
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_revoke_other_orgs_invitation_returns_none(self):
+        invitation = self._invitation()
+
+        with patch(
+            'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_id',
+            new_callable=AsyncMock,
+            return_value=invitation,
+        ):
+            result = await OrgInvitationService.revoke_invitation(
+                UUID('99999999-9999-9999-9999-999999999999'), invitation.id
+            )
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_revoke_non_pending_invitation_raises(self):
+        invitation = self._invitation(status=OrgInvitation.STATUS_ACCEPTED)
+
+        with patch(
+            'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_id',
+            new_callable=AsyncMock,
+            return_value=invitation,
+        ):
+            with pytest.raises(InvitationInvalidError):
+                await OrgInvitationService.revoke_invitation(
+                    invitation.org_id, invitation.id
+                )

@@ -137,6 +137,11 @@ class PendingInvitationsResponse(BaseModel):
 
     items: list[InvitationResponse]
     email_delivery_configured: bool = True
+    # True when this org is the bootstrapped default org and auto-add is on:
+    # anyone who signs in joins automatically, so invitations only matter for
+    # pre-assigning a role. Lets the UI say so instead of implying invites
+    # are the membership path.
+    auto_add_enabled: bool = False
 
 
 class AcceptInvitationRequest(BaseModel):

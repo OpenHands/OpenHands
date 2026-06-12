@@ -64,6 +64,8 @@ export interface BatchInvitationResult {
 export interface PendingInvitationsPage {
   items: OrganizationInvitation[];
   email_delivery_configured: boolean;
+  /** Sign-in alone already adds users to this org; invites only pre-assign roles. */
+  auto_add_enabled: boolean;
 }
 
 /** org_id and user_id are provided via URL params */

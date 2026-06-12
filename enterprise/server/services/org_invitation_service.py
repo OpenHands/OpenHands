@@ -431,3 +431,32 @@ class OrgInvitationService:
         )
 
         return updated_invitation
+
+    @staticmethod
+    async def revoke_invitation(
+        org_id: UUID, invitation_id: int
+    ) -> OrgInvitation | None:
+        """Revoke a pending invitation, invalidating its token/link.
+
+        Returns None when the invitation doesn't exist or belongs to a
+        different org (the caller's org_id comes from the URL path, so a
+        mismatch must look identical to not-found).
+
+        Raises:
+            InvitationInvalidError: If the invitation is not pending
+        """
+        invitation = await OrgInvitationStore.get_invitation_by_id(invitation_id)
+        if not invitation or invitation.org_id != org_id:
+            return None
+
+        if invitation.status != OrgInvitation.STATUS_PENDING:
+            raise InvitationInvalidError('Only pending invitations can be revoked')
+
+        revoked = await OrgInvitationStore.update_invitation_status(
+            invitation_id, OrgInvitation.STATUS_REVOKED
+        )
+        logger.info(
+            'Organization invitation revoked',
+            extra={'invitation_id': invitation_id, 'org_id': str(org_id)},
+        )
+        return revoked

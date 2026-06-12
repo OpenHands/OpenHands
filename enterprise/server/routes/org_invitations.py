@@ -26,6 +26,7 @@ from server.utils.rate_limit_utils import (
     RATE_LIMIT_ORG_INVITATION_USER_SECONDS,
     check_rate_limit_by_user_id,
 )
+from storage.default_org_service import get_default_org_config
 from storage.org_store import OrgStore
 from storage.role_store import RoleStore
 
@@ -194,6 +195,7 @@ async def list_pending_invitations(
         return PendingInvitationsResponse(
             items=items,
             email_delivery_configured=EmailService.is_configured(),
+            auto_add_enabled=await _org_auto_adds_users(org_id),
         )
     except HTTPException:
         raise
@@ -205,6 +207,54 @@ async def list_pending_invitations(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to list pending invitations',
+        )
+
+
+async def _org_auto_adds_users(org_id: UUID) -> bool:
+    """Whether sign-in alone already makes users members of this org."""
+    config = get_default_org_config()
+    if not (config.enabled and config.auto_add_users):
+        return False
+    default_org = await OrgStore.get_default_org()
+    return default_org is not None and default_org.id == org_id
+
+
+@invitation_router.delete(
+    '/invite/{invitation_id}',
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def revoke_invitation(
+    org_id: UUID,
+    invitation_id: int,
+    user_id: str = Depends(require_permission(Permission.INVITE_USER_TO_ORGANIZATION)),
+):
+    """Revoke a pending invitation, invalidating its token and invite link.
+
+    Gated on the invite permission (admins/owners), same as creating and
+    listing invitations.
+
+    Raises:
+        HTTPException 404: Unknown invitation, or it belongs to another org
+        HTTPException 409: Invitation is not pending (already accepted/expired)
+    """
+    try:
+        revoked = await OrgInvitationService.revoke_invitation(org_id, invitation_id)
+    except InvitationInvalidError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except Exception:
+        logger.exception(
+            'Error revoking invitation',
+            extra={'org_id': str(org_id), 'invitation_id': invitation_id},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to revoke invitation',
+        )
+
+    if revoked is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Invitation not found',
         )
 
 

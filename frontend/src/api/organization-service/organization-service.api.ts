@@ -167,6 +167,18 @@ export const organizationService = {
     return data;
   },
 
+  revokeInvitation: async ({
+    orgId,
+    invitationId,
+  }: {
+    orgId: string;
+    invitationId: number;
+  }) => {
+    await openHands.delete(
+      `/api/organizations/${orgId}/members/invite/${invitationId}`,
+    );
+  },
+
   switchOrganization: async ({ orgId }: { orgId: string }) => {
     const { data } = await openHands.post<Organization>(
       `/api/organizations/${orgId}/switch`,

@@ -142,6 +142,15 @@ class OrgInvitationStore:
             return list(result.scalars().all())
 
     @staticmethod
+    async def get_invitation_by_id(invitation_id: int) -> Optional[OrgInvitation]:
+        """Get an invitation by its primary key."""
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(OrgInvitation).filter(OrgInvitation.id == invitation_id)
+            )
+            return result.scalars().first()
+
+    @staticmethod
     async def get_pending_invitation(
         org_id: UUID, email: str
     ) -> Optional[OrgInvitation]:

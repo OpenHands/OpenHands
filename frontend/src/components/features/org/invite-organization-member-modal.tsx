@@ -9,6 +9,7 @@ import { areAllEmailsValid, hasDuplicates } from "#/utils/input-validation";
 import { Dropdown } from "#/ui/dropdown/dropdown";
 import { BatchInvitationResult, OrganizationUserRole } from "#/types/org";
 import { CopyInviteLinkButton } from "#/components/features/org/copy-invite-link-button";
+import { usePendingInvitations } from "#/hooks/query/use-pending-invitations";
 
 interface InviteOrganizationMemberModalProps {
   onClose: (event?: React.MouseEvent<HTMLButtonElement>) => void;
@@ -19,6 +20,9 @@ export function InviteOrganizationMemberModal({
 }: InviteOrganizationMemberModalProps) {
   const { t } = useTranslation();
   const { mutate: inviteMembers, isPending } = useInviteMembersBatch();
+  // The modal is only reachable with the invite permission, which is what
+  // gates the backing endpoint; the response carries auto_add_enabled.
+  const { data: pendingData } = usePendingInvitations(true);
   const [emails, setEmails] = React.useState<string[]>([]);
   const [role, setRole] = React.useState<OrganizationUserRole>("member");
   const [result, setResult] = React.useState<BatchInvitationResult | null>(
@@ -124,6 +128,14 @@ export function InviteOrganizationMemberModal({
       onClose={onClose}
       isLoading={isPending}
     >
+      {pendingData?.auto_add_enabled && (
+        <p
+          data-testid="auto-add-enabled-hint"
+          className="text-xs text-tertiary-alt"
+        >
+          {t(I18nKey.ORG$AUTO_ADD_ENABLED_HINT)}
+        </p>
+      )}
       <BadgeInput
         name="emails-badge-input"
         value={emails}
