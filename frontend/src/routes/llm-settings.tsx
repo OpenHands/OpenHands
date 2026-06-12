@@ -93,6 +93,8 @@ const isProviderDefaultBaseUrl = (model: string, baseUrl: string) => {
   );
 };
 
+type ProfileFormMode = "create" | "edit";
+
 export function LlmSettingsScreen({
   scope = "personal",
 }: {
@@ -143,6 +145,10 @@ export function LlmSettingsScreen({
   // in handleSaveSuccess. Reset on every form open so a stale name from the
   // previous Add doesn't leak in.
   const [profileName, setProfileName] = React.useState("");
+  // Distinguishes Add Profile (blank create form, opens on basic) from Edit
+  // (form hydrated from the persisted settings). Null when no form is open.
+  const [profileFormMode, setProfileFormMode] =
+    React.useState<ProfileFormMode | null>(null);
   // Snapshotted on form open so we can flag the form dirty when the user
   // edits *only* the name — the SDK section page tracks the LLM fields but
   // not the profile-name input that lives outside its schema.
@@ -165,11 +171,16 @@ export function LlmSettingsScreen({
   const isSaasMode = config?.app_mode === "saas";
 
   React.useEffect(() => {
+    // A freshly opened Add Profile form starts blank — don't let the active
+    // settings re-select a provider underneath it.
+    if (profileFormMode === "create" && !showProfiles) {
+      return;
+    }
     if (settings?.llm_model) {
       const { provider } = extractModelAndProvider(settings.llm_model);
       setSelectedProvider(provider || null);
     }
-  }, [settings?.llm_model]);
+  }, [profileFormMode, settings?.llm_model, showProfiles]);
 
   React.useEffect(() => {
     const checkout = searchParams.get("checkout");
@@ -214,6 +225,14 @@ export function LlmSettingsScreen({
         return "basic";
       }
 
+      // Adding a new profile always starts on the basic view. The schema
+      // inference below looks at the *active/org* settings, so a user whose
+      // current config has a custom model or base URL would otherwise be
+      // dropped straight into the advanced form when creating a profile.
+      if (profileFormMode === "create") {
+        return "basic";
+      }
+
       const schemaView = inferInitialView(currentSettings, filteredSchema);
       if (schemaView !== "basic") {
         return schemaView;
@@ -227,7 +246,7 @@ export function LlmSettingsScreen({
 
       return hasCustomBaseUrl ? "all" : "basic";
     },
-    [initialViewHint, isSaasMode, scope],
+    [initialViewHint, isSaasMode, profileFormMode, scope],
   );
 
   const buildHeader = React.useCallback(
@@ -509,6 +528,7 @@ export function LlmSettingsScreen({
     setProfileName("");
     setInitialProfileName("");
     setInitialViewHint(null);
+    setProfileFormMode(null);
     setShowProfiles(true);
   }, [
     activateProfile,
@@ -525,11 +545,36 @@ export function LlmSettingsScreen({
   ]);
 
   const openForm = (view: SettingsView | null, name = "") => {
+    // Editing is identified by the profile name passed from the profiles
+    // list; Add Profile opens the form with no name and gets a blank
+    // create form instead of one pre-filled from the active settings.
+    const isEdit = Boolean(name);
+    setProfileFormMode(isEdit ? "edit" : "create");
     setProfileName(name);
     setInitialProfileName(name);
     setInitialViewHint(view);
+    if (!isEdit) {
+      setSelectedProvider(null);
+    }
     setShowProfiles(false);
   };
+
+  // Add Profile starts from a clean slate: no inherited model, API key, or
+  // base URL from whatever config happens to be active. Editing keeps the
+  // settings-derived initial values (no overrides).
+  const createProfileInitialValueOverrides = React.useMemo(
+    () =>
+      profileFormMode === "create"
+        ? {
+            agent_settings: {
+              "llm.model": "",
+              "llm.api_key": "",
+              "llm.base_url": "",
+            },
+          }
+        : undefined,
+    [profileFormMode],
+  );
 
   if (isProfilesView) {
     if (isOrgProfileMode) {
@@ -569,6 +614,7 @@ export function LlmSettingsScreen({
       type="button"
       onClick={() => {
         setInitialViewHint(null);
+        setProfileFormMode(null);
         setShowProfiles(true);
       }}
       className="flex items-center gap-2 self-start text-sm text-gray-300 hover:text-white cursor-pointer"
@@ -601,6 +647,17 @@ export function LlmSettingsScreen({
         extraDirty={canManageProfilesForScope}
         onSaveSuccess={handleSaveSuccess}
         getInitialView={getInitialView}
+        initialValueOverrides={createProfileInitialValueOverrides}
+        // A new profile starts blank and can't be saved until a model is
+        // chosen — saving a model-less create form would only churn the
+        // active settings without producing a profile.
+        isSaveDisabled={({ values }) =>
+          profileFormMode === "create" &&
+          !(
+            typeof values["llm.model"] === "string" &&
+            values["llm.model"].trim().length > 0
+          )
+        }
         forceShowAdvancedView
         allowAllView={!isSaasMode}
         testId="llm-settings-screen"
