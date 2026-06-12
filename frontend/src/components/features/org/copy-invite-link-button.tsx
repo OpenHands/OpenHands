@@ -29,7 +29,9 @@ export function CopyInviteLinkButton({ inviteUrl }: CopyInviteLinkButtonProps) {
       )}
     >
       {copied ? <Check size={12} /> : <LinkIcon size={12} />}
-      {copied ? t(I18nKey.BUTTON$COPIED) : t(I18nKey.BUTTON$COPY)}
+      {copied
+        ? t(I18nKey.ORG$INVITE_LINK_COPIED)
+        : t(I18nKey.ORG$COPY_INVITE_LINK)}
     </button>
   );
 }

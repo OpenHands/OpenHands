@@ -26807,5 +26807,39 @@
     "uk": "Нові користувачі автоматично приєднуються до цієї організації під час входу. Запрошення потрібні лише для попереднього призначення ролі.",
     "zh-CN": "新用户登录后会自动加入此组织。仅在需要预先分配角色时才需要邀请。",
     "zh-TW": "新使用者登入後會自動加入此組織。僅在需要預先指派角色時才需要邀請。"
+  },
+  "ORG$COPY_INVITE_LINK": {
+    "ar": "نسخ رابط الدعوة",
+    "ca": "Copia l'enllaç d'invitació",
+    "de": "Einladungslink kopieren",
+    "en": "Copy invite",
+    "es": "Copiar invitación",
+    "fr": "Copier l'invitation",
+    "it": "Copia invito",
+    "ja": "招待リンクをコピー",
+    "ko-KR": "초대 링크 복사",
+    "no": "Kopier invitasjon",
+    "pt": "Copiar convite",
+    "tr": "Daveti kopyala",
+    "uk": "Копіювати запрошення",
+    "zh-CN": "复制邀请链接",
+    "zh-TW": "複製邀請連結"
+  },
+  "ORG$INVITE_LINK_COPIED": {
+    "ar": "تم نسخ رابط الدعوة",
+    "ca": "Enllaç d'invitació copiat",
+    "de": "Einladungslink kopiert",
+    "en": "Invite copied",
+    "es": "Invitación copiada",
+    "fr": "Invitation copiée",
+    "it": "Invito copiato",
+    "ja": "招待リンクをコピーしました",
+    "ko-KR": "초대 링크가 복사되었습니다",
+    "no": "Invitasjon kopiert",
+    "pt": "Convite copiado",
+    "tr": "Davet kopyalandı",
+    "uk": "Запрошення скопійовано",
+    "zh-CN": "邀请链接已复制",
+    "zh-TW": "邀請連結已複製"
   }
 }
