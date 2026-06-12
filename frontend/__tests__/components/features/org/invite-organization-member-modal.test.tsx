@@ -73,9 +73,38 @@ describe("InviteOrganizationMemberModal", () => {
     expect(inviteMembersBatchSpy).toHaveBeenCalledExactlyOnceWith({
       orgId: "1",
       emails: ["someone@acme.org"],
+      role: "member",
     });
 
     expect(onCloseMock).toHaveBeenCalledOnce();
+  });
+
+  it("should invite with the admin role when selected in the role dropdown", async () => {
+    const inviteMembersBatchSpy = vi.spyOn(
+      organizationService,
+      "inviteMembers",
+    );
+    const onCloseMock = vi.fn();
+
+    renderInviteOrganizationMemberModal({ onClose: onCloseMock });
+
+    const modal = screen.getByTestId("invite-modal");
+    const badgeInput = within(modal).getByTestId("emails-badge-input");
+    await userEvent.type(badgeInput, "someone@acme.org ");
+
+    const roleDropdown = within(modal).getByTestId("invite-role-dropdown");
+    await userEvent.click(within(roleDropdown).getByTestId("dropdown-trigger"));
+    const listbox = await screen.findByRole("listbox");
+    await userEvent.click(within(listbox).getByText("ORG$ROLE_ADMIN"));
+
+    const submitButton = within(modal).getByRole("button", { name: /add/i });
+    await userEvent.click(submitButton);
+
+    expect(inviteMembersBatchSpy).toHaveBeenCalledExactlyOnceWith({
+      orgId: "1",
+      emails: ["someone@acme.org"],
+      role: "admin",
+    });
   });
 
   it("should allow adding multiple emails using badge input and make a batch POST request", async () => {
@@ -116,6 +145,7 @@ describe("InviteOrganizationMemberModal", () => {
     expect(inviteMembersBatchSpy).toHaveBeenCalledExactlyOnceWith({
       orgId: "1",
       emails: ["user1@acme.org", "user2@acme.org", "user3@acme.org"],
+      role: "member",
     });
 
     expect(onCloseMock).toHaveBeenCalledOnce();

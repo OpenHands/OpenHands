@@ -6,6 +6,8 @@ import { BadgeInput } from "#/components/shared/inputs/badge-input";
 import { I18nKey } from "#/i18n/declaration";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { areAllEmailsValid, hasDuplicates } from "#/utils/input-validation";
+import { Dropdown } from "#/ui/dropdown/dropdown";
+import { OrganizationUserRole } from "#/types/org";
 
 interface InviteOrganizationMemberModalProps {
   onClose: (event?: React.MouseEvent<HTMLButtonElement>) => void;
@@ -17,6 +19,7 @@ export function InviteOrganizationMemberModal({
   const { t } = useTranslation();
   const { mutate: inviteMembers, isPending } = useInviteMembersBatch();
   const [emails, setEmails] = React.useState<string[]>([]);
+  const [role, setRole] = React.useState<OrganizationUserRole>("member");
 
   const handleEmailsChange = (newEmails: string[]) => {
     const trimmedEmails = newEmails.map((email) => email.trim());
@@ -40,12 +43,17 @@ export function InviteOrganizationMemberModal({
     }
 
     inviteMembers(
-      { emails },
+      { emails, role },
       {
         onSuccess: () => onClose(),
       },
     );
   };
+
+  const roleOptions = [
+    { value: "member", label: t(I18nKey.ORG$ROLE_MEMBER) },
+    { value: "admin", label: t(I18nKey.ORG$ROLE_ADMIN) },
+  ];
 
   return (
     <OrgModal
@@ -63,6 +71,17 @@ export function InviteOrganizationMemberModal({
         placeholder={t(I18nKey.COMMON$TYPE_EMAIL_AND_PRESS_SPACE)}
         onChange={handleEmailsChange}
       />
+      <label className="flex flex-col gap-1 text-sm capitalize">
+        {t(I18nKey.ORG$INVITE_ROLE_LABEL)}
+        <Dropdown
+          testId="invite-role-dropdown"
+          options={roleOptions}
+          defaultValue={roleOptions[0]}
+          onChange={(option) =>
+            setRole((option?.value as OrganizationUserRole) ?? "member")
+          }
+        />
+      </label>
     </OrgModal>
   );
 }
