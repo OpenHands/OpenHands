@@ -65,7 +65,7 @@ class OrgStore:
         # Route through the shared SDK loader: it applies persisted-settings
         # migrations (incl. the legacy ``agent_kind: 'llm'`` -> ``'openhands'``
         # rename) and returns the actual variant. ACP settings are returned as
-        # ``ACPAgentSettings``, not coerced into the OpenHands shape 闁?that
+        # ``ACPAgentSettings``, not coerced into the OpenHands shape 闂?that
         # coercion 500s on ACP's nullable ``agent_context``.
         return _load_persisted_agent_settings(dict(org.agent_settings))
 
@@ -391,7 +391,7 @@ class OrgStore:
             if 'id' in org_kwargs:
                 org_kwargs.pop('id')
 
-            # Pop the diff-style kwargs before the setattr loop 闁?otherwise
+            # Pop the diff-style kwargs before the setattr loop 闂?otherwise
             # ``hasattr(org, 'agent_settings')`` is True and the loop would
             # *overwrite* the JSON column instead of deep-merging into it.
             agent_settings_diff = (
@@ -508,7 +508,7 @@ class OrgStore:
         * Users with a membership in at least one other org have their
           ``current_org_id`` reassigned to one of those alternative orgs.
         * If the *requester themselves* is the only orphaned user (sole member
-          of the org being deleted 闁?the personal-org self-service case), the
+          of the org being deleted 闂?the personal-org self-service case), the
           requester's user row is cascade-deleted in the same transaction. The
           Keycloak account is left untouched, so on the user's next login
           ``UserStore.create_user`` re-onboards them as a brand-new user. The
@@ -520,7 +520,7 @@ class OrgStore:
         * If any orphan is **not** the requester (i.e., a multi-user org where
           another member has no other org), ``OrphanedUserError`` is raised
           and the whole transaction is rolled back. The org owner must
-          transfer or remove those members before deletion can proceed 闁?          we refuse to silently destroy accounts that did not consent.
+          transfer or remove those members before deletion can proceed 闂?          we refuse to silently destroy accounts that did not consent.
 
         Args:
             org_id: UUID of the organization to delete
@@ -545,7 +545,7 @@ class OrgStore:
                 return None
 
             try:
-                # Preflight orphan check 闁?fail fast before any writes.
+                # Preflight orphan check 闂?fail fast before any writes.
                 #
                 # The orphan SELECT only reads ``user`` and ``org_member``,
                 # neither of which is modified by the org-data cleanup
@@ -736,7 +736,7 @@ class OrgStore:
 
                 # 5. Finally delete the organization.
                 # ``AsyncSession.delete`` is a coroutine; without ``await``
-                # it is a silent no-op 闁?the ORM never flushes the DELETE
+                # it is a silent no-op 闂?the ORM never flushes the DELETE
                 # and the ``org`` row survives the transaction even though
                 # every preceding step committed. Forgetting the ``await``
                 # here would leave the next sign-in colliding on
