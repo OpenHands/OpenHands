@@ -68,7 +68,7 @@ export function InviteOrganizationMemberModal({
       <BadgeInput
         name="emails-badge-input"
         value={emails}
-        placeholder={t(I18nKey.COMMON$TYPE_EMAIL_AND_PRESS_SPACE)}
+        placeholder={t(I18nKey.COMMON$ENTER_EMAIL_ADDRESSES)}
         onChange={handleEmailsChange}
       />
       <label className="flex flex-col gap-1 text-sm capitalize">
