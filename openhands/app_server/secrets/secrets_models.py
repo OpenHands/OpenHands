@@ -23,6 +23,8 @@ from pydantic import (
 )
 from pydantic.json import pydantic_encoder
 
+from openhands.app_server.utils.env_var_validation import validate_env_var_name
+
 from openhands.app_server.integrations.provider import (
     CUSTOM_SECRETS_TYPE,
     PROVIDER_TOKEN_TYPE,
@@ -177,6 +179,12 @@ class CustomSecretWithoutValue(BaseModel):
 
     name: str
     description: str | None = None
+
+    @field_validator('name')
+    @classmethod
+    def validate_secret_name(cls, v: str) -> str:
+        validate_env_var_name(v, field_name='secret name')
+        return v
 
 
 class CustomSecretCreate(CustomSecretWithoutValue):
