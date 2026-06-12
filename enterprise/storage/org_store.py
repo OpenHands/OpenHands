@@ -3,6 +3,20 @@
 from typing import Any, Optional
 from uuid import UUID
 
+from openhands.app_server.settings.settings_models import (
+    Settings,
+    _load_persisted_agent_settings,
+    _load_persisted_conversation_settings,
+)
+from openhands.app_server.utils.jsonpatch_compat import deep_merge
+from openhands.app_server.utils.llm import is_openhands_model
+from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk.settings import (
+    AgentSettingsConfig,
+    ConversationSettings,
+    OpenHandsAgentSettings,
+    validate_agent_settings,
+)
 from pydantic import SecretStr
 from server.constants import (
     DEFAULT_V1_ENABLED,
@@ -28,33 +42,18 @@ from storage.org_member import OrgMember
 from storage.user import User
 from storage.user_settings import UserSettings
 
-from openhands.app_server.settings.settings_models import (
-    Settings,
-    _load_persisted_agent_settings,
-    _load_persisted_conversation_settings,
-)
-from openhands.app_server.utils.jsonpatch_compat import deep_merge
-from openhands.app_server.utils.llm import is_openhands_model
-from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.sdk.settings import (
-    AgentSettingsConfig,
-    ConversationSettings,
-    OpenHandsAgentSettings,
-    validate_agent_settings,
-)
-
 _ORG_SETTINGS_EXCLUDED_FIELDS = {
-    "id",
-    "name",
-    "contact_name",
-    "contact_email",
-    "org_version",
-    "llm_api_key",
+    'id',
+    'name',
+    'contact_name',
+    'contact_email',
+    'org_version',
+    'llm_api_key',
 }
 _ORG_SETTINGS_FIELDS = {
     normalized
     for column in Org.__table__.columns
-    if (normalized := column.name.lstrip("_")) not in _ORG_SETTINGS_EXCLUDED_FIELDS
+    if (normalized := column.name.lstrip('_')) not in _ORG_SETTINGS_EXCLUDED_FIELDS
 }
 
 
@@ -91,13 +90,13 @@ class OrgStore:
             org = Org(**kwargs)
             org.org_version = ORG_SETTINGS_VERSION
             agent_settings = org.agent_settings or {}
-            llm_settings = agent_settings.get("llm", {})
+            llm_settings = agent_settings.get('llm', {})
             org.agent_settings = deep_merge(
                 agent_settings,
                 {
-                    "llm": {
-                        "model": llm_settings.get("model") or get_default_llm_model(),
-                        "base_url": llm_settings.get("base_url")
+                    'llm': {
+                        'model': llm_settings.get('model') or get_default_llm_model(),
+                        'base_url': llm_settings.get('base_url')
                         or get_default_llm_base_url(),
                     }
                 },
@@ -122,7 +121,7 @@ class OrgStore:
         """Persist BYOR export enablement for an organization."""
         return await OrgStore._update_org_kwargs(
             org_id,
-            {"byor_export_enabled": True},
+            {'byor_export_enabled': True},
         )
 
     @staticmethod
@@ -160,14 +159,14 @@ class OrgStore:
             )
             user = result.scalars().first()
             if not user:
-                logger.warning(f"User not found for ID {keycloak_user_id}")
+                logger.warning(f'User not found for ID {keycloak_user_id}')
                 return None
             org_id = user.current_org_id
             result = await session.execute(select(Org).filter(Org.id == org_id))
             org = result.scalars().first()
             if not org:
                 logger.warning(
-                    f"Org not found for ID {org_id} as the current org for user {keycloak_user_id}"
+                    f'Org not found for ID {org_id} as the current org for user {keycloak_user_id}'
                 )
                 return None
             return await OrgStore._validate_org_version(org)
@@ -242,11 +241,11 @@ class OrgStore:
             org = await OrgStore._update_org_kwargs(
                 org.id,
                 {
-                    "org_version": ORG_SETTINGS_VERSION,
-                    "agent_settings_diff": {
-                        "llm": {
-                            "model": get_default_llm_model(),
-                            "base_url": get_default_llm_base_url(),
+                    'org_version': ORG_SETTINGS_VERSION,
+                    'agent_settings_diff': {
+                        'llm': {
+                            'model': get_default_llm_model(),
+                            'base_url': get_default_llm_base_url(),
                         },
                     },
                 },
@@ -336,16 +335,16 @@ class OrgStore:
         """
         if settings_type is OpenHandsAgentSettings:
             base_settings = _load_persisted_agent_settings(current_settings or {})
-            new_kind = settings_diff.get("agent_kind")
+            new_kind = settings_diff.get('agent_kind')
             if new_kind and new_kind != base_settings.agent_kind:
                 # Variant switch: deep-merging the new kind's fields onto the
                 # outgoing kind's dump yields an invalid mongrel. Start from a
                 # fresh base and let the diff populate it.
-                merged_settings = {"agent_kind": new_kind, **settings_diff}
+                merged_settings = {'agent_kind': new_kind, **settings_diff}
             else:
                 merged_settings = deep_merge(
                     base_settings.model_dump(
-                        mode="json", context={"expose_secrets": True}
+                        mode='json', context={'expose_secrets': True}
                     ),
                     settings_diff,
                 )
@@ -353,7 +352,7 @@ class OrgStore:
 
         base_settings = _load_persisted_conversation_settings(current_settings)  # type: ignore[assignment]
         merged_settings = deep_merge(
-            base_settings.model_dump(mode="json"), settings_diff
+            base_settings.model_dump(mode='json'), settings_diff
         )
         return ConversationSettings.model_validate(merged_settings)
 
@@ -389,8 +388,8 @@ class OrgStore:
             if not org:
                 return None
 
-            if "id" in org_kwargs:
-                org_kwargs.pop("id")
+            if 'id' in org_kwargs:
+                org_kwargs.pop('id')
 
             # Pop the diff-style kwargs before the setattr loop 闁?otherwise
             # ``hasattr(org, 'agent_settings')`` is True and the loop would
@@ -398,12 +397,12 @@ class OrgStore:
             agent_settings_diff = (
                 update_data.agent_settings_diff
                 if update_data is not None
-                else org_kwargs.pop("agent_settings_diff", None)
+                else org_kwargs.pop('agent_settings_diff', None)
             )
             conversation_settings_diff = (
                 update_data.conversation_settings_diff
                 if update_data is not None
-                else org_kwargs.pop("conversation_settings_diff", None)
+                else org_kwargs.pop('conversation_settings_diff', None)
             )
             for key, value in org_kwargs.items():
                 if hasattr(org, key):
@@ -414,19 +413,19 @@ class OrgStore:
                     org.agent_settings,
                     agent_settings_diff,
                     OpenHandsAgentSettings,
-                ).model_dump(mode="json", exclude_unset=True)
+                ).model_dump(mode='json', exclude_unset=True)
 
             if conversation_settings_diff is not None:
                 org.conversation_settings = OrgStore._merge_and_validate_settings(
                     org.conversation_settings,
                     conversation_settings_diff,
                     ConversationSettings,
-                ).model_dump(mode="json", exclude_unset=True)
+                ).model_dump(mode='json', exclude_unset=True)
 
             if update_data is not None and update_data.touches_org_defaults():
                 if user_id is None:
                     raise ValueError(
-                        "user_id is required when updating organization defaults"
+                        'user_id is required when updating organization defaults'
                     )
 
                 member_updates = update_data.get_member_updates()
@@ -459,7 +458,7 @@ class OrgStore:
 
     @staticmethod
     def get_kwargs_from_settings(settings: Settings):
-        dumped = settings.model_dump(mode="json", context={"expose_secrets": True})
+        dumped = settings.model_dump(mode='json', context={'expose_secrets': True})
         return {
             field: dumped[field] for field in _ORG_SETTINGS_FIELDS if field in dumped
         }
@@ -471,7 +470,7 @@ class OrgStore:
             for field in _ORG_SETTINGS_FIELDS
             if hasattr(user_settings, field)
         }
-        kwargs["org_version"] = user_settings.user_version
+        kwargs['org_version'] = user_settings.user_version
         return kwargs
 
     @staticmethod
@@ -580,7 +579,7 @@ class OrgStore:
                             WHERE om.user_id = u.id AND om.org_id != :org_id
                         )
                     """),
-                    {"org_id": str(org_id)},
+                    {'org_id': str(org_id)},
                 )
                 orphaned_user_ids = [str(row[0]) for row in orphaned_result.fetchall()]
 
@@ -608,7 +607,7 @@ class OrgStore:
                         SELECT conversation_id FROM conversation_metadata_saas WHERE org_id = :org_id
                     )
                     """),
-                    {"org_id": str(org_id)},
+                    {'org_id': str(org_id)},
                 )
 
                 await session.execute(
@@ -618,39 +617,39 @@ class OrgStore:
                         SELECT conversation_id::uuid FROM conversation_metadata_saas WHERE org_id = :org_id
                     )
                     """),
-                    {"org_id": str(org_id)},
+                    {'org_id': str(org_id)},
                 )
 
                 # 2. Delete organization-owned data tables (direct org_id foreign keys)
                 await session.execute(
-                    text("DELETE FROM billing_sessions WHERE org_id = :org_id"),
-                    {"org_id": str(org_id)},
+                    text('DELETE FROM billing_sessions WHERE org_id = :org_id'),
+                    {'org_id': str(org_id)},
                 )
                 await session.execute(
                     text(
-                        "DELETE FROM conversation_metadata_saas WHERE org_id = :org_id"
+                        'DELETE FROM conversation_metadata_saas WHERE org_id = :org_id'
                     ),
-                    {"org_id": str(org_id)},
+                    {'org_id': str(org_id)},
                 )
                 await session.execute(
-                    text("DELETE FROM custom_secrets WHERE org_id = :org_id"),
-                    {"org_id": str(org_id)},
+                    text('DELETE FROM custom_secrets WHERE org_id = :org_id'),
+                    {'org_id': str(org_id)},
                 )
                 await session.execute(
-                    text("DELETE FROM api_keys WHERE org_id = :org_id"),
-                    {"org_id": str(org_id)},
+                    text('DELETE FROM api_keys WHERE org_id = :org_id'),
+                    {'org_id': str(org_id)},
                 )
                 await session.execute(
-                    text("DELETE FROM slack_conversation WHERE org_id = :org_id"),
-                    {"org_id": str(org_id)},
+                    text('DELETE FROM slack_conversation WHERE org_id = :org_id'),
+                    {'org_id': str(org_id)},
                 )
                 await session.execute(
-                    text("DELETE FROM slack_users WHERE org_id = :org_id"),
-                    {"org_id": str(org_id)},
+                    text('DELETE FROM slack_users WHERE org_id = :org_id'),
+                    {'org_id': str(org_id)},
                 )
                 await session.execute(
-                    text("DELETE FROM stripe_customers WHERE org_id = :org_id"),
-                    {"org_id": str(org_id)},
+                    text('DELETE FROM stripe_customers WHERE org_id = :org_id'),
+                    {'org_id': str(org_id)},
                 )
 
                 # 3. Handle users with this as current_org_id BEFORE deleting
@@ -726,13 +725,13 @@ class OrgStore:
                         )
                         WHERE "user".current_org_id = :org_id
                     """),
-                    {"org_id": str(org_id)},
+                    {'org_id': str(org_id)},
                 )
 
                 # 4. Delete organization memberships (now safe)
                 await session.execute(
-                    text("DELETE FROM org_member WHERE org_id = :org_id"),
-                    {"org_id": str(org_id)},
+                    text('DELETE FROM org_member WHERE org_id = :org_id'),
+                    {'org_id': str(org_id)},
                 )
 
                 # 5. Finally delete the organization.
@@ -750,8 +749,8 @@ class OrgStore:
                 # 5b. Clean up LiteLLM user records before team deletion
                 #     (best-effort: don't fail the transaction if user cleanup fails)
                 logger.info(
-                    "Cleaning up LiteLLM user records for org members",
-                    extra={"org_id": str(org_id)},
+                    'Cleaning up LiteLLM user records for org members',
+                    extra={'org_id': str(org_id)},
                 )
                 try:
                     result = await session.execute(
@@ -762,28 +761,28 @@ class OrgStore:
                         try:
                             await LiteLlmManager.delete_user(str(user.id))
                             logger.info(
-                                "Deleted LiteLLM user record",
-                                extra={"user_id": str(user.id), "org_id": str(org_id)},
+                                'Deleted LiteLLM user record',
+                                extra={'user_id': str(user.id), 'org_id': str(org_id)},
                             )
                         except Exception as user_exc:
                             logger.warning(
-                                "Failed to delete LiteLLM user record (best-effort)",
+                                'Failed to delete LiteLLM user record (best-effort)',
                                 extra={
-                                    "user_id": str(user.id),
-                                    "org_id": str(org_id),
-                                    "error": str(user_exc),
+                                    'user_id': str(user.id),
+                                    'org_id': str(org_id),
+                                    'error': str(user_exc),
                                 },
                             )
                 except Exception as exc:
                     logger.warning(
-                        "Failed to query org users for LiteLLM cleanup (best-effort)",
-                        extra={"org_id": str(org_id), "error": str(exc)},
+                        'Failed to query org users for LiteLLM cleanup (best-effort)',
+                        extra={'org_id': str(org_id), 'error': str(exc)},
                     )
 
                 # 6. Clean up LiteLLM team before committing transaction
                 logger.info(
-                    "Deleting LiteLLM team within database transaction",
-                    extra={"org_id": str(org_id)},
+                    'Deleting LiteLLM team within database transaction',
+                    extra={'org_id': str(org_id)},
                 )
                 await LiteLlmManager.delete_team(str(org_id))
 
@@ -791,8 +790,8 @@ class OrgStore:
                 await session.commit()
 
                 logger.info(
-                    "Successfully deleted organization and all associated data including LiteLLM team",
-                    extra={"org_id": str(org_id), "org_name": org.name},
+                    'Successfully deleted organization and all associated data including LiteLLM team',
+                    extra={'org_id': str(org_id), 'org_name': org.name},
                 )
 
                 return org
@@ -800,8 +799,8 @@ class OrgStore:
             except Exception as e:
                 await session.rollback()
                 logger.error(
-                    "Failed to delete organization - transaction rolled back",
-                    extra={"org_id": str(org_id), "error": str(e)},
+                    'Failed to delete organization - transaction rolled back',
+                    extra={'org_id': str(org_id), 'error': str(e)},
                 )
                 raise
 
@@ -824,8 +823,8 @@ class OrgStore:
         llm_settings = OrgStore.get_agent_settings_from_org(updated_org).llm
         llm_model = llm_settings.model
         llm_base_url = llm_settings.base_url
-        normalized_llm_base_url = llm_base_url.rstrip("/") if llm_base_url else None
-        normalized_managed_base_url = LITE_LLM_API_URL.rstrip("/")
+        normalized_llm_base_url = llm_base_url.rstrip('/') if llm_base_url else None
+        normalized_managed_base_url = LITE_LLM_API_URL.rstrip('/')
         openhands_type = is_openhands_model(llm_model)
         uses_managed_llm_key = (
             normalized_llm_base_url == normalized_managed_base_url
@@ -843,10 +842,10 @@ class OrgStore:
         acting_member = result.scalars().first()
         if acting_member is None:
             logger.error(
-                "Acting member row not found during managed LLM key "
-                "rotation; skipping managed-key propagation. Members may "
-                "retain stale keys until they save personal settings.",
-                extra={"user_id": user_id, "org_id": str(updated_org.id)},
+                'Acting member row not found during managed LLM key '
+                'rotation; skipping managed-key propagation. Members may '
+                'retain stale keys until they save personal settings.',
+                extra={'user_id': user_id, 'org_id': str(updated_org.id)},
             )
             return None
 
@@ -862,21 +861,21 @@ class OrgStore:
 
         if openhands_type:
             logger.info(
-                "Generated managed LLM key for acting user on org-defaults save",
-                extra={"user_id": user_id, "org_id": str(updated_org.id)},
+                'Generated managed LLM key for acting user on org-defaults save',
+                extra={'user_id': user_id, 'org_id': str(updated_org.id)},
             )
             return await LiteLlmManager.generate_key(
                 user_id,
                 str(updated_org.id),
                 None,
-                {"type": "openhands"},
+                {'type': 'openhands'},
             )
 
         key_alias = get_openhands_cloud_key_alias(user_id, str(updated_org.id))
         await LiteLlmManager.delete_key_by_alias(key_alias=key_alias)
         logger.info(
-            "Generated managed LLM key for acting user on org-defaults save",
-            extra={"user_id": user_id, "org_id": str(updated_org.id)},
+            'Generated managed LLM key for acting user on org-defaults save',
+            extra={'user_id': user_id, 'org_id': str(updated_org.id)},
         )
         return await LiteLlmManager.generate_key(
             user_id,
