@@ -294,6 +294,17 @@ class OrgInvitationService:
 
         if invitation.status != OrgInvitation.STATUS_PENDING:
             if invitation.status == OrgInvitation.STATUS_ACCEPTED:
+                # The invitation may have been accepted on this user's behalf
+                # already (e.g. by email match during the sign-in that just
+                # happened). For the invited user that is success, not an
+                # invalid token.
+                existing_member = await OrgMemberStore.get_org_member(
+                    invitation.org_id, user_id
+                )
+                if existing_member:
+                    raise UserAlreadyMemberError(
+                        'You are already a member of this organization'
+                    )
                 raise InvitationInvalidError('Invitation has already been accepted')
             elif invitation.status == OrgInvitation.STATUS_REVOKED:
                 raise InvitationInvalidError('Invitation has been revoked')

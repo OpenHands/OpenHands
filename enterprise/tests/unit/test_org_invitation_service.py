@@ -7,6 +7,8 @@ import pytest
 from pydantic import SecretStr
 from server.routes.org_invitation_models import (
     EmailMismatchError,
+    InvitationInvalidError,
+    UserAlreadyMemberError,
 )
 from server.services.org_invitation_service import OrgInvitationService
 from storage.org_invitation import OrgInvitation
@@ -666,3 +668,77 @@ class TestCreateInvitationsBatch:
                 )
 
             assert 'Invalid role' in str(exc_info.value)
+
+
+class TestAcceptInvitationAlreadyAccepted:
+    """Accepting an already-accepted invitation should be benign for members.
+
+    The invitation may have been accepted on the user's behalf already (e.g.
+    by verified-email match during sign-in), after which the frontend still
+    submits the token. That must surface as "already a member", not as an
+    invalid-token error.
+    """
+
+    def _invitation(self, status=OrgInvitation.STATUS_ACCEPTED):
+        invitation = MagicMock(spec=OrgInvitation)
+        invitation.id = 1
+        invitation.email = 'alice@example.com'
+        invitation.status = status
+        invitation.org_id = UUID('12345678-1234-5678-1234-567812345678')
+        invitation.role_id = 1
+        return invitation
+
+    @pytest.mark.asyncio
+    async def test_already_accepted_and_member_raises_already_member(self):
+        user_id = UUID('87654321-4321-8765-4321-876543218765')
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_token',
+                new_callable=AsyncMock,
+            ) as mock_get_invitation,
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_member,
+        ):
+            mock_get_invitation.return_value = self._invitation()
+            mock_get_member.return_value = MagicMock()
+
+            with pytest.raises(UserAlreadyMemberError):
+                await OrgInvitationService.accept_invitation('inv-token', user_id)
+
+    @pytest.mark.asyncio
+    async def test_already_accepted_but_not_member_raises_invalid(self):
+        user_id = UUID('87654321-4321-8765-4321-876543218765')
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_token',
+                new_callable=AsyncMock,
+            ) as mock_get_invitation,
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_member,
+        ):
+            mock_get_invitation.return_value = self._invitation()
+            mock_get_member.return_value = None
+
+            with pytest.raises(InvitationInvalidError):
+                await OrgInvitationService.accept_invitation('inv-token', user_id)
+
+    @pytest.mark.asyncio
+    async def test_revoked_invitation_still_raises_invalid(self):
+        user_id = UUID('87654321-4321-8765-4321-876543218765')
+
+        with patch(
+            'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_token',
+            new_callable=AsyncMock,
+        ) as mock_get_invitation:
+            mock_get_invitation.return_value = self._invitation(
+                status=OrgInvitation.STATUS_REVOKED
+            )
+
+            with pytest.raises(InvitationInvalidError):
+                await OrgInvitationService.accept_invitation('inv-token', user_id)
