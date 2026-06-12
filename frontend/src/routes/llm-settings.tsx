@@ -360,10 +360,15 @@ export function LlmSettingsScreen({
                 <OpenHandsApiKeyHelp testId="openhands-api-key-help" />
               ) : null}
 
-              {renderApiKeyInput(
-                "llm-api-key-input",
-                "llm-api-key-help-anchor",
-              )}
+              {/* A blank create form has no provider yet — rendering the key
+                  input only to remove it when a managed provider is picked is
+                  jarring, so wait until a provider is actually selected. */}
+              {activeProvider
+                ? renderApiKeyInput(
+                    "llm-api-key-input",
+                    "llm-api-key-help-anchor",
+                  )
+                : null}
             </div>
           ) : (
             <div

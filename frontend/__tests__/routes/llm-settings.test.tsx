@@ -2637,7 +2637,11 @@ describe("LlmSettingsScreen", () => {
       await screen.findByTestId("llm-settings-form-basic");
       expect(screen.getByTestId("llm-provider-input")).toHaveValue("");
       expect(screen.getByTestId("llm-model-input")).toHaveValue("");
-      expect(screen.getByTestId("llm-api-key-input")).toHaveValue("");
+      // No provider selected yet, so the API key input isn't rendered (it
+      // appears once a key-taking provider is chosen).
+      expect(
+        screen.queryByTestId("llm-api-key-input"),
+      ).not.toBeInTheDocument();
 
       await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
 
@@ -2648,7 +2652,7 @@ describe("LlmSettingsScreen", () => {
 
     it("does not preselect the active provider when creating a profile in SaaS mode", async () => {
       // Default settings use an OpenHands model; previously the create form
-      // inherited the provider selection (hiding the API key input in SaaS).
+      // inherited the provider selection.
       vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
         buildSettings(),
       );
@@ -2657,7 +2661,33 @@ describe("LlmSettingsScreen", () => {
 
       await screen.findByTestId("llm-settings-form-basic");
       expect(screen.getByTestId("llm-provider-input")).toHaveValue("");
+    });
+
+    it("only shows the API key input once a key-taking provider is selected", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings(),
+      );
+
+      await renderLlmSettingsScreen({ appMode: "saas", view: "create" });
+
+      // Blank create form: no provider selected, so no API key input —
+      // rendering it only to remove it again when a managed provider is
+      // picked was jarring.
+      await screen.findByTestId("llm-settings-form-basic");
+      expect(
+        screen.queryByTestId("llm-api-key-input"),
+      ).not.toBeInTheDocument();
+
+      // Picking a key-taking provider reveals the input.
+      await selectProvider("OpenAI");
       expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
+
+      // The managed OpenHands provider keeps it hidden in SaaS mode (keys
+      // are auto-provisioned).
+      await selectProvider("OpenHands");
+      expect(
+        screen.queryByTestId("llm-api-key-input"),
+      ).not.toBeInTheDocument();
     });
 
     it("keeps Save disabled in the create form until a model is chosen", async () => {
