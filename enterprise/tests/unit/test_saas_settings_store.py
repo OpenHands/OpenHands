@@ -451,6 +451,51 @@ def org_with_multiple_members_fixture(session_maker):
 
 
 @pytest.mark.asyncio
+async def test_load_canonicalizes_legacy_litellm_proxy_active_llm(
+    async_session_maker, org_with_multiple_members_fixture
+):
+    from sqlalchemy import update
+    from storage.org_member import OrgMember
+    from storage.user import User
+
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = fixture['admin_user_id']
+    org_id = fixture['org_id']
+
+    async with async_session_maker() as session:
+        await session.execute(
+            update(OrgMember)
+            .where(OrgMember.org_id == org_id, OrgMember.user_id == admin_user_id)
+            .values(
+                agent_settings_diff={
+                    'llm': {
+                        'model': 'litellm_proxy/claude-opus-4-8',
+                        'base_url': LITE_LLM_API_URL,
+                    },
+                }
+            )
+        )
+        await session.execute(
+            update(User)
+            .where(User.id == admin_user_id)
+            .values(enable_sound_notifications=False)
+        )
+        await session.commit()
+
+    store = SaasSettingsStore(str(admin_user_id))
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+    ):
+        loaded = await store.load()
+
+    assert loaded is not None
+    assert loaded.agent_settings.llm.model == 'openhands/claude-opus-4-8'
+    assert loaded.agent_settings.llm.base_url is None
+
+
+@pytest.mark.asyncio
 async def test_store_updates_org_defaults_and_all_members_for_shared_keys(
     session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
