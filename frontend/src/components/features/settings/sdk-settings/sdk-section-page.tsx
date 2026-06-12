@@ -105,6 +105,12 @@ export interface SdkSectionHeaderProps {
   onChange: (key: string, value: string | boolean) => void;
 }
 
+interface SaveDisabledContext {
+  values: SettingsFormValues;
+  dirty: SettingsDirtyState;
+  view: SettingsView;
+}
+
 interface ResolvedSource extends SettingsSourceConfig {
   filteredSchema: SettingsSchema | null;
 }
@@ -133,6 +139,8 @@ export function SdkSectionPage({
   buildPayload,
   onSaveSuccess,
   getInitialView,
+  initialValueOverrides,
+  isSaveDisabled,
   forceShowAdvancedView = false,
   allowAllView = true,
   trailingActions,
@@ -165,6 +173,20 @@ export function SdkSectionPage({
     settings: Settings,
     filteredSchema: SettingsSchema,
   ) => SettingsView;
+  /**
+   * Values merged over the settings-derived initial form state, keyed by
+   * source. Used by create flows that should start from a blank form while
+   * edit flows keep hydrating from the persisted settings. Overridden fields
+   * are not marked dirty — they only change what the form initially shows.
+   */
+  initialValueOverrides?: Partial<
+    Record<SettingsValueSource, Partial<SettingsFormValues>>
+  >;
+  /**
+   * Extra gate on the Save button computed from the unified form state.
+   * Returning true disables Save even when the form is otherwise saveable.
+   */
+  isSaveDisabled?: (context: SaveDisabledContext) => boolean;
   // Extra buttons slotted into the Basic/Advanced/All control strip,
   // after the view toggles. Used by the LLM page to drop a Profiles
   // navigation button into the same row.
@@ -276,7 +298,7 @@ export function SdkSectionPage({
     const result: Partial<Record<SettingsValueSource, SettingsFormValues>> = {};
     for (const src of resolvedSources) {
       if (!src.filteredSchema) return null;
-      result[src.settingsSource] = {
+      const values: SettingsFormValues = {
         ...(result[src.settingsSource] ?? {}),
         ...buildInitialSettingsFormValues(
           settings,
@@ -284,9 +306,18 @@ export function SdkSectionPage({
           src.settingsSource,
         ),
       };
+      const overrides = initialValueOverrides?.[src.settingsSource];
+      if (overrides) {
+        for (const [key, value] of Object.entries(overrides)) {
+          if (value !== undefined) {
+            values[key] = value;
+          }
+        }
+      }
+      result[src.settingsSource] = values;
     }
     return result;
-  }, [settings, resolvedSources]);
+  }, [settings, resolvedSources, initialValueOverrides]);
 
   const initialView = React.useMemo(() => {
     if (!settings) return null;
@@ -466,6 +497,13 @@ export function SdkSectionPage({
 
   const isDirty = Object.keys(flatDirty).length > 0;
 
+  const saveDisabledByCaller =
+    isSaveDisabled?.({
+      values: flatValues,
+      dirty: flatDirty,
+      view,
+    }) ?? false;
+
   return (
     <div data-testid={testId} className="h-full relative">
       <ViewToggle
@@ -526,7 +564,9 @@ export function SdkSectionPage({
             testId="save-button"
             type="button"
             variant="primary"
-            isDisabled={isPending || (!isDirty && !extraDirty)}
+            isDisabled={
+              isPending || saveDisabledByCaller || (!isDirty && !extraDirty)
+            }
             onClick={handleSave}
           >
             {isPending

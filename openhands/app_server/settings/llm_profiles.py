@@ -180,9 +180,8 @@ class LLMProfiles(BaseModel):
         "key stored" vs. "needs key" without fetching each profile.
 
         When ``managed_proxy_url`` is provided, ``base_url`` is resolved to the
-        value the profile will actually use at runtime — e.g. the managed proxy
-        for a ``litellm_proxy/`` model saved without one — so callers display
-        the effective endpoint instead of an empty value.
+        value the profile will actually use at runtime for public OpenHands
+        provider profiles.
         """
         return [
             {

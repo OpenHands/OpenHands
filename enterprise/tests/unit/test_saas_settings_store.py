@@ -539,10 +539,9 @@ async def test_store_keeps_openhands_managed_keys_member_specific(
     with session_maker() as session:
         org = session.execute(select(Org).where(Org.id == org_id)).scalars().first()
         assert org is not None
-        # Settings normalizes openhands/ → litellm_proxy/ during construction
+        # Settings keeps the public openhands/ provider prefix in persisted data
         assert (
-            org.agent_settings['llm']['model']
-            == 'litellm_proxy/claude-opus-4-5-20251101'
+            org.agent_settings['llm']['model'] == 'openhands/claude-opus-4-5-20251101'
         )
         assert org.agent_settings['llm']['base_url'] == LITE_LLM_API_URL
         assert org.conversation_settings['max_iterations'] == 75
@@ -568,7 +567,7 @@ async def test_store_keeps_openhands_managed_keys_member_specific(
         for member in members.values():
             assert (
                 member.agent_settings_diff['llm']['model']
-                == 'litellm_proxy/claude-opus-4-5-20251101'
+                == 'openhands/claude-opus-4-5-20251101'
             )
             assert member.agent_settings_diff['llm']['base_url'] == LITE_LLM_API_URL
             assert member.conversation_settings_diff['max_iterations'] == 75

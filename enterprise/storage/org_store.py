@@ -118,6 +118,14 @@ class OrgStore:
         return await OrgStore._validate_org_version(org)
 
     @staticmethod
+    async def enable_byor_export(org_id: UUID) -> Org | None:
+        """Persist BYOR export enablement for an organization."""
+        return await OrgStore._update_org_kwargs(
+            org_id,
+            {'byor_export_enabled': True},
+        )
+
+    @staticmethod
     async def get_orgs_by_ids(org_ids: list[UUID]) -> list[Org]:
         """Get multiple organizations by IDs in a single query.
 

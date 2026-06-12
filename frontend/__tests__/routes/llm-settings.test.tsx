@@ -252,10 +252,12 @@ async function renderLlmSettingsScreen({
   organizations?: Organization[];
   scope?: "personal" | "org";
   // Profile-enabled scopes land on the Available Models list by default; set
-  // ``view`` to ``"form"`` (the default) to auto-click into the SDK form
-  // so existing form-oriented assertions keep working unchanged, or to
-  // ``"profiles"`` to test the list view itself.
-  view?: "form" | "profiles";
+  // ``view`` to ``"form"`` (the default) to auto-click into the SDK form via
+  // Edit on a seeded active profile — the form then hydrates from the mocked
+  // settings, so existing form-oriented assertions keep working unchanged.
+  // ``"create"`` clicks Add Profile instead (blank create form), and
+  // ``"profiles"`` tests the list view itself.
+  view?: "form" | "create" | "profiles";
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -283,6 +285,26 @@ async function renderLlmSettingsScreen({
     });
   }
 
+  if (view === "form") {
+    // One active profile to Edit into. Its name matches the model-derived
+    // default for the mocked settings, so auto-profile assertions that
+    // expect the derived name keep working under the edit flow.
+    const seededProfile = {
+      name: "openai_gpt-4o",
+      model: "openai/gpt-4o",
+      base_url: null,
+      api_key_set: false,
+    };
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: [seededProfile],
+      active_profile: seededProfile.name,
+    });
+    vi.mocked(OrgProfilesService.listProfiles).mockResolvedValue({
+      profiles: [seededProfile],
+      active_profile: seededProfile.name,
+    });
+  }
+
   const rendered = render(<LlmSettingsScreen scope={scope} />, {
     wrapper: ({ children }) => (
       <MemoryRouter>
@@ -294,6 +316,11 @@ async function renderLlmSettingsScreen({
   });
 
   if (view === "form") {
+    // Edit the seeded active profile: Add Profile now opens a blank create
+    // form, while these tests exercise the form against persisted settings.
+    await userEvent.click(await screen.findByTestId("profile-menu-trigger"));
+    await userEvent.click(await screen.findByTestId("profile-edit"));
+  } else if (view === "create") {
     await userEvent.click(await screen.findByTestId("add-llm-profile"));
   }
 
@@ -346,6 +373,74 @@ describe("LlmSettingsScreen", () => {
     await screen.findByTestId("llm-settings-form-advanced");
     expect(screen.getByTestId("llm-custom-model-input")).toBeInTheDocument();
     expect(screen.getByTestId("base-url-input")).toBeInTheDocument();
+  });
+
+  it("defaults to basic view when an OpenHands managed model has no base URL", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithAdvancedToggle({
+        llm_model: "openhands/claude-opus-4-5-20251101",
+        llm_base_url: "",
+        agent_settings: {
+          llm: {
+            model: "openhands/claude-opus-4-5-20251101",
+          },
+        },
+      }),
+    );
+
+    await renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+    expect(
+      screen.queryByTestId("llm-settings-form-advanced"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens advanced view when an OpenHands model has a custom base URL", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithAdvancedToggle({
+        llm_model: "openhands/claude-opus-4-5-20251101",
+        llm_base_url: "https://custom.example/v1",
+        agent_settings: {
+          llm: {
+            model: "openhands/claude-opus-4-5-20251101",
+            base_url: "https://custom.example/v1",
+          },
+        },
+      }),
+    );
+
+    await renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-advanced");
+    expect(screen.getByTestId("base-url-input")).toHaveValue(
+      "https://custom.example/v1",
+    );
+  });
+
+  it("treats a litellm_proxy model with the managed proxy URL as an explicit custom endpoint", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithAdvancedToggle({
+        llm_model: "litellm_proxy/claude-opus-4-5-20251101",
+        llm_base_url: "https://llm-proxy.app.all-hands.dev",
+        agent_settings: {
+          llm: {
+            model: "litellm_proxy/claude-opus-4-5-20251101",
+            base_url: "https://llm-proxy.app.all-hands.dev",
+          },
+        },
+      }),
+    );
+
+    await renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-advanced");
+    expect(screen.getByTestId("llm-custom-model-input")).toHaveValue(
+      "litellm_proxy/claude-opus-4-5-20251101",
+    );
+    expect(
+      screen.queryByTestId("openhands-api-key-help-2"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows Advanced and All toggles in OSS mode for the default LLM route schema", async () => {
@@ -764,7 +859,7 @@ describe("LlmSettingsScreen", () => {
     });
   });
 
-  it("resets hidden advanced and all settings back to defaults when saving basic view", async () => {
+  it("preserves the existing base URL when saving basic view without changing the model", async () => {
     const schema = structuredClone(
       MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
     );
@@ -850,7 +945,6 @@ describe("LlmSettingsScreen", () => {
           agent_settings_diff: expect.objectContaining({
             llm: expect.objectContaining({
               api_key: "test-api-key",
-              base_url: "https://schema.default/v1",
               timeout: 30,
             }),
           }),
@@ -862,6 +956,11 @@ describe("LlmSettingsScreen", () => {
       string,
       unknown
     >;
+    const llmPayload = getPayloadAgentSettings(payload).llm as Record<
+      string,
+      unknown
+    >;
+    expect(llmPayload).not.toHaveProperty("base_url");
     expect(getPayloadAgentSettings(payload)).not.toHaveProperty("agent");
   });
 
@@ -1159,7 +1258,7 @@ describe("LlmSettingsScreen", () => {
     });
   });
 
-  it("does not clear the hidden search API key on SaaS org settings when saving basic view", async () => {
+  it("does not clear hidden search API key or existing base URL on SaaS org settings when saving basic view", async () => {
     let persistedSettings = buildSettingsWithAdvancedToggle({
       llm_model: "openai/gpt-4o",
       llm_base_url: "https://custom.example/v1",
@@ -1221,7 +1320,6 @@ describe("LlmSettingsScreen", () => {
             agent_settings_diff: expect.objectContaining({
               llm: expect.objectContaining({
                 api_key: "test-api-key",
-                base_url: null,
               }),
             }),
           }),
@@ -1232,6 +1330,10 @@ describe("LlmSettingsScreen", () => {
     const payload = saveOrganizationSettingsSpy.mock.calls[0]?.at(0) as {
       settings: Record<string, unknown>;
     };
+    const llmPayload = (
+      payload.settings.agent_settings_diff as Record<string, unknown>
+    ).llm as Record<string, unknown>;
+    expect(llmPayload).not.toHaveProperty("base_url");
     expect(payload.settings).not.toHaveProperty("search_api_key");
 
     await waitFor(() => {
@@ -1257,7 +1359,7 @@ describe("LlmSettingsScreen", () => {
     });
   });
 
-  it("returns to the profiles list after save and re-enters the form in basic view even when a stale legacy base URL lingers on refetch", async () => {
+  it("keeps an existing custom base URL when saving basic view without a model change", async () => {
     let persistedSettings = buildSettingsWithAdvancedToggle({
       llm_base_url: "https://stale.example/v1",
       agent_settings: {
@@ -1314,12 +1416,21 @@ describe("LlmSettingsScreen", () => {
           agent_settings_diff: expect.objectContaining({
             llm: expect.objectContaining({
               api_key: "test-api-key",
-              base_url: null,
             }),
           }),
         }),
       );
     });
+
+    const payload = saveSettingsSpy.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    const llmPayload = getPayloadAgentSettings(payload).llm as Record<
+      string,
+      unknown
+    >;
+    expect(llmPayload).not.toHaveProperty("base_url");
 
     await waitFor(() => {
       expect(getSettingsSpy).toHaveBeenCalledTimes(2);
@@ -1333,8 +1444,16 @@ describe("LlmSettingsScreen", () => {
       ).not.toBeInTheDocument();
     });
 
-    // Re-entering the form must not get bumped into advanced by the
-    // stale legacy base_url on refetch.
+    // The persisted settings still carry the custom base_url instead of
+    // being silently cleared during the previous save.
+    expect(
+      (persistedSettings.agent_settings?.llm as Record<string, SettingsValue>)
+        ?.base_url,
+    ).toBe("https://stale.example/v1");
+
+    // Re-entering via Add Profile starts a blank create form on the basic
+    // view regardless of stored values; the preserved base_url shows when
+    // editing the existing configuration instead.
     await userEvent.click(screen.getByTestId("add-llm-profile"));
     await waitFor(() => {
       expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
@@ -1550,7 +1669,7 @@ describe("LlmSettingsScreen", () => {
     });
   });
 
-  it("does not reveal all-only fields after save when refetch returns a litellm_proxy model with the managed proxy base URL", async () => {
+  it("does not reveal all-only fields after save when refetch returns an OpenHands managed model", async () => {
     const schema = structuredClone(
       MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
     );
@@ -1591,8 +1710,7 @@ describe("LlmSettingsScreen", () => {
         agent_settings_schema: schema,
         agent_settings: {
           llm: {
-            model: "litellm_proxy/claude-opus-4-5-20251101",
-            base_url: "https://llm-proxy.app.all-hands.dev",
+            model: "openhands/claude-opus-4-5-20251101",
           },
         },
       });
@@ -2267,10 +2385,11 @@ describe("LlmSettingsScreen", () => {
         meData: buildOrganizationMember({ org_id: "3", role: "admin" }),
       });
 
-      await userEvent.type(
-        await screen.findByTestId("llm-profile-name-input"),
-        "team-profile",
+      const orgProfileNameInput = await screen.findByTestId(
+        "llm-profile-name-input",
       );
+      await userEvent.clear(orgProfileNameInput);
+      await userEvent.type(orgProfileNameInput, "team-profile");
       await userEvent.type(
         await screen.findByTestId("llm-api-key-input"),
         "test-api-key",
@@ -2308,10 +2427,11 @@ describe("LlmSettingsScreen", () => {
 
       await renderLlmSettingsScreen({ appMode: "oss" });
 
-      await userEvent.type(
-        await screen.findByTestId("llm-profile-name-input"),
-        "my-custom-name",
+      const profileNameInput = await screen.findByTestId(
+        "llm-profile-name-input",
       );
+      await userEvent.clear(profileNameInput);
+      await userEvent.type(profileNameInput, "my-custom-name");
       await userEvent.type(
         await screen.findByTestId("llm-api-key-input"),
         "test-api-key",
@@ -2346,10 +2466,11 @@ describe("LlmSettingsScreen", () => {
 
       await renderLlmSettingsScreen({ appMode: "oss" });
 
-      await userEvent.type(
-        await screen.findByTestId("llm-profile-name-input"),
-        "has space",
+      const profileNameInput = await screen.findByTestId(
+        "llm-profile-name-input",
       );
+      await userEvent.clear(profileNameInput);
+      await userEvent.type(profileNameInput, "has space");
       await userEvent.type(
         await screen.findByTestId("llm-api-key-input"),
         "test-api-key",
@@ -2413,6 +2534,189 @@ describe("LlmSettingsScreen", () => {
       // Activate must NOT run when save already failed — otherwise we'd
       // activate a profile that doesn't exist on the backend.
       expect(ProfilesService.activateProfile).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Add Profile (create flow) ───────────────────────────────────────
+  //
+  // Adding a new profile starts from a clean slate: the form opens on the
+  // basic view with blank fields instead of inheriting the active/org
+  // settings (which previously dropped users with a custom model or base
+  // URL straight into a pre-filled advanced form).
+
+  describe("Add Profile (create flow)", () => {
+    const settingsWithCustomModelAndBaseUrl = () =>
+      buildSettings({
+        llm_model: "litellm_proxy/custom-model",
+        llm_base_url: "https://custom.example/v1",
+        agent_settings: {
+          llm: {
+            model: "litellm_proxy/custom-model",
+            base_url: "https://custom.example/v1",
+          },
+        },
+      });
+
+    it("opens the create form on basic view even when the active settings have a custom model and base URL", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        settingsWithCustomModelAndBaseUrl(),
+      );
+
+      await renderLlmSettingsScreen({ appMode: "oss", view: "create" });
+
+      await screen.findByTestId("llm-settings-form-basic");
+      expect(
+        screen.queryByTestId("llm-settings-form-advanced"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("starts the create form blank instead of pre-filling from the active settings", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        settingsWithCustomModelAndBaseUrl(),
+      );
+
+      await renderLlmSettingsScreen({ appMode: "oss", view: "create" });
+
+      await screen.findByTestId("llm-settings-form-basic");
+      expect(screen.getByTestId("llm-provider-input")).toHaveValue("");
+      expect(screen.getByTestId("llm-model-input")).toHaveValue("");
+      expect(screen.getByTestId("llm-api-key-input")).toHaveValue("");
+
+      await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
+
+      expect(screen.getByTestId("llm-custom-model-input")).toHaveValue("");
+      expect(screen.getByTestId("base-url-input")).toHaveValue("");
+      expect(screen.getByTestId("llm-api-key-input")).toHaveValue("");
+    });
+
+    it("does not preselect the active provider when creating a profile in SaaS mode", async () => {
+      // Default settings use an OpenHands model; previously the create form
+      // inherited the provider selection (hiding the API key input in SaaS).
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings(),
+      );
+
+      await renderLlmSettingsScreen({ appMode: "saas", view: "create" });
+
+      await screen.findByTestId("llm-settings-form-basic");
+      expect(screen.getByTestId("llm-provider-input")).toHaveValue("");
+      expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
+    });
+
+    it("keeps Save disabled in the create form until a model is chosen", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings({
+          llm_model: "openai/gpt-4o",
+          agent_settings: { llm: { model: "openai/gpt-4o" } },
+        }),
+      );
+
+      await renderLlmSettingsScreen({ appMode: "oss", view: "create" });
+
+      await screen.findByTestId("llm-settings-form-basic");
+      expect(screen.getByTestId("save-button")).toBeDisabled();
+
+      // Picking a provider alone isn't a model yet.
+      await selectProvider("OpenAI");
+      expect(screen.getByTestId("save-button")).toBeDisabled();
+
+      await selectModel("gpt-4o");
+      await waitFor(() => {
+        expect(screen.getByTestId("save-button")).not.toBeDisabled();
+      });
+    });
+
+    it("saves and activates a profile built from the blank create form", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings({
+          llm_model: "openhands/claude-opus-4-5-20251101",
+          agent_settings: {
+            llm: { model: "openhands/claude-opus-4-5-20251101" },
+          },
+        }),
+      );
+      const saveSettingsSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+
+      await renderLlmSettingsScreen({ appMode: "oss", view: "create" });
+
+      await screen.findByTestId("llm-settings-form-basic");
+      await selectProvider("OpenAI");
+      await selectModel("gpt-4o");
+      await userEvent.type(
+        screen.getByTestId("llm-api-key-input"),
+        "new-api-key",
+      );
+      await userEvent.click(screen.getByTestId("save-button"));
+
+      await waitFor(() => {
+        expect(saveSettingsSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            agent_settings_diff: expect.objectContaining({
+              llm: expect.objectContaining({
+                model: "openai/gpt-4o",
+                api_key: "new-api-key",
+              }),
+            }),
+          }),
+        );
+      });
+      await waitFor(() => {
+        expect(ProfilesService.saveProfile).toHaveBeenCalledWith(
+          "openai_gpt-4o",
+          { include_secrets: true },
+        );
+      });
+      await waitFor(() => {
+        expect(ProfilesService.activateProfile).toHaveBeenCalledWith(
+          "openai_gpt-4o",
+        );
+      });
+    });
+
+    it("opens a blank org create form on basic view for admins even when org defaults have custom fields", async () => {
+      vi.spyOn(
+        organizationService,
+        "getOrganizationSettings",
+      ).mockResolvedValue(settingsWithCustomModelAndBaseUrl());
+
+      await renderLlmSettingsScreen({
+        appMode: "saas",
+        scope: "org",
+        organizationId: "3",
+        meData: buildOrganizationMember({ org_id: "3", role: "admin" }),
+        view: "create",
+      });
+
+      await screen.findByTestId("llm-settings-form-basic");
+      expect(
+        screen.queryByTestId("llm-settings-form-advanced"),
+      ).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
+
+      expect(screen.getByTestId("llm-custom-model-input")).toHaveValue("");
+      expect(screen.getByTestId("base-url-input")).toHaveValue("");
+    });
+
+    it("still opens the edit form on advanced view with stored values for a profile with custom fields", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        settingsWithCustomModelAndBaseUrl(),
+      );
+
+      await renderLlmSettingsScreen({ appMode: "oss", view: "form" });
+
+      await screen.findByTestId("llm-settings-form-advanced");
+      expect(screen.getByTestId("llm-custom-model-input")).toHaveValue(
+        "litellm_proxy/custom-model",
+      );
+      expect(screen.getByTestId("base-url-input")).toHaveValue(
+        "https://custom.example/v1",
+      );
+      expect(screen.getByTestId("llm-profile-name-input")).toHaveValue(
+        "openai_gpt-4o",
+      );
     });
   });
 });

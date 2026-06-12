@@ -13,6 +13,7 @@ from openhands.app_server.web_client.web_client_config_injector import (
     WebClientConfigInjector,
 )
 from openhands.app_server.web_client.web_client_models import (
+    ACPModelOption,
     ACPProviderConfig,
     WebClientConfig,
     WebClientFeatureFlags,
@@ -224,10 +225,14 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
             ACPProviderConfig(
                 key=provider.key,
                 display_name=provider.display_name,
-                # SDK exposes ``default_command`` as ``tuple[str, ...]`` (frozen
-                # registry record); the API contract uses ``list[str]`` for
-                # JSON-friendliness.
                 default_command=list(provider.default_command),
+                default_model=provider.default_model or None,
+                available_models=[
+                    ACPModelOption(id=m.id, label=m.label)
+                    for m in (provider.available_models or [])
+                ],
+                api_key_env_var=provider.api_key_env_var,
+                base_url_env_var=provider.base_url_env_var,
             )
             for provider in ACP_PROVIDERS.values()
         ]

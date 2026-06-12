@@ -486,8 +486,8 @@ def test_settings_no_pydantic_frozen_field_warning():
         )
 
 
-def test_litellm_proxy_to_openhands_conversion_with_openhands_proxy():
-    """Test that litellm_proxy/ is converted to openhands/ when using OpenHands proxy."""
+def test_litellm_proxy_with_openhands_proxy_keeps_prefix_for_display():
+    """Display data no longer reverse-maps LiteLLM proxy model names."""
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
             llm=LLM(
@@ -497,12 +497,8 @@ def test_litellm_proxy_to_openhands_conversion_with_openhands_proxy():
         )
     )
 
-    # Internal representation should be litellm_proxy/
-    assert settings.agent_settings.llm.model == 'litellm_proxy/claude-opus-4-5-20251101'
-
-    # Display representation should convert to openhands/
     api_data = settings.get_agent_settings_display()
-    assert api_data['llm']['model'] == 'openhands/claude-opus-4-5-20251101'
+    assert api_data['llm']['model'] == 'litellm_proxy/claude-opus-4-5-20251101'
 
 
 def test_litellm_proxy_custom_endpoint_keeps_prefix():
@@ -524,17 +520,13 @@ def test_litellm_proxy_custom_endpoint_keeps_prefix():
     assert api_data['llm']['model'] == 'litellm_proxy/gpt-5.3-codex'
 
 
-def test_openhands_model_converts_to_litellm_proxy_internally():
-    """Test that openhands/ models are stored as litellm_proxy/ internally."""
+def test_openhands_model_display_does_not_reverse_map():
+    """Display data reflects the LLM model shape provided by the SDK."""
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='openhands/claude-opus-4-5-20251101')
         )
     )
 
-    # Internal representation should be litellm_proxy/
-    assert settings.agent_settings.llm.model == 'litellm_proxy/claude-opus-4-5-20251101'
-
-    # Display representation should convert back to openhands/
     api_data = settings.get_agent_settings_display()
-    assert api_data['llm']['model'] == 'openhands/claude-opus-4-5-20251101'
+    assert api_data['llm']['model'] == settings.agent_settings.llm.model

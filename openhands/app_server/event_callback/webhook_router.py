@@ -477,6 +477,12 @@ async def on_event(
     return Success()
 
 
+async def _resolve_user_context(user_id: str | None) -> AuthUserContext:
+    """Resolve a UserContext from a user_id, falling back to DefaultUserAuth in OSS mode."""
+    user_auth = await get_user_auth_for_user(user_id) if user_id else DefaultUserAuth()
+    return AuthUserContext(user_auth=user_auth)
+
+
 @router.get('/secrets')
 async def get_secret(
     access_token: str = Depends(APIKeyHeader(name='X-Access-Token', auto_error=False)),
@@ -485,20 +491,14 @@ async def get_secret(
     """Given an access token, retrieve a user secret. The access token
     is limited by user and provider type, and may include a timeout, limiting
     the damage in the event that a token is ever leaked"""
+    if not access_token:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
     try:
         payload = jwt_service.verify_jws_token(access_token)
         user_id = payload['user_id']
         provider_type = ProviderType(payload['provider_type'])
 
-        # Get UserAuth for the user_id
-        if user_id:
-            user_auth = await get_user_auth_for_user(user_id)
-        else:
-            # OpenHands (OSS mode) - use default user auth
-            user_auth = DefaultUserAuth()
-
-        # Create UserContext directly
-        user_context = AuthUserContext(user_auth=user_auth)
+        user_context = await _resolve_user_context(user_id)
 
         secret = await user_context.get_latest_token(provider_type)
         if secret is None:
