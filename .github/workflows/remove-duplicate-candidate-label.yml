@@ -24,7 +24,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Remove duplicate-candidate label
-              uses: OpenHands/extensions/plugins/issue-duplicate-checker@fb020c71eb8e7cd2678f0251ab24327d3738da7d
+              uses: OpenHands/extensions/plugins/issue-duplicate-checker@v0.4.1
               with:
                   mode: remove-label
                   github-token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
