@@ -43,7 +43,6 @@ from openhands.sdk.settings import (
     validate_agent_settings,
 )
 
-
 _ORG_SETTINGS_EXCLUDED_FIELDS = {
     'id',
     'name',
