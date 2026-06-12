@@ -225,10 +225,9 @@ export function LlmSettingsScreen({
         return "basic";
       }
 
-      // Adding a new profile always starts on the basic view. The schema
-      // inference below looks at the *active/org* settings, so a user whose
-      // current config has a custom model or base URL would otherwise be
-      // dropped straight into the advanced form when creating a profile.
+      // Create always starts on basic — the inference below reads the
+      // *active* settings and would otherwise open advanced for users
+      // whose current config has a custom model or base URL.
       if (profileFormMode === "create") {
         return "basic";
       }
@@ -545,9 +544,8 @@ export function LlmSettingsScreen({
   ]);
 
   const openForm = (view: SettingsView | null, name = "") => {
-    // Editing is identified by the profile name passed from the profiles
-    // list; Add Profile opens the form with no name and gets a blank
-    // create form instead of one pre-filled from the active settings.
+    // The profiles list passes a name only when editing; Add Profile
+    // opens a blank create form.
     const isEdit = Boolean(name);
     setProfileFormMode(isEdit ? "edit" : "create");
     setProfileName(name);
@@ -559,9 +557,8 @@ export function LlmSettingsScreen({
     setShowProfiles(false);
   };
 
-  // Add Profile starts from a clean slate: no inherited model, API key, or
-  // base URL from whatever config happens to be active. Editing keeps the
-  // settings-derived initial values (no overrides).
+  // Create starts from a clean slate; editing keeps the settings-derived
+  // initial values (no overrides).
   const createProfileInitialValueOverrides = React.useMemo(
     () =>
       profileFormMode === "create"
