@@ -16,11 +16,14 @@ from server.routes.org_models import (
     OrgUpdate,
     OrphanedUserError,
 )
-from sqlalchemy import select, text
+from sqlalchemy import delete, func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker
 from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
 from storage.org import Org
+from storage.org_git_claim import OrgGitClaim
+from storage.org_invitation import OrgInvitation
 from storage.org_member import OrgMember
 from storage.user import User
 from storage.user_settings import UserSettings
@@ -33,7 +36,12 @@ from openhands.app_server.settings.settings_models import (
 from openhands.app_server.utils.jsonpatch_compat import deep_merge
 from openhands.app_server.utils.llm import is_openhands_model
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
+from openhands.sdk.settings import (
+    AgentSettingsConfig,
+    ConversationSettings,
+    OpenHandsAgentSettings,
+    validate_agent_settings,
+)
 
 _ORG_SETTINGS_EXCLUDED_FIELDS = {
     'id',
@@ -54,16 +62,13 @@ class OrgStore:
     """Store for managing organizations."""
 
     @staticmethod
-    def get_agent_settings_from_org(org: Org) -> OpenHandsAgentSettings:
-        # Apply persisted-settings migrations via the shared SDK loader,
-        # then coerce the legacy ``agent_kind: 'llm'`` discriminator onto
-        # the canonical class. Some saved entries still carry that
-        # pre-rename shape and would otherwise validate as
-        # ``LLMAgentSettings``.
-        loaded = _load_persisted_agent_settings(dict(org.agent_settings))
-        payload = loaded.model_dump(mode='json', context={'expose_secrets': True})
-        payload['agent_kind'] = 'openhands'
-        return OpenHandsAgentSettings.model_validate(payload)
+    def get_agent_settings_from_org(org: Org) -> AgentSettingsConfig:
+        # Route through the shared SDK loader: it applies persisted-settings
+        # migrations (incl. the legacy ``agent_kind: 'llm'`` -> ``'openhands'``
+        # rename) and returns the actual variant. ACP settings are returned as
+        # ``ACPAgentSettings``, not coerced into the OpenHands shape — that
+        # coercion 500s on ACP's nullable ``agent_context``.
+        return _load_persisted_agent_settings(dict(org.agent_settings))
 
     @staticmethod
     def get_conversation_settings_from_org(org: Org) -> ConversationSettings:
@@ -111,6 +116,14 @@ class OrgStore:
             result = await session.execute(select(Org).filter(Org.id == org_id))
             org = result.scalars().first()
         return await OrgStore._validate_org_version(org)
+
+    @staticmethod
+    async def enable_byor_export(org_id: UUID) -> Org | None:
+        """Persist BYOR export enablement for an organization."""
+        return await OrgStore._update_org_kwargs(
+            org_id,
+            {'byor_export_enabled': True},
+        )
 
     @staticmethod
     async def get_orgs_by_ids(org_ids: list[UUID]) -> list[Org]:
@@ -166,6 +179,61 @@ class OrgStore:
             result = await session.execute(select(Org).filter(Org.name == name))
             org = result.scalars().first()
         return await OrgStore._validate_org_version(org)
+
+    @staticmethod
+    async def get_default_org() -> Org | None:
+        """Get the org flagged as the install's bootstrapped default org."""
+        async with a_session_maker() as session:
+            result = await session.execute(select(Org).filter(Org.is_default))
+            org = result.scalars().first()
+        return await OrgStore._validate_org_version(org)
+
+    @staticmethod
+    async def mark_org_as_default(org_id: UUID) -> Org | None:
+        """Flag an org as the install's default org.
+
+        Returns the org on success (or if already flagged). Returns None if
+        the org does not exist or another org is already flagged (the partial
+        unique index allows at most one default org).
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(select(Org).filter(Org.id == org_id))
+            org = result.scalars().first()
+            if not org:
+                return None
+            if not org.is_default:
+                org.is_default = True
+                try:
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    return None
+        return org
+
+    @staticmethod
+    async def list_team_orgs(limit: int | None = None) -> list[Org]:
+        """List orgs that are not personal workspaces (see count_team_orgs)."""
+        async with a_session_maker() as session:
+            stmt = select(Org).where(~select(User.id).where(User.id == Org.id).exists())
+            if limit is not None:
+                stmt = stmt.limit(limit)
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    @staticmethod
+    async def count_team_orgs() -> int:
+        """Count orgs that are not personal workspaces.
+
+        A personal workspace shares its id with its user, so team orgs are
+        the orgs whose id has no matching user.
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(func.count())
+                .select_from(Org)
+                .where(~select(User.id).where(User.id == Org.id).exists())
+            )
+            return int(result.scalar() or 0)
 
     @staticmethod
     async def _validate_org_version(org: Org | None) -> Org | None:
@@ -257,22 +325,31 @@ class OrgStore:
         current_settings: dict[str, Any],
         settings_diff: dict[str, Any],
         settings_type: type[OpenHandsAgentSettings] | type[ConversationSettings],
-    ) -> OpenHandsAgentSettings | ConversationSettings:
+    ) -> AgentSettingsConfig | ConversationSettings:
         """Deep-merge a sparse settings diff and validate the merged result.
 
-        The persisted base is routed through the SDK ``from_persisted`` loader
-        first so any registered schema migrations are applied before the diff
-        is merged. Agent settings additionally coerce the legacy
-        ``agent_kind: 'llm'`` discriminator onto the canonical class.
+        The persisted base is routed through the SDK loader first so any
+        registered schema migrations are applied before the diff is merged.
+        Agent settings are validated against the discriminated union, so the
+        result is the correct variant (OpenHands or ACP) rather than a coerced
+        OpenHands shape.
         """
         if settings_type is OpenHandsAgentSettings:
             base_settings = _load_persisted_agent_settings(current_settings or {})
-            merged_settings = deep_merge(
-                base_settings.model_dump(mode='json', context={'expose_secrets': True}),
-                settings_diff,
-            )
-            merged_settings['agent_kind'] = 'openhands'
-            return OpenHandsAgentSettings.model_validate(merged_settings)
+            new_kind = settings_diff.get('agent_kind')
+            if new_kind and new_kind != base_settings.agent_kind:
+                # Variant switch: deep-merging the new kind's fields onto the
+                # outgoing kind's dump yields an invalid mongrel. Start from a
+                # fresh base and let the diff populate it.
+                merged_settings = {'agent_kind': new_kind, **settings_diff}
+            else:
+                merged_settings = deep_merge(
+                    base_settings.model_dump(
+                        mode='json', context={'expose_secrets': True}
+                    ),
+                    settings_diff,
+                )
+            return validate_agent_settings(merged_settings)
 
         base_settings = _load_persisted_conversation_settings(current_settings)  # type: ignore[assignment]
         merged_settings = deep_merge(
@@ -422,16 +499,44 @@ class OrgStore:
             return org
 
     @staticmethod
-    async def delete_org_cascade(org_id: UUID) -> Org | None:
+    async def delete_org_cascade(
+        org_id: UUID, requester_user_id: str | None = None
+    ) -> Org | None:
         """Delete organization and all associated data in cascade, including external LiteLLM cleanup.
+
+        Users that belong to the org being deleted are handled in three ways:
+
+        * Users with a membership in at least one other org have their
+          ``current_org_id`` reassigned to one of those alternative orgs.
+        * If the *requester themselves* is the only orphaned user (sole member
+          of the org being deleted — the personal-org self-service case), the
+          requester's user row is cascade-deleted in the same transaction. The
+          Keycloak account is left untouched, so on the user's next login
+          ``UserStore.create_user`` re-onboards them as a brand-new user. The
+          new ``User.id`` and ``Org.id`` are derived from the Keycloak ``sub``
+          claim, which is stable across logins, so the re-created personal-org
+          identity matches the deleted one (``User.id == Org.id ==
+          UUID(keycloak.sub)``) and downstream automations that key on
+          ``keycloak_user_id`` continue to resolve correctly.
+        * If any orphan is **not** the requester (i.e., a multi-user org where
+          another member has no other org), ``OrphanedUserError`` is raised
+          and the whole transaction is rolled back. The org owner must
+          transfer or remove those members before deletion can proceed —
+          we refuse to silently destroy accounts that did not consent.
 
         Args:
             org_id: UUID of the organization to delete
+            requester_user_id: Keycloak ``sub`` of the user initiating the
+                deletion. Required for the sole-orphan personal-org case;
+                when ``None`` (e.g., internal callers), any orphan triggers
+                ``OrphanedUserError``.
 
         Returns:
             Org: The deleted organization object, or None if not found
 
         Raises:
+            OrphanedUserError: If any non-requester member of the org would be
+                left without any organization by the deletion.
             Exception: If database operations or LiteLLM cleanup fail
         """
         async with a_session_maker() as session:
@@ -442,6 +547,60 @@ class OrgStore:
                 return None
 
             try:
+                # Preflight orphan check — fail fast before any writes.
+                #
+                # The orphan SELECT only reads ``user`` and ``org_member``,
+                # neither of which is modified by the org-data cleanup
+                # below, so we hoist it to the top of the transaction. If
+                # the check fails we raise immediately and the rollback
+                # has essentially no write work to undo.
+                #
+                # Running it inside the transaction (rather than as a
+                # separate pre-flight call before opening the session) is
+                # deliberate: it ensures the orphan computation shares the
+                # same snapshot/locks as the destructive writes below, so
+                # another session cannot create a new orphan between
+                # check-and-act.
+                #
+                # No row-level lock (``FOR UPDATE``) is acquired here. A
+                # concurrent session could in principle insert or remove
+                # an ``org_member`` row for the requester between this
+                # read and the ``DELETE User`` write below; we accept
+                # that as an unlikely edge case for the personal-org
+                # self-service path, where the requester is the only
+                # actor with permission to mutate their own memberships.
+                # Promote to ``FOR UPDATE`` if this code starts running
+                # on behalf of multi-actor flows.
+                orphaned_result = await session.execute(
+                    text("""
+                        SELECT u.id
+                        FROM "user" u
+                        WHERE u.current_org_id = :org_id
+                        AND NOT EXISTS (
+                            SELECT 1 FROM org_member om
+                            WHERE om.user_id = u.id AND om.org_id != :org_id
+                        )
+                    """),
+                    {'org_id': str(org_id)},
+                )
+                orphaned_user_ids = [str(row[0]) for row in orphaned_result.fetchall()]
+
+                # Split the orphaned users into the requester and everyone
+                # else. Only the requester is cascade-deleted: by calling
+                # DELETE on their own org they've consented to losing their
+                # account. Other members have not consented, so if any
+                # non-requester would be orphaned we raise OrphanedUserError
+                # and let the transaction roll back.
+                other_orphans = [
+                    uid for uid in orphaned_user_ids if uid != requester_user_id
+                ]
+                if other_orphans:
+                    raise OrphanedUserError(other_orphans)
+
+                requester_orphan_ids = [
+                    uid for uid in orphaned_user_ids if uid == requester_user_id
+                ]
+
                 # 1. Delete conversation data for organization conversations
                 await session.execute(
                     text("""
@@ -495,26 +654,69 @@ class OrgStore:
                     {'org_id': str(org_id)},
                 )
 
-                # 3. Handle users with this as current_org_id BEFORE deleting memberships
-                # Single query to find orphaned users (those with no alternative org)
-                orphaned_result = await session.execute(
-                    text("""
-                        SELECT u.id
-                        FROM "user" u
-                        WHERE u.current_org_id = :org_id
-                        AND NOT EXISTS (
-                            SELECT 1 FROM org_member om
-                            WHERE om.user_id = u.id AND om.org_id != :org_id
+                # 3. Handle users with this as current_org_id BEFORE deleting
+                # memberships. The orphan partition was computed in the
+                # preflight check at the top of this try block;
+                # ``requester_orphan_ids`` is set iff the requester is a
+                # sole-org member of this org.
+
+                # 3a. Cascade-delete the requester if they are a sole-org user
+                # (personal-org self-service path). Their personal-org identity
+                # is preserved on re-login because UserStore.create_user derives
+                # both User.id and Org.id from the Keycloak ``sub`` claim (which
+                # is stable across logins), so a re-onboarded user receives the
+                # same UUIDs they had before. Downstream systems keyed on
+                # ``keycloak_user_id``/``org_id`` continue to resolve correctly.
+                #
+                # We must remove the user row BEFORE deleting the org row,
+                # because ``user.current_org_id`` is a NOT NULL FK to
+                # ``org.id``. That in turn requires releasing other inbound
+                # FKs to ``user.id`` first: ``org_invitation`` and
+                # ``org_git_claim`` cascade on ``org.id`` in the DB schema,
+                # but the org row still exists at this point, so we clean
+                # those references explicitly here.
+                #
+                # FK edges on ``user.id`` cleared before ``DELETE User``:
+                #   * ``org_invitation.inviter_id``
+                #   * ``org_invitation.accepted_by_user_id``
+                #   * ``org_git_claim.claimed_by``
+                #   * ``org_member.user_id``
+                # *** If a future migration adds another table with a
+                # FK to ``user.id`` (e.g. ``user_api_key``, ``audit_log``)
+                # this block MUST be updated to release it, or the
+                # ``DELETE User`` below will raise a runtime FK violation
+                # with no obvious pointer back to this site. ***
+                if requester_orphan_ids:
+                    await session.execute(
+                        delete(OrgInvitation).where(
+                            OrgInvitation.inviter_id.in_(requester_orphan_ids)
+                            | OrgInvitation.accepted_by_user_id.in_(
+                                requester_orphan_ids
+                            )
                         )
-                    """),
-                    {'org_id': str(org_id)},
-                )
-                orphaned_users = orphaned_result.fetchall()
+                    )
+                    await session.execute(
+                        delete(OrgGitClaim).where(
+                            OrgGitClaim.claimed_by.in_(requester_orphan_ids)
+                        )
+                    )
+                    # All of the orphan's memberships are for the org being
+                    # deleted (definition of "orphan") and so would be removed
+                    # by step 4 anyway, but we have to release them now to drop
+                    # the user_id FK before the user row goes away.
+                    await session.execute(
+                        delete(OrgMember).where(
+                            OrgMember.user_id.in_(requester_orphan_ids)
+                        )
+                    )
+                    await session.execute(
+                        delete(User).where(User.id.in_(requester_orphan_ids))
+                    )
 
-                if orphaned_users:
-                    raise OrphanedUserError([str(row[0]) for row in orphaned_users])
-
-                # Batch update: reassign current_org_id to an alternative org for all affected users
+                # 3b. Batch update: reassign current_org_id to an alternative org
+                # for any remaining users. Orphan rows are gone at this point, so
+                # the subquery is guaranteed to return a non-null org for every
+                # row touched by the UPDATE.
                 await session.execute(
                     text("""
                         UPDATE "user"
@@ -534,8 +736,17 @@ class OrgStore:
                     {'org_id': str(org_id)},
                 )
 
-                # 5. Finally delete the organization
-                session.delete(org)
+                # 5. Finally delete the organization.
+                # ``AsyncSession.delete`` is a coroutine; without ``await``
+                # it is a silent no-op — the ORM never flushes the DELETE
+                # and the ``org`` row survives the transaction even though
+                # every preceding step committed. Forgetting the ``await``
+                # here would leave the next sign-in colliding on
+                # ``org_pkey`` in ``UserStore.create_user``, because both
+                # the surviving row and the new row are keyed on the same
+                # stable Keycloak ``sub``. Awaited explicitly to make that
+                # invariant load-bearing rather than incidental.
+                await session.delete(org)
 
                 # 6. Clean up LiteLLM team before committing transaction
                 logger.info(

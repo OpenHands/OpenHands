@@ -133,6 +133,8 @@ async def get_current_user_git_organizations(
         orgs = await client.get_gitlab_groups()
     elif provider == ProviderType.BITBUCKET:
         orgs = await client.get_bitbucket_workspaces()
+    elif provider == ProviderType.BITBUCKET_DATA_CENTER:
+        orgs = await client.get_bitbucket_dc_projects()
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

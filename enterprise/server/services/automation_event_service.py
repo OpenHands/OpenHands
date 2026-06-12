@@ -34,6 +34,8 @@ from server.auth.constants import (
     AUTOMATION_WEBHOOK_SECRET,
 )
 from server.auth.token_manager import TokenManager
+from storage.default_org_service import get_default_org_config
+from storage.org_store import OrgStore
 from storage.redis import get_redis_client_async
 
 from openhands.app_server.integrations.provider import ProviderType
@@ -42,10 +44,13 @@ from openhands.app_server.utils.logger import openhands_logger as logger
 # Cache TTL constants
 ORG_CLAIM_CACHE_TTL_SECONDS = 3600  # 1 hour for org claims (rarely change)
 USER_ID_CACHE_TTL_SECONDS = 86400  # 24 hours for user ID mappings (never change)
+# Short TTL so creating a second team org switches the fallback off promptly.
+DEFAULT_ORG_FALLBACK_CACHE_TTL_SECONDS = 300
 
 # Cache key prefixes (provider is appended dynamically)
 ORG_CLAIM_CACHE_PREFIX = 'automation:org_claim'
 USER_ID_CACHE_PREFIX = 'automation:idp_to_kc_user'
+DEFAULT_ORG_FALLBACK_CACHE_KEY = 'automation:default_org_fallback'
 
 
 @dataclass
@@ -137,6 +142,51 @@ class AutomationEventService:
             )
             # Don't re-raise in background task - just log for debugging
 
+    async def forward_jira_dc_event(
+        self,
+        org_id: UUID,
+        payload: dict[str, Any],
+        workspace_name: str,
+        connection_id: int | None = None,
+        delivery_id: str | None = None,
+    ) -> None:
+        """
+        Forward a Jira Data Center webhook event to the automation service.
+
+        Jira DC workspaces are configured directly in OpenHands, so the route
+        resolves the OpenHands org from the workspace instead of using the
+        Git-provider owner resolver.
+        """
+        try:
+            event_payload = {
+                'organization': {
+                    'jira_dc_workspace': workspace_name,
+                    'openhands_org_id': str(org_id),
+                },
+                'payload': payload,
+            }
+            if connection_id is not None:
+                event_payload['organization']['jira_dc_connection_id'] = connection_id
+            await self._send_source_to_automation_service(
+                source='jira_dc',
+                org_id=org_id,
+                payload=event_payload,
+            )
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            logger.error(
+                f'[AutomationEventService] Network error forwarding '
+                f'jira_dc event (org_id={org_id}): {e}',
+                exc_info=True,
+                extra={'delivery_id': delivery_id},
+            )
+        except Exception as e:
+            logger.error(
+                f'[AutomationEventService] Unexpected error forwarding '
+                f'jira_dc event (org_id={org_id}): {e}',
+                exc_info=True,
+                extra={'delivery_id': delivery_id},
+            )
+
     async def _resolve_org_context(
         self, provider: ProviderType, payload: dict[str, Any]
     ) -> OrgContext | None:
@@ -171,6 +221,12 @@ class AutomationEventService:
                     f'{git_org_name} to personal org {org_id} ({provider.value})'
                 )
 
+        # Fallback for single-org installs with a bootstrapped default org:
+        # route unclaimed repos there instead of dropping the event. Claims
+        # always take precedence above.
+        if not org_id:
+            org_id = await self._resolve_default_org_fallback(provider, git_org_name)
+
         if not org_id:
             logger.warning(
                 f'[AutomationEventService] {provider.value} org {git_org_name} '
@@ -179,6 +235,46 @@ class AutomationEventService:
             return None
 
         return OrgContext(org_id=org_id, git_org=git_org_name)
+
+    async def _resolve_default_org_fallback(
+        self, provider: ProviderType, git_org_name: str
+    ) -> UUID | None:
+        """Resolve unclaimed events to the bootstrapped default org.
+
+        Applies only when the default org is enabled (OPENHANDS_DEFAULT_ORG_*)
+        and exactly one team org exists in the install — the default org
+        itself, located by its is_default flag (with zero team orgs the
+        default org has not been created yet, so nothing resolves). The
+        moment a second team org exists the fallback switches off (within
+        the cache TTL) and routing reverts to explicit claims, so events can
+        never cross org boundaries in multi-org installs.
+        """
+        config = get_default_org_config()
+        if not config.enabled:
+            return None
+
+        cached = await self._get_cached_value(DEFAULT_ORG_FALLBACK_CACHE_KEY)
+        if cached is not None:
+            return None if cached == 'none' else UUID(cached)
+
+        org_id: UUID | None = None
+        org = await OrgStore.get_default_org()
+        if org and await OrgStore.count_team_orgs() == 1:
+            org_id = org.id
+
+        await self._set_cached_value(
+            DEFAULT_ORG_FALLBACK_CACHE_KEY,
+            str(org_id) if org_id else 'none',
+            DEFAULT_ORG_FALLBACK_CACHE_TTL_SECONDS,
+        )
+
+        if org_id:
+            logger.info(
+                f'[AutomationEventService] Routing unclaimed {provider.value} '
+                f'org {git_org_name} to default org {org_id} '
+                f'(single-org install fallback)'
+            )
+        return org_id
 
     def _extract_owner_info(
         self, provider: ProviderType, payload: dict[str, Any]
@@ -205,9 +301,25 @@ class AutomationEventService:
             repo = payload.get('repository', {})
             owner = repo.get('owner', {})
             return owner.get('login'), owner.get('type'), owner.get('id')
+        if provider == ProviderType.BITBUCKET_DATA_CENTER:
+            repo = self._extract_bitbucket_data_center_repository(payload)
+            project = repo.get('project') or {}
+            return project.get('key'), 'Project', None
 
         logger.warning(f'Unsupported provider ({provider.value})')
         return None, None, None
+
+    def _extract_bitbucket_data_center_repository(
+        self,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Extract the target repository from a Bitbucket Data Center payload."""
+        pull_request = payload.get('pullRequest') or {}
+        return (
+            (pull_request.get('toRef') or {}).get('repository')
+            or payload.get('repository')
+            or {}
+        )
 
     def _build_event_payload(
         self,
@@ -434,6 +546,18 @@ class AutomationEventService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> None:
+        await self._send_source_to_automation_service(
+            source=provider.value,
+            org_id=org_id,
+            payload=payload,
+        )
+
+    async def _send_source_to_automation_service(
+        self,
+        source: str,
+        org_id: UUID,
+        payload: dict[str, Any],
+    ) -> None:
         """
         Send the normalized payload to the automation service.
 
@@ -441,7 +565,7 @@ class AutomationEventService:
         automation service can verify it came from the OpenHands server.
 
         Args:
-            provider: The Git provider type
+            source: The automation event source
             org_id: The OpenHands organization ID
             payload: The event payload to send
         """
@@ -453,9 +577,9 @@ class AutomationEventService:
 
         # Build endpoint URL. AUTOMATION_SERVICE_URL may include path segments
         # (e.g., https://example.com/api/automation), so we strip trailing slash
-        # and append our path. The provider is included in the URL path.
+        # and append our path. The source is included in the URL path.
         base_url = AUTOMATION_SERVICE_URL.rstrip('/')
-        url = f'{base_url}/v1/events/{org_id}/{provider.value}'
+        url = f'{base_url}/v1/events/{org_id}/{source}'
 
         # Serialize payload to JSON bytes for signing
         payload_bytes = json.dumps(payload, separators=(',', ':')).encode('utf-8')
@@ -483,22 +607,22 @@ class AutomationEventService:
                             body = await resp.text()
                         logger.warning(
                             f'[AutomationEventService] Automation service returned '
-                            f'{resp.status} for {provider.value} org {org_id}: {body}'
+                            f'{resp.status} for {source} org {org_id}: {body}'
                         )
                     else:
                         data = await resp.json()
                         matched = data.get('matched', 0)
                         logger.info(
-                            f'[AutomationEventService] Forwarded {provider.value} '
+                            f'[AutomationEventService] Forwarded {source} '
                             f'event to org {org_id}: {matched} automations matched'
                         )
         except asyncio.TimeoutError:
             logger.warning(
                 f'[AutomationEventService] Timeout ({AUTOMATION_SERVICE_TIMEOUT}s) '
-                f'forwarding {provider.value} event to automation service'
+                f'forwarding {source} event to automation service'
             )
         except aiohttp.ClientError as e:
             logger.warning(
                 f'[AutomationEventService] HTTP error forwarding '
-                f'{provider.value} event to automation service: {e}'
+                f'{source} event to automation service: {e}'
             )

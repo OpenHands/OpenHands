@@ -32,12 +32,21 @@ import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useRenameLlmProfile } from "#/hooks/mutation/use-rename-llm-profile";
 import {
+  useSaveOrgLlmProfile,
+  useActivateOrgLlmProfile,
+  useRenameOrgLlmProfile,
+} from "#/hooks/mutation/use-org-llm-profile-mutations";
+import {
   deriveProfileNameFromModel,
   PROFILE_NAME_PATTERN,
 } from "#/utils/derive-profile-name";
 import { LlmProfilesManager } from "#/components/features/settings/llm-profiles-manager";
+import { OrgLlmProfilesManager } from "#/components/features/settings/org-llm-profiles-manager";
 import { ProfileNameInput } from "#/components/features/settings/profile-name-input";
 import { Typography } from "#/ui/typography";
+import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
+import { useMe } from "#/hooks/query/use-me";
+import { usePermission } from "#/hooks/organizations/use-permissions";
 
 const LLM_EXCLUDED_KEYS = new Set(["llm.model", "llm.api_key", "llm.base_url"]);
 
@@ -56,14 +65,6 @@ const getSchemaFieldDefaultValue = (
 
 const KNOWN_PROVIDER_DEFAULT_BASE_URLS: Partial<Record<string, Set<string>>> = {
   openai: new Set(["https://api.openai.com", "https://api.openai.com/v1"]),
-  openhands: new Set([
-    "https://llm-proxy.app.all-hands.dev",
-    "https://llm-proxy.app.all-hands.dev/v1",
-  ]),
-  litellm_proxy: new Set([
-    "https://llm-proxy.app.all-hands.dev",
-    "https://llm-proxy.app.all-hands.dev/v1",
-  ]),
 };
 
 const normalizeBaseUrl = (baseUrl: string) => {
@@ -105,6 +106,9 @@ export function LlmSettingsScreen({
     settings?.agent_settings_schema,
   );
   const { data: config } = useConfig();
+  const { organizationId } = useOrgTypeAndAccess();
+  const { data: me } = useMe();
+  const { hasPermission } = usePermission(me?.role ?? "member");
 
   const [selectedProvider, setSelectedProvider] = React.useState<string | null>(
     null,
@@ -113,16 +117,28 @@ export function LlmSettingsScreen({
   // Captured during buildPayload so onSaveSuccess can derive a profile name
   // from the exact model that was just persisted.
   const lastSavedModelRef = React.useRef<string | null>(null);
+
+  // Personal profile hooks (for OSS mode)
   const saveProfile = useSaveLlmProfile();
   const activateProfile = useActivateLlmProfile();
   const renameProfile = useRenameLlmProfile();
 
+  // Org profile hooks (for org defaults)
+  const saveOrgProfile = useSaveOrgLlmProfile(organizationId);
+  const activateOrgProfile = useActivateOrgLlmProfile(organizationId);
+  const renameOrgProfile = useRenameOrgLlmProfile(organizationId);
+
   // Controls whether the LLM form or the Profiles list is shown. Flipping
   // this unmounts the inactive branch, so the SdkSectionPage re-hydrates
   // its view from ``initialViewHint`` when coming back from profiles.
-  // Personal scope lands on the Available Models list first; org-scope
-  // defaults (which don't have profiles) always open straight into the form.
-  const [showProfiles, setShowProfiles] = React.useState(scope === "personal");
+  // Enable profiles for personal settings and org defaults. Org members can
+  // view org profiles, but only admins/owners can create or manage them.
+  const shouldShowProfilesForScope = scope === "personal" || scope === "org";
+  const canManageProfilesForScope =
+    scope === "personal" || hasPermission("edit_llm_settings");
+  const [showProfiles, setShowProfiles] = React.useState(
+    shouldShowProfilesForScope,
+  );
   // User-supplied profile name. Empty → fall back to deriveProfileNameFromModel
   // in handleSaveSuccess. Reset on every form open so a stale name from the
   // previous Add doesn't leak in.
@@ -137,7 +153,9 @@ export function LlmSettingsScreen({
   // getInitialView below.
   const [initialViewHint, setInitialViewHint] =
     React.useState<SettingsView | null>(null);
-  const isProfilesView = scope === "personal" && showProfiles;
+
+  const isProfilesView = shouldShowProfilesForScope && showProfiles;
+  const isOrgProfileMode = scope === "org";
 
   const defaultModel = String(
     (DEFAULT_SETTINGS.agent_settings?.llm as Record<string, unknown>)?.model ??
@@ -282,7 +300,7 @@ export function LlmSettingsScreen({
             </Typography.Paragraph>
           ) : null}
 
-          {scope === "personal" ? (
+          {canManageProfilesForScope ? (
             <ProfileNameInput
               testId="llm-profile-name-input"
               ruleTestId="llm-profile-name-rule"
@@ -369,6 +387,7 @@ export function LlmSettingsScreen({
       scope,
       selectedProvider,
       settings?.llm_api_key_set,
+      canManageProfilesForScope,
       t,
     ],
   );
@@ -423,7 +442,7 @@ export function LlmSettingsScreen({
 
       return { agent_settings_diff: agentSettings };
     },
-    [isSaasMode, schema, selectedProvider],
+    [isSaasMode, schema, scope, selectedProvider],
   );
 
   const handleSaveSuccess = React.useCallback(async () => {
@@ -440,27 +459,47 @@ export function LlmSettingsScreen({
       : null;
     const name = userName ?? derivedName;
 
-    // Auto-saved profiles are a personal-scope feature — organization default
-    // LLM settings reuse this screen but shouldn't spawn per-user profiles.
-    if (scope !== "org" && name) {
+    const shouldSaveProfile =
+      canManageProfilesForScope &&
+      (scope === "personal" || (scope === "org" && organizationId)) &&
+      name;
+
+    if (shouldSaveProfile) {
       try {
+        const useOrgHooks = scope === "org";
+
         // Editing an existing profile and renaming it via the form should
         // rename the record in place rather than spawning a new one and
         // leaving the original orphaned.
         if (initialProfileName && initialProfileName !== name) {
-          await renameProfile.mutateAsync({
-            name: initialProfileName,
-            newName: name,
-          });
+          if (useOrgHooks) {
+            await renameOrgProfile.mutateAsync({
+              name: initialProfileName,
+              newName: name,
+            });
+          } else {
+            await renameProfile.mutateAsync({
+              name: initialProfileName,
+              newName: name,
+            });
+          }
         }
         // Omit `llm` → backend snapshots the just-saved agent_settings.llm
         // (api_key and all). Saves us from having to hand-reconstruct the
         // config and risk mangling the secret placeholder handling.
-        await saveProfile.mutateAsync({
-          name,
-          request: { include_secrets: true },
-        });
-        await activateProfile.mutateAsync(name);
+        if (useOrgHooks) {
+          await saveOrgProfile.mutateAsync({
+            name,
+            request: { include_secrets: true },
+          });
+          await activateOrgProfile.mutateAsync(name);
+        } else {
+          await saveProfile.mutateAsync({
+            name,
+            request: { include_secrets: true },
+          });
+          await activateProfile.mutateAsync(name);
+        }
       } catch {
         // Best-effort: the settings save already succeeded. Profile cap
         // (HTTP 409) and transient errors are surfaced on the Profiles page.
@@ -473,10 +512,15 @@ export function LlmSettingsScreen({
     setShowProfiles(true);
   }, [
     activateProfile,
+    activateOrgProfile,
+    canManageProfilesForScope,
     initialProfileName,
+    organizationId,
     profileName,
     renameProfile,
+    renameOrgProfile,
     saveProfile,
+    saveOrgProfile,
     scope,
   ]);
 
@@ -488,6 +532,26 @@ export function LlmSettingsScreen({
   };
 
   if (isProfilesView) {
+    if (isOrgProfileMode) {
+      if (!organizationId) {
+        return null;
+      }
+      return (
+        <OrgLlmProfilesManager
+          orgId={organizationId}
+          canManage={canManageProfilesForScope}
+          onAddProfile={
+            canManageProfilesForScope ? () => openForm(null) : undefined
+          }
+          onEditProfile={
+            canManageProfilesForScope
+              ? (profile) => openForm(null, profile.name)
+              : undefined
+          }
+        />
+      );
+    }
+    // Use personal profiles manager for OSS mode
     return (
       <LlmProfilesManager
         onAddProfile={() => openForm(null)}
@@ -496,24 +560,23 @@ export function LlmSettingsScreen({
     );
   }
 
-  // Sub-page back affordance (personal scope only — org-defaults has no
-  // parent list to return to). Replaces the previous "Profiles" trailing
-  // action so the form view follows the second-level settings pattern.
-  const backToProfiles =
-    scope === "personal" ? (
-      <button
-        data-testid="llm-back-to-profiles"
-        type="button"
-        onClick={() => {
-          setInitialViewHint(null);
-          setShowProfiles(true);
-        }}
-        className="flex items-center gap-2 self-start text-sm text-gray-300 hover:text-white cursor-pointer"
-      >
-        <FaChevronLeft size={12} aria-hidden="true" />
-        {t(I18nKey.SETTINGS$BACK_TO_LLM_LIST)}
-      </button>
-    ) : null;
+  // Sub-page back affordance when profiles are enabled. Replaces the previous
+  // "Profiles" trailing action so the form view follows the second-level
+  // settings pattern.
+  const backToProfiles = shouldShowProfilesForScope ? (
+    <button
+      data-testid="llm-back-to-profiles"
+      type="button"
+      onClick={() => {
+        setInitialViewHint(null);
+        setShowProfiles(true);
+      }}
+      className="flex items-center gap-2 self-start text-sm text-gray-300 hover:text-white cursor-pointer"
+    >
+      <FaChevronLeft size={12} aria-hidden="true" />
+      {t(I18nKey.SETTINGS$BACK_TO_LLM_LIST)}
+    </button>
+  ) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -529,7 +592,13 @@ export function LlmSettingsScreen({
         ]}
         header={buildHeader}
         buildPayload={buildPayload}
-        extraDirty={profileName.trim() !== initialProfileName.trim()}
+        // The profile form can always be saved: it snapshots the current LLM
+        // config as a profile, and the name is optional — it falls back to a
+        // model-derived default in handleSaveSuccess. So don't gate Save on the
+        // settings fields being dirty. This matters in SaaS managed mode, where
+        // the model is fixed and there's no editable API key, leaving the form
+        // pristine and Save stuck disabled.
+        extraDirty={canManageProfilesForScope}
         onSaveSuccess={handleSaveSuccess}
         getInitialView={getInitialView}
         forceShowAdvancedView

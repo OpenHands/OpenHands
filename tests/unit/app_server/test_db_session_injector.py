@@ -33,6 +33,11 @@ sys.modules['google.cloud.sql.connector'] = MagicMock()
 from openhands.app_server.services.db_session_injector import (  # noqa: E402
     DbSessionInjector,
 )
+from openhands.db.ssl import (  # noqa: E402
+    build_asyncpg_connect_args,
+    build_db_url_query,
+    build_pg8000_connect_args,
+)
 
 
 class MockRequest:
@@ -103,6 +108,7 @@ class TestDbSessionInjectorConfiguration:
         assert service.gcp_db_instance is None
         assert service.gcp_project is None
         assert service.gcp_region is None
+        assert service.ssl_mode is None
 
     def test_environment_variable_processing(self, temp_persistence_dir):
         """Test that environment variables are properly processed."""
@@ -112,6 +118,7 @@ class TestDbSessionInjectorConfiguration:
             'DB_NAME': 'env_db',
             'DB_USER': 'env_user',
             'DB_PASS': 'env_password',
+            'DB_SSL_MODE': 'require',
             'GCP_DB_INSTANCE': 'env_instance',
             'GCP_PROJECT': 'env_project',
             'GCP_REGION': 'env_region',
@@ -128,6 +135,7 @@ class TestDbSessionInjectorConfiguration:
             assert service.gcp_db_instance == 'env_instance'
             assert service.gcp_project == 'env_project'
             assert service.gcp_region == 'env_region'
+            assert service.ssl_mode == 'require'
 
     def test_explicit_values_override_env_vars(self, temp_persistence_dir):
         """Test that explicitly provided values override environment variables."""
@@ -203,6 +211,7 @@ class TestDbSessionInjectorConnections:
             assert 'test_db' in url_str
 
             # Verify other parameters
+            assert call_args[1]['connect_args'] == {}
             assert call_args[1]['pool_size'] == 25
             assert call_args[1]['max_overflow'] == 10
             assert call_args[1]['pool_pre_ping']
@@ -235,9 +244,77 @@ class TestDbSessionInjectorConnections:
             assert 'test_db' in url_str
 
             # Verify other parameters
+            assert call_args[1]['connect_args'] == {}
             assert call_args[1]['pool_size'] == 25
             assert call_args[1]['max_overflow'] == 10
             assert call_args[1]['pool_pre_ping']
+
+    def test_postgres_connection_requires_ssl(self, temp_persistence_dir):
+        service = DbSessionInjector(
+            persistence_dir=temp_persistence_dir,
+            host='localhost',
+            port=5432,
+            name='test_db',
+            user='test_user',
+            password=SecretStr('test_password'),
+            ssl_mode='require',
+        )
+
+        with patch(
+            'openhands.app_server.services.db_session_injector.create_engine'
+        ) as mock_create_engine:
+            mock_create_engine.return_value = MagicMock()
+
+            service.get_db_engine()
+
+            assert mock_create_engine.call_args[1]['connect_args'] == {
+                'ssl_context': True
+            }
+
+    @pytest.mark.asyncio
+    async def test_postgres_async_connection_requires_ssl(self, temp_persistence_dir):
+        service = DbSessionInjector(
+            persistence_dir=temp_persistence_dir,
+            host='localhost',
+            port=5432,
+            name='test_db',
+            user='test_user',
+            password=SecretStr('test_password'),
+            ssl_mode='require',
+        )
+
+        with patch(
+            'openhands.app_server.services.db_session_injector.create_async_engine'
+        ) as mock_create_async_engine:
+            mock_create_async_engine.return_value = MagicMock()
+
+            await service.get_async_db_engine()
+
+            assert mock_create_async_engine.call_args[1]['connect_args'] == {
+                'ssl': 'require'
+            }
+
+    def test_build_pg8000_connect_args_for_ssl_modes(self):
+        assert build_pg8000_connect_args(None) == {}
+        assert build_pg8000_connect_args('prefer') == {}
+        assert build_pg8000_connect_args('require') == {'ssl_context': True}
+        assert build_pg8000_connect_args('disable') == {'ssl_context': False}
+
+    def test_build_asyncpg_connect_args_for_ssl_modes(self):
+        assert build_asyncpg_connect_args(None) == {}
+        assert build_asyncpg_connect_args('prefer') == {}
+        assert build_asyncpg_connect_args('require') == {'ssl': 'require'}
+        assert build_asyncpg_connect_args('disable') == {'ssl': 'disable'}
+
+    def test_build_db_url_query_for_ssl_modes(self):
+        assert build_db_url_query(None) == ''
+        assert build_db_url_query('prefer') == ''
+        assert build_db_url_query('require') == '?sslmode=require'
+        assert build_db_url_query('disable') == '?sslmode=disable'
+
+    def test_build_connect_args_rejects_unsupported_ssl_mode(self):
+        with pytest.raises(ValueError, match='Unsupported DB_SSL_MODE'):
+            build_pg8000_connect_args('verify-full')
 
     @patch(
         'openhands.app_server.services.db_session_injector.DbSessionInjector._create_gcp_engine'

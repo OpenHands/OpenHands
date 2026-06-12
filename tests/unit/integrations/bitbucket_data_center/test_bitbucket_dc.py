@@ -156,18 +156,156 @@ async def test_get_user_with_user_id():
 
 
 @pytest.mark.asyncio
-async def test_get_user_without_user_id():
-    # x-token-auth tokens don't have a derivable username, so user_id stays None
+async def test_get_user_without_user_id_resolves_via_whoami():
+    # OAuth bearer tokens (SaaS/Keycloak broker flow) carry no username, so
+    # user_id is None; the user is resolved via the applinks whoami servlet.
     svc = BitbucketDCService(
         token=SecretStr('x-token-auth:mytoken'), base_domain='host.example.com'
     )
+    requested_urls = []
+
+    async def mock_make_request(url, params=None, **kwargs):
+        requested_urls.append(url)
+        if url.endswith('/plugins/servlet/applinks/whoami'):
+            return 'jdoe', {}
+        return {
+            'values': [
+                {
+                    'id': 5,
+                    'slug': 'jdoe',
+                    'name': 'jdoe',
+                    'displayName': 'J Doe',
+                    'emailAddress': 'j@example.com',
+                    'avatarUrl': '/users/jdoe/avatar.png?s=64',
+                }
+            ]
+        }, {}
+
+    with patch.object(svc, '_make_request', side_effect=mock_make_request):
+        user = await svc.get_user()
+
+    assert requested_urls == [
+        'https://host.example.com/plugins/servlet/applinks/whoami',
+        'https://host.example.com/rest/api/1.0/users',
+    ]
+    assert user.id == '5'
+    assert user.login == 'jdoe'
+    assert user.name == 'J Doe'
+    assert user.email == 'j@example.com'
+    assert user.avatar_url == 'https://host.example.com/users/jdoe/avatar.png?s=64'
+
+
+@pytest.mark.asyncio
+async def test_get_user_without_user_id_returns_empty_when_resolution_fails():
+    # Credentials not tied to a user (e.g. project/repo-scoped HTTP access
+    # tokens) fail both username lookups; get_user degrades to an empty user.
+    svc = BitbucketDCService(
+        token=SecretStr('x-token-auth:mytoken'), base_domain='host.example.com'
+    )
+    with patch.object(
+        svc, '_make_request', side_effect=Exception('401 Unauthorized')
+    ) as mock_req:
+        user = await svc.get_user()
+
+    assert mock_req.call_count == 2  # whoami + X-AUSERNAME fallback, no /users
+    assert isinstance(user, User)
+    assert user.id == ''
+    assert user.login == ''
+    assert user.avatar_url == ''
+
+
+@pytest.mark.asyncio
+async def test_get_user_falls_back_to_x_ausername_when_whoami_is_empty():
+    # Some Bitbucket DC servers answer whoami with 200 and an empty body for
+    # HTTP access tokens. Fall back to the URL-encoded X-AUSERNAME header
+    # from a cheap REST call. Mirrors a real Bitbucket 8.19 instance where
+    # the user's name differs from the slug.
+    svc = BitbucketDCService(
+        token=SecretStr('x-token-auth:mytoken'), base_domain='host.example.com'
+    )
+
+    async def mock_make_request(url, params=None, **kwargs):
+        if url.endswith('/plugins/servlet/applinks/whoami'):
+            return '', {}
+        if url.endswith('/projects'):
+            return {'values': []}, {'X-AUSERNAME': 'Chris.Bagwell%40example.com'}
+        return {
+            'values': [
+                {
+                    'id': 2,
+                    'slug': 'chris.bagwell_example.com',
+                    'name': 'Chris.Bagwell@example.com',
+                    'displayName': 'Bagwell, Chris',
+                    'emailAddress': 'Chris.Bagwell@example.com',
+                    'avatarUrl': '/users/chris.bagwell_example.com/avatar.png',
+                }
+            ]
+        }, {}
+
+    with patch.object(svc, '_make_request', side_effect=mock_make_request):
+        user = await svc.get_user()
+
+    assert user.id == '2'
+    assert user.login == 'Chris.Bagwell@example.com'
+    assert user.name == 'Bagwell, Chris'
+    assert (
+        user.avatar_url
+        == 'https://host.example.com/users/chris.bagwell_example.com/avatar.png'
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_user_resolved_username_not_found_degrades_to_empty_user():
+    # If the auto-resolved username yields no /users match, degrade to the
+    # empty user instead of raising (explicitly-configured user_id still
+    # raises, covered by test_get_user_raises_when_not_found).
+    svc = BitbucketDCService(
+        token=SecretStr('x-token-auth:mytoken'), base_domain='host.example.com'
+    )
+
+    async def mock_make_request(url, params=None, **kwargs):
+        if url.endswith('/plugins/servlet/applinks/whoami'):
+            return 'ghost-user', {}
+        return {'values': []}, {}
+
+    with patch.object(svc, '_make_request', side_effect=mock_make_request):
+        user = await svc.get_user()
+
+    assert user.id == ''
+    assert user.login == ''
+
+
+@pytest.mark.asyncio
+async def test_get_user_without_user_id_or_base_url_skips_requests():
+    svc = BitbucketDCService(token=SecretStr('x-token-auth:mytoken'), base_domain=None)
     with patch.object(svc, '_make_request') as mock_req:
         user = await svc.get_user()
         mock_req.assert_not_called()
 
-    assert isinstance(user, User)
     assert user.id == ''
     assert user.login == ''
+
+
+def test_select_user_data_prefers_exact_match_over_first_result():
+    # /users?filter= is a substring match; the requested user may not be first.
+    users = [
+        {'name': 'jdoe-bot', 'slug': 'jdoe-bot'},
+        {'name': 'JDoe', 'slug': 'jdoe'},
+    ]
+    selected = BitbucketDCService._select_user_data(users, 'jdoe')
+    assert selected is not None
+    assert selected['slug'] == 'jdoe'
+
+
+def test_select_user_data_falls_back_to_first_result():
+    users = [{'name': 'someone-else', 'slug': 'someone-else'}]
+    selected = BitbucketDCService._select_user_data(users, 'jdoe')
+    assert selected is not None
+    assert selected['slug'] == 'someone-else'
+
+
+def test_select_user_data_empty_list_returns_none():
+    assert BitbucketDCService._select_user_data([], 'jdoe') is None
 
 
 @pytest.mark.asyncio

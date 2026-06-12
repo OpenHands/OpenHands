@@ -19,7 +19,10 @@ from server.routes.org_invitation_models import (
     UserAlreadyMemberError,
 )
 from server.services.org_invitation_service import OrgInvitationService
-from server.utils.rate_limit_utils import check_rate_limit_by_user_id
+from server.utils.rate_limit_utils import (
+    RATE_LIMIT_ORG_INVITATION_USER_SECONDS,
+    check_rate_limit_by_user_id,
+)
 from storage.org_store import OrgStore
 from storage.role_store import RoleStore
 
@@ -78,12 +81,14 @@ async def create_invitation(
         HTTPException 403: User lacks permission to invite
         HTTPException 429: Rate limit exceeded
     """
-    # Rate limit: 10 invitations per minute per user (6 seconds between requests)
+    # Rate limit invitation creation per user (default: 6s between requests, i.e.
+    # 10 invitations per minute; configurable via
+    # RATE_LIMIT_ORG_INVITATION_USER_SECONDS).
     await check_rate_limit_by_user_id(
         request=request,
         key_prefix='org_invitation_create',
         user_id=user_id,
-        user_rate_limit_seconds=6,
+        user_rate_limit_seconds=RATE_LIMIT_ORG_INVITATION_USER_SECONDS,
     )
 
     try:

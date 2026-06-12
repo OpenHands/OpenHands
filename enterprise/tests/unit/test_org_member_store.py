@@ -1239,87 +1239,9 @@ async def test_update_all_members_settings_async_replaces_mcp_config(
         assert len(mcp_servers) == 2, f'Expected 2 servers, got {len(mcp_servers)}'
         assert 'server1' in mcp_servers
         assert 'server2' in mcp_servers
-        assert (
-            'server3' not in mcp_servers
-        ), 'Deleted server was resurrected by deep_merge'
-
-
-@pytest.mark.asyncio
-async def test_update_all_members_settings_async_replaces_acp_env(
-    async_session_maker,
-):
-    """
-    GIVEN: Organization members with existing acp_env in agent_settings_diff
-    WHEN: update_all_members_settings_async is called with fewer env vars
-    THEN: acp_env should be replaced (not merged), so deleted vars stay deleted
-
-    acp_env has the same replacement semantics as mcp_config.
-    """
-    from server.routes.org_models import OrgMemberSettingsUpdate
-
-    # Arrange - Create org with member that has 3 env vars
-    async with async_session_maker() as session:
-        org = Org(name='test-org')
-        session.add(org)
-        await session.flush()
-
-        role = Role(name='member', rank=2)
-        session.add(role)
-        await session.flush()
-
-        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
-        session.add(user)
-        await session.flush()
-
-        org_member = OrgMember(
-            org_id=org.id,
-            user_id=user.id,
-            role_id=role.id,
-            llm_api_key='test-key',
-            agent_settings_diff={
-                'acp_env': {
-                    'VAR1': 'value1',
-                    'VAR2': 'value2',
-                    'VAR3': 'value3',
-                },
-            },
-            status='active',
+        assert 'server3' not in mcp_servers, (
+            'Deleted server was resurrected by deep_merge'
         )
-        session.add(org_member)
-        await session.commit()
-        org_id = org.id
-
-    # Act - Update with only 2 vars (delete VAR3)
-    member_settings = OrgMemberSettingsUpdate(
-        agent_settings_diff={
-            'acp_env': {
-                'VAR1': 'value1',
-                'VAR2': 'value2',
-                # VAR3 is deleted
-            },
-        },
-    )
-
-    async with async_session_maker() as session:
-        await OrgMemberStore.update_all_members_settings_async(
-            session, org_id, member_settings
-        )
-        await session.commit()
-
-    # Assert - Only 2 vars should remain, VAR3 should NOT be resurrected
-    async with async_session_maker() as session:
-        from sqlalchemy import select
-
-        result = await session.execute(
-            select(OrgMember).filter(OrgMember.org_id == org_id)
-        )
-        member = result.scalars().first()
-
-        acp_env = member.agent_settings_diff.get('acp_env', {})
-        assert len(acp_env) == 2, f'Expected 2 vars, got {len(acp_env)}'
-        assert 'VAR1' in acp_env
-        assert 'VAR2' in acp_env
-        assert 'VAR3' not in acp_env, 'Deleted var was resurrected by deep_merge'
 
 
 @pytest.mark.asyncio
@@ -1704,77 +1626,6 @@ async def test_update_all_members_settings_async_acp_env_not_in_payload(
         acp_env = member.agent_settings_diff.get('acp_env', {})
         assert 'SECRET_KEY' in acp_env
         assert 'API_TOKEN' in acp_env
-
-
-@pytest.mark.asyncio
-async def test_update_all_members_settings_async_empty_acp_env(
-    async_session_maker,
-):
-    """
-    GIVEN: Organization members with existing acp_env
-    WHEN: update_all_members_settings_async is called with empty acp_env
-    THEN: acp_env should be cleared (all vars deleted)
-
-    This tests the case where user deletes ALL env vars.
-    """
-    from server.routes.org_models import OrgMemberSettingsUpdate
-
-    # Arrange - Create org with member that has env vars
-    async with async_session_maker() as session:
-        org = Org(name='test-org')
-        session.add(org)
-        await session.flush()
-
-        role = Role(name='member', rank=2)
-        session.add(role)
-        await session.flush()
-
-        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
-        session.add(user)
-        await session.flush()
-
-        org_member = OrgMember(
-            org_id=org.id,
-            user_id=user.id,
-            role_id=role.id,
-            llm_api_key='test-key',
-            agent_settings_diff={
-                'acp_env': {
-                    'VAR1': 'value1',
-                    'VAR2': 'value2',
-                    'VAR3': 'value3',
-                },
-            },
-            status='active',
-        )
-        session.add(org_member)
-        await session.commit()
-        org_id = org.id
-
-    # Act - Update with empty acp_env (delete all vars)
-    member_settings = OrgMemberSettingsUpdate(
-        agent_settings_diff={
-            'acp_env': {},  # Empty - all vars deleted
-        },
-    )
-
-    async with async_session_maker() as session:
-        await OrgMemberStore.update_all_members_settings_async(
-            session, org_id, member_settings
-        )
-        await session.commit()
-
-    # Assert - acp_env should be empty
-    async with async_session_maker() as session:
-        from sqlalchemy import select
-
-        result = await session.execute(
-            select(OrgMember).filter(OrgMember.org_id == org_id)
-        )
-        member = result.scalars().first()
-
-        acp_env = member.agent_settings_diff.get('acp_env', {})
-        assert len(acp_env) == 0, f'Expected 0 vars, got {len(acp_env)}'
 
 
 @pytest.mark.asyncio

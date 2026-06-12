@@ -36,6 +36,7 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
+from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.settings.settings_models import (
     SandboxGroupingStrategy,
     Settings,
@@ -83,6 +84,19 @@ class _TestUserInfo(SimpleNamespace):
         object.__setattr__(self, '_agent_settings_override', value)
 
     @property
+    def llm_profiles(self) -> LLMProfiles:
+        # Real UserInfo always carries llm_profiles; default to empty unless a
+        # test sets profiles.
+        override = getattr(self, '_llm_profiles_override', None)
+        if override is not None:
+            return override
+        return LLMProfiles(profiles={})
+
+    @llm_profiles.setter
+    def llm_profiles(self, value):
+        object.__setattr__(self, '_llm_profiles_override', value)
+
+    @property
     def conversation_settings(self) -> ConversationSettings:
         kwargs: dict = {
             'confirmation_mode': getattr(self, 'confirmation_mode', False),
@@ -124,6 +138,7 @@ class TestLiveStatusAppConversationService:
         self.mock_user_context = Mock(spec=UserContext)
         self.mock_user_auth = Mock()
         self.mock_user_context.user_auth = self.mock_user_auth
+        self.mock_user_context.get_user_email = AsyncMock(return_value=None)
         self.mock_jwt_service = Mock()
         self.mock_sandbox_service = Mock()
         self.mock_sandbox_spec_service = Mock()
@@ -181,6 +196,61 @@ class TestLiveStatusAppConversationService:
         # Default mock for hooks loading - returns None (no hooks found)
         # Tests that specifically test hooks loading can override this mock
         self.service._load_hooks_from_workspace = AsyncMock(return_value=None)
+
+    @pytest.mark.asyncio
+    async def test_seed_sandbox_profiles_upserts_resolved_keys_and_prunes(self):
+        """Pushes each profile to the sandbox with its key resolved (managed key
+        injected, BYOR key kept), then deletes profiles that no longer exist on
+        the app-server.
+        """
+        user = SimpleNamespace(
+            llm_profiles=LLMProfiles(
+                profiles={
+                    'Managed': LLM(model='litellm_proxy/minimax-m2.7', usage_id='p'),
+                    'BYOR': LLM(
+                        model='anthropic/claude-sonnet-4-6',
+                        api_key='byor-key',
+                        usage_id='p',
+                    ),
+                    # Org names aren't character-restricted; this one must be
+                    # skipped so it can't path-inject the request URL.
+                    '../evil': LLM(model='openai/gpt-4o', usage_id='p'),
+                }
+            ),
+            agent_settings=SimpleNamespace(
+                llm=SimpleNamespace(api_key=SecretStr('managed-key'))
+            ),
+        )
+        self.mock_user_context.get_user_info = AsyncMock(return_value=user)
+
+        ok = Mock(raise_for_status=Mock())
+        listing = Mock(raise_for_status=Mock())
+        listing.json = Mock(
+            return_value={
+                'profiles': [{'name': 'Managed'}, {'name': 'BYOR'}, {'name': 'Gone'}]
+            }
+        )
+        self.mock_httpx_client.post = AsyncMock(return_value=ok)
+        self.mock_httpx_client.get = AsyncMock(return_value=listing)
+        self.mock_httpx_client.delete = AsyncMock(return_value=ok)
+
+        await self.service._seed_sandbox_profiles('http://agent.test', 'sess-key')
+
+        base = 'http://agent.test/api/profiles'
+        pushed = {
+            call.args[0]: call.kwargs['json']['llm']
+            for call in self.mock_httpx_client.post.call_args_list
+        }
+        # Managed profile (no stored key) falls back to the effective key; BYOR
+        # keeps its own.
+        assert pushed[f'{base}/Managed']['api_key'] == 'managed-key'
+        assert pushed[f'{base}/BYOR']['api_key'] == 'byor-key'
+        # The unsafe-named profile is skipped entirely (never POSTed).
+        assert self.mock_httpx_client.post.await_count == 2
+        assert not any('evil' in url for url in pushed)
+        # The profile deleted on the app-server is pruned from the sandbox.
+        self.mock_httpx_client.delete.assert_awaited_once()
+        assert self.mock_httpx_client.delete.await_args.args[0] == f'{base}/Gone'
 
     def test_apply_suggested_task_sets_prompt_and_trigger(self):
         """Test suggested task prompts populate initial message and trigger."""
@@ -242,15 +312,21 @@ class TestLiveStatusAppConversationService:
     async def test_setup_secrets_for_git_providers_no_provider_tokens(self):
         """Test _setup_secrets_for_git_providers with no provider tokens."""
         # Arrange
-        base_secrets = {'existing': 'secret'}
+        # get_secrets returns StaticSecret objects (plain strings are not valid)
+        base_secrets = {
+            'existing': StaticSecret(value=SecretStr('secret'), description='')
+        }
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
+        self.mock_jwt_service.create_jws_token.return_value = 'test_access_token'
 
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
-        # Assert
-        assert result == base_secrets
+        # Assert — custom secrets are passed through as-is (no LookupSecret wrapping)
+        assert 'existing' in result
+        assert isinstance(result['existing'], StaticSecret)
+        assert result['existing'].description == ''
         self.mock_user_context.get_secrets.assert_called_once()
         self.mock_user_context.get_provider_tokens.assert_called_once()
 
@@ -473,23 +549,23 @@ class TestLiveStatusAppConversationService:
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
-        # Assert - verify custom secrets are preserved with their descriptions
+        # Assert — custom secrets are passed through as-is; descriptions preserved.
         assert 'CUSTOM_API_KEY' in result
         assert isinstance(result['CUSTOM_API_KEY'], StaticSecret)
+        assert (
+            result['CUSTOM_API_KEY'].value.get_secret_value() == 'custom_secret_value'
+        )
         assert (
             result['CUSTOM_API_KEY'].description
             == 'Custom API key for external service'
         )
-        assert (
-            result['CUSTOM_API_KEY'].value.get_secret_value() == 'custom_secret_value'
-        )
 
         assert 'ANOTHER_SECRET' in result
         assert isinstance(result['ANOTHER_SECRET'], StaticSecret)
-        assert result['ANOTHER_SECRET'].description is None
         assert (
             result['ANOTHER_SECRET'].value.get_secret_value() == 'another_secret_value'
         )
+        assert result['ANOTHER_SECRET'].description is None
 
         # Verify git provider token is also included
         assert 'GITHUB_TOKEN' in result
@@ -508,14 +584,14 @@ class TestLiveStatusAppConversationService:
         base_secrets = {'MY_SECRET': custom_secret_empty_desc}
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
+        self.mock_jwt_service.create_jws_token.return_value = 'test_access_token'
 
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
-        # Assert - empty description should be preserved as-is
+        # Assert — custom secrets are passed through as-is; empty description preserved
         assert 'MY_SECRET' in result
         assert isinstance(result['MY_SECRET'], StaticSecret)
-        # Empty string description is preserved
         assert result['MY_SECRET'].description == ''
 
     @pytest.mark.asyncio
@@ -567,6 +643,41 @@ class TestLiveStatusAppConversationService:
         assert llm.base_url == 'https://sdk-llm.example.com'
 
     @pytest.mark.asyncio
+    async def test_configure_llm_preserves_reasoning_effort(self):
+        """User-configured reasoning_effort must survive _configure_llm.
+
+        Previously _configure_llm created a bare LLM() which reset every
+        field to its Pydantic default (reasoning_effort='high').  Users who
+        set reasoning_effort=None (to disable thinking parameters for models
+        whose litellm version cannot handle them) had their override silently
+        discarded.
+        """
+        from pydantic import SecretStr as _SecretStr
+
+        user_llm = LLM(
+            model='anthropic/claude-opus-4-7',
+            api_key=_SecretStr('test-key'),
+            reasoning_effort=None,
+            extended_thinking_budget=None,
+        )
+        agent_settings = self.mock_user.agent_settings.model_copy(
+            update={'llm': user_llm}
+        )
+        self.mock_user.agent_settings = agent_settings
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, None, self.conversation_id
+        )
+
+        assert llm.model == 'anthropic/claude-opus-4-7'
+        assert llm.reasoning_effort is None, (
+            '_configure_llm must preserve reasoning_effort=None '
+            'instead of resetting it to the SDK default'
+        )
+        assert llm.extended_thinking_budget is None
+
+    @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_openhands_model_uses_user_base_url(
         self,
     ):
@@ -604,7 +715,7 @@ class TestLiveStatusAppConversationService:
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_openhands_model_no_base_urls(self):
-        """openhands/* model still uses the SDK proxy when no other URLs exist."""
+        """openhands/* model is kept public when no explicit base URL exists."""
         # Arrange
         self.mock_user.llm_model = 'openhands/default'
         self.mock_user.llm_base_url = None
@@ -617,30 +728,28 @@ class TestLiveStatusAppConversationService:
         )
 
         # Assert
-        assert llm.base_url == 'https://llm-proxy.app.all-hands.dev/'
+        assert llm.model == 'openhands/default'
+        assert llm.base_url is None
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_litellm_proxy_model_uses_provider_default(
+    async def test_configure_llm_and_mcp_litellm_proxy_model_keeps_empty_base_url(
         self,
     ):
-        """litellm_proxy/* model (inherited by sub-conversations) falls back to provider base URL."""
-        # Arrange — simulates a sub-conversation inheriting the SDK-transformed model name
+        """litellm_proxy/* is not treated as an OpenHands provider model."""
         self.mock_user.llm_base_url = None
         self.mock_user_context.get_mcp_api_key.return_value = None
 
-        # Act
         llm, _ = await self.service._configure_llm_and_mcp(
             self.mock_user, 'litellm_proxy/minimax-2.5', self.conversation_id
         )
 
-        # Assert
-        assert llm.base_url == 'https://provider.example.com'
+        assert llm.base_url is None
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_litellm_proxy_model_prefers_user_base_url(
+    async def test_configure_llm_and_mcp_litellm_proxy_model_preserves_user_base_url(
         self,
     ):
-        """litellm_proxy/* model uses user.llm_base_url when provided."""
+        """litellm_proxy/* model preserves an explicitly configured base_url."""
         # Arrange
         self.mock_user.llm_base_url = 'https://user-llm.example.com'
         self.mock_user_context.get_mcp_api_key.return_value = None
@@ -2165,6 +2274,7 @@ class TestPluginHandling:
         self.mock_user_context = Mock(spec=UserContext)
         self.mock_user_auth = Mock()
         self.mock_user_context.user_auth = self.mock_user_auth
+        self.mock_user_context.get_user_email = AsyncMock(return_value=None)
         self.mock_jwt_service = Mock()
         self.mock_sandbox_service = Mock()
         self.mock_sandbox_spec_service = Mock()
@@ -3148,11 +3258,11 @@ class TestAgentKindConversationUrl:
 
 
 class TestBuildAcpStartConversationRequestSecrets:
-    """Tests for user-secret injection in ``_build_acp_start_conversation_request``.
+    """Tests for secret injection in ``_build_acp_start_conversation_request``.
 
-    Covers issue #14167: secrets from the Secrets panel and git provider
-    tokens must be available to ACP subprocesses as environment variables,
-    mirroring how they flow into the regular OpenHands sandbox.
+    Secrets from the Secrets panel and git provider tokens flow through
+    ``request.secrets`` as the sole canonical channel.  ``llm.api_key`` is
+    never read for ACP (the CLI subprocess handles its own LLM calls).
     """
 
     @pytest.fixture
@@ -3209,9 +3319,12 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
         return user
 
-    def _call_build(self, service, user, tmp_path):
+    def _call_build(self, service, user, tmp_path, *, secrets=None):
         """Wire user_context and call _build_acp_start_conversation_request."""
         service.user_context.get_user_info = AsyncMock(return_value=user)
+        service.user_context.get_user_email = AsyncMock(return_value=None)
+        service.user_context.get_secrets = AsyncMock(return_value=secrets or {})
+        service.user_context.get_provider_tokens = AsyncMock(return_value=None)
         sandbox = Mock(spec=SandboxInfo)
         return service._build_acp_start_conversation_request(
             sandbox=sandbox,
@@ -3222,160 +3335,158 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
 
     @pytest.mark.asyncio
-    async def test_secrets_passed_via_agent_context(self, service, tmp_path):
-        """Secrets are forwarded via agent_context.secrets as SecretSource objects."""
+    async def test_secrets_passed_via_request_secrets(self, service, tmp_path):
+        """Secrets are forwarded via request.secrets as SecretSource objects."""
         github_secret = StaticSecret(value=SecretStr('ghp_test123'))
         api_secret = StaticSecret(value=SecretStr('secret-value'))
         user = self._make_acp_user()
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'GITHUB_TOKEN': github_secret, 'MY_API_KEY': api_secret}
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'GITHUB_TOKEN': github_secret, 'MY_API_KEY': api_secret},
         )
 
-        request = await self._call_build(service, user, tmp_path)
-
-        assert request.agent.agent_context is not None
-        ctx = request.agent.agent_context.secrets
-        assert ctx.get('GITHUB_TOKEN') is github_secret
-        assert ctx.get('MY_API_KEY') is api_secret
+        assert request.secrets.get('GITHUB_TOKEN') is github_secret
+        assert request.secrets.get('MY_API_KEY') is api_secret
+        # Isolation is enabled regardless of whether secrets are present.
+        assert request.agent.acp_isolate_data_dir is True
 
     @pytest.mark.asyncio
     async def test_lookup_secret_forwarded_as_source(self, service, tmp_path):
-        """LookupSecrets are forwarded as-is; the SDK resolves them at start time."""
+        """LookupSecrets from user_context are forwarded as-is."""
         lookup = LookupSecret(url='https://example.com/token', headers={})
         user = self._make_acp_user()
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'GITHUB_TOKEN': lookup}
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'GITHUB_TOKEN': lookup},
         )
 
-        request = await self._call_build(service, user, tmp_path)
-
-        assert request.agent.agent_context is not None
-        assert request.agent.agent_context.secrets.get('GITHUB_TOKEN') is lookup
+        assert request.secrets.get('GITHUB_TOKEN') is lookup
 
     @pytest.mark.asyncio
     async def test_explicit_acp_env_preserved(self, service, tmp_path):
         """Explicit acp_env entries survive when secrets also present."""
         user = self._make_acp_user(acp_env={'MY_TOKEN': 'explicit-override'})
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'OTHER': StaticSecret(value=SecretStr('other-value'))}
-        )
+        other_secret = StaticSecret(value=SecretStr('other-value'))
 
-        request = await self._call_build(service, user, tmp_path)
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'OTHER': other_secret},
+        )
 
         assert request.agent.acp_env.get('MY_TOKEN') == 'explicit-override'
+        assert request.secrets.get('OTHER') is other_secret
 
     @pytest.mark.asyncio
-    async def test_provider_env_in_acp_env_secrets_in_agent_context(
+    async def test_llm_api_key_not_forwarded_to_request_secrets(
         self, service, tmp_path
     ):
-        """LLM credentials land in acp_env; panel secrets in agent_context."""
-        user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
-        panel_secret = StaticSecret(value=SecretStr('sk-from-secrets-panel'))
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'ANTHROPIC_API_KEY': panel_secret}
-        )
+        """llm.api_key must not bleed into request.secrets for ACP.
 
-        request = await self._call_build(service, user, tmp_path)
-
-        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-ui-key'
-        assert request.agent.agent_context is not None
-        assert (
-            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY') is panel_secret
-        )
-
-    @pytest.mark.asyncio
-    async def test_no_secrets_no_agent_context(self, service, tmp_path):
-        """When there are no secrets, agent_context is not set."""
-        user = self._make_acp_user()
-        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
-
-        request = await self._call_build(service, user, tmp_path)
-
-        assert request.agent.agent_context is None
-
-    @pytest.mark.asyncio
-    async def test_acp_env_overrides_provider_env(self, service, tmp_path):
-        """Explicit acp_env entries take priority over auto-generated provider_env.
-
-        When a user sets ANTHROPIC_API_KEY explicitly in acp_env, it must win
-        over the same key the SDK derives from the UI-saved LLM credentials.
-        This exercises the merge priority:
-          acp_env > provider_env > agent_context.secrets
+        ACP does not use the SDK's LLM layer — the CLI subprocess handles its
+        own model calls.  Credentials must be supplied via the Secrets panel
+        (request.secrets channel), not via llm.api_key.
         """
+        user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
+
+        request = await self._call_build(service, user, tmp_path)
+
+        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') is None
+        assert 'ANTHROPIC_API_KEY' not in request.secrets
+
+    @pytest.mark.asyncio
+    async def test_no_secrets_request_secrets_empty(self, service, tmp_path):
+        """When there are no panel secrets, request.secrets is empty."""
+        user = self._make_acp_user()
+
+        request = await self._call_build(service, user, tmp_path)
+
+        assert request.secrets == {}
+
+    @pytest.mark.asyncio
+    async def test_isolate_data_dir_enabled(self, service, tmp_path):
+        """The cloud start path builds the ACP agent with data-dir isolation on
+        so the CLI session subtree lives on /workspace and the SDK self-resumes
+        across pause/resume (#1274)."""
+        user = self._make_acp_user()
+
+        request = await self._call_build(service, user, tmp_path)
+
+        assert request.agent.acp_isolate_data_dir is True
+
+    @pytest.mark.asyncio
+    async def test_acp_env_explicit_override(self, service, tmp_path):
+        """Explicit acp_env is independent of request.secrets — both are preserved."""
         user = self._make_acp_user(
             acp_server='claude-code',
             acp_env={'ANTHROPIC_API_KEY': 'sk-explicit-override'},
-            api_key='sk-ui-key',
         )
-        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
 
         request = await self._call_build(service, user, tmp_path)
 
-        # acp_env must win; the UI-saved key must NOT overwrite it
         assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-explicit-override'
+        # No panel secrets → request.secrets is empty (acp_env is a separate channel).
+        assert 'ANTHROPIC_API_KEY' not in request.secrets
 
     @pytest.mark.asyncio
-    async def test_secrets_forwarded_via_agent_context(self, service, tmp_path):
-        """Panel secrets flow through ``agent_context.secrets`` only.
-
-        The SDK's ``ACPAgent._start_acp_server`` gap-fills ``agent_context.secrets``
-        into the subprocess env at launch time. Pre-resolving here would
-        eagerly hit external auth services (e.g. ``LookupSecret``) on every
-        conversation start from the wrong process, so we forward the
-        ``SecretSource`` objects untouched and let the SDK resolve them
-        at the right boundary.
-        """
+    async def test_secrets_forwarded_via_request_secrets(self, service, tmp_path):
+        """Panel secrets flow through request.secrets; not pre-resolved into acp_env."""
         gh_secret = StaticSecret(value=SecretStr('ghp_test123'))
         user = self._make_acp_user()
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'GH_TOKEN': gh_secret}
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'GH_TOKEN': gh_secret},
         )
 
-        request = await self._call_build(service, user, tmp_path)
-
-        # NOT pre-resolved into acp_env — the SDK does that at subprocess start.
         assert request.agent.acp_env.get('GH_TOKEN') is None
-        # Surfaced as a SecretSource in agent_context.
-        assert request.agent.agent_context is not None
-        assert request.agent.agent_context.secrets.get('GH_TOKEN') is gh_secret
+        assert request.secrets.get('GH_TOKEN') is gh_secret
 
     @pytest.mark.asyncio
-    async def test_panel_secret_does_not_override_provider_env(self, service, tmp_path):
-        """Provider env (from ``llm.api_key``) keeps priority over panel secrets.
+    async def test_panel_secret_is_sole_credentials_channel(self, service, tmp_path):
+        """Panel secret is the only credentials channel; llm.api_key is ignored.
 
-        If a user has both a UI-saved Claude Code LLM key AND a same-named
-        ``ANTHROPIC_API_KEY`` in the Secrets panel, the LLM-saved one ends
-        up driving the subprocess: ``acp_env`` carries it (via the SDK's
-        ``resolve_acp_env`` → ``resolve_provider_env``), and the SDK's
-        subprocess-launch gap-fill skips ``agent_context.secrets`` keys
-        already present in env.
+        When a panel secret and llm.api_key both target the same env var, only
+        the panel secret appears in request.secrets — llm.api_key is not read.
         """
         user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
         panel_secret = StaticSecret(value=SecretStr('sk-from-secrets-panel'))
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'ANTHROPIC_API_KEY': panel_secret}
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'ANTHROPIC_API_KEY': panel_secret},
         )
 
-        request = await self._call_build(service, user, tmp_path)
-
-        # llm.api_key-derived provider env wins in acp_env.
-        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-ui-key'
-        # The panel secret is still forwarded in agent_context.secrets; the
-        # SDK's gap-fill will see ANTHROPIC_API_KEY already in env and skip
-        # it, preserving the priority.
-        assert request.agent.agent_context is not None
-        assert (
-            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY') is panel_secret
-        )
+        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') is None
+        assert request.secrets.get('ANTHROPIC_API_KEY') is panel_secret
 
     @pytest.mark.asyncio
-    async def test_explicit_acp_env_wins_over_panel_secret(self, service, tmp_path):
-        """Same-named explicit acp_env overrides a panel secret of the same name."""
+    async def test_explicit_acp_env_and_panel_secret_coexist(self, service, tmp_path):
+        """acp_env and request.secrets are independent channels.
+
+        An explicit acp_env entry takes precedence at subprocess launch, but
+        the panel secret still flows through request.secrets unchanged.
+        """
+        panel_secret = StaticSecret(value=SecretStr('panel-token'))
         user = self._make_acp_user(acp_env={'GH_TOKEN': 'explicit-token'})
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'GH_TOKEN': StaticSecret(value=SecretStr('panel-token'))}
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'GH_TOKEN': panel_secret},
         )
 
-        request = await self._call_build(service, user, tmp_path)
-
         assert request.agent.acp_env.get('GH_TOKEN') == 'explicit-token'
+        assert request.secrets.get('GH_TOKEN') is panel_secret
