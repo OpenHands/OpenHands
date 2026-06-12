@@ -23,8 +23,6 @@ from pydantic import (
 )
 from pydantic.json import pydantic_encoder
 
-from openhands.app_server.utils.env_var_validation import validate_env_var_name
-
 from openhands.app_server.integrations.provider import (
     CUSTOM_SECRETS_TYPE,
     PROVIDER_TOKEN_TYPE,
@@ -32,6 +30,7 @@ from openhands.app_server.integrations.provider import (
     ProviderToken,
 )
 from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.utils.env_var_validation import validate_env_var_name
 
 
 class Secrets(BaseModel):
