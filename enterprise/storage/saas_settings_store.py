@@ -197,10 +197,9 @@ class SaasSettingsStore(SettingsStore):
                 f'No effective LLM API key found for user {self.user_id} '
                 f'in org {org_id} (org key and member key are both unset)'
             )
-        # Canonicalize legacy litellm_proxy/ → openhands/ on the merged LLM
-        # config so the UI shows the public provider prefix. The canonical
-        # form persists on the next settings save (matches SDK read-time
-        # migration in LLMProfileStore and Settings.from_persisted).
+        # Canonicalize legacy managed OpenHands LLM payloads before Settings
+        # validation so current settings and seeded profiles use the public
+        # openhands/ prefix.
         llm_dict = merged_agent_settings.get('llm')
         if isinstance(llm_dict, dict):
             merged_agent_settings['llm'] = canonicalize_openhands_llm_payload(llm_dict)
