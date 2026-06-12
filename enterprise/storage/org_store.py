@@ -893,4 +893,3 @@ class OrgStore:
     ) -> Org | None:
         """Backward-compatible wrapper for org-defaults updates."""
         return await OrgStore.update_org(org_id, update_data, user_id)
-
