@@ -226,4 +226,39 @@ describe("InviteOrganizationMemberModal", () => {
       await screen.findByTestId("auto-add-enabled-hint"),
     ).toBeInTheDocument();
   });
+
+  it("should show failures without the share-links hint when email is configured but some invites fail", async () => {
+    vi.spyOn(organizationService, "inviteMembers").mockResolvedValue({
+      successful: [
+        {
+          id: 1,
+          email: "ok@acme.org",
+          role: "member",
+          status: "pending",
+          created_at: "2026-01-01T00:00:00Z",
+          expires_at: "2026-01-08T00:00:00Z",
+          invite_url: "https://app.example.com/accept?token=inv-ok",
+        },
+      ],
+      failed: [{ email: "bad@acme.org", error: "User is already a member" }],
+      email_delivery_configured: true,
+    });
+    const onCloseMock = vi.fn();
+
+    renderInviteOrganizationMemberModal({ onClose: onCloseMock });
+
+    const modal = screen.getByTestId("invite-modal");
+    const badgeInput = within(modal).getByTestId("emails-badge-input");
+    await userEvent.type(badgeInput, "ok@acme.org bad@acme.org ");
+    await userEvent.click(within(modal).getByRole("button", { name: /add/i }));
+
+    // Modal stays open so the inviter can see what failed...
+    const linksModal = await screen.findByTestId("invite-links-modal");
+    expect(onCloseMock).not.toHaveBeenCalled();
+    expect(within(linksModal).getByText("bad@acme.org")).toBeInTheDocument();
+    // ...but the "share these links" hint is wrong when emails were sent.
+    expect(
+      within(linksModal).queryByText("ORG$INVITATIONS_CREATED_SHARE_LINKS"),
+    ).not.toBeInTheDocument();
+  });
 });

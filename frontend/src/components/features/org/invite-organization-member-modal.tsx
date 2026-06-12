@@ -88,11 +88,14 @@ export function InviteOrganizationMemberModal({
         onClose={onClose}
       >
         <div className="flex flex-col gap-2" data-testid="invite-links-list">
-          {result.successful.length > 0 && (
-            <span className="text-sm">
-              {t(I18nKey.ORG$INVITATIONS_CREATED_SHARE_LINKS)}
-            </span>
-          )}
+          {/* With email configured the modal only stays open to show failures;
+              "share these links" is only accurate when no email was sent. */}
+          {!result.email_delivery_configured &&
+            result.successful.length > 0 && (
+              <span className="text-sm">
+                {t(I18nKey.ORG$INVITATIONS_CREATED_SHARE_LINKS)}
+              </span>
+            )}
           {result.successful.map((invitation) => (
             <div
               key={invitation.id}
