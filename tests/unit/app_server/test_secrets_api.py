@@ -565,7 +565,6 @@ async def test_add_multiple_git_providers_with_hosts(test_client, file_secrets_s
         )
 
 
-
 @pytest.mark.asyncio
 async def test_create_secret_with_invalid_name_hyphen(test_client, file_secrets_store):
     await file_secrets_store.store(Secrets())
