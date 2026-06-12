@@ -62,6 +62,17 @@ class OrgStore:
     """Store for managing organizations."""
 
     @staticmethod
+    async def _delete_litellm_user_best_effort(user_id: str, org_id: UUID) -> None:
+        """Delete the LiteLLM user record without blocking org deletion."""
+        try:
+            await LiteLlmManager.delete_user(user_id)
+        except Exception as exc:
+            logger.warning(
+                'Failed to delete LiteLLM user during org cascade cleanup',
+                extra={'org_id': str(org_id), 'user_id': user_id, 'error': str(exc)},
+            )
+
+    @staticmethod
     def get_agent_settings_from_org(org: Org) -> AgentSettingsConfig:
         # Route through the shared SDK loader: it applies persisted-settings
         # migrations (incl. the legacy ``agent_kind: 'llm'`` -> ``'openhands'``
@@ -754,6 +765,10 @@ class OrgStore:
                     extra={'org_id': str(org_id)},
                 )
                 await LiteLlmManager.delete_team(str(org_id))
+
+                if requester_orphan_ids:
+                    for user_id in requester_orphan_ids:
+                        await OrgStore._delete_litellm_user_best_effort(user_id, org_id)
 
                 # 7. Commit all changes only if everything succeeded
                 await session.commit()

@@ -3,6 +3,7 @@ import {
   Organization,
   OrganizationMember,
   OrganizationMembersPage,
+  OrganizationUserRole,
   UpdateOrganizationMemberParams,
 } from "#/types/org";
 import { Settings } from "#/types/settings";
@@ -139,14 +140,17 @@ export const organizationService = {
   inviteMembers: async ({
     orgId,
     emails,
+    role = "member",
   }: {
     orgId: string;
     emails: string[];
+    role?: OrganizationUserRole;
   }) => {
     const { data } = await openHands.post<OrganizationMember[]>(
       `/api/organizations/${orgId}/members/invite`,
       {
         emails,
+        role,
       },
     );
 
