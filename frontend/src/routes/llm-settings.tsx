@@ -445,7 +445,7 @@ export function LlmSettingsScreen({
         agentSettings.llm = llm;
       }
 
-      if (context.view === "basic") {
+      if (context.view === "basic" && llm.model !== undefined) {
         llm.base_url = getSchemaFieldDefaultValue(schema, "llm.base_url");
         agentSettings.llm = llm;
       }

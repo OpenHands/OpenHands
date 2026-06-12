@@ -859,7 +859,7 @@ describe("LlmSettingsScreen", () => {
     });
   });
 
-  it("resets hidden advanced and all settings back to defaults when saving basic view", async () => {
+  it("preserves the existing base URL when saving basic view without changing the model", async () => {
     const schema = structuredClone(
       MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
     );
@@ -945,7 +945,6 @@ describe("LlmSettingsScreen", () => {
           agent_settings_diff: expect.objectContaining({
             llm: expect.objectContaining({
               api_key: "test-api-key",
-              base_url: "https://schema.default/v1",
               timeout: 30,
             }),
           }),
@@ -957,6 +956,11 @@ describe("LlmSettingsScreen", () => {
       string,
       unknown
     >;
+    const llmPayload = getPayloadAgentSettings(payload).llm as Record<
+      string,
+      unknown
+    >;
+    expect(llmPayload).not.toHaveProperty("base_url");
     expect(getPayloadAgentSettings(payload)).not.toHaveProperty("agent");
   });
 
@@ -1254,7 +1258,7 @@ describe("LlmSettingsScreen", () => {
     });
   });
 
-  it("does not clear the hidden search API key on SaaS org settings when saving basic view", async () => {
+  it("does not clear hidden search API key or existing base URL on SaaS org settings when saving basic view", async () => {
     let persistedSettings = buildSettingsWithAdvancedToggle({
       llm_model: "openai/gpt-4o",
       llm_base_url: "https://custom.example/v1",
@@ -1316,7 +1320,6 @@ describe("LlmSettingsScreen", () => {
             agent_settings_diff: expect.objectContaining({
               llm: expect.objectContaining({
                 api_key: "test-api-key",
-                base_url: null,
               }),
             }),
           }),
@@ -1327,6 +1330,10 @@ describe("LlmSettingsScreen", () => {
     const payload = saveOrganizationSettingsSpy.mock.calls[0]?.at(0) as {
       settings: Record<string, unknown>;
     };
+    const llmPayload = (
+      payload.settings.agent_settings_diff as Record<string, unknown>
+    ).llm as Record<string, unknown>;
+    expect(llmPayload).not.toHaveProperty("base_url");
     expect(payload.settings).not.toHaveProperty("search_api_key");
 
     await waitFor(() => {
@@ -1352,7 +1359,7 @@ describe("LlmSettingsScreen", () => {
     });
   });
 
-  it("returns to the profiles list after save and re-enters the form in basic view even when a stale legacy base URL lingers on refetch", async () => {
+  it("keeps an existing custom base URL when saving basic view without a model change", async () => {
     let persistedSettings = buildSettingsWithAdvancedToggle({
       llm_base_url: "https://stale.example/v1",
       agent_settings: {
@@ -1409,12 +1416,21 @@ describe("LlmSettingsScreen", () => {
           agent_settings_diff: expect.objectContaining({
             llm: expect.objectContaining({
               api_key: "test-api-key",
-              base_url: null,
             }),
           }),
         }),
       );
     });
+
+    const payload = saveSettingsSpy.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    const llmPayload = getPayloadAgentSettings(payload).llm as Record<
+      string,
+      unknown
+    >;
+    expect(llmPayload).not.toHaveProperty("base_url");
 
     await waitFor(() => {
       expect(getSettingsSpy).toHaveBeenCalledTimes(2);
@@ -1428,14 +1444,13 @@ describe("LlmSettingsScreen", () => {
       ).not.toBeInTheDocument();
     });
 
-    // Re-entering the form must not get bumped into advanced by the
-    // stale legacy base_url on refetch.
+    // Re-entering the form reflects the still-custom base_url instead of
+    // silently clearing it during the previous save.
     await userEvent.click(screen.getByTestId("add-llm-profile"));
     await waitFor(() => {
-      expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
       expect(
-        screen.queryByTestId("llm-settings-form-advanced"),
-      ).not.toBeInTheDocument();
+        screen.getByTestId("llm-settings-form-advanced"),
+      ).toBeInTheDocument();
     });
   });
 
