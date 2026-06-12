@@ -78,6 +78,17 @@ const normalizeBaseUrl = (baseUrl: string) => {
 };
 
 const isProviderDefaultBaseUrl = (model: string, baseUrl: string) => {
+  // Managed openhands/* models always carry a server-owned base_url: the
+  // backend auto-fills it with the managed LiteLLM endpoint on save (see
+  // resolve_llm_base_url in openhands/app_server/utils/llm.py). Whatever
+  // value is stored, the user didn't customize it, so it never warrants
+  // opening the advanced view. Accepted edge case: someone who deliberately
+  // paired an openhands/* model with a custom base_url lands on basic when
+  // editing — their values are preserved and Advanced is one click away.
+  if (model.startsWith("openhands/")) {
+    return true;
+  }
+
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
   const { provider } = extractModelAndProvider(model);
 

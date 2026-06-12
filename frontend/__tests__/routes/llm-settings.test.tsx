@@ -396,7 +396,60 @@ describe("LlmSettingsScreen", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens advanced view when an OpenHands model has a custom base URL", async () => {
+  it("opens basic view when an OpenHands managed model has a server-filled base URL", async () => {
+    // Managed openhands/* profiles always come back with a base_url — the
+    // backend fills it with the managed LiteLLM endpoint on save. That must
+    // not be mistaken for a user customization that opens advanced/all.
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithAdvancedToggle({
+        llm_model: "openhands/claude-opus-4-5-20251101",
+        llm_base_url: "http://openhands-litellm:4000",
+        agent_settings: {
+          llm: {
+            model: "openhands/claude-opus-4-5-20251101",
+            base_url: "http://openhands-litellm:4000",
+          },
+        },
+      }),
+    );
+
+    await renderLlmSettingsScreen({ appMode: "oss" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+    expect(
+      screen.queryByTestId("llm-settings-form-advanced"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens basic view when editing an org-scope OpenHands managed profile with a server-filled base URL", async () => {
+    // Org scope is not covered by the personal-SaaS first-mount-basic rule,
+    // so this exercises the base-URL inference path directly.
+    vi.spyOn(organizationService, "getOrganizationSettings").mockResolvedValue(
+      buildSettingsWithAdvancedToggle({
+        llm_model: "openhands/claude-opus-4-5-20251101",
+        llm_base_url: "http://openhands-litellm:4000",
+        agent_settings: {
+          llm: {
+            model: "openhands/claude-opus-4-5-20251101",
+            base_url: "http://openhands-litellm:4000",
+          },
+        },
+      }),
+    );
+
+    await renderLlmSettingsScreen({ appMode: "saas", scope: "org" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+    expect(
+      screen.queryByTestId("llm-settings-form-advanced"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens basic view even when an OpenHands model has a non-managed base URL", async () => {
+    // Accepted edge case: the server owns base_url for openhands/* models,
+    // so editing always starts on basic — even if the stored URL was set
+    // deliberately in advanced mode. The value is preserved and the
+    // advanced view remains one click away.
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettingsWithAdvancedToggle({
         llm_model: "openhands/claude-opus-4-5-20251101",
@@ -412,10 +465,10 @@ describe("LlmSettingsScreen", () => {
 
     await renderLlmSettingsScreen({ appMode: "oss" });
 
-    await screen.findByTestId("llm-settings-form-advanced");
-    expect(screen.getByTestId("base-url-input")).toHaveValue(
-      "https://custom.example/v1",
-    );
+    await screen.findByTestId("llm-settings-form-basic");
+    expect(
+      screen.queryByTestId("llm-settings-form-advanced"),
+    ).not.toBeInTheDocument();
   });
 
   it("treats a litellm_proxy model with the managed proxy URL as an explicit custom endpoint", async () => {
@@ -1360,10 +1413,14 @@ describe("LlmSettingsScreen", () => {
   });
 
   it("keeps an existing custom base URL when saving basic view without a model change", async () => {
+    // Use a non-managed model: openhands/* models treat any base_url as
+    // server-owned, which would keep this scenario from opening advanced.
     let persistedSettings = buildSettingsWithAdvancedToggle({
+      llm_model: "openai/gpt-4o",
       llm_base_url: "https://stale.example/v1",
       agent_settings: {
         llm: {
+          model: "openai/gpt-4o",
           base_url: "https://stale.example/v1",
         },
       },
