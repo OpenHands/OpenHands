@@ -128,6 +128,9 @@ export function LlmSettingsScreen({
   // Captured during buildPayload so onSaveSuccess can derive a profile name
   // from the exact model that was just persisted.
   const lastSavedModelRef = React.useRef<string | null>(null);
+  // Whether the user typed a new API key this save — drives the backend's
+  // preserve_existing_api_key so a blank key field keeps the profile's key.
+  const lastSavedApiKeyTypedRef = React.useRef(false);
 
   // Personal profile hooks (for OSS mode)
   const saveProfile = useSaveLlmProfile();
@@ -507,6 +510,14 @@ export function LlmSettingsScreen({
       // fire on same-value re-saves (e.g. save → delete profile → save
       // again).
       lastSavedModelRef.current = modelValue || null;
+      // OpenHands-managed saves force api_key to "" above — that's not a
+      // user-typed key, so it must not defeat key preservation.
+      const typedApiKey =
+        typeof context.values["llm.api_key"] === "string"
+          ? context.values["llm.api_key"].trim()
+          : "";
+      lastSavedApiKeyTypedRef.current =
+        !shouldUseOpenHandsKey && typedApiKey.length > 0;
 
       return { agent_settings_diff: agentSettings };
     },
@@ -552,20 +563,18 @@ export function LlmSettingsScreen({
             });
           }
         }
-        // Omit `llm` → backend snapshots the just-saved agent_settings.llm
-        // (api_key and all). Saves us from having to hand-reconstruct the
-        // config and risk mangling the secret placeholder handling.
+        // Omit `llm` → backend snapshots the just-saved agent_settings.llm.
+        // When the user typed no key, the snapshot would carry the *active*
+        // settings' key — preserve_existing_api_key keeps the profile's own.
+        const request = {
+          include_secrets: true,
+          preserve_existing_api_key: !lastSavedApiKeyTypedRef.current,
+        };
         if (useOrgHooks) {
-          await saveOrgProfile.mutateAsync({
-            name,
-            request: { include_secrets: true },
-          });
+          await saveOrgProfile.mutateAsync({ name, request });
           await activateOrgProfile.mutateAsync(name);
         } else {
-          await saveProfile.mutateAsync({
-            name,
-            request: { include_secrets: true },
-          });
+          await saveProfile.mutateAsync({ name, request });
           await activateProfile.mutateAsync(name);
         }
       } catch {

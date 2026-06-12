@@ -2456,12 +2456,78 @@ describe("LlmSettingsScreen", () => {
       await waitFor(() => {
         expect(ProfilesService.saveProfile).toHaveBeenCalledWith(
           "openai_gpt-4o",
-          { include_secrets: true },
+          { include_secrets: true, preserve_existing_api_key: false },
         );
       });
       await waitFor(() => {
         expect(ProfilesService.activateProfile).toHaveBeenCalledWith(
           "openai_gpt-4o",
+        );
+      });
+    });
+
+    it("asks the backend to preserve the stored profile key when no key is typed", async () => {
+      // A save with a blank key field must not snapshot the active settings'
+      // api_key into the profile — that silently swaps the profile's own key.
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings({
+          llm_model: "openai/gpt-4o",
+          agent_settings: { llm: { model: "openai/gpt-4o" } },
+        }),
+      );
+      vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
+
+      await renderLlmSettingsScreen({ appMode: "oss" });
+
+      await screen.findByTestId("llm-api-key-input");
+      await userEvent.click(screen.getByTestId("save-button"));
+
+      await waitFor(() => {
+        expect(ProfilesService.saveProfile).toHaveBeenCalledWith(
+          "openai_gpt-4o",
+          { include_secrets: true, preserve_existing_api_key: true },
+        );
+      });
+    });
+
+    it("asks the backend to preserve the stored org profile key when no key is typed", async () => {
+      vi.spyOn(
+        organizationService,
+        "getOrganizationSettings",
+      ).mockResolvedValue(
+        buildSettings({
+          agent_settings: { llm: { model: "openai/gpt-4o" } },
+        }),
+      );
+      vi.spyOn(
+        organizationService,
+        "saveOrganizationSettings",
+      ).mockResolvedValue({
+        agent_settings: {},
+        conversation_settings: {},
+        search_api_key: undefined,
+        llm_api_key_set: false,
+      });
+
+      await renderLlmSettingsScreen({
+        appMode: "saas",
+        scope: "org",
+        organizationId: "3",
+        meData: buildOrganizationMember({ org_id: "3", role: "admin" }),
+      });
+
+      const orgProfileNameInput = await screen.findByTestId(
+        "llm-profile-name-input",
+      );
+      await userEvent.clear(orgProfileNameInput);
+      await userEvent.type(orgProfileNameInput, "team-profile");
+      await userEvent.click(screen.getByTestId("save-button"));
+
+      await waitFor(() => {
+        expect(OrgProfilesService.saveProfile).toHaveBeenCalledWith(
+          "3",
+          "team-profile",
+          { include_secrets: true, preserve_existing_api_key: true },
         );
       });
     });
@@ -2510,7 +2576,7 @@ describe("LlmSettingsScreen", () => {
         expect(OrgProfilesService.saveProfile).toHaveBeenCalledWith(
           "3",
           "team-profile",
-          { include_secrets: true },
+          { include_secrets: true, preserve_existing_api_key: false },
         );
       });
       await waitFor(() => {
@@ -2548,7 +2614,7 @@ describe("LlmSettingsScreen", () => {
       await waitFor(() => {
         expect(ProfilesService.saveProfile).toHaveBeenCalledWith(
           "my-custom-name",
-          { include_secrets: true },
+          { include_secrets: true, preserve_existing_api_key: false },
         );
       });
       await waitFor(() => {
@@ -2587,7 +2653,7 @@ describe("LlmSettingsScreen", () => {
       await waitFor(() => {
         expect(ProfilesService.saveProfile).toHaveBeenCalledWith(
           "openai_gpt-4o",
-          { include_secrets: true },
+          { include_secrets: true, preserve_existing_api_key: false },
         );
       });
     });
@@ -2772,7 +2838,7 @@ describe("LlmSettingsScreen", () => {
       await waitFor(() => {
         expect(ProfilesService.saveProfile).toHaveBeenCalledWith(
           "openai_gpt-4o",
-          { include_secrets: true },
+          { include_secrets: true, preserve_existing_api_key: false },
         );
       });
       await waitFor(() => {
@@ -2866,7 +2932,9 @@ describe("LlmSettingsScreen", () => {
       await waitFor(() => {
         expect(ProfilesService.saveProfile).toHaveBeenCalledWith(
           "other-profile",
-          { include_secrets: true },
+          // No key typed on this pristine edit-save, so the profile's
+          // stored key must survive the snapshot.
+          { include_secrets: true, preserve_existing_api_key: true },
         );
       });
     });
