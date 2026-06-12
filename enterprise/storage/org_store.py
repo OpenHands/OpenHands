@@ -748,6 +748,28 @@ class OrgStore:
                 # invariant load-bearing rather than incidental.
                 await session.delete(org)
 
+                # 5b. Clean up LiteLLM user records before team deletion
+                # Fetch all users belonging to this org
+                org_users_result = await session.execute(
+                    select(User).join(OrgMember).filter(OrgMember.org_id == org_id)
+                )
+                org_users = org_users_result.scalars().all()
+                
+                for user in org_users:
+                    try:
+                        user_uuid = str(user.id)
+                        await LiteLlmManager.delete_user(user_uuid)
+                        logger.info(
+                            'Deleted LiteLLM user record',
+                            extra={'user_id': user_uuid, 'org_id': str(org_id)},
+                        )
+                    except Exception as e:
+                        # Best-effort: log but don't fail the transaction
+                        logger.warning(
+                            'Failed to delete LiteLLM user record',
+                            extra={'user_id': str(user.id), 'error': str(e)},
+                        )
+                
                 # 6. Clean up LiteLLM team before committing transaction
                 logger.info(
                     'Deleting LiteLLM team within database transaction',
@@ -861,3 +883,5 @@ class OrgStore:
     ) -> Org | None:
         """Backward-compatible wrapper for org-defaults updates."""
         return await OrgStore.update_org(org_id, update_data, user_id)
+
+
