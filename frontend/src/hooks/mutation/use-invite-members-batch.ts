@@ -8,6 +8,7 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
+import { OrganizationUserRole } from "#/types/org";
 
 export const useInviteMembersBatch = () => {
   const queryClient = useQueryClient();
@@ -15,13 +16,20 @@ export const useInviteMembersBatch = () => {
   const { t } = useTranslation();
 
   return useMutation({
-    mutationFn: ({ emails }: { emails: string[] }) => {
+    mutationFn: ({
+      emails,
+      role,
+    }: {
+      emails: string[];
+      role?: OrganizationUserRole;
+    }) => {
       if (!organizationId) {
         throw new Error("Organization ID is required");
       }
       return organizationService.inviteMembers({
         orgId: organizationId,
         emails,
+        role,
       });
     },
     onSuccess: () => {

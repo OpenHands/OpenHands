@@ -26722,5 +26722,22 @@
     "de": "Keine ausstehenden Einladungen",
     "uk": "Немає очікуваних запрошень",
     "ca": "No hi ha invitacions pendents"
+  },
+  "ORG$INVITE_ROLE_LABEL": {
+    "ar": "دعوة بصفة",
+    "ca": "Convida com a",
+    "de": "Einladen als",
+    "en": "Invite as",
+    "es": "Invitar como",
+    "fr": "Inviter en tant que",
+    "it": "Invita come",
+    "ja": "招待時のロール",
+    "ko-KR": "초대 역할",
+    "no": "Inviter som",
+    "pt": "Convidar como",
+    "tr": "Şu rolle davet et",
+    "uk": "Запросити як",
+    "zh-CN": "邀请身份",
+    "zh-TW": "邀請身分"
   }
 }

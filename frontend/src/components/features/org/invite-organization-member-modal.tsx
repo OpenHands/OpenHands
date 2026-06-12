@@ -6,7 +6,8 @@ import { BadgeInput } from "#/components/shared/inputs/badge-input";
 import { I18nKey } from "#/i18n/declaration";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { areAllEmailsValid, hasDuplicates } from "#/utils/input-validation";
-import { BatchInvitationResult } from "#/types/org";
+import { Dropdown } from "#/ui/dropdown/dropdown";
+import { BatchInvitationResult, OrganizationUserRole } from "#/types/org";
 import { CopyInviteLinkButton } from "#/components/features/org/copy-invite-link-button";
 
 interface InviteOrganizationMemberModalProps {
@@ -19,6 +20,7 @@ export function InviteOrganizationMemberModal({
   const { t } = useTranslation();
   const { mutate: inviteMembers, isPending } = useInviteMembersBatch();
   const [emails, setEmails] = React.useState<string[]>([]);
+  const [role, setRole] = React.useState<OrganizationUserRole>("member");
   const [result, setResult] = React.useState<BatchInvitationResult | null>(
     null,
   );
@@ -45,7 +47,7 @@ export function InviteOrganizationMemberModal({
     }
 
     inviteMembers(
-      { emails },
+      { emails, role },
       {
         onSuccess: (data) => {
           // When email delivery works, the invitees are notified and the
@@ -61,6 +63,11 @@ export function InviteOrganizationMemberModal({
       },
     );
   };
+
+  const roleOptions = [
+    { value: "member", label: t(I18nKey.ORG$ROLE_MEMBER) },
+    { value: "admin", label: t(I18nKey.ORG$ROLE_ADMIN) },
+  ];
 
   if (result) {
     return (
@@ -123,6 +130,17 @@ export function InviteOrganizationMemberModal({
         placeholder={t(I18nKey.COMMON$ENTER_EMAIL_ADDRESSES)}
         onChange={handleEmailsChange}
       />
+      <label className="flex flex-col gap-1 text-sm capitalize">
+        {t(I18nKey.ORG$INVITE_ROLE_LABEL)}
+        <Dropdown
+          testId="invite-role-dropdown"
+          options={roleOptions}
+          defaultValue={roleOptions[0]}
+          onChange={(option) =>
+            setRole((option?.value as OrganizationUserRole) ?? "member")
+          }
+        />
+      </label>
     </OrgModal>
   );
 }
