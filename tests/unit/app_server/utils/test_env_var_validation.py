@@ -68,6 +68,7 @@ class TestIsValidEnvVarName:
             'MY"VAR',
             'MY`VAR',
             'MY~VAR',
+            'MY_VAR\n',
         ],
     )
     def test_invalid_names_special_chars(self, name: str):

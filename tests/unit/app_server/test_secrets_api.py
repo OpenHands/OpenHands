@@ -664,3 +664,25 @@ async def test_create_secret_with_empty_name(test_client, file_secrets_store):
         json={'name': '', 'value': 'secret-value'},
     )
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_update_secret_not_found_returns_404(test_client, file_secrets_store):
+    await file_secrets_store.store(Secrets())
+    response = test_client.put(
+        '/secrets/NONEXISTENT',
+        json={'name': 'NONEXISTENT', 'description': 'Updated'},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_secrets_tolerates_legacy_invalid_names(
+    test_client, file_secrets_store
+):
+    custom_secrets = {'MY-LEGACY-SECRET': CustomSecret(secret=SecretStr('value'))}
+    await file_secrets_store.store(Secrets(custom_secrets=custom_secrets))  # type: ignore[arg-type]
+    response = test_client.get('/secrets/search')
+    assert response.status_code == 200
+    data = response.json()
+    assert any(item['name'] == 'MY-LEGACY-SECRET' for item in data['items'])

@@ -3,14 +3,12 @@
 import re
 
 # Must start with a letter or underscore, contain only alphanumeric characters and underscores.
-ENV_VAR_NAME_PATTERN = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+ENV_VAR_NAME_PATTERN = re.compile(r'[a-zA-Z_][a-zA-Z0-9_]*')
 
 
 def is_valid_env_var_name(name: str) -> bool:
     """Check if a name is valid for use as an environment variable."""
-    if not name:
-        return False
-    return bool(ENV_VAR_NAME_PATTERN.match(name))
+    return bool(ENV_VAR_NAME_PATTERN.fullmatch(name))
 
 
 def validate_env_var_name(name: str, field_name: str = 'name') -> None:
