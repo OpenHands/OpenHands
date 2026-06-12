@@ -1444,13 +1444,22 @@ describe("LlmSettingsScreen", () => {
       ).not.toBeInTheDocument();
     });
 
-    // Re-entering the form reflects the still-custom base_url instead of
-    // silently clearing it during the previous save.
+    // The persisted settings still carry the custom base_url instead of
+    // being silently cleared during the previous save.
+    expect(
+      (persistedSettings.agent_settings?.llm as Record<string, SettingsValue>)
+        ?.base_url,
+    ).toBe("https://stale.example/v1");
+
+    // Re-entering via Add Profile starts a blank create form on the basic
+    // view regardless of stored values; the preserved base_url shows when
+    // editing the existing configuration instead.
     await userEvent.click(screen.getByTestId("add-llm-profile"));
     await waitFor(() => {
+      expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
       expect(
-        screen.getByTestId("llm-settings-form-advanced"),
-      ).toBeInTheDocument();
+        screen.queryByTestId("llm-settings-form-advanced"),
+      ).not.toBeInTheDocument();
     });
   });
 
