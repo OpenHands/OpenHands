@@ -235,6 +235,16 @@ classpath = "my_package.my_module.MyCustomAgent"
 # Whether to enable security analyzer
 #enable_security_analyzer = true
 
+#################################### LLM ######################################
+# Language model configuration
+##############################################################################
+# TrustedRouter is OpenAI-compatible. Uncomment these values to route OpenHands
+# through TrustedRouter.
+#[llm]
+#model = "trustedrouter/auto"
+#api_key = "tr-..."
+#base_url = "https://api.trustedrouter.com/v1"
+
 #################################### Condenser #################################
 # Condensers control how conversation history is managed and compressed when
 # the context grows too large. Each agent uses one condenser configuration.

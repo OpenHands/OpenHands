@@ -49,6 +49,15 @@ If you are running headless or CLI workflows, you can prepare local defaults wit
 make setup-config
 ```
 
+For a TrustedRouter key, use the OpenAI-compatible settings:
+
+```toml
+[llm]
+model = "trustedrouter/auto"
+api_key = "tr-..."
+base_url = "https://api.trustedrouter.com/v1"
+```
+
 **Note on Alternative Models:**
 See [our documentation](https://docs.openhands.dev/openhands/usage/llms/llms) for recommended models.
 
