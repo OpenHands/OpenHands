@@ -3,6 +3,7 @@
 import os
 from unittest.mock import MagicMock, patch
 
+import pytest
 from server.services.email_service import (
     DEFAULT_WEB_HOST,
     EmailService,
