@@ -98,7 +98,7 @@ jobs:
         run: |
           $env:OTA_VERSION = "${env:OTA_VERSION}"
           irm https://dist.ota.run/install.ps1 | iex
-          (Join-Path $HOME ".local\\bin") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          (Join-Path $env:LOCALAPPDATA "ota\\bin") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Validate contract
         shell: bash
@@ -441,7 +441,7 @@ jobs:
         run: |
           $env:OTA_VERSION = "${env:OTA_VERSION}"
           irm https://dist.ota.run/install.ps1 | iex
-          (Join-Path $HOME ".local\\bin") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          (Join-Path $env:LOCALAPPDATA "ota\\bin") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Verify Docker
         shell: bash
@@ -554,7 +554,7 @@ jobs:
         run: |
           $env:OTA_VERSION = "${env:OTA_VERSION}"
           irm https://dist.ota.run/install.ps1 | iex
-          (Join-Path $HOME ".local\\bin") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          (Join-Path $env:LOCALAPPDATA "ota\\bin") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Verify Docker
         shell: bash
@@ -618,7 +618,7 @@ jobs:
         run: |
           $env:OTA_VERSION = "${env:OTA_VERSION}"
           irm https://dist.ota.run/install.ps1 | iex
-          (Join-Path $HOME ".local\\bin") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          (Join-Path $env:LOCALAPPDATA "ota\\bin") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Verify Bun
         shell: bash
