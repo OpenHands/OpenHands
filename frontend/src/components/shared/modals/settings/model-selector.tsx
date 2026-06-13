@@ -13,6 +13,7 @@ import { HelpLink } from "#/ui/help-link";
 import { PRODUCT_URL } from "#/utils/constants";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useProviderModels } from "#/hooks/query/use-provider-models";
+import { useAppMode } from "#/hooks/use-app-mode";
 
 interface ModelSelectorProps {
   isDisabled?: boolean;
@@ -46,6 +47,8 @@ export function ModelSelector({
     isLoading: isLoadingModels,
     error: modelsError,
   } = useProviderModels(selectedProvider);
+  // The OpenHands-account CTA points at the cloud product; only show it there.
+  const { isEnterpriseCloud } = useAppMode();
 
   const verifiedProviders = React.useMemo(
     () => providers.filter((p) => p.verified),
@@ -159,7 +162,7 @@ export function ModelSelector({
         </Autocomplete>
       </fieldset>
 
-      {selectedProvider === "openhands" && (
+      {selectedProvider === "openhands" && isEnterpriseCloud && (
         <HelpLink
           testId="openhands-account-help"
           text={t(I18nKey.SETTINGS$NEED_OPENHANDS_ACCOUNT)}
