@@ -7,7 +7,9 @@ import { I18nKey } from "#/i18n/declaration";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { areAllEmailsValid, hasDuplicates } from "#/utils/input-validation";
 import { Dropdown } from "#/ui/dropdown/dropdown";
-import { OrganizationUserRole } from "#/types/org";
+import { BatchInvitationResult, OrganizationUserRole } from "#/types/org";
+import { CopyInviteLinkButton } from "#/components/features/org/copy-invite-link-button";
+import { usePendingInvitations } from "#/hooks/query/use-pending-invitations";
 
 interface InviteOrganizationMemberModalProps {
   onClose: (event?: React.MouseEvent<HTMLButtonElement>) => void;
@@ -18,8 +20,14 @@ export function InviteOrganizationMemberModal({
 }: InviteOrganizationMemberModalProps) {
   const { t } = useTranslation();
   const { mutate: inviteMembers, isPending } = useInviteMembersBatch();
+  // The modal is only reachable with the invite permission, which is what
+  // gates the backing endpoint; the response carries auto_add_enabled.
+  const { data: pendingData } = usePendingInvitations(true);
   const [emails, setEmails] = React.useState<string[]>([]);
   const [role, setRole] = React.useState<OrganizationUserRole>("member");
+  const [result, setResult] = React.useState<BatchInvitationResult | null>(
+    null,
+  );
 
   const handleEmailsChange = (newEmails: string[]) => {
     const trimmedEmails = newEmails.map((email) => email.trim());
@@ -45,7 +53,17 @@ export function InviteOrganizationMemberModal({
     inviteMembers(
       { emails, role },
       {
-        onSuccess: () => onClose(),
+        onSuccess: (data) => {
+          // When email delivery works, the invitees are notified and the
+          // modal can simply close. Without it, the links are the only way
+          // invitees can ever join — keep the modal open so the inviter can
+          // copy them.
+          if (data.email_delivery_configured && data.failed.length === 0) {
+            onClose();
+          } else {
+            setResult(data);
+          }
+        },
       },
     );
   };
@@ -54,6 +72,54 @@ export function InviteOrganizationMemberModal({
     { value: "member", label: t(I18nKey.ORG$ROLE_MEMBER) },
     { value: "admin", label: t(I18nKey.ORG$ROLE_ADMIN) },
   ];
+
+  if (result) {
+    return (
+      <OrgModal
+        testId="invite-links-modal"
+        title={t(I18nKey.ORG$INVITE_ORG_MEMBERS)}
+        description={
+          result.email_delivery_configured
+            ? undefined
+            : t(I18nKey.ORG$EMAIL_DELIVERY_NOT_CONFIGURED)
+        }
+        primaryButtonText={t(I18nKey.BUTTON$CLOSE)}
+        onPrimaryClick={() => onClose()}
+        onClose={onClose}
+      >
+        <div className="flex flex-col gap-2" data-testid="invite-links-list">
+          {/* With email configured the modal only stays open to show failures;
+              "share these links" is only accurate when no email was sent. */}
+          {!result.email_delivery_configured &&
+            result.successful.length > 0 && (
+              <span className="text-sm">
+                {t(I18nKey.ORG$INVITATIONS_CREATED_SHARE_LINKS)}
+              </span>
+            )}
+          {result.successful.map((invitation) => (
+            <div
+              key={invitation.id}
+              className="flex items-center justify-between gap-2 text-sm"
+            >
+              <span className="truncate">{invitation.email}</span>
+              {invitation.invite_url && (
+                <CopyInviteLinkButton inviteUrl={invitation.invite_url} />
+              )}
+            </div>
+          ))}
+          {result.failed.map((failure) => (
+            <div
+              key={failure.email}
+              className="flex items-center justify-between gap-2 text-sm text-danger"
+            >
+              <span className="truncate">{failure.email}</span>
+              <span className="truncate">{failure.error}</span>
+            </div>
+          ))}
+        </div>
+      </OrgModal>
+    );
+  }
 
   return (
     <OrgModal
@@ -65,10 +131,18 @@ export function InviteOrganizationMemberModal({
       onClose={onClose}
       isLoading={isPending}
     >
+      {pendingData?.auto_add_enabled && (
+        <p
+          data-testid="auto-add-enabled-hint"
+          className="text-xs text-tertiary-alt"
+        >
+          {t(I18nKey.ORG$AUTO_ADD_ENABLED_HINT)}
+        </p>
+      )}
       <BadgeInput
         name="emails-badge-input"
         value={emails}
-        placeholder={t(I18nKey.COMMON$TYPE_EMAIL_AND_PRESS_SPACE)}
+        placeholder={t(I18nKey.COMMON$ENTER_EMAIL_ADDRESSES)}
         onChange={handleEmailsChange}
       />
       <label className="flex flex-col gap-1 text-sm capitalize">
