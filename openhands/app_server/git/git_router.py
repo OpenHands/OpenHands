@@ -46,6 +46,13 @@ router = APIRouter(
 user_context_dependency = depends_user_context()
 
 
+def _repositories_have_next_page(repos: list[Repository], limit: int) -> bool:
+    link_headers = [repo.link_header for repo in repos if repo.link_header is not None]
+    if link_headers:
+        return any('rel="next"' in link_header for link_header in link_headers)
+    return len(repos) >= limit
+
+
 @router.get('/installations/search')
 async def search_user_installations(
     provider: ProviderType,
@@ -154,6 +161,12 @@ async def search_repositories(
 
     # If query is provided, use search; otherwise get user's repositories
     if query:
+        if page != 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='Pagination not yet supported for repository search queries.',
+            )
+
         # Parse sort_order into sort and order components (if provided)
         if sort_order:
             search_sort, order = sort_order.value.rsplit('-', 1)
@@ -164,11 +177,13 @@ async def search_repositories(
         repos: list[Repository] = await client.search_repositories(
             selected_provider=provider,
             query=query,
-            per_page=limit + 1,
+            per_page=limit,
             sort=search_sort,
             order=order,
             app_mode=get_global_config().app_mode,
         )
+        repos = repos[:limit]
+        next_page_id = None
     else:
         if sort_order:
             # TODO: This is a temporary state until we refactor the underlying API.
@@ -185,14 +200,13 @@ async def search_repositories(
             app_mode=get_global_config().app_mode,
             selected_provider=provider,
             page=page,
-            per_page=limit + 1,
+            per_page=limit,
             installation_id=installation_id,
         )
-
-    next_page_id = None
-    if len(repos) > limit:
-        repos = repos[:-1]
-        next_page_id = encode_page_id(page + 1)
+        next_page_id = None
+        if _repositories_have_next_page(repos, limit):
+            next_page_id = encode_page_id(page + 1)
+        repos = repos[:limit]
 
     return RepositoryPage(items=repos, next_page_id=next_page_id)
 
@@ -252,26 +266,26 @@ async def search_branches(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail='Pagination not yet supported for branch search queries. Use empty query to list all branches with pagination.',
             )
-        # Get search results - we'll handle pagination ourselves
         branches: list[Branch] = await client.search_branches(
             selected_provider=provider,
             repository=repository,
             query=query,
-            per_page=limit + 1,
+            per_page=limit,
         )
+        branches = branches[:limit]
+        next_page_id = None
     else:
         current_page = await client.get_branches(
             repository=repository,
             specified_provider=provider,
             page=page,
-            per_page=limit + 1,
+            per_page=limit,
         )
         branches = current_page.branches
-
-    next_page_id = None
-    if len(branches) > limit:
-        branches = branches[:-1]
-        next_page_id = encode_page_id(page + 1)
+        next_page_id = None
+        if current_page.has_next_page:
+            next_page_id = encode_page_id(page + 1)
+        branches = branches[:limit]
 
     return BranchPage(items=branches, next_page_id=next_page_id)
 
