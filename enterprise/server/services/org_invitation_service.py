@@ -318,6 +318,9 @@ class OrgInvitationService:
             llm_api_key = (
                 llm_api_key_secret.get_secret_value() if llm_api_key_secret else ''  # type: ignore[union-attr]
             )
+            # Status flips LAST: any failure leaves the invitation pending so
+            # the next sign-in retries it (the already-member branch above
+            # reconciles a member whose status update was lost).
             await OrgMemberStore.add_user_to_org(
                 org_id=invitation.org_id,
                 user_id=user.id,

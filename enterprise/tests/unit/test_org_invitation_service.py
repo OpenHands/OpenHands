@@ -1031,3 +1031,56 @@ class TestAcceptPendingInvitationsForUser:
 
         assert accepted == []
         mock_store.get_pending_invitations_for_email.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_litellm_failure_skips_invitation_and_continues(self):
+        """A LiteLLM outage must not break login or consume the invitation."""
+        user = self._user()
+        failing = self._invitation(invitation_id=1)
+        succeeding = self._invitation(invitation_id=2)
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore'
+            ) as mock_store,
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore'
+            ) as mock_member_store,
+            patch('server.services.org_invitation_service.OrgStore') as mock_org_store,
+            patch(
+                'server.services.org_invitation_service.OrgService'
+            ) as mock_org_service,
+            patch(
+                'server.services.org_invitation_service.UserStore'
+            ) as mock_user_store,
+        ):
+            mock_store.get_pending_invitations_for_email = AsyncMock(
+                return_value=[failing, succeeding]
+            )
+            mock_store.is_token_expired = MagicMock(return_value=False)
+            mock_store.update_invitation_status = AsyncMock()
+            mock_member_store.get_org_member = AsyncMock(return_value=None)
+            mock_member_store.add_user_to_org = AsyncMock()
+            mock_org_store.get_org_by_id = AsyncMock(return_value=MagicMock())
+            mock_org_service.create_litellm_integration = AsyncMock(
+                side_effect=[Exception('LiteLLM unavailable'), self._settings()]
+            )
+            mock_user_store.update_current_org = AsyncMock()
+
+            accepted = await OrgInvitationService.accept_pending_invitations_for_user(
+                user
+            )
+
+        # The failing invitation is skipped (stays pending, retried at next
+        # sign-in); the rest of the batch still processes.
+        assert accepted == [succeeding]
+        mock_member_store.add_user_to_org.assert_awaited_once()
+        assert (
+            mock_member_store.add_user_to_org.await_args.kwargs['org_id']
+            == succeeding.org_id
+        )
+        mock_store.update_invitation_status.assert_awaited_once_with(
+            succeeding.id,
+            OrgInvitation.STATUS_ACCEPTED,
+            accepted_by_user_id=user.id,
+        )
