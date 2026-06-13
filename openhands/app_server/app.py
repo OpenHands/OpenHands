@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 
 from openhands.app_server import v1_router
 from openhands.app_server.config import get_app_lifespan_service
+from openhands.app_server.oauth.device_flow import router as oauth_device_router
 from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.mcp.mcp_router import init_tavily_proxy, mcp_server
 from openhands.app_server.middleware import (
@@ -70,6 +71,7 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
 
 app.include_router(v1_router.router)
 app.include_router(health_router)
+app.include_router(oauth_device_router)
 
 # Branch/reset endpoints at /api/conversations/ (V1-compatible)
 from openhands.app_server.conversation_router import router as conversation_router
