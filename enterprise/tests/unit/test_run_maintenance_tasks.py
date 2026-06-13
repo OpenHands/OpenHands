@@ -19,6 +19,7 @@ sys.modules['storage.database'] = mock_db
 
 # Import after mocking
 from run_maintenance_tasks import (  # noqa: E402
+    enqueue_conversation_expiration_task,
     main,
     next_task,
     run_tasks,
@@ -28,6 +29,12 @@ from storage.maintenance_task import (  # noqa: E402
     MaintenanceTask,
     MaintenanceTaskProcessor,
     MaintenanceTaskStatus,
+)
+from storage.org import Org  # noqa: E402
+
+CONVERSATION_EXPIRATION_PROCESSOR = (
+    'server.maintenance_task_processor.conversation_expiration_processor.'
+    'ConversationExpirationProcessor'
 )
 
 
@@ -41,6 +48,46 @@ class MockMaintenanceTaskProcessor(MaintenanceTaskProcessor):
 
 class TestRunMaintenanceTasks:
     """Tests for the run_maintenance_tasks.py module."""
+
+    def test_enqueue_conversation_expiration_task_when_policy_enabled(
+        self, session_maker
+    ):
+        """Create one expiration maintenance task when an org enables retention."""
+        with session_maker() as session:
+            session.add(Org(name='retention-enabled', conversation_expiration=30))
+            session.commit()
+
+        with session_maker() as session:
+            created = enqueue_conversation_expiration_task(session)
+            session.commit()
+
+        assert created is True
+        with session_maker() as session:
+            task = session.query(MaintenanceTask).one()
+            assert task.status == MaintenanceTaskStatus.PENDING
+            assert task.processor_type == CONVERSATION_EXPIRATION_PROCESSOR
+            assert task.processor_json == '{}'
+
+    def test_enqueue_conversation_expiration_task_is_idempotent(self, session_maker):
+        """Do not enqueue duplicate expiration work while a task is pending."""
+        with session_maker() as session:
+            session.add(Org(name='retention-enabled', conversation_expiration=30))
+            session.add(
+                MaintenanceTask(
+                    status=MaintenanceTaskStatus.PENDING,
+                    processor_type=CONVERSATION_EXPIRATION_PROCESSOR,
+                    processor_json='{}',
+                )
+            )
+            session.commit()
+
+        with session_maker() as session:
+            created = enqueue_conversation_expiration_task(session)
+            session.commit()
+
+        assert created is False
+        with session_maker() as session:
+            assert session.query(MaintenanceTask).count() == 1
 
     def test_set_stale_task_error(self, session_maker):
         """Test that stale tasks are marked as error."""

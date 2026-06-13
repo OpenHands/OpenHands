@@ -7,6 +7,12 @@ from storage.maintenance_task import (
     MaintenanceTask,
     MaintenanceTaskStatus,
 )
+from storage.org import Org
+
+CONVERSATION_EXPIRATION_PROCESSOR = (
+    'server.maintenance_task_processor.conversation_expiration_processor.'
+    'ConversationExpirationProcessor'
+)
 
 NUM_RETRIES = 3
 RETRY_DELAY = 60
@@ -15,9 +21,48 @@ RETRY_DELAY = 60
 async def main():
     try:
         set_stale_task_error()
+        with session_maker() as session:
+            enqueue_conversation_expiration_task(session)
+            session.commit()
         await run_tasks()
     except Exception as e:
         logger.info(f'Error running maintenance tasks: {e}')
+
+
+def enqueue_conversation_expiration_task(session) -> bool:
+    has_enabled_policy = (
+        session.query(Org.id)
+        .filter(
+            Org.conversation_expiration.isnot(None),
+            Org.conversation_expiration > 0,
+        )
+        .first()
+        is not None
+    )
+    if not has_enabled_policy:
+        return False
+
+    active_task = (
+        session.query(MaintenanceTask.id)
+        .filter(
+            MaintenanceTask.processor_type == CONVERSATION_EXPIRATION_PROCESSOR,
+            MaintenanceTask.status.in_(
+                [MaintenanceTaskStatus.PENDING, MaintenanceTaskStatus.WORKING]
+            ),
+        )
+        .first()
+    )
+    if active_task:
+        return False
+
+    session.add(
+        MaintenanceTask(
+            status=MaintenanceTaskStatus.PENDING,
+            processor_type=CONVERSATION_EXPIRATION_PROCESSOR,
+            processor_json='{}',
+        )
+    )
+    return True
 
 
 def set_stale_task_error():
