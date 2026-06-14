@@ -54,7 +54,8 @@ def _derive_default_model() -> str:
     """Translate the env-derived default model to the public prefix.
 
     ``LITELLM_DEFAULT_MODEL`` holds the default as ``litellm_proxy/<name>``;
-    the app stores and displays models as ``openhands/<name>``.
+    the app stores and displays models as ``openhands/<name>``. An already-
+    ``openhands/``-prefixed default is kept as-is; a bare name is prefixed.
     """
     default = get_default_litellm_model()
     if default.startswith(_LITELLM_PROXY_PREFIX):
