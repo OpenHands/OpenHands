@@ -267,3 +267,15 @@ def test_global_skills_dir_points_to_repo_root():
         f'Expected skill file not found: {expected_skill}. '
         f'GLOBAL_SKILLS_DIR may be pointing to wrong location.'
     )
+
+
+def test_bitbucket_skill_documents_api_token_auth_format():
+    """Bitbucket skill guidance should match the API-token flow from settings."""
+    from openhands.app_server.user.skills_router import GLOBAL_SKILLS_DIR
+
+    bitbucket_skill = GLOBAL_SKILLS_DIR / 'bitbucket.md'
+    content = bitbucket_skill.read_text()
+
+    assert 'email:api_token' in content
+    assert 'https://${BITBUCKET_TOKEN}@bitbucket.org' not in content
+    assert 'https://x-token-auth:${BITBUCKET_TOKEN}@bitbucket.org' not in content

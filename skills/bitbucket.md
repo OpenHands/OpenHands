@@ -9,7 +9,9 @@ triggers:
 ---
 
 You have access to an environment variable, `BITBUCKET_TOKEN`, which allows you to interact with
-the Bitbucket API.
+the Bitbucket API. For Bitbucket Cloud API tokens, `BITBUCKET_TOKEN` must be in
+the `email:api_token` format. The API token must be a scoped Atlassian API token
+with at least the `read:user:bitbucket` scope.
 
 <IMPORTANT>
 You can use `curl` with the `BITBUCKET_TOKEN` to interact with Bitbucket's API.
@@ -17,7 +19,7 @@ ALWAYS use the Bitbucket API for operations instead of a web browser.
 ALWAYS use the `create_bitbucket_pr` tool to open a pull request
 </IMPORTANT>
 
-If you encounter authentication issues when pushing to Bitbucket (such as password prompts or permission errors), the old token may have expired. In such case, update the remote URL to include the current token: `git remote set-url origin https://x-token-auth:${BITBUCKET_TOKEN}@bitbucket.org/username/repo.git`
+If you encounter authentication issues when pushing to Bitbucket (such as password prompts or permission errors), the old token may have expired or the token may not be in the required `email:api_token` format. In that case, create a scoped Atlassian API token, store it in `BITBUCKET_TOKEN` as `email:api_token`, URL-encode the email and token, and update the remote URL with encoded credentials: `git remote set-url origin https://<url_encoded_email>:<url_encoded_api_token>@bitbucket.org/username/repo.git`.
 
 Here are some instructions for pushing, but ONLY do this if the user asks you to:
 * NEVER push directly to the `main` or `master` branch
