@@ -34,7 +34,7 @@ from openhands.app_server.config_api.llm_model_service import (
 )
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.utils.http_session import httpx_verify_option
-from openhands.app_server.utils.llm import ModelsResponse
+from openhands.app_server.utils.llm import ModelsResponse, get_supported_llm_models
 
 _logger = logging.getLogger(__name__)
 
@@ -174,13 +174,49 @@ class LiteLLMProxyModelService(DefaultLLMModelService):
             },
         )
 
+    async def _byok_enabled(self) -> bool:
+        """Whether BYOK is on. Read from the resolved web-client config so
+        discovery and the UI gate agree on the same value."""
+        from openhands.app_server.config import get_global_config
+
+        config = await get_global_config().web_client.get_web_client_config()
+        return config.feature_flags.allow_user_llm_configuration
+
+    async def _union_with_catalogue(
+        self, proxy_response: ModelsResponse
+    ) -> ModelsResponse:
+        """BYOK on: add the full SDK provider catalogue so users can pick any
+        provider and bring their own key (matches SaaS). Proxy models stay the
+        managed/verified set; catalogue models land unverified ("Other"). BYOK
+        off: return the managed proxy list unchanged."""
+        if not await self._byok_enabled():
+            return proxy_response
+        catalogue = get_supported_llm_models()
+        proxy_models = set(proxy_response.models)
+        extra = [
+            m
+            for m in catalogue.models
+            if not m.startswith(_OPENHANDS_PREFIX) and m not in proxy_models
+        ]
+        return ModelsResponse(
+            models=proxy_response.models + extra,
+            verified_models=proxy_response.verified_models,
+            verified_providers=proxy_response.verified_providers,
+            default_model=proxy_response.default_model,
+            hidden_models=proxy_response.hidden_models,
+            hidden_model_canonicals=proxy_response.hidden_model_canonicals,
+        )
+
     def _is_model_verified(
         self, model_name: str, name: str, models_response: ModelsResponse
     ) -> bool:
-        # Every model the admin curated on the proxy is verified — they are
-        # all listed in verified_models — so the dropdown shows one flat
-        # group instead of an SDK-static verified/other split.
-        return name in set(models_response.verified_models)
+        # Managed proxy models are verified; the unioned SDK catalogue (BYOK)
+        # is not. Require the openhands/ prefix so a catalogue model whose bare
+        # name collides with a proxy one (openai/gpt-5 vs proxy gpt-5) isn't
+        # falsely verified.
+        return model_name.startswith(_OPENHANDS_PREFIX) and name in set(
+            models_response.verified_models
+        )
 
     async def _get_models_response(
         self,
@@ -225,11 +261,15 @@ class LiteLLMProxyModelService(DefaultLLMModelService):
                     'previous result is cached; returning an empty model list',
                     exc_info=True,
                 )
-                # Not cached, so the next request retries immediately.
-                return self._build_response([])
+                # Not cached, so the next request retries immediately. Still
+                # union the catalogue so BYOK users can bring a key while the
+                # proxy is unreachable.
+                return await self._union_with_catalogue(self._build_response([]))
 
-            response = self._build_response(
-                model_names, hidden_model_names, hidden_model_canonicals
+            response = await self._union_with_catalogue(
+                self._build_response(
+                    model_names, hidden_model_names, hidden_model_canonicals
+                )
             )
             cls._shared_response = response
             cls._shared_fetched_at = self._now()

@@ -11,6 +11,8 @@ from server.verified_models.litellm_proxy_model_router import (
     _derive_default_model,
 )
 
+from openhands.app_server.utils.llm import ModelsResponse
+
 LOGGER_NAME = 'server.verified_models.litellm_proxy_model_router'
 
 HAPPY_PAYLOAD = {
@@ -104,6 +106,49 @@ def proxy_env(monkeypatch):
         router_module,
         'get_default_litellm_model',
         lambda: 'litellm_proxy/claude-sonnet-4-5',
+    )
+
+
+@pytest.fixture(autouse=True)
+def byok_off(monkeypatch):
+    """Default BYOK off so the proxy-only tests are unaffected; the union
+    tests opt in via ``byok_on``. (BYOK defaults *on* in real config, so
+    without this every test would hit the real web-client config lookup.)"""
+
+    async def _off(self):
+        return False
+
+    monkeypatch.setattr(LiteLLMProxyModelService, '_byok_enabled', _off)
+
+
+# A deterministic stand-in for the SDK catalogue. Two bare names collide with
+# the proxy's (``gpt-5``, ``claude-sonnet-4-5``) to exercise the verified-flag
+# guard; an ``openhands/``-prefixed entry must be dropped from the union.
+STUB_CATALOGUE = ModelsResponse(
+    models=[
+        'anthropic/claude-sonnet-4-5',
+        'openai/gpt-5',
+        'openai/gpt-4o',
+        'gemini/gemini-2.0-flash',
+        'openhands/should-be-dropped',
+    ],
+    verified_models=['anthropic/claude-sonnet-4-5'],
+    verified_providers=['anthropic'],
+    default_model='anthropic/claude-sonnet-4-5',
+    hidden_models=[],
+    hidden_model_canonicals={},
+)
+
+
+def byok_on(monkeypatch, catalogue=STUB_CATALOGUE):
+    """Turn BYOK on and pin the SDK catalogue the union pulls from."""
+
+    async def _on(self):
+        return True
+
+    monkeypatch.setattr(LiteLLMProxyModelService, '_byok_enabled', _on)
+    monkeypatch.setattr(
+        router_module, 'get_supported_llm_models', lambda *a, **k: catalogue
     )
 
 
@@ -385,6 +430,89 @@ class TestCacheTtl:
         assert len(calls) == 1
         assert len(calls2) == 1
         assert response.models == ['openhands/new-model']
+
+
+class TestByokUnion:
+    """BYOK on unions the SDK catalogue so users can bring their own provider
+    (SaaS parity); BYOK off keeps the managed proxy list only."""
+
+    async def test_byok_off_ignores_catalogue(self, monkeypatch):
+        # Catalogue is available but BYOK is off (autouse default) -> proxy only.
+        monkeypatch.setattr(
+            router_module, 'get_supported_llm_models', lambda *a, **k: STUB_CATALOGUE
+        )
+        install_client(monkeypatch, response=FakeResponse(HAPPY_PAYLOAD))
+
+        response = await LiteLLMProxyModelService()._get_models_response()
+
+        assert response.models == ['openhands/claude-sonnet-4-5', 'openhands/gpt-5']
+
+    async def test_byok_on_unions_catalogue(self, monkeypatch):
+        byok_on(monkeypatch)
+        install_client(monkeypatch, response=FakeResponse(HAPPY_PAYLOAD))
+
+        response = await LiteLLMProxyModelService()._get_models_response()
+
+        # Managed proxy models first (order preserved), then catalogue extras;
+        # the openhands/-prefixed catalogue entry is dropped.
+        assert response.models == [
+            'openhands/claude-sonnet-4-5',
+            'openhands/gpt-5',
+            'anthropic/claude-sonnet-4-5',
+            'openai/gpt-5',
+            'openai/gpt-4o',
+            'gemini/gemini-2.0-flash',
+        ]
+        assert len(response.models) == len(set(response.models))
+        # Proxy stays the verified/default authority; catalogue opinions ignored.
+        assert response.verified_models == ['claude-sonnet-4-5', 'gpt-5']
+        assert response.verified_providers == ['openhands']
+        assert response.default_model == 'openhands/claude-sonnet-4-5'
+
+    async def test_byok_on_only_managed_models_verified(self, monkeypatch):
+        # Regression: a catalogue model whose bare name collides with a proxy
+        # one (openai/gpt-5 vs proxy gpt-5; anthropic/claude-sonnet-4-5 vs
+        # proxy claude-sonnet-4-5) must NOT be marked verified.
+        byok_on(monkeypatch)
+        install_client(monkeypatch, response=FakeResponse(HAPPY_PAYLOAD))
+
+        page = await LiteLLMProxyModelService().search_llm_models()
+        verified = {
+            (m.provider, m.name) for m in page.items if m.verified and not m.hidden
+        }
+
+        assert verified == {('openhands', 'claude-sonnet-4-5'), ('openhands', 'gpt-5')}
+
+    async def test_byok_on_exposes_catalogue_providers(self, monkeypatch):
+        byok_on(monkeypatch)
+        install_client(monkeypatch, response=FakeResponse(HAPPY_PAYLOAD))
+
+        page = await LiteLLMProxyModelService().search_providers()
+
+        # openhands stays the verified managed provider, listed first; catalogue
+        # providers ride along unverified so the picker shows for BYOK users.
+        assert [(p.name, p.verified) for p in page.items] == [
+            ('openhands', True),
+            ('anthropic', False),
+            ('gemini', False),
+            ('openai', False),
+        ]
+
+    async def test_byok_on_serves_catalogue_when_proxy_down(self, monkeypatch):
+        # Proxy unreachable + BYOK on: no managed models, but the catalogue is
+        # still offered so a BYOK user can bring their own key.
+        byok_on(monkeypatch)
+        install_client(monkeypatch, error=httpx.ConnectError('boom'))
+
+        response = await LiteLLMProxyModelService()._get_models_response()
+
+        assert response.models == [
+            'anthropic/claude-sonnet-4-5',
+            'openai/gpt-5',
+            'openai/gpt-4o',
+            'gemini/gemini-2.0-flash',
+        ]
+        assert response.verified_models == []
 
 
 class TestInjector:
