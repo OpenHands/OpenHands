@@ -3,6 +3,14 @@
 from typing import Any, Optional
 from uuid import UUID
 
+from openhands.app_server.settings.settings_models import (
+    Settings,
+    _load_persisted_agent_settings,
+    _load_persisted_conversation_settings,
+)
+from openhands.app_server.utils.jsonpatch_compat import deep_merge
+from openhands.app_server.utils.llm import is_openhands_model
+from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk.settings import (
     AgentSettingsConfig,
     ConversationSettings,
@@ -10,6 +18,10 @@ from openhands.sdk.settings import (
     validate_agent_settings,
 )
 from pydantic import SecretStr
+from sqlalchemy import delete, func, select, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
+
 from server.constants import (
     DEFAULT_V1_ENABLED,
     LITE_LLM_API_URL,
@@ -22,9 +34,6 @@ from server.routes.org_models import (
     OrgUpdate,
     OrphanedUserError,
 )
-from sqlalchemy import delete, func, select, text
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker
 from storage.lite_llm_manager import (
     LiteLlmManager,
@@ -37,15 +46,6 @@ from storage.org_invitation import OrgInvitation
 from storage.org_member import OrgMember
 from storage.user import User
 from storage.user_settings import UserSettings
-
-from openhands.app_server.settings.settings_models import (
-    Settings,
-    _load_persisted_agent_settings,
-    _load_persisted_conversation_settings,
-)
-from openhands.app_server.utils.jsonpatch_compat import deep_merge
-from openhands.app_server.utils.llm import is_openhands_model
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 _ORG_SETTINGS_EXCLUDED_FIELDS = {
     'id',

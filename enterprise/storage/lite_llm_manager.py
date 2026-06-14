@@ -7,7 +7,10 @@ import os
 from typing import Any, Awaitable, Callable
 
 import httpx
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.utils.http_session import httpx_verify_option
 from pydantic import SecretStr
+
 from server.auth.token_manager import TokenManager
 from server.constants import (
     LITE_LLM_API_KEY,
@@ -22,9 +25,6 @@ from server.constants import (
 )
 from server.logger import logger
 from storage.user_settings import UserSettings
-
-from openhands.app_server.settings.settings_models import Settings
-from openhands.app_server.utils.http_session import httpx_verify_option
 
 # Timeout in seconds for key verification requests to LiteLLM
 KEY_VERIFICATION_TIMEOUT = 5.0
@@ -75,7 +75,7 @@ def get_byor_key_alias(keycloak_user_id: str, org_id: str) -> str:
     return f'BYOR Key - user {keycloak_user_id}, org {org_id}'
 
 
-def get_org_team_alias(org_id: str, org_name: str | None, user_id: str) -> str:
+def get_org_team_alias(org_id: str, org_name: str | None, user_id: str | None) -> str:
     """Human-readable LiteLLM team_alias for an org's team.
 
     Personal orgs (org_id == user_id) get "Personal Workspace"; team orgs use
