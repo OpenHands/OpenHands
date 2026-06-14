@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
+from openhands.sdk.llm.utils.openhands_provider import (
+    canonicalize_openhands_llm_payload,
+)
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 from server.constants import LITE_LLM_API_URL
@@ -31,9 +34,6 @@ from openhands.app_server.utils.jsonpatch_compat import (
     deep_merge_with_wholesale_keys,
 )
 from openhands.app_server.utils.llm import is_openhands_model
-from openhands.sdk.llm.utils.openhands_provider import (
-    canonicalize_openhands_llm_payload,
-)
 
 # Agent-settings keys that are private to each org member and must never
 # be written to org-level defaults or broadcast across the org. Today this
@@ -512,23 +512,17 @@ class SaasSettingsStore(SettingsStore):
             org_id,
             openhands_type=openhands_type,
         ):
-            if openhands_type:
-                generated_key = await LiteLlmManager.generate_key(
-                    self.user_id,
-                    org_id,
-                    None,
-                    {'type': 'openhands'},
-                )
-            else:
-                # Must delete any existing key with the same alias first
-                key_alias = get_openhands_cloud_key_alias(self.user_id, org_id)
-                await LiteLlmManager.delete_key_by_alias(key_alias=key_alias)
-                generated_key = await LiteLlmManager.generate_key(
-                    self.user_id,
-                    org_id,
-                    key_alias,
-                    None,
-                )
+            # Both branches mint one managed key per (user, org) under the same
+            # deterministic alias, deleting any prior key first — so switching
+            # the default to/from an openhands/* model never orphans a key.
+            key_alias = get_openhands_cloud_key_alias(self.user_id, org_id)
+            await LiteLlmManager.delete_key_by_alias(key_alias=key_alias)
+            generated_key = await LiteLlmManager.generate_key(
+                self.user_id,
+                org_id,
+                key_alias,
+                {'type': 'openhands'} if openhands_type else None,
+            )
 
             item.agent_settings.llm.api_key = SecretStr(generated_key)
             logger.info(
