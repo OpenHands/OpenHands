@@ -808,10 +808,12 @@ export function LlmSettingsScreen({
             values["llm.model"].trim().length > 0
           )
         }
-        // Without BYOK the advanced header has nothing extra to show, so only
-        // force the Advanced toggle when user LLM configuration is allowed.
-        // (Schema-driven advanced fields can still surface the toggle.)
+        // Without BYOK the Advanced view (custom model + base URL) has nothing
+        // to show, so Basic and Advanced would render identically. Suppress the
+        // Advanced toggle entirely when user LLM configuration is off; force it
+        // on when allowed (the LLM advanced fields aren't schema-driven).
         forceShowAdvancedView={allowUserLlmConfiguration}
+        allowAdvancedView={allowUserLlmConfiguration}
         allowAllView={!isSaasMode}
         testId="llm-settings-screen"
       />

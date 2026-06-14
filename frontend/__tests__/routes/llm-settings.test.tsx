@@ -3277,10 +3277,11 @@ describe("LlmSettingsScreen", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("keeps the basic header (no BYOK inputs) when a schema-driven Advanced toggle is used", async () => {
-      // The Advanced toggle can still surface via real advanced schema
-      // fields; switching to it must not reveal the custom-model/base-URL
-      // inputs.
+    it("suppresses the Advanced toggle when BYOK is off, even with schema-driven advanced fields", async () => {
+      // Without BYOK the LLM Advanced view (custom model + base URL) has
+      // nothing to show, so Basic and Advanced would be identical. The
+      // Advanced toggle is hidden entirely — even when the schema carries
+      // advanced fields that would otherwise surface it.
       vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
         buildSettingsWithAdvancedToggle({
           llm_model: "openai/gpt-4o",
@@ -3294,8 +3295,10 @@ describe("LlmSettingsScreen", () => {
       });
 
       await screen.findByTestId("llm-settings-form-basic");
-      await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
 
+      expect(
+        screen.queryByTestId("sdk-section-advanced-toggle"),
+      ).not.toBeInTheDocument();
       expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
       expect(
         screen.queryByTestId("llm-settings-form-advanced"),
