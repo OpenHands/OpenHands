@@ -3,6 +3,35 @@
 from typing import Any, Optional
 from uuid import UUID
 
+from pydantic import SecretStr
+from server.constants import (
+    DEFAULT_V1_ENABLED,
+    LITE_LLM_API_URL,
+    ORG_SETTINGS_VERSION,
+    get_default_llm_base_url,
+    get_default_llm_model,
+)
+from server.routes.org_models import (
+    OrgMemberSettingsUpdate,
+    OrgUpdate,
+    OrphanedUserError,
+)
+from sqlalchemy import delete, func, select, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
+from storage.database import a_session_maker
+from storage.lite_llm_manager import (
+    LiteLlmManager,
+    get_openhands_cloud_key_alias,
+    get_org_team_alias,
+)
+from storage.org import Org
+from storage.org_git_claim import OrgGitClaim
+from storage.org_invitation import OrgInvitation
+from storage.org_member import OrgMember
+from storage.user import User
+from storage.user_settings import UserSettings
+
 from openhands.app_server.settings.settings_models import (
     Settings,
     _load_persisted_agent_settings,
@@ -17,35 +46,6 @@ from openhands.sdk.settings import (
     OpenHandsAgentSettings,
     validate_agent_settings,
 )
-from pydantic import SecretStr
-from sqlalchemy import delete, func, select, text
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload
-
-from server.constants import (
-    DEFAULT_V1_ENABLED,
-    LITE_LLM_API_URL,
-    ORG_SETTINGS_VERSION,
-    get_default_llm_base_url,
-    get_default_llm_model,
-)
-from server.routes.org_models import (
-    OrgMemberSettingsUpdate,
-    OrgUpdate,
-    OrphanedUserError,
-)
-from storage.database import a_session_maker
-from storage.lite_llm_manager import (
-    LiteLlmManager,
-    get_openhands_cloud_key_alias,
-    get_org_team_alias,
-)
-from storage.org import Org
-from storage.org_git_claim import OrgGitClaim
-from storage.org_invitation import OrgInvitation
-from storage.org_member import OrgMember
-from storage.user import User
-from storage.user_settings import UserSettings
 
 _ORG_SETTINGS_EXCLUDED_FIELDS = {
     'id',

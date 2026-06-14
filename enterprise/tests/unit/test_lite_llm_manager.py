@@ -9,9 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from openhands.app_server.settings.settings_models import Settings
 from pydantic import SecretStr
-
 from server.constants import (
     get_default_litellm_model,
 )
@@ -22,6 +20,8 @@ from storage.lite_llm_manager import (
     get_org_team_alias,
 )
 from storage.user_settings import UserSettings
+
+from openhands.app_server.settings.settings_models import Settings
 
 
 def _agent_value(settings: Settings, key: str):
