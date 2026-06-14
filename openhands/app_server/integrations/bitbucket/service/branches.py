@@ -87,8 +87,8 @@ class BitBucketBranchesMixin(BitBucketMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
-    ) -> list[Branch]:
+        self, repository: str, query: str, page: int = 1, per_page: int = 30
+    ) -> PaginatedBranchesResponse:
         """Search branches by name using Bitbucket API with `q` param."""
         parts = repository.split('/')
         if len(parts) < 2:
@@ -101,6 +101,7 @@ class BitBucketBranchesMixin(BitBucketMixinBase):
         # Bitbucket filtering: name ~ "query"
         params = {
             'pagelen': per_page,
+            'page': page,
             'q': f'name~"{query}"',
             'sort': '-target.date',
         }
@@ -116,4 +117,10 @@ class BitBucketBranchesMixin(BitBucketMixinBase):
                     last_push_date=branch.get('target', {}).get('date', None),
                 )
             )
-        return branches
+        return PaginatedBranchesResponse(
+            branches=branches,
+            has_next_page=response.get('next') is not None,
+            current_page=page,
+            per_page=per_page,
+            total_count=response.get('size'),
+        )

@@ -72,21 +72,31 @@ class BitbucketDCBranchesMixin(BitbucketDCMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
-    ) -> list[Branch]:
+        self, repository: str, query: str, page: int = 1, per_page: int = 30
+    ) -> PaginatedBranchesResponse:
         """Search branches by name using Bitbucket data center API with `q` param."""
         owner, repo = self._extract_owner_and_repo(repository)
 
         url = f'{self._repo_api_base(owner, repo)}/branches'
+        start = max((page - 1) * per_page, 0)
         params = {
             'limit': per_page,
+            'start': start,
             'filterText': query,
             'orderBy': 'MODIFICATION',
         }
 
         response, _ = await self._make_request(url, params)
 
-        return [self._parse_branch(branch) for branch in response.get('values', [])]
+        return PaginatedBranchesResponse(
+            branches=[
+                self._parse_branch(branch) for branch in response.get('values', [])
+            ],
+            has_next_page=not response.get('isLastPage', True),
+            current_page=page,
+            per_page=per_page,
+            total_count=response.get('size'),
+        )
 
     def _parse_branch(self, branch: dict) -> Branch:
         """Normalize Bitbucket branch representations across Cloud and Server."""

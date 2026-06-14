@@ -112,16 +112,21 @@ async def test_search_branches_uses_filter_text():
     with patch.object(
         svc, '_make_request', return_value=(mock_response, {})
     ) as mock_req:
-        branches = await svc.search_branches(
-            'PROJ/myrepo', query='my-thing', per_page=15
+        result = await svc.search_branches(
+            'PROJ/myrepo', query='my-thing', page=2, per_page=15
         )
 
     call_url, call_params = mock_req.call_args[0]
     assert 'filterText' in call_params
     assert call_params['filterText'] == 'my-thing'
+    assert call_params['limit'] == 15
+    assert call_params['start'] == 15
     assert 'q' not in call_params
-    assert len(branches) == 1
-    assert branches[0].name == 'feature/my-thing'
+    assert isinstance(result, PaginatedBranchesResponse)
+    assert result.current_page == 2
+    assert result.per_page == 15
+    assert len(result.branches) == 1
+    assert result.branches[0].name == 'feature/my-thing'
 
 
 # ── get_branches (all pages via _fetch_paginated_data) ───────────────────────

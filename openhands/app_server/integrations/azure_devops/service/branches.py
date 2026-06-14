@@ -140,8 +140,8 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
-    ) -> list[Branch]:
+        self, repository: str, query: str, page: int = 1, per_page: int = 30
+    ) -> PaginatedBranchesResponse:
         """Search for branches within a repository."""
         # Parse repository string: organization/project/repo
         parts = repository.split('/')
@@ -191,10 +191,19 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
                     )
                     filtered_branches.append(branch)
 
-                    if len(filtered_branches) >= per_page:
-                        break
-
-            return filtered_branches
+            start_idx = max((page - 1) * per_page, 0)
+            end_idx = start_idx + per_page
+            return PaginatedBranchesResponse(
+                branches=filtered_branches[start_idx:end_idx],
+                has_next_page=end_idx < len(filtered_branches),
+                current_page=page,
+                per_page=per_page,
+                total_count=len(filtered_branches),
+            )
         except Exception:
-            # Return empty list on error instead of None
-            return []
+            return PaginatedBranchesResponse(
+                branches=[],
+                has_next_page=False,
+                current_page=page,
+                per_page=per_page,
+            )

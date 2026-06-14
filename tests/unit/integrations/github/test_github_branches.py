@@ -112,7 +112,11 @@ async def test_search_branches_github_success_and_variables():
                             },
                             'branchProtectionRule': None,
                         },
-                    ]
+                    ],
+                    'pageInfo': {
+                        'hasNextPage': True,
+                        'endCursor': 'cursor-1',
+                    },
                 }
             }
         }
@@ -120,7 +124,7 @@ async def test_search_branches_github_success_and_variables():
 
     exec_mock = AsyncMock(return_value=graphql_result)
     with patch.object(service, 'execute_graphql_query', exec_mock) as mock_exec:
-        branches = await service.search_branches('foo/bar', query='fe', per_page=999)
+        result = await service.search_branches('foo/bar', query='fe', per_page=999)
 
         # per_page should be clamped to <= 100 when passed to GraphQL variables
         args, kwargs = mock_exec.call_args
@@ -130,7 +134,11 @@ async def test_search_branches_github_success_and_variables():
         assert variables['name'] == 'bar'
         assert variables['query'] == 'fe'
         assert 1 <= variables['perPage'] <= 100
+        assert variables['after'] is None
 
+        assert isinstance(result, PaginatedBranchesResponse)
+        assert result.has_next_page is True
+        branches = result.branches
         assert len(branches) == 2
         b0, b1 = branches
         assert b0.name == 'feature/bar'
@@ -150,15 +158,71 @@ async def test_search_branches_github_edge_cases():
     service = GitHubService(token=SecretStr('t'))
 
     # Empty query should return [] without issuing a GraphQL call
-    branches = await service.search_branches('foo/bar', query='')
-    assert branches == []
+    result = await service.search_branches('foo/bar', query='')
+    assert result.branches == []
 
     # Invalid repository string should return [] without calling GraphQL
     exec_mock = AsyncMock()
     with patch.object(service, 'execute_graphql_query', exec_mock):
-        branches = await service.search_branches('invalidrepo', query='q')
-        assert branches == []
+        result = await service.search_branches('invalidrepo', query='q')
+        assert result.branches == []
         exec_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_search_branches_github_uses_cursor_for_requested_page():
+    service = GitHubService(token=SecretStr('t'))
+
+    first_page = {
+        'data': {
+            'repository': {
+                'refs': {
+                    'nodes': [],
+                    'pageInfo': {
+                        'hasNextPage': True,
+                        'endCursor': 'cursor-1',
+                    },
+                }
+            }
+        }
+    }
+    second_page = {
+        'data': {
+            'repository': {
+                'refs': {
+                    'nodes': [
+                        {
+                            'name': 'feature/second',
+                            'target': {
+                                '__typename': 'Commit',
+                                'oid': 'bbb222',
+                                'committedDate': '2024-01-06T10:00:00Z',
+                            },
+                            'branchProtectionRule': None,
+                        }
+                    ],
+                    'pageInfo': {
+                        'hasNextPage': False,
+                        'endCursor': None,
+                    },
+                }
+            }
+        }
+    }
+
+    exec_mock = AsyncMock(side_effect=[first_page, second_page])
+    with patch.object(service, 'execute_graphql_query', exec_mock):
+        result = await service.search_branches(
+            'foo/bar', query='feature', page=2, per_page=1
+        )
+
+    assert result.current_page == 2
+    assert result.has_next_page is False
+    assert [branch.name for branch in result.branches] == ['feature/second']
+    first_call = exec_mock.call_args_list[0].args[1]
+    second_call = exec_mock.call_args_list[1].args[1]
+    assert first_call['after'] is None
+    assert second_call['after'] == 'cursor-1'
 
 
 @pytest.mark.asyncio
@@ -167,5 +231,5 @@ async def test_search_branches_github_graphql_error_returns_empty():
 
     exec_mock = AsyncMock(side_effect=Exception('Boom'))
     with patch.object(service, 'execute_graphql_query', exec_mock):
-        branches = await service.search_branches('foo/bar', query='q')
-        assert branches == []
+        result = await service.search_branches('foo/bar', query='q')
+        assert result.branches == []

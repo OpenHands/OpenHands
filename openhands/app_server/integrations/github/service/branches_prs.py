@@ -103,12 +103,17 @@ class GitHubBranchesMixin(GitHubMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
-    ) -> list[Branch]:
+        self, repository: str, query: str, page: int = 1, per_page: int = 30
+    ) -> PaginatedBranchesResponse:
         """Search branches by name using GitHub GraphQL with a partial query."""
         # Require a non-empty query
         if not query:
-            return []
+            return PaginatedBranchesResponse(
+                branches=[],
+                has_next_page=False,
+                current_page=page,
+                per_page=per_page,
+            )
 
         # Clamp per_page to GitHub GraphQL limits
         per_page = min(max(per_page, 1), 100)
@@ -116,31 +121,65 @@ class GitHubBranchesMixin(GitHubMixinBase):
         # Extract owner and repo name from the repository string
         parts = repository.split('/')
         if len(parts) < 2:
-            return []
+            return PaginatedBranchesResponse(
+                branches=[],
+                has_next_page=False,
+                current_page=page,
+                per_page=per_page,
+            )
         owner, name = parts[-2], parts[-1]
 
-        variables = {
-            'owner': owner,
-            'name': name,
-            'query': query or '',
-            'perPage': per_page,
-        }
-
+        requested_page = max(page, 1)
+        after = None
+        result = None
         try:
-            result = await self.execute_graphql_query(
-                search_branches_graphql_query, variables
-            )
+            for current_page in range(1, requested_page + 1):
+                variables = {
+                    'owner': owner,
+                    'name': name,
+                    'query': query or '',
+                    'perPage': per_page,
+                    'after': after,
+                }
+                result = await self.execute_graphql_query(
+                    search_branches_graphql_query, variables
+                )
+                refs = result.get('data', {}).get('repository', {}).get('refs')
+                if not refs:
+                    break
+                page_info = refs.get('pageInfo') or {}
+                if current_page < requested_page and not page_info.get(
+                    'hasNextPage', False
+                ):
+                    return PaginatedBranchesResponse(
+                        branches=[],
+                        has_next_page=False,
+                        current_page=requested_page,
+                        per_page=per_page,
+                    )
+                after = page_info.get('endCursor')
         except Exception as e:
             logger.warning(f'Failed to search for branches: {e}')
             # Fallback to empty result on any GraphQL error
-            return []
+            return PaginatedBranchesResponse(
+                branches=[],
+                has_next_page=False,
+                current_page=requested_page,
+                per_page=per_page,
+            )
 
-        repo = result.get('data', {}).get('repository')
+        repo = result.get('data', {}).get('repository') if result else None
         if not repo or not repo.get('refs'):
-            return []
+            return PaginatedBranchesResponse(
+                branches=[],
+                has_next_page=False,
+                current_page=requested_page,
+                per_page=per_page,
+            )
 
         branches: list[Branch] = []
-        for node in repo['refs'].get('nodes', []):
+        refs = repo['refs']
+        for node in refs.get('nodes', []):
             bname = node.get('name') or ''
             target = node.get('target') or {}
             typename = target.get('__typename')
@@ -161,4 +200,10 @@ class GitHubBranchesMixin(GitHubMixinBase):
                 )
             )
 
-        return branches
+        page_info = refs.get('pageInfo') or {}
+        return PaginatedBranchesResponse(
+            branches=branches,
+            has_next_page=page_info.get('hasNextPage', False),
+            current_page=requested_page,
+            per_page=per_page,
+        )
