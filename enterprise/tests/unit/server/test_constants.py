@@ -8,6 +8,11 @@ import pytest
 class TestDeploymentMode:
     """Tests for _get_deployment_mode() and _is_all_hands_managed_domain() functions."""
 
+    @pytest.fixture(autouse=True)
+    def _no_explicit_mode(self, monkeypatch):
+        """Host-heuristic tests must ignore any ambient OH_DEPLOYMENT_MODE."""
+        monkeypatch.delenv('OH_DEPLOYMENT_MODE', raising=False)
+
     @pytest.mark.parametrize(
         'web_host,expected_mode',
         [
@@ -33,6 +38,34 @@ class TestDeploymentMode:
         """Test that DEPLOYMENT_MODE is correctly determined based on WEB_HOST."""
         with patch.dict('os.environ', {'WEB_HOST': web_host}):
             # Need to reimport to pick up the mocked environment variable
+            import importlib
+
+            import server.constants as constants_module
+
+            importlib.reload(constants_module)
+
+            assert constants_module.DEPLOYMENT_MODE == expected_mode
+
+    @pytest.mark.parametrize(
+        'flag,web_host,expected_mode',
+        [
+            # Explicit flag wins over the host heuristic
+            ('self_hosted', 'app.all-hands.dev', 'self_hosted'),
+            ('cloud', 'openhands.acme.com', 'cloud'),
+            # Case/whitespace tolerant
+            ('  Self_Hosted ', 'app.all-hands.dev', 'self_hosted'),
+            # Invalid/empty values fall back to the host heuristic
+            ('bogus', 'app.all-hands.dev', 'cloud'),
+            ('', 'openhands.acme.com', 'self_hosted'),
+        ],
+    )
+    def test_explicit_deployment_mode_overrides_host(
+        self, flag: str, web_host: str, expected_mode: str
+    ):
+        """OH_DEPLOYMENT_MODE takes precedence; invalid values fall back to WEB_HOST."""
+        with patch.dict(
+            'os.environ', {'OH_DEPLOYMENT_MODE': flag, 'WEB_HOST': web_host}
+        ):
             import importlib
 
             import server.constants as constants_module
