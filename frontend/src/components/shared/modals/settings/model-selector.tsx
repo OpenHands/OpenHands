@@ -101,6 +101,17 @@ export function ModelSelector({
     }
   }, [currentModel]);
 
+  // With a single provider (e.g. managed OHE's bundled proxy) there is nothing
+  // to pick — auto-select it so the picker below can be hidden.
+  React.useEffect(() => {
+    if (providers.length === 1 && !selectedProvider && !currentModel) {
+      const provider = providers[0].name;
+      setSelectedProvider(provider);
+      setLitellmId(`${provider}/`);
+      onChange?.(provider, null);
+    }
+  }, [providers, selectedProvider, currentModel]);
+
   const handleChangeProvider = (provider: string) => {
     setSelectedProvider(provider);
     setSelectedModel(null);
@@ -133,68 +144,70 @@ export function ModelSelector({
         wrapperClassName,
       )}
     >
-      <fieldset className="flex flex-col gap-2.5 w-full">
-        <label className={cn("text-sm", labelClassName)}>
-          {t(I18nKey.LLM$PROVIDER)}
-        </label>
-        <Autocomplete
-          data-testid="llm-provider-input"
-          isRequired
-          isVirtualized={false}
-          name="llm-provider-input"
-          isDisabled={isDisabled}
-          aria-label={t(I18nKey.LLM$PROVIDER)}
-          placeholder={t(I18nKey.LLM$SELECT_PROVIDER_PLACEHOLDER)}
-          isClearable={false}
-          onSelectionChange={(e) => {
-            if (e?.toString()) handleChangeProvider(e.toString());
-          }}
-          onInputChange={(value) => !value && clear()}
-          defaultSelectedKey={selectedProvider ?? undefined}
-          selectedKey={selectedProvider}
-          classNames={{
-            popoverContent: "bg-tertiary rounded-xl border border-[#717888]",
-          }}
-          inputProps={{
-            classNames: {
-              inputWrapper:
-                "bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic",
-            },
-          }}
-        >
-          <AutocompleteSection
-            title={
-              unverifiedProviders.length > 0
-                ? t(I18nKey.MODEL_SELECTOR$VERIFIED)
-                : undefined
-            }
+      {providers.length !== 1 ? (
+        <fieldset className="flex flex-col gap-2.5 w-full">
+          <label className={cn("text-sm", labelClassName)}>
+            {t(I18nKey.LLM$PROVIDER)}
+          </label>
+          <Autocomplete
+            data-testid="llm-provider-input"
+            isRequired
+            isVirtualized={false}
+            name="llm-provider-input"
+            isDisabled={isDisabled}
+            aria-label={t(I18nKey.LLM$PROVIDER)}
+            placeholder={t(I18nKey.LLM$SELECT_PROVIDER_PLACEHOLDER)}
+            isClearable={false}
+            onSelectionChange={(e) => {
+              if (e?.toString()) handleChangeProvider(e.toString());
+            }}
+            onInputChange={(value) => !value && clear()}
+            defaultSelectedKey={selectedProvider ?? undefined}
+            selectedKey={selectedProvider}
+            classNames={{
+              popoverContent: "bg-tertiary rounded-xl border border-[#717888]",
+            }}
+            inputProps={{
+              classNames: {
+                inputWrapper:
+                  "bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic",
+              },
+            }}
           >
-            {verifiedProviders.map((provider) => (
-              <AutocompleteItem
-                data-testid={`provider-item-${provider.name}`}
-                key={provider.name}
-              >
-                {mapProvider(provider.name)}
-              </AutocompleteItem>
-            ))}
-          </AutocompleteSection>
-          {unverifiedProviders.length > 0 ? (
             <AutocompleteSection
               title={
-                verifiedProviders.length > 0
-                  ? t(I18nKey.MODEL_SELECTOR$OTHERS)
+                unverifiedProviders.length > 0
+                  ? t(I18nKey.MODEL_SELECTOR$VERIFIED)
                   : undefined
               }
             >
-              {unverifiedProviders.map((provider) => (
-                <AutocompleteItem key={provider.name}>
+              {verifiedProviders.map((provider) => (
+                <AutocompleteItem
+                  data-testid={`provider-item-${provider.name}`}
+                  key={provider.name}
+                >
                   {mapProvider(provider.name)}
                 </AutocompleteItem>
               ))}
             </AutocompleteSection>
-          ) : null}
-        </Autocomplete>
-      </fieldset>
+            {unverifiedProviders.length > 0 ? (
+              <AutocompleteSection
+                title={
+                  verifiedProviders.length > 0
+                    ? t(I18nKey.MODEL_SELECTOR$OTHERS)
+                    : undefined
+                }
+              >
+                {unverifiedProviders.map((provider) => (
+                  <AutocompleteItem key={provider.name}>
+                    {mapProvider(provider.name)}
+                  </AutocompleteItem>
+                ))}
+              </AutocompleteSection>
+            ) : null}
+          </Autocomplete>
+        </fieldset>
+      ) : null}
 
       {selectedProvider === "openhands" && isEnterpriseCloud && (
         <HelpLink
