@@ -30,7 +30,6 @@ from openhands.app_server.integrations.gitlab.constants import GITLAB_HOST
 from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
 from openhands.app_server.integrations.service_types import (
     AuthenticationError,
-    Branch,
     GitService,
     InstallationsService,
     PaginatedBranchesResponse,

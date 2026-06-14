@@ -20,7 +20,6 @@ from openhands.app_server.git.git_models import (
 )
 from openhands.app_server.integrations.provider import ProviderHandler
 from openhands.app_server.integrations.service_types import (
-    Branch,
     ProviderType,
     Repository,
     SuggestedTask,
