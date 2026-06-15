@@ -407,6 +407,9 @@ class SaveProfileRequest(BaseModel):
 
     include_secrets: bool = True
     llm: StrictLLM | None = None
+    # Set when the caller has no new key (UI key field left blank), so an
+    # existing profile's stored key survives instead of the snapshotted active one.
+    preserve_existing_api_key: bool = False
 
 
 @router.get('/profiles', response_model=ProfileListResponse)
@@ -485,6 +488,7 @@ async def save_profile(
                 detail='Settings not found',
             )
 
+        existing = settings.llm_profiles.get(name)
         llm: LLM
         if request.llm is not None:
             llm = request.llm
@@ -492,12 +496,15 @@ async def save_profile(
             # update (e.g. a frontend round-tripping a GET response where
             # the key was nulled out). Mirrors the deep-merge behaviour
             # the main ``POST /api/v1/settings`` relies on.
-            if llm.api_key is None:
-                existing = settings.llm_profiles.get(name)
-                if existing is not None and existing.api_key is not None:
+            if llm.api_key is None and existing is not None:
+                if existing.api_key is not None:
                     llm = llm.model_copy(update={'api_key': existing.api_key})
         else:
             llm = settings.agent_settings.llm
+        if request.preserve_existing_api_key and existing is not None:
+            # Caller has no new key: keep the profile's stored key (even "no
+            # key") instead of the snapshotted active-settings key.
+            llm = llm.model_copy(update={'api_key': existing.api_key})
 
         try:
             settings.llm_profiles.save(

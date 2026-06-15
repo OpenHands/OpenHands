@@ -7,43 +7,30 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
-import { OrganizationUserRole } from "#/types/org";
 
-export const useInviteMembersBatch = () => {
+export const useRevokeInvitation = () => {
   const queryClient = useQueryClient();
   const { organizationId } = useSelectedOrganizationId();
   const { t } = useTranslation();
 
   return useMutation({
-    mutationFn: ({
-      emails,
-      role,
-    }: {
-      emails: string[];
-      role?: OrganizationUserRole;
-    }) => {
+    mutationFn: ({ invitationId }: { invitationId: number }) => {
       if (!organizationId) {
         throw new Error("Organization ID is required");
       }
-      return organizationService.inviteMembers({
+      return organizationService.revokeInvitation({
         orgId: organizationId,
-        emails,
-        role,
+        invitationId,
       });
     },
     onSuccess: () => {
-      displaySuccessToast(t(I18nKey.ORG$INVITE_MEMBERS_SUCCESS));
-      queryClient.invalidateQueries({
-        queryKey: ["organizations", "members", organizationId],
-      });
+      displaySuccessToast(t(I18nKey.ORG$INVITATION_REVOKED));
       queryClient.invalidateQueries({
         queryKey: ["organizations", "pending-invitations", organizationId],
       });
     },
-    onError: (error) => {
-      const errorMessage = retrieveAxiosErrorMessage(error);
-      displayErrorToast(errorMessage || t(I18nKey.ORG$INVITE_MEMBERS_ERROR));
+    onError: () => {
+      displayErrorToast(t(I18nKey.ORG$INVITATION_REVOKE_ERROR));
     },
   });
 };

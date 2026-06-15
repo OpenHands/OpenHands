@@ -17,6 +17,7 @@ from storage.lite_llm_manager import (
     LiteLlmManager,
     get_byor_key_alias,
     get_openhands_cloud_key_alias,
+    get_org_team_alias,
 )
 from storage.user_settings import UserSettings
 
@@ -35,6 +36,58 @@ def _secret_value(settings: Settings, key: str):
     """Navigate into settings.agent_settings and unwrap SecretStr values."""
     secret = _agent_value(settings, key)
     return secret.get_secret_value() if secret else None
+
+
+class TestOrgTeamAlias:
+    """Human-readable LiteLLM team_alias derivation."""
+
+    def test_personal_org_labeled_personal_workspace(self):
+        # Personal org: org_id == user_id.
+        assert get_org_team_alias('user-1', 'ignored', 'user-1') == 'Personal Workspace'
+
+    def test_team_org_uses_display_name(self):
+        assert get_org_team_alias('org-2', 'Acme Inc', 'user-1') == 'Acme Inc'
+
+    def test_team_org_without_name_falls_back_to_id_not_uid(self):
+        # Never the bare user uid (the old behavior that hid teams).
+        assert get_org_team_alias('org-2', None, 'user-1') == 'Organization org-2'
+
+    @pytest.mark.asyncio
+    async def test_team_alias_for_org_personal_skips_lookup(self):
+        # Personal org short-circuits without touching OrgStore.
+        with patch(
+            'storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock
+        ) as mock_get:
+            alias = await LiteLlmManager._team_alias_for_org('user-1', 'user-1')
+        assert alias == 'Personal Workspace'
+        mock_get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_team_alias_for_org_team_resolves_name(self):
+        org = MagicMock()
+        org.name = 'Acme Inc'
+        with patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=org,
+        ):
+            alias = await LiteLlmManager._team_alias_for_org(
+                '11111111-1111-1111-1111-111111111111', 'user-1'
+            )
+        assert alias == 'Acme Inc'
+
+    @pytest.mark.asyncio
+    async def test_team_alias_for_org_lookup_failure_falls_back(self):
+        # A lookup failure must not crash team creation.
+        with patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            side_effect=RuntimeError('db down'),
+        ):
+            alias = await LiteLlmManager._team_alias_for_org(
+                '11111111-1111-1111-1111-111111111111', 'user-1'
+            )
+        assert alias == 'Organization 11111111-1111-1111-1111-111111111111'
 
 
 class TestDefaultInitialBudget:
