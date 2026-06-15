@@ -1233,7 +1233,12 @@ class TestGetMaxConcurrentSandboxes:
 
     @pytest.mark.asyncio
     async def test_returns_org_member_override_when_set(
-        self, user_id, org_id, mock_user, mock_org_member_with_override, mock_org_with_limit
+        self,
+        user_id,
+        org_id,
+        mock_user,
+        mock_org_member_with_override,
+        mock_org_with_limit,
     ):
         """
         GIVEN: User has an org_member with max_concurrent_sandboxes_override set
@@ -1269,7 +1274,12 @@ class TestGetMaxConcurrentSandboxes:
 
     @pytest.mark.asyncio
     async def test_returns_org_default_when_override_is_none(
-        self, user_id, org_id, mock_user, mock_org_member_no_override, mock_org_with_limit
+        self,
+        user_id,
+        org_id,
+        mock_user,
+        mock_org_member_no_override,
+        mock_org_with_limit,
     ):
         """
         GIVEN: User has org_member with override=None, org has max_concurrent_sandboxes set
@@ -1389,12 +1399,8 @@ class TestGetMaxConcurrentSandboxes:
             refresh_token=SecretStr('refresh_token'),
         )
 
-        with patch(
-            'server.auth.saas_user_auth.UserStore'
-        ) as mock_user_store:
-            mock_user_store.get_user_by_id = AsyncMock(
-                return_value=mock_user_no_org
-            )
+        with patch('server.auth.saas_user_auth.UserStore') as mock_user_store:
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user_no_org)
 
             result = await user_auth.get_max_concurrent_sandboxes()
 
@@ -1412,9 +1418,7 @@ class TestGetMaxConcurrentSandboxes:
             refresh_token=SecretStr('refresh_token'),
         )
 
-        with patch(
-            'server.auth.saas_user_auth.UserStore'
-        ) as mock_user_store:
+        with patch('server.auth.saas_user_auth.UserStore') as mock_user_store:
             mock_user_store.get_user_by_id = AsyncMock(return_value=None)
 
             result = await user_auth.get_max_concurrent_sandboxes()
