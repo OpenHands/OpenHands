@@ -120,7 +120,6 @@ def create_stored_sandbox(
     spec_id: str = 'test-image:latest',
     created_at: datetime | None = None,
     session_api_key_hash: str | None = None,
-    is_paused: bool = False,
 ) -> StoredRemoteSandbox:
     """Helper function to create StoredRemoteSandbox for testing."""
     if created_at is None:
@@ -132,7 +131,6 @@ def create_stored_sandbox(
         sandbox_spec_id=spec_id,
         session_api_key_hash=session_api_key_hash,
         created_at=created_at,
-        is_paused=is_paused,
     )
 
 

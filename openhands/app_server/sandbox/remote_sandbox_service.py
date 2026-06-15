@@ -12,7 +12,7 @@ import base62
 import httpx
 from fastapi import Request
 from pydantic import Field
-from sqlalchemy import Boolean, String, func, select
+from sqlalchemy import String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -93,7 +93,6 @@ class StoredRemoteSandbox(Base):
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now(), index=True
     )
-    is_paused: Mapped[bool] = mapped_column(Boolean, default=False, server_default='0')
 
 
 @dataclass
@@ -581,7 +580,6 @@ class RemoteSandboxService(SandboxService):
                     f'Updated session_api_key_hash for sandbox {sandbox_id} after resume'
                 )
 
-            stored_sandbox.is_paused = False
             return True
         except httpx.HTTPError as e:
             _logger.error(f'Error resuming sandbox {sandbox_id}: {e}')
@@ -601,7 +599,6 @@ class RemoteSandboxService(SandboxService):
             # Security: Invalidate the session API key hash to prevent
             # leaked keys from being used while the sandbox is paused.
             stored_sandbox.session_api_key_hash = None
-            stored_sandbox.is_paused = True
 
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
