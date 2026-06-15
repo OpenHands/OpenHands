@@ -64,12 +64,17 @@ class Org(Base):
     max_budget_per_task: Mapped[float | None] = mapped_column(nullable=True)
     v1_enabled: Mapped[bool | None] = mapped_column(nullable=True)
     conversation_expiration: Mapped[int | None] = mapped_column(nullable=True)
+    # Source of truth for BYOR/OpenHands LLM key export entitlement.
+    # Set by completed billing sessions or when positive org credits are detected.
     byor_export_enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
     sandbox_grouping_strategy: Mapped[str | None] = mapped_column(String, nullable=True)
     # Encrypted column for LLM profiles (contains API keys)
     llm_profiles: Mapped[dict[str, Any] | None] = mapped_column(
         EncryptedJSON, nullable=True
     )
+    # Marks the bootstrapped default org on OHE installs; a partial unique
+    # index allows at most one default org per install.
+    is_default: Mapped[bool] = mapped_column(nullable=False, default=False)
 
     # Relationships
     org_members: Mapped[list['OrgMember']] = relationship(

@@ -24,6 +24,7 @@ from openhands.app_server.sandbox.sandbox_models import (
     ExposedUrl,
     SandboxInfo,
     SandboxPage,
+    SandboxRecord,
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import (
@@ -353,6 +354,26 @@ class DockerSandboxService(SandboxService):
                     if container_session_key == session_api_key:
                         return await self._container_to_checked_sandbox_info(container)
 
+            return None
+        except (NotFound, APIError):
+            return None
+
+    async def get_sandbox_record_by_session_api_key(
+        self, session_api_key: str
+    ) -> SandboxRecord | None:
+        """Get persisted sandbox identity by session API key."""
+        try:
+            all_containers = self.docker_client.containers.list(all=True)
+            for container in all_containers:
+                if container.name and container.name.startswith(
+                    self.container_name_prefix
+                ):
+                    env_vars = self._get_container_env_vars(container)
+                    if env_vars.get(SESSION_API_KEY_VARIABLE) == session_api_key:
+                        return SandboxRecord(
+                            id=container.name,
+                            created_by_user_id=None,
+                        )
             return None
         except (NotFound, APIError):
             return None

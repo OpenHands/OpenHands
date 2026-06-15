@@ -37,6 +37,7 @@ from openhands.app_server.settings.settings_models import (
 )
 from openhands.app_server.utils.llm import MASKED_API_KEY, is_openhands_model
 from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk.llm import LLM
 
 from ..auth.authorization import Permission, require_permission
 
@@ -89,6 +90,9 @@ class SaveProfileRequest(BaseModel):
 
     include_secrets: bool = True
     llm: StrictLLM | None = None
+    # Set when the caller has no new key (UI key field left blank), so an
+    # existing profile's stored key survives instead of the snapshotted one.
+    preserve_existing_api_key: bool = False
 
 
 class RenameProfileRequest(BaseModel):
@@ -211,19 +215,26 @@ async def save_profile(
     If ``llm`` is omitted, saves a copy of the current org LLM defaults.
     """
     async with _org_profiles_transaction(org_id, user_id) as (_session, org, profiles):
+        existing = profiles.get(name)
+        llm: LLM
+        if request.llm is not None:
+            llm = request.llm
+            # Preserve the stored api_key when an update omits it (e.g. a
+            # round-tripped GET response) — mirrors the personal profiles route.
+            if llm.api_key is None and existing is not None:
+                if existing.api_key is not None:
+                    llm = llm.model_copy(update={'api_key': existing.api_key})
+        else:
+            # Snapshot current org LLM settings. Route through the persisted
+            # loader so legacy/canonical ``agent_kind`` discriminator values
+            # ('llm' vs 'openhands') both validate.
+            llm = _load_persisted_agent_settings(org.agent_settings).llm
+        if request.preserve_existing_api_key and existing is not None:
+            # Caller has no new key: keep the profile's stored key (even "no
+            # key") instead of the snapshotted one.
+            llm = llm.model_copy(update={'api_key': existing.api_key})
         try:
-            if request.llm is not None:
-                profiles.save(
-                    name, request.llm, include_secrets=request.include_secrets
-                )
-            else:
-                # Snapshot current org LLM settings. Route through the persisted
-                # loader so legacy/canonical ``agent_kind`` discriminator values
-                # ('llm' vs 'openhands') both validate.
-                agent_settings = _load_persisted_agent_settings(org.agent_settings)
-                profiles.save(
-                    name, agent_settings.llm, include_secrets=request.include_secrets
-                )
+            profiles.save(name, llm, include_secrets=request.include_secrets)
         except ProfileLimitExceededError as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 

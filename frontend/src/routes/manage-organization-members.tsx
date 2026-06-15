@@ -9,6 +9,9 @@ import { useOrganizationMembers } from "#/hooks/query/use-organization-members";
 import { useOrganizationMembersCount } from "#/hooks/query/use-organization-members-count";
 import { OrganizationMember, OrganizationUserRole } from "#/types/org";
 import { OrganizationMemberListItem } from "#/components/features/org/organization-member-list-item";
+import { PendingInvitationListItem } from "#/components/features/org/pending-invitation-list-item";
+import { usePendingInvitations } from "#/hooks/query/use-pending-invitations";
+import { useRevokeInvitation } from "#/hooks/mutation/use-revoke-invitation";
 import { useUpdateMemberRole } from "#/hooks/mutation/use-update-member-role";
 import { useRemoveMember } from "#/hooks/mutation/use-remove-member";
 import { useMe } from "#/hooks/query/use-me";
@@ -77,6 +80,19 @@ function ManageOrganizationMembers() {
 
   const { hasPermission } = usePermission(currentUserRole);
   const hasPermissionToInvite = hasPermission("invite_user_to_organization");
+
+  // Pending invitations render as rows in the members list (with an
+  // "Invited" chip); the backing endpoint is invite-permission gated.
+  const { data: pendingData } = usePendingInvitations(hasPermissionToInvite);
+  const { mutate: revokeInvitation, isPending: isRevokingInvitation } =
+    useRevokeInvitation();
+  const pendingInvitations = (pendingData?.items ?? []).filter(
+    (invitation) =>
+      !debouncedEmailFilter ||
+      invitation.email
+        .toLowerCase()
+        .includes(debouncedEmailFilter.toLowerCase()),
+  );
 
   // Calculate total pages
   const totalPages =
@@ -223,8 +239,28 @@ function ManageOrganizationMembers() {
             </ul>
           )}
 
+        {!isLoading && !hasError && pendingInvitations.length > 0 && (
+          <ul data-testid="pending-invitations-rows">
+            {pendingInvitations.map((invitation) => (
+              <li
+                key={`invitation-${invitation.id}`}
+                className="border-b border-org-divider last:border-none px-6"
+              >
+                <PendingInvitationListItem
+                  invitation={invitation}
+                  isRevoking={isRevokingInvitation}
+                  onRevoke={() =>
+                    revokeInvitation({ invitationId: invitation.id })
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+
         {!isLoading &&
           !hasError &&
+          pendingInvitations.length === 0 &&
           (!membersData?.items || membersData.items.length === 0) && (
             <div className="flex items-center justify-center p-8 text-tertiary-alt">
               {debouncedEmailFilter

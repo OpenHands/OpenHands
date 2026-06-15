@@ -34,6 +34,8 @@ from server.auth.constants import (
     AUTOMATION_WEBHOOK_SECRET,
 )
 from server.auth.token_manager import TokenManager
+from storage.default_org_service import get_default_org_config
+from storage.org_store import OrgStore
 from storage.redis import get_redis_client_async
 
 from openhands.app_server.integrations.provider import ProviderType
@@ -42,10 +44,13 @@ from openhands.app_server.utils.logger import openhands_logger as logger
 # Cache TTL constants
 ORG_CLAIM_CACHE_TTL_SECONDS = 3600  # 1 hour for org claims (rarely change)
 USER_ID_CACHE_TTL_SECONDS = 86400  # 24 hours for user ID mappings (never change)
+# Short TTL so creating a second team org switches the fallback off promptly.
+DEFAULT_ORG_FALLBACK_CACHE_TTL_SECONDS = 300
 
 # Cache key prefixes (provider is appended dynamically)
 ORG_CLAIM_CACHE_PREFIX = 'automation:org_claim'
 USER_ID_CACHE_PREFIX = 'automation:idp_to_kc_user'
+DEFAULT_ORG_FALLBACK_CACHE_KEY = 'automation:default_org_fallback'
 
 
 @dataclass
@@ -216,6 +221,12 @@ class AutomationEventService:
                     f'{git_org_name} to personal org {org_id} ({provider.value})'
                 )
 
+        # Fallback for single-org installs with a bootstrapped default org:
+        # route unclaimed repos there instead of dropping the event. Claims
+        # always take precedence above.
+        if not org_id:
+            org_id = await self._resolve_default_org_fallback(provider, git_org_name)
+
         if not org_id:
             logger.warning(
                 f'[AutomationEventService] {provider.value} org {git_org_name} '
@@ -224,6 +235,46 @@ class AutomationEventService:
             return None
 
         return OrgContext(org_id=org_id, git_org=git_org_name)
+
+    async def _resolve_default_org_fallback(
+        self, provider: ProviderType, git_org_name: str
+    ) -> UUID | None:
+        """Resolve unclaimed events to the bootstrapped default org.
+
+        Applies only when the default org is enabled (OPENHANDS_DEFAULT_ORG_*)
+        and exactly one team org exists in the install — the default org
+        itself, located by its is_default flag (with zero team orgs the
+        default org has not been created yet, so nothing resolves). The
+        moment a second team org exists the fallback switches off (within
+        the cache TTL) and routing reverts to explicit claims, so events can
+        never cross org boundaries in multi-org installs.
+        """
+        config = get_default_org_config()
+        if not config.enabled:
+            return None
+
+        cached = await self._get_cached_value(DEFAULT_ORG_FALLBACK_CACHE_KEY)
+        if cached is not None:
+            return None if cached == 'none' else UUID(cached)
+
+        org_id: UUID | None = None
+        org = await OrgStore.get_default_org()
+        if org and await OrgStore.count_team_orgs() == 1:
+            org_id = org.id
+
+        await self._set_cached_value(
+            DEFAULT_ORG_FALLBACK_CACHE_KEY,
+            str(org_id) if org_id else 'none',
+            DEFAULT_ORG_FALLBACK_CACHE_TTL_SECONDS,
+        )
+
+        if org_id:
+            logger.info(
+                f'[AutomationEventService] Routing unclaimed {provider.value} '
+                f'org {git_org_name} to default org {org_id} '
+                f'(single-org install fallback)'
+            )
+        return org_id
 
     def _extract_owner_info(
         self, provider: ProviderType, payload: dict[str, Any]

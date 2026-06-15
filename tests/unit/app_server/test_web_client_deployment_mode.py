@@ -12,6 +12,12 @@ from openhands.app_server.web_client.web_client_deployment_mode import (
 class TestGetDeploymentMode:
     """Tests for get_deployment_mode() function."""
 
+    @pytest.fixture(autouse=True)
+    def _hermetic_env(self, monkeypatch):
+        """Each test fully controls deployment-mode env; ignore ambient values."""
+        for var in ('OH_DEPLOYMENT_MODE', 'OH_WEB_HOST', 'WEB_HOST'):
+            monkeypatch.delenv(var, raising=False)
+
     @pytest.mark.parametrize(
         'web_host,expected',
         [
@@ -79,3 +85,26 @@ class TestGetDeploymentMode:
                 del os.environ['OH_WEB_HOST']
             result = get_deployment_mode()
             assert result == 'self_hosted'
+
+    @pytest.mark.parametrize(
+        'flag,web_host,expected',
+        [
+            # Explicit flag wins over the host heuristic
+            ('self_hosted', 'app.all-hands.dev', 'self_hosted'),
+            ('cloud', 'customer.example.com', 'cloud'),
+            # Case/whitespace tolerant
+            (' Cloud ', 'customer.example.com', 'cloud'),
+            # Invalid value falls back to the host chain
+            ('bogus', 'app.all-hands.dev', 'cloud'),
+        ],
+    )
+    def test_explicit_deployment_mode_overrides_host(
+        self, flag: str, web_host: str, expected: str
+    ):
+        """OH_DEPLOYMENT_MODE takes precedence; invalid values fall back to WEB_HOST."""
+        with patch.dict(
+            'os.environ',
+            {'OH_DEPLOYMENT_MODE': flag, 'WEB_HOST': web_host},
+            clear=False,
+        ):
+            assert get_deployment_mode() == expected

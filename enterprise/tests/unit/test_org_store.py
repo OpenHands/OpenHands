@@ -77,6 +77,28 @@ async def test_get_org_by_id_not_found(async_session_maker):
 
 
 @pytest.mark.asyncio
+async def test_enable_byor_export_persists_flag(async_session_maker):
+    async with async_session_maker() as session:
+        org = Org(name=f'test-org-{uuid.uuid4()}')
+        session.add(org)
+        await session.commit()
+        await session.refresh(org)
+        org_id = org.id
+        assert org.byor_export_enabled is False
+
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        updated_org = await OrgStore.enable_byor_export(org_id)
+
+    assert updated_org is not None
+    assert updated_org.byor_export_enabled is True
+
+    async with async_session_maker() as session:
+        persisted_org = await session.get(Org, org_id)
+        assert persisted_org is not None
+        assert persisted_org.byor_export_enabled is True
+
+
+@pytest.mark.asyncio
 async def test_list_orgs(async_session_maker, mock_litellm_api):
     # Test listing all orgs
     async with async_session_maker() as session:
@@ -135,7 +157,7 @@ async def test_update_org(async_session_maker, mock_litellm_api):
         assert updated_org is not None
         assert updated_org.name == 'updated-org'
         agent_settings = OrgStore.get_agent_settings_from_org(updated_org)
-        assert agent_settings.llm.model == 'litellm_proxy/claude-3'
+        assert agent_settings.llm.model == 'openhands/claude-3'
 
 
 def test_get_org_settings_from_org_use_persisted_loaders():
@@ -641,7 +663,13 @@ async def test_delete_org_cascade_success(async_session_maker, mock_litellm_api)
         session.add(expected_org)
         await session.commit()
 
-    with patch('storage.org_store.a_session_maker', async_session_maker):
+    with (
+        patch('storage.org_store.a_session_maker', async_session_maker),
+        patch(
+            'storage.org_store.OrgStore._delete_litellm_user_best_effort',
+            new=AsyncMock(),
+        ) as mock_delete_litellm_user,
+    ):
         # Act
         result = await OrgStore.delete_org_cascade(org_id)
 
@@ -651,6 +679,38 @@ async def test_delete_org_cascade_success(async_session_maker, mock_litellm_api)
     assert result.name == 'Test Organization'
     assert result.contact_name == 'John Doe'
     assert result.contact_email == 'john@example.com'
+    mock_delete_litellm_user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_litellm_user_best_effort_calls_litellm():
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+
+    with patch(
+        'storage.org_store.LiteLlmManager.delete_user', new=AsyncMock()
+    ) as mock_delete_user:
+        await OrgStore._delete_litellm_user_best_effort(user_id, org_id)
+
+    mock_delete_user.assert_called_once_with(user_id)
+
+
+@pytest.mark.asyncio
+async def test_delete_litellm_user_best_effort_swallows_litellm_failure():
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+
+    with (
+        patch(
+            'storage.org_store.LiteLlmManager.delete_user',
+            new=AsyncMock(side_effect=Exception('LiteLLM API unavailable')),
+        ) as mock_delete_user,
+        patch('storage.org_store.logger.warning') as mock_warning,
+    ):
+        await OrgStore._delete_litellm_user_best_effort(user_id, org_id)
+
+    mock_delete_user.assert_called_once_with(user_id)
+    mock_warning.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -1067,7 +1127,13 @@ async def test_delete_org_cascade_sole_org_requester_is_deleted(
         await session.commit()
 
     # Act
-    with patch('storage.org_store.a_session_maker', async_session_maker):
+    with (
+        patch('storage.org_store.a_session_maker', async_session_maker),
+        patch(
+            'storage.org_store.OrgStore._delete_litellm_user_best_effort',
+            new=AsyncMock(),
+        ) as mock_delete_litellm_user,
+    ):
         result = await OrgStore.delete_org_cascade(
             org_id, requester_user_id=str(user_id)
         )
@@ -1075,6 +1141,7 @@ async def test_delete_org_cascade_sole_org_requester_is_deleted(
     # Assert: the deleted org is returned, and the user/org/member rows are gone.
     assert result is not None
     assert result.id == org_id
+    mock_delete_litellm_user.assert_called_once_with(str(user_id), org_id)
 
     async with async_session_maker() as session:
         assert await session.get(Org, org_id) is None
@@ -1427,7 +1494,7 @@ async def test_update_org_defaults_async_propagates_managed_key_reset():
 
     assert result is not None
     agent_settings = OrgStore.get_agent_settings_from_org(result)
-    assert agent_settings.llm.model == 'litellm_proxy/claude-3'
+    assert agent_settings.llm.model == 'openhands/claude-3'
     mock_member_update.assert_called_once()
     member_settings = mock_member_update.call_args[0][2]
     assert member_settings.llm_api_key.get_secret_value() == 'managed-key'
@@ -1514,3 +1581,20 @@ async def test_update_org_defaults_async_org_not_found():
 
     # Assert
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_count_team_orgs_excludes_personal_workspaces(async_session_maker):
+    user_id = uuid.uuid4()
+    async with async_session_maker() as session:
+        # Personal workspace: org id matches the user id
+        personal_org = Org(id=user_id, name=f'user_{user_id}_org')
+        session.add(personal_org)
+        await session.commit()
+        session.add(User(id=user_id, current_org_id=user_id))
+        team_org = Org(name='team-org')
+        session.add(team_org)
+        await session.commit()
+
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        assert await OrgStore.count_team_orgs() == 1
