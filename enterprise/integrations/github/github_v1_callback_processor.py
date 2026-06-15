@@ -274,12 +274,9 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 f'No session API key for sandbox: {sandbox.id}'
             )
 
-            # 3. URL
-            agent_server_url = get_agent_server_url_from_sandbox(sandbox)
-
             return await self._get_final_response(
                 httpx_client=httpx_client,
-                agent_server_url=agent_server_url,
+                agent_server_url=get_agent_server_url_from_sandbox(sandbox),
                 conversation_id=conversation_id,
                 session_api_key=sandbox.session_api_key,
             )
