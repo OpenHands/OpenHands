@@ -25,6 +25,7 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
     AppConversationInfoService,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
+    ACP_SERVER_TAG_KEY,
     AgentType,
     AppConversation,
     AppConversationInfo,
@@ -386,9 +387,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 # Persist the active ACP provider key so the conversation UI
                 # can resolve a brand label ("Claude Code", "Codex", …) via
                 # the SDK registry without keeping a per-conversation column.
+                # Surfaced to the UI as the projected ``acp_server`` field.
                 acp_user = await self.user_context.get_user_info()
                 if isinstance(acp_user.agent_settings, ACPAgentSettings):
-                    tags['acp_server'] = acp_user.agent_settings.acp_server
+                    tags[ACP_SERVER_TAG_KEY] = acp_user.agent_settings.acp_server
             else:
                 llm_model = request_agent.llm.model
                 agent_kind = 'openhands'
