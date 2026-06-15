@@ -4,9 +4,12 @@ from uuid import UUID, uuid4
 import pytest
 
 from openhands.app_server.app_conversation.app_conversation_models import (
+    ACP_SERVER_TAG_KEY,
+    AppConversation,
     AppConversationInfo,
     AppConversationStartRequest,
     AppConversationUpdateRequest,
+    PluginSpec,
 )
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
@@ -98,3 +101,91 @@ def test_app_conversation_update_request_title_field_updates_conversation_info()
         'Title was not updated on AppConversationInfo. '
         "Ensure 'title' is in AppConversationUpdateRequest.model_fields_set."
     )
+
+
+class TestAcpServerProjection:
+    """``AppConversationInfo.acp_server`` projects the ``acpserver`` tag.
+
+    The conversation UI on the cloud backend reads this top-level field to
+    resolve a provider brand label and render the model picker.
+    """
+
+    def _acp_info(self, **overrides) -> AppConversationInfo:
+        kwargs: dict = {
+            'created_by_user_id': 'u',
+            'sandbox_id': 'sb',
+            'agent_kind': 'acp',
+            'tags': {ACP_SERVER_TAG_KEY: 'codex'},
+        }
+        kwargs.update(overrides)
+        return AppConversationInfo(**kwargs)
+
+    def test_projects_provider_key_from_tag(self):
+        assert self._acp_info().acp_server == 'codex'
+
+    def test_serialized_into_json_for_the_canvas(self):
+        info = self._acp_info()
+        assert info.model_dump()['acp_server'] == 'codex'
+        assert info.model_dump_json().find('"acp_server":"codex"') != -1
+
+    def test_survives_db_roundtrip_via_tags_only(self):
+        # The list endpoint rebuilds info from stored columns; ``tags`` is the
+        # only carrier, so re-deriving from it alone must still yield the key.
+        info = self._acp_info()
+        restored = AppConversationInfo(
+            created_by_user_id=None,
+            sandbox_id='sb',
+            agent_kind='acp',
+            tags=info.tags,
+        )
+        assert restored.acp_server == 'codex'
+
+    def test_survives_app_conversation_build(self):
+        # ``_build_conversation`` does ``AppConversation(**info.model_dump())``.
+        info = self._acp_info()
+        conv = AppConversation(**info.model_dump())
+        assert conv.acp_server == 'codex'
+
+    def test_none_for_openhands_even_with_stray_tag(self):
+        info = self._acp_info(agent_kind='openhands')
+        assert info.acp_server is None
+
+    def test_none_when_tag_absent(self):
+        info = self._acp_info(tags={})
+        assert info.acp_server is None
+
+
+class TestPluginSpecSourceRedaction:
+    """Verify PluginSpec.source credentials are redacted on serialization."""
+
+    def test_model_dump_redacts_credentials(self):
+        spec = PluginSpec(source='https://oauth2:SECRET@gitlab.com/org/repo.git')
+        dumped = spec.model_dump()
+        assert '****' in dumped['source']
+        assert 'SECRET' not in dumped['source']
+
+    def test_model_dump_json_redacts_credentials(self):
+        spec = PluginSpec(source='https://user:pass@github.com/org/repo.git')
+        json_str = spec.model_dump_json()
+        assert 'pass' not in json_str
+        assert '****' in json_str
+
+    def test_source_attribute_retains_raw_value(self):
+        url = 'https://oauth2:SECRET@gitlab.com/org/repo.git'
+        spec = PluginSpec(source=url)
+        assert spec.source == url
+
+    def test_clean_url_passes_through_unchanged(self):
+        url = 'https://github.com/org/repo.git'
+        spec = PluginSpec(source=url)
+        assert spec.model_dump()['source'] == url
+
+    def test_redaction_nested_in_start_request(self):
+        """Credentials stay out of model_dump when PluginSpec is nested."""
+        req = AppConversationStartRequest(
+            plugins=[PluginSpec(source='https://token@github.com/org/repo.git')]
+        )
+        dumped = req.model_dump()
+        plugin_source = dumped['plugins'][0]['source']
+        assert 'token' not in plugin_source
+        assert '****' in plugin_source

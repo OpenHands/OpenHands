@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 from uuid import UUID as parse_uuid
 
 from server.constants import (
+    DEFAULT_COMMERCIAL_ORG_CONCURRENT_SANDBOXES,
     ORG_SETTINGS_VERSION,
     get_default_llm_base_url,
     get_default_llm_model,
@@ -124,6 +125,7 @@ class OrgService:
             org_version=ORG_SETTINGS_VERSION,
             agent_settings=agent_settings,
             conversation_settings=ConversationSettings(),
+            max_concurrent_sandboxes=DEFAULT_COMMERCIAL_ORG_CONCURRENT_SANDBOXES,
         )
 
     @staticmethod
@@ -855,7 +857,15 @@ class OrgService:
         if not org:
             return False
 
-        return org.byor_export_enabled
+        if org.byor_export_enabled:
+            return True
+
+        credits = await OrgService.get_org_credits(user_id, org_id)
+        if credits is None or credits <= 0:
+            return False
+
+        org = await OrgStore.enable_byor_export(org_id)
+        return bool(org and org.byor_export_enabled)
 
     @staticmethod
     async def switch_org(user_id: str, org_id: UUID) -> Org:

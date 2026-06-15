@@ -42,6 +42,7 @@ from storage.jira_integration_store import JiraIntegrationStore
 from storage.jira_user import JiraUser
 from storage.jira_workspace import JiraWorkspace
 
+from openhands.app_server.errors import ConcurrencyLimitError
 from openhands.app_server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
@@ -310,6 +311,22 @@ class JiraManager(Manager[JiraViewInterface]):
                 extra={'issue_key': view.payload.issue_key, 'error': str(e)},
             )
             msg_info = str(e)
+
+        except ConcurrencyLimitError as e:
+            detail = e.detail if isinstance(e.detail, dict) else {}
+            limit = detail.get('limit', '?')
+            logger.warning(
+                '[Jira] Concurrency limit reached',
+                extra={
+                    'issue_key': view.payload.issue_key,
+                    'limit': limit,
+                    'current': detail.get('current'),
+                },
+            )
+            msg_info = (
+                f'You have reached your limit of {limit} concurrent conversation(s). '
+                f'Please close an existing conversation at {HOST_URL} to start a new one.'
+            )
 
         except Exception as e:
             logger.error(

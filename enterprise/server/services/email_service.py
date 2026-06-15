@@ -38,6 +38,33 @@ class EmailService:
         return True
 
     @staticmethod
+    def is_configured() -> bool:
+        """Whether transactional email delivery is configured.
+
+        Mirrors the checks in _get_resend_client without logging, so callers
+        can surface "email is not configured" to users instead of letting
+        invitations fail silently.
+        """
+        return RESEND_AVAILABLE and bool(os.environ.get('RESEND_API_KEY'))
+
+    @staticmethod
+    def build_invitation_url(invitation_token: str) -> str:
+        """Build the absolute acceptance URL for an invitation token.
+
+        WEB_HOST may be configured as a bare hostname (the OHE chart sets it
+        that way), so normalize to an https URL before composing the link.
+        """
+        web_host = os.environ.get('WEB_HOST', DEFAULT_WEB_HOST).strip().rstrip('/')
+        if not web_host:
+            web_host = DEFAULT_WEB_HOST
+        if not web_host.startswith(('http://', 'https://')):
+            web_host = f'https://{web_host}'
+        return (
+            f'{web_host}/api/organizations/members/invite/accept'
+            f'?token={invitation_token}'
+        )
+
+    @staticmethod
     def send_invitation_email(
         to_email: str,
         org_name: str,
@@ -59,9 +86,7 @@ class EmailService:
         if not EmailService._get_resend_client():
             return
 
-        # Build invitation URL
-        web_host = os.environ.get('WEB_HOST', DEFAULT_WEB_HOST)
-        invitation_url = f'{web_host}/api/organizations/members/invite/accept?token={invitation_token}'
+        invitation_url = EmailService.build_invitation_url(invitation_token)
 
         from_email = os.environ.get('RESEND_FROM_EMAIL', DEFAULT_FROM_EMAIL)
 

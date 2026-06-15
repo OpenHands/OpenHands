@@ -7,6 +7,7 @@ from uuid import UUID
 
 from server.auth.token_manager import TokenManager
 from server.constants import (
+    DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES,
     DEFAULT_V1_ENABLED,
     LITE_LLM_API_URL,
     ORG_SETTINGS_VERSION,
@@ -78,6 +79,7 @@ class UserStore:
                 or user_info.get('preferred_username', ''),
                 contact_email=user_info['email'],
                 v1_enabled=True,
+                max_concurrent_sandboxes=DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES,
             )
             session.add(org)
 
@@ -214,6 +216,7 @@ class UserStore:
                 or user_info.get('username', ''),
                 contact_email=user_info['email'],
                 byor_export_enabled=has_completed_billing,
+                max_concurrent_sandboxes=DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES,
             )
             session.add(org)
 

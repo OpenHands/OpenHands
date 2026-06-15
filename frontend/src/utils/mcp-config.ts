@@ -15,6 +15,53 @@ const EMPTY_MCP_CONFIG: MCPConfig = {
 type SdkMcpServerConfig = Record<string, SettingsValue>;
 type SdkMcpConfig = { mcpServers: Record<string, SdkMcpServerConfig> };
 
+function apiKeyFromAuthorizationHeader(value: unknown): string | undefined {
+  if (Array.isArray(value)) {
+    return value
+      .map(apiKeyFromAuthorizationHeader)
+      .find((apiKey) => apiKey !== undefined);
+  }
+
+  if (typeof value !== "string" || value.length === 0) return undefined;
+  const bearer = value.match(/^Bearer\s+(.+)$/i);
+  return bearer ? bearer[1] : value;
+}
+
+/**
+ * Recover a remote server's API key from either the canonical
+ * ``headers.Authorization`` bearer token or the legacy ``auth`` field (kept
+ * for back-compat with settings persisted before the header migration).
+ */
+function apiKeyFromServerConfig(
+  serverConfig: Record<string, unknown>,
+): string | undefined {
+  const { headers } = serverConfig;
+  const authorization =
+    headers && typeof headers === "object"
+      ? ((headers as Record<string, unknown>).Authorization ??
+        (headers as Record<string, unknown>).authorization)
+      : undefined;
+  const headerApiKey = apiKeyFromAuthorizationHeader(authorization);
+  if (headerApiKey) return headerApiKey;
+
+  const { auth } = serverConfig;
+  return typeof auth === "string" && auth !== "oauth" ? auth : undefined;
+}
+
+/**
+ * Serialize an API key as an ``Authorization`` bearer header. The SDK only
+ * redacts/encrypts ``headers`` (and ``env``), not ``auth``, so a key written
+ * to ``auth`` would persist in plaintext — write the header form instead.
+ */
+function getAuthorizationHeaders(apiKey: string | undefined) {
+  if (!apiKey) return {};
+  return {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  };
+}
+
 /**
  * Generate a unique name for an MCP server, avoiding collisions with existing names.
  * Only adds a suffix if there's an actual collision.
@@ -64,9 +111,7 @@ export function parseMcpConfig(value: unknown): MCPConfig {
 
     if (url) {
       const transport = serverConfig.transport as string | undefined;
-      const auth = serverConfig.auth as string | undefined;
-      const apiKey =
-        typeof auth === "string" && auth !== "oauth" ? auth : undefined;
+      const apiKey = apiKeyFromServerConfig(serverConfig);
 
       if (transport === "sse") {
         const server: MCPSSEServer = {
@@ -124,7 +169,7 @@ export function toSdkMcpConfig(config: MCPConfig): SdkMcpConfig | null {
       server.url = entry;
     } else {
       server.url = entry.url;
-      if (entry.api_key) server.auth = entry.api_key;
+      Object.assign(server, getAuthorizationHeaders(entry.api_key));
     }
     server.transport = "sse";
 
@@ -142,7 +187,7 @@ export function toSdkMcpConfig(config: MCPConfig): SdkMcpConfig | null {
       server.url = entry;
     } else {
       server.url = entry.url;
-      if (entry.api_key) server.auth = entry.api_key;
+      Object.assign(server, getAuthorizationHeaders(entry.api_key));
       if (entry.timeout != null) server.timeout = entry.timeout;
     }
 

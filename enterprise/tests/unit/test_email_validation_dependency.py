@@ -1,5 +1,5 @@
 """
-Unit tests for email validation dependency (get_admin_user_id).
+Unit tests for email validation dependency (get_admin_user_id and is_openhands_member).
 
 Tests the FastAPI dependency that validates @openhands.dev email domain.
 """
@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request
-from server.email_validation import get_admin_user_id
+from server.email_validation import get_admin_user_id, is_openhands_member
 
 
 @pytest.fixture
@@ -270,3 +270,106 @@ async def test_get_openhands_user_id_empty_email(mock_request, mock_user_auth):
 
         assert exc_info.value.status_code == 401
         assert 'email not available' in exc_info.value.detail.lower()
+
+
+# Tests for is_openhands_member helper function
+
+
+@pytest.mark.asyncio
+async def test_is_openhands_member_true_for_valid_email(mock_request, mock_user_auth):
+    """
+    GIVEN: User with @openhands.dev email
+    WHEN: is_openhands_member is called
+    THEN: Returns True
+    """
+    mock_user_auth.get_user_email.return_value = 'test@openhands.dev'
+
+    with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
+        result = await is_openhands_member(mock_request)
+        assert result is True
+
+
+@pytest.mark.asyncio
+async def test_is_openhands_member_false_for_external_email(
+    mock_request, mock_user_auth
+):
+    """
+    GIVEN: User with non-@openhands.dev email
+    WHEN: is_openhands_member is called
+    THEN: Returns False
+    """
+    mock_user_auth.get_user_email.return_value = 'test@external.com'
+
+    with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
+        result = await is_openhands_member(mock_request)
+        assert result is False
+
+
+@pytest.mark.asyncio
+async def test_is_openhands_member_false_for_none_email(mock_request, mock_user_auth):
+    """
+    GIVEN: User with no email (None)
+    WHEN: is_openhands_member is called
+    THEN: Returns False
+    """
+    mock_user_auth.get_user_email.return_value = None
+
+    with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
+        result = await is_openhands_member(mock_request)
+        assert result is False
+
+
+@pytest.mark.asyncio
+async def test_is_openhands_member_false_for_empty_email(mock_request, mock_user_auth):
+    """
+    GIVEN: User with empty string email
+    WHEN: is_openhands_member is called
+    THEN: Returns False
+    """
+    mock_user_auth.get_user_email.return_value = ''
+
+    with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
+        result = await is_openhands_member(mock_request)
+        assert result is False
+
+
+@pytest.mark.asyncio
+async def test_is_openhands_member_case_sensitive(mock_request, mock_user_auth):
+    """
+    GIVEN: User with uppercase @OPENHANDS.DEV email
+    WHEN: is_openhands_member is called
+    THEN: Returns False (case-sensitive check)
+    """
+    mock_user_auth.get_user_email.return_value = 'test@OPENHANDS.DEV'
+
+    with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
+        result = await is_openhands_member(mock_request)
+        assert result is False
+
+
+@pytest.mark.asyncio
+async def test_is_openhands_member_subdomain_not_allowed(mock_request, mock_user_auth):
+    """
+    GIVEN: User with subdomain email like @test.openhands.dev
+    WHEN: is_openhands_member is called
+    THEN: Returns False
+    """
+    mock_user_auth.get_user_email.return_value = 'test@test.openhands.dev'
+
+    with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
+        result = await is_openhands_member(mock_request)
+        assert result is False
+
+
+@pytest.mark.asyncio
+async def test_is_openhands_member_with_plus_addressing(mock_request, mock_user_auth):
+    """
+    GIVEN: User with plus addressing (test+tag@openhands.dev)
+    WHEN: is_openhands_member is called
+    THEN: Returns True
+    """
+    mock_user_auth.get_user_email.return_value = 'test+tag@openhands.dev'
+
+    with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
+        result = await is_openhands_member(mock_request)
+        assert result is True

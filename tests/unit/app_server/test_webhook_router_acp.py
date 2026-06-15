@@ -17,6 +17,7 @@ from sqlalchemy.pool import StaticPool
 
 from openhands.agent_server.models import ConversationInfo, Success
 from openhands.app_server.app_conversation.app_conversation_models import (
+    ACP_SERVER_TAG_KEY,
     AppConversationInfo,
 )
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
@@ -183,12 +184,13 @@ async def test_acp_conversation_sets_agent_kind(async_session, service, sandbox_
 async def test_acp_server_tag_preserved_on_webhook_update(
     async_session, service, sandbox_record
 ):
-    """``tags['acp_server']`` set during creation must survive a webhook update.
+    """The ``acpserver`` tag set during creation must survive a webhook update.
 
-    The live-status service stamps the active ACP provider key into
-    ``tags['acp_server']`` when the conversation is first stored. Subsequent
-    webhook updates merge incoming tags onto existing ones, so the provider
-    key must still be present after a state-change webhook fires.
+    The live-status service stamps the active ACP provider key into the
+    ``acpserver`` tag when the conversation is first stored. Subsequent webhook
+    updates merge incoming tags onto existing ones, so the provider key — and
+    the ``acp_server`` field projected from it — must still be present after a
+    state-change webhook fires.
     """
     acp_info = _make_acp_conversation_info(acp_command=['my-acp'])
     conversation_id = acp_info.id
@@ -198,7 +200,8 @@ async def test_acp_server_tag_preserved_on_webhook_update(
         title='Test',
         sandbox_id=sandbox_record.id,
         created_by_user_id=sandbox_record.created_by_user_id,
-        tags={'acp_server': 'claude-code'},
+        agent_kind='acp',
+        tags={ACP_SERVER_TAG_KEY: 'claude-code'},
     )
 
     with patch(
@@ -213,7 +216,9 @@ async def test_acp_server_tag_preserved_on_webhook_update(
 
     saved = await service.get_app_conversation_info(conversation_id)
     assert saved is not None
-    assert saved.tags.get('acp_server') == 'claude-code'
+    assert saved.tags.get(ACP_SERVER_TAG_KEY) == 'claude-code'
+    # The projected field is what the conversation UI reads on the cloud backend.
+    assert saved.acp_server == 'claude-code'
 
 
 # ---------------------------------------------------------------------------

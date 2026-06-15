@@ -9,7 +9,11 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from server.constants import LITE_LLM_API_URL
+from server.constants import (
+    DEFAULT_COMMERCIAL_ORG_CONCURRENT_SANDBOXES,
+    DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES,
+    LITE_LLM_API_URL,
+)
 from storage.org import Org
 from storage.org_member import OrgMember
 from storage.role import Role
@@ -183,6 +187,7 @@ class OrgResponse(BaseModel):
     v1_enabled: bool | None = None
     credits: float | None = None
     is_personal: bool = False
+    max_concurrent_sandboxes: int = DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES
 
     @classmethod
     def from_org(
@@ -213,6 +218,13 @@ class OrgResponse(BaseModel):
             v1_enabled=org.v1_enabled,
             credits=credits,
             is_personal=str(org.id) == user_id if user_id else False,
+            max_concurrent_sandboxes=org.max_concurrent_sandboxes
+            if org.max_concurrent_sandboxes is not None
+            else (
+                DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES
+                if str(org.id) == user_id
+                else DEFAULT_COMMERCIAL_ORG_CONCURRENT_SANDBOXES
+            ),
         )
 
 
@@ -251,6 +263,7 @@ class OrgUpdate(BaseModel):
     llm_api_key: str | None = None
     agent_settings_diff: dict[str, Any] | None = None
     conversation_settings_diff: dict[str, Any] | None = None
+    max_concurrent_sandboxes: int | None = Field(default=None, gt=0, le=100)
 
     @model_validator(mode='after')
     def _normalize_settings_diffs(self) -> 'OrgUpdate':
@@ -410,16 +423,13 @@ class OrgDefaultsSettingsResponse(BaseModel):
     def from_org(cls, org: Org) -> 'OrgDefaultsSettingsResponse':
         """Create response from Org entity.
 
-        Denormalizes the SDK's ``litellm_proxy/`` prefix back to
-        ``openhands/`` so the frontend's basic-view provider/model dropdowns
-        can be populated, and nulls ``api_key`` so neither the raw secret
-        nor the ``MASKED_API_KEY`` marker leaks in the response.
-        ``base_url`` is returned exactly as stored so ``org.agent_settings``,
-        ``org_member.agent_settings_diff`` and this response always carry
-        the same value.
+        The SDK now keeps ``openhands/`` as the public/stored provider prefix
+        and translates to ``litellm_proxy/`` only at the transport boundary, so
+        organization responses should not reverse-map model names. Secret
+        values are still stripped before returning the response.
         """
         agent_settings = _load_persisted_agent_settings(org.agent_settings)
-        cls._denormalize_llm_for_response(agent_settings)
+        cls._prepare_llm_for_response(agent_settings)
         return cls(
             agent_settings=agent_settings,
             conversation_settings=_load_persisted_conversation_settings(
@@ -430,31 +440,16 @@ class OrgDefaultsSettingsResponse(BaseModel):
         )
 
     @staticmethod
-    def _denormalize_llm_for_response(agent_settings: AgentSettingsConfig) -> None:
-        """Rewrite ``agent_settings.llm`` in-place for UI consumption.
-
-        * ``litellm_proxy/X`` → ``openhands/X`` so the basic-view provider
-          dropdown matches (the SDK's ``AgentSettings`` validator
-          normalizes the other direction on load).
-        * ``base_url`` is returned **as stored** so the three sync targets
-          (``org.agent_settings.llm.base_url``,
-          ``org_member.agent_settings_diff.llm.base_url``, and the GET
-          response) always agree. The frontend is responsible for
-          recognizing the managed LiteLLM proxy URL / provider-default URL
-          as "basic mode" — see ``KNOWN_PROVIDER_DEFAULT_BASE_URLS`` in
-          ``frontend/src/routes/llm-settings.tsx``.
-        * ``api_key`` is nulled so neither the raw secret nor the
-          ``MASKED_API_KEY`` marker leaks in the response — the frontend
-          reads ``llm_api_key_set`` to know whether a key exists.
-
-        Pydantic v2 field assignment bypasses ``field_validator`` /
-        ``model_validator`` by default (``validate_assignment`` is off on
-        the SDK's ``LLM`` model), so the rename survives without being
-        re-normalized back to ``litellm_proxy/``.
-        """
+    def _prepare_llm_for_response(agent_settings: AgentSettingsConfig) -> None:
+        """Strip response-only LLM fields without changing provider names."""
         llm = agent_settings.llm
-        if llm.model and llm.model.startswith('litellm_proxy/'):
-            llm.model = f'openhands/{llm.model.removeprefix("litellm_proxy/")}'
+        if (
+            llm.model
+            and llm.model.startswith('openhands/')
+            and llm.base_url
+            and llm.base_url.rstrip('/') == LITE_LLM_API_URL.rstrip('/')
+        ):
+            llm.base_url = None
         llm.api_key = None
 
 
@@ -494,6 +489,8 @@ class OrgMemberResponse(BaseModel):
     role: str
     role_rank: int
     status: str | None
+    max_concurrent_sandboxes_override: int | None = None
+    effective_max_concurrent_sandboxes: int = DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES
 
 
 class OrgMemberPage(BaseModel):
@@ -508,6 +505,7 @@ class OrgMemberUpdate(BaseModel):
     """Request model for updating an organization member."""
 
     role: str | None = None  # Role name: 'owner', 'admin', or 'member'
+    max_concurrent_sandboxes_override: int | None = Field(default=None, gt=0, le=100)
 
 
 class MeResponse(BaseModel):
@@ -526,6 +524,8 @@ class MeResponse(BaseModel):
     agent_settings_diff: dict[str, Any] = Field(default_factory=dict)
     conversation_settings_diff: dict[str, Any] = Field(default_factory=dict)
     status: str | None = None
+    max_concurrent_sandboxes_override: int | None = None
+    effective_max_concurrent_sandboxes: int = DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES
 
     @staticmethod
     def _mask_key(secret: str | SecretStr | None) -> str:
@@ -545,8 +545,14 @@ class MeResponse(BaseModel):
         member: OrgMember,
         role: Role,
         email: str,
+        org_max_concurrent_sandboxes: int = DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES,
     ) -> 'MeResponse':
         """Create a MeResponse from an OrgMember, Role, and user email."""
+        effective_limit = (
+            member.max_concurrent_sandboxes_override
+            if member.max_concurrent_sandboxes_override is not None
+            else org_max_concurrent_sandboxes
+        )
         return cls(
             org_id=str(member.org_id),
             user_id=str(member.user_id),
@@ -557,6 +563,8 @@ class MeResponse(BaseModel):
             agent_settings_diff=dict(member.agent_settings_diff or {}),
             conversation_settings_diff=dict(member.conversation_settings_diff or {}),
             status=member.status,
+            max_concurrent_sandboxes_override=member.max_concurrent_sandboxes_override,
+            effective_max_concurrent_sandboxes=effective_limit,
         )
 
 
@@ -565,6 +573,7 @@ class OrgAppSettingsResponse(BaseModel):
 
     enable_proactive_conversation_starters: bool = True
     max_budget_per_task: float | None = None
+    max_concurrent_sandboxes: int = DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES
 
     @classmethod
     def from_org(cls, org: Org) -> 'OrgAppSettingsResponse':
@@ -581,6 +590,9 @@ class OrgAppSettingsResponse(BaseModel):
             if org.enable_proactive_conversation_starters is not None
             else True,
             max_budget_per_task=org.max_budget_per_task,
+            max_concurrent_sandboxes=org.max_concurrent_sandboxes
+            if org.max_concurrent_sandboxes is not None
+            else DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES,
         )
 
 
@@ -589,6 +601,7 @@ class OrgAppSettingsUpdate(BaseModel):
 
     enable_proactive_conversation_starters: bool | None = None
     max_budget_per_task: float | None = None
+    max_concurrent_sandboxes: int | None = Field(default=None, gt=0, le=100)
 
     @field_validator('max_budget_per_task')
     @classmethod

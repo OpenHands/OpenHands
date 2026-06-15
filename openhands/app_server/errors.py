@@ -41,3 +41,15 @@ class PermissionsError(OpenHandsError):
 
 class SandboxError(OpenHandsError):
     """Error in Sandbox."""
+
+
+class ConcurrencyLimitError(OpenHandsError):
+    """Error when user has reached their concurrent sandbox limit."""
+
+    def __init__(
+        self,
+        detail: Any = None,
+        headers: dict[str, str] | None = None,
+        status_code: int = status.HTTP_429_TOO_MANY_REQUESTS,
+    ):
+        super().__init__(status_code=status_code, detail=detail, headers=headers)
