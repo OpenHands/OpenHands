@@ -2110,7 +2110,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 event_filename = f'event_{i:06d}_{event.id}.json'
                 event_path = os.path.join(temp_dir, event_filename)
 
-                with open(event_path, 'w') as f:
+                with open(event_path, 'w', encoding='utf-8') as f:
                     # Use model_dump with mode='json' to handle UUID serialization
                     event_data = event.model_dump(mode='json')
                     json.dump(event_data, f, indent=2)
@@ -2118,7 +2118,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
             # Create meta.json with conversation info
             meta_path = os.path.join(temp_dir, 'meta.json')
-            with open(meta_path, 'w') as f:
+            with open(meta_path, 'w', encoding='utf-8') as f:
                 f.write(conversation_info.model_dump_json(indent=2))
 
             # Create zip file in memory
