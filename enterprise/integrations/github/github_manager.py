@@ -42,6 +42,12 @@ from openhands.app_server.types import (
 )
 from openhands.app_server.utils.logger import openhands_logger as logger
 
+IGNORED_GITHUB_EVENT_SENDERS = frozenset(
+    {
+        'openhands-ai[bot]',
+    }
+)
+
 
 class GithubManager(Manager[GithubViewType]):
     def __init__(
@@ -123,6 +129,13 @@ class GithubManager(Manager[GithubViewType]):
 
             return False
 
+    def _get_ignored_sender_login(self, message: Message) -> str | None:
+        payload = message.message.get('payload', {})
+        login = payload.get('sender', {}).get('login')
+        if login and login.lower() in IGNORED_GITHUB_EVENT_SENDERS:
+            return login
+        return None
+
     def _get_issue_number_from_payload(self, message: Message) -> int | None:
         """Extract issue/PR number from a GitHub webhook payload.
 
@@ -196,6 +209,11 @@ class GithubManager(Manager[GithubViewType]):
     async def is_job_requested(self, message: Message) -> bool:
         self._confirm_incoming_source_type(message)
 
+        ignored_sender = self._get_ignored_sender_login(message)
+        if ignored_sender:
+            logger.info('[GitHub] Ignoring event from %s', ignored_sender)
+            return False
+
         installation_id = message.message['installation']
         payload = message.message.get('payload', {})
         repo_obj = payload.get('repository')
@@ -236,6 +254,12 @@ class GithubManager(Manager[GithubViewType]):
 
     async def receive_message(self, message: Message):
         self._confirm_incoming_source_type(message)
+
+        ignored_sender = self._get_ignored_sender_login(message)
+        if ignored_sender:
+            logger.info('[GitHub] Ignoring event from %s', ignored_sender)
+            return
+
         try:
             await self.data_collector.process_payload(message)
         except Exception:
