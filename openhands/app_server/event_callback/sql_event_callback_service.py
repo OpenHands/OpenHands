@@ -6,13 +6,14 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from typing import AsyncGenerator
 from uuid import UUID, uuid4
 
 from fastapi import Request
-from sqlalchemy import UUID as SQLUUID
-from sqlalchemy import Column, Enum, String, and_, func, or_, select
+from sqlalchemy import Enum, Index, String, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column
 
 from openhands.agent_server.utils import utc_now
 from openhands.app_server.event_callback.event_callback_models import (
@@ -44,28 +45,48 @@ _logger = logging.getLogger(__name__)
 # TODO: Add user level filtering to this class
 
 
-class StoredEventCallback(Base):  # type: ignore
+class StoredEventCallback(Base):
     __tablename__ = 'event_callback'
-    id = Column(SQLUUID, primary_key=True)
-    conversation_id = Column(SQLUUID, nullable=True)
-    status = Column(
+    __table_args__ = (
+        Index(
+            'ix_event_callback_conversation_id_status_event_kind',
+            'conversation_id',
+            'status',
+            'event_kind',
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    conversation_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    status: Mapped[EventCallbackStatus] = mapped_column(
         Enum(EventCallbackStatus), nullable=False, default=EventCallbackStatus.ACTIVE
     )
-    processor = Column(create_json_type_decorator(EventCallbackProcessor))
-    event_kind = Column(String, nullable=True)
-    created_at = Column(UtcDateTime, server_default=func.now(), index=True)
-    updated_at = Column(UtcDateTime, server_default=func.now(), index=True)
+    processor: Mapped[EventCallbackProcessor] = mapped_column(
+        create_json_type_decorator(EventCallbackProcessor)
+    )
+    event_kind: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, server_default=func.now(), index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, server_default=func.now(), index=True
+    )
 
 
-class StoredEventCallbackResult(Base):  # type: ignore
+class StoredEventCallbackResult(Base):
     __tablename__ = 'event_callback_result'
-    id = Column(SQLUUID, primary_key=True, default=uuid4)
-    status = Column(Enum(EventCallbackResultStatus), nullable=True)
-    event_callback_id = Column(SQLUUID, index=True)
-    event_id = Column(String, index=True)
-    conversation_id = Column(SQLUUID, index=True)
-    detail = Column(String, nullable=True)
-    created_at = Column(UtcDateTime, server_default=func.now(), index=True)
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    status: Mapped[EventCallbackResultStatus | None] = mapped_column(
+        Enum(EventCallbackResultStatus), nullable=True
+    )
+    event_callback_id: Mapped[UUID] = mapped_column(index=True)
+    event_id: Mapped[str] = mapped_column(String, index=True)
+    conversation_id: Mapped[UUID] = mapped_column(index=True)
+    detail: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, server_default=func.now(), index=True
+    )
 
 
 @dataclass
@@ -188,18 +209,8 @@ class SQLEventCallbackService(EventCallbackService):
         query = (
             select(StoredEventCallback)
             .where(StoredEventCallback.status == EventCallbackStatus.ACTIVE)
-            .where(
-                or_(
-                    StoredEventCallback.event_kind == event.kind,
-                    StoredEventCallback.event_kind.is_(None),
-                )
-            )
-            .where(
-                or_(
-                    StoredEventCallback.conversation_id == conversation_id,
-                    StoredEventCallback.conversation_id.is_(None),
-                )
-            )
+            .where(StoredEventCallback.event_kind == event.kind)
+            .where(StoredEventCallback.conversation_id == conversation_id)
         )
         result = await self.db_session.execute(query)
         stored_callbacks = result.scalars().all()

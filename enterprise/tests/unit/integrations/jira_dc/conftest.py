@@ -16,8 +16,8 @@ from storage.jira_dc_conversation import JiraDcConversation
 from storage.jira_dc_user import JiraDcUser
 from storage.jira_dc_workspace import JiraDcWorkspace
 
-from openhands.integrations.service_types import ProviderType, Repository
-from openhands.server.user_auth.user_auth import UserAuth
+from openhands.app_server.integrations.service_types import ProviderType, Repository
+from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 @pytest.fixture
@@ -135,6 +135,44 @@ def sample_issue_update_webhook_payload():
             'key': 'testuser',
             'accountId': 'user456',
             'self': 'https://jira.company.com/rest/api/2/user?username=testuser',
+        },
+    }
+
+
+@pytest.fixture
+def sample_issue_created_webhook_payload():
+    """Sample issue created webhook payload."""
+    return {
+        'webhookEvent': 'jira:issue_created',
+        'issue': {
+            'id': '12345',
+            'key': 'PROJ-123',
+            'self': 'https://jira.company.com/rest/api/2/issue/12345',
+        },
+        'user': {
+            'emailAddress': 'user@company.com',
+            'displayName': 'Test User',
+            'key': 'testuser',
+            'accountId': 'user456',
+            'self': 'https://jira.company.com/rest/api/2/user?username=testuser',
+        },
+    }
+
+
+@pytest.fixture
+def sample_comment_updated_webhook_payload():
+    """Sample comment updated webhook payload."""
+    return {
+        'webhookEvent': 'comment_updated',
+        'comment': {
+            'id': '10001',
+            'body': 'Edited comment',
+            'self': 'https://jira.company.com/rest/api/2/issue/12345/comment/10001',
+        },
+        'issue': {
+            'id': '12345',
+            'key': 'PROJ-123',
+            'self': 'https://jira.company.com/rest/api/2/issue/12345',
         },
     }
 

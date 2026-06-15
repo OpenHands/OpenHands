@@ -40,8 +40,8 @@ from storage.org_member_store import OrgMemberStore
 from storage.role import Role
 from storage.role_store import RoleStore
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.server.user_auth import get_user_auth, get_user_id
+from openhands.app_server.user_auth import get_user_auth, get_user_id
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class Permission(str, Enum):
@@ -87,6 +87,9 @@ class Permission(str, Enum):
     # Git organization claims
     MANAGE_ORG_CLAIMS = 'manage_org_claims'
 
+    # Manage Automations
+    MANAGE_AUTOMATIONS = 'manage_automations'
+
 
 class RoleName(str, Enum):
     """Role names used in the system."""
@@ -123,6 +126,8 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.DELETE_ORGANIZATION,
             # Git organization claims
             Permission.MANAGE_ORG_CLAIMS,
+            # Manage Automations
+            Permission.MANAGE_AUTOMATIONS,
         ]
     ),
     RoleName.ADMIN: frozenset(
@@ -146,6 +151,8 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.EDIT_ORG_SETTINGS,
             # Git organization claims
             Permission.MANAGE_ORG_CLAIMS,
+            # Manage Automations
+            Permission.MANAGE_AUTOMATIONS,
         ]
     ),
     RoleName.MEMBER: frozenset(
@@ -159,6 +166,8 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             # Settings (View only)
             Permission.VIEW_ORG_SETTINGS,
             Permission.VIEW_LLM_SETTINGS,
+            # Manage Automations
+            Permission.MANAGE_AUTOMATIONS,
         ]
     ),
 }
@@ -287,6 +296,18 @@ def require_permission(permission: Permission):
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail='API key is not authorized for this organization',
                 )
+
+        # If the route does not carry an ``{org_id}`` path parameter,
+        # resolve the effective org for the request — which honors any
+        # ``X-Org-Id`` header override (and validates membership /
+        # API-key binding in the process). This keeps endpoints that
+        # implicitly operate on the "current org" consistent with the
+        # rest of the codebase.
+        if org_id is None:
+            # Local import to avoid circular import via saas_user_auth.
+            from server.auth.org_context import maybe_resolve_effective_org_id
+
+            org_id = await maybe_resolve_effective_org_id(request)
 
         user_role = await get_user_org_role(user_id, org_id)
 

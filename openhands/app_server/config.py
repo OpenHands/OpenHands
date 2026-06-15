@@ -7,7 +7,6 @@ from typing import AsyncContextManager
 import httpx
 from fastapi import Depends, Request
 from pydantic import Field, SecretStr
-from sqlalchemy.ext.asyncio import AsyncSession
 
 # Import the event_callback module to ensure all processors are registered
 import openhands.app_server.event_callback  # noqa: F401
@@ -28,11 +27,18 @@ from openhands.app_server.app_lifespan.app_lifespan_service import AppLifespanSe
 from openhands.app_server.app_lifespan.oss_app_lifespan_service import (
     OssAppLifespanService,
 )
+from openhands.app_server.config_api.config_models import AppMode
+from openhands.app_server.config_api.llm_model_service import (
+    LLMModelService,
+    LLMModelServiceInjector,
+)
 from openhands.app_server.event.event_service import EventService, EventServiceInjector
 from openhands.app_server.event_callback.event_callback_service import (
     EventCallbackService,
     EventCallbackServiceInjector,
 )
+from openhands.app_server.file_store.files import FileStore
+from openhands.app_server.file_store.local import LocalFileStore
 from openhands.app_server.pending_messages.pending_message_service import (
     PendingMessageService,
     PendingMessageServiceInjector,
@@ -45,6 +51,10 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
     SandboxSpecService,
     SandboxSpecServiceInjector,
 )
+from openhands.app_server.services.db_session import (  # noqa: F401  (re-exported)
+    depends_db_session,
+    get_db_session,
+)
 from openhands.app_server.services.db_session_injector import (
     DbSessionInjector,
 )
@@ -52,6 +62,7 @@ from openhands.app_server.services.httpx_client_injector import HttpxClientInjec
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService, JwtServiceInjector
 from openhands.app_server.user.user_context import UserContext, UserContextInjector
+from openhands.app_server.utils.environment import StorageProvider, get_storage_provider
 from openhands.app_server.web_client.default_web_client_config_injector import (
     DefaultWebClientConfigInjector,
 )
@@ -59,8 +70,6 @@ from openhands.app_server.web_client.web_client_config_injector import (
     WebClientConfigInjector,
 )
 from openhands.sdk.utils.models import OpenHandsModel
-from openhands.server.types import AppMode
-from openhands.utils.environment import StorageProvider, get_storage_provider
 
 
 def get_default_persistence_dir() -> Path:
@@ -105,20 +114,83 @@ def get_default_permitted_cors_origins() -> list[str]:
 
 
 def get_openhands_provider_base_url() -> str | None:
-    """Return the base URL for the OpenHands provider, if configured."""
-    return os.getenv('OPENHANDS_PROVIDER_BASE_URL') or None
+    """Return the base URL for the OpenHands provider, if configured.
+
+    Falls back to LLM_BASE_URL for backward compatibility.
+    """
+    return os.getenv('OPENHANDS_PROVIDER_BASE_URL') or os.getenv('LLM_BASE_URL') or None
+
+
+def get_default_tavily_api_key() -> str | None:
+    """Return the Tavily API key from environment, if configured.
+
+    Falls back to SEARCH_API_KEY for backward compatibility.
+    """
+    return os.getenv('TAVILY_API_KEY') or os.getenv('SEARCH_API_KEY') or None
+
+
+# OpenHands provider models use this proxy at the SDK transport boundary.
+# Deployments (e.g. staging) may use a different LLM proxy, configured via
+# OPENHANDS_PROVIDER_BASE_URL.
+_SDK_DEFAULT_PROXY = 'https://llm-proxy.app.all-hands.dev/'
+
+
+def resolve_provider_llm_base_url(
+    model: str | None,
+    base_url: str | None,
+    provider_base_url: str | None = None,
+) -> str | None:
+    """Apply deployment-specific LLM proxy override when needed.
+
+    When the model uses the public ``openhands/`` prefix and the stored
+    ``base_url`` is the SDK default, replace it with the deployment's provider
+    URL.
+
+    Priority: user-explicit URL > deployment provider URL > SDK default.
+
+    Args:
+        model: LLM model name (e.g. ``openhands/gpt-5.5``).
+        base_url: The base URL from user/org settings.
+        provider_base_url: Deployment provider URL.  Falls back to
+            ``get_openhands_provider_base_url()`` when *None*.
+    """
+    if not model or not model.startswith('openhands/'):
+        return base_url
+
+    user_set_custom = base_url and base_url.rstrip('/') != _SDK_DEFAULT_PROXY.rstrip(
+        '/'
+    )
+    if user_set_custom:
+        return base_url
+
+    if provider_base_url is None:
+        provider_base_url = get_openhands_provider_base_url()
+    if provider_base_url:
+        return provider_base_url
+
+    return base_url
 
 
 def _get_default_lifespan():
-    # Check legacy parameters for saas mode. If we are in SAAS mode do not apply
-    # OpenHands alembic migrations
+    # Check legacy parameters for saas mode. If we are in SAAS mode use
+    # SaasAppLifespanService to initialize PostHog analytics
     if 'saas' in (os.getenv('OPENHANDS_CONFIG_CLS') or '').lower():
-        return None
+        from server.app_lifespan.saas_app_lifespan_service import (
+            SaasAppLifespanService,
+        )
+
+        return SaasAppLifespanService()
     return OssAppLifespanService()
+
+
+def _get_default_file_store() -> FileStore:
+    """Create a default LocalFileStore using the default persistence directory."""
+    return LocalFileStore(root=str(get_default_persistence_dir()))
 
 
 class AppServerConfig(OpenHandsModel):
     persistence_dir: Path = Field(default_factory=get_default_persistence_dir)
+    file_store: FileStore = Field(default_factory=_get_default_file_store)
     web_url: str | None = Field(
         default_factory=get_default_web_url,
         description='The URL where OpenHands is running (e.g., http://localhost:3000)',
@@ -135,7 +207,12 @@ class AppServerConfig(OpenHandsModel):
         default_factory=get_openhands_provider_base_url,
         description='Base URL for the OpenHands provider',
     )
+    tavily_api_key: str | None = Field(
+        default_factory=get_default_tavily_api_key,
+        description='Tavily API key for search integration (proxied via MCP server)',
+    )
     # Dependency Injection Injectors
+    llm_model: LLMModelServiceInjector | None = None
     event: EventServiceInjector | None = None
     event_callback: EventCallbackServiceInjector | None = None
     sandbox: SandboxServiceInjector | None = None
@@ -207,6 +284,26 @@ def config_from_env() -> AppServerConfig:
 
     config: AppServerConfig = from_env(AppServerConfig, 'OH')  # type: ignore
 
+    if config.llm_model is None:
+        from openhands.app_server.config_api.default_llm_model_service import (
+            DefaultLLMModelServiceInjector,
+        )
+
+        llm_model_kwargs: dict = {}
+        aws_region = os.getenv('AWS_REGION_NAME')
+        aws_key = os.getenv('AWS_ACCESS_KEY_ID')
+        aws_secret = os.getenv('AWS_SECRET_ACCESS_KEY')
+        if aws_region and aws_key and aws_secret:
+            llm_model_kwargs['aws_region_name'] = aws_region
+            llm_model_kwargs['aws_access_key_id'] = SecretStr(aws_key)
+            llm_model_kwargs['aws_secret_access_key'] = SecretStr(aws_secret)
+
+        ollama_url = os.getenv('OLLAMA_BASE_URL')
+        if ollama_url:
+            llm_model_kwargs['ollama_base_url'] = ollama_url
+
+        config.llm_model = DefaultLLMModelServiceInjector(**llm_model_kwargs)
+
     if config.event is None:
         provider = get_storage_provider()
 
@@ -220,9 +317,12 @@ def config_from_env() -> AppServerConfig:
             config.event = AwsEventServiceInjector(bucket_name=bucket_name)
         elif provider == StorageProvider.GCP:
             # Google Cloud storage configuration
-            config.event = GoogleCloudEventServiceInjector(
-                bucket_name=os.environ.get('FILE_STORE_PATH')
-            )
+            bucket_name = os.environ.get('FILE_STORE_PATH')
+            if not bucket_name:
+                raise ValueError(
+                    'FILE_STORE_PATH environment variable is required for Google Cloud storage'
+                )
+            config.event = GoogleCloudEventServiceInjector(bucket_name=bucket_name)
         else:
             config.event = FilesystemEventServiceInjector()
 
@@ -302,13 +402,7 @@ def config_from_env() -> AppServerConfig:
         )
 
     if config.app_conversation is None:
-        tavily_api_key = None
-        tavily_api_key_str = os.getenv('TAVILY_API_KEY') or os.getenv('SEARCH_API_KEY')
-        if tavily_api_key_str:
-            tavily_api_key = SecretStr(tavily_api_key_str)
-        config.app_conversation = LiveStatusAppConversationServiceInjector(
-            tavily_api_key=tavily_api_key
-        )
+        config.app_conversation = LiveStatusAppConversationServiceInjector()
 
     if config.pending_message is None:
         from openhands.app_server.pending_messages.pending_message_service import (
@@ -425,12 +519,6 @@ def get_jwt_service(
     return injector.context(state, request)
 
 
-def get_db_session(
-    state: InjectorState, request: Request | None = None
-) -> AsyncContextManager[AsyncSession]:
-    return get_global_config().db_session.context(state, request)
-
-
 def get_app_lifespan_service() -> AppLifespanService | None:
     config = get_global_config()
     return config.lifespan
@@ -500,5 +588,15 @@ def depends_jwt_service():
     return Depends(injector.depends)
 
 
-def depends_db_session():
-    return Depends(get_global_config().db_session.depends)
+def get_llm_model_service(
+    state: InjectorState, request: Request | None = None
+) -> AsyncContextManager[LLMModelService]:
+    injector = get_global_config().llm_model
+    assert injector is not None
+    return injector.context(state, request)
+
+
+def depends_llm_model_service():
+    injector = get_global_config().llm_model
+    assert injector is not None
+    return Depends(injector.depends)

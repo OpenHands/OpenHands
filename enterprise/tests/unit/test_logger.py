@@ -8,7 +8,7 @@ import pytest
 from freezegun import freeze_time
 from server.logger import format_stack, setup_json_logger
 
-from openhands.core.logger import openhands_logger
+from openhands.app_server.utils.logger import openhands_logger
 
 FROZEN_TIMESTAMP = '2024-01-15T10:30:00+00:00'
 # datetime.now().isoformat() doesn't include timezone info
@@ -339,9 +339,9 @@ class TestLogOutput:
         assert 'ts' in output
         assert 'timestamp' not in output
         # Verify 'ts' appears only once in the raw output (not duplicated as key)
-        assert (
-            raw_output.count('"ts"') == 1
-        ), f"'ts' should appear exactly once, found in: {raw_output}"
+        assert raw_output.count('"ts"') == 1, (
+            f"'ts' should appear exactly once, found in: {raw_output}"
+        )
         assert output['message'] == 'Test both modes message'
         assert output['severity'] == 'INFO'
         # When LOG_JSON_FOR_CONSOLE=1, custom_json_serializer uses datetime.now().isoformat()

@@ -61,13 +61,6 @@ export LITE_LLM_API_KEY=<your LLM API key>
 python enterprise_local/convert_to_env.py
 ```
 
-You'll also need to set up the runtime image, so that the dev server doesn't try to rebuild it.
-
-```
-export SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/openhands/runtime:main-nikolaik
-docker pull $SANDBOX_RUNTIME_CONTAINER_IMAGE
-```
-
 By default the application will log in json, you can override.
 
 ```
@@ -167,7 +160,11 @@ A Local redis instance is required for clustered communication between server no
 A Local postgres instance is required. I used the official docker image:
 `docker run -p 5432:5432 --name my-postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=openhands -d postgres`
 Run the alembic migrations:
-`poetry run alembic upgrade head `
+`poetry run alembic upgrade head`
+
+> **Note:** By default, migrations use the `pg8000` driver (matching production,
+> which connects through the Cloud SQL connector on pg8000). To use psycopg2 instead,
+> set `DB_DRIVER=''` before running alembic commands.
 
 #### VSCode launch.json
 
@@ -203,7 +200,6 @@ And then invoking `printenv`. NOTE: _DO NOT DO THIS WITH PROD!!!_ (Hopefully by 
                 "REDIS_HOST": "localhost:6379",
                 "OPENHANDS": "<YOUR LOCAL OPENHANDS DIR>",
                 "FRONTEND_DIRECTORY": "<YOUR LOCAL OPENHANDS DIR>/frontend/build",
-                "SANDBOX_RUNTIME_CONTAINER_IMAGE": "ghcr.io/openhands/runtime:main-nikolaik",
                 "FILE_STORE_PATH": "<YOUR HOME DIRECTORY>>/.openhands-state",
                 "OPENHANDS_CONFIG_CLS": "server.config.SaaSServerConfig",
                 "GITHUB_APP_ID": "1062351",
@@ -237,7 +233,6 @@ And then invoking `printenv`. NOTE: _DO NOT DO THIS WITH PROD!!!_ (Hopefully by 
                 "REDIS_HOST": "localhost:6379",
                 "OPENHANDS": "<YOUR LOCAL OPENHANDS DIR>",
                 "FRONTEND_DIRECTORY": "<YOUR LOCAL OPENHANDS DIR>/frontend/build",
-                "SANDBOX_RUNTIME_CONTAINER_IMAGE": "ghcr.io/openhands/runtime:main-nikolaik",
                 "FILE_STORE_PATH": "<YOUR HOME DIRECTORY>>/.openhands-state",
                 "OPENHANDS_CONFIG_CLS": "server.config.SaaSServerConfig",
                 "GITHUB_APP_ID": "1062351",

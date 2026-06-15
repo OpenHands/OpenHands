@@ -6,15 +6,17 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from server.constants import (
-    LITE_LLM_API_URL,
     ORG_SETTINGS_VERSION,
-    get_default_litellm_model,
+    get_default_llm_base_url,
+    get_default_llm_model,
 )
 from server.routes.org_models import OrgAppSettingsUpdate
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from storage.org import Org
 from storage.user import User
+
+from openhands.app_server.utils.jsonpatch_compat import deep_merge
 
 
 @dataclass
@@ -33,10 +35,10 @@ class OrgAppSettingsStore:
             Org: The organization object, or None if not found
         """
         # Get user with their current_org_id
-        result = await self.db_session.execute(
+        user_result = await self.db_session.execute(
             select(User).filter(User.id == UUID(user_id))
         )
-        user = result.scalars().first()
+        user = user_result.scalars().first()
 
         if not user:
             return None
@@ -45,13 +47,21 @@ class OrgAppSettingsStore:
         if not org_id:
             return None
 
-        # Get the organization
-        result = await self.db_session.execute(select(Org).filter(Org.id == org_id))
-        org = result.scalars().first()
+        return await self.get_org_by_id(org_id)
 
+    async def get_org_by_id(self, org_id: UUID) -> Org | None:
+        """Get an organization by its id, validating the org version.
+
+        Args:
+            org_id: The organization's UUID.
+
+        Returns:
+            Org: The organization object, or None if not found.
+        """
+        org_result = await self.db_session.execute(select(Org).filter(Org.id == org_id))
+        org = org_result.scalars().first()
         if not org:
             return None
-
         return await self._validate_org_version(org)
 
     async def _validate_org_version(self, org: Org) -> Org:
@@ -65,8 +75,15 @@ class OrgAppSettingsStore:
         """
         if org.org_version < ORG_SETTINGS_VERSION:
             org.org_version = ORG_SETTINGS_VERSION
-            org.default_llm_model = get_default_litellm_model()
-            org.llm_base_url = LITE_LLM_API_URL
+            org.agent_settings = deep_merge(
+                org.agent_settings,
+                {
+                    'llm': {
+                        'model': get_default_llm_model(),
+                        'base_url': get_default_llm_base_url(),
+                    },
+                },
+            )
             await self.db_session.flush()
             await self.db_session.refresh(org)
 

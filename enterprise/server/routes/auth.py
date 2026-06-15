@@ -2,21 +2,34 @@ import base64
 import json
 import uuid
 import warnings
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from types import MappingProxyType
 from typing import Annotated, Optional, cast
-from urllib.parse import quote, urlencode
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 from uuid import UUID as parse_uuid
 
-import posthog
-from fastapi import APIRouter, Header, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from fastapi.responses import JSONResponse, RedirectResponse
-from pydantic import SecretStr
+from pydantic import BaseModel, SecretStr
 from server.auth.constants import (
     KEYCLOAK_CLIENT_ID,
     KEYCLOAK_REALM_NAME,
     KEYCLOAK_SERVER_URL_EXT,
     RECAPTCHA_SITE_KEY,
     ROLE_CHECK_ENABLED,
+)
+from server.auth.cookie_chunking import (
+    delete_chunked_cookie,
+    read_chunked_cookie,
+    set_chunked_cookie,
 )
 from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.recaptcha_service import recaptcha_service
@@ -26,9 +39,10 @@ from server.auth.user.user_authorizer import (
     UserAuthorizer,
     depends_user_authorizer,
 )
-from server.config import sign_token
-from server.constants import IS_FEATURE_ENV, IS_LOCAL_ENV
-from server.routes.event_webhook import _get_session_api_key, _get_user_id
+from server.constants import (
+    DEPLOYMENT_MODE,
+    IS_FEATURE_ENV,
+)
 from server.services.org_invitation_service import (
     EmailMismatchError,
     InvitationExpiredError,
@@ -36,20 +50,29 @@ from server.services.org_invitation_service import (
     OrgInvitationService,
     UserAlreadyMemberError,
 )
-from server.utils.rate_limit_utils import check_rate_limit_by_user_id
+from server.utils.conversation_utils import get_session_api_key, get_user_id
+from server.utils.rate_limit_utils import (
+    RATE_LIMIT_AUTH_VERIFY_EMAIL_IP_SECONDS,
+    RATE_LIMIT_AUTH_VERIFY_EMAIL_USER_SECONDS,
+    check_rate_limit_by_user_id,
+)
 from server.utils.url_utils import get_cookie_domain, get_cookie_samesite, get_web_url
 from sqlalchemy import select
 from storage.database import a_session_maker
+from storage.default_org_service import DefaultOrgBootstrapService
 from storage.user import User
 from storage.user_store import UserStore
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.provider import ProviderHandler
-from openhands.integrations.service_types import ProviderType, TokenResponse
-from openhands.server.services.conversation_service import create_provider_tokens_object
-from openhands.server.shared import config
-from openhands.server.user_auth import get_access_token
-from openhands.server.user_auth.user_auth import get_user_auth
+from openhands.analytics import get_analytics_service, resolve_analytics_context
+from openhands.app_server.integrations.provider import (
+    PROVIDER_TOKEN_TYPE,
+    ProviderHandler,
+    ProviderToken,
+)
+from openhands.app_server.integrations.service_types import ProviderType, TokenResponse
+from openhands.app_server.user_auth import get_access_token
+from openhands.app_server.user_auth.user_auth import AuthType, get_user_auth
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
@@ -58,6 +81,18 @@ api_router = APIRouter(prefix='/api')
 oauth_router = APIRouter(prefix='/oauth')
 
 token_manager = TokenManager()
+
+
+def create_provider_tokens_object(
+    providers_set: list[ProviderType],
+) -> PROVIDER_TOKEN_TYPE:
+    """Create provider tokens object for the given providers."""
+    provider_information: dict[ProviderType, ProviderToken] = {}
+
+    for provider in providers_set:
+        provider_information[provider] = ProviderToken(token=None, user_id=None)
+
+    return MappingProxyType(provider_information)
 
 
 def set_response_cookie(
@@ -74,27 +109,26 @@ def set_response_cookie(
         'refresh_token': keycloak_refresh_token,
         'accepted_tos': accepted_tos,
     }
-    signed_token = sign_token(cookie_data, config.jwt_secret.get_secret_value())  # type: ignore
+    from storage.encrypt_utils import get_jwt_service
 
-    # Set secure cookie with signed token
-    domain = get_cookie_domain()
-    if domain:
-        response.set_cookie(
-            key='keycloak_auth',
-            value=signed_token,
-            domain=domain,
-            httponly=True,
-            secure=secure,
-            samesite=get_cookie_samesite(),
-        )
-    else:
-        response.set_cookie(
-            key='keycloak_auth',
-            value=signed_token,
-            httponly=True,
-            secure=secure,
-            samesite=get_cookie_samesite(),
-        )
+    signed_token = get_jwt_service().create_jws_token(
+        cookie_data, expires_in=timedelta(weeks=1)
+    )
+
+    # Set secure cookie with signed token. The value can exceed the
+    # browser's 4096-byte single-cookie cap for users with large Keycloak
+    # claim sets, so write it through the chunked-cookie helper, which
+    # splits oversized values across sibling cookies and stays
+    # byte-identical for values that fit in one cookie.
+    set_chunked_cookie(
+        response,
+        'keycloak_auth',
+        signed_token,
+        domain=get_cookie_domain(),
+        secure=secure,
+        httponly=True,
+        samesite=get_cookie_samesite(),
+    )
 
 
 def _extract_oauth_state(state: str | None) -> tuple[str, str | None, str | None]:
@@ -120,9 +154,107 @@ def _extract_oauth_state(state: str | None) -> tuple[str, str | None, str | None
         return state, None, None
 
 
+async def _get_user_orgs_with_data(user_id: str, org_member_ids: list) -> list:
+    """Load Org objects for a user's org memberships.
+
+    Uses OrgStore.get_orgs_by_ids() to batch-load all Org objects in a single
+    query, avoiding N+1.
+
+    Args:
+        user_id: The user's ID string
+        org_member_ids: List of org_id UUIDs from user.org_members
+
+    Returns:
+        List of Org objects the user belongs to
+    """
+    from storage.org_store import OrgStore
+
+    if not org_member_ids:
+        return []
+
+    try:
+        return await OrgStore.get_orgs_by_ids(org_member_ids)
+    except Exception:
+        logger.exception(
+            'auth:_get_user_orgs_with_data:failed',
+            extra={'user_id': user_id, 'org_ids': [str(oid) for oid in org_member_ids]},
+        )
+        return []
+
+
+async def _track_login_analytics_background(
+    user_id: str,
+    email: str | None,
+    idp: str,
+    current_org_id: parse_uuid | None,
+    org_member_ids: list,
+    consented: bool,
+) -> None:
+    """Track login analytics in background to avoid blocking auth response."""
+    try:
+        from storage.org_member_store import OrgMemberStore
+        from storage.org_store import OrgStore
+
+        analytics = get_analytics_service()
+        if not analytics:
+            return
+
+        org_id_str = str(current_org_id) if current_org_id else None
+
+        # Load current org
+        current_org = (
+            await OrgStore.get_org_by_id(current_org_id) if current_org_id else None
+        )
+
+        # Load org data (orgs list with member_count)
+        user_orgs = await _get_user_orgs_with_data(user_id, org_member_ids)
+
+        orgs_data = []
+        for org in user_orgs:
+            try:
+                member_count = await OrgMemberStore.get_org_members_count(org_id=org.id)
+            except Exception:
+                logger.exception(
+                    'auth:identify_user:member_count_failed',
+                    extra={'user_id': user_id, 'org_id': str(org.id)},
+                )
+                member_count = None
+            orgs_data.append(
+                {'id': str(org.id), 'name': org.name, 'member_count': member_count}
+            )
+
+        from openhands.analytics.analytics_context import AnalyticsContext
+
+        ctx = AnalyticsContext(
+            user_id=user_id,
+            consented=consented,
+            org_id=org_id_str,
+            user=None,
+        )
+
+        analytics.identify_user(
+            ctx=ctx,
+            email=email,
+            org_name=current_org.name if current_org else None,
+            idp=idp,
+            orgs=orgs_data,
+        )
+
+        analytics.track_user_logged_in(
+            ctx=ctx,
+            idp=idp,
+        )
+    except Exception:
+        logger.exception(
+            'auth:_track_login_analytics_background:failed',
+            extra={'user_id': user_id},
+        )
+
+
 @oauth_router.get('/keycloak/callback')
 async def keycloak_callback(
     request: Request,
+    background_tasks: BackgroundTasks,
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
@@ -199,8 +331,10 @@ async def keycloak_callback(
     user_id = user_info.sub
     user_info_dict = user_info.model_dump(exclude_none=True)
     user = await UserStore.get_user_by_id(user_id)
+    is_new_user: bool = False
     if not user:
         user = await UserStore.create_user(user_id, user_info_dict)
+        is_new_user = True
     else:
         # Existing user — gradually backfill contact_name if it still has a username-style value
         await UserStore.backfill_contact_name(user_id, user_info_dict)
@@ -272,16 +406,17 @@ async def keycloak_callback(
         # Import locally to avoid circular import with email.py
         from server.routes.email import verify_email
 
-        # Rate limit verification emails during auth flow (60 seconds per user)
-        # This is separate from the manual resend rate limit which uses 30 seconds
+        # Rate limit verification emails during auth flow (defaults: 60s per user,
+        # 120s per IP; configurable via RATE_LIMIT_AUTH_VERIFY_EMAIL_* env vars).
+        # This is separate from the manual resend limit (RATE_LIMIT_EMAIL_RESEND_*).
         rate_limited = False
         try:
             await check_rate_limit_by_user_id(
                 request=request,
                 key_prefix='auth_verify_email',
                 user_id=user_id,
-                user_rate_limit_seconds=60,
-                ip_rate_limit_seconds=120,
+                user_rate_limit_seconds=RATE_LIMIT_AUTH_VERIFY_EMAIL_USER_SECONDS,
+                ip_rate_limit_seconds=RATE_LIMIT_AUTH_VERIFY_EMAIL_IP_SECONDS,
             )
             await verify_email(request=request, user_id=user_id, is_auth_flow=True)
         except HTTPException as e:
@@ -317,9 +452,12 @@ async def keycloak_callback(
         idp, idp_type = idp.rsplit(':', 1)
         idp_type = idp_type.lower()
 
-    await token_manager.store_idp_tokens(
-        ProviderType(idp), user_id, keycloak_access_token
-    )
+    # Only fetch/store IdP tokens for OAuth-based IdPs (not SAML)
+    # SAML IdPs don't have OAuth tokens to retrieve from Keycloak's broker endpoint
+    if idp_type != 'saml':
+        await token_manager.store_idp_tokens(
+            ProviderType(idp), user_id, keycloak_access_token
+        )
 
     valid_offline_token = (
         await token_manager.validate_offline_token(user_id=user_info.sub)
@@ -331,36 +469,26 @@ async def keycloak_callback(
         f'keycloakAccessToken: {keycloak_access_token}, keycloakUserId: {user_id}'
     )
 
-    # adding in posthog tracking
+    # Server-side identity — defer to background to avoid blocking auth response
+    consented = user.user_consents_to_analytics is True
+    org_member_ids = [om.org_id for om in user.org_members] if user.org_members else []
 
-    # If this is a feature environment, add "FEATURE_" prefix to user_id for PostHog
-    posthog_user_id = f'FEATURE_{user_id}' if IS_FEATURE_ENV else user_id
-
-    try:
-        posthog.set(
-            distinct_id=posthog_user_id,
-            properties={
-                'user_id': posthog_user_id,
-                'original_user_id': user_id,
-                'is_feature_env': IS_FEATURE_ENV,
-            },
-        )
-    except Exception as e:
-        logger.error(
-            'auth:posthog_set:failed',
-            extra={
-                'user_id': user_id,
-                'error': str(e),
-            },
-        )
-        # Continue execution as this is not critical
+    background_tasks.add_task(
+        _track_login_analytics_background,
+        user_id=user_id,
+        email=email,
+        idp=idp,
+        current_org_id=user.current_org_id,
+        org_member_ids=org_member_ids,
+        consented=consented,
+    )
 
     logger.info(
         'user_logged_in',
         extra={
             'idp': idp,
             'idp_type': idp_type,
-            'posthog_user_id': posthog_user_id,
+            'user_id': user_id,
             'is_feature_env': IS_FEATURE_ENV,
         },
     )
@@ -454,6 +582,32 @@ async def keycloak_callback(
             else:
                 redirect_url = f'{redirect_url}?invitation_error=true'
 
+    # Accept pending invitations addressed to the user's email. Runs before
+    # the default-org bootstrap so an invitation's role (e.g. admin) wins
+    # over the bootstrap's auto-add member role for the same org.
+    try:
+        accepted_invitations = (
+            await OrgInvitationService.accept_pending_invitations_for_user(user)
+        )
+        if accepted_invitations:
+            user = await UserStore.get_user_by_id(user_id) or user
+    except Exception as e:
+        logger.exception(
+            'Unexpected error accepting pending invitations at login',
+            extra={'user_id': user_id, 'error': str(e)},
+        )
+
+    try:
+        user = await DefaultOrgBootstrapService.apply_for_user(
+            user,
+            is_new_user=is_new_user,
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error applying default organization bootstrap',
+            extra={'user_id': user_id, 'error': str(e)},
+        )
+
     # If the user hasn't accepted the TOS, redirect to the TOS page
     if not has_accepted_tos:
         encoded_redirect_url = quote(redirect_url, safe='')
@@ -462,8 +616,23 @@ async def keycloak_callback(
             tos_redirect_url = f'{tos_redirect_url}&invitation_success=true'
         response = RedirectResponse(tos_redirect_url, status_code=302)
     else:
+        # User has accepted TOS - check if they need onboarding
+        # Only redirect to onboarding if user has a valid offline token,
+        # otherwise they need to complete the Keycloak offline token flow first
+        if valid_offline_token and await _should_redirect_to_onboarding(user_id, user):
+            # Preserve the user's originally requested destination as
+            # ``?returnTo=...`` so the frontend ``OnboardingForm`` can
+            # restore it after the user finishes the form.
+            redirect_url = _build_onboarding_redirect(redirect_url, web_url)
+            logger.info(
+                'Redirecting returning user to onboarding',
+                extra={'user_id': user_id, 'deployment_mode': DEPLOYMENT_MODE},
+            )
         if invitation_token:
-            redirect_url = f'{redirect_url}&invitation_success=true'
+            if '?' in redirect_url:
+                redirect_url = f'{redirect_url}&invitation_success=true'
+            else:
+                redirect_url = f'{redirect_url}?invitation_success=true'
         response = RedirectResponse(redirect_url, status_code=302)
 
     set_response_cookie(
@@ -471,7 +640,7 @@ async def keycloak_callback(
         response=response,
         keycloak_access_token=keycloak_access_token,
         keycloak_refresh_token=keycloak_refresh_token,
-        secure=True if redirect_url.startswith('https') else False,
+        secure=True if web_url.startswith('https') else False,
         accepted_tos=has_accepted_tos,
     )
 
@@ -512,8 +681,16 @@ async def keycloak_offline_callback(code: str, state: str, request: Request):
         user_id=user_info.sub, offline_token=keycloak_refresh_token
     )
 
+    user = await UserStore.get_user_by_id(user_info.sub)
     redirect_url, _, _ = _extract_oauth_state(state)
-    return RedirectResponse(redirect_url if redirect_url else web_url, status_code=302)
+    default_url = redirect_url if redirect_url else web_url
+    final_url = await _get_post_auth_redirect(user_info.sub, default_url, web_url, user)
+
+    # Intentionally do NOT write tokens into the `keycloak_auth` cookie:
+    # the cookie tracks the regular (online) session and is the token
+    # passed to Keycloak's /logout endpoint. Putting the offline token
+    # in the cookie causes logout to terminate the offline session.
+    return RedirectResponse(final_url, status_code=302)
 
 
 @oauth_router.get('/github/callback')
@@ -537,16 +714,174 @@ async def authenticate(request: Request):
             content={'error': 'User is not authenticated'},
         )
 
-        # Delete the auth cookie if it exists
-        keycloak_auth_cookie = request.cookies.get('keycloak_auth')
+        # Delete the auth cookie (and any sibling chunks) if it exists
+        keycloak_auth_cookie = read_chunked_cookie(request, 'keycloak_auth')
         if keycloak_auth_cookie:
-            response.delete_cookie(
-                key='keycloak_auth',
+            delete_chunked_cookie(
+                response,
+                'keycloak_auth',
                 domain=get_cookie_domain(),
                 samesite=get_cookie_samesite(),
             )
 
         return response
+
+
+def _extract_login_inner_return_to(relative_url: str) -> str | None:
+    """Extract the inner ``returnTo`` from a ``/login?returnTo=...`` URL.
+
+    Returns the decoded inner ``returnTo`` value, or ``None`` if
+    ``relative_url`` is not a login URL or has no inner ``returnTo``.
+
+    The OAuth flow's ``state`` is set to the full URL of the page that
+    triggered the login (see ``generateAuthUrl`` in the frontend).
+    For an unauthenticated deep-link visit, that page is itself
+    ``/login?returnTo=<actual destination>``, so the OAuth callback's
+    ``redirect_url`` ends up *wrapping* the user's true destination
+    inside a login URL. Sending the user back through ``/login`` after
+    onboarding works in principle (``LoginPage`` re-redirects authed
+    users to its own ``returnTo``), but the round-trip adds extra
+    state and is brittle when query-string layering goes wrong.
+
+    Unwrapping here keeps the post-onboarding navigation a single
+    direct step, e.g. ``/onboarding?returnTo=%2Fsettings%2Fuser``
+    rather than the doubly-nested
+    ``/onboarding?returnTo=%2Flogin%3FreturnTo%3D%252Fsettings...``.
+    """
+    parsed = urlparse(relative_url)
+    if parsed.path != '/login':
+        return None
+    inner = parse_qs(parsed.query).get('returnTo')
+    if not inner:
+        return None
+    value = inner[0]
+    if not value.startswith('/'):
+        return None
+    return value
+
+
+def _build_onboarding_redirect(original_url: str, web_url: str) -> str:
+    """Build the ``/onboarding`` redirect URL preserving ``returnTo``.
+
+    The user's originally requested destination is preserved as a
+    ``returnTo`` query parameter on ``/onboarding``.
+
+    Without this, any deep link the user clicked while logged out
+    (e.g. ``/conversations/abc?foo=bar``) is silently dropped at the
+    onboarding interstitial because the OAuth callback would clobber
+    its working ``redirect_url`` with a bare ``f'{web_url}/onboarding'``.
+    The frontend ``OnboardingForm`` reads this ``returnTo`` query
+    parameter and restores it after the user finishes the form.
+
+    The trivial home-page case (``original_url`` empty, equal to
+    ``web_url``, or pointing at ``web_url/``) returns the bare
+    ``/onboarding`` URL to keep the URL bar clean — that is already
+    the default landing page once onboarding completes.
+
+    The ``returnTo`` value is always a *relative* path (``/foo?bar``)
+    rather than an absolute URL: that keeps the URL short, avoids
+    leaking the deployment origin into the browser bar a second time,
+    and lets the frontend use ``navigate(returnTo)`` directly.
+
+    When ``original_url`` is itself a ``/login?returnTo=...`` URL —
+    which is the common case for unauthenticated deep-link visits,
+    because the OAuth flow's ``state`` carries the full login page
+    URL — the *inner* ``returnTo`` is extracted so the user lands at
+    their real destination in a single navigation rather than
+    bouncing through ``/login`` after onboarding.
+    """
+    onboarding_url = f'{web_url}/onboarding'
+    if not original_url:
+        return onboarding_url
+
+    # Compute the path-and-query portion of the original URL. We try
+    # to strip the deployment origin first so we end up with a
+    # relative path; if the URL points at a different host we fall
+    # back to the URL as-is. The ``OnboardingForm`` component's
+    # ``sanitizeReturnTo`` helper rejects absolute/protocol-relative
+    # URLs before use, so any unexpected absolute value here is safe.
+    relative = original_url
+    if web_url and original_url.startswith(web_url):
+        relative = original_url[len(web_url) :] or '/'
+
+    # If we ended up with a login-page URL, unwrap its inner
+    # ``returnTo`` so post-onboarding navigation goes straight to the
+    # user's real destination instead of bouncing through ``/login``.
+    inner_return_to = _extract_login_inner_return_to(relative)
+    if inner_return_to is not None:
+        relative = inner_return_to
+
+    # Skip the trivial home-page case to keep the URL clean.
+    if relative in ('', '/'):
+        return onboarding_url
+
+    return f'{onboarding_url}?returnTo={quote(relative, safe="")}'
+
+
+async def _should_redirect_to_onboarding(user_id: str, user: User) -> bool:
+    """Check if user should be redirected to onboarding after TOS acceptance.
+    Backend always redirects applicable users to /onboarding.
+    Returns True if:
+    - User has onboarding_completed explicitly set to False (new users)
+    - Either:
+      - Deployment mode is 'cloud' (all users)
+      - Deployment mode is 'self_hosted' AND user is the super admin
+        (first owner in their current org to accept TOS)
+
+    Returns False if:
+    - User has onboarding_completed=True (already completed)
+    - User has onboarding_completed=None (existing users before this feature)
+    """
+    # Already completed onboarding
+    if user.onboarding_completed is True:
+        return False
+
+    # Existing user before this feature (NULL in database)
+    if user.onboarding_completed is None:
+        return False
+
+    # Cloud SaaS: all users go to onboarding
+    if DEPLOYMENT_MODE == 'cloud':
+        return True
+
+    # Self-hosted SaaS: only the super admin (first owner to accept TOS in the org)
+    if DEPLOYMENT_MODE == 'self_hosted':
+        first_owner = await UserStore.get_first_owner_in_org(user.current_org_id)
+        if first_owner and str(first_owner.id) == user_id:
+            return True
+
+    return False
+
+
+async def _get_post_auth_redirect(
+    user_id: str, default_url: str, web_url: str, user: User | None = None
+) -> str:
+    """Determine where to redirect user after authentication completes.
+
+    Called after offline token is stored to determine final redirect destination.
+    Checks for pending user flows (e.g., onboarding) before falling back to default.
+
+    Args:
+        user_id: The user's ID.
+        default_url: The default URL to redirect to if no special flow is needed.
+        web_url: The base web URL for constructing absolute paths.
+        user: Optional user object to avoid refetching.
+
+    Returns:
+        The URL to redirect the user to.
+    """
+    if not user:
+        user = await UserStore.get_user_by_id(user_id)
+    if user and await _should_redirect_to_onboarding(user_id, user):
+        logger.info(
+            'Redirecting user to onboarding',
+            extra={'user_id': user_id, 'deployment_mode': DEPLOYMENT_MODE},
+        )
+        # Preserve the user's originally requested destination as
+        # ``?returnTo=...`` so the frontend ``OnboardingForm`` can
+        # restore it after the user finishes the form.
+        return _build_onboarding_redirect(default_url, web_url)
+    return default_url
 
 
 @api_router.post('/accept_tos')
@@ -585,9 +920,45 @@ async def accept_tos(request: Request):
                 content={'error': 'User does not exist'},
             )
         user.accepted_tos = accepted_tos
+        # SaaS users consent to analytics via Terms of Service acceptance
+        user.user_consents_to_analytics = True
         await session.commit()
 
         logger.info(f'User {user_id} accepted TOS')
+
+        # Analytics: user signed up event (fires on first TOS acceptance)
+        try:
+            analytics = get_analytics_service()
+            if analytics:
+                from openhands.analytics.analytics_context import AnalyticsContext
+
+                org_id_str = str(user.current_org_id) if user.current_org_id else None
+                email = user.email
+
+                ctx = AnalyticsContext(
+                    user_id=user_id,
+                    consented=True,
+                    org_id=org_id_str,
+                    user=user,
+                )
+                analytics.track_user_signed_up(
+                    ctx=ctx,
+                    email_domain=email.split('@')[1]
+                    if email and '@' in email
+                    else None,
+                )
+                analytics.set_person_properties(
+                    ctx=ctx,
+                    properties={'signed_up_at': datetime.now(timezone.utc).isoformat()},
+                )
+        except Exception:
+            logger.exception('analytics:user_signed_up:failed')
+
+    # Determine final redirect - but don't override if it's the offline token flow
+    # (the offline callback will handle post-auth redirect after storing the token)
+    is_offline_flow = 'offline' in redirect_url
+    if not is_offline_flow:
+        redirect_url = await _get_post_auth_redirect(user_id, redirect_url, web_url)
 
     response = JSONResponse(
         status_code=status.HTTP_200_OK, content={'redirect_url': redirect_url}
@@ -598,10 +969,123 @@ async def accept_tos(request: Request):
         response=response,
         keycloak_access_token=access_token.get_secret_value(),
         keycloak_refresh_token=refresh_token.get_secret_value(),
-        secure=not IS_LOCAL_ENV,
+        secure=True if web_url.startswith('https') else False,
         accepted_tos=True,
     )
     return response
+
+
+@api_router.get('/onboarding_status')
+async def onboarding_status(request: Request):
+    """Return whether the current user must still complete onboarding.
+
+    Kept as a dedicated endpoint instead of riding on ``GET /api/v1/settings``
+    (the natural home for fields like ``email_verified``) because the settings
+    response is heavyweight: ``SaasSettingsStore.load`` joins User, Org, and
+    OrgMember rows and deep-merges the org-level and member-level
+    ``agent_settings`` before returning. Onboarding gating runs on every
+    protected-route navigation, so we need a lightweight read of a single
+    boolean rather than paying for the full settings aggregation.
+    """
+    user_auth = cast(SaasUserAuth, await get_user_auth(request))
+    user_id = await user_auth.get_user_id()
+
+    if not user_id:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={'error': 'User is not authenticated'},
+        )
+
+    user = await UserStore.get_user_by_id(user_id)
+    if not user:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': 'User not found'},
+        )
+
+    should_complete = await _should_redirect_to_onboarding(user_id, user)
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={'should_complete_onboarding': should_complete},
+    )
+
+
+class OnboardingSubmission(BaseModel):
+    """Payload posted from the onboarding form.
+
+    ``selections`` maps onboarding question_id -> selected option(s), e.g.
+    ``{"role": "software_engineer", "org_size": "solo",
+       "use_case": ["new_features", "fixing_bugs"]}``.
+
+    The field is optional so the endpoint stays backwards-compatible with any
+    client that previously called it with an empty body, but the current
+    frontend always submits a populated mapping.
+    """
+
+    selections: dict[str, str | list[str]] = {}
+
+
+@api_router.post('/complete_onboarding')
+async def complete_onboarding(
+    request: Request, body: OnboardingSubmission | None = None
+):
+    """Mark onboarding as completed for the current user and fire analytics.
+
+    Persists ``user.onboarding_completed = True`` and emits the
+    ``onboarding completed`` PostHog event (plus an org ``group_identify`` to
+    stamp ``onboarding_completed_at``). Analytics failures are swallowed so
+    they never block the user from leaving the onboarding flow.
+    """
+    user_auth = cast(SaasUserAuth, await get_user_auth(request))
+    user_id = await user_auth.get_user_id()
+
+    if not user_id:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={'error': 'User is not authenticated'},
+        )
+
+    user = await UserStore.mark_onboarding_completed(user_id)
+    if not user:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': 'User not found'},
+        )
+
+    logger.info(
+        'User completed onboarding',
+        extra={'user_id': user_id},
+    )
+
+    # Analytics: 'onboarding completed' event + org group_identify.
+    # Best-effort: never let a tracking failure break the onboarding flow.
+    selections = body.selections if body is not None else {}
+    try:
+        analytics = get_analytics_service()
+        if analytics:
+            ctx = await resolve_analytics_context(user_id)
+            analytics.track_onboarding_completed(
+                ctx=ctx,
+                selections=selections,
+            )
+            if ctx.org_id:
+                analytics.group_identify(
+                    ctx=ctx,
+                    group_type='org',
+                    group_key=ctx.org_id,
+                    properties={
+                        'onboarding_completed_at': datetime.now(
+                            timezone.utc
+                        ).isoformat(),
+                    },
+                )
+    except Exception:
+        logger.exception('analytics:onboarding_completed:failed')
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={'message': 'Onboarding completed'},
+    )
 
 
 @api_router.post('/logout')
@@ -612,17 +1096,33 @@ async def logout(request: Request):
         content={'message': 'User logged out'},
     )
 
-    # Always delete the cookie regardless of what happens
-    response.delete_cookie(
-        key='keycloak_auth',
+    # Always delete the cookie (and any sibling chunks) regardless of what happens
+    delete_chunked_cookie(
+        response,
+        'keycloak_auth',
         domain=get_cookie_domain(),
         samesite=get_cookie_samesite(),
     )
 
-    # Try to properly logout from Keycloak, but don't fail if it doesn't work
+    # Try to properly logout from Keycloak, but don't fail if it doesn't work.
+    #
+    # IMPORTANT: only terminate the Keycloak session when the resolved
+    # auth is the *cookie* (browser session). ``get_user_auth`` resolves
+    # bearer tokens before cookies, so a request that carries both an
+    # ``Authorization: Bearer <api-key>`` header *and* a
+    # ``keycloak_auth`` cookie would otherwise have its API-key-bound
+    # *offline_token* terminated when the user clicked "logout" in the
+    # browser. The browser intent is to drop the cookie session, not to
+    # revoke a long-lived API key. The cookie itself is always deleted
+    # above; we just must not nuke an offline session that belongs to a
+    # different auth surface.
     try:
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
-        if user_auth and user_auth.refresh_token:
+        if (
+            user_auth
+            and user_auth.refresh_token
+            and user_auth.auth_type == AuthType.COOKIE
+        ):
             refresh_token = user_auth.refresh_token.get_secret_value()
             await token_manager.logout(refresh_token)
     except Exception as e:
@@ -641,8 +1141,8 @@ async def refresh_tokens(
     x_session_api_key: Annotated[str | None, Header(alias='X-Session-API-Key')],
 ) -> TokenResponse:
     """Return the latest token for a given provider."""
-    user_id = _get_user_id(sid)
-    session_api_key = await _get_session_api_key(user_id, sid)
+    user_id = get_user_id(sid)
+    session_api_key = await get_session_api_key(sid)
     if session_api_key != x_session_api_key:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Forbidden')
 

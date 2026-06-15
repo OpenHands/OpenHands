@@ -14,13 +14,6 @@ vi.mock("react-router", async () => {
   };
 });
 
-// Mock useTracking to avoid QueryClient dependency
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
-    trackEnterpriseLeadFormSubmitted: vi.fn(),
-  }),
-}));
-
 describe("InformationRequest", () => {
   beforeEach(() => {
     vi.clearAllMocks();

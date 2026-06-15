@@ -3,7 +3,8 @@ import hashlib
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, AsyncGenerator, Union
+from datetime import datetime
+from typing import Any, AsyncGenerator
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -11,22 +12,19 @@ import base62
 import httpx
 from fastapi import Request
 from pydantic import Field
-from sqlalchemy import Column, String, func, select
+from sqlalchemy import String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column
 
-from openhands.agent_server.models import ConversationInfo, EventPage
-from openhands.agent_server.utils import utc_now
-from openhands.app_server.app_conversation.app_conversation_info_service import (
-    AppConversationInfoService,
+from openhands.agent_server.models import (
+    ConversationInfo,
+    EventPage,
 )
+from openhands.agent_server.utils import utc_now
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
 from openhands.app_server.errors import SandboxError
-from openhands.app_server.event.event_service import EventService
-from openhands.app_server.event_callback.event_callback_service import (
-    EventCallbackService,
-)
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     VSCODE,
@@ -35,6 +33,7 @@ from openhands.app_server.sandbox.sandbox_models import (
     ExposedUrl,
     SandboxInfo,
     SandboxPage,
+    SandboxRecord,
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import (
@@ -71,7 +70,7 @@ def _hash_session_api_key(session_api_key: str) -> str:
     return hashlib.sha256(session_api_key.encode()).hexdigest()
 
 
-class StoredRemoteSandbox(Base):  # type: ignore
+class StoredRemoteSandbox(Base):
     """Local storage for remote sandbox info.
 
     The remote runtime API does not return some variables we need, and does not
@@ -80,11 +79,20 @@ class StoredRemoteSandbox(Base):  # type: ignore
     run historicallly."""
 
     __tablename__ = 'v1_remote_sandbox'
-    id = Column(String, primary_key=True)
-    created_by_user_id = Column(String, nullable=True, index=True)
-    sandbox_spec_id = Column(String, index=True)  # shadows runtime['image']
-    session_api_key_hash = Column(String, nullable=True, index=True)
-    created_at = Column(UtcDateTime, server_default=func.now(), index=True)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
+    sandbox_spec_id: Mapped[str] = mapped_column(
+        String, index=True
+    )  # shadows runtime['image']
+    session_api_key_hash: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, server_default=func.now(), index=True
+    )
 
 
 @dataclass
@@ -322,7 +330,7 @@ class RemoteSandboxService(SandboxService):
 
         return SandboxPage(items=items, next_page_id=next_page_id)
 
-    async def get_sandbox(self, sandbox_id: str) -> Union[SandboxInfo, None]:
+    async def get_sandbox(self, sandbox_id: str) -> SandboxInfo | None:
         """Get a single sandbox by checking its corresponding runtime."""
         stored_sandbox = await self._get_stored_sandbox(sandbox_id)
         if stored_sandbox is None:
@@ -338,74 +346,12 @@ class RemoteSandboxService(SandboxService):
 
         return self._to_sandbox_info(stored_sandbox, runtime)
 
-    async def _get_sandbox_by_session_api_key_legacy(
-        self, session_api_key: str
-    ) -> Union[SandboxInfo, None]:
-        """Legacy method to get sandbox by session API key via runtime API.
-
-        This is the fallback for sandboxes created before the session_api_key_hash
-        column was added. It calls the remote runtime API which is less efficient.
-        """
-        try:
-            response = await self._send_runtime_api_request(
-                'GET',
-                '/list',
-            )
-            response.raise_for_status()
-            content = response.json()
-            for runtime in content['runtimes']:
-                if session_api_key == runtime['session_api_key']:
-                    query = await self._secure_select()
-                    query = query.filter(
-                        StoredRemoteSandbox.id == runtime.get('session_id')
-                    )
-                    result = await self.db_session.execute(query)
-                    sandbox = result.scalar_one_or_none()
-                    if sandbox is None:
-                        raise ValueError('sandbox_not_found')
-                    # Backfill the hash for future lookups (Auto committed at end of request)
-                    sandbox.session_api_key_hash = _hash_session_api_key(
-                        session_api_key
-                    )
-                    return self._to_sandbox_info(sandbox, runtime)
-        except Exception:
-            _logger.exception(
-                'Error getting sandbox from session_api_key', stack_info=True
-            )
-
-        # Get all stored sandboxes for the current user
-        stmt = await self._secure_select()
-        result = await self.db_session.execute(stmt)
-        stored_sandboxes = result.scalars().all()
-
-        # Check each sandbox's runtime data for matching session_api_key
-        for stored_sandbox in stored_sandboxes:
-            try:
-                runtime = await self._get_runtime(stored_sandbox.id)
-                if runtime and runtime.get('session_api_key') == session_api_key:
-                    # Backfill the hash for future lookups (Auto committed at end of request)
-                    stored_sandbox.session_api_key_hash = _hash_session_api_key(
-                        session_api_key
-                    )
-                    return self._to_sandbox_info(stored_sandbox, runtime)
-            except Exception:
-                # Continue checking other sandboxes if one fails
-                continue
-
-        return None
-
     async def get_sandbox_by_session_api_key(
         self, session_api_key: str
-    ) -> Union[SandboxInfo, None]:
-        """Get a single sandbox by session API key.
-
-        Uses the stored session_api_key_hash for efficient database lookup instead
-        of calling the remote runtime API. Falls back to legacy API-based lookup
-        for sandboxes created before the hash column was added.
-        """
+    ) -> SandboxInfo | None:
+        """Get a single sandbox by session API key using the stored hash."""
         session_api_key_hash = _hash_session_api_key(session_api_key)
 
-        # First try to find sandbox by hash in the database
         stmt = await self._secure_select()
         stmt = stmt.where(
             StoredRemoteSandbox.session_api_key_hash == session_api_key_hash
@@ -413,19 +359,39 @@ class RemoteSandboxService(SandboxService):
         result = await self.db_session.execute(stmt)
         stored_sandbox = result.scalar_one_or_none()
 
-        if stored_sandbox:
-            try:
-                runtime = await self._get_runtime(stored_sandbox.id)
-                return self._to_sandbox_info(stored_sandbox, runtime)
-            except Exception:
-                _logger.exception(
-                    f'Error getting runtime for sandbox {stored_sandbox.id}',
-                    stack_info=True,
-                )
-                return self._to_sandbox_info(stored_sandbox, None)
+        if stored_sandbox is None:
+            return None
 
-        # Fallback for sandboxes created before the hash column was added
-        return await self._get_sandbox_by_session_api_key_legacy(session_api_key)
+        try:
+            runtime = await self._get_runtime(stored_sandbox.id)
+            return self._to_sandbox_info(stored_sandbox, runtime)
+        except Exception:
+            _logger.exception(
+                f'Error getting runtime for sandbox {stored_sandbox.id}',
+                stack_info=True,
+            )
+            return self._to_sandbox_info(stored_sandbox, None)
+
+    async def get_sandbox_record_by_session_api_key(
+        self, session_api_key: str
+    ) -> SandboxRecord | None:
+        """Get persisted sandbox identity by session API key — DB lookup only, no runtime call."""
+        session_api_key_hash = _hash_session_api_key(session_api_key)
+
+        stmt = await self._secure_select()
+        stmt = stmt.where(
+            StoredRemoteSandbox.session_api_key_hash == session_api_key_hash
+        )
+        result = await self.db_session.execute(stmt)
+        stored_sandbox = result.scalar_one_or_none()
+
+        if stored_sandbox is None:
+            return None
+
+        return SandboxRecord(
+            id=stored_sandbox.id,
+            created_by_user_id=stored_sandbox.created_by_user_id,
+        )
 
     async def start_sandbox(
         self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
@@ -511,12 +477,18 @@ class RemoteSandboxService(SandboxService):
             raise SandboxError(f'Failed to start sandbox: {e}')
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
-        """Resume a paused sandbox."""
+        """Resume a paused sandbox.
+
+        Security: When a sandbox is resumed, the runtime-api generates a new
+        session_api_key and returns it. This invalidates any previously leaked
+        keys and ensures that only the new key can be used to access secrets.
+        """
         # Enforce sandbox limits by cleaning up old sandboxes
         await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
 
         try:
-            if not await self._get_stored_sandbox(sandbox_id):
+            stored_sandbox = await self._get_stored_sandbox(sandbox_id)
+            if not stored_sandbox:
                 return False
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
@@ -527,16 +499,39 @@ class RemoteSandboxService(SandboxService):
             if response.status_code == 404:
                 return False
             response.raise_for_status()
+
+            # Security: Update stored session_api_key with the new key returned
+            # by the runtime-api. The old key was invalidated on resume.
+            response_data = response.json()
+            new_session_api_key = response_data.get('session_api_key')
+            if new_session_api_key:
+                stored_sandbox.session_api_key_hash = _hash_session_api_key(
+                    new_session_api_key
+                )
+                _logger.info(
+                    f'Updated session_api_key_hash for sandbox {sandbox_id} after resume'
+                )
+
             return True
         except httpx.HTTPError as e:
             _logger.error(f'Error resuming sandbox {sandbox_id}: {e}')
             return False
 
     async def pause_sandbox(self, sandbox_id: str) -> bool:
-        """Pause a running sandbox."""
+        """Pause a running sandbox.
+
+        Security: Clears the session_api_key_hash to invalidate any existing
+        session keys, preventing leaked keys from being used while paused.
+        """
         try:
-            if not await self._get_stored_sandbox(sandbox_id):
+            stored_sandbox = await self._get_stored_sandbox(sandbox_id)
+            if not stored_sandbox:
                 return False
+
+            # Security: Invalidate the session API key hash to prevent
+            # leaked keys from being used while the sandbox is paused.
+            stored_sandbox.session_api_key_hash = None
+
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
                 'POST',
@@ -553,11 +548,17 @@ class RemoteSandboxService(SandboxService):
             return False
 
     async def delete_sandbox(self, sandbox_id: str) -> bool:
-        """Delete a sandbox by stopping its runtime."""
+        """Delete a sandbox by stopping its runtime.
+
+        Security: Deleting the stored_sandbox record also removes the
+        session_api_key_hash, invalidating any leaked session keys.
+        """
         try:
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
             if not stored_sandbox:
                 return False
+            # Deleting the record also removes the session_api_key_hash,
+            # which invalidates any leaked session keys.
             await self.db_session.delete(stored_sandbox)
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
@@ -669,18 +670,24 @@ async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):
     """When the app server does not have a public facing url, we poll the agent
     servers for the most recent data.
 
-    This is because webhook callbacks cannot be invoked."""
+    This is because webhook callbacks cannot be invoked.
+
+    IMPORTANT: DB sessions are scoped tightly to avoid holding connections across
+    network I/O. Services are imported locally inside the function bodies to
+    ensure they are resolved in the correct context. We use a
+    "fetch -> release -> network -> re-acquire -> write" pattern.
+    """
     from openhands.app_server.config import (
         get_app_conversation_info_service,
-        get_event_callback_service,
-        get_event_service,
+        get_db_session,
         get_httpx_client,
     )
 
     while True:
         try:
-            # Refresh the conversations associated with those sandboxes.
             state = InjectorState()
+            # We allow access to all items here
+            setattr(state, USER_CONTEXT_ATTR, ADMIN)
 
             try:
                 # Get the list of running sandboxes using the runtime api /list endpoint.
@@ -699,29 +706,35 @@ async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):
                         if runtime['status'] == 'running'
                     }
 
-                # We allow access to all items here
-                setattr(state, USER_CONTEXT_ATTR, ADMIN)
+                # Phase 1: Read - fetch all conversations into a list with a short DB session
+                # This releases the DB session before any network I/O
+                conversations_to_refresh: list[AppConversationInfo] = []
                 async with (
                     get_app_conversation_info_service(
                         state
                     ) as app_conversation_info_service,
-                    get_event_service(state) as event_service,
-                    get_event_callback_service(state) as event_callback_service,
-                    get_httpx_client(state) as httpx_client,
+                    get_db_session(state) as _db_session,
                 ):
-                    matches = 0
                     async for app_conversation_info in page_iterator(
                         app_conversation_info_service.search_app_conversation_info
                     ):
+                        conversations_to_refresh.append(app_conversation_info)
+
+                _logger.debug(
+                    f'Found {len(conversations_to_refresh)} conversations to check'
+                )
+
+                # Phase 2: Network I/O - fetch httpx client and do all network operations
+                # WITHOUT any DB session held
+                async with get_httpx_client(state) as httpx_client:
+                    matches = 0
+                    for app_conversation_info in conversations_to_refresh:
                         runtime = runtimes_by_sandbox_id.get(
                             app_conversation_info.sandbox_id
                         )
                         if runtime:
                             matches += 1
                             await refresh_conversation(
-                                app_conversation_info_service=app_conversation_info_service,
-                                event_service=event_service,
-                                event_callback_service=event_callback_service,
                                 app_conversation_info=app_conversation_info,
                                 runtime=runtime,
                                 httpx_client=httpx_client,
@@ -743,9 +756,6 @@ async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):
 
 
 async def refresh_conversation(
-    app_conversation_info_service: AppConversationInfoService,
-    event_service: EventService,
-    event_callback_service: EventCallbackService,
     app_conversation_info: AppConversationInfo,
     runtime: dict[str, Any],
     httpx_client: httpx.AsyncClient,
@@ -753,14 +763,29 @@ async def refresh_conversation(
     """Refresh a conversation.
 
     Grab ConversationInfo and all events from the agent server and make sure they
-    exist in the app server."""
+    exist in the app server.
+
+    IMPORTANT: This function acquires its own short-lived DB sessions for writes,
+    never holding a session across network I/O. Uses a "fetch -> release -> write"
+    pattern per conversation.
+    """
+    from openhands.app_server.config import (
+        get_app_conversation_info_service,
+        get_db_session,
+        get_event_callback_service,
+        get_event_service,
+    )
+
+    state = InjectorState()
+    setattr(state, USER_CONTEXT_ATTR, ADMIN)
+
     _logger.debug(f'Started Refreshing Conversation {app_conversation_info.id}')
     try:
         url = runtime['url']
 
         # TODO: Maybe we can use RemoteConversation here?
 
-        # First get conversation...
+        # Phase 1: Network I/O - First get conversation...
         conversation_url = f'{url}/api/conversations/{app_conversation_info.id.hex}'
         response = await httpx_client.get(
             conversation_url, headers={'X-Session-API-Key': runtime['session_api_key']}
@@ -781,12 +806,17 @@ async def refresh_conversation(
         except Exception:
             _logger.exception('error_updating_conversation_metrics', stack_info=True)
 
-        # TODO: Update other appropriate attributes...
+        # Phase 2: Write - acquire DB session and save conversation info
+        # (short-lived session, no network I/O held)
+        async with (
+            get_db_session(state) as _db_session,
+            get_app_conversation_info_service(state) as app_conversation_info_service,
+        ):
+            await app_conversation_info_service.save_app_conversation_info(
+                app_conversation_info
+            )
 
-        await app_conversation_info_service.save_app_conversation_info(
-            app_conversation_info
-        )
-
+        # Phase 3: Network I/O - fetch events (no DB session held)
         # TODO: It would be nice to have an updated_at__gte filter parameter in the
         # agent server so that we don't pull the full event list each time
         event_url = (
@@ -807,14 +837,21 @@ async def refresh_conversation(
             return EventPage.model_validate(response.json())
 
         async for event in page_iterator(fetch_events_page):
-            existing = await event_service.get_event(
-                app_conversation_info.id, UUID(event.id)
-            )
-            if existing is None:
-                await event_service.save_event(app_conversation_info.id, event)
-                await event_callback_service.execute_callbacks(
-                    app_conversation_info.id, event
+            # Phase 4: Write - acquire DB session for each event save
+            # (short-lived session per event, no network I/O held)
+            async with (
+                get_db_session(state) as _db_session,
+                get_event_service(state) as event_service,
+                get_event_callback_service(state) as event_callback_service,
+            ):
+                existing = await event_service.get_event(
+                    app_conversation_info.id, UUID(event.id)
                 )
+                if existing is None:
+                    await event_service.save_event(app_conversation_info.id, event)
+                    await event_callback_service.execute_callbacks(
+                        app_conversation_info.id, event
+                    )
 
         _logger.debug(f'Finished Refreshing Conversation {app_conversation_info.id}')
 

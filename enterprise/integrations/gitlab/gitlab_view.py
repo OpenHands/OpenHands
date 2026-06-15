@@ -3,49 +3,36 @@ from uuid import UUID, uuid4
 
 from integrations.models import Message
 from integrations.resolver_context import ResolverUserContext
+from integrations.resolver_org_router import resolve_org_for_repo
 from integrations.types import ResolverViewInterface, UserData
 from integrations.utils import (
-    ENABLE_V1_GITLAB_RESOLVER,
     HOST,
     get_oh_labels,
-    get_user_v1_enabled_setting,
     has_exact_mention,
 )
 from jinja2 import Environment
 from server.auth.token_manager import TokenManager
-from server.config import get_config
 from storage.saas_secrets_store import SaasSecretsStore
 
 from openhands.agent_server.models import SendMessageRequest
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTaskStatus,
-)
-from openhands.app_server.config import get_app_conversation_service
-from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
-from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
-from openhands.integrations.service_types import Comment
-from openhands.sdk import TextContent
-from openhands.server.services.conversation_service import (
-    initialize_conversation,
-    start_conversation,
-)
-from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.conversation_metadata import (
-    ConversationMetadata,
     ConversationTrigger,
 )
+from openhands.app_server.config import get_app_conversation_service
+from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
+from openhands.app_server.integrations.service_types import Comment
+from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
+from openhands.app_server.user_auth.user_auth import UserAuth
+from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk import TextContent
 
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
 CONFIDENTIAL_NOTE = 'confidential_note'
 NOTE_TYPES = ['note', CONFIDENTIAL_NOTE]
-
-
-async def is_v1_enabled_for_gitlab_resolver(user_id: str) -> bool:
-    return await get_user_v1_enabled_setting(user_id) and ENABLE_V1_GITLAB_RESOLVER
 
 
 # =================================================
@@ -69,7 +56,6 @@ class GitlabIssue(ResolverViewInterface):
     description: str
     previous_comments: list[Comment]
     is_mr: bool
-    v1_enabled: bool
 
     def _get_branch_name(self) -> str | None:
         return getattr(self, 'branch_name', None)
@@ -110,85 +96,41 @@ class GitlabIssue(ResolverViewInterface):
         return user_instructions, conversation_instructions
 
     async def _get_user_secrets(self):
-        secrets_store = SaasSecretsStore(self.user_info.keycloak_user_id, get_config())
+        secrets_store = await SaasSecretsStore.get_instance(
+            self.user_info.keycloak_user_id
+        )
         user_secrets = await secrets_store.load()
 
         return user_secrets.custom_secrets if user_secrets else None
 
-    async def initialize_new_conversation(self) -> ConversationMetadata:
-        # v1_enabled is already set at construction time in the factory method
-        # This is the source of truth for the conversation type
-        if self.v1_enabled:
-            # Create dummy conversation metadata
-            # Don't save to conversation store
-            # V1 conversations are stored in a separate table
-            self.conversation_id = uuid4().hex
-            return ConversationMetadata(
-                conversation_id=self.conversation_id,
-                selected_repository=self.full_repo_name,
-            )
-
-        conversation_metadata: ConversationMetadata = await initialize_conversation(  # type: ignore[assignment]
-            user_id=self.user_info.keycloak_user_id,
-            conversation_id=None,
-            selected_repository=self.full_repo_name,
-            selected_branch=self._get_branch_name(),
-            conversation_trigger=ConversationTrigger.RESOLVER,
-            git_provider=ProviderType.GITLAB,
+    async def initialize_new_conversation(self) -> UUID:
+        # Resolve target org based on claimed git organizations
+        self.resolved_org_id = await resolve_org_for_repo(
+            provider='gitlab',
+            full_repo_name=self.full_repo_name,
+            keycloak_user_id=self.user_info.keycloak_user_id,
         )
 
-        self.conversation_id = conversation_metadata.conversation_id
-        return conversation_metadata
+        # All conversations use V1 app conversation service
+        conversation_id = uuid4()
+        self.conversation_id = conversation_id.hex
+        return conversation_id
 
     async def create_new_conversation(
         self,
         jinja_env: Environment,
         git_provider_tokens: PROVIDER_TOKEN_TYPE,
-        conversation_metadata: ConversationMetadata,
+        conversation_id: UUID,
         saas_user_auth: UserAuth,
     ):
-        # v1_enabled is already set at construction time in the factory method
-        if self.v1_enabled:
-            # Use V1 app conversation service
-            await self._create_v1_conversation(
-                jinja_env, saas_user_auth, conversation_metadata
-            )
-        else:
-            await self._create_v0_conversation(
-                jinja_env, git_provider_tokens, conversation_metadata
-            )
-
-    async def _create_v0_conversation(
-        self,
-        jinja_env: Environment,
-        git_provider_tokens: PROVIDER_TOKEN_TYPE,
-        conversation_metadata: ConversationMetadata,
-    ):
-        """Create conversation using the legacy V0 system."""
-        logger.info('[GitLab]: Creating V0 conversation')
-        custom_secrets = await self._get_user_secrets()
-
-        user_instructions, conversation_instructions = await self._get_instructions(
-            jinja_env
-        )
-
-        await start_conversation(
-            user_id=self.user_info.keycloak_user_id,
-            git_provider_tokens=git_provider_tokens,
-            custom_secrets=custom_secrets,
-            initial_user_msg=user_instructions,
-            image_urls=None,
-            replay_json=None,
-            conversation_id=conversation_metadata.conversation_id,
-            conversation_metadata=conversation_metadata,
-            conversation_instructions=conversation_instructions,
-        )
+        # V0 conversation path has been removed - all conversations use V1 app conversation service
+        await self._create_v1_conversation(jinja_env, saas_user_auth, conversation_id)
 
     async def _create_v1_conversation(
         self,
         jinja_env: Environment,
         saas_user_auth: UserAuth,
-        conversation_metadata: ConversationMetadata,
+        conversation_id: UUID,
     ):
         """Create conversation using the new V1 app conversation system."""
         logger.info('[GitLab V1]: Creating V1 conversation')
@@ -214,7 +156,7 @@ class GitlabIssue(ResolverViewInterface):
 
         # Create the V1 conversation start request with the callback processor
         start_request = AppConversationStartRequest(
-            conversation_id=UUID(conversation_metadata.conversation_id),
+            conversation_id=conversation_id,
             system_message_suffix=conversation_instructions,
             initial_message=initial_message,
             selected_repository=self.full_repo_name,
@@ -228,7 +170,10 @@ class GitlabIssue(ResolverViewInterface):
         )
 
         # Set up the GitLab user context for the V1 system
-        gitlab_user_context = ResolverUserContext(saas_user_auth=saas_user_auth)
+        gitlab_user_context = ResolverUserContext(
+            saas_user_auth=saas_user_auth,
+            resolver_org_id=self.resolved_org_id,
+        )
         setattr(injector_state, USER_CONTEXT_ATTR, gitlab_user_context)
 
         async with get_app_conversation_service(
@@ -260,7 +205,7 @@ class GitlabIssue(ResolverViewInterface):
                 'is_mr': self.is_mr,
                 'discussion_id': getattr(self, 'discussion_id', None),
             },
-            send_summary_instruction=self.send_summary_instruction,
+            should_request_summary=self.send_summary_instruction,
         )
 
 
@@ -455,19 +400,11 @@ class GitlabFactory:
         keycloak_user_id = await token_manager.get_user_id_from_idp_user_id(
             user_id, ProviderType.GITLAB
         )
-
+        # TODO: When keycloak_user_id is None, perhaps this should raise unauthorized.
         user_info = UserData(
-            user_id=user_id, username=username, keycloak_user_id=keycloak_user_id
-        )
-
-        # Check v1_enabled at construction time - this is the source of truth
-        v1_enabled = (
-            await is_v1_enabled_for_gitlab_resolver(keycloak_user_id)
-            if keycloak_user_id
-            else False
-        )
-        logger.info(
-            f'[GitLab V1]: User flag found for {keycloak_user_id} is {v1_enabled}'
+            user_id=user_id,
+            username=username,
+            keycloak_user_id=keycloak_user_id,  # type: ignore[arg-type]
         )
 
         if GitlabFactory.is_labeled_issue(message):
@@ -491,7 +428,6 @@ class GitlabFactory:
                 description='',
                 previous_comments=[],
                 is_mr=False,
-                v1_enabled=v1_enabled,
             )
 
         elif GitlabFactory.is_issue_comment(message):
@@ -522,7 +458,6 @@ class GitlabFactory:
                 description='',
                 previous_comments=[],
                 is_mr=False,
-                v1_enabled=v1_enabled,
             )
 
         elif GitlabFactory.is_mr_comment(message):
@@ -555,7 +490,6 @@ class GitlabFactory:
                 description='',
                 previous_comments=[],
                 is_mr=True,
-                v1_enabled=v1_enabled,
             )
 
         elif GitlabFactory.is_mr_comment(message, inline=True):
@@ -596,7 +530,6 @@ class GitlabFactory:
                 description='',
                 previous_comments=[],
                 is_mr=True,
-                v1_enabled=v1_enabled,
             )
 
         raise ValueError(f'Unhandled GitLab webhook event: {message}')

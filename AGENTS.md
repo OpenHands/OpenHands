@@ -13,13 +13,21 @@ export RUNTIME=local
 make build && make run FRONTEND_PORT=12000 FRONTEND_HOST=0.0.0.0 BACKEND_HOST=0.0.0.0 &> /tmp/openhands-log.txt &
 ```
 
+Local run troubleshooting notes:
+- If the backend fails with `nc: command not found`, install `netcat-openbsd`.
+- If local runtime startup fails with `duplicate session: test-session`, clear the stale tmux session on the default socket: `tmux -S /tmp/tmux-$(id -u)/default kill-session -t test-session`.
+- Local runtime browser startup expects Playwright browsers under `~/.cache/playwright`; if needed run `PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/playwright poetry run playwright install chromium`.
+- In this sandbox environment, an inherited `SESSION_API_KEY` can make `/api/v1/settings` return 401 in the browser. Unset it before `make run` when you want to use the local web UI directly.
+- In this sandbox, `frontend`'s `npm run dev:mock` / `dev:mock:saas` can start but still be awkward to browse through the work-host proxy. For PR QA screenshots, a reliable fallback is to `npm run build` with the desired `VITE_MOCK_*` env, then serve `build/` with a tiny custom HTTP server that returns the minimal mock JSON endpoints needed by the settings page.
+
+
 IMPORTANT: Before making any changes to the codebase, ALWAYS run `make install-pre-commit-hooks` to ensure pre-commit hooks are properly installed.
 
 Before pushing any changes, you MUST ensure that any lint errors or simple test errors have been fixed.
 
 * If you've made changes to the backend, you should run `pre-commit run --config ./dev_config/python/.pre-commit-config.yaml` (this will run on staged files).
 * If you've made changes to the frontend, you should run `cd frontend && npm run lint:fix && npm run build ; cd ..`
-* If you've made changes to the VSCode extension, you should run `cd openhands/integrations/vscode && npm run lint:fix && npm run compile ; cd ../../..`
+* If you've made changes to the VSCode extension, you should run `cd openhands/app_server/integrations/vscode && npm run lint:fix && npm run compile ; cd ../../..`
 
 The pre-commit hooks MUST pass successfully before pushing any changes to the repository. This is a mandatory requirement to maintain code quality and consistency.
 
@@ -35,6 +43,12 @@ then re-run the command to ensure it passes. Common issues include:
 - Prefer specific `git add <filename>` instead of `git add .` to avoid accidentally staging unintended files
 - Be especially careful with `git reset --hard` after staging files, as it will remove accidentally staged files
 - When remote has new changes, use `git fetch upstream && git rebase upstream/<branch>` on the same branch
+
+## GitHub Actions
+
+- Pin external third-party actions to a full 40-character commit SHA, with the version tag in a trailing comment (e.g. `uses: owner/repo@<sha> # v1.2.3`). Do not use mutable tags (`@v1`) or branches for third-party actions.
+- GitHub-authored (`actions/*`, `github/*`) and first-party (`OpenHands/*`) actions are currently exempt.
+- Dependabot's `github-actions` ecosystem bumps the pinned SHA and the trailing comment under the configured cooldown, so pinning does not block security or version updates.
 
 ## Lockfile Regeneration (Preserve Original Tool Versions)
 
@@ -138,9 +152,11 @@ Frontend:
   - Query hooks should follow the pattern use[Resource] (e.g., `useConversationSkills`)
   - Mutation hooks should follow the pattern use[Action] (e.g., `useDeleteConversation`)
   - Architecture rule: UI components → TanStack Query hooks → Data Access Layer (`frontend/src/api`) → API endpoints
+  - For SaaS organization management screens, prefer deriving the selected organization from `useOrganizations()` plus the selected org ID store instead of adding a dedicated single-org fetch when only list-level fields (for example `name`) are needed.
+
 
 VSCode Extension:
-- Located in the `openhands/integrations/vscode` directory
+- Located in the `openhands/app_server/integrations/vscode` directory
 - Setup: Run `npm install` in the extension directory
 - Linting:
   - Run linting with fixes: `npm run lint:fix`
@@ -226,6 +242,7 @@ Each integration follows a consistent pattern with service classes, storage mode
 - Database changes require careful migration planning in `enterprise/migrations/`
 - Always test changes in both OpenHands and enterprise contexts
 - Use the enterprise-specific Makefile commands for development
+- When the `openhands-ai` package (root project) version has been updated, run `poetry lock` in the `enterprise/` folder to update the version in the enterprise poetry lockfile.
 
 **Enterprise Testing Best Practices:**
 
@@ -268,10 +285,39 @@ Each integration follows a consistent pattern with service classes, storage mode
 ## Template for Github Pull Request
 
 If you are starting a pull request (PR), please follow the template in `.github/pull_request_template.md`.
+- The PR template now starts with a `HUMAN:` section, the human-tested checkbox, and an `AGENT:` section.
+- `.github/workflows/pr-readiness-confirm.yml` checks non-draft PRs for non-empty text between `HUMAN:` and the human-tested checkbox; if present it adds a 👍 reaction, and if absent it posts a reminder comment.
+
 
 ## Implementation Details
 
 These details may or may not be useful for your current task.
+
+### Conversation State Management
+
+#### Agent State and Sandbox Status:
+The frontend uses `useAgentState` hook (`frontend/src/hooks/use-agent-state.ts`) to determine the current conversation state. This hook:
+- Returns `curAgentState` (AgentState enum) for UI state determination
+- Returns `isArchived` flag when `sandbox_status === "MISSING"` (archived conversations)
+- Prioritizes live WebSocket execution status over cached API data
+
+#### Archived Conversations (sandbox_status === "MISSING"):
+When a conversation's sandbox is no longer available (archived):
+- `useAgentState` returns `AgentState.STOPPED` and `isArchived: true`
+- Chat input is replaced with an archived banner (`ArchivedBanner` component)
+- VS Code tab, Terminal, and Planner show read-only messages instead of loading states
+- All interactive elements that require a running sandbox are disabled
+
+#### Testing useAgentState:
+When mocking `useAgentState` in tests, always include the `isArchived` property:
+```typescript
+vi.mock("#/hooks/use-agent-state", () => ({
+  useAgentState: () => ({
+    curAgentState: AgentState.AWAITING_USER_INPUT,
+    isArchived: false,
+  }),
+}));
+```
 
 ### Microagents
 
@@ -352,6 +398,7 @@ There are two main patterns for saving settings in the OpenHands frontend:
 **When to use each pattern:**
 - Use Pattern 1 (Immediate Save) for entity management where each item is independent
 - Use Pattern 2 (Manual Save) for configuration forms where settings are interdependent or need validation
+- Git provider tokens in the local/OSS integrations settings are managed through the V1 secrets endpoints (`POST`/`DELETE /api/v1/secrets/git-providers`). Do not reuse the logout flow for disconnecting tokens; `useLogout` is for actual app logout and still targets legacy OSS logout behavior.
 
 ### Adding New LLM Models
 
@@ -415,6 +462,24 @@ To add a new LLM model to OpenHands, you need to update multiple files across bo
 - The `organize_models_and_providers` function groups models by provider
 - Default model selection prioritizes verified models for each provider
 
+### Environment Variable Enable Toggles
+
+When adding a new boolean enable toggle read from an environment variable (e.g. `FEATURE_ENABLED`, `SLACK_WEBHOOKS_ENABLED`), the check **must** accept both `'true'` and `'1'` as truthy values. Older Helm chart versions default to `'1'` rather than `'true'`, so accepting only one form silently disables the feature in those deployments.
+
+**Required pattern:**
+```python
+os.getenv('MY_FEATURE_ENABLED', 'false').lower() in ('true', '1')
+```
+
+**Do not use:**
+```python
+os.getenv('MY_FEATURE_ENABLED', 'false').lower() == 'true'  # breaks when value is '1'
+os.getenv('MY_FEATURE_ENABLED', 'false') == '1'             # breaks when value is 'true'
+bool(os.getenv('MY_FEATURE_ENABLED'))                       # treats any non-empty string as True
+```
+
+This applies anywhere an env var gates a feature: backend config, web client config injectors, integration service initialization, etc. Add a unit test for the `'1'` case alongside the `'true'` case.
+
 ### Sandbox Settings API (SDK Credential Inheritance)
 
 The sandbox settings API allows SDK-created conversations to inherit the user's SaaS credentials
@@ -441,3 +506,9 @@ Called by `workspace.get_llm()` in the SDK to retrieve LLM config with the API k
 - `openhands/sdk/llm/llm.py`: `LLM.api_key` accepts `SecretSource` (including `LookupSecret`)
 - `openhands/workspace/cloud/workspace.py`: `get_llm()` and `get_secrets()` return LookupSecret-backed objects
 - Tests: `tests/sdk/llm/test_llm_secret_source_api_key.py`, `tests/workspace/test_cloud_workspace_sdk_settings.py`
+
+### Issue Triage Automation
+
+- `.github/workflows/issue-opened.yml` has a second issue-opened job that auto-applies `good first issue` after the duplicate check completes.
+- The duplicate check is used only as a veto/guardrail for `good first issue` automation: duplicate or overlapping-scope issues should not be auto-labeled.
+- The OpenHands classifier logic for newcomer suitability lives in `scripts/issue_good_first_issue_check_openhands.py`, with focused unit coverage in `tests/unit/test_issue_good_first_issue_check_openhands.py`.

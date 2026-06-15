@@ -6,30 +6,19 @@ export interface Organization {
   contact_name: string;
   contact_email: string;
   conversation_expiration: number;
-  agent: string;
-  default_max_iterations: number;
-  security_analyzer: string;
-  confirmation_mode: boolean;
-  default_llm_model: string;
-  default_llm_api_key_for_byor: string;
-  default_llm_base_url: string;
   remote_runtime_resource_factor: number;
-  enable_default_condenser: boolean;
   billing_margin: number;
   enable_proactive_conversation_starters: boolean;
   sandbox_base_container_image: string;
   sandbox_runtime_container_image: string;
   org_version: number;
-  mcp_config: {
-    tools: unknown[];
-    settings: Record<string, unknown>;
-  };
+  agent_settings?: Record<string, unknown>;
   search_api_key: string | null;
   sandbox_api_key: string | null;
   max_budget_per_task: number;
   enable_solvability_analysis: boolean;
   v1_enabled: boolean;
-  credits: number;
+  credits: number | null;
   is_personal?: boolean;
 }
 
@@ -38,11 +27,12 @@ export interface OrganizationMember {
   user_id: string;
   email: string;
   role: OrganizationUserRole;
-  llm_api_key: string;
   max_iterations: number;
   llm_model: string;
-  llm_api_key_for_byor: string | null;
   llm_base_url: string;
+
+  llm_api_key: string;
+  agent_settings?: Record<string, unknown>;
   status: "active" | "invited" | "inactive";
 }
 
@@ -50,6 +40,32 @@ export interface OrganizationMembersPage {
   items: OrganizationMember[];
   current_page: number;
   per_page: number;
+}
+
+export interface OrganizationInvitation {
+  id: number;
+  email: string;
+  role: string;
+  status: string;
+  created_at: string;
+  expires_at: string;
+  inviter_email?: string | null;
+  /** Acceptance link; only returned by admin/owner-gated endpoints. */
+  invite_url?: string | null;
+}
+
+export interface BatchInvitationResult {
+  successful: OrganizationInvitation[];
+  failed: { email: string; error: string }[];
+  /** False when the instance has no email provider configured. */
+  email_delivery_configured: boolean;
+}
+
+export interface PendingInvitationsPage {
+  items: OrganizationInvitation[];
+  email_delivery_configured: boolean;
+  /** Sign-in alone already adds users to this org; invites only pre-assign roles. */
+  auto_add_enabled: boolean;
 }
 
 /** org_id and user_id are provided via URL params */

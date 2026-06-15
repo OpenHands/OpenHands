@@ -18,13 +18,14 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.util import await_only
 
 from openhands.app_server.services.injector import Injector, InjectorState
+from openhands.db.ssl import build_asyncpg_connect_args, build_pg8000_connect_args
 
 _logger = logging.getLogger(__name__)
 DB_SESSION_ATTR = 'db_session'
 DB_SESSION_KEEP_OPEN_ATTR = 'db_session_keep_open'
 
 
-class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
+class DbSessionInjector(BaseModel, Injector[AsyncSession]):
     persistence_dir: Path
     host: str | None = None
     port: int | None = None
@@ -38,6 +39,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
     gcp_db_instance: str | None = None
     gcp_project: str | None = None
     gcp_region: str | None = None
+    ssl_mode: str | None = None
 
     # Private attrs
     _engine: Engine | None = PrivateAttr(default=None)
@@ -48,7 +50,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
 
     @model_validator(mode='after')
     def fill_empty_fields(self):
-        """Override any defaults with values from legacy enviroment variables"""
+        """Override any defaults with values from legacy environment variables"""
         if self.host is None:
             self.host = os.getenv('DB_HOST')
         if self.port is None:
@@ -65,6 +67,8 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
             self.gcp_project = os.getenv('GCP_PROJECT')
         if self.gcp_region is None:
             self.gcp_region = os.getenv('GCP_REGION')
+        if self.ssl_mode is None:
+            self.ssl_mode = os.getenv('DB_SSL_MODE') or os.getenv('PGSSLMODE')
         return self
 
     def _create_gcp_db_connection(self):
@@ -166,6 +170,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         if self.gcp_db_instance:  # GCP environments
             async_engine = await self._create_async_gcp_engine()
         else:
+            url: str | URL
             if self.host:
                 try:
                     import asyncpg  # noqa: F401
@@ -188,6 +193,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
             if self.host:
                 async_engine = create_async_engine(
                     url,
+                    connect_args=build_asyncpg_connect_args(self.ssl_mode),
                     pool_size=self.pool_size,
                     max_overflow=self.max_overflow,
                     pool_recycle=self.pool_recycle,
@@ -199,6 +205,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                     poolclass=NullPool,
                     pool_pre_ping=True,
                 )
+        assert async_engine is not None  # Always assigned in either branch above
         self._async_engine = async_engine
         return async_engine
 
@@ -209,6 +216,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         if self.gcp_db_instance:  # GCP environments
             engine = self._create_gcp_engine()
         else:
+            url: str | URL
             if self.host:
                 try:
                     import pg8000  # noqa: F401
@@ -229,11 +237,13 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                 url = f'sqlite:///{self.persistence_dir}/openhands.db'
             engine = create_engine(
                 url,
+                connect_args=build_pg8000_connect_args(self.ssl_mode),
                 pool_size=self.pool_size,
                 max_overflow=self.max_overflow,
                 pool_recycle=self.pool_recycle,
                 pool_pre_ping=True,
             )
+        assert engine is not None  # Always assigned in either branch above
         self._engine = engine
         return engine
 

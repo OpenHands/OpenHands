@@ -45,12 +45,12 @@ describe("ConversationTabsContextMenu", () => {
       "COMMON$CHANGES",
       "COMMON$CODE",
       "COMMON$TERMINAL",
-      "COMMON$APP",
       "COMMON$BROWSER",
     ];
     for (const tab of expectedTabs) {
       expect(screen.getByText(tab)).toBeInTheDocument();
     }
+    expect(screen.queryByText("COMMON$APP")).not.toBeInTheDocument();
   });
 
   it("should re-pin a tab when clicking an unpinned tab", async () => {

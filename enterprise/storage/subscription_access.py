@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 
-from sqlalchemy import DECIMAL, Column, DateTime, Enum, Integer, String
+from sqlalchemy import DECIMAL, DateTime, Enum, String
+from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 
 
-class SubscriptionAccess(Base):  # type: ignore
+class SubscriptionAccess(Base):
     """
     Represents a user's subscription access record.
     Tracks subscription status, duration, payment information, and cancellation status.
@@ -12,8 +14,8 @@ class SubscriptionAccess(Base):  # type: ignore
 
     __tablename__ = 'subscription_access'
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    status = Column(
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    status: Mapped[str] = mapped_column(
         Enum(
             'ACTIVE',
             'DISABLED',
@@ -22,22 +24,30 @@ class SubscriptionAccess(Base):  # type: ignore
         nullable=False,
         index=True,
     )
-    user_id = Column(String, nullable=False, index=True)
-    start_at = Column(DateTime(timezone=True), nullable=True)
-    end_at = Column(DateTime(timezone=True), nullable=True)
-    amount_paid = Column(DECIMAL(19, 4), nullable=True)
-    stripe_invoice_payment_id = Column(String, nullable=False)
-    cancelled_at = Column(DateTime(timezone=True), nullable=True)
-    stripe_subscription_id = Column(String, nullable=True, index=True)
-    created_at = Column(
+    user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    start_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    end_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    amount_paid: Mapped[Decimal | None] = mapped_column(DECIMAL(19, 4), nullable=True)
+    stripe_invoice_payment_id: Mapped[str] = mapped_column(String, nullable=False)
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    stripe_subscription_id: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),  # type: ignore[attr-defined]
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),  # type: ignore[attr-defined]
-        onupdate=lambda: datetime.now(UTC),  # type: ignore[attr-defined]
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 

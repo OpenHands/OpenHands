@@ -1,11 +1,23 @@
 import {
+  PendingInvitationsPage,
+  BatchInvitationResult,
   GitOrgClaim,
   Organization,
   OrganizationMember,
   OrganizationMembersPage,
+  OrganizationUserRole,
   UpdateOrganizationMemberParams,
 } from "#/types/org";
+import { Settings } from "#/types/settings";
 import { openHands } from "../open-hands-axios";
+
+type OrganizationSettingsResponse = Pick<
+  Settings,
+  | "agent_settings"
+  | "conversation_settings"
+  | "search_api_key"
+  | "llm_api_key_set"
+>;
 
 export const organizationService = {
   getMe: async ({ orgId }: { orgId: string }) => {
@@ -13,13 +25,6 @@ export const organizationService = {
       `/api/organizations/${orgId}/me`,
     );
 
-    return data;
-  },
-
-  getOrganization: async ({ orgId }: { orgId: string }) => {
-    const { data } = await openHands.get<Organization>(
-      `/api/organizations/${orgId}`,
-    );
     return data;
   },
 
@@ -137,18 +142,41 @@ export const organizationService = {
   inviteMembers: async ({
     orgId,
     emails,
+    role = "member",
   }: {
     orgId: string;
     emails: string[];
+    role?: OrganizationUserRole;
   }) => {
-    const { data } = await openHands.post<OrganizationMember[]>(
+    const { data } = await openHands.post<BatchInvitationResult>(
       `/api/organizations/${orgId}/members/invite`,
       {
         emails,
+        role,
       },
     );
 
     return data;
+  },
+
+  getPendingInvitations: async ({ orgId }: { orgId: string }) => {
+    const { data } = await openHands.get<PendingInvitationsPage>(
+      `/api/organizations/${orgId}/members/invite`,
+    );
+
+    return data;
+  },
+
+  revokeInvitation: async ({
+    orgId,
+    invitationId,
+  }: {
+    orgId: string;
+    invitationId: number;
+  }) => {
+    await openHands.delete(
+      `/api/organizations/${orgId}/members/invite/${invitationId}`,
+    );
   },
 
   switchOrganization: async ({ orgId }: { orgId: string }) => {
@@ -166,6 +194,27 @@ export const organizationService = {
       role: string;
     }>("/api/organizations/members/invite/accept", { token });
 
+    return data;
+  },
+
+  getOrganizationSettings: async ({ orgId }: { orgId: string }) => {
+    const { data } = await openHands.get<OrganizationSettingsResponse>(
+      `/api/organizations/${orgId}/settings`,
+    );
+    return data;
+  },
+
+  saveOrganizationSettings: async ({
+    orgId,
+    settings,
+  }: {
+    orgId: string;
+    settings: Partial<Settings> & Record<string, unknown>;
+  }) => {
+    const { data } = await openHands.patch<OrganizationSettingsResponse>(
+      `/api/organizations/${orgId}/settings`,
+      settings,
+    );
     return data;
   },
 

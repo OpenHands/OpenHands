@@ -3,7 +3,8 @@
 from datetime import UTC, datetime
 from enum import Enum
 
-from sqlalchemy import Column, DateTime, Identity, Integer, String
+from sqlalchemy import DateTime, Identity, String
+from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 
 
@@ -14,7 +15,7 @@ class UserAuthorizationType(str, Enum):
     BLACKLIST = 'blacklist'
 
 
-class UserAuthorization(Base):  # type: ignore
+class UserAuthorization(Base):
     """Stores user authorization rules based on email patterns and provider types.
 
     Supports:
@@ -28,16 +29,16 @@ class UserAuthorization(Base):  # type: ignore
 
     __tablename__ = 'user_authorizations'
 
-    id = Column(Integer, Identity(), primary_key=True)
-    email_pattern = Column(String, nullable=True)
-    provider_type = Column(String, nullable=True)
-    type = Column(String, nullable=False)
-    created_at = Column(
+    id: Mapped[int] = mapped_column(Identity(), primary_key=True)
+    email_pattern: Mapped[str | None] = mapped_column(String, nullable=True)
+    provider_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    type: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         nullable=False,
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),

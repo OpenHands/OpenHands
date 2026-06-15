@@ -15,6 +15,8 @@ import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { Provider } from "#/types/settings";
 import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
+import { agentDisplayLabel } from "#/utils/agent-display-label";
+import { useConfig } from "#/hooks/query/use-config";
 import { ConversationCard } from "./conversation-card/conversation-card";
 import { StartTaskCard } from "./start-task-card/start-task-card";
 import { ConversationCardSkeleton } from "./conversation-card/conversation-card-skeleton";
@@ -28,6 +30,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
   const { conversationId: currentConversationId } = useParams();
   const ref = useClickOutsideElement<HTMLDivElement>(onClose);
   const navigate = useNavigate();
+  const { data: config } = useConfig();
 
   const [confirmDeleteModalVisible, setConfirmDeleteModalVisible] =
     React.useState(false);
@@ -42,8 +45,6 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
   >(null);
   const [selectedConversationTitle, setSelectedConversationTitle] =
     React.useState<string | null>(null);
-  const [selectedConversationVersion, setSelectedConversationVersion] =
-    React.useState<"V0" | "V1" | undefined>(undefined);
   const [selectedSandboxId, setSelectedSandboxId] = React.useState<
     string | null
   >(null);
@@ -63,8 +64,8 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
   // Fetch in-progress start tasks
   const { data: startTasks } = useStartTasks();
 
-  // Flatten all pages into a single array of conversations
-  const conversations = data?.pages.flatMap((page) => page.results) ?? [];
+  // Flatten all pages into a single array of conversations (V1 uses 'items' instead of 'results')
+  const conversations = data?.pages.flatMap((page) => page.items) ?? [];
 
   const { mutate: deleteConversation } = useDeleteConversation();
   const { mutate: pauseConversationSandbox } =
@@ -87,12 +88,10 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
 
   const handleStopConversation = (
     conversationId: string,
-    version?: "V0" | "V1",
     sandboxId?: string | null,
   ) => {
     setConfirmStopModalVisible(true);
     setSelectedConversationId(conversationId);
-    setSelectedConversationVersion(version);
     setSelectedSandboxId(sandboxId ?? null);
   };
 
@@ -129,7 +128,6 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
     if (selectedConversationId) {
       pauseConversationSandbox({
         conversationId: selectedConversationId,
-        version: selectedConversationVersion,
       });
     }
   };
@@ -176,41 +174,42 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
         </NavLink>
       ))}
       {/* Then render completed conversations */}
-      {conversations?.map((project) => (
+      {conversations?.map((conversation) => (
         <NavLink
-          key={project.conversation_id}
-          to={`/conversations/${project.conversation_id}`}
+          key={conversation.id}
+          to={`/conversations/${conversation.id}`}
           onClick={onClose}
         >
           <ConversationCard
             onDelete={() =>
-              handleDeleteProject(project.conversation_id, project.title)
+              handleDeleteProject(conversation.id, conversation.title ?? "")
             }
             onStop={() =>
-              handleStopConversation(
-                project.conversation_id,
-                project.conversation_version,
-                project.sandbox_id,
-              )
+              handleStopConversation(conversation.id, conversation.sandbox_id)
             }
             onChangeTitle={(title) =>
-              handleConversationTitleChange(project.conversation_id, title)
+              handleConversationTitleChange(conversation.id, title)
             }
-            title={project.title}
+            title={conversation.title ?? ""}
             selectedRepository={{
-              selected_repository: project.selected_repository,
-              selected_branch: project.selected_branch,
-              git_provider: project.git_provider as Provider,
+              selected_repository: conversation.selected_repository,
+              selected_branch: conversation.selected_branch,
+              git_provider: conversation.git_provider as Provider,
             }}
-            lastUpdatedAt={project.last_updated_at}
-            createdAt={project.created_at}
-            conversationStatus={project.status}
-            conversationId={project.conversation_id}
-            conversationVersion={project.conversation_version}
-            contextMenuOpen={openContextMenuId === project.conversation_id}
+            lastUpdatedAt={conversation.updated_at}
+            createdAt={conversation.created_at}
+            sandboxStatus={conversation.sandbox_status}
+            conversationId={conversation.id}
+            contextMenuOpen={openContextMenuId === conversation.id}
             onContextMenuToggle={(isOpen) =>
-              setOpenContextMenuId(isOpen ? project.conversation_id : null)
+              setOpenContextMenuId(isOpen ? conversation.id : null)
             }
+            llmModel={agentDisplayLabel(
+              conversation.agent_kind,
+              conversation.llm_model,
+              conversation.tags,
+              config?.acp_providers,
+            )}
           />
         </NavLink>
       ))}

@@ -2,7 +2,7 @@ import base64
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -19,15 +19,32 @@ from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from storage.openhands_pr import OpenhandsPR
 from storage.openhands_pr_store import OpenhandsPRStore
 
-from openhands.core.config import load_openhands_config
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.github.github_service import GithubServiceImpl
-from openhands.integrations.service_types import ProviderType
-from openhands.storage import get_file_store
-from openhands.storage.locations import get_conversation_dir
+from openhands.app_server.config import get_global_config
+from openhands.app_server.conversation_paths import get_conversation_dir
+from openhands.app_server.integrations.github.github_service import GithubServiceImpl
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.utils.logger import openhands_logger as logger
 
-config = load_openhands_config()
-file_store = get_file_store(config.file_store, config.file_store_path)
+file_store = get_global_config().file_store
+
+
+def _github_ts_to_naive_utc(value: str | None) -> datetime | None:
+    """Normalize a GitHub ISO-8601 timestamp to a naive UTC datetime.
+
+    GitHub sends timestamps like ``"2025-06-19T21:19:36Z"``. Parsing the
+    trailing ``Z`` produces a timezone-aware datetime, which asyncpg refuses to
+    bind to the ``TIMESTAMP WITHOUT TIME ZONE`` columns on ``openhands_prs``
+    (``DataError: can't subtract offset-naive and offset-aware datetimes``).
+    Converting to UTC and dropping ``tzinfo`` keeps the stored value consistent
+    with how naive UTC timestamps are already persisted on that table.
+    """
+    if not value:
+        return None
+    return (
+        datetime.fromisoformat(value.replace('Z', '+00:00'))
+        .astimezone(timezone.utc)
+        .replace(tzinfo=None)
+    )
 
 
 COLLECT_GITHUB_INTERACTIONS = (
@@ -112,7 +129,7 @@ class GitHubDataCollector:
         suffix = path.format(repo_id, number)
 
         if conversation_id:
-            return f'{get_conversation_dir(conversation_id)}{suffix}'
+            return f'{get_conversation_dir(conversation_id)}/{suffix}'
 
         return suffix
 
@@ -429,6 +446,11 @@ class GitHubDataCollector:
         - Num openhands review comments
         """
         pr_number = openhands_pr.pr_number
+        if openhands_pr.installation_id is None:
+            logger.warning(
+                f'Skipping PR {openhands_pr.repo_name}#{pr_number}: missing installation_id'
+            )
+            return
         installation_id = int(openhands_pr.installation_id)
         repo_id = openhands_pr.repo_id
 
@@ -633,12 +655,13 @@ class GitHubDataCollector:
         num_deletions = pr_data.get('deletions', 0)
         merged = pr_data.get('merged', False)
 
-        # Extract closed_at timestamp
-        # Example: "closed_at":"2025-06-19T21:19:36Z"
-        closed_at_str = pr_data.get('closed_at')
-        created_at = pr_data.get('created_at')
-
-        closed_at = datetime.fromisoformat(closed_at_str.replace('Z', '+00:00'))
+        # Extract timestamps. Example: "closed_at":"2025-06-19T21:19:36Z".
+        # Both are normalized to naive UTC so they can be bound to the naive
+        # TIMESTAMP columns on openhands_prs (see _github_ts_to_naive_utc).
+        # Previously created_at was passed as a raw string; it is now
+        # consistently a naive-UTC datetime like closed_at.
+        closed_at = _github_ts_to_naive_utc(pr_data.get('closed_at'))
+        created_at = _github_ts_to_naive_utc(pr_data.get('created_at'))
 
         # Determine status based on whether it was merged
         status = PRStatus.MERGED if merged else PRStatus.CLOSED

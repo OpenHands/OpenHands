@@ -111,7 +111,6 @@ describe("Manage Org Route", () => {
       llm_api_key: "**********",
       max_iterations: 20,
       llm_model: "gpt-4",
-      llm_api_key_for_byor: null,
       llm_base_url: "https://api.openai.com",
       status: "active",
     },
@@ -123,7 +122,6 @@ describe("Manage Org Route", () => {
       llm_api_key: "**********",
       max_iterations: 20,
       llm_model: "gpt-4",
-      llm_api_key_for_byor: null,
       llm_base_url: "https://api.openai.com",
       status: "active",
     },
@@ -138,7 +136,6 @@ describe("Manage Org Route", () => {
     llm_api_key: string;
     max_iterations: number;
     llm_model: string;
-    llm_api_key_for_byor: string | null;
     llm_base_url: string;
     status: "active" | "invited" | "inactive";
   }) => {
@@ -176,6 +173,7 @@ describe("Manage Org Route", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+          enable_onboarding: false,
         },
       }),
     );
@@ -248,7 +246,9 @@ describe("Manage Org Route", () => {
     await userEvent.click(nextButton);
 
     // expect redirect to payment page
-    expect(createCheckoutSessionSpy).toHaveBeenCalledWith(1000);
+    await waitFor(() =>
+      expect(createCheckoutSessionSpy).toHaveBeenCalledWith(1000),
+    );
 
     await waitFor(() =>
       expect(screen.queryByTestId("add-credits-form")).not.toBeInTheDocument(),
@@ -456,7 +456,6 @@ describe("Manage Org Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       });
@@ -482,7 +481,6 @@ describe("Manage Org Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       });
@@ -535,6 +533,7 @@ describe("Manage Org Route", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+            enable_onboarding: false,
           },
         }),
       );
@@ -567,6 +566,7 @@ describe("Manage Org Route", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+            enable_onboarding: false,
           },
         }),
       );
@@ -599,6 +599,7 @@ describe("Manage Org Route", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+            enable_onboarding: false,
           },
         }),
       );
@@ -632,6 +633,7 @@ describe("Manage Org Route", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+            enable_onboarding: false,
           },
         }),
       );
@@ -650,6 +652,53 @@ describe("Manage Org Route", () => {
       });
 
       getConfigSpy.mockRestore();
+    });
+  });
+
+  describe("Git conversation routing visibility", () => {
+    it("should show the section by default for owners", async () => {
+      renderManageOrg();
+      await screen.findByTestId("manage-org-screen");
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("git-conversation-routing"),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("should hide the section in org-only installs with a single team org", async () => {
+      vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+        createMockWebClientConfig({
+          app_mode: "saas",
+          feature_flags: {
+            enable_billing: true,
+            hide_llm_settings: false,
+            enable_jira: false,
+            enable_jira_dc: false,
+            enable_linear: false,
+            hide_users_page: false,
+            hide_billing_page: false,
+            hide_integrations_page: false,
+            enable_onboarding: false,
+            hide_personal_workspaces: true,
+          },
+        }),
+      );
+      queryClient.setQueryData(["organizations"], {
+        items: [MOCK_TEAM_ORG_ACME],
+        currentOrgId: MOCK_TEAM_ORG_ACME.id,
+      });
+
+      renderManageOrg();
+      await screen.findByTestId("manage-org-screen");
+
+      await waitFor(() => {
+        expect(screen.getByTestId("org-name")).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByTestId("git-conversation-routing"),
+      ).not.toBeInTheDocument();
     });
   });
 });

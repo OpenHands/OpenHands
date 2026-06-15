@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 from urllib.parse import urlparse
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class JiraEventType(Enum):
@@ -136,11 +136,10 @@ class JiraPayloadParser:
         items = changelog.get('items', [])
 
         # Extract labels that were added
-        labels = [
-            item.get('toString', '')
-            for item in items
-            if item.get('field') == 'labels' and 'toString' in item
-        ]
+        labels = set()
+        for item in items:
+            if item.get('field') == 'labels' and item.get('toString'):
+                labels.update(item['toString'].split())
 
         if self.oh_label not in labels:
             return JiraPayloadSkipped(
@@ -222,7 +221,7 @@ class JiraPayloadParser:
             missing.append('base_api_url (derived from issue.self)')
 
         if missing:
-            return JiraPayloadError(f"Missing required fields: {', '.join(missing)}")
+            return JiraPayloadError(f'Missing required fields: {", ".join(missing)}')
 
         return JiraPayloadSuccess(
             JiraWebhookPayload(

@@ -2,77 +2,129 @@
 SQLAlchemy model for Organization.
 """
 
-from uuid import uuid4
+from typing import TYPE_CHECKING, Any
+from uuid import UUID, uuid4
 
 from pydantic import SecretStr
 from server.constants import DEFAULT_BILLING_MARGIN
-from sqlalchemy import JSON, UUID, Boolean, Column, Float, Integer, String
-from sqlalchemy.orm import relationship
+from sqlalchemy import JSON, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from storage.base import Base
-from storage.encrypt_utils import decrypt_value, encrypt_value
+from storage.encrypt_utils import EncryptedJSON, decrypt_value, encrypt_value
+
+if TYPE_CHECKING:
+    from storage.api_key import ApiKey
+    from storage.billing_session import BillingSession
+    from storage.org_git_claim import OrgGitClaim
+    from storage.org_invitation import OrgInvitation
+    from storage.org_member import OrgMember
+    from storage.slack_conversation import SlackConversation
+    from storage.slack_user import SlackUser
+    from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
+    from storage.stored_custom_secrets import StoredCustomSecrets
+    from storage.stripe_customer import StripeCustomer
+    from storage.user import User
 
 
-class Org(Base):  # type: ignore
+class Org(Base):
     """Organization model."""
 
     __tablename__ = 'org'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    name = Column(String, nullable=False, unique=True)
-    contact_name = Column(String, nullable=True)
-    contact_email = Column(String, nullable=True)
-    agent = Column(String, nullable=True)
-    default_max_iterations = Column(Integer, nullable=True)
-    security_analyzer = Column(String, nullable=True)
-    confirmation_mode = Column(Boolean, nullable=True, default=False)
-    default_llm_model = Column(String, nullable=True)
-    default_llm_base_url = Column(String, nullable=True)
-    remote_runtime_resource_factor = Column(Integer, nullable=True)
-    enable_default_condenser = Column(Boolean, nullable=False, default=True)
-    billing_margin = Column(Float, nullable=True, default=DEFAULT_BILLING_MARGIN)
-    enable_proactive_conversation_starters = Column(
-        Boolean, nullable=False, default=True
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    contact_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String, nullable=True)
+    remote_runtime_resource_factor: Mapped[int | None] = mapped_column(nullable=True)
+    billing_margin: Mapped[float | None] = mapped_column(
+        nullable=True, default=DEFAULT_BILLING_MARGIN
     )
-    sandbox_base_container_image = Column(String, nullable=True)
-    sandbox_runtime_container_image = Column(String, nullable=True)
-    org_version = Column(Integer, nullable=False, default=0)
-    mcp_config = Column(JSON, nullable=True)
+    enable_proactive_conversation_starters: Mapped[bool] = mapped_column(
+        nullable=False, default=True
+    )
+    sandbox_base_container_image: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    sandbox_runtime_container_image: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    org_version: Mapped[int] = mapped_column(nullable=False, default=0)
+    agent_settings: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    conversation_settings: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     # encrypted column, don't set directly, set without the underscore
-    _search_api_key = Column(String, nullable=True)
+    _llm_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
     # encrypted column, don't set directly, set without the underscore
-    _sandbox_api_key = Column(String, nullable=True)
-    max_budget_per_task = Column(Float, nullable=True)
-    enable_solvability_analysis = Column(Boolean, nullable=True, default=False)
-    v1_enabled = Column(Boolean, nullable=True)
-    conversation_expiration = Column(Integer, nullable=True)
-    condenser_max_size = Column(Integer, nullable=True)
-    byor_export_enabled = Column(Boolean, nullable=False, default=False)
-    sandbox_grouping_strategy = Column(String, nullable=True)
+    _search_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    # encrypted column, don't set directly, set without the underscore
+    _sandbox_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    max_budget_per_task: Mapped[float | None] = mapped_column(nullable=True)
+    v1_enabled: Mapped[bool | None] = mapped_column(nullable=True)
+    conversation_expiration: Mapped[int | None] = mapped_column(nullable=True)
+    # Source of truth for BYOR/OpenHands LLM key export entitlement.
+    # Set by completed billing sessions or when positive org credits are detected.
+    byor_export_enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
+    sandbox_grouping_strategy: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Encrypted column for LLM profiles (contains API keys)
+    llm_profiles: Mapped[dict[str, Any] | None] = mapped_column(
+        EncryptedJSON, nullable=True
+    )
+    # Marks the bootstrapped default org on OHE installs; a partial unique
+    # index allows at most one default org per install.
+    is_default: Mapped[bool] = mapped_column(nullable=False, default=False)
 
     # Relationships
-    org_members = relationship('OrgMember', back_populates='org')
-    current_users = relationship('User', back_populates='current_org')
-    invitations = relationship(
+    org_members: Mapped[list['OrgMember']] = relationship(
+        'OrgMember', back_populates='org'
+    )
+    current_users: Mapped[list['User']] = relationship(
+        'User', back_populates='current_org'
+    )
+    invitations: Mapped[list['OrgInvitation']] = relationship(
         'OrgInvitation', back_populates='org', passive_deletes=True
     )
-    billing_sessions = relationship('BillingSession', back_populates='org')
-    stored_conversation_metadata_saas = relationship(
-        'StoredConversationMetadataSaas', back_populates='org'
+    billing_sessions: Mapped[list['BillingSession']] = relationship(
+        'BillingSession', back_populates='org'
     )
-    user_secrets = relationship('StoredCustomSecrets', back_populates='org')
-    api_keys = relationship('ApiKey', back_populates='org')
-    slack_conversations = relationship('SlackConversation', back_populates='org')
-    slack_users = relationship('SlackUser', back_populates='org')
-    stripe_customers = relationship('StripeCustomer', back_populates='org')
-    git_claims = relationship('OrgGitClaim', back_populates='org')
+    stored_conversation_metadata_saas: Mapped[
+        list['StoredConversationMetadataSaas']
+    ] = relationship('StoredConversationMetadataSaas', back_populates='org')
+    user_secrets: Mapped[list['StoredCustomSecrets']] = relationship(
+        'StoredCustomSecrets', back_populates='org'
+    )
+    api_keys: Mapped[list['ApiKey']] = relationship('ApiKey', back_populates='org')
+    slack_conversations: Mapped[list['SlackConversation']] = relationship(
+        'SlackConversation', back_populates='org'
+    )
+    slack_users: Mapped[list['SlackUser']] = relationship(
+        'SlackUser', back_populates='org'
+    )
+    stripe_customers: Mapped[list['StripeCustomer']] = relationship(
+        'StripeCustomer', back_populates='org'
+    )
+    git_claims: Mapped[list['OrgGitClaim']] = relationship(
+        'OrgGitClaim', back_populates='org'
+    )
 
     def __init__(self, **kwargs):
+        # Serialize Pydantic model objects to dicts for JSON columns.
+        from pydantic import BaseModel
+
+        for key in ('agent_settings', 'conversation_settings'):
+            if key in kwargs and isinstance(kwargs[key], BaseModel):
+                kwargs[key] = kwargs[key].model_dump(mode='json')
+
         # Handle known SQLAlchemy columns directly
         for key in list(kwargs):
             if hasattr(self.__class__, key):
                 setattr(self, key, kwargs.pop(key))
 
         # Handle custom property-style fields
+        if 'llm_api_key' in kwargs:
+            self.llm_api_key = kwargs.pop('llm_api_key')
         if 'search_api_key' in kwargs:
             self.search_api_key = kwargs.pop('search_api_key')
         if 'sandbox_api_key' in kwargs:
@@ -80,6 +132,18 @@ class Org(Base):  # type: ignore
 
         if kwargs:
             raise TypeError(f'Unexpected keyword arguments: {list(kwargs.keys())}')
+
+    @property
+    def llm_api_key(self) -> SecretStr | None:
+        if self._llm_api_key:
+            decrypted = decrypt_value(self._llm_api_key)
+            return SecretStr(decrypted)
+        return None
+
+    @llm_api_key.setter
+    def llm_api_key(self, value: str | SecretStr | None):
+        raw = value.get_secret_value() if isinstance(value, SecretStr) else value
+        self._llm_api_key = encrypt_value(raw) if raw else None
 
     @property
     def search_api_key(self) -> SecretStr | None:

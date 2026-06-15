@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
-import React from "react";
+import React, { useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { useGetSecrets } from "#/hooks/query/use-get-secrets";
+import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 import { useDeleteSecret } from "#/hooks/mutation/use-delete-secret";
 import { SecretForm } from "#/components/features/settings/secrets-settings/secret-form";
 import {
@@ -10,10 +10,10 @@ import {
 } from "#/components/features/settings/secrets-settings/secret-list-item";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
-import { GetSecretsResponse } from "#/api/secrets-service.types";
 import { I18nKey } from "#/i18n/declaration";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 
 export const clientLoader = createPermissionGuard("manage_secrets");
 
@@ -21,8 +21,16 @@ function SecretsSettingsScreen() {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
   const { organizationId } = useSelectedOrganizationId();
+  const tableContainerRef = useRef<HTMLDivElement>(null);
 
-  const { data: secrets, isLoading: isLoadingSecrets } = useGetSecrets();
+  const {
+    data: secrets,
+    isLoading: isLoadingSecrets,
+    hasNextPage,
+    isFetchingNextPage,
+    onLoadMore,
+  } = useSearchSecrets({ pageSize: 30 });
+
   const { mutate: deleteSecret } = useDeleteSecret();
 
   const [view, setView] = React.useState<
@@ -34,27 +42,37 @@ function SecretsSettingsScreen() {
   const [confirmationModalIsVisible, setConfirmationModalIsVisible] =
     React.useState(false);
 
-  const deleteSecretOptimistically = (secret: string) => {
-    queryClient.setQueryData<GetSecretsResponse["custom_secrets"]>(
-      ["secrets", organizationId],
-      (oldSecrets) => {
-        if (!oldSecrets) return [];
-        return oldSecrets.filter((s) => s.name !== secret);
-      },
-    );
-  };
+  // Handle scroll for infinite loading
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const target = e.currentTarget;
+      const isNearBottom =
+        target.scrollHeight - target.scrollTop <= target.clientHeight + 100;
 
-  const revertOptimisticUpdate = () => {
-    queryClient.invalidateQueries({ queryKey: ["secrets", organizationId] });
+      if (isNearBottom && hasNextPage && !isFetchingNextPage) {
+        onLoadMore();
+      }
+    },
+    [hasNextPage, isFetchingNextPage, onLoadMore],
+  );
+
+  const invalidateSecrets = () => {
+    // Invalidate both the new infinite query and the legacy query for compatibility
+    queryClient.invalidateQueries({
+      queryKey: ["secrets-search"],
+    });
+    queryClient.invalidateQueries({
+      queryKey: ["secrets", organizationId],
+    });
   };
 
   const handleDeleteSecret = (secret: string) => {
-    deleteSecretOptimistically(secret);
     deleteSecret(secret, {
       onSettled: () => {
         setConfirmationModalIsVisible(false);
       },
-      onError: revertOptimisticUpdate,
+      onSuccess: invalidateSecrets,
+      onError: invalidateSecrets,
     });
   };
 
@@ -88,10 +106,14 @@ function SecretsSettingsScreen() {
         </BrandButton>
       )}
 
-      {view === "list" && (
-        <div className="border border-tertiary rounded-md overflow-hidden">
+      {view === "list" && !isLoadingSecrets && (
+        <div
+          ref={tableContainerRef}
+          className="border border-tertiary rounded-md overflow-auto max-h-[60vh]"
+          onScroll={handleScroll}
+        >
           <table className="w-full min-w-full table-fixed">
-            <thead className="bg-base-tertiary">
+            <thead className="bg-base-tertiary sticky top-0">
               <tr>
                 <th className="w-1/4 text-left p-3 text-sm font-medium">
                   {t(I18nKey.SETTINGS$NAME)}
@@ -122,6 +144,13 @@ function SecretsSettingsScreen() {
               ))}
             </tbody>
           </table>
+
+          {/* Loading indicator for infinite scroll */}
+          {isFetchingNextPage && (
+            <div className="flex justify-center p-4">
+              <LoadingSpinner size="small" />
+            </div>
+          )}
         </div>
       )}
 

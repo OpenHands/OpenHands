@@ -1,19 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import sqlalchemy
 from sqlalchemy import select
 from storage.database import a_session_maker
 from storage.user_repo_map import UserRepositoryMap
 
-from openhands.core.config.openhands_config import OpenHandsConfig
 
-
-@dataclass
 class UserRepositoryMapStore:
-    config: OpenHandsConfig
-
     async def store_user_repo_mappings(self, mappings: list[UserRepositoryMap]) -> None:
         """
         Store user-repository mappings in database (async version)
@@ -60,6 +53,6 @@ class UserRepositoryMapStore:
             await session.commit()
 
     @classmethod
-    def get_instance(cls, config: OpenHandsConfig) -> UserRepositoryMapStore:
+    def get_instance(cls) -> UserRepositoryMapStore:
         """Get an instance of the UserRepositoryMapStore."""
-        return UserRepositoryMapStore(config)
+        return UserRepositoryMapStore()

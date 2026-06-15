@@ -23,19 +23,22 @@ jobs:
         steps:
             - name: Check if fork PR
               id: check-fork
+              env:
+                  HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+                  BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
               run: |
-                  if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.event.pull_request.base.repo.full_name }}" ]; then
+                  if [ "$HEAD_REPO" != "$BASE_REPO" ]; then
                     echo "is_fork=true" >> $GITHUB_OUTPUT
                     echo "::notice::Fork PR detected - skipping auto-cleanup (manual removal required)"
                   else
                     echo "is_fork=false" >> $GITHUB_OUTPUT
                   fi
 
-            - uses: actions/checkout@v5
+            - uses: actions/checkout@v6
               if: steps.check-fork.outputs.is_fork == 'false'
               with:
                   ref: ${{ github.event.pull_request.head.ref }}
-                  token: ${{ secrets.ALLHANDS_BOT_GITHUB_PAT }}
+                  token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC }}
 
             - name: Remove .pr/ directory
               id: remove
@@ -59,7 +62,7 @@ jobs:
 
             - name: Update PR comment after cleanup
               if: steps.check-fork.outputs.is_fork == 'false' && steps.remove.outputs.removed == 'true'
-              uses: actions/github-script@v7
+              uses: actions/github-script@v9
               with:
                   script: |
                       const marker = '<!-- pr-artifacts-notice -->';
@@ -93,7 +96,7 @@ jobs:
             contents: read
             pull-requests: write
         steps:
-            - uses: actions/checkout@v5
+            - uses: actions/checkout@v6
 
             - name: Check for .pr/ directory
               id: check
@@ -107,7 +110,7 @@ jobs:
 
             - name: Post or update PR comment
               if: steps.check.outputs.exists == 'true'
-              uses: actions/github-script@v7
+              uses: actions/github-script@v9
               with:
                   script: |
                       const marker = '<!-- pr-artifacts-notice -->';

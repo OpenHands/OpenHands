@@ -5,17 +5,17 @@ import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react
 import GitHubLogo from "#/assets/branding/github-logo.svg?react";
 import GitLabLogo from "#/assets/branding/gitlab-logo.svg?react";
 import BitbucketLogo from "#/assets/branding/bitbucket-logo.svg?react";
+import AzureDevOpsLogo from "#/assets/branding/azure-devops-logo.svg?react";
 import { useAuthUrl } from "#/hooks/use-auth-url";
 import { WebClientConfig } from "#/api/option-service/option.types";
 import { Provider } from "#/types/settings";
-import { useTracking } from "#/hooks/use-tracking";
 import { TermsAndPrivacyNotice } from "#/components/shared/terms-and-privacy-notice";
 import { useRecaptcha } from "#/hooks/use-recaptcha";
 import { useConfig } from "#/hooks/query/use-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { cn } from "#/utils/utils";
-import { ENABLE_PROJ_USER_JOURNEY } from "#/utils/feature-flags";
 import { LoginCTA } from "./login-cta";
+import { useAppMode } from "#/hooks/use-app-mode";
 
 export interface LoginContentProps {
   githubAuthUrl: string | null;
@@ -43,8 +43,8 @@ export function LoginContent({
   buildOAuthStateData,
 }: LoginContentProps) {
   const { t } = useTranslation();
-  const { trackLoginButtonClick } = useTracking();
   const { data: config } = useConfig();
+  const { isEnterpriseCloud } = useAppMode();
 
   // reCAPTCHA - only need token generation, verification happens at backend callback
   const { isReady: recaptchaReady, executeRecaptcha } = useRecaptcha({
@@ -69,18 +69,19 @@ export function LoginContent({
     authUrl,
   });
 
+  const azureDevOpsAuthUrl = useAuthUrl({
+    appMode: appMode || null,
+    identityProvider: "azure_devops",
+    authUrl,
+  });
+
   const enterpriseSsoAuthUrl = useAuthUrl({
     appMode: appMode || null,
     identityProvider: "enterprise_sso",
     authUrl,
   });
 
-  const handleAuthRedirect = async (
-    redirectUrl: string,
-    provider: Provider,
-  ) => {
-    trackLoginButtonClick({ provider });
-
+  const handleAuthRedirect = async (redirectUrl: string) => {
     const url = new URL(redirectUrl);
     const currentState =
       url.searchParams.get("state") || window.location.origin;
@@ -115,31 +116,37 @@ export function LoginContent({
 
   const handleGitHubAuth = () => {
     if (githubAuthUrl) {
-      handleAuthRedirect(githubAuthUrl, "github");
+      handleAuthRedirect(githubAuthUrl);
     }
   };
 
   const handleGitLabAuth = () => {
     if (gitlabAuthUrl) {
-      handleAuthRedirect(gitlabAuthUrl, "gitlab");
+      handleAuthRedirect(gitlabAuthUrl);
     }
   };
 
   const handleBitbucketAuth = () => {
     if (bitbucketAuthUrl) {
-      handleAuthRedirect(bitbucketAuthUrl, "bitbucket");
+      handleAuthRedirect(bitbucketAuthUrl);
     }
   };
 
   const handleBitbucketDataCenterAuth = () => {
     if (bitbucketDataCenterAuthUrl) {
-      handleAuthRedirect(bitbucketDataCenterAuthUrl, "bitbucket_data_center");
+      handleAuthRedirect(bitbucketDataCenterAuthUrl);
+    }
+  };
+
+  const handleAzureDevOpsAuth = () => {
+    if (azureDevOpsAuthUrl) {
+      handleAuthRedirect(azureDevOpsAuthUrl);
     }
   };
 
   const handleEnterpriseSsoAuth = () => {
     if (enterpriseSsoAuthUrl) {
-      handleAuthRedirect(enterpriseSsoAuthUrl, "enterprise_sso");
+      handleAuthRedirect(enterpriseSsoAuthUrl);
     }
   };
 
@@ -159,6 +166,10 @@ export function LoginContent({
     providersConfigured &&
     providersConfigured.length > 0 &&
     providersConfigured.includes("bitbucket_data_center");
+  const showAzureDevOps =
+    providersConfigured &&
+    providersConfigured.length > 0 &&
+    providersConfigured.includes("azure_devops");
   const showEnterpriseSso =
     providersConfigured &&
     providersConfigured.length > 0 &&
@@ -287,6 +298,23 @@ export function LoginContent({
                 </button>
               )}
 
+              {showAzureDevOps && (
+                <button
+                  type="button"
+                  onClick={handleAzureDevOpsAuth}
+                  className={`${buttonBaseClasses} bg-[#0078D4] text-white`}
+                >
+                  <AzureDevOpsLogo
+                    width={14}
+                    height={14}
+                    className="shrink-0"
+                  />
+                  <span className={buttonLabelClasses}>
+                    {t(I18nKey.AZURE_DEVOPS$CONNECT_ACCOUNT)}
+                  </span>
+                </button>
+              )}
+
               {showEnterpriseSso && (
                 <button
                   type="button"
@@ -306,7 +334,7 @@ export function LoginContent({
         <TermsAndPrivacyNotice className="max-w-[320px] text-[#A3A3A3]" />
       </div>
 
-      {appMode === "saas" && ENABLE_PROJ_USER_JOURNEY() && <LoginCTA />}
+      {isEnterpriseCloud && <LoginCTA />}
     </div>
   );
 }

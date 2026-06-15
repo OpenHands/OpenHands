@@ -1,9 +1,14 @@
+from uuid import UUID
+
+from openhands.app_server.integrations.provider import (
+    PROVIDER_TOKEN_TYPE,
+    ProviderHandler,
+)
+from openhands.app_server.integrations.service_types import ProviderType, UserGitInfo
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
-from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderHandler
-from openhands.integrations.service_types import ProviderType
+from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.sdk.secret import SecretSource, StaticSecret
-from openhands.server.user_auth.user_auth import UserAuth
 
 
 class ResolverUserContext(UserContext):
@@ -12,12 +17,24 @@ class ResolverUserContext(UserContext):
     def __init__(
         self,
         saas_user_auth: UserAuth,
+        resolver_org_id: UUID | None = None,
     ):
         self.saas_user_auth = saas_user_auth
+        self.resolver_org_id = resolver_org_id
         self._provider_handler: ProviderHandler | None = None
+        # SaasUserAuth supports this resolver override; other UserAuth
+        # implementations may not, so keep the call defensive.
+        set_effective_org_id_override = getattr(
+            type(self.saas_user_auth), 'set_effective_org_id_override', None
+        )
+        if resolver_org_id is not None and callable(set_effective_org_id_override):
+            set_effective_org_id_override(self.saas_user_auth, resolver_org_id)
 
     async def get_user_id(self) -> str | None:
         return await self.saas_user_auth.get_user_id()
+
+    async def get_user_email(self) -> str | None:
+        return await self.saas_user_auth.get_user_email()
 
     async def get_user_info(self) -> UserInfo:
         user_settings = await self.saas_user_auth.get_user_settings()
@@ -74,10 +91,13 @@ class ResolverUserContext(UserContext):
             converted_secrets = {}
             for key, custom_secret in secrets.custom_secrets.items():
                 # Extract the secret value from CustomSecret and convert to StaticSecret
-                secret_value = custom_secret.secret.get_secret_value()
-                converted_secrets[key] = StaticSecret(value=secret_value)
+                secret_source: SecretSource = StaticSecret(value=custom_secret.secret)
+                converted_secrets[key] = secret_source
             return converted_secrets
         return {}
 
     async def get_mcp_api_key(self) -> str | None:
         return await self.saas_user_auth.get_mcp_api_key()
+
+    async def get_user_git_info(self) -> UserGitInfo | None:
+        return await self.saas_user_auth.get_user_git_info()

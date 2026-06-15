@@ -7,7 +7,11 @@ from typing import NoReturn
 from uuid import UUID, uuid4
 from uuid import UUID as parse_uuid
 
-from server.constants import ORG_SETTINGS_VERSION, get_default_litellm_model
+from server.constants import (
+    ORG_SETTINGS_VERSION,
+    get_default_llm_base_url,
+    get_default_llm_model,
+)
 from server.routes.org_models import (
     LiteLLMIntegrationError,
     OrgAuthorizationError,
@@ -15,6 +19,7 @@ from server.routes.org_models import (
     OrgNameExistsError,
     OrgNotFoundError,
     OrgUpdate,
+    OrphanedUserError,
 )
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org import Org
@@ -24,8 +29,9 @@ from storage.org_store import OrgStore
 from storage.role_store import RoleStore
 from storage.user_store import UserStore
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.storage.data_models.settings import Settings
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk.settings import ConversationSettings, default_agent_settings
 
 
 class OrgService:
@@ -107,13 +113,17 @@ class OrgService:
         Returns:
             Org: New organization entity (not yet persisted)
         """
+        agent_settings = default_agent_settings()
+        agent_settings.llm.model = get_default_llm_model()
+        agent_settings.llm.base_url = get_default_llm_base_url()
         return Org(
             id=org_id,
             name=name,
             contact_name=contact_name,
             contact_email=contact_email,
             org_version=ORG_SETTINGS_VERSION,
-            default_llm_model=get_default_litellm_model(),
+            agent_settings=agent_settings,
+            conversation_settings=ConversationSettings(),
         )
 
     @staticmethod
@@ -468,42 +478,6 @@ class OrgService:
             return False
 
     @staticmethod
-    def _get_llm_settings_fields() -> set[str]:
-        """
-        Get the set of organization fields that are considered LLM settings
-        and require admin/owner role to update.
-
-        Returns:
-            set[str]: Set of field names that require elevated permissions
-        """
-        return {
-            'default_llm_model',
-            'default_llm_api_key_for_byor',
-            'default_llm_base_url',
-            'search_api_key',
-            'security_analyzer',
-            'agent',
-            'confirmation_mode',
-            'enable_default_condenser',
-            'condenser_max_size',
-        }
-
-    @staticmethod
-    def _has_llm_settings_updates(update_data: OrgUpdate) -> set[str]:
-        """
-        Check if the update contains any LLM settings fields.
-
-        Args:
-            update_data: The organization update data
-
-        Returns:
-            set[str]: Set of LLM fields being updated (empty if none)
-        """
-        llm_fields = OrgService._get_llm_settings_fields()
-        update_dict = update_data.model_dump(exclude_none=True)
-        return llm_fields.intersection(update_dict.keys())
-
-    @staticmethod
     async def update_org_with_permissions(
         org_id: UUID,
         update_data: OrgUpdate,
@@ -571,45 +545,31 @@ class OrgService:
                 )
                 raise OrgNameExistsError(update_data.name)
 
-        # Check if update contains any LLM settings
-        llm_fields_being_updated = OrgService._has_llm_settings_updates(update_data)
-        if llm_fields_being_updated:
-            # Verify user has admin or owner role
-            has_permission = await OrgService.has_admin_or_owner_role(user_id, org_id)
-            if not has_permission:
-                logger.warning(
-                    'User attempted to update LLM settings without permission',
-                    extra={
-                        'user_id': user_id,
-                        'org_id': str(org_id),
-                        'attempted_fields': list(llm_fields_being_updated),
-                    },
-                )
-                raise PermissionError(
-                    'Admin or owner role required to update LLM settings'
-                )
-
-            logger.debug(
-                'User has permission to update LLM settings',
-                extra={
-                    'user_id': user_id,
-                    'org_id': str(org_id),
-                    'llm_fields': list(llm_fields_being_updated),
-                },
-            )
-
-        # Convert to dict for OrgStore (excluding None values)
-        update_dict = update_data.model_dump(exclude_none=True)
-        if not update_dict:
+        if not update_data.has_updates():
             logger.info(
                 'No fields to update',
                 extra={'org_id': str(org_id), 'user_id': user_id},
             )
             return existing_org
 
-        # Perform the update
+        restricted_fields = update_data.restricted_fields()
+        if restricted_fields and not await OrgService.has_admin_or_owner_role(
+            user_id, org_id
+        ):
+            logger.warning(
+                'Insufficient role for restricted organization settings update',
+                extra={
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                    'restricted_fields': sorted(restricted_fields),
+                },
+            )
+            raise PermissionError(
+                'Admin or owner role required to update organization default settings'
+            )
+
         try:
-            updated_org = await OrgStore.update_org(org_id, update_dict)
+            updated_org = await OrgStore.update_org(org_id, update_data, user_id)
             if not updated_org:
                 raise OrgDatabaseError('Failed to update organization in database')
 
@@ -618,7 +578,7 @@ class OrgService:
                 extra={
                     'org_id': str(org_id),
                     'user_id': user_id,
-                    'updated_fields': list(update_dict.keys()),
+                    'updated_fields': sorted(update_data.updated_fields()),
                 },
             )
 
@@ -840,7 +800,9 @@ class OrgService:
 
         # Step 2: Perform database cascade deletion with LiteLLM cleanup in transaction
         try:
-            deleted_org = await OrgStore.delete_org_cascade(org_id)
+            deleted_org = await OrgStore.delete_org_cascade(
+                org_id, requester_user_id=user_id
+            )
             if not deleted_org:
                 # This shouldn't happen since we verified existence above
                 raise OrgDatabaseError('Organization not found during deletion')
@@ -856,6 +818,11 @@ class OrgService:
 
             return deleted_org
 
+        except OrphanedUserError:
+            # Propagate as-is so the route can return a 400 with the affected
+            # user list. Wrapping into OrgDatabaseError below would mask the
+            # specific failure mode and force a 500.
+            raise
         except Exception as e:
             logger.error(
                 'Organization deletion failed',
@@ -864,27 +831,39 @@ class OrgService:
             raise OrgDatabaseError(f'Failed to delete organization: {str(e)}')
 
     @staticmethod
-    async def check_byor_export_enabled(user_id: str) -> bool:
-        """Check if BYOR export is enabled for the user's current org.
-
-        Returns True if the user's current org has byor_export_enabled set to True.
-        Returns False if the user is not found, has no current org, or the flag is False.
+    async def check_byor_export_enabled(
+        user_id: str, org_id: UUID | None = None
+    ) -> bool:
+        """Check if BYOR export is enabled for an organization.
 
         Args:
-            user_id: User ID to check
+            user_id: User ID (used only as fallback to look up the user's
+                ``current_org_id`` when ``org_id`` is omitted).
+            org_id: Explicit org id. Request-context callers should pass
+                the effective org id from ``SaasUserAuth.get_effective_org_id``.
 
         Returns:
-            bool: True if BYOR export is enabled, False otherwise
+            bool: True if BYOR export is enabled, False otherwise.
         """
-        user = await UserStore.get_user_by_id(user_id)
-        if not user or not user.current_org_id:
-            return False
+        if org_id is None:
+            user = await UserStore.get_user_by_id(user_id)
+            if not user or not user.current_org_id:
+                return False
+            org_id = user.current_org_id
 
-        org = await OrgStore.get_org_by_id(user.current_org_id)
+        org = await OrgStore.get_org_by_id(org_id)
         if not org:
             return False
 
-        return org.byor_export_enabled
+        if org.byor_export_enabled:
+            return True
+
+        credits = await OrgService.get_org_credits(user_id, org_id)
+        if credits is None or credits <= 0:
+            return False
+
+        org = await OrgStore.enable_byor_export(org_id)
+        return bool(org and org.byor_export_enabled)
 
     @staticmethod
     async def switch_org(user_id: str, org_id: UUID) -> Org:

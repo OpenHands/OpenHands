@@ -86,8 +86,19 @@ If you need help with anything, or just want to chat, [come find us on Slack](ht
 
 <hr>
 
+### Thank You to Our Contributors
+
 <div align="center">
-  <strong>Trusted by engineers at</strong>
+
+[![OpenHands Contributors](https://assets.openhands.dev/readme/openhands-openhands-contributors.svg)](https://github.com/OpenHands/OpenHands/graphs/contributors)
+
+</div>
+
+<hr>
+
+### Trusted by Engineers at
+
+<div align="center">
   <br/><br/>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/tiktok.svg">
@@ -137,4 +148,6 @@ If you need help with anything, or just want to chat, [come find us on Slack](ht
     <source media="(prefers-color-scheme: dark)" srcset="https://assets.openhands.dev/logos/external/white/google.svg">
     <img src="https://assets.openhands.dev/logos/external/black/google.svg" alt="Google" height="17" hspace="5">
   </picture>
+</div>
+
 </div>

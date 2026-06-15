@@ -1,8 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSettings } from "#/hooks/query/use-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
-import { MCPSSEServer, MCPStdioServer, MCPSHTTPServer } from "#/types/settings";
+import {
+  MCPSHTTPServer,
+  MCPConfig,
+  MCPSSEServer,
+  MCPStdioServer,
+} from "#/types/settings";
+import { parseMcpConfig, toSdkMcpConfig } from "#/utils/mcp-config";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 type MCPServerType = "sse" | "stdio" | "shttp";
 
@@ -19,7 +25,6 @@ interface MCPServerConfig {
 
 export function useUpdateMcpServer() {
   const queryClient = useQueryClient();
-  const { data: settings } = useSettings();
   const { organizationId } = useSelectedOrganizationId();
 
   return useMutation({
@@ -30,9 +35,18 @@ export function useUpdateMcpServer() {
       serverId: string;
       server: MCPServerConfig;
     }): Promise<void> => {
-      if (!settings?.mcp_config) return;
+      // Fetch fresh settings at mutation time to avoid stale closure issues
+      const settings = await SettingsService.getSettings();
 
-      const newConfig = { ...settings.mcp_config };
+      const currentConfig = parseMcpConfig(
+        settings?.agent_settings?.mcp_config,
+      );
+
+      const newConfig: MCPConfig = {
+        sse_servers: [...currentConfig.sse_servers],
+        stdio_servers: [...currentConfig.stdio_servers],
+        shttp_servers: [...currentConfig.shttp_servers],
+      };
       const [serverType, indexStr] = serverId.split("-");
       const index = parseInt(indexStr, 10);
 
@@ -59,17 +73,15 @@ export function useUpdateMcpServer() {
         newConfig.shttp_servers[index] = shttpServer;
       }
 
-      const apiSettings = {
-        mcp_config: newConfig,
-        v1_enabled: settings.v1_enabled,
+      const payload = {
+        agent_settings_diff: { mcp_config: toSdkMcpConfig(newConfig) },
       };
 
-      await SettingsService.saveSettings(apiSettings);
+      await SettingsService.saveSettings(payload);
     },
     onSuccess: () => {
-      // Invalidate the settings query to trigger a refetch
       queryClient.invalidateQueries({
-        queryKey: ["settings", organizationId],
+        queryKey: SETTINGS_QUERY_KEYS.personal(organizationId),
       });
     },
   });

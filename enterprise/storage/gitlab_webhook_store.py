@@ -3,12 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from integrations.types import GitLabResourceType
-from sqlalchemy import and_, asc, select, text, update
+from sqlalchemy import and_, asc, delete, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from storage.database import a_session_maker
 from storage.gitlab_webhook import GitlabWebhook
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass
@@ -25,6 +25,8 @@ class GitlabWebhookStore:
 
         if webhook.group_id:
             return (GitLabResourceType.GROUP, webhook.group_id)
+        # At this point, project_id must be set (we checked at least one is set above)
+        assert webhook.project_id is not None
         return (GitLabResourceType.PROJECT, webhook.project_id)
 
     async def store_webhooks(self, project_details: list[GitlabWebhook]) -> None:
@@ -123,11 +125,11 @@ class GitlabWebhookStore:
             async with session.begin():
                 # Create query based on the identifier provided
                 if resource_type == GitLabResourceType.PROJECT:
-                    query = GitlabWebhook.__table__.delete().where(
+                    query = delete(GitlabWebhook).where(
                         GitlabWebhook.project_id == resource_id
                     )
                 else:  # has_group_id must be True based on validation
-                    query = GitlabWebhook.__table__.delete().where(
+                    query = delete(GitlabWebhook).where(
                         GitlabWebhook.group_id == resource_id
                     )
 
@@ -196,7 +198,7 @@ class GitlabWebhookStore:
 
     async def get_webhook_secret(self, webhook_uuid: str, user_id: str) -> str | None:
         """
-        Get's webhook secret given the webhook uuid and admin keycloak user id
+        Gets webhook secret given the webhook uuid and admin keycloak user id
         """
         async with a_session_maker() as session:
             query = (

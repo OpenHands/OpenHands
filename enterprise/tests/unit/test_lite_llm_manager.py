@@ -17,10 +17,77 @@ from storage.lite_llm_manager import (
     LiteLlmManager,
     get_byor_key_alias,
     get_openhands_cloud_key_alias,
+    get_org_team_alias,
 )
 from storage.user_settings import UserSettings
 
-from openhands.server.settings import Settings
+from openhands.app_server.settings.settings_models import Settings
+
+
+def _agent_value(settings: Settings, key: str):
+    """Navigate into settings.agent_settings using a dot-separated key."""
+    obj = settings.agent_settings
+    for part in key.split('.'):
+        obj = getattr(obj, part)
+    return obj
+
+
+def _secret_value(settings: Settings, key: str):
+    """Navigate into settings.agent_settings and unwrap SecretStr values."""
+    secret = _agent_value(settings, key)
+    return secret.get_secret_value() if secret else None
+
+
+class TestOrgTeamAlias:
+    """Human-readable LiteLLM team_alias derivation."""
+
+    def test_personal_org_labeled_personal_workspace(self):
+        # Personal org: org_id == user_id.
+        assert get_org_team_alias('user-1', 'ignored', 'user-1') == 'Personal Workspace'
+
+    def test_team_org_uses_display_name(self):
+        assert get_org_team_alias('org-2', 'Acme Inc', 'user-1') == 'Acme Inc'
+
+    def test_team_org_without_name_falls_back_to_id_not_uid(self):
+        # Never the bare user uid (the old behavior that hid teams).
+        assert get_org_team_alias('org-2', None, 'user-1') == 'Organization org-2'
+
+    @pytest.mark.asyncio
+    async def test_team_alias_for_org_personal_skips_lookup(self):
+        # Personal org short-circuits without touching OrgStore.
+        with patch(
+            'storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock
+        ) as mock_get:
+            alias = await LiteLlmManager._team_alias_for_org('user-1', 'user-1')
+        assert alias == 'Personal Workspace'
+        mock_get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_team_alias_for_org_team_resolves_name(self):
+        org = MagicMock()
+        org.name = 'Acme Inc'
+        with patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=org,
+        ):
+            alias = await LiteLlmManager._team_alias_for_org(
+                '11111111-1111-1111-1111-111111111111', 'user-1'
+            )
+        assert alias == 'Acme Inc'
+
+    @pytest.mark.asyncio
+    async def test_team_alias_for_org_lookup_failure_falls_back(self):
+        # A lookup failure must not crash team creation.
+        with patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            side_effect=RuntimeError('db down'),
+        ):
+            alias = await LiteLlmManager._team_alias_for_org(
+                '11111111-1111-1111-1111-111111111111', 'user-1'
+            )
+        assert alias == 'Organization 11111111-1111-1111-1111-111111111111'
 
 
 class TestDefaultInitialBudget:
@@ -122,20 +189,33 @@ class TestLiteLlmManager:
     def mock_settings(self):
         """Create a mock Settings object."""
         settings = Settings()
-        settings.agent = 'TestAgent'
-        settings.llm_model = 'test-model'
-        settings.llm_api_key = SecretStr('test-key')
-        settings.llm_base_url = 'http://test.com'
+        settings.update(
+            {
+                'agent_settings_diff': {
+                    'agent': 'TestAgent',
+                    'llm': {
+                        'model': 'test-model',
+                        'api_key': 'test-key',
+                        'base_url': 'http://test.com',
+                    },
+                },
+            }
+        )
         return settings
 
     @pytest.fixture
     def mock_user_settings(self):
         """Create a mock UserSettings object."""
         user_settings = UserSettings()
-        user_settings.agent = 'TestAgent'
-        user_settings.llm_model = 'test-model'
+        user_settings.agent_settings = {
+            'agent': 'TestAgent',
+            'llm': {
+                'model': 'test-model',
+                'base_url': 'http://test.com',
+                'api_key': 'test-key',
+            },
+        }
         user_settings.llm_api_key = SecretStr('test-key')
-        user_settings.llm_base_url = 'http://test.com'
         user_settings.user_version = 4  # Set version to avoid None comparison
         return user_settings
 
@@ -216,6 +296,42 @@ class TestLiteLlmManager:
                     assert result is None
 
     @pytest.mark.asyncio
+    async def test_create_entries_direct_defaults_skip_litellm(self, mock_settings):
+        """Test direct LLM defaults without provisioning LiteLLM users or keys."""
+        with (
+            patch(
+                'storage.lite_llm_manager.should_use_direct_llm_defaults',
+                return_value=True,
+            ),
+            patch(
+                'storage.lite_llm_manager.get_default_llm_model',
+                return_value='openai/anthropic/claude-sonnet',
+            ),
+            patch(
+                'storage.lite_llm_manager.get_default_llm_base_url',
+                return_value='https://bifrost.example.com/openai/v1',
+            ),
+            patch(
+                'storage.lite_llm_manager.get_default_llm_api_key',
+                return_value='sk-bf-shared-smoke-test',
+            ),
+            patch('httpx.AsyncClient') as mock_client_class,
+        ):
+            result = await LiteLlmManager.create_entries(
+                'test-org-id', 'test-user-id', mock_settings, create_user=True
+            )
+
+            assert result is not None
+            assert _agent_value(result, 'agent') == 'CodeActAgent'
+            assert _agent_value(result, 'llm.model') == 'openai/anthropic/claude-sonnet'
+            assert (
+                _agent_value(result, 'llm.base_url')
+                == 'https://bifrost.example.com/openai/v1'
+            )
+            assert _secret_value(result, 'llm.api_key') == 'sk-bf-shared-smoke-test'
+            mock_client_class.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_create_entries_local_deployment(self, mock_settings):
         """Test create_entries in local deployment mode."""
         with patch.dict(os.environ, {'LOCAL_DEPLOYMENT': '1'}):
@@ -228,10 +344,12 @@ class TestLiteLlmManager:
                     )
 
                     assert result is not None
-                    assert result.agent == 'CodeActAgent'
-                    assert result.llm_model == get_default_litellm_model()
-                    assert result.llm_api_key.get_secret_value() == 'test-key'
-                    assert result.llm_base_url == 'http://test.com'
+                    assert _agent_value(result, 'agent') == 'CodeActAgent'
+                    assert (
+                        _agent_value(result, 'llm.model') == get_default_litellm_model()
+                    )
+                    assert _secret_value(result, 'llm.api_key') == 'test-key'
+                    assert _agent_value(result, 'llm.base_url') == 'http://test.com'
 
     @pytest.mark.asyncio
     async def test_create_entries_cloud_deployment(self, mock_settings, mock_response):
@@ -275,10 +393,10 @@ class TestLiteLlmManager:
             )
 
             assert result is not None
-            assert result.agent == 'CodeActAgent'
-            assert result.llm_model == get_default_litellm_model()
-            assert result.llm_api_key.get_secret_value() == 'test-api-key'
-            assert result.llm_base_url == 'http://test.com'
+            assert _agent_value(result, 'agent') == 'CodeActAgent'
+            assert _agent_value(result, 'llm.model') == get_default_litellm_model()
+            assert _secret_value(result, 'llm.api_key') == 'test-api-key'
+            assert _agent_value(result, 'llm.base_url') == 'http://test.com'
 
             # Verify API calls were made (get_team + user_exists + 4 posts)
             assert mock_client.get.call_count == 2  # get_team + user_exists
@@ -530,10 +648,14 @@ class TestLiteLlmManager:
 
                     # migrate_entries returns the user_settings unchanged
                     assert result is not None
-                    assert result.agent == 'TestAgent'
-                    assert result.llm_model == 'test-model'
+                    effective_settings = result.to_settings()
+                    assert _agent_value(effective_settings, 'agent') == 'TestAgent'
+                    assert _agent_value(effective_settings, 'llm.model') == 'test-model'
                     assert result.llm_api_key.get_secret_value() == 'test-key'
-                    assert result.llm_base_url == 'http://test.com'
+                    assert (
+                        _agent_value(effective_settings, 'llm.base_url')
+                        == 'http://test.com'
+                    )
 
     @pytest.mark.asyncio
     async def test_migrate_entries_no_user_found(self, mock_user_settings):
@@ -654,10 +776,19 @@ class TestLiteLlmManager:
 
                             # migrate_entries returns the user_settings unchanged
                             assert result is not None
-                            assert result.agent == 'TestAgent'
-                            assert result.llm_model == 'test-model'
+                            effective_settings = result.to_settings()
+                            assert (
+                                _agent_value(effective_settings, 'agent') == 'TestAgent'
+                            )
+                            assert (
+                                _agent_value(effective_settings, 'llm.model')
+                                == 'test-model'
+                            )
                             assert result.llm_api_key.get_secret_value() == 'test-key'
-                            assert result.llm_base_url == 'http://test.com'
+                            assert (
+                                _agent_value(effective_settings, 'llm.base_url')
+                                == 'http://test.com'
+                            )
 
                             # Verify migration steps were called:
                             # - 2 GET requests: _get_user, _get_user_keys
@@ -736,11 +867,12 @@ class TestLiteLlmManager:
                             # migrate_entries should update user_settings with the new key
                             assert result is not None
                             assert (
-                                result.llm_api_key.get_secret_value()
+                                result.agent_settings['llm']['api_key']
                                 == 'new-generated-key'
                             )
+                            assert result.llm_api_key_for_byor_secret is not None
                             assert (
-                                result.llm_api_key_for_byor.get_secret_value()
+                                result.llm_api_key_for_byor_secret.get_secret_value()
                                 == 'new-generated-key'
                             )
 
@@ -2031,7 +2163,10 @@ class TestLiteLlmManager:
 
                             # downgrade_entries returns the user_settings
                             assert result is not None
-                            assert result.agent == 'TestAgent'
+                            assert (
+                                _agent_value(result.to_settings(), 'agent')
+                                == 'TestAgent'
+                            )
 
                             # Verify downgrade steps were called:
                             # GET requests:
@@ -2065,7 +2200,7 @@ class TestLiteLlmManager:
                     # In local deployment, should return user_settings without
                     # making any LiteLLM calls
                     assert result is not None
-                    assert result.agent == 'TestAgent'
+                    assert _agent_value(result.to_settings(), 'agent') == 'TestAgent'
 
 
 class TestGetAllKeysForUser:
@@ -2450,9 +2585,9 @@ class TestBudgetPayloadHandling:
 
         # Verify that max_budget IS in the JSON payload with the correct value
         json_payload = call_args[1]['json']
-        assert (
-            'max_budget' in json_payload
-        ), 'max_budget should be in payload when set to a value'
+        assert 'max_budget' in json_payload, (
+            'max_budget should be in payload when set to a value'
+        )
         assert json_payload['max_budget'] == 100.0
 
     @pytest.mark.asyncio
@@ -2511,9 +2646,9 @@ class TestBudgetPayloadHandling:
 
         # Verify that max_budget_in_team IS in the JSON payload
         json_payload = call_args[1]['json']
-        assert (
-            'max_budget_in_team' in json_payload
-        ), 'max_budget_in_team should be in payload when set to a value'
+        assert 'max_budget_in_team' in json_payload, (
+            'max_budget_in_team should be in payload when set to a value'
+        )
         assert json_payload['max_budget_in_team'] == 50.0
 
     @pytest.mark.asyncio
@@ -2572,9 +2707,9 @@ class TestBudgetPayloadHandling:
 
         # Verify that max_budget_in_team IS in the JSON payload
         json_payload = call_args[1]['json']
-        assert (
-            'max_budget_in_team' in json_payload
-        ), 'max_budget_in_team should be in payload when set to a value'
+        assert 'max_budget_in_team' in json_payload, (
+            'max_budget_in_team should be in payload when set to a value'
+        )
         assert json_payload['max_budget_in_team'] == 75.0
 
 

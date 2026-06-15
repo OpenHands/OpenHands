@@ -59,4 +59,55 @@ describe("BadgeInput", () => {
     await userEvent.type(input, " ");
     expect(onChangeMock).not.toHaveBeenCalled();
   });
+
+  it("should render the input as a badge on enter", async () => {
+    const onChangeMock = vi.fn();
+    render(<BadgeInput value={[]} onChange={onChangeMock} />);
+
+    const input = screen.getByTestId("badge-input");
+    await userEvent.type(input, "test{enter}");
+
+    expect(onChangeMock).toHaveBeenCalledWith(["test"]);
+    expect(input).toHaveValue("");
+  });
+
+  it("should render the input as a badge on comma", async () => {
+    const onChangeMock = vi.fn();
+    render(<BadgeInput value={[]} onChange={onChangeMock} />);
+
+    const input = screen.getByTestId("badge-input");
+    await userEvent.type(input, "test,");
+
+    expect(onChangeMock).toHaveBeenCalledWith(["test"]);
+    expect(input).toHaveValue("");
+  });
+
+  it("should commit pending input as a badge on blur", async () => {
+    const onChangeMock = vi.fn();
+    render(<BadgeInput value={[]} onChange={onChangeMock} />);
+
+    const input = screen.getByTestId("badge-input");
+    await userEvent.type(input, "test");
+    await userEvent.tab();
+
+    expect(onChangeMock).toHaveBeenCalledWith(["test"]);
+    expect(input).toHaveValue("");
+  });
+
+  it("should split pasted text into multiple badges", async () => {
+    const onChangeMock = vi.fn();
+    render(<BadgeInput value={[]} onChange={onChangeMock} />);
+
+    const input = screen.getByTestId("badge-input");
+    await userEvent.click(input);
+    await userEvent.paste("a@acme.org, b@acme.org\tc@acme.org");
+    await userEvent.tab();
+
+    expect(onChangeMock).toHaveBeenCalledWith([
+      "a@acme.org",
+      "b@acme.org",
+      "c@acme.org",
+    ]);
+    expect(input).toHaveValue("");
+  });
 });

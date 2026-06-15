@@ -10,20 +10,18 @@ from integrations.github.github_types import (
 )
 from integrations.models import Message
 from integrations.resolver_context import ResolverUserContext
+from integrations.resolver_org_router import resolve_org_for_repo
 from integrations.types import ResolverViewInterface, UserData
 from integrations.utils import (
     ENABLE_PROACTIVE_CONVERSATION_STARTERS,
-    ENABLE_V1_GITHUB_RESOLVER,
     HOST,
     HOST_URL,
     get_oh_labels,
-    get_user_v1_enabled_setting,
     has_exact_mention,
 )
 from jinja2 import Environment
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from server.auth.token_manager import TokenManager
-from server.config import get_config
 from storage.org_store import OrgStore
 from storage.proactive_conversation_store import ProactiveConversationStore
 from storage.saas_secrets_store import SaasSecretsStore
@@ -32,31 +30,20 @@ from openhands.agent_server.models import SendMessageRequest
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTaskStatus,
-)
-from openhands.app_server.config import get_app_conversation_service
-from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.github.github_service import GithubServiceImpl
-from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
-from openhands.integrations.service_types import Comment
-from openhands.sdk import TextContent
-from openhands.server.services.conversation_service import (
-    initialize_conversation,
-    start_conversation,
-)
-from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.conversation_metadata import (
-    ConversationMetadata,
     ConversationTrigger,
 )
-from openhands.utils.async_utils import call_sync_from_async
+from openhands.app_server.config import get_app_conversation_service
+from openhands.app_server.integrations.github.github_service import GithubServiceImpl
+from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
+from openhands.app_server.integrations.service_types import Comment
+from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
+from openhands.app_server.user_auth.user_auth import UserAuth
+from openhands.app_server.utils.async_utils import call_sync_from_async
+from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk import TextContent
 
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
-
-
-async def is_v1_enabled_for_github_resolver(user_id: str) -> bool:
-    return await get_user_v1_enabled_setting(user_id) and ENABLE_V1_GITHUB_RESOLVER
 
 
 async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
@@ -106,7 +93,6 @@ class GithubIssue(ResolverViewInterface):
     title: str
     description: str
     previous_comments: list[Comment]
-    v1_enabled: bool
 
     def _get_branch_name(self) -> str | None:
         return getattr(self, 'branch_name', None)
@@ -148,88 +134,35 @@ class GithubIssue(ResolverViewInterface):
         return user_instructions, conversation_instructions
 
     async def _get_user_secrets(self):
-        secrets_store = SaasSecretsStore(self.user_info.keycloak_user_id, get_config())
+        secrets_store = await SaasSecretsStore.get_instance(
+            self.user_info.keycloak_user_id
+        )
         user_secrets = await secrets_store.load()
 
         return user_secrets.custom_secrets if user_secrets else None
 
-    async def initialize_new_conversation(self) -> ConversationMetadata:
-        # FIXME: Handle if initialize_conversation returns None
-
-        self.v1_enabled = await is_v1_enabled_for_github_resolver(
-            self.user_info.keycloak_user_id
+    async def initialize_new_conversation(self) -> UUID:
+        # Resolve target org based on claimed git organizations
+        self.resolved_org_id = await resolve_org_for_repo(
+            provider='github',
+            full_repo_name=self.full_repo_name,
+            keycloak_user_id=self.user_info.keycloak_user_id,
         )
 
-        logger.info(
-            f'[GitHub V1]: User flag found for {self.user_info.keycloak_user_id} is {self.v1_enabled}'
-        )
-        if self.v1_enabled:
-            # Create dummy conversationm metadata
-            # Don't save to conversation store
-            # V1 conversations are stored in a separate table
-            self.conversation_id = uuid4().hex
-            return ConversationMetadata(
-                conversation_id=self.conversation_id,
-                selected_repository=self.full_repo_name,
-            )
-
-        conversation_metadata: ConversationMetadata = await initialize_conversation(  # type: ignore[assignment]
-            user_id=self.user_info.keycloak_user_id,
-            conversation_id=None,
-            selected_repository=self.full_repo_name,
-            selected_branch=self._get_branch_name(),
-            conversation_trigger=ConversationTrigger.RESOLVER,
-            git_provider=ProviderType.GITHUB,
-        )
-
-        self.conversation_id = conversation_metadata.conversation_id
-        return conversation_metadata
+        # All conversations use V1 app conversation service
+        conversation_id = uuid4()
+        self.conversation_id = conversation_id.hex
+        return conversation_id
 
     async def create_new_conversation(
         self,
         jinja_env: Environment,
         git_provider_tokens: PROVIDER_TOKEN_TYPE,
-        conversation_metadata: ConversationMetadata,
+        conversation_id: UUID,
         saas_user_auth: UserAuth,
     ):
-        logger.info(
-            f'[GitHub V1]: User flag found for {self.user_info.keycloak_user_id} is {self.v1_enabled}'
-        )
-        if self.v1_enabled:
-            # Use V1 app conversation service
-            await self._create_v1_conversation(
-                jinja_env, saas_user_auth, conversation_metadata
-            )
-        else:
-            await self._create_v0_conversation(
-                jinja_env, git_provider_tokens, conversation_metadata
-            )
-
-    async def _create_v0_conversation(
-        self,
-        jinja_env: Environment,
-        git_provider_tokens: PROVIDER_TOKEN_TYPE,
-        conversation_metadata: ConversationMetadata,
-    ):
-        """Create conversation using the legacy V0 system."""
-        logger.info('[GitHub]: Creating V0 conversation')
-        custom_secrets = await self._get_user_secrets()
-
-        user_instructions, conversation_instructions = await self._get_instructions(
-            jinja_env
-        )
-
-        await start_conversation(
-            user_id=self.user_info.keycloak_user_id,
-            git_provider_tokens=git_provider_tokens,
-            custom_secrets=custom_secrets,
-            initial_user_msg=user_instructions,
-            image_urls=None,
-            replay_json=None,
-            conversation_id=conversation_metadata.conversation_id,
-            conversation_metadata=conversation_metadata,
-            conversation_instructions=conversation_instructions,
-        )
+        # V0 conversation path has been removed - all conversations use V1 app conversation service
+        await self._create_v1_conversation(jinja_env, saas_user_auth, conversation_id)
 
     async def _get_v1_initial_user_message(self, jinja_env: Environment) -> str:
         """Build the initial user message for V1 resolver conversations.
@@ -241,7 +174,6 @@ class GithubIssue(ResolverViewInterface):
         comments, inline review comments) override this method to control ordering
         (e.g., context first, then the triggering comment, then previous comments).
         """
-
         user_instructions, conversation_instructions = await self._get_instructions(
             jinja_env
         )
@@ -258,7 +190,7 @@ class GithubIssue(ResolverViewInterface):
         self,
         jinja_env: Environment,
         saas_user_auth: UserAuth,
-        conversation_metadata: ConversationMetadata,
+        conversation_id: UUID,
     ):
         """Create conversation using the new V1 app conversation system."""
         logger.info('[GitHub V1]: Creating V1 conversation')
@@ -278,7 +210,7 @@ class GithubIssue(ResolverViewInterface):
 
         # Create the V1 conversation start request with the callback processor
         start_request = AppConversationStartRequest(
-            conversation_id=UUID(conversation_metadata.conversation_id),
+            conversation_id=conversation_id,
             # NOTE: Resolver instructions are intended to be lower priority than the
             # system prompt, so we inject them into the initial user message.
             system_message_suffix=None,
@@ -294,7 +226,10 @@ class GithubIssue(ResolverViewInterface):
         )
 
         # Set up the GitHub user context for the V1 system
-        github_user_context = ResolverUserContext(saas_user_auth=saas_user_auth)
+        github_user_context = ResolverUserContext(
+            saas_user_auth=saas_user_auth,
+            resolver_org_id=self.resolved_org_id,
+        )
         setattr(injector_state, USER_CONTEXT_ATTR, github_user_context)
 
         async with get_app_conversation_service(
@@ -322,7 +257,7 @@ class GithubIssue(ResolverViewInterface):
                 'full_repo_name': self.full_repo_name,
                 'installation_id': self.installation_id,
             },
-            send_summary_instruction=self.send_summary_instruction,
+            should_request_summary=self.send_summary_instruction,
         )
 
 
@@ -476,7 +411,7 @@ class GithubInlinePRComment(GithubPRComment):
                 'comment_id': self.comment_id,
             },
             inline_pr_comment=True,
-            send_summary_instruction=self.send_summary_instruction,
+            should_request_summary=self.send_summary_instruction,
         )
 
 
@@ -829,7 +764,6 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1_enabled=False,
             )
 
         elif GithubFactory.is_issue_comment(message):
@@ -855,7 +789,6 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1_enabled=False,
             )
 
         elif GithubFactory.is_pr_comment(message):
@@ -897,7 +830,6 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1_enabled=False,
             )
 
         elif GithubFactory.is_inline_pr_comment(message):
@@ -931,7 +863,6 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1_enabled=False,
             )
 
         else:

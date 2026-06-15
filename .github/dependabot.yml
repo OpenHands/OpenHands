@@ -55,6 +55,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "wednesday"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       docusaurus:
@@ -73,9 +75,14 @@ updates:
           - "*"
 
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/docker-image-tags"
+      - "/.github/actions/docker-merge-manifest"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
 
   - package-ecosystem: "docker"
@@ -83,4 +90,6 @@ updates:
       - "containers/*"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5

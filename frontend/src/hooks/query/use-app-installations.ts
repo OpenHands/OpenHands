@@ -6,6 +6,9 @@ import { useUserProviders } from "../use-user-providers";
 import { Provider } from "#/types/settings";
 import { shouldUseInstallationRepos } from "#/utils/utils";
 
+/**
+ * Get the first page of app installations for the provider given.
+ */
 export const useAppInstallations = (selectedProvider: Provider | null) => {
   const { data: config } = useConfig();
   const { data: userIsAuthenticated } = useIsAuthed();
@@ -13,7 +16,7 @@ export const useAppInstallations = (selectedProvider: Provider | null) => {
 
   return useQuery({
     queryKey: ["installations", providers || [], selectedProvider],
-    queryFn: () => GitService.getUserInstallationIds(selectedProvider!),
+    queryFn: () => GitService.getUserInstallations(selectedProvider!),
     enabled:
       userIsAuthenticated &&
       !!selectedProvider &&

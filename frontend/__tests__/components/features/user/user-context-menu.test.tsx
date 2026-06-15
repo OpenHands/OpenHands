@@ -23,16 +23,10 @@ vi.mock("#/hooks/use-breakpoint", () => ({
   useBreakpoint: vi.fn(() => false), // Default to desktop (not mobile)
 }));
 
-// Mock feature flags
-const mockEnableProjUserJourney = vi.fn(() => true);
-vi.mock("#/utils/feature-flags", () => ({
-  ENABLE_PROJ_USER_JOURNEY: () => mockEnableProjUserJourney(),
-}));
-
-// Mock useTracking hook for CTA
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
+vi.mock("#/hooks/use-client-analytics", () => ({
+  useClientAnalytics: () => ({
     trackSaasSelfhostedInquiry: vi.fn(),
+    trackEnterpriseLeadFormSubmitted: vi.fn(),
   }),
 }));
 
@@ -106,7 +100,6 @@ const createMockUser = (
   llm_api_key: "",
   max_iterations: 100,
   llm_model: "gpt-4",
-  llm_api_key_for_byor: null,
   llm_base_url: "",
   status: "active",
   ...overrides,
@@ -144,9 +137,8 @@ describe("UserContextMenu", () => {
     // Ensure clean state at the start of each test
     vi.restoreAllMocks();
     useSelectedOrganizationStore.setState({ organizationId: null });
-    // Reset feature flag and breakpoint mocks to defaults
-    mockEnableProjUserJourney.mockReturnValue(true);
-    vi.mocked(breakpoint.useBreakpoint).mockReturnValue(false); // Desktop by default
+    // Reset breakpoint mock to desktop by default
+    vi.mocked(breakpoint.useBreakpoint).mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -194,23 +186,34 @@ describe("UserContextMenu", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       }),
     );
 
     renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
-    // Wait for config to load and verify that navigation items are rendered (except organization-members/org which are filtered out)
+    // In SaaS, personal LLM/Condenser/Verification routes are hidden in favor
+    // of /settings/org-defaults/* (visible only when an org is selected, which
+    // this test does not seed). Org-only and billing routes are also filtered.
+    const personalLlmPaths = new Set([
+      "/settings",
+      "/settings/condenser",
+      "/settings/verification",
+    ]);
     const expectedItems = SAAS_NAV_ITEMS.filter(
       (item) =>
         item.to !== "/settings/org-members" &&
         item.to !== "/settings/org" &&
-        item.to !== "/settings/billing",
+        item.to !== "/settings/billing" &&
+        !item.to.startsWith("/settings/org-defaults") &&
+        !personalLlmPaths.has(item.to) &&
+        true,
     );
 
     await waitFor(() => {
       expectedItems.forEach((item) => {
-        expect(screen.getByText(item.text)).toBeInTheDocument();
+        expect(screen.getAllByText(item.text).length).toBeGreaterThan(0);
       });
     });
   });
@@ -228,6 +231,7 @@ describe("UserContextMenu", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       }),
     );
@@ -239,12 +243,14 @@ describe("UserContextMenu", () => {
     // Wait for config to load and verify that navigation items are rendered (except organization-members/org which are filtered out)
     const expectedItems = SAAS_NAV_ITEMS.filter(
       (item) =>
-        item.to !== "/settings/org-members" && item.to !== "/settings/org",
+        item.to !== "/settings/org-members" &&
+        item.to !== "/settings/org" &&
+        true,
     );
 
     await waitFor(() => {
       expectedItems.forEach((item) => {
-        expect(screen.getByText(item.text)).toBeInTheDocument();
+        expect(screen.getAllByText(item.text).length).toBeGreaterThan(0);
       });
     });
   });
@@ -278,6 +284,7 @@ describe("UserContextMenu", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -342,6 +349,7 @@ describe("UserContextMenu", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -371,9 +379,19 @@ describe("UserContextMenu", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
+      // The LLM nav item now lives under /settings/org-defaults, which only
+      // appears when an org is selected. Seed a personal org for that.
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
+      useSelectedOrganizationStore.setState({
+        organizationId: MOCK_PERSONAL_ORG.id,
+      });
 
       renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
@@ -467,6 +485,7 @@ describe("UserContextMenu", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       }),
     );
@@ -615,7 +634,6 @@ describe("UserContextMenu", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       });
@@ -651,7 +669,6 @@ describe("UserContextMenu", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       });
@@ -711,6 +728,7 @@ describe("UserContextMenu", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       }),
     );
@@ -750,15 +768,27 @@ describe("UserContextMenu", () => {
   });
 
   describe("Context Menu CTA", () => {
-    it("should render the CTA component in SaaS mode on desktop with feature flag enabled", async () => {
-      // Set SaaS mode
+    it("should render the CTA component in SaaS Cloud mode on desktop", async () => {
       vi.spyOn(OptionService, "getConfig").mockResolvedValue(
-        createMockWebClientConfig({ app_mode: "saas" }),
+        createMockWebClientConfig({
+          app_mode: "saas",
+          feature_flags: {
+            deployment_mode: "cloud",
+            enable_billing: false,
+            hide_llm_settings: false,
+            enable_jira: false,
+            enable_jira_dc: false,
+            enable_linear: false,
+            hide_users_page: false,
+            hide_billing_page: false,
+            hide_integrations_page: false,
+        enable_onboarding: false,
+          },
+        }),
       );
 
       renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
-      // Wait for config to load
       await waitFor(() => {
         expect(screen.getByTestId("context-menu-cta")).toBeInTheDocument();
       });
@@ -766,59 +796,75 @@ describe("UserContextMenu", () => {
       expect(screen.getByText("CTA$LEARN_MORE")).toBeInTheDocument();
     });
 
-    it("should not render the CTA component in OSS mode even with feature flag enabled", async () => {
-      // Set OSS mode
+    it("should not render the CTA component in OSS mode", async () => {
       vi.spyOn(OptionService, "getConfig").mockResolvedValue(
         createMockWebClientConfig({ app_mode: "oss" }),
       );
 
       renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
-      // Wait for config to load
       await waitFor(() => {
         expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
       });
-
       expect(screen.queryByTestId("context-menu-cta")).not.toBeInTheDocument();
-      expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
     });
 
-    it("should not render the CTA component on mobile even in SaaS mode with feature flag enabled", async () => {
-      // Set SaaS mode
+    it("should not render the CTA component on mobile even in SaaS Cloud mode", async () => {
       vi.spyOn(OptionService, "getConfig").mockResolvedValue(
-        createMockWebClientConfig({ app_mode: "saas" }),
+        createMockWebClientConfig({
+          app_mode: "saas",
+          feature_flags: {
+            deployment_mode: "cloud",
+            enable_billing: false,
+            hide_llm_settings: false,
+            enable_jira: false,
+            enable_jira_dc: false,
+            enable_linear: false,
+            hide_users_page: false,
+            hide_billing_page: false,
+            hide_integrations_page: false,
+        enable_onboarding: false,
+          },
+        }),
       );
       // Set mobile mode
       vi.mocked(breakpoint.useBreakpoint).mockReturnValue(true);
 
       renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
-      // Wait for config to load
       await waitFor(() => {
         expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
       });
 
       expect(screen.queryByTestId("context-menu-cta")).not.toBeInTheDocument();
-      expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
     });
 
-    it("should not render the CTA component when feature flag is disabled in SaaS mode", async () => {
-      // Set SaaS mode
+    it("should not render the CTA component in SaaS Self-hosted mode", async () => {
       vi.spyOn(OptionService, "getConfig").mockResolvedValue(
-        createMockWebClientConfig({ app_mode: "saas" }),
+        createMockWebClientConfig({
+          app_mode: "saas",
+          feature_flags: {
+            deployment_mode: "self_hosted",
+            enable_billing: false,
+            hide_llm_settings: false,
+            enable_jira: false,
+            enable_jira_dc: false,
+            enable_linear: false,
+            hide_users_page: false,
+            hide_billing_page: false,
+            hide_integrations_page: false,
+        enable_onboarding: false,
+          },
+        }),
       );
-      // Disable the feature flag
-      mockEnableProjUserJourney.mockReturnValue(false);
 
       renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
 
-      // Wait for config to load
       await waitFor(() => {
         expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
       });
 
       expect(screen.queryByTestId("context-menu-cta")).not.toBeInTheDocument();
-      expect(screen.queryByText("CTA$ENTERPRISE_TITLE")).not.toBeInTheDocument();
     });
   });
 });

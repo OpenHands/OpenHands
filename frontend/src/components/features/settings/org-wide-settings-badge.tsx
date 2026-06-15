@@ -3,8 +3,21 @@ import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import InfoCircleIcon from "#/icons/info-circle.svg?react";
 
-export function OrgWideSettingsBadge() {
+export type OrgWideSettingsBadgeVariant = "org-wide" | "managed-by-admin";
+
+interface OrgWideSettingsBadgeProps {
+  variant?: OrgWideSettingsBadgeVariant;
+}
+
+export function OrgWideSettingsBadge({
+  variant = "org-wide",
+}: OrgWideSettingsBadgeProps) {
   const { t } = useTranslation();
+
+  const i18nKey =
+    variant === "managed-by-admin"
+      ? I18nKey.SETTINGS$ORG_MANAGED_BY_ADMIN_BADGE
+      : I18nKey.SETTINGS$ORG_WIDE_SETTING_BADGE;
 
   return (
     <div
@@ -13,7 +26,7 @@ export function OrgWideSettingsBadge() {
     >
       <InfoCircleIcon width={12} height={12} className="text-[#8c8c8c]" />
       <Typography.Text className="text-[11px] font-medium text-[#8c8c8c] leading-5">
-        {t(I18nKey.SETTINGS$ORG_WIDE_SETTING_BADGE)}
+        {t(i18nKey)}
       </Typography.Text>
     </div>
   );

@@ -112,6 +112,7 @@ describe("Manage Organization Members Route", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+          enable_onboarding: false,
         },
       }),
     );
@@ -124,6 +125,13 @@ describe("Manage Organization Members Route", () => {
       currentOrgId: MOCK_TEAM_ORG_ACME.id,
     });
 
+    // Default: no pending invitations (individual tests override)
+    vi.spyOn(organizationService, "getPendingInvitations").mockResolvedValue({
+      items: [],
+      email_delivery_configured: false,
+      auto_add_enabled: false,
+    });
+
     // Set default mock for user (admin role has invite permission)
     getMeSpy.mockResolvedValue({
       org_id: "1",
@@ -133,7 +141,6 @@ describe("Manage Organization Members Route", () => {
       llm_api_key: "**********",
       max_iterations: 20,
       llm_model: "gpt-4",
-      llm_api_key_for_byor: null,
       llm_base_url: "https://api.openai.com",
       status: "active",
     });
@@ -225,7 +232,6 @@ describe("Manage Organization Members Route", () => {
       llm_api_key: string;
       max_iterations: number;
       llm_model: string;
-      llm_api_key_for_byor: string | null;
       llm_base_url: string;
       status: "active" | "invited" | "inactive";
     },
@@ -253,7 +259,6 @@ describe("Manage Organization Members Route", () => {
       llm_api_key: string;
       max_iterations: number;
       llm_model: string;
-      llm_api_key_for_byor: string | null;
       llm_base_url: string;
       status: "active" | "invited" | "inactive";
     },
@@ -376,7 +381,6 @@ describe("Manage Organization Members Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       },
@@ -435,7 +439,6 @@ describe("Manage Organization Members Route", () => {
       llm_api_key: "**********",
       max_iterations: 20,
       llm_model: "gpt-4",
-      llm_api_key_for_byor: null,
       llm_base_url: "https://api.openai.com",
       status: "active" as const,
     };
@@ -480,7 +483,6 @@ describe("Manage Organization Members Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active" as const,
       },
@@ -492,7 +494,6 @@ describe("Manage Organization Members Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active" as const,
       },
@@ -514,7 +515,6 @@ describe("Manage Organization Members Route", () => {
       llm_api_key: "**********",
       max_iterations: 20,
       llm_model: "gpt-4",
-      llm_api_key_for_byor: null,
       llm_base_url: "https://api.openai.com",
       status: "active",
     });
@@ -551,7 +551,6 @@ describe("Manage Organization Members Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       },
@@ -605,7 +604,6 @@ describe("Manage Organization Members Route", () => {
     // Verify the specific user email is no longer present
     expect(screen.queryByText("charlie@acme.org")).not.toBeInTheDocument();
   });
-
 
   describe("Inviting Organization Members", () => {
     it("should render an invite organization member button", async () => {
@@ -661,7 +659,6 @@ describe("Manage Organization Members Route", () => {
             llm_api_key: "**********",
             max_iterations: 20,
             llm_model: "gpt-4",
-            llm_api_key_for_byor: null,
             llm_base_url: "https://api.openai.com",
             status: "invited",
           },
@@ -708,7 +705,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active",
         });
@@ -722,7 +718,7 @@ describe("Manage Organization Members Route", () => {
       },
     );
 
-    it("should not show invite button when user lacks canInviteUsers permission (User role)", async () => {
+    it("should redirect user when they lack canInviteUsers permission (Member role)", async () => {
       const userData = {
         org_id: "1",
         user_id: "1",
@@ -731,29 +727,25 @@ describe("Manage Organization Members Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active" as const,
       };
 
-      // Set mock and remove cached query before rendering
+      // Set mock for member role user
       getMeSpy.mockResolvedValue(userData);
-      // Remove any cached "me" queries so fresh data is fetched
-      queryClient.removeQueries({ queryKey: ["organizations"] });
+      // Also set the mockQueryClient used by clientLoader
+      mockQueryClient.setQueryData(["organizations", "1", "me"], userData);
 
-      await setupTestWithOrg(0);
+      renderManageOrganizationMembers();
 
-      // Directly set the query data to force component re-render with user role
-      // This ensures the component uses the user role data instead of cached admin data
-      queryClient.setQueryData(["organizations", "1", "me"], userData);
-
-      // Wait for the component to update with the new query data
+      // Member role users cannot access org-members page - they get redirected
+      // The clientLoader redirects users without invite_user_to_organization permission
+      // So the manage-organization-members-settings element should not be present
       await waitFor(
         () => {
-          const inviteButton = screen.queryByRole("button", {
-            name: /ORG\$INVITE_ORG_MEMBERS/i,
-          });
-          expect(inviteButton).not.toBeInTheDocument();
+          expect(
+            screen.queryByTestId("manage-organization-members-settings"),
+          ).not.toBeInTheDocument();
         },
         { timeout: 3000 },
       );
@@ -776,7 +768,6 @@ describe("Manage Organization Members Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active" as const,
       };
@@ -821,7 +812,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active" as const,
         },
@@ -833,7 +823,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active" as const,
         },
@@ -855,7 +844,6 @@ describe("Manage Organization Members Route", () => {
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
         status: "active",
       });
@@ -891,7 +879,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active",
         },
@@ -928,7 +915,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active",
         },
@@ -964,7 +950,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active",
         },
@@ -1006,7 +991,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active" as const,
         },
@@ -1036,7 +1020,6 @@ describe("Manage Organization Members Route", () => {
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
           status: "active" as const,
         },
@@ -1057,6 +1040,62 @@ describe("Manage Organization Members Route", () => {
 
       // Verify no API call was made
       expect(updateMemberRoleSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("pending invitations rows", () => {
+    const PENDING_INVITATION = {
+      id: 5,
+      email: "pending@acme.org",
+      role: "member",
+      status: "pending",
+      created_at: "2026-01-01T00:00:00Z",
+      expires_at: "2026-01-08T00:00:00Z",
+      invite_url: "https://app.example.com/accept?token=inv-abc",
+    };
+
+    it("should render pending invitations as rows in the members list with copy + revoke actions", async () => {
+      vi.spyOn(organizationService, "getPendingInvitations").mockResolvedValue({
+        items: [PENDING_INVITATION],
+        email_delivery_configured: false,
+        auto_add_enabled: false,
+      });
+
+      renderManageOrganizationMembers();
+
+      const row = await screen.findByTestId("pending-invitation-item");
+      expect(within(row).getByText("pending@acme.org")).toBeInTheDocument();
+      expect(
+        within(row).getByTestId("copy-invite-link-button"),
+      ).toBeInTheDocument();
+      expect(
+        within(row).getByTestId("revoke-invitation-button"),
+      ).toBeInTheDocument();
+    });
+
+    it("should revoke an invitation when the revoke button is clicked", async () => {
+      vi.spyOn(organizationService, "getPendingInvitations").mockResolvedValue({
+        items: [PENDING_INVITATION],
+        email_delivery_configured: false,
+        auto_add_enabled: false,
+      });
+      const revokeSpy = vi
+        .spyOn(organizationService, "revokeInvitation")
+        .mockResolvedValue(undefined);
+
+      renderManageOrganizationMembers();
+
+      const row = await screen.findByTestId("pending-invitation-item");
+      await userEvent.click(
+        within(row).getByTestId("revoke-invitation-button"),
+      );
+
+      await waitFor(() =>
+        expect(revokeSpy).toHaveBeenCalledExactlyOnceWith({
+          orgId: MOCK_TEAM_ORG_ACME.id,
+          invitationId: 5,
+        }),
+      );
     });
   });
 });

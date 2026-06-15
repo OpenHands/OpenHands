@@ -10,6 +10,71 @@ from storage.org_member import OrgMember
 from storage.org_member_store import OrgMemberStore
 from storage.role import Role
 from storage.user import User
+from storage.user_settings import UserSettings
+
+from openhands.app_server.settings.settings_models import Settings
+
+
+def test_get_kwargs_from_user_settings_uses_agent_settings_as_source_of_truth():
+    user_settings = UserSettings(
+        llm_api_key='legacy-secret',
+        agent_settings={
+            'agent': 'CodeActAgent',
+            'llm': {
+                'model': 'anthropic/claude-sonnet-4-5-20250929',
+                'base_url': 'https://api.example.com',
+            },
+            'condenser': {
+                'enabled': False,
+                'max_size': 128,
+            },
+        },
+        conversation_settings={
+            'confirmation_mode': True,
+            'security_analyzer': 'llm',
+            'max_iterations': 42,
+        },
+    )
+
+    kwargs = OrgMemberStore.get_kwargs_from_user_settings(user_settings)
+
+    assert kwargs['llm_api_key'] == 'legacy-secret'
+    assert kwargs['agent_settings_diff']['agent'] == 'CodeActAgent'
+    assert (
+        kwargs['agent_settings_diff']['llm']['model']
+        == 'anthropic/claude-sonnet-4-5-20250929'
+    )
+    assert kwargs['agent_settings_diff']['llm']['base_url'] == 'https://api.example.com'
+    assert kwargs['agent_settings_diff']['condenser']['enabled'] is False
+    assert kwargs['agent_settings_diff']['condenser']['max_size'] == 128
+    assert kwargs['conversation_settings_diff']['confirmation_mode'] is True
+    assert kwargs['conversation_settings_diff']['security_analyzer'] == 'llm'
+    assert kwargs['conversation_settings_diff']['max_iterations'] == 42
+
+
+def test_get_kwargs_from_settings_starts_members_without_agent_setting_overrides():
+    settings = Settings()
+    settings.update(
+        {
+            'agent_settings_diff': {
+                'agent': 'CodeActAgent',
+                'llm': {
+                    'model': 'anthropic/claude-sonnet-4-5-20250929',
+                    'base_url': 'https://api.example.com',
+                    'api_key': 'member-secret',
+                },
+            },
+            'conversation_settings_diff': {
+                'max_iterations': 42,
+                'confirmation_mode': True,
+            },
+        }
+    )
+
+    kwargs = OrgMemberStore.get_kwargs_from_settings(settings)
+
+    assert kwargs['llm_api_key'].get_secret_value() == 'member-secret'
+    assert kwargs['agent_settings_diff'] == {}
 
 
 @pytest.fixture
@@ -271,16 +336,23 @@ async def test_add_user_to_org_with_llm_settings(async_session_maker):
             role_id=role_id,
             llm_api_key='test-api-key',
             status='active',
-            llm_model='claude-sonnet-4',
-            llm_base_url='https://api.example.com',
-            max_iterations=50,
+            agent_settings_diff={
+                'schema_version': 1,
+                'llm': {
+                    'model': 'claude-sonnet-4',
+                    'base_url': 'https://api.example.com',
+                },
+                'max_iterations': 50,
+            },
         )
 
     # Assert
     assert org_member is not None
-    assert org_member.llm_model == 'claude-sonnet-4'
-    assert org_member.llm_base_url == 'https://api.example.com'
-    assert org_member.max_iterations == 50
+    assert org_member.agent_settings_diff['llm']['model'] == 'claude-sonnet-4'
+    assert (
+        org_member.agent_settings_diff['llm']['base_url'] == 'https://api.example.com'
+    )
+    assert org_member.agent_settings_diff['max_iterations'] == 50
 
 
 @pytest.mark.asyncio
@@ -879,15 +951,15 @@ async def test_get_org_members_paginated_email_filter_case_insensitive(
 
 
 @pytest.mark.asyncio
-async def test_update_all_members_llm_settings_async_with_llm_api_key(
+async def test_update_all_members_settings_async_with_llm_api_key(
     async_session_maker,
 ):
     """
     GIVEN: Organization with members and llm_api_key in member settings
-    WHEN: update_all_members_llm_settings_async is called with llm_api_key
+    WHEN: update_all_members_settings_async is called with llm_api_key
     THEN: The llm_api_key is encrypted and stored in _llm_api_key column for all members
     """
-    from server.routes.org_models import OrgMemberLLMSettings
+    from server.routes.org_models import OrgMemberSettingsUpdate
     from storage.encrypt_utils import decrypt_value
 
     # Arrange
@@ -923,10 +995,10 @@ async def test_update_all_members_llm_settings_async_with_llm_api_key(
 
     # Act
     new_api_key = 'new-test-api-key-12345'
-    member_settings = OrgMemberLLMSettings(llm_api_key=new_api_key)
+    member_settings = OrgMemberSettingsUpdate(llm_api_key=new_api_key)
 
     async with async_session_maker() as session:
-        await OrgMemberStore.update_all_members_llm_settings_async(
+        await OrgMemberStore.update_all_members_settings_async(
             session, org_id, member_settings
         )
         await session.commit()
@@ -948,15 +1020,15 @@ async def test_update_all_members_llm_settings_async_with_llm_api_key(
 
 
 @pytest.mark.asyncio
-async def test_update_all_members_llm_settings_async_with_non_encrypted_fields(
+async def test_update_all_members_settings_async_with_non_encrypted_fields(
     async_session_maker,
 ):
     """
     GIVEN: Organization with members
-    WHEN: update_all_members_llm_settings_async is called with non-encrypted fields
+    WHEN: update_all_members_settings_async is called with non-encrypted fields
     THEN: The fields are updated directly without encryption
     """
-    from server.routes.org_models import OrgMemberLLMSettings
+    from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange
     async with async_session_maker() as session:
@@ -977,8 +1049,11 @@ async def test_update_all_members_llm_settings_async_with_non_encrypted_fields(
             user_id=user.id,
             role_id=role.id,
             llm_api_key='test-key',
-            llm_model='old-model',
-            max_iterations=10,
+            agent_settings_diff={
+                'schema_version': 1,
+                'llm': {'model': 'old-model'},
+                'max_iterations': 10,
+            },
             status='active',
         )
         session.add(org_member)
@@ -986,14 +1061,18 @@ async def test_update_all_members_llm_settings_async_with_non_encrypted_fields(
         org_id = org.id
 
     # Act
-    member_settings = OrgMemberLLMSettings(
-        llm_model='new-model',
-        llm_base_url='https://new-url.com',
-        max_iterations=50,
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'llm': {
+                'model': 'new-model',
+                'base_url': 'https://new-url.com',
+            },
+            'max_iterations': 50,
+        }
     )
 
     async with async_session_maker() as session:
-        await OrgMemberStore.update_all_members_llm_settings_async(
+        await OrgMemberStore.update_all_members_settings_async(
             session, org_id, member_settings
         )
         await session.commit()
@@ -1007,21 +1086,24 @@ async def test_update_all_members_llm_settings_async_with_non_encrypted_fields(
         )
         updated_member = result.scalars().first()
 
-        assert updated_member.llm_model == 'new-model'
-        assert updated_member.llm_base_url == 'https://new-url.com'
-        assert updated_member.max_iterations == 50
+        assert updated_member.agent_settings_diff['llm']['model'] == 'new-model'
+        assert (
+            updated_member.agent_settings_diff['llm']['base_url']
+            == 'https://new-url.com'
+        )
+        assert updated_member.agent_settings_diff['max_iterations'] == 50
 
 
 @pytest.mark.asyncio
-async def test_update_all_members_llm_settings_async_with_empty_settings(
+async def test_update_all_members_settings_async_with_empty_settings(
     async_session_maker,
 ):
     """
     GIVEN: Organization with members and empty member settings
-    WHEN: update_all_members_llm_settings_async is called with no fields set
+    WHEN: update_all_members_settings_async is called with no fields set
     THEN: No database update is performed
     """
-    from server.routes.org_models import OrgMemberLLMSettings
+    from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange
     async with async_session_maker() as session:
@@ -1042,7 +1124,10 @@ async def test_update_all_members_llm_settings_async_with_empty_settings(
             user_id=user.id,
             role_id=role.id,
             llm_api_key='original-key',
-            llm_model='original-model',
+            agent_settings_diff={
+                'schema_version': 1,
+                'llm': {'model': 'original-model'},
+            },
             status='active',
         )
         session.add(org_member)
@@ -1050,10 +1135,10 @@ async def test_update_all_members_llm_settings_async_with_empty_settings(
         org_id = org.id
 
     # Act - Empty settings (all None)
-    member_settings = OrgMemberLLMSettings()
+    member_settings = OrgMemberSettingsUpdate()
 
     async with async_session_maker() as session:
-        await OrgMemberStore.update_all_members_llm_settings_async(
+        await OrgMemberStore.update_all_members_settings_async(
             session, org_id, member_settings
         )
         await session.commit()
@@ -1067,138 +1152,621 @@ async def test_update_all_members_llm_settings_async_with_empty_settings(
         )
         member = result.scalars().first()
 
-        assert member.llm_model == 'original-model'
+        assert member.agent_settings_diff['llm']['model'] == 'original-model'
         # Original key should still be there (encrypted)
         assert member._llm_api_key is not None
 
 
-# =============================================================================
-# OrgMemberLLMSettings and OrgLLMSettingsUpdate Model Unit Tests
-# =============================================================================
-
-
-def test_org_member_llm_settings_has_updates_with_llm_api_key():
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_replaces_mcp_config(
+    async_session_maker,
+):
     """
-    GIVEN: OrgMemberLLMSettings with only llm_api_key set
-    WHEN: has_updates() is called
-    THEN: Returns True
+    GIVEN: Organization members with existing mcp_config in agent_settings_diff
+    WHEN: update_all_members_settings_async is called with fewer MCP servers
+    THEN: mcp_config should be replaced (not merged), so deleted servers stay deleted
+
+    This tests the fix for APP-1862: MCP server settings cannot be updated
+    or deleted because deep_merge was resurrecting deleted servers.
     """
-    from server.routes.org_models import OrgMemberLLMSettings
+    from server.routes.org_models import OrgMemberSettingsUpdate
 
-    # Arrange
-    settings = OrgMemberLLMSettings(llm_api_key='test-key')
+    # Arrange - Create org with member that has 3 MCP servers
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
 
-    # Act
-    result = settings.has_updates()
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
 
-    # Assert
-    assert result is True
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
 
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'mcp_config': {
+                    'mcpServers': {
+                        'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+                        'server2': {'url': 'https://server2.com', 'transport': 'sse'},
+                        'server3': {'url': 'https://server3.com', 'transport': 'sse'},
+                    },
+                },
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
 
-def test_org_member_llm_settings_has_updates_empty():
-    """
-    GIVEN: OrgMemberLLMSettings with no fields set
-    WHEN: has_updates() is called
-    THEN: Returns False
-    """
-    from server.routes.org_models import OrgMemberLLMSettings
-
-    # Arrange
-    settings = OrgMemberLLMSettings()
-
-    # Act
-    result = settings.has_updates()
-
-    # Assert
-    assert result is False
-
-
-def test_org_llm_settings_update_apply_to_org_skips_llm_api_key():
-    """
-    GIVEN: OrgLLMSettingsUpdate with llm_api_key and other fields set
-    WHEN: apply_to_org() is called
-    THEN: llm_api_key is NOT applied to org, but other fields are
-    """
-    from unittest.mock import MagicMock
-
-    from server.routes.org_models import OrgLLMSettingsUpdate
-
-    # Arrange
-    settings = OrgLLMSettingsUpdate(
-        default_llm_model='claude-3',
-        llm_api_key='should-not-be-applied',
-    )
-    mock_org = MagicMock()
-    mock_org.default_llm_model = None
-
-    # Act
-    settings.apply_to_org(mock_org)
-
-    # Assert
-    assert mock_org.default_llm_model == 'claude-3'
-    # llm_api_key should NOT be set on org (it's member-only)
-    assert (
-        not hasattr(mock_org, 'llm_api_key')
-        or mock_org.llm_api_key != 'should-not-be-applied'
+    # Act - Update with only 2 servers (delete server3)
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'mcp_config': {
+                'mcpServers': {
+                    'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+                    'server2': {'url': 'https://server2.com', 'transport': 'sse'},
+                    # server3 is deleted
+                },
+            },
+        },
     )
 
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
 
-def test_org_llm_settings_update_get_member_updates_includes_llm_api_key():
-    """
-    GIVEN: OrgLLMSettingsUpdate with llm_api_key set
-    WHEN: get_member_updates() is called
-    THEN: Returns OrgMemberLLMSettings with llm_api_key included
-    """
-    from server.routes.org_models import OrgLLMSettingsUpdate
+    # Assert - Only 2 servers should remain, server3 should NOT be resurrected
+    async with async_session_maker() as session:
+        from sqlalchemy import select
 
-    # Arrange
-    settings = OrgLLMSettingsUpdate(
-        default_llm_model='claude-3',
-        llm_api_key='new-member-key',
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        mcp_servers = member.agent_settings_diff.get('mcp_config', {}).get(
+            'mcpServers', {}
+        )
+        assert len(mcp_servers) == 2, f'Expected 2 servers, got {len(mcp_servers)}'
+        assert 'server1' in mcp_servers
+        assert 'server2' in mcp_servers
+        assert 'server3' not in mcp_servers, (
+            'Deleted server was resurrected by deep_merge'
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_mcp_config_not_in_payload(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization members with existing mcp_config
+    WHEN: update_all_members_settings_async is called WITHOUT mcp_config in payload
+    THEN: mcp_config should remain unchanged (not be cleared)
+
+    This ensures we only replace mcp_config when it's explicitly in the update.
+    """
+    from server.routes.org_models import OrgMemberSettingsUpdate
+
+    # Arrange - Create org with member that has MCP servers
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'mcp_config': {
+                    'mcpServers': {
+                        'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+                    },
+                },
+                'llm': {'model': 'old-model'},
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Update only llm settings, NOT mcp_config
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'llm': {'model': 'new-model'},
+            # mcp_config is NOT in the payload
+        },
     )
 
-    # Act
-    member_updates = settings.get_member_updates()
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
 
-    # Assert
-    assert member_updates is not None
-    assert member_updates.llm_api_key == 'new-member-key'
-    assert member_updates.llm_model == 'claude-3'
+    # Assert - mcp_config should still exist with server1
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        # LLM should be updated
+        assert member.agent_settings_diff['llm']['model'] == 'new-model'
+        # mcp_config should be unchanged
+        mcp_config = member.agent_settings_diff.get('mcp_config', {})
+        assert 'server1' in mcp_config.get('mcpServers', {})
 
 
-def test_org_llm_settings_update_get_member_updates_only_llm_api_key():
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_empty_mcp_config(
+    async_session_maker,
+):
     """
-    GIVEN: OrgLLMSettingsUpdate with only llm_api_key set
-    WHEN: get_member_updates() is called
-    THEN: Returns OrgMemberLLMSettings with llm_api_key (not None)
+    GIVEN: Organization members with existing mcp_config
+    WHEN: update_all_members_settings_async is called with empty mcp_config
+    THEN: mcp_config should be cleared (all servers deleted)
+
+    This tests the case where user deletes ALL servers.
     """
-    from server.routes.org_models import OrgLLMSettingsUpdate
+    from server.routes.org_models import OrgMemberSettingsUpdate
+
+    # Arrange - Create org with member that has MCP servers
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'mcp_config': {
+                    'mcpServers': {
+                        'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+                        'server2': {'url': 'https://server2.com', 'transport': 'sse'},
+                    },
+                },
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Update with empty mcp_config (delete all servers)
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'mcp_config': {
+                'mcpServers': {},  # Empty - all servers deleted
+            },
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - mcp_config should be empty
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        mcp_config = member.agent_settings_diff.get('mcp_config', {})
+        mcp_servers = mcp_config.get('mcpServers', {})
+        assert len(mcp_servers) == 0, f'Expected 0 servers, got {len(mcp_servers)}'
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_add_first_mcp_server(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization members with NO existing mcp_config
+    WHEN: update_all_members_settings_async is called with mcp_config
+    THEN: mcp_config should be added correctly
+
+    This tests adding the first server when none exist.
+    """
+    from server.routes.org_models import OrgMemberSettingsUpdate
+
+    # Arrange - Create org with member that has NO mcp_config
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'llm': {'model': 'some-model'},
+                # No mcp_config
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Add first MCP server
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'mcp_config': {
+                'mcpServers': {
+                    'first-server': {'url': 'https://first.com', 'transport': 'sse'},
+                },
+            },
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - Server should be added
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        mcp_config = member.agent_settings_diff.get('mcp_config', {})
+        mcp_servers = mcp_config.get('mcpServers', {})
+        assert len(mcp_servers) == 1
+        assert 'first-server' in mcp_servers
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_update_server_url(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization members with existing mcp_config
+    WHEN: update_all_members_settings_async is called with updated server URL
+    THEN: The server URL should be updated (not duplicated)
+
+    This tests updating an existing server's properties.
+    """
+    from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange
-    settings = OrgLLMSettingsUpdate(llm_api_key='member-key-only')
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
 
-    # Act
-    member_updates = settings.get_member_updates()
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
 
-    # Assert
-    assert member_updates is not None
-    assert member_updates.llm_api_key == 'member-key-only'
-    assert member_updates.llm_model is None
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'mcp_config': {
+                    'mcpServers': {
+                        'myserver': {
+                            'url': 'https://old-url.com',
+                            'transport': 'sse',
+                        },
+                    },
+                },
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Update server URL
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'mcp_config': {
+                'mcpServers': {
+                    'myserver': {
+                        'url': 'https://new-url.com',
+                        'transport': 'sse',
+                    },
+                },
+            },
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - URL should be updated
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        mcp_config = member.agent_settings_diff.get('mcp_config', {})
+        mcp_servers = mcp_config.get('mcpServers', {})
+        assert len(mcp_servers) == 1
+        assert mcp_servers['myserver']['url'] == 'https://new-url.com'
 
 
-def test_org_llm_settings_update_has_updates_with_llm_api_key():
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_acp_env_not_in_payload(
+    async_session_maker,
+):
     """
-    GIVEN: OrgLLMSettingsUpdate with only llm_api_key set
-    WHEN: has_updates() is called
-    THEN: Returns True
+    GIVEN: Organization members with existing acp_env
+    WHEN: update_all_members_settings_async is called WITHOUT acp_env in payload
+    THEN: acp_env should remain unchanged (not be cleared)
+
+    This ensures we only replace acp_env when it's explicitly in the update.
     """
-    from server.routes.org_models import OrgLLMSettingsUpdate
+    from server.routes.org_models import OrgMemberSettingsUpdate
+
+    # Arrange - Create org with member that has env vars
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'acp_env': {
+                    'SECRET_KEY': 'secret-value',
+                    'API_TOKEN': 'token-value',
+                },
+                'llm': {'model': 'old-model'},
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Update only llm settings, NOT acp_env
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'llm': {'model': 'new-model'},
+            # acp_env is NOT in the payload
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - acp_env should still exist with both vars
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        # LLM should be updated
+        assert member.agent_settings_diff['llm']['model'] == 'new-model'
+        # acp_env should be unchanged
+        acp_env = member.agent_settings_diff.get('acp_env', {})
+        assert 'SECRET_KEY' in acp_env
+        assert 'API_TOKEN' in acp_env
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_add_first_acp_env_var(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization members with NO existing acp_env
+    WHEN: update_all_members_settings_async is called with acp_env
+    THEN: acp_env should be added correctly
+
+    This tests adding the first env var when none exist.
+    """
+    from server.routes.org_models import OrgMemberSettingsUpdate
+
+    # Arrange - Create org with member that has NO acp_env
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'llm': {'model': 'some-model'},
+                # No acp_env
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Add first env var
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'acp_env': {
+                'FIRST_VAR': 'first-value',
+            },
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - Env var should be added
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        acp_env = member.agent_settings_diff.get('acp_env', {})
+        assert len(acp_env) == 1
+        assert 'FIRST_VAR' in acp_env
+        assert acp_env['FIRST_VAR'] == 'first-value'
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_settings_async_update_acp_env_value(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization members with existing acp_env
+    WHEN: update_all_members_settings_async is called with updated var value
+    THEN: The var value should be updated
+
+    This tests updating an existing env var's value.
+    """
+    from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange
-    settings = OrgLLMSettingsUpdate(llm_api_key='test-key')
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
 
-    # Act
-    result = settings.has_updates()
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
 
-    # Assert
-    assert result is True
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            agent_settings_diff={
+                'acp_env': {
+                    'MY_SECRET': 'old-secret-value',
+                },
+            },
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Update env var value
+    member_settings = OrgMemberSettingsUpdate(
+        agent_settings_diff={
+            'acp_env': {
+                'MY_SECRET': 'new-secret-value',
+            },
+        },
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - Value should be updated
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        acp_env = member.agent_settings_diff.get('acp_env', {})
+        assert len(acp_env) == 1
+        assert acp_env['MY_SECRET'] == 'new-secret-value'

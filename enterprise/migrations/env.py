@@ -6,10 +6,18 @@ from logging.config import fileConfig
 # These plugin setup messages would otherwise appear before logging is configured
 logging.getLogger('alembic.runtime.plugins').setLevel(logging.WARNING)
 
+# Prevent SQLAlchemy engine from logging SQL results at DEBUG level, which can
+# leak sensitive column data (e.g. API keys, tokens) into log aggregators.
+# This is set before any engine is created so it takes effect immediately.
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.engine.Engine').setLevel(logging.WARNING)
+
 from alembic import context  # noqa: E402
 from google.cloud.sql.connector import Connector  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 from storage.base import Base  # noqa: E402
+
+from openhands.db.ssl import build_db_url_query, build_pg8000_connect_args  # noqa: E402
 
 target_metadata = Base.metadata
 
@@ -18,6 +26,12 @@ DB_PASS = os.getenv('DB_PASS', 'postgres')
 DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_PORT = os.getenv('DB_PORT', '5432')
 DB_NAME = os.getenv('DB_NAME', 'openhands')
+# Driver for the non-Cloud-SQL (DB_HOST) path used by feature/local/CI. Production
+# connects through the Cloud SQL connector on pg8000, so we default to pg8000 here
+# too: this keeps every environment on the same driver and lets pg8000-specific
+# migration failures surface before deploy. Set DB_DRIVER='' to use psycopg2.
+DB_DRIVER = os.getenv('DB_DRIVER', 'pg8000')
+DB_SSL_MODE = os.getenv('DB_SSL_MODE') or os.getenv('PGSSLMODE')
 
 GCP_DB_INSTANCE = os.getenv('GCP_DB_INSTANCE')
 GCP_PROJECT = os.getenv('GCP_PROJECT')
@@ -50,12 +64,18 @@ def get_engine(database_name=DB_NAME):
             pool_pre_ping=True,
         )
     else:
-        url = f'postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{database_name}'
+        scheme = f'postgresql+{DB_DRIVER}' if DB_DRIVER else 'postgresql'
+        url = f'{scheme}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{database_name}'
+        if DB_DRIVER != 'pg8000':
+            url += build_db_url_query(DB_SSL_MODE)
         return create_engine(
             url,
             pool_size=POOL_SIZE,
             max_overflow=MAX_OVERFLOW,
             pool_pre_ping=True,
+            connect_args=(
+                build_pg8000_connect_args(DB_SSL_MODE) if DB_DRIVER == 'pg8000' else {}
+            ),
         )
 
 
@@ -69,6 +89,12 @@ config = context.config
 # This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# Re-apply SQLAlchemy engine log suppression after fileConfig, which may override
+# our earlier settings from alembic.ini. This ensures DEBUG-level SQL result logging
+# is always suppressed, preventing sensitive data from leaking into log aggregators.
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.engine.Engine').setLevel(logging.WARNING)
 
 
 def run_migrations_offline() -> None:

@@ -6,14 +6,45 @@ HOST = os.getenv('WEB_HOST', 'app.all-hands.dev').strip()
 
 # Check if this is a feature environment
 # Feature environments have a host format like {some-text}.staging.all-hands.dev
+# or {some-text}.ohe-staging.platform-team.all-hands.dev (for platform-team sandbox)
 # Just staging.all-hands.dev doesn't count as a feature environment
 IS_STAGING_ENV = bool(
-    re.match(r'^.+\.staging\.all-hands\.dev$', HOST) or HOST == 'staging.all-hands.dev'
+    re.match(r'^.+\.staging\.all-hands\.dev$', HOST)
+    or re.match(r'^.+\.ohe-staging\.platform-team\.all-hands\.dev$', HOST)
+    or HOST == 'staging.all-hands.dev'
 )  # Includes the staging deployment + feature deployments
 IS_FEATURE_ENV = (
     IS_STAGING_ENV and HOST != 'staging.all-hands.dev'
 )  # Does not include the staging deployment
 IS_LOCAL_ENV = bool(HOST == 'localhost')
+
+
+# Explicit OH_DEPLOYMENT_MODE wins; _is_all_hands_managed_domain() is the host fallback.
+def _is_all_hands_managed_domain(host: str) -> bool:
+    """Check if the host is an All-Hands managed domain."""
+    return (
+        host == 'app.all-hands.dev'
+        or host == 'app.openhands.ai'
+        or host.endswith('.all-hands.dev')
+        or host.endswith('.openhands.ai')
+    )
+
+
+def _get_deployment_mode() -> str:
+    """Determine deployment mode.
+
+    Honors an explicit OH_DEPLOYMENT_MODE ('cloud' | 'self_hosted'); otherwise
+    infers from WEB_HOST (managed domain -> 'cloud', else 'self_hosted').
+    """
+    explicit = os.getenv('OH_DEPLOYMENT_MODE', '').strip().lower()
+    if explicit in ('cloud', 'self_hosted'):
+        return explicit
+    if _is_all_hands_managed_domain(HOST):
+        return 'cloud'
+    return 'self_hosted'
+
+
+DEPLOYMENT_MODE = _get_deployment_mode()
 
 # Role name constants
 ROLE_OWNER = 'owner'
@@ -30,12 +61,21 @@ PERSONAL_WORKSPACE_VERSION_TO_MODEL = {
     2: 'claude-3-7-sonnet-20250219',
     3: 'claude-sonnet-4-20250514',
     4: 'claude-sonnet-4-20250514',
-    # Minimax is now the default as it gives results close to claude in terms of quality
-    # but at a much lower price
     5: 'minimax-m2.5',
+    6: 'minimax-m2.7',
 }
 
 LITELLM_DEFAULT_MODEL = os.getenv('LITELLM_DEFAULT_MODEL')
+OPENHANDS_LLM_PROVIDER_ROUTE = os.getenv('OPENHANDS_LLM_PROVIDER_ROUTE')
+OPENHANDS_DEFAULT_LLM_MODEL = os.getenv('OPENHANDS_DEFAULT_LLM_MODEL') or os.getenv(
+    'LLM_MODEL'
+)
+OPENHANDS_DEFAULT_LLM_BASE_URL = os.getenv(
+    'OPENHANDS_DEFAULT_LLM_BASE_URL'
+) or os.getenv('LLM_BASE_URL')
+OPENHANDS_DEFAULT_LLM_API_KEY = os.getenv('OPENHANDS_DEFAULT_LLM_API_KEY') or os.getenv(
+    'LLM_API_KEY'
+)
 
 # Current user settings version - this should be the latest key in USER_SETTINGS_VERSION_TO_MODEL
 ORG_SETTINGS_VERSION = max(PERSONAL_WORKSPACE_VERSION_TO_MODEL.keys())
@@ -102,3 +142,34 @@ def get_default_litellm_model():
         return LITELLM_DEFAULT_MODEL
     model = PERSONAL_WORKSPACE_VERSION_TO_MODEL[PERSONAL_WORKSPACE_VERSION]
     return build_litellm_proxy_model_path(model)
+
+
+def should_use_direct_llm_defaults() -> bool:
+    """Whether defaults should point directly at an OpenAI-compatible endpoint."""
+    return (
+        OPENHANDS_LLM_PROVIDER_ROUTE == 'direct'
+        and bool(OPENHANDS_DEFAULT_LLM_MODEL)
+        and bool(OPENHANDS_DEFAULT_LLM_BASE_URL)
+    )
+
+
+def get_default_llm_model() -> str:
+    """Return the deployment default LLM model."""
+    if should_use_direct_llm_defaults() and OPENHANDS_DEFAULT_LLM_MODEL:
+        return OPENHANDS_DEFAULT_LLM_MODEL
+    return get_default_litellm_model()
+
+
+def get_default_llm_base_url() -> str:
+    """Return the deployment default LLM base URL."""
+    if should_use_direct_llm_defaults() and OPENHANDS_DEFAULT_LLM_BASE_URL:
+        return OPENHANDS_DEFAULT_LLM_BASE_URL
+    return LITE_LLM_API_URL
+
+
+def get_default_llm_api_key() -> str | None:
+    """Return the optional shared deployment default LLM API key."""
+    if not should_use_direct_llm_defaults() or not OPENHANDS_DEFAULT_LLM_API_KEY:
+        return None
+    key = OPENHANDS_DEFAULT_LLM_API_KEY.strip()
+    return key or None

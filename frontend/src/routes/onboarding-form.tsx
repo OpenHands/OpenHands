@@ -1,35 +1,106 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, redirect } from "react-router";
+import {
+  useNavigate,
+  redirect,
+  useLoaderData,
+  useSearchParams,
+} from "react-router";
 import StepHeader from "#/components/features/onboarding/step-header";
 import { StepContent } from "#/components/features/onboarding/step-content";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
 import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react";
 import { useSubmitOnboarding } from "#/hooks/mutation/use-submit-onboarding";
-import { useTracking } from "#/hooks/use-tracking";
-import { ENABLE_ONBOARDING } from "#/utils/feature-flags";
+import { useOnboardingStatus } from "#/hooks/query/use-onboarding-status";
 import { cn } from "#/utils/utils";
-import { useConfig } from "#/hooks/query/use-config";
 import {
   ONBOARDING_FORM,
   OnboardingQuestion,
   OnboardingAppMode,
 } from "#/constants/onboarding";
+import {
+  DeploymentMode,
+  WebClientConfig,
+} from "#/api/option-service/option.types";
+import { queryClient } from "#/query-client-config";
+import OptionService from "#/api/option-service/option-service.api";
 
-export const clientLoader = async () => {
-  if (!ENABLE_ONBOARDING()) {
-    return redirect("/");
+/**
+ * Sanitize a raw ``returnTo`` value, returning a safe same-origin path.
+ *
+ * Absolute URLs and protocol-relative URLs fall back to ``"/"`` to
+ * prevent open-redirect attacks. Relative paths that don't start with
+ * ``"/"`` are prepended with one.
+ */
+export function sanitizeReturnTo(raw: string | null): string {
+  if (!raw) return "/";
+  // Same-origin paths only — reject protocol-bearing or
+  // protocol-relative targets.
+  if (
+    raw.startsWith("http://") ||
+    raw.startsWith("https://") ||
+    raw.startsWith("//")
+  ) {
+    return "/";
+  }
+  return raw.startsWith("/") ? raw : `/${raw}`;
+}
+
+/**
+ * Compute a safe redirect target from the URL's ``returnTo`` query
+ * parameter, defaulting to ``"/"``.
+ *
+ * This loader intentionally redirects same-origin only — absolute URLs
+ * are dropped to ``"/"`` rather than being followed, since the loader
+ * This loader intentionally redirects to same-origin paths only. Absolute
+ * URLs are silently dropped to "/" because a loader's `redirect()` performs
+ * a client-side navigation — following an external URL would break the SPA.
+ * URL here would break the SPA.
+ */
+function safeReturnToFromRequest(request: Request): string {
+  const url = new URL(request.url);
+  return sanitizeReturnTo(url.searchParams.get("returnTo"));
+}
+
+export const clientLoader = async ({ request }: { request: Request }) => {
+  let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
+  if (!config) {
+    config = await OptionService.getConfig();
+    queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
   }
 
-  return null;
+  // The deployment's frontend may have ``enable_onboarding=false`` or
+  // a non-SaaS ``app_mode`` even when the backend OAuth callback has
+  // just sent the user here (the backend gates on ``DEPLOYMENT_MODE``,
+  // not on the frontend feature flag, so the two can disagree). When
+  // we redirect away in those cases, honor the user's deep-link
+  // ``?returnTo=`` so they don't lose their original destination at
+  // the onboarding interstitial.
+  const fallback = safeReturnToFromRequest(request);
+
+  // Check server feature flag to block access
+  if (!config?.feature_flags?.enable_onboarding) {
+    return redirect(fallback);
+  }
+
+  // Only allow access to onboarding for SaaS mode (cloud or self-hosted)
+  // OSS users should never reach /onboarding
+  if (config?.app_mode !== "saas") {
+    return redirect(fallback);
+  }
+
+  return { config };
 };
 
 type OnboardingAnswers = Record<string, string | string[]>;
 
-function getOnboardingAppMode(): OnboardingAppMode {
-  // TODO: query for app mode (saas or self hosted super user)
-  return "saas";
+function getOnboardingAppMode(
+  deploymentMode: DeploymentMode | undefined,
+): OnboardingAppMode {
+  if (deploymentMode === "self_hosted") return "self-hosted";
+  if (deploymentMode === "cloud") return "cloud";
+  return "oss";
 }
 
 function getAnswerAsArray(answers: OnboardingAnswers, key: string): string[] {
@@ -63,11 +134,37 @@ function getTranslatedInputFields(
 function OnboardingForm() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const config = useConfig({ enabled: true });
+  const loaderData = useLoaderData<typeof clientLoader>();
+  const config = loaderData?.config;
+  const [searchParams] = useSearchParams();
+  // ``OnboardingGuard`` forwards the user's originally requested URL
+  // here so we can restore it after they finish the form. Sanitize to
+  // prevent open-redirect attacks — absolute/protocol-relative URLs
+  // fall back to ``"/"``.
+  const returnTo = sanitizeReturnTo(searchParams.get("returnTo"));
+  const { data: onboardingStatus, isLoading: isOnboardingStatusLoading } =
+    useOnboardingStatus();
   const { mutate: submitOnboarding } = useSubmitOnboarding();
-  const { trackOnboardingCompleted } = useTracking();
 
-  const onboardingAppMode: OnboardingAppMode = getOnboardingAppMode();
+  React.useEffect(() => {
+    if (isOnboardingStatusLoading) return;
+    if (onboardingStatus?.should_complete_onboarding === false) {
+      // Honor returnTo if the user already completed onboarding so a
+      // stale ``/onboarding`` link still respects their deep-link
+      // destination. ``returnTo`` is already sanitized above so it is
+      // always a safe same-origin path.
+      navigate(returnTo, { replace: true });
+    }
+  }, [
+    onboardingStatus?.should_complete_onboarding,
+    isOnboardingStatusLoading,
+    navigate,
+    returnTo,
+  ]);
+
+  const onboardingAppMode: OnboardingAppMode = getOnboardingAppMode(
+    config?.feature_flags?.deployment_mode,
+  );
 
   const steps = React.useMemo(
     () =>
@@ -146,19 +243,7 @@ function OnboardingForm() {
 
   const handleNext = () => {
     if (isLastStep) {
-      submitOnboarding({ selections: answers });
-
-      // Only track onboarding for SaaS users
-      if (config.data?.app_mode === "saas") {
-        trackOnboardingCompleted({
-          role: typeof answers.role === "string" ? answers.role : undefined,
-          orgSize:
-            typeof answers.org_size === "string" ? answers.org_size : undefined,
-          useCase: Array.isArray(answers.use_case)
-            ? answers.use_case
-            : undefined,
-        });
-      }
+      submitOnboarding({ selections: answers, returnTo });
     } else {
       setCurrentStepIndex((prev) => prev + 1);
     }
@@ -180,59 +265,61 @@ function OnboardingForm() {
   const translatedInputFields = getTranslatedInputFields(currentStep, t);
 
   return (
-    <div
-      data-testid="onboarding-form"
-      className="w-[500px] max-w-[calc(100vw-2rem)] mx-auto p-4 sm:p-6 flex flex-col justify-center overflow-hidden"
-    >
-      <div className="flex flex-col items-center mb-4">
-        <OpenHandsLogoWhite width={55} height={55} />
-      </div>
-      <StepHeader
-        title={t(currentStep.questionKey)}
-        subtitle={
-          currentStep.subtitleKey ? t(currentStep.subtitleKey) : undefined
-        }
-        currentStep={currentStepIndex + 1}
-        totalSteps={steps.length}
-      />
-      <StepContent
-        options={translatedOptions}
-        inputFields={translatedInputFields}
-        selectedOptionIds={currentSelections}
-        inputValues={inputValues}
-        onSelectOption={handleSelectOption}
-        onInputChange={handleInputChange}
-      />
+    <div className="min-h-screen flex items-center justify-center bg-base">
       <div
-        data-testid="step-actions"
-        className="flex justify-end items-center gap-3"
+        data-testid="onboarding-form"
+        className="w-[500px] max-w-[calc(100vw-2rem)] mx-auto p-4 sm:p-6 flex flex-col justify-center overflow-hidden"
       >
-        {!isFirstStep && (
+        <div className="flex flex-col items-center mb-4">
+          <OpenHandsLogoWhite width={55} height={55} />
+        </div>
+        <StepHeader
+          title={t(currentStep.questionKey)}
+          subtitle={
+            currentStep.subtitleKey ? t(currentStep.subtitleKey) : undefined
+          }
+          currentStep={currentStepIndex + 1}
+          totalSteps={steps.length}
+        />
+        <StepContent
+          options={translatedOptions}
+          inputFields={translatedInputFields}
+          selectedOptionIds={currentSelections}
+          inputValues={inputValues}
+          onSelectOption={handleSelectOption}
+          onInputChange={handleInputChange}
+        />
+        <div
+          data-testid="step-actions"
+          className="flex justify-end items-center gap-3"
+        >
+          {!isFirstStep && (
+            <BrandButton
+              type="button"
+              variant="secondary"
+              onClick={handleBack}
+              className="flex-1 px-4 sm:px-6 py-2.5 bg-[050505] text-white border hover:bg-white border-[#242424] hover:text-black"
+            >
+              {t(I18nKey.ONBOARDING$BACK_BUTTON)}
+            </BrandButton>
+          )}
           <BrandButton
             type="button"
-            variant="secondary"
-            onClick={handleBack}
-            className="flex-1 px-4 sm:px-6 py-2.5 bg-[050505] text-white border hover:bg-white border-[#242424] hover:text-black"
+            variant="primary"
+            onClick={handleNext}
+            isDisabled={!isStepComplete}
+            className={cn(
+              "px-4 sm:px-6 py-2.5 bg-white text-black hover:bg-white/90",
+              isFirstStep ? "w-1/2" : "flex-1",
+            )}
           >
-            {t(I18nKey.ONBOARDING$BACK_BUTTON)}
+            {t(
+              isLastStep
+                ? I18nKey.ONBOARDING$FINISH_BUTTON
+                : I18nKey.ONBOARDING$NEXT_BUTTON,
+            )}
           </BrandButton>
-        )}
-        <BrandButton
-          type="button"
-          variant="primary"
-          onClick={handleNext}
-          isDisabled={!isStepComplete}
-          className={cn(
-            "px-4 sm:px-6 py-2.5 bg-white text-black hover:bg-white/90",
-            isFirstStep ? "w-1/2" : "flex-1",
-          )}
-        >
-          {t(
-            isLastStep
-              ? I18nKey.ONBOARDING$FINISH_BUTTON
-              : I18nKey.ONBOARDING$NEXT_BUTTON,
-          )}
-        </BrandButton>
+        </div>
       </div>
     </div>
   );

@@ -17,7 +17,7 @@ from storage.api_key_store import ApiKeyStore
 from storage.org_member_store import OrgMemberStore
 from storage.user_store import UserStore
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Environment variable for the service API key
 AUTOMATIONS_SERVICE_KEY = os.getenv('AUTOMATIONS_SERVICE_KEY', '').strip()

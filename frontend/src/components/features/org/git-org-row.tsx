@@ -1,6 +1,7 @@
-import { cn } from "#/utils/utils";
+import { cn, getProviderName } from "#/utils/utils";
 import { Text } from "#/ui/typography";
 import type { GitOrg } from "#/types/org";
+import type { Provider } from "#/types/settings";
 import { ClaimButton } from "./claim-button";
 
 interface GitOrgRowProps {
@@ -25,7 +26,9 @@ export function GitOrgRow({
       )}
     >
       <span className="text-sm font-normal leading-5">
-        <Text className="text-[#8c8c8c]">{org.provider}/</Text>
+        <Text className="text-[#8c8c8c]">
+          {getProviderName(org.provider.toLowerCase() as Provider)}/
+        </Text>
         <Text className="text-[#fafafa]">{org.name}</Text>
       </span>
       <ClaimButton org={org} onClaim={onClaim} onDisconnect={onDisconnect} />

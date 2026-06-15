@@ -2,6 +2,8 @@ import { isFileImage } from "#/utils/is-file-image";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { validateFiles } from "#/utils/file-validation";
 import { CustomChatInput } from "./custom-chat-input";
+import { useBtwInterceptor } from "#/hooks/chat/use-btw-interceptor";
+import { useModelInterceptor } from "#/hooks/chat/use-model-interceptor";
 import { AgentState } from "#/types/agent-state";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { GitControlBar } from "./git-control-bar";
@@ -39,7 +41,7 @@ export function InteractiveChatBox({
   const { taskStatus: subConversationTaskStatus } =
     useSubConversationTaskPolling(
       subConversationTaskId,
-      conversation?.conversation_id || null,
+      conversation?.id || null,
     );
 
   // Helper function to validate and filter files
@@ -137,10 +139,13 @@ export function InteractiveChatBox({
     }
   };
 
-  const handleSubmit = (message: string) => {
+  const conversationId = conversation?.id ?? null;
+  const submitWithFiles = (message: string) => {
     onSubmit(message, images, files);
     clearAllFiles();
   };
+  const handleAfterModel = useBtwInterceptor(conversationId, submitWithFiles);
+  const handleSubmit = useModelInterceptor(conversationId, handleAfterModel);
 
   const handleSuggestionsClick = (suggestion: string) => {
     handleSubmit(suggestion);
@@ -160,7 +165,7 @@ export function InteractiveChatBox({
         isNewConversationPending={disabled}
         onSubmit={handleSubmit}
         onFilesPaste={handleUpload}
-        conversationStatus={conversation?.status || null}
+        sandboxStatus={conversation?.sandbox_status || null}
       />
       <div className="mt-4">
         <GitControlBar onSuggestionsClick={handleSuggestionsClick} />
