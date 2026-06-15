@@ -392,9 +392,11 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             )
             saas_result = await self.db_session.execute(saas_query)
             existing_saas_metadata = saas_result.scalar_one_or_none()
-            assert existing_saas_metadata is None or (
-                existing_saas_metadata.user_id == user_id_uuid
-                and existing_saas_metadata.org_id == org_id
+
+            # org_id is not asserted: it falls back to user.current_org_id, which changes when the user switches orgs.
+            assert (
+                existing_saas_metadata is None
+                or existing_saas_metadata.user_id == user_id_uuid
             )
 
             if not existing_saas_metadata:

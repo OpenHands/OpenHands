@@ -1,9 +1,10 @@
+import re
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, field_serializer
 
 from openhands.agent_server.models import (
     ImageContent,
@@ -41,6 +42,16 @@ class ConversationTrigger(Enum):
     AUTOMATION = 'automation'
 
 
+def _redact_url_credentials(url: str) -> str:
+    """Redact embedded credentials from a URL (https://user:token@host → https://****@host).
+
+    # TODO: replace with `from openhands.sdk.utils.redact import redact_url_credentials`
+    # once the SDK pin is bumped to include OpenHands/software-agent-sdk#2154.
+    """
+    m = re.match(r'^(https?://)([^@/]+)@(.+)$', url)
+    return f'{m.group(1)}****@{m.group(3)}' if m else url
+
+
 class AgentType(Enum):
     """Agent type for conversation."""
 
@@ -59,6 +70,11 @@ class PluginSpec(PluginSource):
         default=None,
         description='User-provided values for plugin input parameters',
     )
+
+    @field_serializer('source')
+    @classmethod
+    def _serialize_source(cls, source: str) -> str:
+        return _redact_url_credentials(source)
 
     @property
     def display_name(self) -> str:
@@ -337,6 +353,16 @@ class SwitchProfileRequest(BaseModel):
     profile_name: str = Field(
         ...,
         description='Name of a profile previously saved via /api/v1/settings/profiles.',
+        min_length=1,
+    )
+
+
+class SwitchAcpModelRequest(BaseModel):
+    """Request to switch a running ACP conversation's model in place."""
+
+    model: str = Field(
+        ...,
+        description='Model identifier to switch to (must be supported by the provider).',
         min_length=1,
     )
 

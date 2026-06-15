@@ -67,8 +67,19 @@ def _load_persisted_agent_settings(
     Routes the raw payload through :func:`validate_agent_settings` so any
     schema migrations registered with the SDK are applied before validation
     against the discriminated :data:`AgentSettingsConfig` union.
+
+    The legacy ``agent_kind: 'llm'`` tag (pre-rename, field-compatible with
+    ``openhands``) is normalized to ``'openhands'`` first. The SDK migration
+    only rewrites it while advancing ``schema_version``, so an ``'llm'`` payload
+    already at the current version would otherwise validate as the deprecated
+    ``LLMAgentSettings``. Doing it here keeps every read on the canonical
+    ``{openhands, acp}`` variants, without the cross-variant coercion that 500'd
+    ACP settings (``agent_kind: 'acp'`` is left untouched).
     """
-    return validate_agent_settings(data or {})
+    payload = data or {}
+    if isinstance(payload, dict) and payload.get('agent_kind') == 'llm':
+        payload = {**payload, 'agent_kind': 'openhands'}
+    return validate_agent_settings(payload)
 
 
 def _load_persisted_conversation_settings(data: Any) -> ConversationSettings:
@@ -208,11 +219,6 @@ class Settings(BaseModel):
             replace_mcp_config = 'mcp_config' in agent_update
             mcp_config = coerced.pop('mcp_config', None) if replace_mcp_config else None
 
-            # acp_env is a flat credential dict that should be replaced wholesale
-            # when present; deep-merging would make removed keys persist across saves.
-            replace_acp_env = 'acp_env' in agent_update
-            acp_env = coerced.pop('acp_env', None) if replace_acp_env else None
-
             new_kind = coerced.get('agent_kind')
             current_kind = self.agent_settings.agent_kind
 
@@ -233,8 +239,6 @@ class Settings(BaseModel):
             merged = deep_merge(base, coerced)
             if replace_mcp_config:
                 merged['mcp_config'] = mcp_config
-            if replace_acp_env:
-                merged['acp_env'] = acp_env or {}
 
             # Use object.__setattr__ to avoid validate_assignment
             # side-effects on other fields.
@@ -400,15 +404,7 @@ class Settings(BaseModel):
         return self.agent_settings
 
     def get_agent_settings_display(self) -> dict[str, Any]:
-        """Return agent_settings dict with display-friendly model names.
-
-        ``litellm_proxy/`` prefixes are normalised to ``openhands/`` only when
-        using the OpenHands proxy URL. Custom litellm_proxy endpoints keep their
-        litellm_proxy/ prefix.
-        The LiteLLM proxy ``base_url`` is cleared for managed models so
-        that the frontend can display "basic" mode.
-        Secrets are masked by Pydantic's default serialiser.
-        """
+        """Return agent_settings with display-only defaults removed."""
         from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
         from openhands.app_server.utils.llm import is_openhands_model
 
@@ -417,16 +413,6 @@ class Settings(BaseModel):
         if isinstance(llm, dict):
             model = llm.get('model')
             base_url = llm.get('base_url')
-
-            # Only convert litellm_proxy/ to openhands/ if using the OpenHands proxy
-            if isinstance(model, str) and model.startswith('litellm_proxy/'):
-                normalized_base = (base_url or '').rstrip('/')
-                normalized_proxy = LITE_LLM_API_URL.rstrip('/')
-                if normalized_base == normalized_proxy:
-                    llm['model'] = f'openhands/{model.removeprefix("litellm_proxy/")}'
-
-            # Clear the proxy base_url for managed models so the frontend
-            # sees null and can display the simple "basic" settings view.
             if is_openhands_model(model):
                 normalized_base = (base_url or '').rstrip('/')
                 normalized_proxy = LITE_LLM_API_URL.rstrip('/')

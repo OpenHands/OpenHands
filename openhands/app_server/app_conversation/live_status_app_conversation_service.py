@@ -1007,6 +1007,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     def _configure_llm(self, user: UserInfo, llm_model: str | None) -> LLM:
         """Configure LLM settings.
 
+        Starts from the user's saved LLM configuration and overrides only
+        the fields that the server needs to resolve (model name, base URL,
+        and usage ID).  All other user-configured fields (e.g.
+        ``reasoning_effort``, ``extended_thinking_budget``, ``drop_params``)
+        are preserved so that they reach the agent-server unchanged.
+
         Args:
             user: User information containing LLM preferences
             llm_model: Optional specific model to use, falls back to user default
@@ -1026,11 +1032,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             provider_base_url=self.openhands_provider_base_url,
         )
 
-        return LLM(
-            model=model,
-            base_url=base_url,
-            api_key=user.agent_settings.llm.api_key,
-            usage_id='agent',
+        return user.agent_settings.llm.model_copy(
+            update={
+                'model': model,
+                'base_url': base_url,
+                'api_key': user.agent_settings.llm.api_key,
+                'usage_id': 'agent',
+            }
         )
 
     async def _add_system_mcp_servers(
@@ -1593,16 +1601,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     ) -> StartConversationRequest:
         """Build a StartConversationRequest for ACP agent conversations.
 
-        Unlike the LLM path, ACP agents run as separate subprocesses; we pass
-        credentials via environment variables rather than injecting an LLM object.
-
-        User secrets (Secrets panel + git provider tokens) flow through two
-        complementary channels: they're rendered into the ACP prompt as a
-        ``<CUSTOM_SECRETS>`` block via ``AgentContext.secrets`` (so the agent
-        knows the names) and also pre-exported as environment variables on
-        the ACP subprocess via ``acp_env`` (so plain CLI commands like
-        ``gh`` / ``aws`` / ``git`` pick them up from env without the agent
-        having to manually export them).
+        User secrets (Secrets panel + git provider tokens) flow through
+        ``request.secrets`` — the canonical cipher-protected wire channel.
+        In SaaS mode each secret is a ``LookupSecret`` pointing at
+        ``/api/v1/webhooks/custom-secret`` with a per-secret scoped JWT, so
+        values are never materialised in this process.  In OSS mode (no
+        ``web_url``) they remain ``StaticSecret``.  Secrets are passed
+        directly as ``secrets=`` to ``create_request()``; no ``AgentContext``
+        relay is needed.  This avoids the deprecated ``acp_env`` channel
+        (software-agent-sdk #3464; OpenHands/agent-canvas#1039).
 
         Args:
             sandbox: Sandbox information
@@ -1619,7 +1626,29 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         workspace = LocalWorkspace(working_dir=project_dir)
 
         # --- secrets --------------------------------------------------------
-        secrets = await self._setup_secrets_for_git_providers(user)
+        # ACP secrets must be StaticSecrets — LookupSecrets with JWT headers
+        # (e.g. X-Access-Token) are redacted by the SDK serializer because
+        # "TOKEN" matches SECRET_KEY_PATTERNS, leaving headers: {} and
+        # causing provider auth to silently fail at subprocess launch.
+        # Use the raw custom secrets directly, then fold in git provider tokens
+        # as StaticSecrets (bypassing the LookupSecret wrapping that
+        # _setup_secrets_for_git_providers does for non-ACP paths).
+        secrets: dict = await self.user_context.get_secrets()
+        provider_tokens = cast(
+            PROVIDER_TOKEN_TYPE | None,
+            await self.user_context.get_provider_tokens(),
+        )
+        if provider_tokens:
+            for provider_type, provider_token in provider_tokens.items():
+                if not provider_token.token:
+                    continue
+                secret_name = f'{provider_type.name}_TOKEN'
+                static_token = await self.user_context.get_latest_token(provider_type)
+                if static_token:
+                    secrets[secret_name] = StaticSecret(
+                        value=SecretStr(static_token),
+                        description=f'{provider_type.name} authentication token',
+                    )
 
         if api_secrets:
             from openhands.app_server.constants import (
@@ -1640,20 +1669,20 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         acp_settings = user.agent_settings  # already verified to be ACPAgentSettings
         assert isinstance(acp_settings, ACPAgentSettings)
 
-        # Pass user secrets via AgentContext. The SDK renders them as a
-        # <CUSTOM_SECRETS> block in the ACP prompt (so the agent knows the
-        # names) and ``ACPAgent._start_acp_server`` gap-fills any that
-        # aren't already in ``acp_env`` into the subprocess env at launch
-        # time — preserving the ``acp_env > provider env > secrets``
-        # precedence end-to-end. We pass ``SecretSource`` objects through
-        # verbatim; resolving them here (with ``source.get_value()``) would
-        # eagerly hit the auth service for every ``LookupSecret`` on every
-        # conversation start, from the wrong process.
-        agent_context = AgentContext(secrets=secrets) if secrets else None
-        settings_update = (
-            {'agent_context': agent_context} if agent_context is not None else {}
+        # Isolate the CLI data dir onto the durable /workspace tree so the SDK
+        # self-resumes the provider session (session/load from base_state.json)
+        # across pause/resume — matching the regular-agent lifecycle (#1274).
+        # Strip llm.api_key/base_url to prevent proxy settings from leaking
+        # into the subprocess env (ACP CLIs handle their own LLM calls).
+        acp_settings_for_agent = acp_settings.model_copy(
+            update={
+                'acp_isolate_data_dir': True,
+                'llm': acp_settings.llm.model_copy(
+                    update={'api_key': None, 'base_url': None}
+                ),
+            }
         )
-        acp_agent = acp_settings.model_copy(update=settings_update).create_agent()
+        acp_agent = acp_settings_for_agent.create_agent()
 
         sdk_plugins: list[PluginSource] | None = None
         if plugins:
@@ -1681,7 +1710,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # attributable, falling back to ``user.id`` when no email is available.
         laminar_user_id = await self.user_context.get_user_email() or user.id
         return conv_settings.create_request(
-            StartConversationRequest, agent=acp_agent, user_id=laminar_user_id
+            StartConversationRequest,
+            agent=acp_agent,
+            user_id=laminar_user_id,
+            secrets=secrets,
         )
 
     async def _process_pending_messages(

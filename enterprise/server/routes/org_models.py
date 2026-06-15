@@ -19,26 +19,11 @@ from openhands.app_server.settings.settings_models import (
     _load_persisted_conversation_settings,
 )
 from openhands.app_server.utils.llm import MASKED_API_KEY, resolve_llm_base_url
-from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
-
-
-def _validate_persisted_agent_settings(
-    raw: dict[str, Any] | None,
-) -> OpenHandsAgentSettings:
-    """Validate persisted ``org.agent_settings`` against the canonical schema.
-
-    Routes the raw payload through the shared SDK loader so any schema
-    migrations registered with the SDK are applied first. Older rows carry
-    the legacy ``agent_kind: 'llm'`` discriminator from the pre-rename SDK;
-    force ``'openhands'`` after migration so the canonical class accepts
-    both shapes. Mirrors :func:`OrgStore.get_agent_settings_from_org` — kept
-    inline to avoid a circular import (``org_store`` already imports from this
-    module).
-    """
-    loaded = _load_persisted_agent_settings(raw or {})
-    payload = loaded.model_dump(mode='json', context={'expose_secrets': True})
-    payload['agent_kind'] = 'openhands'
-    return OpenHandsAgentSettings.model_validate(payload)
+from openhands.sdk.settings import (
+    AgentSettingsConfig,
+    ConversationSettings,
+    OpenHandsAgentSettings,
+)
 
 
 class OrgCreationError(Exception):
@@ -81,12 +66,22 @@ class OrgAuthorizationError(OrgDeletionError):
 
 
 class OrphanedUserError(OrgDeletionError):
-    """Raised when deleting an org would leave users without any organization."""
+    """Raised when deleting an org would leave OTHER users (not the requester)
+    without any organization.
+
+    A user is "orphaned" when their only ``org_member`` row is for the org being
+    deleted. The deletion path tolerates *the requester themselves* being orphaned
+    (the personal-org self-service case — the requester is consenting to their
+    own deletion by calling ``DELETE``), but refuses to silently destroy the
+    accounts of other members. In that case it raises this error so the org
+    owner can transfer or remove those members first.
+    """
 
     def __init__(self, user_ids: list[str]):
         self.user_ids = user_ids
         super().__init__(
-            f'Cannot delete organization: {len(user_ids)} user(s) would have no remaining organization'
+            f'Cannot delete organization: {len(user_ids)} other user(s) '
+            'would have no remaining organization'
         )
 
 
@@ -178,9 +173,7 @@ class OrgResponse(BaseModel):
     sandbox_base_container_image: str | None = None
     sandbox_runtime_container_image: str | None = None
     org_version: int = 0
-    agent_settings: OpenHandsAgentSettings = Field(
-        default_factory=OpenHandsAgentSettings
-    )
+    agent_settings: AgentSettingsConfig = Field(default_factory=OpenHandsAgentSettings)
     conversation_settings: ConversationSettings = Field(
         default_factory=ConversationSettings
     )
@@ -210,7 +203,7 @@ class OrgResponse(BaseModel):
             sandbox_base_container_image=org.sandbox_base_container_image,
             sandbox_runtime_container_image=org.sandbox_runtime_container_image,
             org_version=org.org_version if org.org_version is not None else 0,
-            agent_settings=_validate_persisted_agent_settings(org.agent_settings),
+            agent_settings=_load_persisted_agent_settings(org.agent_settings),
             conversation_settings=_load_persisted_conversation_settings(
                 org.conversation_settings
             ),
@@ -394,9 +387,7 @@ class OrgUpdate(BaseModel):
 class OrgDefaultsSettingsResponse(BaseModel):
     """Response model for organization default settings."""
 
-    agent_settings: OpenHandsAgentSettings = Field(
-        default_factory=OpenHandsAgentSettings
-    )
+    agent_settings: AgentSettingsConfig = Field(default_factory=OpenHandsAgentSettings)
     conversation_settings: ConversationSettings = Field(
         default_factory=ConversationSettings
     )
@@ -419,16 +410,13 @@ class OrgDefaultsSettingsResponse(BaseModel):
     def from_org(cls, org: Org) -> 'OrgDefaultsSettingsResponse':
         """Create response from Org entity.
 
-        Denormalizes the SDK's ``litellm_proxy/`` prefix back to
-        ``openhands/`` so the frontend's basic-view provider/model dropdowns
-        can be populated, and nulls ``api_key`` so neither the raw secret
-        nor the ``MASKED_API_KEY`` marker leaks in the response.
-        ``base_url`` is returned exactly as stored so ``org.agent_settings``,
-        ``org_member.agent_settings_diff`` and this response always carry
-        the same value.
+        The SDK now keeps ``openhands/`` as the public/stored provider prefix
+        and translates to ``litellm_proxy/`` only at the transport boundary, so
+        organization responses should not reverse-map model names. Secret
+        values are still stripped before returning the response.
         """
-        agent_settings = _validate_persisted_agent_settings(org.agent_settings)
-        cls._denormalize_llm_for_response(agent_settings)
+        agent_settings = _load_persisted_agent_settings(org.agent_settings)
+        cls._prepare_llm_for_response(agent_settings)
         return cls(
             agent_settings=agent_settings,
             conversation_settings=_load_persisted_conversation_settings(
@@ -439,31 +427,16 @@ class OrgDefaultsSettingsResponse(BaseModel):
         )
 
     @staticmethod
-    def _denormalize_llm_for_response(agent_settings: OpenHandsAgentSettings) -> None:
-        """Rewrite ``agent_settings.llm`` in-place for UI consumption.
-
-        * ``litellm_proxy/X`` → ``openhands/X`` so the basic-view provider
-          dropdown matches (the SDK's ``AgentSettings`` validator
-          normalizes the other direction on load).
-        * ``base_url`` is returned **as stored** so the three sync targets
-          (``org.agent_settings.llm.base_url``,
-          ``org_member.agent_settings_diff.llm.base_url``, and the GET
-          response) always agree. The frontend is responsible for
-          recognizing the managed LiteLLM proxy URL / provider-default URL
-          as "basic mode" — see ``KNOWN_PROVIDER_DEFAULT_BASE_URLS`` in
-          ``frontend/src/routes/llm-settings.tsx``.
-        * ``api_key`` is nulled so neither the raw secret nor the
-          ``MASKED_API_KEY`` marker leaks in the response — the frontend
-          reads ``llm_api_key_set`` to know whether a key exists.
-
-        Pydantic v2 field assignment bypasses ``field_validator`` /
-        ``model_validator`` by default (``validate_assignment`` is off on
-        the SDK's ``LLM`` model), so the rename survives without being
-        re-normalized back to ``litellm_proxy/``.
-        """
+    def _prepare_llm_for_response(agent_settings: AgentSettingsConfig) -> None:
+        """Strip response-only LLM fields without changing provider names."""
         llm = agent_settings.llm
-        if llm.model and llm.model.startswith('litellm_proxy/'):
-            llm.model = f'openhands/{llm.model.removeprefix("litellm_proxy/")}'
+        if (
+            llm.model
+            and llm.model.startswith('openhands/')
+            and llm.base_url
+            and llm.base_url.rstrip('/') == LITE_LLM_API_URL.rstrip('/')
+        ):
+            llm.base_url = None
         llm.api_key = None
 
 
