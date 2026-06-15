@@ -328,10 +328,15 @@ async def test_ensure_api_key_keeps_valid_key():
 
 @pytest.mark.asyncio
 async def test_ensure_api_key_generates_new_key_when_verification_fails():
-    """When verification fails, a new key should be generated."""
+    """When verification fails, a new managed key is minted under the shared
+    alias after deleting any prior key — symmetric across model types so
+    switching to/from an openhands/* model never orphans a key."""
+    from storage.lite_llm_manager import get_openhands_cloud_key_alias
+
     store = SaasSettingsStore('test-user-id-123')
     new_key = 'sk-new-key'
     item = _make_settings(model='openhands/gpt-4', api_key='sk-invalid-key')
+    expected_alias = get_openhands_cloud_key_alias('test-user-id-123', 'org-123')
 
     with (
         patch(
@@ -340,15 +345,24 @@ async def test_ensure_api_key_generates_new_key_when_verification_fails():
             return_value=False,
         ),
         patch(
+            'storage.saas_settings_store.LiteLlmManager.delete_key_by_alias',
+            new_callable=AsyncMock,
+        ) as mock_delete,
+        patch(
             'storage.saas_settings_store.LiteLlmManager.generate_key',
             new_callable=AsyncMock,
             return_value=new_key,
-        ),
+        ) as mock_generate,
     ):
         await store._ensure_api_key(item, 'org-123', openhands_type=True)
 
-        assert _secret_value(item, 'llm.api_key') is not None
         assert _secret_value(item, 'llm.api_key') == new_key
+        # The openhands branch now deletes the prior key under the shared alias
+        # before minting (previously it skipped the delete and orphaned keys).
+        mock_delete.assert_awaited_once_with(key_alias=expected_alias)
+        mock_generate.assert_awaited_once_with(
+            'test-user-id-123', 'org-123', expected_alias, {'type': 'openhands'}
+        )
 
 
 @pytest.fixture
@@ -448,6 +462,110 @@ def org_with_multiple_members_fixture(session_maker):
         'member2_user_id': member2_user_id,
         'decrypt_value': decrypt_value,
     }
+
+
+@pytest.mark.asyncio
+async def test_load_canonicalizes_legacy_litellm_proxy_active_llm(
+    async_session_maker, org_with_multiple_members_fixture
+):
+    from sqlalchemy import update
+    from storage.org_member import OrgMember
+    from storage.user import User
+
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = fixture['admin_user_id']
+    org_id = fixture['org_id']
+
+    async with async_session_maker() as session:
+        await session.execute(
+            update(OrgMember)
+            .where(OrgMember.org_id == org_id, OrgMember.user_id == admin_user_id)
+            .values(
+                agent_settings_diff={
+                    'llm': {
+                        'model': 'litellm_proxy/claude-opus-4-8',
+                        'base_url': LITE_LLM_API_URL,
+                    },
+                }
+            )
+        )
+        await session.execute(
+            update(User)
+            .where(User.id == admin_user_id)
+            .values(enable_sound_notifications=False)
+        )
+        await session.commit()
+
+    store = SaasSettingsStore(str(admin_user_id))
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+    ):
+        loaded = await store.load()
+
+    assert loaded is not None
+    assert loaded.agent_settings.llm.model == 'openhands/claude-opus-4-8'
+    assert loaded.agent_settings.llm.base_url is None
+
+
+@pytest.mark.asyncio
+async def test_load_canonicalizes_legacy_litellm_proxy_llm_profiles(
+    async_session_maker, org_with_multiple_members_fixture
+):
+    from sqlalchemy import update
+    from storage.org import Org
+    from storage.user import User
+
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = fixture['admin_user_id']
+    org_id = fixture['org_id']
+
+    async with async_session_maker() as session:
+        await session.execute(
+            update(Org)
+            .where(Org.id == org_id)
+            .values(
+                llm_profiles={
+                    'profiles': {
+                        'legacy': {
+                            'model': 'litellm_proxy/claude-opus-4-8',
+                            'base_url': LITE_LLM_API_URL,
+                        },
+                        'custom': {
+                            'model': 'litellm_proxy/custom-alias',
+                            'base_url': LITE_LLM_API_URL,
+                        },
+                    },
+                    'active': 'legacy',
+                }
+            )
+        )
+        await session.execute(
+            update(User)
+            .where(User.id == admin_user_id)
+            .values(enable_sound_notifications=False)
+        )
+        await session.commit()
+
+    store = SaasSettingsStore(str(admin_user_id))
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+    ):
+        loaded = await store.load()
+
+    assert loaded is not None
+    assert loaded.llm_profiles.active == 'legacy'
+
+    legacy = loaded.llm_profiles.require('legacy')
+    assert legacy.model == 'openhands/claude-opus-4-8'
+    assert legacy.base_url is None
+
+    custom = loaded.llm_profiles.require('custom')
+    assert custom.model == 'litellm_proxy/custom-alias'
+    assert custom.base_url == LITE_LLM_API_URL
 
 
 @pytest.mark.asyncio

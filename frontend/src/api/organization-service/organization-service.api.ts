@@ -1,8 +1,11 @@
 import {
+  PendingInvitationsPage,
+  BatchInvitationResult,
   GitOrgClaim,
   Organization,
   OrganizationMember,
   OrganizationMembersPage,
+  OrganizationUserRole,
   UpdateOrganizationMemberParams,
 } from "#/types/org";
 import { Settings } from "#/types/settings";
@@ -139,18 +142,41 @@ export const organizationService = {
   inviteMembers: async ({
     orgId,
     emails,
+    role = "member",
   }: {
     orgId: string;
     emails: string[];
+    role?: OrganizationUserRole;
   }) => {
-    const { data } = await openHands.post<OrganizationMember[]>(
+    const { data } = await openHands.post<BatchInvitationResult>(
       `/api/organizations/${orgId}/members/invite`,
       {
         emails,
+        role,
       },
     );
 
     return data;
+  },
+
+  getPendingInvitations: async ({ orgId }: { orgId: string }) => {
+    const { data } = await openHands.get<PendingInvitationsPage>(
+      `/api/organizations/${orgId}/members/invite`,
+    );
+
+    return data;
+  },
+
+  revokeInvitation: async ({
+    orgId,
+    invitationId,
+  }: {
+    orgId: string;
+    invitationId: number;
+  }) => {
+    await openHands.delete(
+      `/api/organizations/${orgId}/members/invite/${invitationId}`,
+    );
   },
 
   switchOrganization: async ({ orgId }: { orgId: string }) => {

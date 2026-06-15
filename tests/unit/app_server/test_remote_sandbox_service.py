@@ -120,6 +120,7 @@ def create_stored_sandbox(
     spec_id: str = 'test-image:latest',
     created_at: datetime | None = None,
     session_api_key_hash: str | None = None,
+    is_paused: bool = False,
 ) -> StoredRemoteSandbox:
     """Helper function to create StoredRemoteSandbox for testing."""
     if created_at is None:
@@ -131,6 +132,7 @@ def create_stored_sandbox(
         sandbox_spec_id=spec_id,
         session_api_key_hash=session_api_key_hash,
         created_at=created_at,
+        is_paused=is_paused,
     )
 
 
@@ -397,6 +399,12 @@ class TestSandboxLifecycle:
         remote_sandbox_service.httpx_client.request.return_value = mock_response
         remote_sandbox_service.pause_old_sandboxes = AsyncMock(return_value=[])
 
+        # Mock concurrency limit methods
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=10
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=0)
+
         # Mock database operations
         remote_sandbox_service.db_session.add = MagicMock()
         remote_sandbox_service.db_session.commit = AsyncMock()
@@ -408,9 +416,6 @@ class TestSandboxLifecycle:
         # Verify
         assert sandbox_info.id == 'test-sandbox-123'
         assert sandbox_info.status == SandboxStatus.RUNNING
-        remote_sandbox_service.pause_old_sandboxes.assert_called_once_with(
-            9
-        )  # max_num_sandboxes - 1
         remote_sandbox_service.db_session.add.assert_called_once()
         remote_sandbox_service.db_session.commit.assert_not_called()
 
@@ -424,6 +429,13 @@ class TestSandboxLifecycle:
         mock_response.json.return_value = create_runtime_data()
         remote_sandbox_service.httpx_client.request.return_value = mock_response
         remote_sandbox_service.pause_old_sandboxes = AsyncMock(return_value=[])
+
+        # Mock concurrency limit methods
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=10
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=0)
+
         remote_sandbox_service.db_session.add = MagicMock()
         remote_sandbox_service.db_session.commit = AsyncMock()
 
@@ -445,6 +457,12 @@ class TestSandboxLifecycle:
         mock_sandbox_spec_service.get_sandbox_spec.return_value = None
         remote_sandbox_service.pause_old_sandboxes = AsyncMock(return_value=[])
 
+        # Mock concurrency limit methods
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=10
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=0)
+
         # Execute & Verify
         with pytest.raises(ValueError, match='Sandbox Spec not found'):
             await remote_sandbox_service.start_sandbox('non-existent-spec')
@@ -461,6 +479,12 @@ class TestSandboxLifecycle:
         )
         remote_sandbox_service.httpx_client.request.return_value = mock_response
         remote_sandbox_service.pause_old_sandboxes = AsyncMock(return_value=[])
+
+        # Mock concurrency limit methods
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=10
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=0)
 
         # Mock database operations
         remote_sandbox_service.db_session.add = MagicMock()
@@ -485,6 +509,13 @@ class TestSandboxLifecycle:
             'API Error'
         )
         remote_sandbox_service.pause_old_sandboxes = AsyncMock(return_value=[])
+
+        # Mock concurrency limit methods
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=10
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=0)
+
         remote_sandbox_service.db_session.add = MagicMock()
         remote_sandbox_service.db_session.commit = AsyncMock()
 
@@ -502,6 +533,13 @@ class TestSandboxLifecycle:
         mock_response.json.return_value = create_runtime_data()
         remote_sandbox_service.httpx_client.request.return_value = mock_response
         remote_sandbox_service.pause_old_sandboxes = AsyncMock(return_value=[])
+
+        # Mock concurrency limit methods
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=10
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=0)
+
         remote_sandbox_service.db_session.add = MagicMock()
         remote_sandbox_service.db_session.commit = AsyncMock()
 
@@ -1155,6 +1193,293 @@ class TestConstants:
         """Test that environment variable constants are defined."""
         assert WEBHOOK_CALLBACK_VARIABLE == 'OH_WEBHOOKS_0_BASE_URL'
         assert ALLOW_CORS_ORIGINS_VARIABLE == 'OH_ALLOW_CORS_ORIGINS_0'
+
+
+class TestConcurrencyLimits:
+    """Test cases for sandbox concurrency limit enforcement.
+
+    Tests the _get_user_effective_sandbox_limit, _count_user_running_sandboxes,
+    and start_sandbox limit enforcement functionality.
+
+    NOTE: Tests involving enterprise storage modules (UserStore, OrgMemberStore,
+    OrgStore) are in enterprise/tests/unit/ since they require enterprise modules.
+    """
+
+    @pytest.mark.asyncio
+    async def test_get_effective_limit_delegates_to_user_context(
+        self, remote_sandbox_service
+    ):
+        """Test that _get_user_effective_sandbox_limit delegates to UserContext."""
+        remote_sandbox_service.user_context.get_max_concurrent_sandboxes = AsyncMock(
+            return_value=5
+        )
+
+        result = await remote_sandbox_service._get_user_effective_sandbox_limit()
+
+        assert result == 5
+        remote_sandbox_service.user_context.get_max_concurrent_sandboxes.assert_called_once_with(
+            10  # max_num_sandboxes passed as default
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_effective_limit_passes_max_num_sandboxes_as_default(
+        self, remote_sandbox_service
+    ):
+        """Test that _get_user_effective_sandbox_limit passes max_num_sandboxes as default.
+
+        The global fallback (max_num_sandboxes=10) is passed to UserContext,
+        which can use it as the default in OSS mode.
+        """
+        remote_sandbox_service.user_context.get_max_concurrent_sandboxes = AsyncMock(
+            return_value=10
+        )
+
+        result = await remote_sandbox_service._get_user_effective_sandbox_limit()
+
+        assert result == 10  # global fallback (max_num_sandboxes)
+
+    @pytest.mark.asyncio
+    async def test_count_running_sandboxes_returns_zero_when_no_db_records(
+        self, remote_sandbox_service
+    ):
+        """Test that _count_user_running_sandboxes returns 0 when user has no sandboxes."""
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+
+        result = await remote_sandbox_service._count_user_running_sandboxes()
+
+        assert result == 0
+        # No runtime API call should be made
+        remote_sandbox_service.httpx_client.request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_count_running_sandboxes_excludes_paused_sandboxes(
+        self, remote_sandbox_service
+    ):
+        """Test that _count_user_running_sandboxes only counts non-paused sandboxes."""
+        # DB returns 2 running sandboxes (is_paused=False) filtered by the query;
+        # paused sandboxes are excluded at the query level.
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [
+            create_stored_sandbox(sandbox_id='sandbox-1', is_paused=False),
+            create_stored_sandbox(sandbox_id='sandbox-2', is_paused=False),
+        ]
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+
+        result = await remote_sandbox_service._count_user_running_sandboxes()
+
+        assert result == 2
+        # No runtime API call should be made
+        remote_sandbox_service.httpx_client.request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_start_sandbox_raises_concurrency_error_when_at_limit(
+        self, remote_sandbox_service
+    ):
+        """Test that start_sandbox raises ConcurrencyLimitError when user is at limit."""
+        from openhands.app_server.errors import ConcurrencyLimitError
+
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=3
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=3)
+
+        with pytest.raises(ConcurrencyLimitError) as exc_info:
+            await remote_sandbox_service.start_sandbox()
+
+        assert exc_info.value.detail['limit'] == 3
+        assert exc_info.value.detail['current'] == 3
+        assert exc_info.value.status_code == 429
+
+    @pytest.mark.asyncio
+    async def test_start_sandbox_raises_concurrency_error_when_over_limit(
+        self, remote_sandbox_service
+    ):
+        """Test that start_sandbox raises ConcurrencyLimitError when user exceeds limit."""
+        from openhands.app_server.errors import ConcurrencyLimitError
+
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=5
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=7)
+
+        with pytest.raises(ConcurrencyLimitError) as exc_info:
+            await remote_sandbox_service.start_sandbox()
+
+        assert exc_info.value.detail['limit'] == 5
+        assert exc_info.value.detail['current'] == 7
+
+    @pytest.mark.asyncio
+    async def test_start_sandbox_allows_creation_when_under_limit(
+        self, remote_sandbox_service
+    ):
+        """Test that start_sandbox succeeds when user is under their limit."""
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=5
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=2)
+        remote_sandbox_service.pause_old_sandboxes = AsyncMock(return_value=[])
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {
+            'session_id': 'new-sandbox-123',
+            'status': 'running',
+            'url': 'https://sandbox.example.com',
+            'session_api_key': 'test-key',
+            'runtime_id': 'runtime-456',
+        }
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_response
+        )
+
+        result = await remote_sandbox_service.start_sandbox()
+
+        assert result is not None
+        assert result.id is not None
+
+    @pytest.mark.asyncio
+    async def test_start_sandbox_pauses_old_sandboxes_when_approaching_limit(
+        self, remote_sandbox_service
+    ):
+        """Test that start_sandbox calls pause_old_sandboxes when approaching limit."""
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=5
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=4)
+        remote_sandbox_service.pause_old_sandboxes = AsyncMock(return_value=[])
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {
+            'session_id': 'new-sandbox-123',
+            'status': 'running',
+            'url': 'https://sandbox.example.com',
+            'session_api_key': 'test-key',
+            'runtime_id': 'runtime-456',
+        }
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_response
+        )
+
+        await remote_sandbox_service.start_sandbox()
+
+        remote_sandbox_service.pause_old_sandboxes.assert_called_once_with(4)
+
+    @pytest.mark.asyncio
+    async def test_start_sandbox_does_not_pause_when_well_under_limit(
+        self, remote_sandbox_service
+    ):
+        """Test that start_sandbox does not pause sandboxes when well under limit."""
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=10
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=2)
+        remote_sandbox_service.pause_old_sandboxes = AsyncMock(return_value=[])
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {
+            'session_id': 'new-sandbox-123',
+            'status': 'running',
+            'url': 'https://sandbox.example.com',
+            'session_api_key': 'test-key',
+            'runtime_id': 'runtime-456',
+        }
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_response
+        )
+
+        await remote_sandbox_service.start_sandbox()
+
+        remote_sandbox_service.pause_old_sandboxes.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_start_sandbox_concurrency_error_not_wrapped_in_sandbox_error(
+        self, remote_sandbox_service
+    ):
+        """Test that ConcurrencyLimitError is raised directly, not wrapped in SandboxError."""
+        from openhands.app_server.errors import ConcurrencyLimitError
+
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=3
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=3)
+
+        with pytest.raises(ConcurrencyLimitError):
+            await remote_sandbox_service.start_sandbox()
+
+        # Verify it's not wrapped in SandboxError
+        try:
+            await remote_sandbox_service.start_sandbox()
+        except ConcurrencyLimitError:
+            pass  # Expected
+        except SandboxError:
+            pytest.fail('ConcurrencyLimitError should not be wrapped in SandboxError')
+
+    @pytest.mark.asyncio
+    async def test_check_concurrency_limit_raises_when_at_limit(
+        self, remote_sandbox_service
+    ):
+        """Test that check_concurrency_limit raises ConcurrencyLimitError when at limit."""
+        from openhands.app_server.errors import ConcurrencyLimitError
+
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=3
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=3)
+
+        with pytest.raises(ConcurrencyLimitError) as exc_info:
+            await remote_sandbox_service.check_concurrency_limit()
+
+        assert exc_info.value.detail['limit'] == 3
+        assert exc_info.value.detail['current'] == 3
+        assert exc_info.value.status_code == 429
+
+    @pytest.mark.asyncio
+    async def test_check_concurrency_limit_raises_when_over_limit(
+        self, remote_sandbox_service
+    ):
+        """Test that check_concurrency_limit raises ConcurrencyLimitError when over limit."""
+        from openhands.app_server.errors import ConcurrencyLimitError
+
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=5
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=7)
+
+        with pytest.raises(ConcurrencyLimitError) as exc_info:
+            await remote_sandbox_service.check_concurrency_limit()
+
+        assert exc_info.value.detail['limit'] == 5
+        assert exc_info.value.detail['current'] == 7
+
+    @pytest.mark.asyncio
+    async def test_check_concurrency_limit_succeeds_when_under_limit(
+        self, remote_sandbox_service
+    ):
+        """Test that check_concurrency_limit succeeds when under limit."""
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=5
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=2)
+
+        # Should not raise
+        await remote_sandbox_service.check_concurrency_limit()
+
+    @pytest.mark.asyncio
+    async def test_check_concurrency_limit_succeeds_when_well_under_limit(
+        self, remote_sandbox_service
+    ):
+        """Test that check_concurrency_limit succeeds when well under limit."""
+        remote_sandbox_service._get_user_effective_sandbox_limit = AsyncMock(
+            return_value=10
+        )
+        remote_sandbox_service._count_user_running_sandboxes = AsyncMock(return_value=0)
+
+        # Should not raise
+        await remote_sandbox_service.check_concurrency_limit()
 
 
 def _async_cm_factory(value):

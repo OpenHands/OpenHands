@@ -3,6 +3,7 @@
 import os
 from unittest.mock import MagicMock, patch
 
+import pytest
 from server.services.email_service import (
     DEFAULT_WEB_HOST,
     EmailService,
@@ -190,3 +191,41 @@ class TestEmailServiceSendInvitationEmail:
             assert 'John Doe' in email_params['html']
             assert 'Acme Corp' in email_params['html']
             assert 'admin' in email_params['html']
+
+
+class TestEmailServiceHelpers:
+    """Tests for is_configured and build_invitation_url."""
+
+    def test_is_configured_false_without_api_key(self, monkeypatch):
+        monkeypatch.delenv('RESEND_API_KEY', raising=False)
+        from server.services.email_service import EmailService
+
+        assert EmailService.is_configured() is False
+
+    def test_is_configured_true_with_api_key(self, monkeypatch):
+        monkeypatch.setenv('RESEND_API_KEY', 'test-key')
+        from server.services import email_service
+
+        if not email_service.RESEND_AVAILABLE:
+            pytest.skip('resend library not installed')
+        assert email_service.EmailService.is_configured() is True
+
+    def test_build_invitation_url_normalizes_bare_hostname(self, monkeypatch):
+        """OHE charts set WEB_HOST as a bare hostname; links must get a scheme."""
+        monkeypatch.setenv('WEB_HOST', 'app.example.com')
+        from server.services.email_service import EmailService
+
+        url = EmailService.build_invitation_url('inv-token123')
+
+        assert url == (
+            'https://app.example.com/api/organizations/members/invite/accept'
+            '?token=inv-token123'
+        )
+
+    def test_build_invitation_url_keeps_explicit_scheme(self, monkeypatch):
+        monkeypatch.setenv('WEB_HOST', 'https://app.example.com/')
+        from server.services.email_service import EmailService
+
+        url = EmailService.build_invitation_url('inv-token123')
+
+        assert url.startswith('https://app.example.com/api/')

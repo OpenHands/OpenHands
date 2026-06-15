@@ -1175,3 +1175,386 @@ class TestOpenHandsApiKey:
             assert result is not None
             assert 'OPENHANDS_API_KEY' in result.custom_secrets
             assert len(result.custom_secrets) == 1
+
+
+class TestGetMaxConcurrentSandboxes:
+    """Tests for SaasUserAuth.get_max_concurrent_sandboxes() method.
+
+    This method resolves concurrent sandbox limits in the following order:
+    1. OrgMember.max_concurrent_sandboxes_override (if not NULL)
+    2. Org.max_concurrent_sandboxes (org default)
+    3. The provided default value
+    """
+
+    @pytest.fixture
+    def user_id(self):
+        """Create a test user ID."""
+        return str(uuid.uuid4())
+
+    @pytest.fixture
+    def org_id(self):
+        """Create a test organization ID."""
+        return uuid.uuid4()
+
+    @pytest.fixture
+    def mock_user(self, org_id):
+        """Create a mock user with current_org_id."""
+        user = MagicMock()
+        user.current_org_id = org_id
+        return user
+
+    @pytest.fixture
+    def mock_org_member_with_override(self, org_id, user_id):
+        """Create a mock org member with override set."""
+        member = MagicMock()
+        member.org_id = org_id
+        member.user_id = uuid.UUID(user_id)
+        member.max_concurrent_sandboxes_override = 15
+        return member
+
+    @pytest.fixture
+    def mock_org_member_no_override(self, org_id, user_id):
+        """Create a mock org member with override as None."""
+        member = MagicMock()
+        member.org_id = org_id
+        member.user_id = uuid.UUID(user_id)
+        member.max_concurrent_sandboxes_override = None
+        return member
+
+    @pytest.fixture
+    def mock_org_with_limit(self, org_id):
+        """Create a mock org with max_concurrent_sandboxes set."""
+        org = MagicMock()
+        org.id = org_id
+        org.max_concurrent_sandboxes = 8
+        return org
+
+    # HAPPY PATH TESTS
+
+    @pytest.mark.asyncio
+    async def test_returns_org_member_override_when_set(
+        self,
+        user_id,
+        org_id,
+        mock_user,
+        mock_org_member_with_override,
+        mock_org_with_limit,
+    ):
+        """
+        GIVEN: User has an org_member with max_concurrent_sandboxes_override set
+        WHEN: get_max_concurrent_sandboxes is called
+        THEN: Returns the override value (15)
+        """
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            # OrgMemberStore is imported locally inside the function
+            patch(
+                'storage.org_member_store.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_org_member,
+            patch(
+                'storage.org_store.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+            mock_get_org_member.return_value = mock_org_member_with_override
+            mock_get_org.return_value = mock_org_with_limit
+
+            result = await user_auth.get_max_concurrent_sandboxes()
+
+            assert result == 15
+            # OrgStore should not be called when override exists
+            mock_get_org.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_returns_org_default_when_override_is_none(
+        self,
+        user_id,
+        org_id,
+        mock_user,
+        mock_org_member_no_override,
+        mock_org_with_limit,
+    ):
+        """
+        GIVEN: User has org_member with override=None, org has max_concurrent_sandboxes set
+        WHEN: get_max_concurrent_sandboxes is called
+        THEN: Returns the org's max_concurrent_sandboxes (8)
+        """
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            patch(
+                'storage.org_member_store.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_org_member,
+            patch(
+                'storage.org_store.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+            mock_get_org_member.return_value = mock_org_member_no_override
+            mock_get_org.return_value = mock_org_with_limit
+
+            result = await user_auth.get_max_concurrent_sandboxes()
+
+            assert result == 8
+
+    @pytest.mark.asyncio
+    async def test_returns_default_when_both_org_and_override_unset(
+        self, user_id, org_id, mock_user, mock_org_member_no_override
+    ):
+        """
+        GIVEN: User has org_member with override=None, org has max_concurrent_sandboxes=None
+        WHEN: get_max_concurrent_sandboxes is called
+        THEN: Returns the default value (10)
+        """
+        mock_org_no_limit = MagicMock()
+        mock_org_no_limit.id = org_id
+        mock_org_no_limit.max_concurrent_sandboxes = None
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            patch(
+                'storage.org_member_store.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_org_member,
+            patch(
+                'storage.org_store.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+            mock_get_org_member.return_value = mock_org_member_no_override
+            mock_get_org.return_value = mock_org_no_limit
+
+            result = await user_auth.get_max_concurrent_sandboxes()
+
+            assert result == 10  # default
+
+    @pytest.mark.asyncio
+    async def test_returns_custom_default_when_no_limits_set(
+        self, user_id, org_id, mock_user, mock_org_member_no_override
+    ):
+        """
+        GIVEN: No limits are set anywhere
+        WHEN: get_max_concurrent_sandboxes is called with custom default (5)
+        THEN: Returns the custom default (5)
+        """
+        mock_org_no_limit = MagicMock()
+        mock_org_no_limit.id = org_id
+        mock_org_no_limit.max_concurrent_sandboxes = None
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            patch(
+                'storage.org_member_store.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_org_member,
+            patch(
+                'storage.org_store.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+            mock_get_org_member.return_value = mock_org_member_no_override
+            mock_get_org.return_value = mock_org_no_limit
+
+            result = await user_auth.get_max_concurrent_sandboxes(default=5)
+
+            assert result == 5
+
+    @pytest.mark.asyncio
+    async def test_returns_default_when_user_has_no_current_org_id(self, user_id):
+        """
+        GIVEN: User has no current_org_id
+        WHEN: get_max_concurrent_sandboxes is called
+        THEN: Returns the default value (10) immediately
+        """
+        mock_user_no_org = MagicMock()
+        mock_user_no_org.current_org_id = None
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with patch('server.auth.saas_user_auth.UserStore') as mock_user_store:
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user_no_org)
+
+            result = await user_auth.get_max_concurrent_sandboxes()
+
+            assert result == 10
+
+    @pytest.mark.asyncio
+    async def test_returns_default_when_user_does_not_exist(self, user_id):
+        """
+        GIVEN: User does not exist in database
+        WHEN: get_max_concurrent_sandboxes is called
+        THEN: Returns the default value (10)
+        """
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with patch('server.auth.saas_user_auth.UserStore') as mock_user_store:
+            mock_user_store.get_user_by_id = AsyncMock(return_value=None)
+
+            result = await user_auth.get_max_concurrent_sandboxes()
+
+            assert result == 10
+
+    @pytest.mark.asyncio
+    async def test_returns_org_default_when_org_member_not_found(
+        self, user_id, org_id, mock_user, mock_org_with_limit
+    ):
+        """
+        GIVEN: User exists but has no org_member record
+        WHEN: get_max_concurrent_sandboxes is called
+        THEN: Falls back to org's max_concurrent_sandboxes
+        """
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            patch(
+                'storage.org_member_store.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_org_member,
+            patch(
+                'storage.org_store.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+            mock_get_org_member.return_value = None
+            mock_get_org.return_value = mock_org_with_limit
+
+            result = await user_auth.get_max_concurrent_sandboxes()
+
+            assert result == 8
+
+    @pytest.mark.asyncio
+    async def test_returns_default_when_org_not_found(
+        self, user_id, org_id, mock_user, mock_org_member_no_override
+    ):
+        """
+        GIVEN: OrgMember exists but org does not exist
+        WHEN: get_max_concurrent_sandboxes is called
+        THEN: Returns the default value (10)
+        """
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            patch(
+                'storage.org_member_store.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_org_member,
+            patch(
+                'storage.org_store.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+            mock_get_org_member.return_value = mock_org_member_no_override
+            mock_get_org.return_value = None
+
+            result = await user_auth.get_max_concurrent_sandboxes()
+
+            assert result == 10
+
+    # UNHAPPY PATH TESTS
+
+    @pytest.mark.asyncio
+    async def test_handles_database_error_gracefully(
+        self, user_id, org_id, mock_user, mock_org_member_no_override
+    ):
+        """
+        GIVEN: A database error occurs during lookup
+        WHEN: get_max_concurrent_sandboxes is called
+        THEN: Returns the default value (10) without raising
+        """
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            patch(
+                'storage.org_member_store.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_org_member,
+            patch(
+                'storage.org_store.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+            mock_get_org_member.side_effect = Exception('Database connection failed')
+            mock_get_org.return_value = mock_org_member_no_override
+
+            result = await user_auth.get_max_concurrent_sandboxes()
+
+            assert result == 10
+
+    @pytest.mark.asyncio
+    async def test_handles_org_store_error_gracefully(
+        self, user_id, org_id, mock_user, mock_org_member_no_override
+    ):
+        """
+        GIVEN: OrgStore raises an error
+        WHEN: get_max_concurrent_sandboxes is called after org_member check
+        THEN: Returns the default value (10) without raising
+        """
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            patch(
+                'storage.org_member_store.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_org_member,
+            patch(
+                'storage.org_store.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+            mock_get_org_member.return_value = mock_org_member_no_override
+            mock_get_org.side_effect = Exception('Org lookup failed')
+
+            result = await user_auth.get_max_concurrent_sandboxes()
+
+            assert result == 10
