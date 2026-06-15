@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Marketplace Settings UI Design</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'oh-bg': '#0f1114',
+            'oh-surface': '#1a1d23',
+            'oh-surface-hover': '#25272d',
+            'oh-border': '#2e333d',
+            'oh-text': '#e4e7ec',
+            'oh-text-muted': '#8b92a5',
+            'oh-accent': '#3b82f6',
+            'oh-accent-hover': '#2563eb',
+            'oh-danger': '#ef4444',
+            'oh-warning': '#f59e0b',
+            'oh-success': '#22c55e',
+            'oh-instance': '#8b5cf6',
+            'oh-org': '#06b6d4',
+            'oh-personal': '#22c55e',
+          },
+          fontFamily: {
+            'sans': ['Inter', 'system-ui', 'sans-serif'],
+            'mono': ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background-color: #0f1114; }
+    
+    .marketplace-card {
+      transition: all 0.2s ease;
+    }
+    .marketplace-card:hover {
+      background-color: #25272d;
+    }
+    
+    .scope-badge {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    
+    .toggle-switch {
+      position: relative;
+      width: 40px;
+      height: 22px;
+      background: #2e333d;
+      border-radius: 11px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .toggle-switch.active {
+      background: #22c55e;
+    }
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 18px;
+      height: 18px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    .toggle-switch.active::after {
+      transform: translateX(18px);
+    }
+    .toggle-switch.disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: 500;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    .btn-primary:hover {
+      background: #2563eb;
+    }
+    
+    .btn-ghost {
+      background: transparent;
+      color: #8b92a5;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+    .btn-ghost:hover {
+      background: rgba(255,255,255,0.1);
+      color: #e4e7ec;
+    }
+    
+    .btn-icon {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+    .btn-icon:hover {
+      background: rgba(255,255,255,0.1);
+    }
+    .btn-icon.disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+    
+    .modal-content {
+      background: #1a1d23;
+      border: 1px solid #2e333d;
+      border-radius: 12px;
+      width: 100%;
+      max-width: 480px;
+      max-height: 90vh;
+      overflow: auto;
+    }
+    
+    .input-field {
+      background: #25272d;
+      border: 1px solid #2e333d;
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: #e4e7ec;
+      font-size: 14px;
+      width: 100%;
+      transition: border-color 0.2s;
+    }
+    .input-field:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+    .input-field::placeholder {
+      color: #5a6275;
+    }
+    
+    .label-text {
+      font-size: 13px;
+      font-weight: 500;
+      color: #8b92a5;
+      margin-bottom: 6px;
+      display: block;
+    }
+    
+    .lock-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(15,17,20,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .marketplace-card:hover .lock-overlay {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body class="font-sans text-oh-text min-h-screen p-8">
+  
+  <div class="max-w-3xl mx-auto">
+    
+    <!-- Header -->
+    <div class="mb-8">
+      <h1 class="text-2xl font-semibold mb-2">Plugin Marketplaces</h1>
+      <p class="text-oh-text-muted text-sm">
+        Configure which plugin marketplaces are available. Instance and organization 
+        marketplaces are inherited and cannot be modified.
+      </p>
+    </div>
+    
+    <!-- Instance/Org Section (Read-only) -->
+    <div class="mb-6">
+      <h2 class="text-sm font-semibold text-oh-text-muted uppercase tracking-wide mb-3">
+        Inherited Marketplaces
+      </h2>
+      
+      <div class="space-y-2">
+        
+        <!-- Instance Marketplace -->
+        <div class="marketplace-card relative bg-oh-surface border border-oh-border rounded-lg p-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-md bg-oh-instance/20 flex items-center justify-center">
+                <svg class="w-4 h-4 text-oh-instance" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                </svg>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-medium">OpenHands Extensions</span>
+                  <span class="scope-badge bg-oh-instance/20 text-oh-instance">Instance</span>
+                </div>
+                <span class="text-sm text-oh-text-muted font-mono">github:OpenHands/extensions</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-4">
+              <div class="text-right">
+                <span class="text-xs text-oh-text-muted">Auto-load</span>
+                <div class="flex items-center gap-2 justify-end">
+                  <span class="text-sm text-oh-success">Enabled</span>
+                  <div class="toggle-switch disabled"></div>
+                </div>
+              </div>
+              <div class="text-oh-text-muted">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Org Marketplace -->
+        <div class="marketplace-card relative bg-oh-surface border border-oh-border rounded-lg p-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-md bg-oh-org/20 flex items-center justify-center">
+                <svg class="w-4 h-4 text-oh-org" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                </svg>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-medium">Acme Team Plugins</span>
+                  <span class="scope-badge bg-oh-org/20 text-oh-org">Organization</span>
+                </div>
+                <span class="text-sm text-oh-text-muted font-mono">github:acme-internal/plugins</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-4">
+              <div class="text-right">
+                <span class="text-xs text-oh-text-muted">Auto-load</span>
+                <div class="flex items-center gap-2 justify-end">
+                  <span class="text-sm text-oh-warning">Disabled</span>
+                  <div class="toggle-switch disabled"></div>
+                </div>
+              </div>
+              <div class="text-oh-text-muted">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+      </div>
+    </div>
+    
+    <!-- Personal Section (Editable) -->
+    <div>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-oh-text-muted uppercase tracking-wide">
+          Personal Marketplaces
+        </h2>
+        <button class="btn-primary flex items-center gap-2" onclick="openAddModal()">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          Add Marketplace
+        </button>
+      </div>
+      
+      <div class="space-y-2">
+        
+        <!-- Personal Marketplace 1 -->
+        <div class="marketplace-card bg-oh-surface border border-oh-border rounded-lg p-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-md bg-oh-personal/20 flex items-center justify-center">
+                <svg class="w-4 h-4 text-oh-personal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                </svg>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-medium">My Plugins</span>
+                  <span class="scope-badge bg-oh-personal/20 text-oh-personal">Personal</span>
+                </div>
+                <span class="text-sm text-oh-text-muted font-mono">github:myusername/plugins</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-4">
+              <div class="text-right">
+                <span class="text-xs text-oh-text-muted">Auto-load</span>
+                <div class="flex items-center gap-2 justify-end">
+                  <span class="text-sm text-oh-success">Enabled</span>
+                  <div class="toggle-switch active" onclick="toggleAutoLoad(this)"></div>
+                </div>
+              </div>
+              <div class="flex items-center gap-1">
+                <button class="btn-icon" onclick="openEditModal()">
+                  <svg class="w-4 h-4 text-oh-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                  </svg>
+                </button>
+                <button class="btn-icon" onclick="openDeleteModal()">
+                  <svg class="w-4 h-4 text-oh-text-muted hover:text-oh-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Empty State -->
+        <div id="emptyState" class="hidden bg-oh-surface border border-dashed border-oh-border rounded-lg p-8 text-center">
+          <div class="w-12 h-12 mx-auto mb-4 rounded-full bg-oh-surface-hover flex items-center justify-center">
+            <svg class="w-6 h-6 text-oh-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+            </svg>
+          </div>
+          <p class="text-oh-text-muted mb-4">No personal marketplaces configured</p>
+          <button class="btn-primary" onclick="openAddModal()">Add Your First Marketplace</button>
+        </div>
+        
+      </div>
+    </div>
+    
+  </div>
+  
+  <!-- Add/Edit Modal -->
+  <div id="addEditModal" class="modal-backdrop hidden">
+    <div class="modal-content p-6">
+      <div class="flex items-center justify-between mb-6">
+        <h3 id="modalTitle" class="text-lg font-semibold">Add Marketplace</h3>
+        <button onclick="closeAddEditModal()" class="btn-icon">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      
+      <form class="space-y-4">
+        <div>
+          <label class="label-text">Source *</label>
+          <input type="text" class="input-field" placeholder="github:owner/repo" required>
+          <p class="text-xs text-oh-text-muted mt-1">Format: github:owner/repo, git URL, or local path</p>
+        </div>
+        
+        <div>
+          <label class="label-text">Name</label>
+          <input type="text" class="input-field" placeholder="my-marketplace">
+          <p class="text-xs text-oh-text-muted mt-1">Optional. Auto-generated from source if empty.</p>
+        </div>
+        
+        <div>
+          <label class="label-text">Ref</label>
+          <input type="text" class="input-field" placeholder="main">
+          <p class="text-xs text-oh-text-muted mt-1">Optional. Branch, tag, or commit SHA.</p>
+        </div>
+        
+        <div>
+          <label class="label-text">Repo Path</label>
+          <input type="text" class="input-field" placeholder="marketplaces/my-plugins">
+          <p class="text-xs text-oh-text-muted mt-1">Optional. Subdirectory for monorepos.</p>
+        </div>
+        
+        <div class="flex items-center justify-between py-3 border-t border-oh-border">
+          <div>
+            <span class="text-sm font-medium">Auto-load</span>
+            <p class="text-xs text-oh-text-muted">Load at conversation start</p>
+          </div>
+          <div class="toggle-switch" onclick="toggleAutoLoad(this)"></div>
+        </div>
+        
+        <div class="flex gap-3 pt-4">
+          <button type="button" onclick="closeAddEditModal()" class="btn-ghost flex-1">Cancel</button>
+          <button type="submit" class="btn-primary flex-1">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  <!-- Delete Confirmation Modal -->
+  <div id="deleteModal" class="modal-backdrop hidden">
+    <div class="modal-content p-6 max-w-sm">
+      <div class="text-center">
+        <div class="w-12 h-12 mx-auto mb-4 rounded-full bg-oh-danger/20 flex items-center justify-center">
+          <svg class="w-6 h-6 text-oh-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+        </div>
+        <h3 class="text-lg font-semibold mb-2">Delete Marketplace?</h3>
+        <p class="text-oh-text-muted text-sm mb-6">This will remove "My Plugins" from your personal marketplaces. This action cannot be undone.</p>
+        
+        <div class="flex gap-3">
+          <button onclick="closeDeleteModal()" class="btn-ghost flex-1">Cancel</button>
+          <button onclick="confirmDelete()" class="flex-1 bg-oh-danger hover:bg-red-600 text-white py-2 px-4 rounded-md font-medium transition-colors">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    function toggleAutoLoad(el) {
+      if (el.classList.contains('disabled')) return;
+      el.classList.toggle('active');
+      const label = el.parentElement.querySelector('span');
+      label.textContent = el.classList.contains('active') ? 'Enabled' : 'Disabled';
+      label.className = 'text-sm ' + (el.classList.contains('active') ? 'text-oh-success' : 'text-oh-warning');
+    }
+    
+    function openAddModal() {
+      document.getElementById('modalTitle').textContent = 'Add Marketplace';
+      document.getElementById('addEditModal').classList.remove('hidden');
+    }
+    
+    function openEditModal() {
+      document.getElementById('modalTitle').textContent = 'Edit Marketplace';
+      document.getElementById('addEditModal').classList.remove('hidden');
+    }
+    
+    function closeAddEditModal() {
+      document.getElementById('addEditModal').classList.add('hidden');
+    }
+    
+    function openDeleteModal() {
+      document.getElementById('deleteModal').classList.remove('hidden');
+    }
+    
+    function closeDeleteModal() {
+      document.getElementById('deleteModal').classList.add('hidden');
+    }
+    
+    function confirmDelete() {
+      closeDeleteModal();
+      // Delete logic here
+    }
+    
+    // Close modals on backdrop click
+    document.querySelectorAll('.modal-backdrop').forEach(modal => {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.classList.add('hidden');
+        }
+      });
+    });
+  </script>
+  
+</body>
+</html>
