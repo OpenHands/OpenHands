@@ -1874,6 +1874,97 @@ async def test_update_org_with_permissions_only_non_llm_fields(
 
 
 @pytest.mark.asyncio
+async def test_check_byor_export_enabled_returns_true_for_self_hosted():
+    user_id = 'test-user-123'
+
+    with (
+        patch('storage.org_service.DEPLOYMENT_MODE', 'self_hosted'),
+        patch(
+            'storage.org_service.UserStore.get_user_by_id',
+            new_callable=AsyncMock,
+        ) as mock_get_user,
+        patch(
+            'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+        ) as mock_get_org,
+        patch(
+            'storage.org_service.OrgService.get_org_credits',
+            new_callable=AsyncMock,
+        ) as mock_get_credits,
+        patch(
+            'storage.org_service.OrgStore.enable_byor_export',
+            new_callable=AsyncMock,
+        ) as mock_enable_byor_export,
+    ):
+        result = await OrgService.check_byor_export_enabled(user_id)
+
+        assert result is True
+        mock_get_user.assert_not_called()
+        mock_get_org.assert_not_called()
+        mock_get_credits.assert_not_called()
+        mock_enable_byor_export.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_check_byor_export_enabled_returns_true_for_self_hosted_with_org_id():
+    user_id = 'test-user-123'
+    org_id = uuid.uuid4()
+
+    with (
+        patch('storage.org_service.DEPLOYMENT_MODE', 'self_hosted'),
+        patch(
+            'storage.org_service.UserStore.get_user_by_id',
+            new_callable=AsyncMock,
+        ) as mock_get_user,
+        patch(
+            'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+        ) as mock_get_org,
+        patch(
+            'storage.org_service.OrgService.get_org_credits',
+            new_callable=AsyncMock,
+        ) as mock_get_credits,
+        patch(
+            'storage.org_service.OrgStore.enable_byor_export',
+            new_callable=AsyncMock,
+        ) as mock_enable_byor_export,
+    ):
+        result = await OrgService.check_byor_export_enabled(user_id, org_id)
+
+        assert result is True
+        mock_get_user.assert_not_called()
+        mock_get_org.assert_not_called()
+        mock_get_credits.assert_not_called()
+        mock_enable_byor_export.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_check_byor_export_enabled_uses_existing_gate_for_cloud():
+    user_id = 'test-user-123'
+    org_id = uuid.uuid4()
+
+    mock_user = MagicMock()
+    mock_user.current_org_id = org_id
+
+    with (
+        patch('storage.org_service.DEPLOYMENT_MODE', 'cloud'),
+        patch(
+            'storage.org_service.UserStore.get_user_by_id',
+            AsyncMock(return_value=mock_user),
+        ) as mock_get_user,
+        patch(
+            'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+    ):
+        result = await OrgService.check_byor_export_enabled(user_id)
+
+        assert result is False
+        mock_get_user.assert_awaited_once_with(user_id)
+
+
+@pytest.mark.asyncio
 async def test_check_byor_export_enabled_returns_true_when_enabled():
     """
     GIVEN: User has current_org with byor_export_enabled=True
