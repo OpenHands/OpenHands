@@ -7,6 +7,26 @@ from fastapi import Depends, HTTPException, Request, status
 from openhands.app_server.user_auth import get_user_auth, get_user_id
 from openhands.app_server.utils.logger import openhands_logger as logger
 
+# Email domain for OpenHands team members
+OPENHANDS_EMAIL_DOMAIN = '@openhands.dev'
+
+
+async def is_openhands_member(request: Request) -> bool:
+    """Check if the current user has an @openhands.dev email.
+
+    This is a generic helper function that can be used anywhere in the codebase
+    to check if the current user is an OpenHands team member.
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        bool: True if user has @openhands.dev email, False otherwise
+    """
+    user_auth = await get_user_auth(request)
+    email = await user_auth.get_user_email()
+    return email is not None and email.endswith(OPENHANDS_EMAIL_DOMAIN)
+
 
 async def get_admin_user_id(
     request: Request, user_id: str | None = Depends(get_user_id)
@@ -55,7 +75,7 @@ async def get_admin_user_id(
             detail='User email not available',
         )
 
-    if not user_email.endswith('@openhands.dev'):
+    if not user_email.endswith(OPENHANDS_EMAIL_DOMAIN):
         logger.warning(
             'Access denied - invalid email domain',
             extra={'user_id': user_id, 'email_domain': user_email.split('@')[-1]},

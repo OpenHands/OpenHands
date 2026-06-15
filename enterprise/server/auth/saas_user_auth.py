@@ -580,6 +580,45 @@ class SaasUserAuth(UserAuth):
             logger.error(f'Error fetching org info for user {self.user_id}: {e}')
             return None
 
+    async def get_max_concurrent_sandboxes(self, default: int = 10) -> int:
+        """Get the user's maximum concurrent sandboxes limit.
+
+        Resolution order:
+        1. OrgMember.max_concurrent_sandboxes_override (if not NULL)
+        2. Org.max_concurrent_sandboxes (org default)
+        3. The provided default value
+
+        Args:
+            default: The fallback limit if no user/org-specific limit is set.
+
+        Returns:
+            The effective maximum number of concurrent sandboxes allowed.
+        """
+        from storage.org_member_store import OrgMemberStore
+
+        try:
+            # Get user to find their current org
+            user = await UserStore.get_user_by_id(self.user_id)
+            if not user or not user.current_org_id:
+                return default
+
+            org_id = user.current_org_id
+
+            # Check for user-specific override in OrgMember
+            org_member = await OrgMemberStore.get_org_member(org_id, UUID(self.user_id))
+            if org_member and org_member.max_concurrent_sandboxes_override is not None:
+                return org_member.max_concurrent_sandboxes_override
+
+            # Fall back to org default
+            org = await OrgStore.get_org_by_id(org_id)
+            if org and org.max_concurrent_sandboxes is not None:
+                return org.max_concurrent_sandboxes
+
+        except Exception as e:
+            logger.warning(f'Failed to get user sandbox limit: {e}')
+
+        return default
+
     @classmethod
     async def get_instance(cls, request: Request) -> UserAuth:
         logger.debug('saas_user_auth_get_instance')

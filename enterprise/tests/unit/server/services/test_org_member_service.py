@@ -5,8 +5,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import SecretStr
+from server.constants import DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES
 from server.routes.org_models import (
     CannotModifySelfError,
+    InsufficientPermissionError,
     InvalidRoleError,
     LastOwnerError,
     MeResponse,
@@ -109,6 +111,14 @@ def target_membership_admin(org_id, target_user_id, admin_role):
     return membership
 
 
+@pytest.fixture
+def mock_org():
+    """Create a mock organization with default max_concurrent_sandboxes."""
+    org = MagicMock()
+    org.max_concurrent_sandboxes = DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES
+    return org
+
+
 class TestOrgMemberServiceGetOrgMembers:
     """Test cases for OrgMemberService.get_org_members."""
 
@@ -142,7 +152,12 @@ class TestOrgMemberServiceGetOrgMembers:
 
     @pytest.mark.asyncio
     async def test_get_members_succeeds_returns_paginated_data(
-        self, org_id, current_user_id, mock_org_member, requester_membership_owner
+        self,
+        org_id,
+        current_user_id,
+        mock_org_member,
+        requester_membership_owner,
+        mock_org,
     ):
         """Test that successful retrieval returns paginated member data."""
         # Arrange
@@ -157,9 +172,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([mock_org_member], False)
+            mock_get_org.return_value = mock_org
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -259,7 +279,12 @@ class TestOrgMemberServiceGetOrgMembers:
 
     @pytest.mark.asyncio
     async def test_first_page_pagination_no_page_id(
-        self, org_id, current_user_id, mock_org_member, requester_membership_owner
+        self,
+        org_id,
+        current_user_id,
+        mock_org_member,
+        requester_membership_owner,
+        mock_org,
     ):
         """Test first page pagination when page_id is None."""
         # Arrange
@@ -272,9 +297,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([mock_org_member], False)
+            mock_get_org.return_value = mock_org
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -294,7 +324,12 @@ class TestOrgMemberServiceGetOrgMembers:
 
     @pytest.mark.asyncio
     async def test_next_page_pagination_with_page_id(
-        self, org_id, current_user_id, mock_org_member, requester_membership_owner
+        self,
+        org_id,
+        current_user_id,
+        mock_org_member,
+        requester_membership_owner,
+        mock_org,
     ):
         """Test next page pagination when page_id is provided."""
         # Arrange
@@ -307,9 +342,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([mock_org_member], True)
+            mock_get_org.return_value = mock_org
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -329,7 +369,12 @@ class TestOrgMemberServiceGetOrgMembers:
 
     @pytest.mark.asyncio
     async def test_last_page_has_more_false(
-        self, org_id, current_user_id, mock_org_member, requester_membership_owner
+        self,
+        org_id,
+        current_user_id,
+        mock_org_member,
+        requester_membership_owner,
+        mock_org,
     ):
         """Test last page when has_more is False."""
         # Arrange
@@ -342,9 +387,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([mock_org_member], False)
+            mock_get_org.return_value = mock_org
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -361,7 +411,7 @@ class TestOrgMemberServiceGetOrgMembers:
 
     @pytest.mark.asyncio
     async def test_empty_organization_no_members(
-        self, org_id, current_user_id, requester_membership_owner
+        self, org_id, current_user_id, requester_membership_owner, mock_org
     ):
         """Test empty organization with no members."""
         # Arrange
@@ -374,9 +424,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([], False)
+            mock_get_org.return_value = mock_org
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -393,7 +448,7 @@ class TestOrgMemberServiceGetOrgMembers:
 
     @pytest.mark.asyncio
     async def test_missing_user_relationship_handles_gracefully(
-        self, org_id, current_user_id, mock_role, requester_membership_owner
+        self, org_id, current_user_id, mock_role, requester_membership_owner, mock_org
     ):
         """Test that missing user relationship is handled gracefully."""
         # Arrange
@@ -414,9 +469,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([member_no_user], False)
+            mock_get_org.return_value = mock_org
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -434,7 +494,7 @@ class TestOrgMemberServiceGetOrgMembers:
 
     @pytest.mark.asyncio
     async def test_missing_role_relationship_handles_gracefully(
-        self, org_id, current_user_id, mock_user, requester_membership_owner
+        self, org_id, current_user_id, mock_user, requester_membership_owner, mock_org
     ):
         """Test that missing role relationship is handled gracefully."""
         # Arrange
@@ -455,9 +515,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([member_no_role], False)
+            mock_get_org.return_value = mock_org
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -476,7 +541,13 @@ class TestOrgMemberServiceGetOrgMembers:
 
     @pytest.mark.asyncio
     async def test_multiple_members_returns_all(
-        self, org_id, current_user_id, mock_user, mock_role, requester_membership_owner
+        self,
+        org_id,
+        current_user_id,
+        mock_user,
+        mock_role,
+        requester_membership_owner,
+        mock_org,
     ):
         """Test that multiple members are returned correctly."""
         # Arrange
@@ -505,9 +576,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([member1, member2], False)
+            mock_get_org.return_value = mock_org
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -524,7 +600,12 @@ class TestOrgMemberServiceGetOrgMembers:
 
     @pytest.mark.asyncio
     async def test_email_filter_passed_to_store(
-        self, org_id, current_user_id, mock_org_member, requester_membership_owner
+        self,
+        org_id,
+        current_user_id,
+        mock_org_member,
+        requester_membership_owner,
+        mock_org,
     ):
         """Test that email filter is passed to store methods."""
         # Arrange
@@ -537,9 +618,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([mock_org_member], False)
+            mock_get_org.return_value = mock_org
 
             # Act
             await OrgMemberService.get_org_members(
@@ -557,7 +643,12 @@ class TestOrgMemberServiceGetOrgMembers:
 
     @pytest.mark.asyncio
     async def test_pagination_metadata_correct_for_page_2(
-        self, org_id, current_user_id, mock_org_member, requester_membership_owner
+        self,
+        org_id,
+        current_user_id,
+        mock_org_member,
+        requester_membership_owner,
+        mock_org,
     ):
         """Test pagination metadata is correct for page 2."""
         # Arrange
@@ -570,9 +661,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([mock_org_member], True)
+            mock_get_org.return_value = mock_org
 
             # Act - Request page 2 (offset 10) with limit 10
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -1610,6 +1706,7 @@ class TestOrgMemberServiceUpdateOrgMember:
         owner_role,
         member_role,
         admin_role,
+        mock_org,
     ):
         """GIVEN owner and target user WHEN owner sets target role to admin THEN update succeeds and returns OrgMemberResponse."""
         # Arrange
@@ -1640,6 +1737,10 @@ class TestOrgMemberServiceUpdateOrgMember:
                 'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.side_effect = [
                 requester_membership_owner,
@@ -1649,6 +1750,7 @@ class TestOrgMemberServiceUpdateOrgMember:
             mock_get_role_by_name.return_value = admin_role
             mock_update.return_value = updated_member
             mock_get_user.return_value = mock_user
+            mock_get_org.return_value = mock_org
 
             # Act
             data = await OrgMemberService.update_org_member(
@@ -1671,6 +1773,7 @@ class TestOrgMemberServiceUpdateOrgMember:
         target_membership_user,
         admin_role,
         member_role,
+        mock_org,
     ):
         """GIVEN admin and target user WHEN admin sets target role to admin THEN update succeeds."""
         # Arrange
@@ -1701,6 +1804,10 @@ class TestOrgMemberServiceUpdateOrgMember:
                 'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.side_effect = [
                 requester_membership_admin,
@@ -1710,6 +1817,7 @@ class TestOrgMemberServiceUpdateOrgMember:
             mock_get_role_by_name.return_value = admin_role
             mock_update.return_value = updated_member
             mock_get_user.return_value = mock_user
+            mock_get_org.return_value = mock_org
 
             # Act
             data = await OrgMemberService.update_org_member(
@@ -1730,6 +1838,7 @@ class TestOrgMemberServiceUpdateOrgMember:
         target_membership_admin,
         admin_role,
         member_role,
+        mock_org,
     ):
         """GIVEN admin and target admin WHEN admin changes target role to member THEN update succeeds."""
         # Arrange
@@ -1760,6 +1869,10 @@ class TestOrgMemberServiceUpdateOrgMember:
                 'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.side_effect = [
                 requester_membership_admin,
@@ -1769,6 +1882,7 @@ class TestOrgMemberServiceUpdateOrgMember:
             mock_get_role_by_name.return_value = member_role
             mock_update.return_value = updated_member
             mock_get_user.return_value = mock_user
+            mock_get_org.return_value = mock_org
 
             # Act
             data = await OrgMemberService.update_org_member(
@@ -1793,6 +1907,7 @@ class TestOrgMemberServiceUpdateOrgMember:
         target_membership_owner,
         owner_role,
         admin_role,
+        mock_org,
     ):
         """GIVEN owner and target owner WHEN owner changes target role to admin THEN update succeeds."""
         # Arrange
@@ -1823,6 +1938,10 @@ class TestOrgMemberServiceUpdateOrgMember:
                 'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
             patch.object(
                 OrgMemberService,
                 '_is_last_owner',
@@ -1838,6 +1957,7 @@ class TestOrgMemberServiceUpdateOrgMember:
             mock_get_role_by_name.return_value = admin_role
             mock_update.return_value = updated_member
             mock_get_user.return_value = mock_user
+            mock_get_org.return_value = mock_org
 
             # Act
             data = await OrgMemberService.update_org_member(
@@ -1930,6 +2050,7 @@ class TestOrgMemberServiceUpdateOrgMember:
         target_membership_user,
         owner_role,
         member_role,
+        mock_org,
     ):
         """GIVEN unknown role name WHEN update_org_member THEN raises InvalidRoleError."""
         # Arrange
@@ -1946,6 +2067,10 @@ class TestOrgMemberServiceUpdateOrgMember:
                 'server.services.org_member_service.RoleStore.get_role_by_name',
                 new_callable=AsyncMock,
             ) as mock_get_role_by_name,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.side_effect = [
                 requester_membership_owner,
@@ -1953,6 +2078,7 @@ class TestOrgMemberServiceUpdateOrgMember:
             ]
             mock_get_role.side_effect = [owner_role, member_role]
             mock_get_role_by_name.return_value = None
+            mock_get_org.return_value = mock_org
 
             # Act & Assert
             with pytest.raises(InvalidRoleError):
@@ -1973,6 +2099,7 @@ class TestOrgMemberServiceUpdateOrgMember:
         target_membership_owner,
         owner_role,
         admin_role,
+        mock_org,
     ):
         """GIVEN last owner would be demoted WHEN update_org_member THEN raises LastOwnerError."""
         # Arrange: patch _can_update_member_role so we reach the last-owner check (owner cannot normally modify owner)
@@ -1990,6 +2117,10 @@ class TestOrgMemberServiceUpdateOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_role_by_name,
             patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+            patch(
                 'server.services.org_member_service.OrgMemberService._can_update_member_role'
             ) as mock_can_update,
             patch(
@@ -2003,6 +2134,7 @@ class TestOrgMemberServiceUpdateOrgMember:
             ]
             mock_get_role.side_effect = [owner_role, owner_role]
             mock_get_role_by_name.return_value = admin_role
+            mock_get_org.return_value = mock_org
             mock_can_update.return_value = True
             mock_is_last_owner.return_value = True
 
@@ -2025,6 +2157,7 @@ class TestOrgMemberServiceUpdateOrgMember:
         target_membership_user,
         owner_role,
         member_role,
+        mock_org,
     ):
         """GIVEN update with no role WHEN update_org_member THEN returns current member without changing role."""
         # Arrange
@@ -2044,6 +2177,10 @@ class TestOrgMemberServiceUpdateOrgMember:
                 'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.side_effect = [
                 requester_membership_owner,
@@ -2051,6 +2188,7 @@ class TestOrgMemberServiceUpdateOrgMember:
             ]
             mock_get_role.side_effect = [owner_role, member_role]
             mock_get_user.return_value = mock_user
+            mock_get_org.return_value = mock_org
 
             # Act
             data = await OrgMemberService.update_org_member(
@@ -2246,7 +2384,7 @@ class TestOrgMemberServiceGetMe:
 
     @pytest.mark.asyncio
     async def test_get_me_success_returns_me_response(
-        self, org_id, current_user_id, mock_org_member, mock_user, owner_role
+        self, org_id, current_user_id, mock_org_member, mock_user, owner_role, mock_org
     ):
         """GIVEN: User is a member of the organization
         WHEN: get_me is called
@@ -2266,10 +2404,15 @@ class TestOrgMemberServiceGetMe:
                 'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.return_value = mock_org_member
             mock_get_role.return_value = owner_role
             mock_get_user.return_value = mock_user
+            mock_get_org.return_value = mock_org
 
             # Act
             result = await OrgMemberService.get_me(org_id, current_user_id)
@@ -2333,7 +2476,7 @@ class TestOrgMemberServiceGetMe:
 
     @pytest.mark.asyncio
     async def test_get_me_user_not_found_returns_empty_email(
-        self, org_id, current_user_id, mock_org_member, owner_role
+        self, org_id, current_user_id, mock_org_member, owner_role, mock_org
     ):
         """GIVEN: Member exists but user lookup returns None
         WHEN: get_me is called
@@ -2353,13 +2496,417 @@ class TestOrgMemberServiceGetMe:
                 'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
         ):
             mock_get_member.return_value = mock_org_member
             mock_get_role.return_value = owner_role
             mock_get_user.return_value = None
+            mock_get_org.return_value = mock_org
 
             # Act
             result = await OrgMemberService.get_me(org_id, current_user_id)
 
             # Assert
             assert result.email == ''
+
+
+class TestOrgMemberServiceConcurrencyLimits:
+    """Test cases for OrgMemberService concurrency limits functionality.
+
+    Tests the max_concurrent_sandboxes feature including:
+    - MeResponse including effective_max_concurrent_sandboxes
+    - OrgMemberResponse including effective_max_concurrent_sandboxes
+    - OrgMemberUpdate handling max_concurrent_sandboxes_override
+    - Limit resolution order: member override → org default → global fallback
+    """
+
+    @pytest.fixture
+    def mock_org(self, org_id):
+        """Create a mock organization with max_concurrent_sandboxes."""
+        from storage.org import Org
+
+        org = MagicMock(spec=Org)
+        org.id = org_id
+        org.max_concurrent_sandboxes = 5
+        return org
+
+    @pytest.fixture
+    def mock_org_member_with_override(self, org_id, current_user_id):
+        """Create a mock OrgMember with max_concurrent_sandboxes_override."""
+        member = MagicMock(spec=OrgMember)
+        member.org_id = org_id
+        member.user_id = current_user_id
+        member.role_id = 1
+        member.llm_api_key = SecretStr('sk-test-key-12345')
+        member.llm_api_key_for_byor = None
+        member.agent_settings_diff = {}
+        member.conversation_settings_diff = {}
+        member.status = 'active'
+        member.max_concurrent_sandboxes_override = 10
+        return member
+
+    @pytest.fixture
+    def mock_org_member_no_override(self, org_id, current_user_id):
+        """Create a mock OrgMember without max_concurrent_sandboxes_override."""
+        member = MagicMock(spec=OrgMember)
+        member.org_id = org_id
+        member.user_id = current_user_id
+        member.role_id = 1
+        member.llm_api_key = SecretStr('sk-test-key-12345')
+        member.llm_api_key_for_byor = None
+        member.agent_settings_diff = {}
+        member.conversation_settings_diff = {}
+        member.status = 'active'
+        member.max_concurrent_sandboxes_override = None
+        return member
+
+    @pytest.fixture
+    def mock_user(self, current_user_id):
+        """Create a mock User."""
+        user = MagicMock(spec=User)
+        user.id = current_user_id
+        user.email = 'test@example.com'
+        return user
+
+    @pytest.mark.asyncio
+    async def test_get_me_with_member_override_returns_override_as_effective(
+        self,
+        org_id,
+        current_user_id,
+        mock_org_member_with_override,
+        mock_user,
+        mock_org,
+        owner_role,
+    ):
+        """GIVEN: Member has max_concurrent_sandboxes_override set
+        WHEN: get_me is called
+        THEN: effective_max_concurrent_sandboxes equals member override
+        """
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_user,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+        ):
+            mock_get_member.return_value = mock_org_member_with_override
+            mock_get_role.return_value = owner_role
+            mock_get_user.return_value = mock_user
+            mock_get_org.return_value = mock_org
+
+            result = await OrgMemberService.get_me(org_id, current_user_id)
+
+            assert isinstance(result, MeResponse)
+            assert result.max_concurrent_sandboxes_override == 10
+            assert result.effective_max_concurrent_sandboxes == 10
+
+    @pytest.mark.asyncio
+    async def test_get_me_without_member_override_uses_org_default(
+        self,
+        org_id,
+        current_user_id,
+        mock_org_member_no_override,
+        mock_user,
+        mock_org,
+        owner_role,
+    ):
+        """GIVEN: Member has no max_concurrent_sandboxes_override
+        WHEN: get_me is called
+        THEN: effective_max_concurrent_sandboxes equals org default
+        """
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_user,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+        ):
+            mock_get_member.return_value = mock_org_member_no_override
+            mock_get_role.return_value = owner_role
+            mock_get_user.return_value = mock_user
+            mock_get_org.return_value = mock_org
+
+            result = await OrgMemberService.get_me(org_id, current_user_id)
+
+            assert isinstance(result, MeResponse)
+            assert result.max_concurrent_sandboxes_override is None
+            assert result.effective_max_concurrent_sandboxes == 5  # org default
+
+    @pytest.mark.asyncio
+    async def test_get_me_without_org_uses_fallback(
+        self,
+        org_id,
+        current_user_id,
+        mock_org_member_no_override,
+        mock_user,
+        owner_role,
+    ):
+        """GIVEN: Org lookup returns None
+        WHEN: get_me is called
+        THEN: effective_max_concurrent_sandboxes uses fallback (3)
+        """
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_user,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+        ):
+            mock_get_member.return_value = mock_org_member_no_override
+            mock_get_role.return_value = owner_role
+            mock_get_user.return_value = mock_user
+            mock_get_org.return_value = None
+
+            result = await OrgMemberService.get_me(org_id, current_user_id)
+
+            assert result.max_concurrent_sandboxes_override is None
+            # fallback to personal org default when org is None
+            assert (
+                result.effective_max_concurrent_sandboxes
+                == DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_org_members_returns_effective_limits(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        mock_org,
+        owner_role,
+        member_role,
+    ):
+        """GIVEN: Org with members having different override settings
+        WHEN: get_org_members is called
+        THEN: Each member has correct effective_max_concurrent_sandboxes
+        """
+        # Create mock members with different override settings
+        mock_member_with_override = MagicMock(spec=OrgMember)
+        mock_member_with_override.org_id = org_id
+        mock_member_with_override.user_id = target_user_id
+        mock_member_with_override.role_id = member_role.id
+        mock_member_with_override.status = 'active'
+        mock_member_with_override.max_concurrent_sandboxes_override = 15
+        mock_member_with_override.user = MagicMock()
+        mock_member_with_override.user.email = 'user@example.com'
+        mock_member_with_override.role = member_role
+
+        mock_member_no_override = MagicMock(spec=OrgMember)
+        mock_member_no_override.org_id = org_id
+        mock_member_no_override.user_id = current_user_id
+        mock_member_no_override.role_id = owner_role.id
+        mock_member_no_override.status = 'active'
+        mock_member_no_override.max_concurrent_sandboxes_override = None
+        mock_member_no_override.user = MagicMock()
+        mock_member_no_override.user.email = 'owner@example.com'
+        mock_member_no_override.role = owner_role
+
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
+                new_callable=AsyncMock,
+            ) as mock_get_paginated,
+        ):
+            mock_get_member.return_value = mock_member_no_override
+            mock_get_org.return_value = mock_org
+            mock_get_paginated.return_value = (
+                [mock_member_with_override, mock_member_no_override],
+                False,
+            )
+
+            success, error_code, data = await OrgMemberService.get_org_members(
+                org_id=org_id,
+                current_user_id=current_user_id,
+                page_id=None,
+                limit=10,
+            )
+
+            assert success is True
+            assert error_code is None
+            assert data is not None
+            assert len(data.items) == 2
+
+            # Member with override
+            member_with_override = data.items[0]
+            assert member_with_override.max_concurrent_sandboxes_override == 15
+            assert member_with_override.effective_max_concurrent_sandboxes == 15
+
+            # Member without override (uses org default)
+            member_no_override = data.items[1]
+            assert member_no_override.max_concurrent_sandboxes_override is None
+            assert member_no_override.effective_max_concurrent_sandboxes == 5
+
+    @pytest.mark.asyncio
+    async def test_update_org_member_owner_can_update_sandbox_override(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        owner_role,
+        member_role,
+        mock_org,
+    ):
+        """GIVEN: Requester is owner
+        WHEN: update_org_member is called with max_concurrent_sandboxes_override
+        THEN: Override is updated successfully
+        """
+        requester_membership = MagicMock(spec=OrgMember)
+        requester_membership.org_id = org_id
+        requester_membership.user_id = current_user_id
+        requester_membership.role_id = owner_role.id
+
+        target_membership = MagicMock(spec=OrgMember)
+        target_membership.org_id = org_id
+        target_membership.user_id = target_user_id
+        target_membership.role_id = member_role.id
+        target_membership.status = 'active'
+        target_membership.max_concurrent_sandboxes_override = None
+
+        mock_user = MagicMock(spec=User)
+        mock_user.id = target_user_id
+        mock_user.email = 'target@example.com'
+
+        update_data = OrgMemberUpdate(max_concurrent_sandboxes_override=20)
+
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.update_org_member',
+                new_callable=AsyncMock,
+            ) as mock_update_member,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_user,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership,
+                target_membership,
+            ]
+            mock_get_role.side_effect = [owner_role, member_role]
+            mock_get_org.return_value = mock_org
+            mock_get_user.return_value = mock_user
+
+            result = await OrgMemberService.update_org_member(
+                org_id=org_id,
+                target_user_id=target_user_id,
+                current_user_id=current_user_id,
+                update_data=update_data,
+            )
+
+            assert isinstance(result, OrgMemberResponse)
+            mock_update_member.assert_called_once()
+            assert target_membership.max_concurrent_sandboxes_override == 20
+
+    @pytest.mark.asyncio
+    async def test_update_org_member_member_cannot_update_sandbox_override(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        member_role,
+        mock_org,
+    ):
+        """GIVEN: Requester is regular member
+        WHEN: update_org_member is called with max_concurrent_sandboxes_override
+        THEN: Raises InsufficientPermissionError
+        """
+        requester_membership = MagicMock(spec=OrgMember)
+        requester_membership.org_id = org_id
+        requester_membership.user_id = current_user_id
+        requester_membership.role_id = member_role.id
+
+        target_membership = MagicMock(spec=OrgMember)
+        target_membership.org_id = org_id
+        target_membership.user_id = target_user_id
+        target_membership.role_id = member_role.id
+        target_membership.status = 'active'
+        target_membership.max_concurrent_sandboxes_override = None
+
+        update_data = OrgMemberUpdate(max_concurrent_sandboxes_override=20)
+
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.OrgStore.get_org_by_id',
+                new_callable=AsyncMock,
+            ) as mock_get_org,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership,
+                target_membership,
+            ]
+            mock_get_role.side_effect = [member_role, member_role]
+            mock_get_org.return_value = mock_org
+
+            with pytest.raises(InsufficientPermissionError) as exc_info:
+                await OrgMemberService.update_org_member(
+                    org_id=org_id,
+                    target_user_id=target_user_id,
+                    current_user_id=current_user_id,
+                    update_data=update_data,
+                )
+
+            assert 'sandbox limits' in str(exc_info.value)

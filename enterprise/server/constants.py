@@ -51,6 +51,12 @@ ROLE_OWNER = 'owner'
 ROLE_ADMIN = 'admin'
 ROLE_MEMBER = 'member'
 
+# Concurrent sandbox limits
+# Personal orgs (org.id == user.id) get a lower limit
+DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES = 3
+# Commercial orgs get a higher limit
+DEFAULT_COMMERCIAL_ORG_CONCURRENT_SANDBOXES = 10
+
 # Deprecated - billing margins are now handled internally in litellm
 DEFAULT_BILLING_MARGIN = float(os.environ.get('DEFAULT_BILLING_MARGIN', '1.0'))
 
