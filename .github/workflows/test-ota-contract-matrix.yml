@@ -61,23 +61,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Python 3.12
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-
-      - name: Setup Node.js 22
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-
-      - name: Install Poetry
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install poetry==2.3.4
-          poetry --version
-
       - name: Install netcat on Ubuntu
         if: matrix.os == 'ubuntu-latest'
         shell: bash
@@ -201,12 +184,6 @@ jobs:
           ota run lint:backend --native --stream .
           ota run lint:frontend --native --stream .
           ota run test:backend --native --stream .
-
-      - name: Setup Bun (native pressure lane)
-        if: ${{ matrix.full_proof && matrix.name == 'ubuntu-bash' }}
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version-file: openhands-ui/.bun-version
 
       - name: Dry-run all non-internal tasks (native coverage lane)
         if: ${{ matrix.full_proof }}
