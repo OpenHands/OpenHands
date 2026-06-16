@@ -14,10 +14,12 @@ from pydantic import SecretStr
 from openhands import tools  # type: ignore[attr-defined]
 from openhands.agent_server.models import ConversationInfo, Success
 from openhands.analytics import get_analytics_service, resolve_analytics_context
+from openhands.app_server import shared
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
+    ACP_SERVER_TAG_KEY,
     AppConversationInfo,
     ConversationTrigger,
 )
@@ -52,6 +54,7 @@ from openhands.app_server.user_auth.user_auth import (
 )
 from openhands.sdk import ConversationExecutionStatus, Event
 from openhands.sdk.event import ConversationStateUpdateEvent, ObservationEvent
+from openhands.sdk.settings import ACPAgentSettings
 from openhands.sdk.tool.builtins import SwitchLLMObservation
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
@@ -296,6 +299,30 @@ async def valid_conversation(
     return app_conversation_info
 
 
+async def _resolve_acp_server_key(user_id: str | None) -> str | None:
+    """Re-derive the ACP provider key ('claude-code', 'codex', …) from the
+    owning user's saved agent settings.
+
+    The agent-server webhook payload and tags don't carry this key — it's an
+    app-server concept stamped onto the conversation at create-time. Because
+    this webhook can race conversation creation and observe a freshly-created
+    stub (with no tags yet), trusting ``existing.tags`` alone would drop the
+    provider brand from the conversation chip. Re-deriving from the
+    authoritative settings keeps it stable regardless of write ordering.
+    """
+    try:
+        settings_store = await shared.SettingsStoreImpl.get_instance(user_id)
+        settings = await settings_store.load() if settings_store else None
+        agent_settings = getattr(settings, 'agent_settings', None)
+        if isinstance(agent_settings, ACPAgentSettings):
+            return agent_settings.acp_server
+    except Exception:
+        _logger.warning(
+            'Failed to resolve ACP server key for user %s', user_id, exc_info=True
+        )
+    return None
+
+
 @router.post('/conversations')
 async def on_conversation_update(
     conversation_info: ConversationInfo,
@@ -341,7 +368,20 @@ async def on_conversation_update(
     agent = conversation_info.agent
     if agent.agent_kind == 'acp':
         agent_kind = 'acp'
-        llm_model = None
+        # The ACP agent payload carries ``acp_model`` (the model the chip
+        # displays); prefer it and fall back to whatever was already stored.
+        # Never force ``None`` — this webhook can race conversation creation
+        # and would otherwise wipe the model the app-server just persisted.
+        llm_model = getattr(agent, 'acp_model', None) or existing.llm_model
+        # The provider key isn't on the payload or the merged tags when this
+        # webhook beats creation and ``existing`` is a stub. Re-derive it from
+        # the owning user's settings so the provider brand survives on the chip.
+        if ACP_SERVER_TAG_KEY not in merged_tags:
+            acp_server_key = await _resolve_acp_server_key(
+                sandbox_record.created_by_user_id
+            )
+            if acp_server_key:
+                merged_tags[ACP_SERVER_TAG_KEY] = acp_server_key
     else:
         # ``AgentBase.llm: LLM`` is non-optional on both arms of the union.
         agent_kind = 'openhands'
