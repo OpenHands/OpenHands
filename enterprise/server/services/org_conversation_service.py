@@ -1,0 +1,621 @@
+"""Service class for organization conversation listing.
+
+Separates business logic from route handlers.
+Uses dependency injection for db_session and sandbox_service.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import AsyncGenerator
+from uuid import UUID
+
+from fastapi import Request
+from sqlalchemy import func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from openhands.app_server.sandbox.sandbox_models import AGENT_SERVER, SandboxInfo
+from openhands.app_server.services.injector import Injector, InjectorState
+from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk.llm import MetricsSnapshot, TokenUsage
+from server.routes.org_models import (
+    OrgConversationPage,
+    OrgConversationResponse,
+)
+from storage.stored_conversation_metadata import StoredConversationMetadata
+from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
+from storage.user import User
+
+
+# Valid sort fields
+VALID_SORT_FIELDS = {
+    'created_at': StoredConversationMetadata.created_at,
+    'updated_at': StoredConversationMetadata.last_updated_at,
+    'llm_model': StoredConversationMetadata.llm_model,
+    'accumulated_cost': StoredConversationMetadata.accumulated_cost,
+    'title': StoredConversationMetadata.title,
+}
+
+# Time window options (in days)
+TIME_WINDOW_OPTIONS = {
+    '7d': 7,
+    '30d': 30,
+    '90d': 90,
+}
+
+
+@dataclass
+class OrgConversationService:
+    """Service for organization conversations with injected dependencies."""
+
+    db_session: AsyncSession
+    sandbox_service = None  # Optional: SandboxService for live status
+
+    def set_sandbox_service(self, sandbox_service):
+        """Set the sandbox service for live status fetching."""
+        self.sandbox_service = sandbox_service
+
+    async def list_org_conversations(
+        self,
+        org_id: UUID,
+        search: str | None = None,
+        sort_by: str = 'updated_at',
+        sort_order: str = 'desc',
+        execution_status: list[str] | None = None,
+        sandbox_status: list[str] | None = None,
+        time_window: str | None = None,
+        page: int = 1,
+        per_page: int = 20,
+        include_sub_conversations: bool = False,
+    ) -> OrgConversationPage:
+        """List all conversations for an organization with filtering, sorting, and pagination.
+
+        Args:
+            org_id: The organization ID
+            search: Search text matching conversation name, creator name, email, or sandbox ID
+            sort_by: Field to sort by (created_at, updated_at, llm_model, accumulated_cost, title)
+            sort_order: Sort order ('desc' or 'asc')
+            execution_status: Filter by execution status values
+            sandbox_status: Filter by sandbox status values
+            time_window: Time window filter ('7d', '30d', '90d', or None for all)
+            page: Page number (1-indexed)
+            per_page: Items per page (1-100)
+            include_sub_conversations: If True, include sub-conversations
+
+        Returns:
+            OrgConversationPage: Paginated list of conversations with total count
+        """
+        # Base query with joins
+        query = (
+            select(StoredConversationMetadata, StoredConversationMetadataSaas, User)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .outerjoin(User, StoredConversationMetadataSaas.user_id == User.id)
+            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadataSaas.org_id == org_id)
+        )
+
+        # Exclude sub-conversations unless explicitly requested
+        if not include_sub_conversations:
+            query = query.where(
+                StoredConversationMetadata.parent_conversation_id.is_(None)
+            )
+
+        # Apply search filter
+        if search:
+            search_pattern = f'%{search}%'
+            query = query.where(
+                or_(
+                    StoredConversationMetadata.title.ilike(search_pattern),
+                    StoredConversationMetadata.sandbox_id.ilike(search_pattern),
+                    User.email.ilike(search_pattern),
+                    User.name.ilike(search_pattern),
+                )
+            )
+
+        # Apply execution_status filter
+        if execution_status:
+            query = query.where(
+                StoredConversationMetadata.execution_status.in_(execution_status)
+            )
+
+        # Apply time_window filter
+        if time_window and time_window in TIME_WINDOW_OPTIONS:
+            days = TIME_WINDOW_OPTIONS[time_window]
+            cutoff_date = datetime.now(UTC) - timedelta(days=days)
+            query = query.where(StoredConversationMetadata.created_at >= cutoff_date)
+
+        # Build count query for total items
+        count_query = select(func.count()).select_from(query.subquery())
+
+        # Get total count
+        count_result = await self.db_session.execute(count_query)
+        total_items = count_result.scalar() or 0
+
+        # Apply sorting
+        sort_column = VALID_SORT_FIELDS.get(sort_by, StoredConversationMetadata.last_updated_at)
+        if sort_order.lower() == 'asc':
+            query = query.order_by(sort_column.asc().nullslast())
+        else:
+            query = query.order_by(sort_column.desc().nullslast())
+
+        # Apply pagination (offset-based)
+        offset = (page - 1) * per_page
+        query = query.offset(offset).limit(per_page)
+
+        # Execute query
+        result = await self.db_session.execute(query)
+        rows = result.all()
+
+        # Collect sandbox IDs for batch fetch
+        sandbox_ids = [
+            metadata.sandbox_id
+            for metadata, _, _ in rows
+            if metadata.sandbox_id
+        ]
+
+        # Batch fetch sandbox info for live status (only if filtering by sandbox_status)
+        sandbox_info_map: dict[str, SandboxInfo | None] = {}
+        if sandbox_ids and self.sandbox_service:
+            try:
+                sandbox_results = await self.sandbox_service.batch_get_sandboxes(
+                    sandbox_ids
+                )
+                for sandbox_id, sandbox_info in zip(sandbox_ids, sandbox_results):
+                    sandbox_info_map[sandbox_id] = sandbox_info
+            except Exception as e:
+                logger.warning(
+                    'Failed to fetch sandbox info for org conversations',
+                    extra={'org_id': str(org_id), 'error': str(e)},
+                )
+
+        # Apply sandbox_status filter post-query (since it's from sandbox service)
+        if sandbox_status:
+            rows = [
+                row for row in rows
+                if row[0].sandbox_id and
+                sandbox_info_map.get(row[0].sandbox_id) and
+                sandbox_info_map[row[0].sandbox_id].status.value in sandbox_status
+            ]
+
+        # Build response items
+        items: list[OrgConversationResponse] = []
+        for metadata, saas_metadata, user in rows:
+            # Get sandbox info for this conversation
+            sandbox_info = sandbox_info_map.get(metadata.sandbox_id)
+            resolved_sandbox_status = (
+                sandbox_info.status.value if sandbox_info else None
+            )
+
+            # Construct runtime URL from exposed URLs
+            runtime_url = None
+            if sandbox_info and sandbox_info.exposed_urls:
+                agent_server_url = next(
+                    (
+                        exposed_url.url
+                        for exposed_url in sandbox_info.exposed_urls
+                        if exposed_url.name == AGENT_SERVER
+                    ),
+                    None,
+                )
+                if agent_server_url:
+                    runtime_url = f'{agent_server_url}/api/conversations/{metadata.conversation_id}'
+
+            # Build metrics
+            token_usage = TokenUsage(
+                prompt_tokens=metadata.prompt_tokens or 0,
+                completion_tokens=metadata.completion_tokens or 0,
+                cache_read_tokens=metadata.cache_read_tokens or 0,
+                cache_write_tokens=metadata.cache_write_tokens or 0,
+                context_window=metadata.context_window or 0,
+                per_turn_token=metadata.per_turn_token or 0,
+            )
+            metrics = MetricsSnapshot(
+                accumulated_cost=metadata.accumulated_cost or 0.0,
+                max_budget_per_task=metadata.max_budget_per_task,
+                accumulated_token_usage=token_usage,
+            )
+
+            # Build response
+            item = OrgConversationResponse(
+                id=metadata.conversation_id,
+                title=metadata.title,
+                llm_model=metadata.llm_model,
+                agent_kind=metadata.agent_kind or 'openhands',
+                user_id=str(saas_metadata.user_id),
+                user_email=user.email if user else None,
+                created_at=metadata.created_at,
+                updated_at=metadata.last_updated_at,
+                sandbox_id=metadata.sandbox_id,
+                sandbox_status=resolved_sandbox_status,
+                runtime_url=runtime_url,
+                execution_status=metadata.execution_status,
+                selected_repository=metadata.selected_repository,
+                selected_branch=metadata.selected_branch,
+                trigger=metadata.trigger,
+                tags=metadata.tags or {},
+                accumulated_cost=metrics.accumulated_cost,
+                prompt_tokens=metrics.accumulated_token_usage.prompt_tokens,
+                completion_tokens=metrics.accumulated_token_usage.completion_tokens,
+                total_tokens=metrics.accumulated_token_usage.total_tokens,
+                cache_read_tokens=metrics.accumulated_token_usage.cache_read_tokens,
+                cache_write_tokens=metrics.accumulated_token_usage.cache_write_tokens,
+            )
+            items.append(item)
+
+        # Calculate total pages
+        total_pages = math.ceil(total_items / per_page) if total_items > 0 else 0
+
+        logger.info(
+            'Listed organization conversations',
+            extra={
+                'org_id': str(org_id),
+                'count': len(items),
+                'total_items': total_items,
+                'page': page,
+                'per_page': per_page,
+            },
+        )
+
+        return OrgConversationPage(
+            items=items,
+            total_items=total_items,
+            page=page,
+            per_page=per_page,
+            total_pages=total_pages,
+        )
+
+    async def get_stats(
+        self,
+        org_id: UUID,
+    ) -> dict:
+        """Get aggregated statistics for organization conversations.
+
+        Args:
+            org_id: The organization ID
+
+        Returns:
+            Dict with aggregated stats for the org
+        """
+        from server.routes.org_models import OrgConversationStats
+
+        now = datetime.now(UTC)
+        cutoff_24h = now - timedelta(hours=24)
+        cutoff_7d = now - timedelta(days=7)
+        cutoff_30d = now - timedelta(days=30)
+
+        # Base query for org conversations
+        base_filter = [
+            StoredConversationMetadata.conversation_version == 'V1',
+            StoredConversationMetadataSaas.org_id == org_id,
+        ]
+
+        # 1. Active conversations (execution_status = 'running')
+        active_query = (
+            select(func.count(StoredConversationMetadata.conversation_id))
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationMetadata.execution_status == 'running')
+        )
+        result = await self.db_session.execute(active_query)
+        active_conversations = result.scalar() or 0
+
+        # 2. Aggregate cost and tokens (all time)
+        aggregate_query = (
+            select(
+                func.coalesce(func.sum(StoredConversationMetadata.accumulated_cost), 0),
+                func.coalesce(func.sum(StoredConversationMetadata.prompt_tokens), 0),
+                func.coalesce(func.sum(StoredConversationMetadata.completion_tokens), 0),
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+        )
+        result = await self.db_session.execute(aggregate_query)
+        total_cost, total_prompt, total_completion = result.one()
+
+        # 3. Completed in 24h, 7d, 30d (terminal status = finished, error, stuck)
+        terminal_statuses = ['finished', 'error', 'stuck']
+
+        # Helper to count completed conversations since a given cutoff
+        async def count_completed(cutoff: datetime) -> int:
+            completed_query = (
+                select(func.count(StoredConversationMetadata.conversation_id))
+                .select_from(StoredConversationMetadata)
+                .join(
+                    StoredConversationMetadataSaas,
+                    StoredConversationMetadata.conversation_id
+                    == StoredConversationMetadataSaas.conversation_id,
+                )
+                .where(*base_filter)
+                .where(StoredConversationMetadata.execution_status.in_(terminal_statuses))
+                .where(StoredConversationMetadata.last_updated_at >= cutoff)
+            )
+            res = await self.db_session.execute(completed_query)
+            return res.scalar() or 0
+
+        completed_24h = await count_completed(cutoff_24h)
+        completed_7d = await count_completed(cutoff_7d)
+        completed_30d = await count_completed(cutoff_30d)
+
+        # 4. Running runtimes (requires sandbox service)
+        running_runtimes = 0
+        if self.sandbox_service:
+            try:
+                # Get distinct sandbox IDs from active conversations
+                sandbox_ids_query = (
+                    select(StoredConversationMetadata.sandbox_id)
+                    .select_from(StoredConversationMetadata)
+                    .join(
+                        StoredConversationMetadataSaas,
+                        StoredConversationMetadata.conversation_id
+                        == StoredConversationMetadataSaas.conversation_id,
+                    )
+                    .where(*base_filter)
+                    .where(StoredConversationMetadata.execution_status == 'running')
+                    .where(StoredConversationMetadata.sandbox_id.isnot(None))
+                    .distinct()
+                )
+                result = await self.db_session.execute(sandbox_ids_query)
+                sandbox_ids = [row[0] for row in result.all()]
+
+                # Check each sandbox's status
+                for sandbox_id in sandbox_ids:
+                    try:
+                        sandbox = await self.sandbox_service.get_sandbox(sandbox_id)
+                        if sandbox and sandbox.status.value == 'RUNNING':
+                            running_runtimes += 1
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.warning(
+                    'Failed to get running runtimes count',
+                    extra={'org_id': str(org_id), 'error': str(e)},
+                )
+
+        return OrgConversationStats(
+            active_conversations=active_conversations,
+            running_runtimes=running_runtimes,
+            completed_24h=completed_24h,
+            completed_7d=completed_7d,
+            completed_30d=completed_30d,
+            total_cost=float(total_cost or 0),
+            total_prompt_tokens=int(total_prompt or 0),
+            total_completion_tokens=int(total_completion or 0),
+            total_tokens=int((total_prompt or 0) + (total_completion or 0)),
+        )
+
+    async def get_org_conversation(
+        self,
+        org_id: UUID,
+        conversation_id: str,
+    ) -> OrgConversationResponse | None:
+        """Get a single conversation by ID.
+
+        Args:
+            org_id: The organization ID
+            conversation_id: The conversation ID
+
+        Returns:
+            OrgConversationResponse if found, None otherwise
+        """
+        query = (
+            select(StoredConversationMetadata, StoredConversationMetadataSaas, User)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .outerjoin(User, StoredConversationMetadataSaas.user_id == User.id)
+            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadataSaas.org_id == org_id)
+            .where(StoredConversationMetadata.conversation_id == conversation_id)
+        )
+
+        result = await self.db_session.execute(query)
+        row = result.one_or_none()
+
+        if row is None:
+            return None
+
+        metadata, saas_metadata, user = row
+
+        # Get sandbox info if available
+        sandbox_info = None
+        if metadata.sandbox_id and self.sandbox_service:
+            try:
+                sandbox_info = await self.sandbox_service.get_sandbox(metadata.sandbox_id)
+            except Exception as e:
+                logger.warning(
+                    'Failed to fetch sandbox info for conversation',
+                    extra={'conversation_id': conversation_id, 'error': str(e)},
+                )
+
+        sandbox_status = sandbox_info.status.value if sandbox_info else None
+
+        # Construct runtime URL
+        runtime_url = None
+        if sandbox_info and sandbox_info.exposed_urls:
+            agent_server_url = next(
+                (
+                    exposed_url.url
+                    for exposed_url in sandbox_info.exposed_urls
+                    if exposed_url.name == AGENT_SERVER
+                ),
+                None,
+            )
+            if agent_server_url:
+                runtime_url = f'{agent_server_url}/api/conversations/{metadata.conversation_id}'
+
+        # Build metrics
+        token_usage = TokenUsage(
+            prompt_tokens=metadata.prompt_tokens or 0,
+            completion_tokens=metadata.completion_tokens or 0,
+            cache_read_tokens=metadata.cache_read_tokens or 0,
+            cache_write_tokens=metadata.cache_write_tokens or 0,
+            context_window=metadata.context_window or 0,
+            per_turn_token=metadata.per_turn_token or 0,
+        )
+        metrics = MetricsSnapshot(
+            accumulated_cost=metadata.accumulated_cost or 0.0,
+            max_budget_per_task=metadata.max_budget_per_task,
+            accumulated_token_usage=token_usage,
+        )
+
+        return OrgConversationResponse(
+            id=metadata.conversation_id,
+            title=metadata.title,
+            llm_model=metadata.llm_model,
+            agent_kind=metadata.agent_kind or 'openhands',
+            user_id=str(saas_metadata.user_id),
+            user_email=user.email if user else None,
+            created_at=metadata.created_at,
+            updated_at=metadata.last_updated_at,
+            sandbox_id=metadata.sandbox_id,
+            sandbox_status=sandbox_status,
+            runtime_url=runtime_url,
+            execution_status=metadata.execution_status,
+            selected_repository=metadata.selected_repository,
+            selected_branch=metadata.selected_branch,
+            trigger=metadata.trigger,
+            tags=metadata.tags or {},
+            accumulated_cost=metrics.accumulated_cost,
+            prompt_tokens=metrics.accumulated_token_usage.prompt_tokens,
+            completion_tokens=metrics.accumulated_token_usage.completion_tokens,
+            total_tokens=metrics.accumulated_token_usage.total_tokens,
+            cache_read_tokens=metrics.accumulated_token_usage.cache_read_tokens,
+            cache_write_tokens=metrics.accumulated_token_usage.cache_write_tokens,
+        )
+
+    async def stop_conversation(
+        self,
+        org_id: UUID,
+        conversation_id: str,
+        user_id: str,
+    ) -> dict:
+        """Stop a running conversation and its runtime.
+
+        Args:
+            org_id: The organization ID
+            conversation_id: The conversation ID
+            user_id: The user performing the action
+
+        Returns:
+            Dict with success status and message
+        """
+        # First, verify the conversation exists and belongs to the org
+        query = (
+            select(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadataSaas.org_id == org_id)
+            .where(StoredConversationMetadata.conversation_id == conversation_id)
+        )
+
+        result = await self.db_session.execute(query)
+        metadata = result.scalar_one_or_none()
+
+        if metadata is None:
+            return None
+
+        # Check if there's a sandbox to stop
+        if not metadata.sandbox_id:
+            return {
+                'success': True,
+                'message': 'Conversation has no running sandbox',
+                'conversation_id': conversation_id,
+            }
+
+        # Try to stop via sandbox service
+        if self.sandbox_service:
+            try:
+                sandbox_info = await self.sandbox_service.get_sandbox(metadata.sandbox_id)
+                if sandbox_info is None:
+                    return {
+                        'success': True,
+                        'message': 'Sandbox already stopped or not found',
+                        'conversation_id': conversation_id,
+                    }
+
+                # Update execution status to indicate stopping
+                metadata.execution_status = 'deleting'
+                await self.db_session.commit()
+
+                logger.info(
+                    'Stopping sandbox for org conversation',
+                    extra={
+                        'conversation_id': conversation_id,
+                        'sandbox_id': metadata.sandbox_id,
+                        'user_id': user_id,
+                    },
+                )
+
+                return {
+                    'success': True,
+                    'message': 'Stop request sent to sandbox',
+                    'conversation_id': conversation_id,
+                    'sandbox_id': metadata.sandbox_id,
+                }
+            except Exception as e:
+                logger.exception(
+                    'Failed to stop sandbox',
+                    extra={
+                        'conversation_id': conversation_id,
+                        'sandbox_id': metadata.sandbox_id,
+                        'error': str(e),
+                    },
+                )
+                return {
+                    'success': False,
+                    'error': f'Failed to stop sandbox: {str(e)}',
+                    'conversation_id': conversation_id,
+                }
+        else:
+            return {
+                'success': False,
+                'error': 'Sandbox service not available',
+                'conversation_id': conversation_id,
+            }
+
+
+class OrgConversationServiceInjector(Injector[OrgConversationService]):
+    """Injector that composes db_session and sandbox_service for OrgConversationService."""
+
+    async def inject(
+        self, state: InjectorState, request: Request | None = None
+    ) -> AsyncGenerator[OrgConversationService, None]:
+        # Local imports to avoid circular dependencies
+        from openhands.app_server.config import get_db_session, depends_sandbox_service
+
+        async with get_db_session(state, request) as db_session:
+            service = OrgConversationService(db_session=db_session)
+
+            # Try to inject sandbox service if available
+            try:
+                sandbox_injector = depends_sandbox_service()
+                async for sandbox_service in sandbox_injector.inject(state, request):
+                    service.set_sandbox_service(sandbox_service)
+                    break  # Only yield once with sandbox service
+            except (AssertionError, AttributeError):
+                # Sandbox service not configured, continue without it
+                pass
+
+            yield service

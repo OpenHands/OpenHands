@@ -13,6 +13,7 @@ export default [
     index("routes/home.tsx"),
     route("accept-tos", "routes/accept-tos.tsx"),
     route("launch", "routes/launch.tsx"),
+    route("admin/dashboard", "routes/admin-dashboard.tsx"),
     route("settings", "routes/settings.tsx", [
       index("routes/llm-settings.tsx"),
       route("agent", "routes/agent-settings.tsx"),
