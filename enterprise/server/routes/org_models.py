@@ -675,7 +675,9 @@ class OrgConversationResponse(BaseModel):
     sandbox_id: str | None = None
     sandbox_status: str | None = None  # STARTING, RUNNING, PAUSED, ERROR, MISSING
     runtime_url: str | None = None  # URL to access the conversation runtime
-    execution_status: str | None = None  # Agent execution status (requires agent server call)
+    execution_status: str | None = (
+        None  # Agent execution status (requires agent server call)
+    )
     selected_repository: str | None = None
     selected_branch: str | None = None
     trigger: str | None = None
@@ -703,7 +705,9 @@ class OrgConversationStats(BaseModel):
     """Aggregated statistics for organization conversations."""
 
     # Conversation counts
-    active_conversations: int = 0  # Count of conversations with execution_status='running'
+    active_conversations: int = (
+        0  # Count of conversations with execution_status='running'
+    )
     running_runtimes: int = 0  # Count of distinct sandboxes currently running
 
     # Completion metrics

@@ -16,6 +16,7 @@ from fastapi import Request
 from server.routes.org_models import (
     OrgConversationPage,
     OrgConversationResponse,
+    OrgConversationStats,
 )
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -113,7 +114,7 @@ class OrgConversationService:
                     StoredConversationMetadata.title.ilike(search_pattern),
                     StoredConversationMetadata.sandbox_id.ilike(search_pattern),
                     User.email.ilike(search_pattern),
-                    User.name.ilike(search_pattern),
+                    User.name.ilike(search_pattern),  # type: ignore[attr-defined]
                 )
             )
 
@@ -180,7 +181,7 @@ class OrgConversationService:
                 for row in rows
                 if row[0].sandbox_id
                 and sandbox_info_map.get(row[0].sandbox_id)
-                and sandbox_info_map[row[0].sandbox_id].status.value in sandbox_status
+                and sandbox_info_map[row[0].sandbox_id].status.value in sandbox_status  # type: ignore[union-attr]
             ]
 
         # Build response items
@@ -240,11 +241,11 @@ class OrgConversationService:
                 trigger=metadata.trigger,
                 tags=metadata.tags or {},
                 accumulated_cost=metrics.accumulated_cost,
-                prompt_tokens=metrics.accumulated_token_usage.prompt_tokens,
-                completion_tokens=metrics.accumulated_token_usage.completion_tokens,
-                total_tokens=metrics.accumulated_token_usage.total_tokens,
-                cache_read_tokens=metrics.accumulated_token_usage.cache_read_tokens,
-                cache_write_tokens=metrics.accumulated_token_usage.cache_write_tokens,
+                prompt_tokens=metrics.accumulated_token_usage.prompt_tokens,  # type: ignore[union-attr]
+                completion_tokens=metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
+                total_tokens=metrics.accumulated_token_usage.total_tokens,  # type: ignore[union-attr]
+                cache_read_tokens=metrics.accumulated_token_usage.cache_read_tokens,  # type: ignore[union-attr]
+                cache_write_tokens=metrics.accumulated_token_usage.cache_write_tokens,  # type: ignore[union-attr]
             )
             items.append(item)
 
@@ -273,17 +274,15 @@ class OrgConversationService:
     async def get_stats(
         self,
         org_id: UUID,
-    ) -> dict:
+    ) -> OrgConversationStats:
         """Get aggregated statistics for organization conversations.
 
         Args:
             org_id: The organization ID
 
         Returns:
-            Dict with aggregated stats for the org
+            OrgConversationStats with aggregated stats for the org
         """
-        from server.routes.org_models import OrgConversationStats
-
         now = datetime.now(UTC)
         cutoff_24h = now - timedelta(hours=24)
         cutoff_7d = now - timedelta(days=7)
@@ -502,11 +501,11 @@ class OrgConversationService:
             trigger=metadata.trigger,
             tags=metadata.tags or {},
             accumulated_cost=metrics.accumulated_cost,
-            prompt_tokens=metrics.accumulated_token_usage.prompt_tokens,
-            completion_tokens=metrics.accumulated_token_usage.completion_tokens,
-            total_tokens=metrics.accumulated_token_usage.total_tokens,
-            cache_read_tokens=metrics.accumulated_token_usage.cache_read_tokens,
-            cache_write_tokens=metrics.accumulated_token_usage.cache_write_tokens,
+            prompt_tokens=metrics.accumulated_token_usage.prompt_tokens,  # type: ignore[union-attr]
+            completion_tokens=metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
+            total_tokens=metrics.accumulated_token_usage.total_tokens,  # type: ignore[union-attr]
+            cache_read_tokens=metrics.accumulated_token_usage.cache_read_tokens,  # type: ignore[union-attr]
+            cache_write_tokens=metrics.accumulated_token_usage.cache_write_tokens,  # type: ignore[union-attr]
         )
 
     async def stop_conversation(
@@ -514,7 +513,7 @@ class OrgConversationService:
         org_id: UUID,
         conversation_id: str,
         user_id: str,
-    ) -> dict:
+    ) -> dict | None:
         """Stop a running conversation and its runtime.
 
         Args:
