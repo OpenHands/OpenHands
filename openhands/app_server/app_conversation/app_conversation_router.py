@@ -824,9 +824,33 @@ async def switch_conversation_acp_model(
             'Agent server returned error during switch_acp_model: '
             f'{e.response.status_code} - {e.response.text}'
         )
-        # Surface agent-server's 400/409/504 directly — they carry semantics
-        # (not-ACP, no-session, timeout) that the client can act on.
-        if e.response.status_code in (400, 409, 504):
+        if e.response.status_code == 409:
+            # ACP session not initialised yet (before the first run()). Save
+            # the requested model to the conversation record so the chip stays
+            # current and the selection isn't lost. Return 200 — the canvas
+            # treats 409 as a hard error, but this is a valid pre-run switch.
+            logger.info(
+                'ACP session not yet initialised for conversation %s; '
+                'persisting model %r for next run',
+                conversation_id,
+                request.model,
+            )
+            try:
+                info = await app_conversation_info_service.get_app_conversation_info(
+                    conversation_id,
+                )
+                if info is not None and info.llm_model != request.model:
+                    info.llm_model = request.model
+                    await app_conversation_info_service.save_app_conversation_info(info)
+            except Exception:
+                logger.exception(
+                    'Failed to persist pre-run model on conversation %s',
+                    conversation_id,
+                )
+            return Success()
+        # Surface agent-server's 400/504 directly — they carry semantics
+        # (not-ACP, timeout) that the client can act on.
+        if e.response.status_code in (400, 504):
             raise HTTPException(
                 status_code=e.response.status_code,
                 detail=f'Agent server error: {e.response.status_code}',
