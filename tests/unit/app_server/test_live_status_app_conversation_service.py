@@ -1837,7 +1837,11 @@ class TestLiveStatusAppConversationService:
         conversation_id = uuid4()
 
         self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
-        acp_user = _TestUserInfo(id='test_user_123', llm_model='gpt-4')
+        acp_user = _TestUserInfo(
+            id='test_user_123',
+            llm_model='gpt-4',
+            sandbox_grouping_strategy=SandboxGroupingStrategy.NO_GROUPING,
+        )
         acp_user.agent_settings = ACPAgentSettings(
             acp_server='codex', acp_model='gpt-5.5/high'
         )
