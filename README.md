@@ -103,7 +103,7 @@ docker run -it --rm \
   ghcr.io/openhands/agent-canvas:1.0.0-rc.11
 ```
 
-**Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
+**Windows (PowerShell / Windows Terminal):** See [README.windows.md](https://github.com/OpenHands/agent-canvas/blob/main/README.windows.md) for the equivalent commands.
 
 The agent will be able to access any project under `PROJECTS_PATH`.
 
