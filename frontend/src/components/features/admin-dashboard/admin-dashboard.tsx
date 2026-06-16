@@ -1,98 +1,206 @@
+/* eslint-disable i18next/no-literal-string */
 import React, { useMemo } from "react";
-import { useTranslation } from "react-i18next";
-import { useCurrentOrganization } from "#/hooks/query/use-organizations";
-import { organizationService } from "#/api/organization-service/organization-service.api";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
+import { useOrganizations } from "#/hooks/query/use-organizations";
+import { organizationService } from "#/api/organization-service/organization-service.api";
 
 // Icons as inline SVGs for simplicity
-const SearchIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <circle cx="11" cy="11" r="8" />
-    <path d="m21 21-4.35-4.35" />
-  </svg>
-);
+function SearchIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.35-4.35" />
+    </svg>
+  );
+}
 
-const ExportIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="7,10 12,15 17,10" />
-    <line x1="12" y1="15" x2="12" y2="3" />
-  </svg>
-);
+function ExportIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7,10 12,15 17,10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
 
-const CopyIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-  </svg>
-);
+function CopyIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
 
-const ExternalLinkIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-    <polyline points="15,3 21,3 21,9" />
-    <line x1="10" y1="14" x2="21" y2="3" />
-  </svg>
-);
+function ExternalLinkIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      <polyline points="15,3 21,3 21,9" />
+      <line x1="10" y1="14" x2="21" y2="3" />
+    </svg>
+  );
+}
 
-const EyeIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-    <circle cx="12" cy="12" r="3" />
-  </svg>
-);
+function EyeIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
 
-const StopIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <circle cx="12" cy="12" r="10" />
-    <rect x="9" y="9" width="6" height="6" />
-  </svg>
-);
+function StopIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <rect x="9" y="9" width="6" height="6" />
+    </svg>
+  );
+}
 
-const ChevronLeftIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polyline points="15,18 9,12 15,6" />
-  </svg>
-);
+function ChevronLeftIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <polyline points="15,18 9,12 15,6" />
+    </svg>
+  );
+}
 
-const ChevronRightIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polyline points="9,18 15,12 9,6" />
-  </svg>
-);
+function ChevronRightIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <polyline points="9,18 15,12 9,6" />
+    </svg>
+  );
+}
 
-const ActivityIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polyline points="22,12 18,12 15,21 9,3 6,12 2,12" />
-  </svg>
-);
+function ActivityIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <polyline points="22,12 18,12 15,21 9,3 6,12 2,12" />
+    </svg>
+  );
+}
 
-const ServerIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
-    <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
-    <line x1="6" y1="6" x2="6.01" y2="6" />
-    <line x1="6" y1="18" x2="6.01" y2="18" />
-  </svg>
-);
+function ServerIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+      <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+      <line x1="6" y1="6" x2="6.01" y2="6" />
+      <line x1="6" y1="18" x2="6.01" y2="18" />
+    </svg>
+  );
+}
 
-const CheckCircleIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-    <polyline points="22,4 12,14.01 9,11.01" />
-  </svg>
-);
+function CheckCircleIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22,4 12,14.01 9,11.01" />
+    </svg>
+  );
+}
 
-const DollarIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <line x1="12" y1="1" x2="12" y2="23" />
-    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-  </svg>
-);
+function DollarIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <line x1="12" y1="1" x2="12" y2="23" />
+      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    </svg>
+  );
+}
 
 // Status badge component
-const StatusBadge = ({ status }: { status: string | null }) => {
+function StatusBadge({ status }: { status: string | null }) {
   const getStatusStyle = () => {
     switch (status) {
       case "running":
@@ -111,14 +219,16 @@ const StatusBadge = ({ status }: { status: string | null }) => {
   };
 
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusStyle()}`}>
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusStyle()}`}
+    >
       {status || "unknown"}
     </span>
   );
-};
+}
 
 // Runtime status badge
-const RuntimeBadge = ({ status }: { status: string | null }) => {
+function RuntimeBadge({ status }: { status: string | null }) {
   const getStatusStyle = () => {
     switch (status) {
       case "RUNNING":
@@ -136,14 +246,16 @@ const RuntimeBadge = ({ status }: { status: string | null }) => {
   };
 
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusStyle()}`}>
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusStyle()}`}
+    >
       {status || "N/A"}
     </span>
   );
-};
+}
 
 // KPI Card component
-const KPICard = ({
+function KPICard({
   label,
   value,
   subtext,
@@ -153,16 +265,20 @@ const KPICard = ({
   value: string | number;
   subtext?: string;
   icon: React.ReactNode;
-}) => (
-  <div className="bg-[#1E1E1E] border border-[#262626] rounded-lg p-4">
-    <div className="flex items-center justify-between mb-3">
-      <span className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">{label}</span>
-      <span className="text-[#8C8C8C]">{icon}</span>
+}) {
+  return (
+    <div className="bg-[#1E1E1E] border border-[#262626] rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
+          {label}
+        </span>
+        <span className="text-[#8C8C8C]">{icon}</span>
+      </div>
+      <div className="text-white text-2xl font-bold mb-1">{value}</div>
+      {subtext && <div className="text-[#8C8C8C] text-xs">{subtext}</div>}
     </div>
-    <div className="text-white text-2xl font-bold mb-1">{value}</div>
-    {subtext && <div className="text-[#8C8C8C] text-xs">{subtext}</div>}
-  </div>
-);
+  );
+}
 
 // Format tokens
 const formatTokens = (tokens: number) => {
@@ -195,15 +311,18 @@ const copyToClipboard = (text: string) => {
 };
 
 export function AdminDashboard() {
-  const { t } = useTranslation();
-  const { currentOrganization } = useCurrentOrganization();
+  const { data: orgData } = useOrganizations();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const orgId = currentOrganization?.id;
+  // Use current org from organizations list (first team org)
+  const currentOrg = orgData?.organizations?.find(
+    (org: { is_personal?: boolean }) => !org.is_personal,
+  );
+  const orgId = currentOrg?.id;
 
   // Filter state from URL params
-  const page = parseInt(searchParams.get("page") || "1");
-  const perPage = parseInt(searchParams.get("per_page") || "20");
+  const page = parseInt(searchParams.get("page") || "1", 10);
+  const perPage = parseInt(searchParams.get("per_page") || "20", 10);
   const search = searchParams.get("search") || "";
   const sortBy = searchParams.get("sort_by") || "updated_at";
   const sortOrder = searchParams.get("sort_order") || "desc";
@@ -212,40 +331,42 @@ export function AdminDashboard() {
   const timeWindow = searchParams.get("time_window") || "";
 
   // Fetch stats
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats } = useQuery({
     queryKey: ["org-conversation-stats", orgId],
     queryFn: () => organizationService.getConversationStats({ orgId: orgId! }),
     enabled: !!orgId,
   });
 
   // Fetch conversations
-  const { data: conversationsData, isLoading: conversationsLoading } = useQuery({
-    queryKey: [
-      "org-conversations",
-      orgId,
-      page,
-      perPage,
-      search,
-      sortBy,
-      sortOrder,
-      executionStatus,
-      sandboxStatus,
-      timeWindow,
-    ],
-    queryFn: () =>
-      organizationService.getConversations({
-        orgId: orgId!,
+  const { data: conversationsData, isLoading: conversationsLoading } = useQuery(
+    {
+      queryKey: [
+        "org-conversations",
+        orgId,
         page,
         perPage,
-        search: search || undefined,
+        search,
         sortBy,
         sortOrder,
-        executionStatus: executionStatus.length ? executionStatus : undefined,
-        sandboxStatus: sandboxStatus.length ? sandboxStatus : undefined,
-        timeWindow: timeWindow || undefined,
-      }),
-    enabled: !!orgId,
-  });
+        executionStatus,
+        sandboxStatus,
+        timeWindow,
+      ],
+      queryFn: () =>
+        organizationService.getConversations({
+          orgId: orgId!,
+          page,
+          perPage,
+          search: search || undefined,
+          sortBy,
+          sortOrder,
+          executionStatus: executionStatus.length ? executionStatus : undefined,
+          sandboxStatus: sandboxStatus.length ? sandboxStatus : undefined,
+          timeWindow: timeWindow || undefined,
+        }),
+      enabled: !!orgId,
+    },
+  );
 
   const updateFilter = (key: string, value: string | string[] | null) => {
     const newParams = new URLSearchParams(searchParams);
@@ -281,7 +402,15 @@ export function AdminDashboard() {
       sandboxStatus: sandboxStatus.length ? sandboxStatus : undefined,
       timeWindow: timeWindow || undefined,
     });
-  }, [orgId, search, sortBy, sortOrder, executionStatus, sandboxStatus, timeWindow]);
+  }, [
+    orgId,
+    search,
+    sortBy,
+    sortOrder,
+    executionStatus,
+    sandboxStatus,
+    timeWindow,
+  ]);
 
   if (!orgId) {
     return (
@@ -334,7 +463,9 @@ export function AdminDashboard() {
         {/* Filter Bar */}
         <div className="bg-[#161616] border border-[#262626] rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">Filters</span>
+            <span className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
+              Filters
+            </span>
             <a
               href={exportUrl}
               className="flex items-center gap-2 px-3 py-1.5 bg-[#1E1E1E] border border-[#262626] rounded text-sm text-[#8C8C8C] hover:text-white hover:border-[#404040] transition-colors"
@@ -385,7 +516,9 @@ export function AdminDashboard() {
             {/* Conversation Status */}
             <select
               value={executionStatus[0] || ""}
-              onChange={(e) => updateFilter("execution_status", e.target.value || null)}
+              onChange={(e) =>
+                updateFilter("execution_status", e.target.value || null)
+              }
               className="px-3 py-2 bg-[#0D0D0D] border border-[#262626] rounded text-sm text-white focus:outline-none focus:border-[#404040] appearance-none cursor-pointer"
             >
               <option value="">Conversation status: All</option>
@@ -400,7 +533,9 @@ export function AdminDashboard() {
             {/* Runtime Status */}
             <select
               value={sandboxStatus[0] || ""}
-              onChange={(e) => updateFilter("sandbox_status", e.target.value || null)}
+              onChange={(e) =>
+                updateFilter("sandbox_status", e.target.value || null)
+              }
               className="px-3 py-2 bg-[#0D0D0D] border border-[#262626] rounded text-sm text-white focus:outline-none focus:border-[#404040] appearance-none cursor-pointer"
             >
               <option value="">Runtime status: All</option>
@@ -414,7 +549,9 @@ export function AdminDashboard() {
             {/* Time Window */}
             <select
               value={timeWindow}
-              onChange={(e) => updateFilter("time_window", e.target.value || null)}
+              onChange={(e) =>
+                updateFilter("time_window", e.target.value || null)
+              }
               className="px-3 py-2 bg-[#0D0D0D] border border-[#262626] rounded text-sm text-white focus:outline-none focus:border-[#404040] appearance-none cursor-pointer"
             >
               <option value="">All time</option>
@@ -461,19 +598,28 @@ export function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {conversationsLoading ? (
+                {conversationsLoading && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-[#8C8C8C]">
+                    <td
+                      colSpan={9}
+                      className="px-4 py-8 text-center text-[#8C8C8C]"
+                    >
                       Loading...
                     </td>
                   </tr>
-                ) : conversationsData?.items.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-[#8C8C8C]">
-                      No conversations found
-                    </td>
-                  </tr>
-                ) : (
+                )}
+                {!conversationsLoading &&
+                  conversationsData?.items.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={9}
+                        className="px-4 py-8 text-center text-[#8C8C8C]"
+                      >
+                        No conversations found
+                      </td>
+                    </tr>
+                  )}
+                {!conversationsLoading &&
                   conversationsData?.items.map((conversation, index) => (
                     <tr
                       key={conversation.id}
@@ -482,7 +628,9 @@ export function AdminDashboard() {
                       }`}
                     >
                       <td className="px-4 py-3">
-                        <div className="font-medium text-white text-sm">{conversation.title || "Untitled"}</div>
+                        <div className="font-medium text-white text-sm">
+                          {conversation.title || "Untitled"}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <span className="font-mono text-xs text-[#8C8C8C]">
@@ -491,8 +639,13 @@ export function AdminDashboard() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-sm">
-                          <div className="text-white">{conversation.user_email?.split("@")[0] || "Unknown"}</div>
-                          <div className="text-[#8C8C8C] text-xs">{conversation.user_email || ""}</div>
+                          <div className="text-white">
+                            {conversation.user_email?.split("@")[0] ||
+                              "Unknown"}
+                          </div>
+                          <div className="text-[#8C8C8C] text-xs">
+                            {conversation.user_email || ""}
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -508,7 +661,10 @@ export function AdminDashboard() {
                               {conversation.sandbox_id.slice(0, 12)}...
                             </span>
                             <button
-                              onClick={() => copyToClipboard(conversation.sandbox_id!)}
+                              type="button"
+                              onClick={() =>
+                                copyToClipboard(conversation.sandbox_id!)
+                              }
                               className="text-[#6B6B6B] hover:text-white transition-colors"
                               title="Copy GUID"
                             >
@@ -532,33 +688,50 @@ export function AdminDashboard() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-xs">
-                          <div className="text-[#8C8C8C] uppercase mb-0.5">Created</div>
-                          <div className="text-white mb-1">{formatDate(conversation.created_at)}</div>
-                          <div className="text-[#8C8C8C] uppercase mb-0.5">Updated</div>
-                          <div className="text-white">{formatDate(conversation.updated_at)}</div>
+                          <div className="text-[#8C8C8C] uppercase mb-0.5">
+                            Created
+                          </div>
+                          <div className="text-white mb-1">
+                            {formatDate(conversation.created_at)}
+                          </div>
+                          <div className="text-[#8C8C8C] uppercase mb-0.5">
+                            Updated
+                          </div>
+                          <div className="text-white">
+                            {formatDate(conversation.updated_at)}
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-xs text-right">
-                          <div className="text-white font-mono">{formatTokens(conversation.total_tokens)}</div>
-                          <div className="text-white font-medium">${conversation.accumulated_cost.toFixed(2)}</div>
+                          <div className="text-white font-mono">
+                            {formatTokens(conversation.total_tokens)}
+                          </div>
+                          <div className="text-white font-medium">
+                            ${conversation.accumulated_cost.toFixed(2)}
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-1">
-                          <button className="flex items-center gap-1.5 px-2 py-1 text-xs text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1.5 px-2 py-1 text-xs text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors"
+                          >
                             <EyeIcon />
                             View
                           </button>
-                          <button className="flex items-center gap-1.5 px-2 py-1 text-xs text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1.5 px-2 py-1 text-xs text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors"
+                          >
                             <StopIcon />
                             Stop
                           </button>
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
+                  ))}
               </tbody>
             </table>
           </div>
@@ -567,6 +740,7 @@ export function AdminDashboard() {
           <div className="flex items-center justify-between px-4 py-3 border-t border-[#262626]">
             <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => handlePageChange(page - 1)}
                 disabled={page <= 1}
                 className={`flex items-center gap-1 px-2 py-1 text-sm rounded transition-colors ${
@@ -579,6 +753,7 @@ export function AdminDashboard() {
                 Previous
               </button>
               <button
+                type="button"
                 onClick={() => handlePageChange(page + 1)}
                 disabled={page >= totalPages}
                 className={`flex items-center gap-1 px-2 py-1 text-sm rounded transition-colors ${
