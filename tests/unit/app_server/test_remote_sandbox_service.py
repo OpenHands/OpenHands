@@ -1782,9 +1782,7 @@ class TestBatchGetSandboxes:
         mock_result.__iter__ = MagicMock(
             return_value=iter([(stored_sandbox_1,), (stored_sandbox_2,)])
         )
-        remote_sandbox_service.db_session.execute = AsyncMock(
-            return_value=mock_result
-        )
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
 
         # Mock successful runtime batch response
         remote_sandbox_service._get_runtimes_batch = AsyncMock(
@@ -1833,9 +1831,7 @@ class TestBatchGetSandboxes:
         mock_result.__iter__ = MagicMock(
             return_value=iter([(stored_sandbox_1,), (stored_sandbox_2,)])
         )
-        remote_sandbox_service.db_session.execute = AsyncMock(
-            return_value=mock_result
-        )
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
 
         # Mock runtime API timeout
         remote_sandbox_service._get_runtimes_batch = AsyncMock(
@@ -1871,9 +1867,7 @@ class TestBatchGetSandboxes:
         # Mock DB query result
         mock_result = MagicMock()
         mock_result.__iter__ = MagicMock(return_value=iter([(stored_sandbox_1,)]))
-        remote_sandbox_service.db_session.execute = AsyncMock(
-            return_value=mock_result
-        )
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
 
         # Mock runtime API HTTP error
         remote_sandbox_service._get_runtimes_batch = AsyncMock(
@@ -1906,9 +1900,7 @@ class TestBatchGetSandboxes:
         # Mock DB query result
         mock_result = MagicMock()
         mock_result.__iter__ = MagicMock(return_value=iter([(stored_sandbox_1,)]))
-        remote_sandbox_service.db_session.execute = AsyncMock(
-            return_value=mock_result
-        )
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
 
         # Mock HTTP status error from raise_for_status()
         remote_sandbox_service._get_runtimes_batch = AsyncMock(
