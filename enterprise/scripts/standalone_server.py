@@ -8,20 +8,18 @@ Usage:
 """
 
 import argparse
-import os
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from typing import Optional
 
+import uvicorn
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-import uvicorn
+from starlette.responses import HTMLResponse
 
-DEFAULT_DB_URL = "postgresql://postgres:postgres@localhost:5432/openhands"
+DEFAULT_DB_URL = 'postgresql://postgres:postgres@localhost:5432/openhands'
 DEFAULT_PORT = 8080
 
 
@@ -68,15 +66,15 @@ class ConversationsResponse(BaseModel):
 
 
 # Create FastAPI app
-app = FastAPI(title="OpenHands Admin API", version="1.0.0")
+app = FastAPI(title='OpenHands Admin API', version='1.0.0')
 
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=['*'],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=['*'],
+    allow_headers=['*'],
 )
 
 # Global engine and session
@@ -92,27 +90,29 @@ def get_engine(db_url: str):
     return _engine, _SessionLocal
 
 
-@app.get("/")
+@app.get('/')
 async def root():
-    return {"message": "OpenHands Admin API", "docs": "/docs"}
+    return {'message': 'OpenHands Admin API', 'docs': '/docs'}
 
 
-@app.get("/api/organizations/{org_id}/conversations/stats", response_model=ConversationStats)
+@app.get(
+    '/api/organizations/{org_id}/conversations/stats', response_model=ConversationStats
+)
 async def get_conversation_stats(org_id: str, db_url: str = Query(None)):
     """Get aggregated conversation statistics for an organization."""
     db_url = db_url or DEFAULT_DB_URL
     engine, _ = get_engine(db_url)
-    
+
     with engine.connect() as conn:
         now = datetime.now(UTC)
         time_24h_ago = now - timedelta(hours=24)
         time_7d_ago = now - timedelta(days=7)
         time_30d_ago = now - timedelta(days=30)
-        
+
         # Get conversation counts
         stats = conn.execute(
             text("""
-                SELECT 
+                SELECT
                     COUNT(*) FILTER (WHERE cm.execution_status IN ('running', 'idle', 'paused')) as active_conversations,
                     COUNT(*) FILTER (WHERE cm.sandbox_status = 'RUNNING') as running_runtimes,
                     COUNT(*) FILTER (WHERE cm.execution_status = 'finished' AND cm.last_updated_at >= :time_24h) as completed_24h,
@@ -127,13 +127,13 @@ async def get_conversation_stats(org_id: str, db_url: str = Query(None)):
                 WHERE cms.org_id = :org_id
             """),
             {
-                "org_id": org_id,
-                "time_24h": time_24h_ago,
-                "time_7d": time_7d_ago,
-                "time_30d": time_30d_ago,
-            }
+                'org_id': org_id,
+                'time_24h': time_24h_ago,
+                'time_7d': time_7d_ago,
+                'time_30d': time_30d_ago,
+            },
         ).fetchone()
-        
+
         return ConversationStats(
             active_conversations=stats[0] or 0,
             running_runtimes=stats[1] or 0,
@@ -147,14 +147,16 @@ async def get_conversation_stats(org_id: str, db_url: str = Query(None)):
         )
 
 
-@app.get("/api/organizations/{org_id}/conversations", response_model=ConversationsResponse)
+@app.get(
+    '/api/organizations/{org_id}/conversations', response_model=ConversationsResponse
+)
 async def list_conversations(
     org_id: str,
     status: Optional[str] = None,
     time_window: Optional[str] = None,
     search: Optional[str] = None,
-    sort_by: str = "created_at",
-    sort_order: str = "desc",
+    sort_by: str = 'created_at',
+    sort_order: str = 'desc',
     page: int = 1,
     page_size: int = 20,
     db_url: str = Query(None),
@@ -162,11 +164,11 @@ async def list_conversations(
     """List conversations for an organization with filtering and pagination."""
     db_url = db_url or DEFAULT_DB_URL
     engine, _ = get_engine(db_url)
-    
+
     with engine.connect() as conn:
         # Build query
         base_query = """
-            SELECT 
+            SELECT
                 cm.conversation_id,
                 cm.title,
                 cm.user_id,
@@ -190,68 +192,78 @@ async def list_conversations(
             LEFT JOIN users u ON cm.user_id = u.id
             WHERE cms.org_id = :org_id
         """
-        
-        params = {"org_id": org_id}
-        
+
+        params = {'org_id': org_id}
+
         # Add filters
-        if status and status != "all":
-            if status == "running":
+        if status and status != 'all':
+            if status == 'running':
                 base_query += " AND cm.execution_status = 'running'"
-            elif status == "finished":
+            elif status == 'finished':
                 base_query += " AND cm.execution_status = 'finished'"
-            elif status == "error":
+            elif status == 'error':
                 base_query += " AND cm.execution_status IN ('error', 'stuck')"
-        
+
         if time_window:
             now = datetime.now(UTC)
-            if time_window == "24h":
-                base_query += " AND cm.created_at >= :time_filter"
-                params["time_filter"] = now - timedelta(hours=24)
-            elif time_window == "7d":
-                base_query += " AND cm.created_at >= :time_filter"
-                params["time_filter"] = now - timedelta(days=7)
-            elif time_window == "30d":
-                base_query += " AND cm.created_at >= :time_filter"
-                params["time_filter"] = now - timedelta(days=30)
-        
+            if time_window == '24h':
+                base_query += ' AND cm.created_at >= :time_filter'
+                params['time_filter'] = now - timedelta(hours=24)
+            elif time_window == '7d':
+                base_query += ' AND cm.created_at >= :time_filter'
+                params['time_filter'] = now - timedelta(days=7)
+            elif time_window == '30d':
+                base_query += ' AND cm.created_at >= :time_filter'
+                params['time_filter'] = now - timedelta(days=30)
+
         if search:
-            base_query += " AND (cm.title ILIKE :search OR cm.selected_repository ILIKE :search)"
-            params["search"] = f"%{search}%"
-        
+            base_query += (
+                ' AND (cm.title ILIKE :search OR cm.selected_repository ILIKE :search)'
+            )
+            params['search'] = f'%{search}%'
+
         # Count total
-        count_query = f"SELECT COUNT(*) FROM ({base_query}) as subquery"
+        count_query = f'SELECT COUNT(*) FROM ({base_query}) as subquery'
         total = conn.execute(text(count_query), params).scalar()
-        
+
         # Add sorting and pagination
-        valid_sort_columns = ["created_at", "last_updated_at", "title", "llm_model", "accumulated_cost"]
+        valid_sort_columns = [
+            'created_at',
+            'last_updated_at',
+            'title',
+            'llm_model',
+            'accumulated_cost',
+        ]
         if sort_by not in valid_sort_columns:
-            sort_by = "created_at"
-        
-        sort_direction = "DESC" if sort_order.lower() == "desc" else "ASC"
-        base_query += f" ORDER BY cm.{sort_by} {sort_direction} LIMIT :limit OFFSET :offset"
-        
-        params["limit"] = page_size
-        params["offset"] = (page - 1) * page_size
-        
+            sort_by = 'created_at'
+
+        sort_direction = 'DESC' if sort_order.lower() == 'desc' else 'ASC'
+        base_query += (
+            f' ORDER BY cm.{sort_by} {sort_direction} LIMIT :limit OFFSET :offset'
+        )
+
+        params['limit'] = page_size
+        params['offset'] = (page - 1) * page_size
+
         # Execute
         rows = conn.execute(text(base_query), params).fetchall()
-        
+
         conversations = [
             Conversation(
                 conversation_id=row[0],
-                title=row[1] or "Untitled",
+                title=row[1] or 'Untitled',
                 user_id=row[2],
                 user_name=row[3],
                 user_email=row[4],
-                llm_model=row[5] or "unknown",
-                agent_kind=row[6] or "unknown",
-                status=row[7] or "unknown",
-                sandbox_status=row[8] or "unknown",
-                created_at=row[9].isoformat() if row[9] else "",
-                last_updated_at=row[10].isoformat() if row[10] else "",
-                selected_repository=row[11] or "unknown",
-                selected_branch=row[12] or "unknown",
-                trigger=row[13] or "unknown",
+                llm_model=row[5] or 'unknown',
+                agent_kind=row[6] or 'unknown',
+                status=row[7] or 'unknown',
+                sandbox_status=row[8] or 'unknown',
+                created_at=row[9].isoformat() if row[9] else '',
+                last_updated_at=row[10].isoformat() if row[10] else '',
+                selected_repository=row[11] or 'unknown',
+                selected_branch=row[12] or 'unknown',
+                trigger=row[13] or 'unknown',
                 accumulated_cost=float(row[14] or 0),
                 prompt_tokens=int(row[15] or 0),
                 completion_tokens=int(row[16] or 0),
@@ -259,9 +271,9 @@ async def list_conversations(
             )
             for row in rows
         ]
-        
+
         total_pages = (total + page_size - 1) // page_size
-        
+
         return ConversationsResponse(
             conversations=conversations,
             total=total,
@@ -271,16 +283,16 @@ async def list_conversations(
         )
 
 
-@app.get("/api/organizations")
+@app.get('/api/organizations')
 async def list_organizations(db_url: str = Query(None)):
     """List all organizations with basic info."""
     db_url = db_url or DEFAULT_DB_URL
     engine, _ = get_engine(db_url)
-    
+
     with engine.connect() as conn:
         orgs = conn.execute(
             text("""
-                SELECT 
+                SELECT
                     o.id,
                     o.name,
                     COUNT(DISTINCT om.user_id) as member_count,
@@ -292,28 +304,28 @@ async def list_organizations(db_url: str = Query(None)):
                 GROUP BY o.id, o.name
             """)
         ).fetchall()
-        
+
         return [
             {
-                "id": str(row[0]),
-                "name": row[1],
-                "member_count": row[2],
-                "conversation_count": row[3],
+                'id': str(row[0]),
+                'name': row[1],
+                'member_count': row[2],
+                'conversation_count': row[3],
             }
             for row in orgs
         ]
 
 
-@app.get("/api/organizations/{org_id}")
+@app.get('/api/organizations/{org_id}')
 async def get_organization(org_id: str, db_url: str = Query(None)):
     """Get organization details."""
     db_url = db_url or DEFAULT_DB_URL
     engine, _ = get_engine(db_url)
-    
+
     with engine.connect() as conn:
         org = conn.execute(
             text("""
-                SELECT 
+                SELECT
                     o.id,
                     o.name,
                     COUNT(DISTINCT om.user_id) as member_count,
@@ -324,24 +336,24 @@ async def get_organization(org_id: str, db_url: str = Query(None)):
                 WHERE o.id = :org_id
                 GROUP BY o.id, o.name
             """),
-            {"org_id": org_id}
+            {'org_id': org_id},
         ).fetchone()
-        
+
         if not org:
-            raise HTTPException(status_code=404, detail="Organization not found")
-        
+            raise HTTPException(status_code=404, detail='Organization not found')
+
         return {
-            "id": str(org[0]),
-            "name": org[1],
-            "member_count": org[2],
-            "owner_count": org[3],
-            "admin_count": org[4],
+            'id': str(org[0]),
+            'name': org[1],
+            'member_count': org[2],
+            'owner_count': org[3],
+            'admin_count': org[4],
         }
 
 
 def create_standalone_frontend():
     """Create a simple standalone HTML frontend for the admin dashboard."""
-    return '''
+    return r"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -355,21 +367,21 @@ def create_standalone_frontend():
         header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #333; }
         h1 { font-size: 1.5rem; font-weight: 600; }
         .org-select { background: #1a1a1a; color: #e0e0e0; border: 1px solid #333; padding: 0.5rem 1rem; border-radius: 6px; min-width: 200px; }
-        
+
         /* Stats Grid */
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
         .stat-card { background: #1a1a1a; border-radius: 12px; padding: 1.5rem; border: 1px solid #333; }
         .stat-card h3 { font-size: 0.875rem; color: #888; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
         .stat-card .value { font-size: 2rem; font-weight: 700; color: #fff; }
         .stat-card .sub { font-size: 0.875rem; color: #666; margin-top: 0.25rem; }
-        
+
         /* Filter Bar */
         .filter-bar { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center; }
         .filter-bar input, .filter-bar select { background: #1a1a1a; color: #e0e0e0; border: 1px solid #333; padding: 0.5rem 1rem; border-radius: 6px; }
         .filter-bar input { flex: 1; min-width: 200px; }
         .filter-bar button { background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; }
         .filter-bar button:hover { background: #2563eb; }
-        
+
         /* Table */
         .table-container { background: #1a1a1a; border-radius: 12px; border: 1px solid #333; overflow: hidden; }
         table { width: 100%; border-collapse: collapse; }
@@ -382,13 +394,13 @@ def create_standalone_frontend():
         .status.error { background: #ef444420; color: #ef4444; }
         .status.idle { background: #f59e0b20; color: #f59e0b; }
         .cost { font-family: monospace; color: #22c55e; }
-        
+
         /* Pagination */
         .pagination { display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1.5rem; }
         .pagination button { background: #1a1a1a; color: #e0e0e0; border: 1px solid #333; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; }
         .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
         .pagination span { color: #888; }
-        
+
         .loading { text-align: center; padding: 2rem; color: #888; }
         .error { background: #ef444420; color: #ef4444; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
     </style>
@@ -401,9 +413,9 @@ def create_standalone_frontend():
                 <option value="">Select Organization</option>
             </select>
         </header>
-        
+
         <div id="error" class="error" style="display: none;"></div>
-        
+
         <div class="stats-grid" id="stats">
             <div class="stat-card">
                 <h3>Active Conversations</h3>
@@ -427,7 +439,7 @@ def create_standalone_frontend():
                 <div class="sub" id="totalTokens">- tokens</div>
             </div>
         </div>
-        
+
         <div class="filter-bar">
             <input type="text" id="searchInput" placeholder="Search conversations...">
             <select id="statusFilter">
@@ -450,7 +462,7 @@ def create_standalone_frontend():
             </select>
             <button onclick="loadConversations(1)">Apply Filters</button>
         </div>
-        
+
         <div class="table-container">
             <table>
                 <thead>
@@ -469,15 +481,15 @@ def create_standalone_frontend():
                 </tbody>
             </table>
         </div>
-        
+
         <div class="pagination" id="pagination"></div>
     </div>
-    
+
     <script>
         const API_BASE = window.location.origin;
         let currentOrg = null;
         let currentPage = 1;
-        
+
         async function loadOrganizations() {
             try {
                 const res = await fetch(API_BASE + '/api/organizations');
@@ -491,7 +503,7 @@ def create_standalone_frontend():
                 showError('Failed to load organizations: ' + e.message);
             }
         }
-        
+
         async function loadStats(orgId) {
             try {
                 const res = await fetch(API_BASE + '/api/organizations/' + orgId + '/conversations/stats');
@@ -506,21 +518,21 @@ def create_standalone_frontend():
                 showError('Failed to load stats: ' + e.message);
             }
         }
-        
+
         async function loadConversations(page = 1) {
             if (!currentOrg) return;
             currentPage = page;
-            
+
             const search = document.getElementById('searchInput').value;
             const status = document.getElementById('statusFilter').value;
             const timeWindow = document.getElementById('timeWindow').value;
             const sortBy = document.getElementById('sortBy').value;
-            
+
             const params = new URLSearchParams({ page, sort_by: sortBy });
             if (search) params.append('search', search);
             if (status !== 'all') params.append('status', status);
             if (timeWindow) params.append('time_window', timeWindow);
-            
+
             try {
                 const res = await fetch(API_BASE + '/api/organizations/' + currentOrg + '/conversations?' + params);
                 const data = await res.json();
@@ -530,7 +542,7 @@ def create_standalone_frontend():
                 showError('Failed to load conversations: ' + e.message);
             }
         }
-        
+
         function renderTable(conversations) {
             const tbody = document.getElementById('conversationsTable');
             if (conversations.length === 0) {
@@ -553,7 +565,7 @@ def create_standalone_frontend():
                 \`;
             }).join('');
         }
-        
+
         function renderPagination(data) {
             const div = document.getElementById('pagination');
             let html = \`<button onclick="loadConversations(\${data.page - 1})" \${data.page <= 1 ? 'disabled' : ''}>Previous</button>\`;
@@ -561,18 +573,18 @@ def create_standalone_frontend():
             html += \`<button onclick="loadConversations(\${data.page + 1})" \${data.page >= data.total_pages ? 'disabled' : ''}>Next</button>\`;
             div.innerHTML = html;
         }
-        
+
         function formatNumber(n) {
             if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
             if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
             return n.toString();
         }
-        
+
         function showError(msg) {
             document.getElementById('error').textContent = msg;
             document.getElementById('error').style.display = 'block';
         }
-        
+
         document.getElementById('orgSelect').addEventListener('change', async (e) => {
             currentOrg = e.target.value;
             if (currentOrg) {
@@ -580,38 +592,35 @@ def create_standalone_frontend():
                 await loadConversations(1);
             }
         });
-        
+
         // Initialize
         loadOrganizations();
     </script>
 </body>
 </html>
-'''
+"""
 
 
 # Add static file route for the frontend
-@app.get("/dashboard")
+@app.get('/dashboard')
 async def dashboard():
     return HTMLResponse(create_standalone_frontend())
 
 
-from starlette.responses import HTMLResponse
-
-
 def main():
-    parser = argparse.ArgumentParser(description="Run standalone admin API server")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Port to run on")
-    parser.add_argument("--db-url", type=str, default=None, help="Database URL")
+    parser = argparse.ArgumentParser(description='Run standalone admin API server')
+    parser.add_argument('--port', type=int, default=DEFAULT_PORT, help='Port to run on')
+    parser.add_argument('--db-url', type=str, default=None, help='Database URL')
     args = parser.parse_args()
-    
+
     db_url = args.db_url or DEFAULT_DB_URL
-    print(f"Starting server on port {args.port}")
-    print(f"Database: {db_url}")
-    print(f"API Docs: http://localhost:{args.port}/docs")
-    print(f"Dashboard: http://localhost:{args.port}/dashboard")
-    
-    uvicorn.run(app, host="0.0.0.0", port=args.port)
+    print(f'Starting server on port {args.port}')
+    print(f'Database: {db_url}')
+    print(f'API Docs: http://localhost:{args.port}/docs')
+    print(f'Dashboard: http://localhost:{args.port}/dashboard')
+
+    uvicorn.run(app, host='0.0.0.0', port=args.port)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
