@@ -1,5 +1,6 @@
 """Unit tests for the methods in LiveStatusAppConversationService."""
 
+import builtins
 import io
 import json
 import os
@@ -1464,6 +1465,68 @@ class TestLiveStatusAppConversationService:
         )
         assert self.mock_event_service.search_events.call_count == 2
         mock_conversation_info.model_dump_json.assert_called_once_with(indent=2)
+
+    async def test_export_conversation_writes_utf8_when_platform_default_cannot_encode(
+        self,
+    ):
+        """Test trajectory export writes JSON as UTF-8 regardless of platform default."""
+        # Arrange
+        conversation_id = uuid4()
+
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.title = 'Café 🔐'
+        mock_conversation_info.model_dump_json = Mock(
+            return_value='{"id": "test", "title": "Café 🔐"}'
+        )
+
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+
+        mock_event = Mock(spec=Event)
+        mock_event.id = uuid4()
+        mock_event.model_dump = Mock(
+            return_value={
+                'id': str(mock_event.id),
+                'type': 'observation',
+                'message': 'résumé 🔐',
+            }
+        )
+
+        mock_event_page = Mock()
+        mock_event_page.items = [mock_event]
+        mock_event_page.next_page_id = None
+        self.mock_event_service.search_events = AsyncMock(return_value=mock_event_page)
+
+        real_open = builtins.open
+
+        def cp1252_default_open(file, mode='r', *args, **kwargs):
+            if 'w' in mode and 'encoding' not in kwargs:
+                kwargs['encoding'] = 'cp1252'
+            return real_open(file, mode, *args, **kwargs)
+
+        # Act
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.open',
+            cp1252_default_open,
+            create=True,
+        ):
+            result = await self.service.export_conversation(conversation_id)
+
+        # Assert
+        with zipfile.ZipFile(io.BytesIO(result), 'r') as zipf:
+            with zipf.open('meta.json') as meta_file:
+                meta_content = meta_file.read().decode('utf-8')
+                assert '"title": "Café 🔐"' in meta_content
+
+            event_files = [
+                name for name in zipf.namelist() if name.startswith('event_')
+            ]
+            assert len(event_files) == 1
+            with zipf.open(event_files[0]) as event_file:
+                event_content = json.loads(event_file.read().decode('utf-8'))
+                assert event_content['message'] == 'résumé 🔐'
 
     @pytest.mark.asyncio
     async def test_export_conversation_conversation_not_found(self):

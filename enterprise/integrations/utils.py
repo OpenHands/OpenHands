@@ -83,6 +83,26 @@ def get_account_not_linked_message(username: str | None = None) -> str:
     return f"You have an OpenHands account but haven't linked it to this workspace yet. Please link it at [OpenHands Cloud]({HOST_URL}) under Settings > Integrations and try again."
 
 
+def get_jira_dc_relink_message(display_name: str | None = None) -> str:
+    """Get a message asking the user to re-link their Jira DC workspace.
+
+    Surfaced when the stored OAuth tokens are missing, expired, or fail to
+    refresh — meaning the conversation cannot be started with per-user credentials.
+
+    Args:
+        display_name: Optional Jira display name to personalise the message.
+
+    Returns:
+        A formatted re-link message in Jira Wiki Markup.
+    """
+    greeting = f'Hi {display_name}, ' if display_name else ''
+    return (
+        f'{greeting}your Jira workspace link has expired or is not yet set up. '
+        f'Please re-link in [OpenHands Cloud|{HOST_URL}] under '
+        f'Settings → Integrations to continue using OpenHands from Jira.'
+    )
+
+
 OPENHANDS_RESOLVER_TEMPLATES_DIR = (
     os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
     or 'openhands/app_server/integrations/templates/resolver/'
