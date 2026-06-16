@@ -56,6 +56,8 @@ async def _get_effective_org_id(user_context: UserContext) -> UUID | None:
     if resolver_org_id is not None:
         return resolver_org_id
 
+    # Known org-bearing UserContext shapes: resolver starts set resolver_org_id;
+    # user-auth starts expose get_effective_org_id on one of these auth attrs.
     for auth_attr in ('saas_user_auth', 'user_auth'):
         user_auth = getattr(user_context, auth_attr, None)
         get_effective_org_id = getattr(user_auth, 'get_effective_org_id', None)
@@ -72,7 +74,8 @@ async def _effective_org_matches(
 ) -> bool:
     effective_org_id = await _get_effective_org_id(user_context)
     if effective_org_id is None:
-        logger.warning(
+        # Expected best-effort skip, not an anomaly: keep at info to avoid noise.
+        logger.info(
             '[Jira DC] Skipping Jira DC token injection because workspace %s is '
             'org-scoped but no effective org was resolved',
             workspace_id,
@@ -132,6 +135,7 @@ class JiraDcConversationSecretEnricher(ConversationSecretEnricher):
         jwt_service: JwtService,
         access_token_hard_timeout: timedelta | None,
     ) -> ConversationSecretEnrichment:
+        # Identity is resolved via user_context; `user` is required only by the interface.
         del user
 
         if not JIRA_DC_ENABLE_OAUTH:
