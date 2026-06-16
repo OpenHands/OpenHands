@@ -38,6 +38,7 @@ import {
   ConversationWebSocketProvider,
   useConversationWebSocket,
 } from "#/contexts/conversation-websocket-context";
+import PendingMessageService from "#/api/pending-message-service/pending-message-service.api";
 import { conversationWebSocketTestSetup } from "./helpers/msw-websocket-setup";
 import { useEventStore } from "#/stores/use-event-store";
 import { isV1Event } from "#/types/v1/type-guards";
@@ -891,6 +892,123 @@ describe("Conversation WebSocket Handler", () => {
 
   // 7. Message Sending Tests
   describe("Message Sending", () => {
+    it("should queue user messages through PendingMessageService when the WebSocket is not connected", async () => {
+      const conversationId = "test-conversation-queued";
+      const queueMessageSpy = vi
+        .spyOn(PendingMessageService, "queueMessage")
+        .mockResolvedValue({
+          id: "pending-message-1",
+          queued: true,
+          position: 1,
+        });
+
+      let sendMessageFn: typeof useConversationWebSocket extends () => infer R
+        ? R extends { sendMessage: infer S }
+          ? S
+          : null
+        : null = null;
+
+      function TestComponent() {
+        const context = useConversationWebSocket();
+
+        React.useEffect(() => {
+          if (context?.sendMessage) {
+            sendMessageFn = context.sendMessage;
+          }
+        }, [context?.sendMessage]);
+
+        return (
+          <div>
+            <div data-testid="connection-state">
+              {context?.connectionState || "NOT_AVAILABLE"}
+            </div>
+          </div>
+        );
+      }
+
+      renderWithWebSocketContext(<TestComponent />, conversationId, "");
+
+      await waitFor(() => {
+        expect(sendMessageFn).not.toBeNull();
+      });
+
+      let sendResult: Awaited<ReturnType<NonNullable<typeof sendMessageFn>>>;
+
+      await act(async () => {
+        sendResult = await sendMessageFn!({
+          role: "user",
+          content: [{ type: "text", text: "Queue me while disconnected" }],
+        });
+      });
+
+      expect(sendResult!).toEqual({ queued: true });
+      expect(queueMessageSpy).toHaveBeenCalledWith(conversationId, {
+        role: "user",
+        content: [{ type: "text", text: "Queue me while disconnected" }],
+      });
+
+      queueMessageSpy.mockRestore();
+    });
+
+    it("should surface queueing errors when PendingMessageService fails", async () => {
+      const conversationId = "test-conversation-queue-error";
+      const queueError = new Error("Failed to queue message for delivery");
+      const queueMessageSpy = vi
+        .spyOn(PendingMessageService, "queueMessage")
+        .mockRejectedValue(queueError);
+
+      let sendMessageFn: typeof useConversationWebSocket extends () => infer R
+        ? R extends { sendMessage: infer S }
+          ? S
+          : null
+        : null = null;
+
+      function TestComponent() {
+        const context = useConversationWebSocket();
+
+        React.useEffect(() => {
+          if (context?.sendMessage) {
+            sendMessageFn = context.sendMessage;
+          }
+        }, [context?.sendMessage]);
+
+        return (
+          <div>
+            <div data-testid="connection-state">
+              {context?.connectionState || "NOT_AVAILABLE"}
+            </div>
+            <ErrorMessageStoreComponent />
+          </div>
+        );
+      }
+
+      renderWithWebSocketContext(<TestComponent />, conversationId, "");
+
+      await waitFor(() => {
+        expect(sendMessageFn).not.toBeNull();
+      });
+
+      await expect(
+        sendMessageFn!({
+          role: "user",
+          content: [{ type: "text", text: "This one should fail" }],
+        }),
+      ).rejects.toThrow("Failed to queue message for delivery");
+
+      await waitFor(() => {
+        expect(screen.getByTestId("error-message")).toHaveTextContent(
+          "Failed to queue message for delivery",
+        );
+      });
+
+      expect(queueMessageSpy).toHaveBeenCalledWith(conversationId, {
+        role: "user",
+        content: [{ type: "text", text: "This one should fail" }],
+      });
+
+      queueMessageSpy.mockRestore();
+    });
+
     it("should send user actions through WebSocket when connected", async () => {
       // Arrange
       const conversationId = "test-conversation-send";
