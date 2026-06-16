@@ -63,6 +63,11 @@ export const useUnifiedGetGitChanges = () => {
     },
   });
 
+  React.useEffect(() => {
+    setOrderedChanges([]);
+    previousDataRef.current = null;
+  }, [conversationId, conversationUrl, sessionApiKey, gitPath]);
+
   // Latest changes should be on top
   React.useEffect(() => {
     if (!result.isFetching && result.isSuccess && result.data) {
