@@ -171,8 +171,8 @@ describe("sdk settings schema helpers", () => {
       agent_settings: {
         ...BASE_SETTINGS.agent_settings,
         verification: {
-          ...(BASE_SETTINGS.agent_settings as Record<string, unknown>)
-            .verification as Record<string, unknown>,
+          ...((BASE_SETTINGS.agent_settings as Record<string, unknown>)
+            .verification as Record<string, unknown>),
           critic_mode: "all_actions",
         },
       },
@@ -218,6 +218,69 @@ describe("sdk settings schema helpers", () => {
       (s) => s.key === "verification",
     );
     expect(verificationSection?.fields).toHaveLength(2);
+  });
+
+  it("treats LLM timeout as an advanced field even when the SDK schema marks it minor", () => {
+    const settings: Settings = {
+      ...BASE_SETTINGS,
+      agent_settings_schema: {
+        model_name: "AgentSettings",
+        sections: [
+          {
+            key: "llm",
+            label: "LLM",
+            fields: [
+              {
+                key: "llm.model",
+                label: "Model",
+                section: "llm",
+                section_label: "LLM",
+                value_type: "string",
+                default: "openai/gpt-4o",
+                choices: [],
+                depends_on: [],
+                prominence: "critical",
+                secret: false,
+                required: true,
+              },
+              {
+                key: "llm.timeout",
+                label: "Timeout",
+                section: "llm",
+                section_label: "LLM",
+                value_type: "integer",
+                default: 300,
+                choices: [],
+                depends_on: [],
+                prominence: "minor",
+                secret: false,
+                required: false,
+              },
+            ],
+          },
+        ],
+      },
+      agent_settings: {
+        ...BASE_SETTINGS.agent_settings,
+        llm: {
+          model: "openai/gpt-4o",
+          timeout: 900,
+        },
+      },
+    };
+
+    const values = buildInitialSettingsFormValues(settings);
+
+    expect(inferInitialView(settings)).toBe("advanced");
+    expect(
+      getVisibleSettingsSections(
+        settings.agent_settings_schema!,
+        values,
+        "advanced",
+      )
+        .flatMap((section) => section.fields)
+        .map((field) => field.key),
+    ).toContain("llm.timeout");
   });
 
   it("passes through all fields when excludeKeys is empty", () => {
@@ -303,7 +366,9 @@ describe("sdk settings schema helpers", () => {
       "llm.litellm_extra_body": true,
     };
 
-    expect(buildSdkSettingsPayloadForView(schema, values, dirty, "basic")).toEqual({
+    expect(
+      buildSdkSettingsPayloadForView(schema, values, dirty, "basic"),
+    ).toEqual({
       llm: {
         model: "anthropic/claude-sonnet-4-20250514",
         timeout: 30,
@@ -325,7 +390,9 @@ describe("sdk settings schema helpers", () => {
       verification: { critic_enabled: true, critic_mode: "finish_and_message" },
     });
 
-    expect(buildSdkSettingsPayloadForView(schema, values, dirty, "all")).toEqual({
+    expect(
+      buildSdkSettingsPayloadForView(schema, values, dirty, "all"),
+    ).toEqual({
       llm: {
         model: "anthropic/claude-sonnet-4-20250514",
         timeout: 90,

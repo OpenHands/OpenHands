@@ -30,6 +30,10 @@ const VIEW_PROMINENCES: Record<SettingsView, Set<SettingProminence>> = {
   all: new Set<SettingProminence>(["critical", "major", "minor"]),
 };
 
+const FIELD_PROMINENCE_OVERRIDES: Record<string, SettingProminence> = {
+  "llm.timeout": "major",
+};
+
 function getSchemaFields(schema: SettingsSchema): SettingsFieldSchema[] {
   return schema.sections.flatMap((section) => section.fields);
 }
@@ -98,12 +102,16 @@ function isChoiceField(field: SettingsFieldSchema): boolean {
   return field.choices.length > 0;
 }
 
+function getEffectiveProminence(field: SettingsFieldSchema): SettingProminence {
+  return FIELD_PROMINENCE_OVERRIDES[field.key] ?? field.prominence;
+}
+
 function isCriticalField(field: SettingsFieldSchema): boolean {
-  return field.prominence === "critical";
+  return getEffectiveProminence(field) === "critical";
 }
 
 function isMinorField(field: SettingsFieldSchema): boolean {
-  return field.prominence === "minor";
+  return getEffectiveProminence(field) === "minor";
 }
 
 function normalizeFieldValue(
@@ -403,7 +411,7 @@ function isFieldVisibleInView(
   field: SettingsFieldSchema,
   view: SettingsView,
 ): boolean {
-  return VIEW_PROMINENCES[view].has(field.prominence);
+  return VIEW_PROMINENCES[view].has(getEffectiveProminence(field));
 }
 
 export function buildSdkSettingsPayloadForView(
@@ -450,11 +458,15 @@ export function getVisibleSettingsSections(
 /** Whether the schema has any fields visible in the "advanced" tier. */
 export function hasAdvancedSettings(schema: SettingsSchema | null): boolean {
   if (!schema) return false;
-  return getSchemaFields(schema).some((f) => f.prominence === "major");
+  return getSchemaFields(schema).some(
+    (f) => getEffectiveProminence(f) === "major",
+  );
 }
 
 /** Whether the schema has any "minor" prominence fields. */
 export function hasMinorSettings(schema: SettingsSchema | null): boolean {
   if (!schema) return false;
-  return getSchemaFields(schema).some((f) => f.prominence === "minor");
+  return getSchemaFields(schema).some(
+    (f) => getEffectiveProminence(f) === "minor",
+  );
 }
