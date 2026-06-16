@@ -13,21 +13,20 @@ from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import Request
+from server.routes.org_models import (
+    OrgConversationPage,
+    OrgConversationResponse,
+)
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from storage.stored_conversation_metadata import StoredConversationMetadata
+from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
+from storage.user import User
 
 from openhands.app_server.sandbox.sandbox_models import AGENT_SERVER, SandboxInfo
 from openhands.app_server.services.injector import Injector, InjectorState
 from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk.llm import MetricsSnapshot, TokenUsage
-from server.routes.org_models import (
-    OrgConversationPage,
-    OrgConversationResponse,
-)
-from storage.stored_conversation_metadata import StoredConversationMetadata
-from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
-from storage.user import User
-
 
 # Valid sort fields
 VALID_SORT_FIELDS = {
@@ -138,7 +137,9 @@ class OrgConversationService:
         total_items = count_result.scalar() or 0
 
         # Apply sorting
-        sort_column = VALID_SORT_FIELDS.get(sort_by, StoredConversationMetadata.last_updated_at)
+        sort_column = VALID_SORT_FIELDS.get(
+            sort_by, StoredConversationMetadata.last_updated_at
+        )
         if sort_order.lower() == 'asc':
             query = query.order_by(sort_column.asc().nullslast())
         else:
@@ -154,9 +155,7 @@ class OrgConversationService:
 
         # Collect sandbox IDs for batch fetch
         sandbox_ids = [
-            metadata.sandbox_id
-            for metadata, _, _ in rows
-            if metadata.sandbox_id
+            metadata.sandbox_id for metadata, _, _ in rows if metadata.sandbox_id
         ]
 
         # Batch fetch sandbox info for live status (only if filtering by sandbox_status)
@@ -177,10 +176,11 @@ class OrgConversationService:
         # Apply sandbox_status filter post-query (since it's from sandbox service)
         if sandbox_status:
             rows = [
-                row for row in rows
-                if row[0].sandbox_id and
-                sandbox_info_map.get(row[0].sandbox_id) and
-                sandbox_info_map[row[0].sandbox_id].status.value in sandbox_status
+                row
+                for row in rows
+                if row[0].sandbox_id
+                and sandbox_info_map.get(row[0].sandbox_id)
+                and sandbox_info_map[row[0].sandbox_id].status.value in sandbox_status
             ]
 
         # Build response items
