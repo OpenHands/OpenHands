@@ -3480,3 +3480,36 @@ class TestBuildAcpStartConversationRequestSecrets:
         request = await self._call_build(service, user, tmp_path)
 
         assert request.agent.acp_env.get('GH_TOKEN') == 'explicit-token'
+
+
+class TestAugmentSuffixWithDependencyRepos:
+    """Tests for _augment_suffix_with_dependency_repos."""
+
+    def test_returns_suffix_unchanged_when_no_repos_cloned(self):
+        result = LiveStatusAppConversationService._augment_suffix_with_dependency_repos(
+            'original suffix', []
+        )
+        assert result == 'original suffix'
+
+    def test_returns_none_when_no_suffix_and_no_repos(self):
+        result = LiveStatusAppConversationService._augment_suffix_with_dependency_repos(
+            None, []
+        )
+        assert result is None
+
+    def test_lists_cloned_paths_when_no_existing_suffix(self):
+        result = LiveStatusAppConversationService._augment_suffix_with_dependency_repos(
+            None, ['/workspace/primary/dep-a', '/workspace/primary/dep-b']
+        )
+        assert result is not None
+        assert '<DEPENDENCY_REPOSITORIES>' in result
+        assert '- /workspace/primary/dep-a' in result
+        assert '- /workspace/primary/dep-b' in result
+
+    def test_appends_to_existing_suffix(self):
+        result = LiveStatusAppConversationService._augment_suffix_with_dependency_repos(
+            'existing', ['/workspace/primary/dep-a']
+        )
+        assert result is not None
+        assert result.startswith('existing\n\n')
+        assert '- /workspace/primary/dep-a' in result

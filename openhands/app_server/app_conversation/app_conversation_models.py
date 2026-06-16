@@ -271,6 +271,13 @@ class AppConversationStartTask(OpenHandsModel):
     agent_server_url: str | None = Field(
         default=None, description='The agent server url, if READY'
     )
+    dependency_repos_cloned: list[str] = Field(
+        default_factory=list,
+        description=(
+            'Absolute sandbox paths of any dependency repositories that were '
+            'cloned for this conversation.'
+        ),
+    )
     request: AppConversationStartRequest
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)

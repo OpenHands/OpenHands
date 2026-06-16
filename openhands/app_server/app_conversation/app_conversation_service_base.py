@@ -356,8 +356,6 @@ class AppConversationServiceBase(AppConversationService, ABC):
             raise ValueError('Missing either Git token or valid repository')
 
         dir_name = request.selected_repository.split('/')[-1]
-        quoted_remote_repo_url = shlex.quote(remote_repo_url)
-        quoted_dir_name = shlex.quote(dir_name)
         git_dir = Path(workspace.working_dir) / dir_name
         azure_devops_bearer_token = await self._get_azure_devops_bearer_token_for_git(
             request.git_provider,
@@ -365,16 +363,9 @@ class AppConversationServiceBase(AppConversationService, ABC):
         )
 
         # Clone the repo - this is the slow part!
-        if azure_devops_bearer_token:
-            auth_header = shlex.quote(
-                f'Authorization: Bearer {azure_devops_bearer_token}'
-            )
-            clone_command = (
-                f'git -c http.extraheader={auth_header} clone '
-                f'{quoted_remote_repo_url} {quoted_dir_name}'
-            )
-        else:
-            clone_command = f'git clone {quoted_remote_repo_url} {quoted_dir_name}'
+        clone_command = self._build_git_clone_command(
+            remote_repo_url, dir_name, azure_devops_bearer_token
+        )
         result = await workspace.execute_command(
             clone_command, workspace.working_dir, 120
         )
@@ -403,28 +394,72 @@ class AppConversationServiceBase(AppConversationService, ABC):
         if result.exit_code:
             _logger.warning(f'Git checkout failed: {result.stderr}')
 
-        # Clone dependency repos if specified
+        # Clone dependency repos (if any) into the project root so they are
+        # visible from the agent's configured workspace. Record the cloned
+        # paths on the task so the conversation can surface them to the agent.
         if request.dependency_repos:
-            await self._clone_dependency_repos(request.dependency_repos, workspace)
+            task.dependency_repos_cloned = await self._clone_dependency_repos(
+                request.dependency_repos,
+                workspace,
+                project_dir=str(git_dir),
+                sandbox=sandbox,
+            )
+
+    def _build_git_clone_command(
+        self,
+        remote_repo_url: str,
+        dir_name: str,
+        azure_devops_bearer_token: str | None,
+    ) -> str:
+        """Build a ``git clone`` command, reusing provider-specific auth.
+
+        When an Azure DevOps OAuth/JWT bearer token is supplied, the token is
+        injected via ``http.extraheader`` exactly as the primary-repo clone
+        does. Shared by the primary clone and dependency-repo clones so the two
+        paths cannot drift apart.
+        """
+        quoted_url = shlex.quote(remote_repo_url)
+        quoted_dir = shlex.quote(dir_name)
+        if azure_devops_bearer_token:
+            auth_header = shlex.quote(
+                f'Authorization: Bearer {azure_devops_bearer_token}'
+            )
+            return (
+                f'git -c http.extraheader={auth_header} clone {quoted_url} {quoted_dir}'
+            )
+        return f'git clone {quoted_url} {quoted_dir}'
 
     async def _clone_dependency_repos(
         self,
         dependency_repos: list[str],
         workspace: AsyncRemoteWorkspace,
+        project_dir: str | None = None,
+        sandbox: SandboxInfo | None = None,
     ) -> list[str]:
-        """Clone additional dependency repositories into the workspace.
+        """Clone additional dependency repositories into the project root.
 
-        Failures are non-fatal: each repo is attempted independently,
-        and warnings are logged for any that fail.
+        Dependency repos are cloned *into* ``project_dir`` (the primary repo
+        directory, i.e. the agent's configured workspace root) so the started
+        agent can actually discover and access them. The same provider-specific
+        clone handling used for the primary repo is reused here, including the
+        Azure DevOps bearer header and credential-helper setup.
+
+        Failures are non-fatal: each repo is attempted independently, and
+        warnings are logged for any that fail.
 
         Args:
             dependency_repos: List of repos in 'owner/repo' format.
             workspace: The remote workspace to clone repos into.
+            project_dir: Directory to clone into. Defaults to
+                ``workspace.working_dir`` when not provided.
+            sandbox: Sandbox info, required for Azure DevOps credential-helper
+                setup.
 
         Returns:
-            List of directory names that were successfully cloned.
+            Absolute paths of the dependency repos that were cloned successfully.
         """
-        cloned = []
+        parent_dir = project_dir or workspace.working_dir
+        cloned_paths: list[str] = []
         for repo in dependency_repos:
             try:
                 dep_url = await self.user_context.get_authenticated_git_url(repo)
@@ -434,21 +469,32 @@ class AppConversationServiceBase(AppConversationService, ABC):
                     )
                     continue
                 dep_name = repo.split('/')[-1]
-                result = await workspace.execute_command(
-                    f'git clone {shlex.quote(dep_url)} {shlex.quote(dep_name)}',
-                    workspace.working_dir,
-                    120,
+                dep_dir = Path(parent_dir) / dep_name
+                # Detect Azure DevOps from the resolved URL: a dependency may
+                # use a different provider than the primary repo.
+                azure_devops_bearer_token = (
+                    await self._get_azure_devops_bearer_token_for_git(None, dep_url)
                 )
+                clone_command = self._build_git_clone_command(
+                    dep_url, dep_name, azure_devops_bearer_token
+                )
+                result = await workspace.execute_command(clone_command, parent_dir, 120)
                 if result.exit_code:
                     _logger.warning(
                         f'Failed to clone dependency repo {repo}: {result.stderr}'
                     )
-                else:
-                    cloned.append(dep_name)
-                    _logger.info(f'Successfully cloned dependency repo: {repo}')
+                    continue
+                if azure_devops_bearer_token:
+                    await self._configure_azure_devops_git_credential_helper(
+                        workspace, dep_dir, repo, sandbox
+                    )
+                cloned_paths.append(str(dep_dir))
+                _logger.info(
+                    f'Successfully cloned dependency repo {repo} into {dep_dir}'
+                )
             except Exception as e:
                 _logger.warning(f'Unexpected error cloning dependency repo {repo}: {e}')
-        return cloned
+        return cloned_paths
 
     async def _get_azure_devops_bearer_token_for_git(
         self,

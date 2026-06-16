@@ -316,13 +316,20 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             ):
                 yield updated_task
 
+            # Surface any cloned dependency repos to the agent via the system
+            # message suffix so it knows where to find them in its workspace.
+            system_message_suffix = self._augment_suffix_with_dependency_repos(
+                request.system_message_suffix,
+                task.dependency_repos_cloned,
+            )
+
             # Build the start request
             start_conversation_request = (
                 await self._build_start_conversation_request_for_user(
                     sandbox,
                     conversation_id,
                     request.initial_message,
-                    request.system_message_suffix,
+                    system_message_suffix,
                     request.git_provider,
                     working_dir,
                     request.agent_type,
@@ -1308,6 +1315,32 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             project_dir=project_dir,
             httpx_client=self.httpx_client,
         )
+
+    @staticmethod
+    def _augment_suffix_with_dependency_repos(
+        system_message_suffix: str | None,
+        dependency_repos_cloned: list[str],
+    ) -> str | None:
+        """Append cloned dependency-repo paths to the system message suffix.
+
+        Cloning dependency repos is only useful if the agent knows where to
+        find them, so we list their absolute workspace paths in the agent
+        context. Returns the suffix unchanged when no dependency repos were
+        cloned.
+        """
+        if not dependency_repos_cloned:
+            return system_message_suffix
+        listing = '\n'.join(f'- {path}' for path in dependency_repos_cloned)
+        context = (
+            '<DEPENDENCY_REPOSITORIES>\n'
+            'The following dependency repositories were cloned into your '
+            'workspace and are available alongside the primary repository:\n'
+            f'{listing}\n'
+            '</DEPENDENCY_REPOSITORIES>'
+        )
+        if system_message_suffix:
+            return f'{system_message_suffix}\n\n{context}'
+        return context
 
     async def _build_start_conversation_request_for_user(
         self,
