@@ -1,11 +1,9 @@
 import React from "react";
 import { useLocation } from "react-router";
-import { useTranslation } from "react-i18next";
 import { useMe } from "#/hooks/query/use-me";
 import { cn } from "#/utils/utils";
 
 export function AdminDashboardButton() {
-  const { t } = useTranslation();
   const location = useLocation();
   const { data: me } = useMe();
 
@@ -24,9 +22,10 @@ export function AdminDashboardButton() {
         "flex items-center justify-center w-[34px] h-[34px] rounded-lg transition-colors",
         isActive
           ? "bg-[#262626] text-white"
-          : "text-[#8C8C8C] hover:text-white hover:bg-[#1E1E1E]"
+          : "text-[#8C8C8C] hover:text-white hover:bg-[#1E1E1E]",
       )}
       title="Admin Dashboard"
+      aria-label="Admin Dashboard"
     >
       <svg
         width="20"

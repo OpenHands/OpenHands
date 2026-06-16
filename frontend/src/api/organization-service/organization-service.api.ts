@@ -295,7 +295,8 @@ export const organizationService = {
       sandboxStatus.forEach((s) => params.append("sandbox_status", s));
     }
     if (timeWindow) params.set("time_window", timeWindow);
-    if (includeSubConversations) params.set("include_sub_conversations", "true");
+    if (includeSubConversations)
+      params.set("include_sub_conversations", "true");
 
     const { data } = await openHands.get<OrgConversationPage>(
       `/api/organizations/${orgId}/conversations?${params.toString()}`,

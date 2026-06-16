@@ -315,7 +315,9 @@ class OrgConversationService:
             select(
                 func.coalesce(func.sum(StoredConversationMetadata.accumulated_cost), 0),
                 func.coalesce(func.sum(StoredConversationMetadata.prompt_tokens), 0),
-                func.coalesce(func.sum(StoredConversationMetadata.completion_tokens), 0),
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.completion_tokens), 0
+                ),
             )
             .select_from(StoredConversationMetadata)
             .join(
@@ -342,7 +344,9 @@ class OrgConversationService:
                     == StoredConversationMetadataSaas.conversation_id,
                 )
                 .where(*base_filter)
-                .where(StoredConversationMetadata.execution_status.in_(terminal_statuses))
+                .where(
+                    StoredConversationMetadata.execution_status.in_(terminal_statuses)
+                )
                 .where(StoredConversationMetadata.last_updated_at >= cutoff)
             )
             res = await self.db_session.execute(completed_query)
@@ -438,7 +442,9 @@ class OrgConversationService:
         sandbox_info = None
         if metadata.sandbox_id and self.sandbox_service:
             try:
-                sandbox_info = await self.sandbox_service.get_sandbox(metadata.sandbox_id)
+                sandbox_info = await self.sandbox_service.get_sandbox(
+                    metadata.sandbox_id
+                )
             except Exception as e:
                 logger.warning(
                     'Failed to fetch sandbox info for conversation',
@@ -459,7 +465,9 @@ class OrgConversationService:
                 None,
             )
             if agent_server_url:
-                runtime_url = f'{agent_server_url}/api/conversations/{metadata.conversation_id}'
+                runtime_url = (
+                    f'{agent_server_url}/api/conversations/{metadata.conversation_id}'
+                )
 
         # Build metrics
         token_usage = TokenUsage(
@@ -547,7 +555,9 @@ class OrgConversationService:
         # Try to stop via sandbox service
         if self.sandbox_service:
             try:
-                sandbox_info = await self.sandbox_service.get_sandbox(metadata.sandbox_id)
+                sandbox_info = await self.sandbox_service.get_sandbox(
+                    metadata.sandbox_id
+                )
                 if sandbox_info is None:
                     return {
                         'success': True,
@@ -603,7 +613,7 @@ class OrgConversationServiceInjector(Injector[OrgConversationService]):
         self, state: InjectorState, request: Request | None = None
     ) -> AsyncGenerator[OrgConversationService, None]:
         # Local imports to avoid circular dependencies
-        from openhands.app_server.config import get_db_session, depends_sandbox_service
+        from openhands.app_server.config import depends_sandbox_service, get_db_session
 
         async with get_db_session(state, request) as db_session:
             service = OrgConversationService(db_session=db_session)
