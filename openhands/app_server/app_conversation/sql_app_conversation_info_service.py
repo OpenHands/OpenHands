@@ -112,7 +112,9 @@ class StoredConversationMetadata(Base):
     public: Mapped[bool | None] = mapped_column(nullable=True, index=True)
 
     # Execution status: idle, running, paused, finished, error, stuck, deleting
-    execution_status: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    execution_status: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
 
     # Tags for conversation metadata (e.g., automation context, skills used)
     tags: Mapped[dict[str, str] | None] = mapped_column(
