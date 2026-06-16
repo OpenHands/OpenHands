@@ -76,6 +76,7 @@ function MCPSettingsScreen() {
       type: "sse" as const,
       url: typeof server === "string" ? server : server.url,
       api_key: typeof server === "object" ? server.api_key : undefined,
+      timeout: typeof server === "object" ? server.timeout : undefined,
     })),
     ...mcpConfig.stdio_servers.map((server, index) => ({
       id: `stdio-${index}`,

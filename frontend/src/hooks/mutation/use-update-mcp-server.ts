@@ -53,7 +53,7 @@ function updatedRemoteServer(
     ...(typeof current === "object" ? current : {}),
     url: server.url!,
   };
-  if (server.type === "shttp" && server.timeout !== undefined) {
+  if (server.timeout !== undefined) {
     updated.timeout = server.timeout;
   } else {
     delete updated.timeout;

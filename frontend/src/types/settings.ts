@@ -52,6 +52,7 @@ export type MCPSSEServer = {
   api_key?: string;
   auth?: MCPAuthCredential;
   headers?: Record<string, string>;
+  timeout?: number;
 };
 
 export type MCPStdioServer = {

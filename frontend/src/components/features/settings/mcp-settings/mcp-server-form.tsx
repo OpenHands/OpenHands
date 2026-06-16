@@ -166,12 +166,9 @@ export function MCPServerForm({
       const urlDupError = validateUrlUniqueness(url);
       if (urlDupError) return urlDupError;
 
-      // Validate timeout for SHTTP servers only
-      if (serverType === "shttp") {
-        const timeoutStr = formData.get("timeout")?.toString() || "";
-        const timeoutError = validateTimeout(timeoutStr);
-        if (timeoutError) return timeoutError;
-      }
+      const timeoutStr = formData.get("timeout")?.toString() || "";
+      const timeoutError = validateTimeout(timeoutStr);
+      if (timeoutError) return timeoutError;
 
       return null;
     }
@@ -236,8 +233,7 @@ export function MCPServerForm({
         ...(apiKey && { api_key: apiKey }),
       };
 
-      // Only add timeout for SHTTP servers
-      if (serverType === "shttp" && timeoutStr) {
+      if (timeoutStr) {
         const timeoutValue = parseInt(timeoutStr, 10);
         if (!Number.isNaN(timeoutValue)) {
           serverConfig.timeout = timeoutValue;
@@ -320,20 +316,18 @@ export function MCPServerForm({
             placeholder={t(I18nKey.SETTINGS$MCP_API_KEY_PLACEHOLDER)}
           />
 
-          {serverType === "shttp" && (
-            <SettingsInput
-              testId="timeout-input"
-              name="timeout"
-              type="number"
-              label={t(I18nKey.SETTINGS$MCP_TIMEOUT_LABEL)}
-              className="w-full max-w-[680px]"
-              showOptionalTag
-              defaultValue={server?.timeout?.toString() || ""}
-              placeholder="60"
-              min={1}
-              max={3600}
-            />
-          )}
+          <SettingsInput
+            testId="timeout-input"
+            name="timeout"
+            type="number"
+            label={t(I18nKey.SETTINGS$MCP_TIMEOUT_LABEL)}
+            className="w-full max-w-[680px]"
+            showOptionalTag
+            defaultValue={server?.timeout?.toString() || ""}
+            placeholder="60"
+            min={1}
+            max={3600}
+          />
         </>
       )}
 

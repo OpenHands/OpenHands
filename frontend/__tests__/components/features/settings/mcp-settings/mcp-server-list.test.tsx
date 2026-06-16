@@ -129,6 +129,30 @@ describe("MCPServerList", () => {
     expect(screen.getByText(expectedDetails)).toBeInTheDocument();
   });
 
+  it("should display timeout for remote servers", () => {
+    const sseServer = {
+      id: "sse-1",
+      type: "sse" as const,
+      url: "https://example.com/sse",
+      timeout: 90,
+    };
+
+    const mockOnEdit = vi.fn();
+    const mockOnDelete = vi.fn();
+
+    render(
+      <MCPServerList
+        servers={[sseServer]}
+        onEdit={mockOnEdit}
+        onDelete={mockOnDelete}
+      />,
+    );
+
+    expect(
+      screen.getByText("https://example.com/sse (timeout: 90s)"),
+    ).toBeInTheDocument();
+  });
+
   it("should fallback to server name for STDIO servers without command", () => {
     const stdioServer = {
       id: "stdio-2",

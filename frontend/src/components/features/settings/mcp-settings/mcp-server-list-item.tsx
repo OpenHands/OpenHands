@@ -53,6 +53,9 @@ export function MCPServerListItem({
       (serverConfig.type === "sse" || serverConfig.type === "shttp") &&
       serverConfig.url
     ) {
+      if (serverConfig.timeout) {
+        return `${serverConfig.url} (timeout: ${serverConfig.timeout}s)`;
+      }
       return serverConfig.url;
     }
     return "";

@@ -107,4 +107,35 @@ describe("MCPServerForm validation", () => {
 
     r2.unmount();
   });
+
+  it("submits timeout for SSE servers", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <MCPServerForm
+        mode="add"
+        server={{ id: "tmp", type: "sse" }}
+        existingServers={[]}
+        onSubmit={onSubmit}
+        onCancel={noop}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("url-input"), {
+      target: { value: "https://example.com/sse" },
+    });
+    fireEvent.change(screen.getByTestId("timeout-input"), {
+      target: { value: "90" },
+    });
+
+    fireEvent.click(screen.getByTestId("submit-button"));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "sse",
+        url: "https://example.com/sse",
+        timeout: 90,
+      }),
+    );
+  });
 });

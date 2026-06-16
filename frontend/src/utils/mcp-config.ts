@@ -270,6 +270,9 @@ export function parseMcpConfig(value: unknown): MCPConfig {
         if (apiKey) server.api_key = apiKey;
         if (auth) server.auth = auth;
         if (headers) server.headers = headers;
+        if (serverConfig.timeout != null) {
+          server.timeout = serverConfig.timeout as number;
+        }
         sseServers.push(server);
       } else {
         const server: MCPSHTTPServer = {
@@ -330,6 +333,7 @@ export function toSdkMcpConfig(
     } else {
       server.url = entry.url;
       Object.assign(server, getRemoteSecretFields(entry));
+      if (entry.timeout != null) server.timeout = entry.timeout;
     }
     server.transport = "sse";
 
