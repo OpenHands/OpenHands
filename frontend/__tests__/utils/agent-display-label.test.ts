@@ -7,16 +7,29 @@ const PROVIDERS: ACPProviderConfig[] = [
     key: "claude-code",
     display_name: "Claude Code",
     default_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+    available_models: [
+      { id: "anthropic/claude-opus-4-1", label: "Claude Opus 4.1" },
+      { id: "opus[1m]", label: "Claude Opus (1M)" },
+      { id: "opusplan", label: "Opus (plan) + Sonnet (execute)" },
+    ],
   },
   {
     key: "codex",
     display_name: "Codex",
     default_command: ["npx", "-y", "@openai/codex-acp"],
+    available_models: [
+      { id: "gpt-5.5/high", label: "GPT-5.5 (high)" },
+      { id: "gpt-5.3-codex/high", label: "GPT-5.3 Codex (high)" },
+      { id: "gpt-5.5/xhigh", label: "GPT-5.5 (xhigh)" },
+    ],
   },
   {
     key: "gemini-cli",
     display_name: "Gemini CLI",
     default_command: ["npx", "-y", "@google/gemini-cli-acp"],
+    available_models: [
+      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+    ],
   },
 ];
 
@@ -69,7 +82,7 @@ describe("resolveAgentChip", () => {
       },
     );
 
-    it("uses prettified llm_model as text with brand+model tooltip", () => {
+    it("uses registry label as text with brand+model tooltip", () => {
       const chip = resolveAgentChip(
         "acp",
         "anthropic/claude-opus-4-1",
@@ -80,6 +93,46 @@ describe("resolveAgentChip", () => {
         kind: "acp-claude-code",
         text: "Claude Opus 4.1",
         tooltip: "Claude Code · anthropic/claude-opus-4-1",
+      });
+    });
+
+    it("uses registry label for ACP models with special characters (xhigh, opus[1m], etc.)", () => {
+      expect(
+        resolveAgentChip("acp", "gpt-5.5/xhigh", "codex", PROVIDERS),
+      ).toEqual({
+        kind: "acp-codex",
+        text: "GPT-5.5 (xhigh)",
+        tooltip: "Codex · gpt-5.5/xhigh",
+      });
+
+      expect(
+        resolveAgentChip("acp", "opus[1m]", "claude-code", PROVIDERS),
+      ).toEqual({
+        kind: "acp-claude-code",
+        text: "Claude Opus (1M)",
+        tooltip: "Claude Code · opus[1m]",
+      });
+
+      expect(
+        resolveAgentChip("acp", "opusplan", "claude-code", PROVIDERS),
+      ).toEqual({
+        kind: "acp-claude-code",
+        text: "Opus (plan) + Sonnet (execute)",
+        tooltip: "Claude Code · opusplan",
+      });
+    });
+
+    it("falls back to raw model ID when not found in registry", () => {
+      const chip = resolveAgentChip(
+        "acp",
+        "custom-model-v123",
+        "claude-code",
+        PROVIDERS,
+      );
+      expect(chip).toEqual({
+        kind: "acp-claude-code",
+        text: "custom-model-v123",
+        tooltip: "Claude Code · custom-model-v123",
       });
     });
 

@@ -3,9 +3,12 @@ function capitalize(s: string): string {
 }
 
 // Reasoning-effort qualifiers used as the final slash-segment in model names
-// (e.g. "gpt-5.5/high", "o3/medium", "gpt-5.5/xhigh"). Keeping this list short avoids
+// (e.g. "gpt-5.5/high", "o3/medium"). Keeping this list short avoids
 // false-positive matches on real model name segments.
-const EFFORT_QUALS = new Set(["high", "medium", "low", "xhigh", "none"]);
+// Note: ACP models (which may include xhigh, none, opus[1m], opusplan, etc.)
+// are formatted via registry labels in resolveAgentChip; this is for native
+// OpenHands litellm routing strings only.
+const EFFORT_QUALS = new Set(["high", "medium", "low"]);
 
 /**
  * Format a raw ``llm_model`` routing string into a short, human-readable
@@ -68,60 +71,28 @@ export function formatLlmModel(raw: string): string {
     return `Claude ${version} ${tier}`;
   }
 
-  // Claude bare aliases: opus[1m], sonnet[1m], opusplan, etc.
-  //   opus[1m]     -> Claude Opus (1M)
-  //   sonnet[1m]   -> Claude Sonnet (1M)
-  //   opusplan     -> Claude Opus (plan)
-  m = lower.match(/^(opus|sonnet|haiku)(?:\[(.+)\])?(?:-(.+))?$/);
-  if (m) {
-    const tier = capitalize(m[1]);
-    let qualifier = "";
-    if (m[2]) {
-      qualifier = m[2].toUpperCase();
-    } else if (m[3]) {
-      qualifier = capitalize(m[3]);
-    }
-    return qualifier ? `Claude ${tier} (${qualifier})` : `Claude ${tier}`;
-  }
-
   // GPT family: gpt-{rest}
   //   gpt-4o           -> GPT-4o
   //   gpt-4o-mini      -> GPT-4o mini
   //   gpt-4.1          -> GPT-4.1
   //   gpt-5            -> GPT-5
   //   gpt-5.5/high     -> GPT-5.5 (high)
-  //   gpt-5.3-codex    -> GPT-5.3 Codex
-  //   gpt-5.3-codex/high -> GPT-5.3 Codex (high)
   m = lower.match(/^gpt-(.+)$/);
   if (m) {
     const rest = m[1];
     // Reasoning-effort qualifier via slash: "5.5/high" → "GPT-5.5 (high)"
     const slashIdx = rest.indexOf("/");
-    let beforeSlash = rest;
-    let effort = "";
     if (slashIdx >= 0) {
-      beforeSlash = rest.slice(0, slashIdx);
-      effort = rest.slice(slashIdx + 1);
+      return `GPT-${rest.slice(0, slashIdx)} (${rest.slice(slashIdx + 1)})`;
     }
-    // Check for codex suffix
-    if (beforeSlash.endsWith("-codex")) {
-      const versionMatch = beforeSlash.slice(0, -6).match(/^[\d.]+/);
-      if (versionMatch) {
-        const version = versionMatch[0];
-        return effort
-          ? `GPT-${version} Codex (${effort})`
-          : `GPT-${version} Codex`;
-      }
-    }
-    // Regular GPT suffix
-    const versionMatch = beforeSlash.match(/^([\d.]+[a-z]?)(?:-(.+))?$/);
+    // Split off optional "-{suffix}" once we've consumed the version token.
+    const versionMatch = rest.match(/^([\d.]+[a-z]?)(?:-(.+))?$/);
     if (versionMatch) {
       const version = versionMatch[1];
       const suffix = versionMatch[2];
-      const text = suffix ? `GPT-${version} ${suffix}` : `GPT-${version}`;
-      return effort ? `${text} (${effort})` : text;
+      return suffix ? `GPT-${version} ${suffix}` : `GPT-${version}`;
     }
-    return effort ? `GPT-${beforeSlash} (${effort})` : `GPT-${beforeSlash}`;
+    return `GPT-${rest}`;
   }
 
   // o-series (OpenAI reasoning): o1, o3, o3-mini, o4-mini, o3/high, etc.

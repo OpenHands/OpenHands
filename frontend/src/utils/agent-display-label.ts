@@ -69,15 +69,21 @@ export function resolveAgentChip(
 ): AgentChip | null {
   if (agentKind === "acp") {
     let name = "ACP";
+    let provider: ACPProviderConfig | undefined;
     if (acpServer && acpProviders) {
-      const provider = acpProviders.find((p) => p.key === acpServer);
+      provider = acpProviders.find((p) => p.key === acpServer);
       if (provider) name = provider.display_name;
     }
     const kind = acpKindFor(acpServer ?? undefined);
     if (llmModel) {
+      // Use the curated label from the ACP provider registry, falling back to
+      // raw ID for custom overrides or registry/version lag.
+      const label =
+        provider?.available_models?.find((m) => m.id === llmModel)?.label ??
+        llmModel;
       return {
         kind,
-        text: formatLlmModel(llmModel),
+        text: label,
         tooltip: `${name} · ${llmModel}`,
       };
     }
