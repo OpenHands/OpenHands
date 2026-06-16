@@ -3374,7 +3374,7 @@ requires-dist = [
     { name = "psutil" },
     { name = "pybase62", specifier = ">=1" },
     { name = "pygithub", specifier = ">=2.5" },
-    { name = "pyjwt", specifier = ">=2.12" },
+    { name = "pyjwt", specifier = ">=2.13.0" },
     { name = "pylatexenc" },
     { name = "pypdf", specifier = ">=6.10.2" },
     { name = "python-docx" },
