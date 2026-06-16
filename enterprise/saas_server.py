@@ -51,6 +51,9 @@ from server.routes.orgs import org_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.service import service_router  # noqa: E402
 from server.routes.user_app_settings import user_app_settings_router  # noqa: E402
+from server.routes.user_provisioning import (  # noqa: E402
+    user_provisioning_router,
+)
 from server.routes.users_v1 import (  # noqa: E402
     override_users_me_endpoint,
 )
@@ -133,6 +136,9 @@ if BITBUCKET_APP_CLIENT_ID:
 base_app.include_router(api_keys_router)  # Add routes for API key management
 base_app.include_router(service_router)  # Add routes for internal service API
 base_app.include_router(org_router)  # Add routes for organization management
+base_app.include_router(
+    user_provisioning_router
+)  # Add admin route for provisioning new users into an org
 base_app.include_router(
     org_profiles_router, prefix='/api/organizations'
 )  # Add routes for org LLM profiles
