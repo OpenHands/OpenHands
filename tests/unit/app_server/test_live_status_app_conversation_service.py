@@ -21,6 +21,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AgentType,
     AppConversationInfo,
     AppConversationStartRequest,
+    AppConversationStartTask,
     ConversationTrigger,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
@@ -238,6 +239,37 @@ class TestLiveStatusAppConversationService:
         # Default mock for hooks loading - returns None (no hooks found)
         # Tests that specifically test hooks loading can override this mock
         self.service._load_hooks_from_workspace = AsyncMock(return_value=None)
+
+    @pytest.mark.asyncio
+    async def test_wait_for_sandbox_start_uses_requested_sandbox_spec(self):
+        conversation_id = uuid4()
+        request = AppConversationStartRequest(
+            conversation_id=conversation_id,
+            sandbox_spec_id='custom-image:latest',
+        )
+        task = AppConversationStartTask(
+            created_by_user_id='test_user_123',
+            request=request,
+        )
+        sandbox = SandboxInfo(
+            id='custom-sandbox',
+            created_by_user_id='test_user_123',
+            sandbox_spec_id='custom-image:latest',
+            status=SandboxStatus.RUNNING,
+            session_api_key='session-key',
+        )
+        self.service._find_running_sandbox_for_user = AsyncMock()
+        self.mock_sandbox_service.start_sandbox = AsyncMock(return_value=sandbox)
+
+        async for updated_task in self.service._wait_for_sandbox_start(task):
+            assert updated_task.sandbox_id == 'custom-sandbox'
+            break
+
+        self.service._find_running_sandbox_for_user.assert_not_called()
+        self.mock_sandbox_service.start_sandbox.assert_awaited_once_with(
+            sandbox_id=conversation_id.hex,
+            sandbox_spec_id='custom-image:latest',
+        )
 
     @pytest.mark.asyncio
     async def test_seed_sandbox_profiles_upserts_resolved_keys_and_prunes(self):

@@ -847,8 +847,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         """Wait for sandbox to start and return info."""
         # Get or create the sandbox
         if not task.request.sandbox_id:
-            # First try to find a running sandbox for the current user
-            sandbox = await self._find_running_sandbox_for_user()
+            requested_sandbox_spec_id = task.request.sandbox_spec_id
+            # First try to find a running sandbox for the current user. Requests
+            # for a custom sandbox spec need a new sandbox; otherwise grouping
+            # could attach the conversation to a sandbox running a different image.
+            sandbox = None
+            if requested_sandbox_spec_id is None:
+                sandbox = await self._find_running_sandbox_for_user()
             if sandbox is None:
                 # No running sandbox found, start a new one
 
@@ -860,7 +865,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 )
 
                 sandbox = await self.sandbox_service.start_sandbox(
-                    sandbox_id=sandbox_id_str
+                    sandbox_id=sandbox_id_str,
+                    sandbox_spec_id=requested_sandbox_spec_id,
                 )
             task.sandbox_id = sandbox.id
         else:

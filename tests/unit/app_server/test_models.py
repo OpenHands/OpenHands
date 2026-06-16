@@ -46,6 +46,21 @@ async def test_app_conversation_start_request_polymorphism():
     assert result.detail == 'Live long and prosper!'
 
 
+def test_app_conversation_start_request_accepts_sandbox_spec_id():
+    req = AppConversationStartRequest(sandbox_spec_id='custom-image:latest')
+
+    assert req.sandbox_spec_id == 'custom-image:latest'
+    assert req.model_dump()['sandbox_spec_id'] == 'custom-image:latest'
+
+
+def test_app_conversation_start_request_rejects_sandbox_id_with_sandbox_spec_id():
+    with pytest.raises(ValueError, match='Cannot specify both sandbox_id'):
+        AppConversationStartRequest(
+            sandbox_id='existing-sandbox',
+            sandbox_spec_id='custom-image:latest',
+        )
+
+
 def test_app_conversation_update_request_includes_title_field():
     """Test that AppConversationUpdateRequest supports updating the title field.
 

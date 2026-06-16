@@ -3,7 +3,13 @@ from enum import Enum
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, SecretStr, computed_field
+from pydantic import (
+    BaseModel,
+    Field,
+    SecretStr,
+    computed_field,
+    model_validator,
+)
 
 from openhands.agent_server.models import (
     ImageContent,
@@ -194,7 +200,14 @@ class AppConversationStartRequest(OpenHandsModel):
     from the app server copies these from the user info.
     """
 
-    sandbox_id: str | None = Field(default=None)
+    sandbox_id: str | None = Field(
+        default=None,
+        description='ID of an existing sandbox to use. Mutually exclusive with sandbox_spec_id.',
+    )
+    sandbox_spec_id: str | None = Field(
+        default=None,
+        description='Image/spec ID for creating a new sandbox. Mutually exclusive with sandbox_id.',
+    )
     conversation_id: UUID | None = Field(default=None)
     initial_message: SendMessageRequest | None = None
     system_message_suffix: str | None = None
@@ -234,6 +247,12 @@ class AppConversationStartRequest(OpenHandsModel):
             'Warning: Providing a secret that already exists will silently override it.'
         ),
     )
+
+    @model_validator(mode='after')
+    def validate_sandbox_params(self) -> 'AppConversationStartRequest':
+        if self.sandbox_id and self.sandbox_spec_id:
+            raise ValueError('Cannot specify both sandbox_id and sandbox_spec_id')
+        return self
 
 
 class AppConversationUpdateRequest(BaseModel):
