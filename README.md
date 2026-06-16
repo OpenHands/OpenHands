@@ -1,7 +1,6 @@
 <a name="readme-top"></a>
 <div align="center">
   <img src="https://assets.openhands.dev/logo-whitebackground.png" alt="OpenHands logo" width="340">
-  <h1 align="center" style="border-bottom: none">OpenHands</h1>
   <p align="center">
     <strong>The self-hosted developer control center for coding agents and automations.</strong>
   </p>
