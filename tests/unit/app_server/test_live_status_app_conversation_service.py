@@ -1912,6 +1912,7 @@ class TestLiveStatusAppConversationService:
         ][0]
         assert saved_info.llm_model == 'gpt-5.5/high'
         assert saved_info.agent_kind == 'acp'
+        assert saved_info.tags.get('acpserver') == 'codex'
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_custom_remote_servers(self):

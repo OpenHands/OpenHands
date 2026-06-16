@@ -300,15 +300,10 @@ async def valid_conversation(
 
 
 async def _resolve_acp_server_key(user_id: str | None) -> str | None:
-    """Re-derive the ACP provider key ('claude-code', 'codex', …) from the
-    owning user's saved agent settings.
+    """Re-derive the ACP provider key from the user's saved agent settings.
 
-    The agent-server webhook payload and tags don't carry this key — it's an
-    app-server concept stamped onto the conversation at create-time. Because
-    this webhook can race conversation creation and observe a freshly-created
-    stub (with no tags yet), trusting ``existing.tags`` alone would drop the
-    provider brand from the conversation chip. Re-deriving from the
-    authoritative settings keeps it stable regardless of write ordering.
+    When this webhook races conversation creation, re-deriving from settings
+    avoids dropping the provider brand if the conversation stub has no tags yet.
     """
     try:
         settings_store = await shared.SettingsStoreImpl.get_instance(user_id)
@@ -359,23 +354,12 @@ async def on_conversation_update(
         sandbox_id=sandbox_record.id,
     )
 
-    # Trust the discriminated-union payload over any stored ``agent_kind``
-    # on ``existing``: a webhook is always authoritative for the agent
-    # currently running, and a drifted row (e.g. mid-migration data) must
-    # not lock us into the wrong branch. Branch on the ``agent_kind``
-    # discriminator (an ``AgentBase`` property) so we don't import a
-    # concrete SDK subclass just to do a kind check.
     agent = conversation_info.agent
     if agent.agent_kind == 'acp':
         agent_kind = 'acp'
-        # The ACP agent payload carries ``acp_model`` (the model the chip
-        # displays); prefer it and fall back to whatever was already stored.
-        # Never force ``None`` — this webhook can race conversation creation
-        # and would otherwise wipe the model the app-server just persisted.
+        # Prefer agent's model; fall back to existing to avoid losing user-set models.
         llm_model = getattr(agent, 'acp_model', None) or existing.llm_model
-        # The provider key isn't on the payload or the merged tags when this
-        # webhook beats creation and ``existing`` is a stub. Re-derive it from
-        # the owning user's settings so the provider brand survives on the chip.
+        # Re-derive provider key if not in tags (race with creation).
         if ACP_SERVER_TAG_KEY not in merged_tags:
             acp_server_key = await _resolve_acp_server_key(
                 sandbox_record.created_by_user_id

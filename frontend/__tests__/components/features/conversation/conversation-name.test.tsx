@@ -110,7 +110,7 @@ describe("ConversationName", () => {
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it("should render the conversation name in view mode", () => {
@@ -429,7 +429,7 @@ describe("ConversationNameContextMenu", () => {
   };
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it("should render all menu options when all handlers are provided", () => {
@@ -692,7 +692,7 @@ describe("ConversationNameContextMenu - Share Link Functionality", () => {
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it("should display copy and open buttons when conversation is public", () => {
