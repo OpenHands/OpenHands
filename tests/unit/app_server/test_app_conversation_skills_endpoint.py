@@ -36,6 +36,7 @@ def _make_service_mock(
     conversation_return: AppConversation | None = None,
     skills_return: list[Skill] | None = None,
     raise_on_load: bool = False,
+    disabled_skills: list[str] | None = None,
 ):
     """Create a mock service that passes the isinstance check and returns the desired values."""
     mock_cls = type('AppConversationServiceMock', (MagicMock,), {})
@@ -43,6 +44,11 @@ def _make_service_mock(
 
     service = mock_cls()
     service.user_context = user_context
+    # The skills endpoint reads disabled_skills off the service's user_context
+    # to drop them from the response (mirroring the agent-context filter).
+    user_info = MagicMock()
+    user_info.disabled_skills = disabled_skills
+    user_context.get_user_info = AsyncMock(return_value=user_info)
     service.get_app_conversation = AsyncMock(return_value=conversation_return)
 
     async def _load_skills(*_args, **_kwargs):
@@ -160,6 +166,77 @@ class TestGetConversationSkills:
         assert knowledge_skill_data['type'] == 'knowledge'
         assert knowledge_skill_data['content'] == 'Knowledge skill content'
         assert knowledge_skill_data['triggers'] == ['test', 'help']
+
+    async def test_get_skills_excludes_user_disabled_skills(self):
+        """Test that skills listed in user.disabled_skills are filtered out.
+
+        Arrange: Two skills loaded, one of them in the user's disabled_skills
+        Act: Call get_conversation_skills endpoint
+        Assert: Only the non-disabled skill is returned (mirrors the agent
+            context filter so the panel matches what the agent loads)
+        """
+        # Arrange
+        conversation_id = uuid4()
+        sandbox_id = str(uuid4())
+
+        mock_conversation = AppConversation(
+            id=conversation_id,
+            created_by_user_id='test-user',
+            sandbox_id=sandbox_id,
+            selected_repository='owner/repo',
+            sandbox_status=SandboxStatus.RUNNING,
+        )
+        mock_sandbox = SandboxInfo(
+            id=sandbox_id,
+            created_by_user_id='test-user',
+            status=SandboxStatus.RUNNING,
+            sandbox_spec_id=str(uuid4()),
+            session_api_key='test-api-key',
+            exposed_urls=[
+                ExposedUrl(name=AGENT_SERVER, url='http://localhost:8000', port=8000)
+            ],
+        )
+        mock_sandbox_spec = SandboxSpecInfo(
+            id=str(uuid4()), command=None, working_dir='/workspace'
+        )
+
+        repo_skill = Skill(name='repo_skill', content='kept', trigger=None)
+        disabled_skill = Skill(
+            name='disabled_skill',
+            content='should be filtered',
+            trigger=KeywordTrigger(keywords=['x']),
+        )
+
+        mock_user_context = MagicMock(spec=UserContext)
+        mock_app_conversation_service = _make_service_mock(
+            user_context=mock_user_context,
+            conversation_return=mock_conversation,
+            skills_return=[repo_skill, disabled_skill],
+            disabled_skills=['disabled_skill'],
+        )
+
+        mock_sandbox_service = MagicMock()
+        mock_sandbox_service.get_sandbox = AsyncMock(return_value=mock_sandbox)
+        mock_sandbox_spec_service = MagicMock()
+        mock_sandbox_spec_service.get_sandbox_spec = AsyncMock(
+            return_value=mock_sandbox_spec
+        )
+
+        # Act
+        response = await get_conversation_skills(
+            conversation_id=conversation_id,
+            app_conversation_service=mock_app_conversation_service,
+            sandbox_service=mock_sandbox_service,
+            sandbox_spec_service=mock_sandbox_spec_service,
+        )
+
+        # Assert
+        import json
+
+        assert response.status_code == status.HTTP_200_OK
+        data = json.loads(response.body.decode('utf-8'))
+        names = [s['name'] for s in data['skills']]
+        assert names == ['repo_skill']
 
     async def test_get_skills_returns_404_when_conversation_not_found(self):
         """Test endpoint returns 404 when conversation doesn't exist.

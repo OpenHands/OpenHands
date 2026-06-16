@@ -1351,6 +1351,16 @@ async def get_conversation_skills(
                 ctx.agent_server_url,
             )
 
+            # Drop user-disabled skills so the panel matches what the agent
+            # actually loads. The agent context already filters these in
+            # AppConversationServiceBase._load_skills_and_update_agent; without
+            # the same filter here the endpoint advertises skills the agent
+            # does not have.
+            user = await app_conversation_service.user_context.get_user_info()
+            if user.disabled_skills:
+                disabled_set = set(user.disabled_skills)
+                all_skills = [s for s in all_skills if s.name not in disabled_set]
+
         logger.info(
             f'Loaded {len(all_skills)} skills for conversation {conversation_id}: '
             f'{[s.name for s in all_skills]}'
