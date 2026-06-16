@@ -1049,7 +1049,7 @@ class TestRequireFinancialDataAccess:
         mock_request = _create_mock_request_with_email(user_email='admin@openhands.dev')
 
         with patch(
-            'server.auth.authorization.get_user_auth',
+            'server.email_validation.get_user_auth',
             AsyncMock(return_value=mock_request.state.user_auth),
         ):
             # Act
@@ -1078,7 +1078,7 @@ class TestRequireFinancialDataAccess:
 
         with (
             patch(
-                'server.auth.authorization.get_user_auth',
+                'server.email_validation.get_user_auth',
                 AsyncMock(return_value=mock_request.state.user_auth),
             ),
             patch(
@@ -1112,7 +1112,7 @@ class TestRequireFinancialDataAccess:
 
         with (
             patch(
-                'server.auth.authorization.get_user_auth',
+                'server.email_validation.get_user_auth',
                 AsyncMock(return_value=mock_request.state.user_auth),
             ),
             patch(
@@ -1146,7 +1146,7 @@ class TestRequireFinancialDataAccess:
 
         with (
             patch(
-                'server.auth.authorization.get_user_auth',
+                'server.email_validation.get_user_auth',
                 AsyncMock(return_value=mock_request.state.user_auth),
             ),
             patch(
@@ -1179,7 +1179,7 @@ class TestRequireFinancialDataAccess:
 
         with (
             patch(
-                'server.auth.authorization.get_user_auth',
+                'server.email_validation.get_user_auth',
                 AsyncMock(return_value=mock_request.state.user_auth),
             ),
             patch(
@@ -1243,3 +1243,124 @@ class TestRequireFinancialDataAccess:
 
         assert exc_info.value.status_code == 403
         assert 'API key is not authorized' in exc_info.value.detail
+
+
+# =============================================================================
+# Tests for require_openhands_email_for_sandbox_limits
+# =============================================================================
+
+
+class TestRequireOpenhandsEmailForSandboxLimits:
+    """Tests for require_openhands_email_for_sandbox_limits helper function."""
+
+    @pytest.mark.asyncio
+    async def test_allows_when_field_is_not_present(self):
+        """
+        GIVEN: has_sandbox_limit_field is False
+        WHEN: require_openhands_email_for_sandbox_limits is called
+        THEN: Returns without checking email (no exception)
+        """
+        from server.auth.authorization import require_openhands_email_for_sandbox_limits
+
+        # Arrange - mock request doesn't need email setup since it won't be checked
+        mock_request = MagicMock()
+
+        # Act & Assert - should not raise
+        await require_openhands_email_for_sandbox_limits(
+            request=mock_request, has_sandbox_limit_field=False
+        )
+
+    @pytest.mark.asyncio
+    async def test_allows_openhands_email(self):
+        """
+        GIVEN: User has @openhands.dev email and field is being updated
+        WHEN: require_openhands_email_for_sandbox_limits is called
+        THEN: Returns without exception
+        """
+        from server.auth.authorization import require_openhands_email_for_sandbox_limits
+
+        # Arrange
+        mock_request = _create_mock_request_with_email(user_email='admin@openhands.dev')
+
+        with patch(
+            'server.email_validation.get_user_auth',
+            AsyncMock(return_value=mock_request.state.user_auth),
+        ):
+            # Act & Assert - should not raise
+            await require_openhands_email_for_sandbox_limits(
+                request=mock_request, has_sandbox_limit_field=True
+            )
+
+    @pytest.mark.asyncio
+    async def test_rejects_non_openhands_email(self):
+        """
+        GIVEN: User has non-@openhands.dev email and field is being updated
+        WHEN: require_openhands_email_for_sandbox_limits is called
+        THEN: Raises HTTPException with 403
+        """
+        from server.auth.authorization import require_openhands_email_for_sandbox_limits
+
+        # Arrange
+        mock_request = _create_mock_request_with_email(user_email='user@example.com')
+
+        with patch(
+            'server.email_validation.get_user_auth',
+            AsyncMock(return_value=mock_request.state.user_auth),
+        ):
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await require_openhands_email_for_sandbox_limits(
+                    request=mock_request, has_sandbox_limit_field=True
+                )
+
+            assert exc_info.value.status_code == 403
+            assert 'Only OpenHands team members' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_rejects_no_email(self):
+        """
+        GIVEN: User has no email and field is being updated
+        WHEN: require_openhands_email_for_sandbox_limits is called
+        THEN: Raises HTTPException with 403
+        """
+        from server.auth.authorization import require_openhands_email_for_sandbox_limits
+
+        # Arrange
+        mock_request = _create_mock_request_with_email(user_email=None)
+
+        with patch(
+            'server.email_validation.get_user_auth',
+            AsyncMock(return_value=mock_request.state.user_auth),
+        ):
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await require_openhands_email_for_sandbox_limits(
+                    request=mock_request, has_sandbox_limit_field=True
+                )
+
+            assert exc_info.value.status_code == 403
+            assert 'Only OpenHands team members' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_email_check_is_case_sensitive(self):
+        """
+        GIVEN: User has @OPENHANDS.DEV email (uppercase)
+        WHEN: require_openhands_email_for_sandbox_limits is called
+        THEN: Raises HTTPException (case sensitive, following existing pattern)
+        """
+        from server.auth.authorization import require_openhands_email_for_sandbox_limits
+
+        # Arrange - uppercase domain should NOT match (case sensitive)
+        mock_request = _create_mock_request_with_email(user_email='Admin@OPENHANDS.DEV')
+
+        with patch(
+            'server.email_validation.get_user_auth',
+            AsyncMock(return_value=mock_request.state.user_auth),
+        ):
+            # Act & Assert - should raise because email check is case-sensitive
+            with pytest.raises(HTTPException) as exc_info:
+                await require_openhands_email_for_sandbox_limits(
+                    request=mock_request, has_sandbox_limit_field=True
+                )
+
+            assert exc_info.value.status_code == 403

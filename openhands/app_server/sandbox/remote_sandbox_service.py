@@ -12,7 +12,7 @@ import base62
 import httpx
 from fastapi import Request
 from pydantic import Field
-from sqlalchemy import String, func, select
+from sqlalchemy import Boolean, String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,7 +24,7 @@ from openhands.agent_server.utils import utc_now
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
-from openhands.app_server.errors import SandboxError
+from openhands.app_server.errors import ConcurrencyLimitError, SandboxError
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     VSCODE,
@@ -93,6 +93,7 @@ class StoredRemoteSandbox(Base):
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now(), index=True
     )
+    is_paused: Mapped[bool] = mapped_column(Boolean, default=False, server_default='0')
 
 
 @dataclass
@@ -211,6 +212,35 @@ class RemoteSandboxService(SandboxService):
         if user_id:
             query = query.where(StoredRemoteSandbox.created_by_user_id == user_id)
         return query
+
+    async def _get_user_effective_sandbox_limit(self) -> int:
+        """Get the effective sandbox limit for the current user.
+
+        Delegates to UserContext.get_max_concurrent_sandboxes() which handles:
+        1. OrgMember.max_concurrent_sandboxes_override (if not NULL) - enterprise only
+        2. Org.max_concurrent_sandboxes (org default) - enterprise only
+        3. Global fallback (self.max_num_sandboxes) - OSS mode
+
+        Returns:
+            int: The effective maximum number of concurrent sandboxes
+        """
+        return await self.user_context.get_max_concurrent_sandboxes(
+            self.max_num_sandboxes
+        )
+
+    async def _count_user_running_sandboxes(self) -> int:
+        """Count the number of running (non-paused) sandboxes for the current user.
+
+        Queries the DB directly by created_by_user_id and is_paused, avoiding
+        a global runtime API call for every concurrency check.
+
+        Returns:
+            int: Number of running sandboxes
+        """
+        query = await self._secure_select()
+        query = query.filter(StoredRemoteSandbox.is_paused == False)  # noqa: E712
+        result = await self.db_session.execute(query)
+        return len(result.scalars().all())
 
     async def _get_stored_sandbox(self, sandbox_id: str) -> StoredRemoteSandbox | None:
         stmt = await self._secure_select()
@@ -372,6 +402,35 @@ class RemoteSandboxService(SandboxService):
             )
             return self._to_sandbox_info(stored_sandbox, None)
 
+    async def check_concurrency_limit(self) -> None:
+        """Check if the user has reached their concurrent sandbox limit.
+
+        This check is performed synchronously before creating a task to allow
+        the API to return a 429 error immediately instead of failing asynchronously.
+
+        Raises:
+            ConcurrencyLimitError: If the user has reached their limit
+        """
+        effective_limit = await self._get_user_effective_sandbox_limit()
+        current_count = await self._count_user_running_sandboxes()
+
+        if current_count >= effective_limit:
+            _logger.info(
+                f'User has reached sandbox limit: {current_count}/{effective_limit}'
+            )
+            raise ConcurrencyLimitError(
+                detail={
+                    'error': 'CONCURRENCY_LIMIT_REACHED',
+                    'message': (
+                        f'You have reached your limit of {effective_limit} '
+                        'concurrent conversations. Please close an existing '
+                        'conversation to start a new one.'
+                    ),
+                    'limit': effective_limit,
+                    'current': current_count,
+                }
+            )
+
     async def get_sandbox_record_by_session_api_key(
         self, session_api_key: str
     ) -> SandboxRecord | None:
@@ -396,12 +455,15 @@ class RemoteSandboxService(SandboxService):
     async def start_sandbox(
         self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
     ) -> SandboxInfo:
-        """Start a new sandbox by creating a remote runtime."""
-        try:
-            # Enforce sandbox limits by cleaning up old sandboxes
-            await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
+        """Start a new sandbox by creating a remote runtime.
 
-            # Get sandbox spec
+        Uses SELECT FOR UPDATE within a nested transaction to acquire a row-level
+        lock, preventing race conditions (TOCTOU) when checking concurrency limits.
+        The lock is released after the sandbox record is inserted (before the
+        long-running runtime startup) to avoid blocking concurrent requests.
+        """
+        try:
+            # Get sandbox spec early (before locking) to minimize lock hold time
             if sandbox_spec_id is None:
                 sandbox_spec = (
                     await self.sandbox_spec_service.get_default_sandbox_spec()
@@ -418,17 +480,67 @@ class RemoteSandboxService(SandboxService):
             if sandbox_id is None:
                 sandbox_id = base62.encodebytes(os.urandom(16))
 
-            # get user id
+            # Get user id for locking and record creation
             user_id = await self.user_context.get_user_id()
 
-            # Store the sandbox
-            stored_sandbox = StoredRemoteSandbox(
-                id=sandbox_id,
-                created_by_user_id=user_id,
-                sandbox_spec_id=sandbox_spec.id,
-                created_at=utc_now(),
-            )
-            self.db_session.add(stored_sandbox)
+            # Use a nested transaction (savepoint) for the lock + check + insert.
+            # This allows us to release the row-level lock after inserting the
+            # sandbox record, before the long-running runtime startup begins.
+            # Without this, the lock would be held for the entire request duration
+            # (up to 120s for sandbox startup), blocking concurrent requests.
+            async with self.db_session.begin_nested():
+                # Acquire row-level lock to prevent TOCTOU race condition.
+                # This serializes concurrent sandbox creation requests for the same user.
+                # We lock the user's most recent sandbox row (if any) to coordinate access.
+                # If no sandbox exists, the INSERT below will still serialize due to
+                # unique constraint checks, and the next request will have a row to lock.
+                await self.db_session.execute(
+                    select(StoredRemoteSandbox.id)
+                    .filter(StoredRemoteSandbox.created_by_user_id == user_id)
+                    .order_by(StoredRemoteSandbox.created_at.desc())
+                    .limit(1)
+                    .with_for_update()
+                )
+
+                # Get user's effective limit and current count (now serialized)
+                effective_limit = await self._get_user_effective_sandbox_limit()
+                current_count = await self._count_user_running_sandboxes()
+
+                # Check if user has reached their limit
+                if current_count >= effective_limit:
+                    _logger.info(
+                        f'User has reached sandbox limit: {current_count}/{effective_limit}'
+                    )
+                    raise ConcurrencyLimitError(
+                        detail={
+                            'error': 'CONCURRENCY_LIMIT_REACHED',
+                            'message': (
+                                f'You have reached your limit of {effective_limit} '
+                                'concurrent conversations. Please close an existing '
+                                'conversation to start a new one.'
+                            ),
+                            'limit': effective_limit,
+                            'current': current_count,
+                        }
+                    )
+
+                # Enforce sandbox limits by cleaning up old sandboxes if approaching limit
+                # Use effective_limit - 1 to leave room for the new sandbox
+                if current_count >= effective_limit - 1:
+                    await self.pause_old_sandboxes(effective_limit - 1)
+
+                # Store the sandbox record (this reserves the slot)
+                stored_sandbox = StoredRemoteSandbox(
+                    id=sandbox_id,
+                    created_by_user_id=user_id,
+                    sandbox_spec_id=sandbox_spec.id,
+                    created_at=utc_now(),
+                )
+                self.db_session.add(stored_sandbox)
+
+            # Nested transaction committed - lock is now released.
+            # The sandbox record exists, so the concurrency slot is reserved.
+            # Other requests can now proceed with their own concurrency checks.
 
             # Prepare environment variables
             environment = await self._init_environment(sandbox_spec, sandbox_id)
@@ -472,6 +584,9 @@ class RemoteSandboxService(SandboxService):
 
             return self._to_sandbox_info(stored_sandbox, runtime_data)
 
+        except ConcurrencyLimitError:
+            # Re-raise concurrency limit errors without wrapping
+            raise
         except httpx.HTTPError as e:
             _logger.error(f'Failed to start sandbox: {e}')
             raise SandboxError(f'Failed to start sandbox: {e}')
@@ -512,6 +627,7 @@ class RemoteSandboxService(SandboxService):
                     f'Updated session_api_key_hash for sandbox {sandbox_id} after resume'
                 )
 
+            stored_sandbox.is_paused = False
             return True
         except httpx.HTTPError as e:
             _logger.error(f'Error resuming sandbox {sandbox_id}: {e}')
@@ -531,6 +647,7 @@ class RemoteSandboxService(SandboxService):
             # Security: Invalidate the session API key hash to prevent
             # leaked keys from being used while the sandbox is paused.
             stored_sandbox.session_api_key_hash = None
+            stored_sandbox.is_paused = True
 
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
@@ -586,17 +703,10 @@ class RemoteSandboxService(SandboxService):
         if max_num_sandboxes <= 0:
             raise ValueError('max_num_sandboxes must be greater than 0')
 
-        response = await self._send_runtime_api_request(
-            'GET',
-            '/list',
-        )
-        content = response.json()
-        running_session_ids = [
-            runtime.get('session_id') for runtime in content['runtimes']
-        ]
-
+        # Query running sandboxes from DB directly using is_paused flag, avoiding
+        # a global runtime API call that returns all users' runtimes.
         query = await self._secure_select()
-        query = query.filter(StoredRemoteSandbox.id.in_(running_session_ids)).order_by(
+        query = query.filter(StoredRemoteSandbox.is_paused == False).order_by(  # noqa: E712
             StoredRemoteSandbox.created_at.desc()
         )
         running_sandboxes = list(await self.db_session.execute(query))

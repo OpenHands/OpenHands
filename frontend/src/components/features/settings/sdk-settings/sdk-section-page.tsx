@@ -142,6 +142,7 @@ export function SdkSectionPage({
   initialValueOverrides,
   isSaveDisabled,
   forceShowAdvancedView = false,
+  allowAdvancedView = true,
   allowAllView = true,
   trailingActions,
   testId = "sdk-section-settings-screen",
@@ -192,6 +193,10 @@ export function SdkSectionPage({
   // navigation button into the same row.
   trailingActions?: React.ReactNode;
   forceShowAdvancedView?: boolean;
+  // Master gate for the Advanced tier. When false the Advanced toggle never
+  // shows, even if the schema has advanced fields — e.g. the LLM page when
+  // BYOK is off, where Basic and Advanced would otherwise be identical.
+  allowAdvancedView?: boolean;
   allowAllView?: boolean;
   testId?: string;
 }) {
@@ -276,8 +281,9 @@ export function SdkSectionPage({
   );
 
   const showAdvanced =
-    forceShowAdvancedView ||
-    resolvedSources.some((src) => hasAdvancedSettings(src.filteredSchema));
+    allowAdvancedView &&
+    (forceShowAdvancedView ||
+      resolvedSources.some((src) => hasAdvancedSettings(src.filteredSchema)));
   const showAll =
     allowAllView &&
     resolvedSources.some((src) => hasMinorSettings(src.filteredSchema));

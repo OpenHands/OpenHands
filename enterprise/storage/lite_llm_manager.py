@@ -75,6 +75,18 @@ def get_byor_key_alias(keycloak_user_id: str, org_id: str) -> str:
     return f'BYOR Key - user {keycloak_user_id}, org {org_id}'
 
 
+def get_org_team_alias(org_id: str, org_name: str | None, user_id: str | None) -> str:
+    """Human-readable LiteLLM team_alias for an org's team.
+
+    Personal orgs (org_id == user_id) get "Personal Workspace"; team orgs use
+    their display name. Falls back to the id when no name is available, never
+    the bare user uid (which made teams indistinguishable in the dashboard).
+    """
+    if str(org_id) == str(user_id):
+        return 'Personal Workspace'
+    return org_name or f'Organization {org_id}'
+
+
 class LiteLlmManager:
     """Manage LiteLLM interactions."""
 
@@ -180,8 +192,11 @@ class LiteLlmManager:
                         extra={'org_id': org_id, 'user_id': keycloak_user_id},
                     )
 
+                team_alias = await LiteLlmManager._team_alias_for_org(
+                    org_id, keycloak_user_id
+                )
                 await LiteLlmManager._create_team(
-                    client, keycloak_user_id, org_id, team_budget
+                    client, team_alias, org_id, team_budget
                 )
 
                 if create_user:
@@ -349,9 +364,10 @@ class LiteLlmManager:
                     'LiteLlmManager:migrate_lite_llm_entries:create_team',
                     extra={'org_id': org_id, 'user_id': keycloak_user_id},
                 )
-                await LiteLlmManager._create_team(
-                    client, keycloak_user_id, org_id, credits
+                team_alias = await LiteLlmManager._team_alias_for_org(
+                    org_id, keycloak_user_id
                 )
+                await LiteLlmManager._create_team(client, team_alias, org_id, credits)
 
                 logger.debug(
                     'LiteLlmManager:migrate_lite_llm_entries:update_user',
@@ -604,6 +620,29 @@ class LiteLlmManager:
                 await LiteLlmManager._update_user_in_team(
                     client, user_id, team_id, max_budget
                 )
+
+    @staticmethod
+    async def _team_alias_for_org(org_id: str, keycloak_user_id: str) -> str:
+        """Resolve the dashboard-friendly team_alias for an org (its display
+        name, or 'Personal Workspace' for the user's personal org). The org
+        name is looked up lazily; lookup failures fall back to a stable label."""
+        if str(org_id) == str(keycloak_user_id):
+            return get_org_team_alias(org_id, None, keycloak_user_id)
+        # Lazy import: org_store imports this module at load time.
+        from uuid import UUID
+
+        from storage.org_store import OrgStore
+
+        org_name = None
+        try:
+            org = await OrgStore.get_org_by_id(UUID(org_id))
+            org_name = org.name if org else None
+        except Exception:
+            logger.warning(
+                'Failed to resolve org name for LiteLLM team_alias',
+                extra={'org_id': org_id},
+            )
+        return get_org_team_alias(org_id, org_name, keycloak_user_id)
 
     @staticmethod
     async def _create_team(

@@ -19,8 +19,7 @@ IS_FEATURE_ENV = (
 IS_LOCAL_ENV = bool(HOST == 'localhost')
 
 
-# _is_all_hands_managed_domain() can be removed/replaced when a self-hosted specific
-# env var is created (e.g is_self_hosted` or `deployment_mode`)
+# Explicit OH_DEPLOYMENT_MODE wins; _is_all_hands_managed_domain() is the host fallback.
 def _is_all_hands_managed_domain(host: str) -> bool:
     """Check if the host is an All-Hands managed domain."""
     return (
@@ -32,12 +31,14 @@ def _is_all_hands_managed_domain(host: str) -> bool:
 
 
 def _get_deployment_mode() -> str:
-    """Determine deployment mode based on WEB_HOST.
+    """Determine deployment mode.
 
-    Returns:
-        'cloud' for All-Hands managed infrastructure (app.all-hands.dev, etc.)
-        'self_hosted' for enterprise self-hosted deployments (customer domains)
+    Honors an explicit OH_DEPLOYMENT_MODE ('cloud' | 'self_hosted'); otherwise
+    infers from WEB_HOST (managed domain -> 'cloud', else 'self_hosted').
     """
+    explicit = os.getenv('OH_DEPLOYMENT_MODE', '').strip().lower()
+    if explicit in ('cloud', 'self_hosted'):
+        return explicit
     if _is_all_hands_managed_domain(HOST):
         return 'cloud'
     return 'self_hosted'
@@ -49,6 +50,12 @@ DEPLOYMENT_MODE = _get_deployment_mode()
 ROLE_OWNER = 'owner'
 ROLE_ADMIN = 'admin'
 ROLE_MEMBER = 'member'
+
+# Concurrent sandbox limits
+# Personal orgs (org.id == user.id) get a lower limit
+DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES = 3
+# Commercial orgs get a higher limit
+DEFAULT_COMMERCIAL_ORG_CONCURRENT_SANDBOXES = 10
 
 # Deprecated - billing margins are now handled internally in litellm
 DEFAULT_BILLING_MARGIN = float(os.environ.get('DEFAULT_BILLING_MARGIN', '1.0'))

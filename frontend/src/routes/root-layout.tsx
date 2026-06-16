@@ -31,9 +31,9 @@ import { AlertBanner } from "#/components/features/alerts/alert-banner";
 import { cn } from "#/utils/utils";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useAppTitle } from "#/hooks/use-app-title";
-import { useInvitation } from "#/hooks/use-invitation";
-import { InvitationAcceptModal } from "#/components/features/invitations/invitation-accept-modal";
-import { useSwitchOrganization } from "#/hooks/mutation/use-switch-organization";
+import { useAutoAcceptInvitation } from "#/hooks/use-auto-accept-invitation";
+import { ConversationLimitModal } from "#/components/features/org/conversation-limit-modal";
+import { useConversationLimitStore } from "#/stores/conversation-limit-store";
 
 export function ErrorBoundary() {
   const error = useRouteError();
@@ -88,10 +88,15 @@ export default function MainApp() {
 
   const [consentFormIsOpen, setConsentFormIsOpen] = React.useState(false);
 
-  // Invitation acceptance modal state
-  const { invitationToken, clearInvitation } = useInvitation();
-  const { mutate: switchOrganization } = useSwitchOrganization();
-  const [showInvitationModal, setShowInvitationModal] = React.useState(false);
+  // Accept a pending invitation token once authenticated
+  useAutoAcceptInvitation();
+
+  // Conversation limit modal state
+  const {
+    isOpen: isConversationLimitModalOpen,
+    limit: conversationLimit,
+    closeLimitModal,
+  } = useConversationLimitStore();
 
   // Auto-login if login method is stored in local storage
   useAutoLogin();
@@ -142,28 +147,6 @@ export default function MainApp() {
       displaySuccessToast(t(I18nKey.BILLING$YOURE_IN));
     }
   }, [settings?.is_new_user, config.data?.app_mode]);
-
-  // Show invitation modal when authenticated and has invitation token
-  React.useEffect(() => {
-    if (isAuthed && invitationToken && !isOnIntermediatePage) {
-      setShowInvitationModal(true);
-    }
-  }, [isAuthed, invitationToken, isOnIntermediatePage]);
-
-  const handleInvitationClose = React.useCallback(() => {
-    setShowInvitationModal(false);
-    clearInvitation();
-  }, [clearInvitation]);
-
-  const handleInvitationSuccess = React.useCallback(
-    (payload: { orgId: string; orgName: string; isPersonal: boolean }) => {
-      setShowInvitationModal(false);
-      clearInvitation();
-      // Switch to the newly joined organization
-      switchOrganization(payload);
-    },
-    [clearInvitation, switchOrganization],
-  );
 
   // Function to check if login method exists in local storage
   const checkLoginMethodExists = React.useCallback(() => {
@@ -295,11 +278,10 @@ export default function MainApp() {
           }}
         />
       )}
-      {showInvitationModal && invitationToken && (
-        <InvitationAcceptModal
-          token={invitationToken}
-          onClose={handleInvitationClose}
-          onSuccess={handleInvitationSuccess}
+      {isConversationLimitModalOpen && conversationLimit !== null && (
+        <ConversationLimitModal
+          onClose={closeLimitModal}
+          limit={conversationLimit}
         />
       )}
     </div>

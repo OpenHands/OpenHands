@@ -216,6 +216,40 @@ class TestGetFeatureFlags:
             result = _get_feature_flags()
             assert result.enable_linear is True
 
+    def test_allow_user_llm_configuration_true_when_env_var_unset(self):
+        """OH_ALLOW_USER_LLM_CONFIGURATION defaults to True when unset.
+
+        Critical: SaaS and existing installs never set this env var, so the
+        BYOK editing UI must stay visible for them.
+        """
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {}, clear=True):
+            result = _get_feature_flags()
+            assert result.allow_user_llm_configuration is True
+
+    def test_allow_user_llm_configuration_true_when_env_var_true(self):
+        """When OH_ALLOW_USER_LLM_CONFIGURATION is 'true', the flag is True."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {'OH_ALLOW_USER_LLM_CONFIGURATION': 'true'}):
+            result = _get_feature_flags()
+            assert result.allow_user_llm_configuration is True
+
+    def test_allow_user_llm_configuration_false_when_env_var_false(self):
+        """When OH_ALLOW_USER_LLM_CONFIGURATION is 'false', the flag is False."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {'OH_ALLOW_USER_LLM_CONFIGURATION': 'false'}):
+            result = _get_feature_flags()
+            assert result.allow_user_llm_configuration is False
+
     def test_multiple_flags_can_be_set(self):
         """Multiple feature flags can be enabled simultaneously."""
         from openhands.app_server.web_client.default_web_client_config_injector import (
@@ -237,6 +271,37 @@ class TestGetFeatureFlags:
             assert result.enable_jira is False
             assert result.enable_jira_dc is False
             assert result.enable_linear is True
+
+    def test_enable_automations_true_by_default(self):
+        """When ENABLE_AUTOMATIONS is unset, enable_automations defaults to True."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.pop('ENABLE_AUTOMATIONS', None)
+            result = _get_feature_flags()
+            assert result.enable_automations is True
+
+    def test_enable_automations_false_when_env_var_false(self):
+        """When ENABLE_AUTOMATIONS is 'false', enable_automations flag is False."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {'ENABLE_AUTOMATIONS': 'false'}):
+            result = _get_feature_flags()
+            assert result.enable_automations is False
+
+    def test_enable_automations_true_when_env_var_true(self):
+        """When ENABLE_AUTOMATIONS is 'true', enable_automations flag is True."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {'ENABLE_AUTOMATIONS': 'true'}):
+            result = _get_feature_flags()
+            assert result.enable_automations is True
 
 
 class TestGetJiraDcServiceAccountConfig:

@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 from uuid import UUID as parse_uuid
 
 from server.constants import (
+    DEFAULT_COMMERCIAL_ORG_CONCURRENT_SANDBOXES,
     ORG_SETTINGS_VERSION,
     get_default_llm_base_url,
     get_default_llm_model,
@@ -124,6 +125,7 @@ class OrgService:
             org_version=ORG_SETTINGS_VERSION,
             agent_settings=agent_settings,
             conversation_settings=ConversationSettings(),
+            max_concurrent_sandboxes=DEFAULT_COMMERCIAL_ORG_CONCURRENT_SANDBOXES,
         )
 
     @staticmethod
