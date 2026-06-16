@@ -6,8 +6,8 @@ explicit app-level pause/resume calls update it, so externally terminated or
 expired sandboxes remain is_paused=False forever. Concurrency counting now
 uses the runtime /list endpoint as the source of truth instead.
 
-Revision ID: 122
-Revises: 121
+Revision ID: 123
+Revises: 122
 Create Date: 2026-06-05
 """
 
@@ -16,8 +16,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = '122'
-down_revision: Union[str, None] = '121'
+revision: str = '123'
+down_revision: Union[str, None] = '122'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
