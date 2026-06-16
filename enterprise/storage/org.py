@@ -1,12 +1,13 @@
-"""
-SQLAlchemy model for Organization.
-"""
+"""SQLAlchemy model for Organization."""
 
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from pydantic import SecretStr
-from server.constants import DEFAULT_BILLING_MARGIN
+from server.constants import (
+    DEFAULT_BILLING_MARGIN,
+    DEFAULT_COMMERCIAL_ORG_CONCURRENT_SANDBOXES,
+)
 from sqlalchemy import JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from storage.base import Base
@@ -68,6 +69,9 @@ class Org(Base):
     # Set by completed billing sessions or when positive org credits are detected.
     byor_export_enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
     sandbox_grouping_strategy: Mapped[str | None] = mapped_column(String, nullable=True)
+    max_concurrent_sandboxes: Mapped[int] = mapped_column(
+        nullable=False, default=DEFAULT_COMMERCIAL_ORG_CONCURRENT_SANDBOXES
+    )
     # Encrypted column for LLM profiles (contains API keys)
     llm_profiles: Mapped[dict[str, Any] | None] = mapped_column(
         EncryptedJSON, nullable=True

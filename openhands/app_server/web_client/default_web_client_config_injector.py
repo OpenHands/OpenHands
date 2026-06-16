@@ -163,6 +163,9 @@ def _get_feature_flags() -> WebClientFeatureFlags:
     HIDE_PERSONAL_WORKSPACES, ENABLE_ACP, and OH_ENABLE_ONBOARDING from
     environment. Each flag is True only if the corresponding env var is
     exactly 'true', otherwise False.
+
+    OH_ALLOW_USER_LLM_CONFIGURATION is the exception: it defaults to 'true'
+    when unset so SaaS and existing installs keep the BYOK editing UI.
     """
     return WebClientFeatureFlags(
         enable_billing=os.getenv('ENABLE_BILLING', 'false') == 'true',
@@ -175,8 +178,13 @@ def _get_feature_flags() -> WebClientFeatureFlags:
         hide_integrations_page=os.getenv('HIDE_INTEGRATIONS_PAGE', 'false') == 'true',
         hide_personal_workspaces=os.getenv('HIDE_PERSONAL_WORKSPACES', 'false')
         == 'true',
+        allow_user_llm_configuration=os.getenv(
+            'OH_ALLOW_USER_LLM_CONFIGURATION', 'true'
+        )
+        == 'true',
         enable_acp=os.getenv('ENABLE_ACP', 'false') == 'true',
         enable_onboarding=os.getenv('OH_ENABLE_ONBOARDING', 'false') == 'true',
+        enable_automations=os.getenv('ENABLE_AUTOMATIONS', 'true') == 'true',
     )
 
 

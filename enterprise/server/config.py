@@ -11,6 +11,7 @@ from server.auth.constants import (
     AZURE_DEVOPS_CLIENT_ID,
     BITBUCKET_APP_CLIENT_ID,
     BITBUCKET_DATA_CENTER_CLIENT_ID,
+    ENABLE_AUTOMATIONS,
     ENABLE_ENTERPRISE_SSO,
     ENABLE_JIRA,
     ENABLE_JIRA_DC,
@@ -73,6 +74,7 @@ class SaaSServerConfig(ServerConfig):
     enable_jira = ENABLE_JIRA
     enable_jira_dc = ENABLE_JIRA_DC
     enable_linear = ENABLE_LINEAR
+    enable_automations = ENABLE_AUTOMATIONS
     enable_onboarding = os.environ.get('OH_ENABLE_ONBOARDING', 'false') == 'true'
 
     app_slug: None | str = None
@@ -167,6 +169,7 @@ class SaaSServerConfig(ServerConfig):
                 'ENABLE_JIRA': self.enable_jira,
                 'ENABLE_JIRA_DC': self.enable_jira_dc,
                 'ENABLE_LINEAR': self.enable_linear,
+                'ENABLE_AUTOMATIONS': self.enable_automations,
                 'DEPLOYMENT_MODE': DEPLOYMENT_MODE,
                 'ENABLE_ONBOARDING': self.enable_onboarding,
             },

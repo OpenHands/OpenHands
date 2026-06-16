@@ -1,7 +1,7 @@
 """Add OAuth token columns to jira_dc_users.
 
-Revision ID: 120
-Revises: 119
+Revision ID: 122
+Revises: 121
 Create Date: 2025-05-31
 """
 
@@ -10,8 +10,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = '120'
-down_revision: Union[str, None] = '119'
+revision: str = '122'
+down_revision: Union[str, None] = '121'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
