@@ -53,10 +53,11 @@ function acpKindFor(providerKey: string | undefined): AgentChipKind {
  * Resolve the icon, label, and tooltip for the conversation chip.
  *
  * The chip carries two signals: the icon is a brand mark for the harness
- * (OpenHands logo, Claude/OpenAI/Gemini mark), and the text is the prettified
- * LLM model when known. For ACP conversations where the underlying model
- * isn't exposed, the text falls back to the provider brand ("Claude Code",
- * "Codex", "Gemini CLI", …, or "ACP").
+ * (OpenHands logo, Claude/OpenAI/Gemini mark), and the text is the model label.
+ * ACP models use the curated label from the provider registry (falling back to
+ * the raw id); native OpenHands models use ``formatLlmModel``. For ACP
+ * conversations where the underlying model isn't exposed, the text falls back
+ * to the provider brand ("Claude Code", "Codex", "Gemini CLI", …, or "ACP").
  *
  * Returns ``null`` when the conversation has neither a model nor an ACP
  * discriminator — in that case the chip is hidden.

@@ -380,6 +380,9 @@ describe("ConversationName", () => {
             key: "claude-code",
             display_name: "Claude Code",
             default_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+            available_models: [
+              { id: "anthropic/claude-opus-4-1", label: "Claude Opus 4.1" },
+            ],
           },
         ],
       },
@@ -389,6 +392,40 @@ describe("ConversationName", () => {
 
     const model = screen.getByTestId("conversation-name-llm-model");
     expect(model).toHaveTextContent("Claude Opus 4.1");
+    expect(model).toHaveAttribute(
+      "title",
+      "Claude Code · anthropic/claude-opus-4-1",
+    );
+  });
+
+  it("falls back to the raw model id for an ACP conversation not in the registry", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        title: "Test Conversation",
+        status: "RUNNING",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "anthropic/claude-opus-4-1",
+      } as unknown as Conversation,
+    });
+    useConfigMock.mockReturnValue({
+      data: {
+        app_mode: "oss",
+        acp_providers: [
+          {
+            key: "claude-code",
+            display_name: "Claude Code",
+            default_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useConfigMock>);
+
+    renderConversationNameWithRouter();
+
+    const model = screen.getByTestId("conversation-name-llm-model");
+    expect(model).toHaveTextContent("anthropic/claude-opus-4-1");
     expect(model).toHaveAttribute(
       "title",
       "Claude Code · anthropic/claude-opus-4-1",
