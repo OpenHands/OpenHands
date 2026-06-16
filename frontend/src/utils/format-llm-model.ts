@@ -73,7 +73,7 @@ export function formatLlmModel(raw: string): string {
 
   // o-series (OpenAI reasoning): o1, o3, o3-mini, o4-mini, etc.
   if (/^o\d+(-[a-z]+)?$/.test(lower)) {
-    return noDate;
+    return lower;
   }
 
   // Gemini: gemini-{ver}[-{tier}[-{rest}]]

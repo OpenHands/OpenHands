@@ -138,7 +138,7 @@ export function ConversationName() {
   const agentChip = resolveAgentChip(
     conversation.agent_kind,
     conversation.llm_model,
-    conversation.tags,
+    conversation.acp_server,
     config?.acp_providers,
   );
 

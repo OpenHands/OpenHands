@@ -58,7 +58,7 @@ describe("resolveAgentChip", () => {
         const chip = resolveAgentChip(
           "acp",
           null,
-          { acp_server: providerKey },
+          providerKey,
           PROVIDERS,
         );
         expect(chip).toEqual({
@@ -73,7 +73,7 @@ describe("resolveAgentChip", () => {
       const chip = resolveAgentChip(
         "acp",
         "anthropic/claude-opus-4-1",
-        { acp_server: "claude-code" },
+        "claude-code",
         PROVIDERS,
       );
       expect(chip).toEqual({
@@ -87,7 +87,7 @@ describe("resolveAgentChip", () => {
       const chip = resolveAgentChip(
         "acp",
         null,
-        { acp_server: "some-custom-thing" },
+        "some-custom-thing",
         PROVIDERS,
       );
       expect(chip).toEqual({
@@ -98,7 +98,7 @@ describe("resolveAgentChip", () => {
     });
 
     it("uses the brand icon from acp_server even when the provider registry hasn't loaded yet (text falls back to 'ACP')", () => {
-      const chip = resolveAgentChip("acp", null, { acp_server: "claude-code" });
+      const chip = resolveAgentChip("acp", null, "claude-code");
       // The acp_server key is canonical, so we can still pick the right brand
       // mark; the display_name is unavailable without the registry so the text
       // falls back to the generic "ACP" label.

@@ -382,7 +382,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             request_agent = start_conversation_request.agent
             tags: dict[str, str] = {}
             if request_agent.agent_kind == 'acp':
-                llm_model = None
+                llm_model = request_agent.acp_model
                 agent_kind = 'acp'
                 # Persist the active ACP provider key so the conversation UI
                 # can resolve a brand label ("Claude Code", "Codex", …) via

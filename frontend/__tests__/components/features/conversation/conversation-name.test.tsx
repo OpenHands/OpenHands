@@ -339,7 +339,7 @@ describe("ConversationName", () => {
         title: "Test Conversation",
         status: "RUNNING",
         agent_kind: "acp",
-        tags: { acp_server: "claude-code" },
+        acp_server: "claude-code",
       } as unknown as Conversation,
     });
     useConfigMock.mockReturnValue({
@@ -368,7 +368,7 @@ describe("ConversationName", () => {
         title: "Test Conversation",
         status: "RUNNING",
         agent_kind: "acp",
-        tags: { acp_server: "claude-code" },
+        acp_server: "claude-code",
         llm_model: "anthropic/claude-opus-4-1",
       } as unknown as Conversation,
     });

@@ -1,15 +1,14 @@
 import type { ACPProviderConfig } from "#/api/option-service/option.types";
-import type { AgentKind, ConversationTags } from "#/api/open-hands.types";
+import type { AgentKind } from "#/api/open-hands.types";
 import { formatLlmModel } from "./format-llm-model";
 
 /**
  * Tag key on ``AppConversationInfo.tags`` holding the active ACP provider
- * discriminator (e.g. ``"claude-code"``, ``"codex"``, ``"gemini-cli"``,
- * ``"custom"``). The backend writes this at conversation create-time in
- * ``openhands.app_server.app_conversation.agent_server_routing.ACP_SERVER_TAG``;
- * keep the two constants in sync.
+ * discriminator (e.g. ``"claude-code"``, ``"codex"``, ``"gemini-cli"``).
+ * Synced with agent-canvas and the OpenHands backend. Constrained to ^[a-z0-9]+$
+ * by the agent-server SDK validator — no underscores allowed.
  */
-export const ACP_SERVER_TAG = "acp_server";
+export const ACP_SERVER_TAG = "acpserver";
 
 /**
  * Discriminator for the chip icon. Known ACP providers get a dedicated kind so
@@ -50,19 +49,6 @@ function acpKindFor(providerKey: string | undefined): AgentChipKind {
   }
 }
 
-function resolveAcpProvider(
-  tags: ConversationTags | undefined,
-  acpProviders: ACPProviderConfig[] | undefined,
-): { key: string | undefined; name: string } {
-  const key = tags?.[ACP_SERVER_TAG];
-  const keyStr = typeof key === "string" ? key : undefined;
-  if (keyStr && acpProviders) {
-    const provider = acpProviders.find((p) => p.key === keyStr);
-    if (provider) return { key: keyStr, name: provider.display_name };
-  }
-  return { key: keyStr, name: "ACP" };
-}
-
 /**
  * Resolve the icon, label, and tooltip for the conversation chip.
  *
@@ -78,12 +64,16 @@ function resolveAcpProvider(
 export function resolveAgentChip(
   agentKind: AgentKind | undefined,
   llmModel: string | null | undefined,
-  tags?: ConversationTags,
+  acpServer?: string | null,
   acpProviders?: ACPProviderConfig[],
 ): AgentChip | null {
   if (agentKind === "acp") {
-    const { key, name } = resolveAcpProvider(tags, acpProviders);
-    const kind = acpKindFor(key);
+    let name = "ACP";
+    if (acpServer && acpProviders) {
+      const provider = acpProviders.find((p) => p.key === acpServer);
+      if (provider) name = provider.display_name;
+    }
+    const kind = acpKindFor(acpServer ?? undefined);
     if (llmModel) {
       return {
         kind,
