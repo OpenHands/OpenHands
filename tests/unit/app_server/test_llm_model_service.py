@@ -11,8 +11,10 @@ from openhands.app_server.config_api.config_models import (
 from openhands.app_server.config_api.default_llm_model_service import (
     DefaultLLMModelService,
     DefaultLLMModelServiceInjector,
+    _to_llm_models,
 )
 from openhands.app_server.config_api.llm_model_service import LLMModelService
+from openhands.app_server.utils.llm import ModelsResponse
 
 
 class TestDefaultLLMModelServiceSearchModels:
@@ -171,6 +173,42 @@ class TestDefaultLLMModelServiceSearchModels:
         assert result1.items[0].name in [
             m.split('/', 1)[-1] for m in service._cached_response.models
         ]
+
+
+class TestToLLMModelsHiddenCanonical:
+    """Hidden models and their canonical mappings flow into LLMModel items."""
+
+    def test_canonical_set_only_on_mapped_hidden_models(self):
+        response = ModelsResponse(
+            models=['openhands/real-model'],
+            verified_models=['real-model'],
+            verified_providers=['openhands'],
+            default_model='openhands/real-model',
+            hidden_models=['openhands/legacy-alias', 'openhands/untagged-alias'],
+            hidden_model_canonicals={'openhands/legacy-alias': 'openhands/real-model'},
+        )
+
+        by_name = {m.name: m for m in _to_llm_models(response)}
+
+        assert by_name['real-model'].hidden is False
+        assert by_name['real-model'].canonical is None
+        assert by_name['legacy-alias'].hidden is True
+        # Canonical is reported as a bare model name, like ``name``.
+        assert by_name['legacy-alias'].canonical == 'real-model'
+        assert by_name['untagged-alias'].hidden is True
+        assert by_name['untagged-alias'].canonical is None
+
+    def test_defaults_empty_no_hidden_items(self):
+        response = ModelsResponse(
+            models=['openhands/real-model'],
+            verified_models=['real-model'],
+            verified_providers=['openhands'],
+            default_model='openhands/real-model',
+        )
+
+        models = _to_llm_models(response)
+
+        assert all(not m.hidden and m.canonical is None for m in models)
 
 
 class TestDefaultLLMModelServiceSearchProviders:

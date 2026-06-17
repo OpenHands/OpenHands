@@ -11,6 +11,7 @@ from integrations.jira_dc.jira_dc_service_account import (
 from integrations.jira_dc.jira_dc_types import (
     JiraDcViewInterface,
 )
+from integrations.jira_dc.jira_dc_user_token import JiraDcUserTokenError
 from integrations.jira_dc.jira_dc_view import (
     JiraDcExistingConversationView,
     JiraDcFactory,
@@ -22,6 +23,7 @@ from integrations.utils import (
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
     filter_potential_repos_by_user_msg,
     get_account_not_linked_message,
+    get_jira_dc_relink_message,
     get_session_expired_message,
     get_user_not_found_message,
     infer_repo_from_message,
@@ -35,6 +37,7 @@ from storage.jira_dc_integration_store import JiraDcIntegrationStore
 from storage.jira_dc_user import JiraDcUser
 from storage.jira_dc_workspace import JiraDcWorkspace
 
+from openhands.app_server.errors import ConcurrencyLimitError
 from openhands.app_server.integrations.provider import ProviderHandler
 from openhands.app_server.integrations.service_types import Comment, Repository
 from openhands.app_server.shared import server_config
@@ -507,6 +510,22 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         except SessionExpiredError as e:
             logger.warning(f'[Jira DC] Session expired: {str(e)}')
             msg_info = get_session_expired_message()
+
+        except JiraDcUserTokenError as e:
+            logger.warning(f'[Jira DC] User token unavailable: {str(e)}')
+            msg_info = get_jira_dc_relink_message(jira_dc_view.job_context.display_name)
+
+        except ConcurrencyLimitError as e:
+            detail = e.detail if isinstance(e.detail, dict) else {}
+            limit = detail.get('limit', '?')
+            logger.warning(
+                '[Jira DC] Concurrency limit reached',
+                extra={'limit': limit, 'current': detail.get('current')},
+            )
+            msg_info = (
+                f'You have reached your limit of {limit} concurrent conversation(s). '
+                f'Please close an existing conversation at {HOST_URL} to start a new one.'
+            )
 
         except Exception as e:
             logger.error(

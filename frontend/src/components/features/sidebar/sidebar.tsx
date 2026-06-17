@@ -15,7 +15,6 @@ import { useConfig } from "#/hooks/query/use-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
-import { ENABLE_AUTOMATIONS } from "#/utils/feature-flags";
 
 export function Sidebar() {
   const { t } = useTranslation();
@@ -89,7 +88,7 @@ export function Sidebar() {
               }
               disabled={settings?.email_verified === false}
             />
-            {ENABLE_AUTOMATIONS() && (
+            {config?.feature_flags?.enable_automations && (
               <AutomationsButton
                 disabled={settings?.email_verified === false}
               />

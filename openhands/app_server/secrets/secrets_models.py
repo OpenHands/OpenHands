@@ -30,6 +30,7 @@ from openhands.app_server.integrations.provider import (
     ProviderToken,
 )
 from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.utils.env_var_validation import validate_env_var_name
 
 
 class Secrets(BaseModel):
@@ -177,6 +178,12 @@ class CustomSecretWithoutValue(BaseModel):
 
     name: str
     description: str | None = None
+
+    @field_validator('name')
+    @classmethod
+    def validate_secret_name(cls, v: str) -> str:
+        validate_env_var_name(v, field_name='secret name')
+        return v
 
 
 class CustomSecretCreate(CustomSecretWithoutValue):
