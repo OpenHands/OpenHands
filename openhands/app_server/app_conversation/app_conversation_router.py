@@ -773,12 +773,7 @@ async def switch_conversation_profile(
             'description': 'Agent is not ACP, or provider does not support model switching'
         },
         404: {'description': 'Conversation or sandbox not found'},
-        409: {
-            'description': (
-                'ACP session not initialised yet (send the first message first), '
-                'or the sandbox is paused (resume it first)'
-            )
-        },
+        409: {'description': 'Sandbox is paused; resume it before switching models'},
         502: {'description': 'Agent server returned an error'},
         504: {'description': 'ACP server did not respond to the model switch in time'},
     },
@@ -840,16 +835,9 @@ async def switch_conversation_acp_model(
             'Agent server returned error during switch_acp_model: '
             f'{e.response.status_code} - {e.response.text}'
         )
-        if e.response.status_code == 409:
-            # The ACP session isn't created until the first run(), so the switch
-            # can't apply yet. Surface it (rather than silently persisting a
-            # display-only model the run would ignore) with an actionable detail.
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail='ACP session not initialised yet; send the first message first.',
-            )
-        # Surface agent-server's 400/504 directly — they carry semantics
-        # (not-ACP, timeout) that the client can act on.
+        # Surface agent-server's 400/504 directly (not-ACP, timeout). The
+        # pre-session 409 band-aid is gone as of SDK #3764: a pre-run switch now
+        # persists and returns 200, so the agent-server no longer 409s here.
         if e.response.status_code in (400, 504):
             raise HTTPException(
                 status_code=e.response.status_code,
