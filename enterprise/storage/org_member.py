@@ -1,6 +1,4 @@
-"""
-SQLAlchemy model for Organization-Member relationship.
-"""
+"""SQLAlchemy model for Organization-Member relationship."""
 
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -35,6 +33,7 @@ class OrgMember(Base):
         JSON, nullable=False, default=dict
     )
     status: Mapped[str | None] = mapped_column(String, nullable=True)
+    max_concurrent_sandboxes_override: Mapped[int | None] = mapped_column(nullable=True)
 
     # Relationships
     org: Mapped['Org'] = relationship('Org', back_populates='org_members')

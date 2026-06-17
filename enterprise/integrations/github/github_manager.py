@@ -31,6 +31,7 @@ from server.auth.auth_error import ExpiredError
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from server.auth.token_manager import TokenManager
 
+from openhands.app_server.errors import ConcurrencyLimitError
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.secrets.secrets_models import Secrets
@@ -40,6 +41,12 @@ from openhands.app_server.types import (
     SessionExpiredError,
 )
 from openhands.app_server.utils.logger import openhands_logger as logger
+
+IGNORED_GITHUB_EVENT_SENDERS = frozenset(
+    {
+        'openhands-ai[bot]',
+    }
+)
 
 
 class GithubManager(Manager[GithubViewType]):
@@ -122,6 +129,13 @@ class GithubManager(Manager[GithubViewType]):
 
             return False
 
+    def _get_ignored_sender_login(self, message: Message) -> str | None:
+        payload = message.message.get('payload', {})
+        login = payload.get('sender', {}).get('login')
+        if login and login.lower() in IGNORED_GITHUB_EVENT_SENDERS:
+            return login
+        return None
+
     def _get_issue_number_from_payload(self, message: Message) -> int | None:
         """Extract issue/PR number from a GitHub webhook payload.
 
@@ -195,6 +209,11 @@ class GithubManager(Manager[GithubViewType]):
     async def is_job_requested(self, message: Message) -> bool:
         self._confirm_incoming_source_type(message)
 
+        ignored_sender = self._get_ignored_sender_login(message)
+        if ignored_sender:
+            logger.info('[GitHub] Ignoring event from %s', ignored_sender)
+            return False
+
         installation_id = message.message['installation']
         payload = message.message.get('payload', {})
         repo_obj = payload.get('repository')
@@ -235,6 +254,12 @@ class GithubManager(Manager[GithubViewType]):
 
     async def receive_message(self, message: Message):
         self._confirm_incoming_source_type(message)
+
+        ignored_sender = self._get_ignored_sender_login(message)
+        if ignored_sender:
+            logger.info('[GitHub] Ignoring event from %s', ignored_sender)
+            return
+
         try:
             await self.data_collector.process_payload(message)
         except Exception:
@@ -401,6 +426,19 @@ class GithubManager(Manager[GithubViewType]):
                 )
 
                 msg_info = get_session_expired_message(user_info.username)
+
+            except ConcurrencyLimitError as e:
+                detail = e.detail if isinstance(e.detail, dict) else {}
+                limit = detail.get('limit', '?')
+                logger.warning(
+                    f'[GitHub] Concurrency limit reached for user {user_info.username}',
+                    extra={'limit': limit, 'current': detail.get('current')},
+                )
+                msg_info = (
+                    f'@{user_info.username} You have reached your limit of {limit} '
+                    'concurrent conversation(s). Please close an existing conversation '
+                    f'to start a new one: {HOST_URL}'
+                )
 
             await self.send_message(msg_info, github_view)
 

@@ -841,6 +841,109 @@ class TestSendToAutomationService:
             mock_logger.warning.assert_called()
             assert 'not configured' in str(mock_logger.warning.call_args)
 
+    @pytest.mark.asyncio
+    async def test_send_timeout_logs_error(self, mock_token_manager):
+        """
+        GIVEN: AUTOMATION_SERVICE_URL is configured
+        WHEN: _send_to_automation_service times out
+        THEN: Error is logged (not warning) since the event was never delivered
+        """
+        import asyncio
+
+        org_id = uuid.UUID('12345678-1234-5678-1234-567812345678')
+        payload = {'test': 'data'}
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={'matched': 2})
+
+        # Create a mock post that raises TimeoutError within the async context
+        async def raise_timeout(*args, **kwargs):
+            raise asyncio.TimeoutError('Connection timed out')
+
+        mock_post_context = MagicMock()
+        mock_post_context.__aenter__ = AsyncMock(
+            side_effect=asyncio.TimeoutError('Connection timed out')
+        )
+        mock_post_context.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session_instance = MagicMock()
+        mock_session_instance.post = MagicMock(return_value=mock_post_context)
+
+        mock_session_context = MagicMock()
+        mock_session_context.__aenter__ = AsyncMock(return_value=mock_session_instance)
+        mock_session_context.__aexit__ = AsyncMock(return_value=None)
+
+        with (
+            patch(
+                'server.services.automation_event_service.AUTOMATION_SERVICE_URL',
+                'https://automation.example.com',
+            ),
+            patch(
+                'server.services.automation_event_service.aiohttp.ClientSession',
+                return_value=mock_session_context,
+            ),
+            patch('server.services.automation_event_service.logger') as mock_logger,
+        ):
+            service = create_service(mock_token_manager)
+            await service._send_to_automation_service(
+                ProviderType.GITHUB, org_id, payload
+            )
+
+            mock_logger.error.assert_called()
+            assert 'Timeout' in str(mock_logger.error.call_args)
+            assert (
+                'never delivered' in str(mock_logger.error.call_args).lower()
+                or 'timeout' in str(mock_logger.error.call_args).lower()
+            )
+
+    @pytest.mark.asyncio
+    async def test_send_client_error_logs_error(self, mock_token_manager):
+        """
+        GIVEN: AUTOMATION_SERVICE_URL is configured
+        WHEN: _send_to_automation_service fails with HTTP error
+        THEN: Error is logged (not warning) since the event was not delivered
+        """
+        import aiohttp
+
+        org_id = uuid.UUID('12345678-1234-5678-1234-567812345678')
+        payload = {'test': 'data'}
+
+        mock_session_instance = MagicMock()
+        mock_session_instance.post = MagicMock()
+
+        # Create a mock that raises ClientError when used as async context manager
+        mock_post_context = MagicMock()
+        mock_post_context.__aenter__ = AsyncMock(
+            side_effect=aiohttp.ClientError('Connection refused')
+        )
+        mock_post_context.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session_instance.post = MagicMock(return_value=mock_post_context)
+
+        mock_session_context = MagicMock()
+        mock_session_context.__aenter__ = AsyncMock(return_value=mock_session_instance)
+        mock_session_context.__aexit__ = AsyncMock(return_value=None)
+
+        with (
+            patch(
+                'server.services.automation_event_service.AUTOMATION_SERVICE_URL',
+                'https://automation.example.com',
+            ),
+            patch(
+                'server.services.automation_event_service.aiohttp.ClientSession',
+                return_value=mock_session_context,
+            ),
+            patch('server.services.automation_event_service.logger') as mock_logger,
+        ):
+            service = create_service(mock_token_manager)
+            await service._send_to_automation_service(
+                ProviderType.GITHUB, org_id, payload
+            )
+
+            mock_logger.error.assert_called()
+            assert 'HTTP error' in str(mock_logger.error.call_args)
+
 
 class TestSignPayload:
     """Tests for _sign_payload method."""

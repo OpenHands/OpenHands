@@ -36,6 +36,7 @@ class WebClientFeatureFlags(BaseModel):
     enable_acp: bool = False
     deployment_mode: DeploymentMode | None = None
     enable_onboarding: bool = False
+    enable_automations: bool = True
 
     # This can be removed / replaced when a DeploymentMode (or similar) env var is created.
     @model_validator(mode='after')

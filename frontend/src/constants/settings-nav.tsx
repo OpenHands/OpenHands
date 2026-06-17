@@ -25,10 +25,12 @@ export interface SettingsNavItem {
   section?: SettingsNavSection;
   // When true, this item is greyed out (and its route redirects to
   // ``/settings/agent``) while the personal-scope active agent is ACP.
-  // The ACP sub-agent manages its own LLM / condenser / MCP, so these
-  // OpenHands-side surfaces have no useful content. Drives both the
-  // navigation disable in ``use-settings-nav-items.ts`` and the
-  // server-side redirect in ``routes/settings.tsx`` from one source.
+  // The ACP sub-agent manages its own LLM and condenser, so those
+  // OpenHands-side surfaces have no useful content. (MCP is intentionally
+  // NOT flagged: MCP servers configured here are forwarded to the ACP
+  // subprocess at session creation, so the page is meaningful under ACP.)
+  // Drives both the navigation disable in ``use-settings-nav-items.ts``
+  // and the server-side redirect in ``routes/settings.tsx`` from one source.
   disabledByAcp?: boolean;
 }
 
@@ -106,7 +108,6 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/mcp",
     text: "SETTINGS$NAV_MCP",
     section: "personal",
-    disabledByAcp: true,
   },
   {
     icon: <UserIcon width={22} height={22} />,
@@ -167,7 +168,6 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     icon: <ServerProcessIcon width={22} height={22} />,
     to: "/settings/mcp",
     text: "SETTINGS$NAV_MCP",
-    disabledByAcp: true,
   },
   {
     icon: <LightbulbIcon width={22} height={22} />,

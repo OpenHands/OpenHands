@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, SecretStr, field_serializer
+from pydantic import BaseModel, Field, SecretStr, computed_field, field_serializer
 
 from openhands.agent_server.models import (
     ImageContent,
@@ -26,6 +26,12 @@ from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.plugin import PluginSource
 
 __all__ = ['SandboxGroupingStrategy']
+
+# Canonical conversation-tag key under which the active ACP provider key
+# ('claude-code', 'codex', 'gemini-cli') is stored. Lowercase-alphanumeric to satisfy
+# the SDK tag-key validator (^[a-z0-9]+$); mirrors agent-canvas' ACP_SERVER_TAG_KEY.
+# The typed ``AppConversationInfo.acp_server`` field is a projection of this tag.
+ACP_SERVER_TAG_KEY = 'acpserver'
 
 
 class ConversationTrigger(Enum):
@@ -132,6 +138,22 @@ class AppConversationInfo(BaseModel):
 
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def acp_server(self) -> str | None:
+        """Active ACP provider key ('claude-code', 'codex', 'gemini-cli'), else None.
+
+        A typed projection of the ``acpserver`` tag (the same key agent-canvas
+        reads) so the conversation UI can resolve a provider brand label without
+        a dedicated column. Riding the tag keeps a single source of truth that
+        round-trips through the DB ``tags`` column for free. Gated on
+        ``agent_kind`` so a stray tag never reports a provider for an OpenHands
+        conversation.
+        """
+        if self.agent_kind != 'acp':
+            return None
+        return self.tags.get(ACP_SERVER_TAG_KEY)
 
 
 class AppConversationSortOrder(Enum):

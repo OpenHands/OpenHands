@@ -617,12 +617,12 @@ class AutomationEventService:
                             f'event to org {org_id}: {matched} automations matched'
                         )
         except asyncio.TimeoutError:
-            logger.warning(
+            logger.error(
                 f'[AutomationEventService] Timeout ({AUTOMATION_SERVICE_TIMEOUT}s) '
                 f'forwarding {source} event to automation service'
             )
         except aiohttp.ClientError as e:
-            logger.warning(
+            logger.error(
                 f'[AutomationEventService] HTTP error forwarding '
                 f'{source} event to automation service: {e}'
             )
