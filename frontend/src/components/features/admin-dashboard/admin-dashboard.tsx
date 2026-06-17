@@ -390,6 +390,13 @@ export function AdminDashboard() {
     enabled: !!orgId,
   });
 
+  // Fetch usage stats for Usage tab
+  const { data: usageStats } = useQuery({
+    queryKey: ["org-usage-stats", orgId],
+    queryFn: () => organizationService.getUsageStats({ orgId: orgId! }),
+    enabled: !!orgId && activeTab === "usage",
+  });
+
   // Fetch conversations
   const { data: conversationsData, isLoading: conversationsLoading } = useQuery(
     {
@@ -570,8 +577,10 @@ export function AdminDashboard() {
                       </svg>
                     </div>
                   </div>
-                  <div className="text-white text-3xl font-bold tracking-tight mb-2">128</div>
-                  <div className="text-[#888888] text-sm">+14% vs prior week</div>
+                  <div className="text-white text-3xl font-bold tracking-tight mb-2">
+                    {usageStats?.active_users ?? 0}
+                  </div>
+                  <div className="text-[#888888] text-sm">users in last 7 days</div>
                 </div>
 
                 {/* Agent Runs */}
@@ -585,9 +594,13 @@ export function AdminDashboard() {
                     </div>
                   </div>
                   <div className="text-white text-3xl font-bold tracking-tight mb-2">
-                    {stats?.active_conversations ? stats.active_conversations + 350 : 359}
+                    {usageStats?.agent_runs ?? 0}
                   </div>
-                  <div className="text-[#888888] text-sm">51 daily average</div>
+                  <div className="text-[#888888] text-sm">
+                    {usageStats?.agent_runs && usageStats.agent_runs > 0
+                      ? `${Math.round(usageStats.agent_runs / 7)} daily average`
+                      : 'No runs in last 7 days'}
+                  </div>
                 </div>
 
                 {/* Token Usage */}
@@ -602,9 +615,11 @@ export function AdminDashboard() {
                     </div>
                   </div>
                   <div className="text-white text-3xl font-bold tracking-tight mb-2">
-                    {formatTokens(stats?.total_tokens ?? 0)}
+                    {formatTokens(usageStats?.total_tokens ?? 0)}
                   </div>
-                  <div className="text-[#888888] text-sm">${(stats?.total_cost ?? 0).toFixed(0)} estimated spend</div>
+                  <div className="text-[#888888] text-sm">
+                    ${(usageStats?.estimated_spend ?? 0).toFixed(2)} estimated spend
+                  </div>
                 </div>
               </div>
 
@@ -619,22 +634,31 @@ export function AdminDashboard() {
 
                   {/* Simple Bar Chart */}
                   <div className="h-48 flex items-end justify-between gap-4 px-2">
-                    {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, i) => {
-                      const tokenHeight = 20 + Math.random() * 60 + (i % 3) * 15;
-                      const convoHeight = 10 + Math.random() * 30 + (i % 2) * 10;
+                    {(usageStats?.daily_usage ?? []).map((day) => {
+                      // Find max tokens for scaling
+                      const maxTokens = Math.max(...(usageStats?.daily_usage?.map(d => d.tokens) ?? [1]), 1);
+                      const tokenHeight = day.tokens > 0 ? (day.tokens / maxTokens) * 100 : 5;
+                      const convoHeight = day.conversations > 0 ? Math.min((day.conversations / Math.max(...(usageStats?.daily_usage?.map(d => d.conversations) ?? [1]), 1)) * 100, 80) : 5;
+
+                      // Get day name from date
+                      const date = new Date(day.date);
+                      const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+
                       return (
-                        <div key={day} className="flex-1 flex flex-col items-center gap-2">
+                        <div key={day.date} className="flex-1 flex flex-col items-center gap-2">
                           <div className="w-full flex items-end justify-center gap-1 h-36">
                             <div
-                              className="w-4 bg-white rounded-sm"
+                              className="w-4 bg-white rounded-sm transition-all"
                               style={{ height: `${tokenHeight}%` }}
+                              title={`${day.tokens.toLocaleString()} tokens`}
                             />
                             <div
-                              className="w-4 bg-zinc-600 rounded-sm"
+                              className="w-4 bg-zinc-600 rounded-sm transition-all"
                               style={{ height: `${convoHeight}%` }}
+                              title={`${day.conversations} conversations`}
                             />
                           </div>
-                          <span className="text-[#888888] text-xs">{day}</span>
+                          <span className="text-[#888888] text-xs">{dayName}</span>
                         </div>
                       );
                     })}
@@ -653,33 +677,35 @@ export function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Usage by Team */}
+                {/* Usage by Team (User) */}
                 <div className="bg-[#1A1A1A] p-6 rounded-xl border border-white/5">
                   <div className="mb-6">
-                    <h2 className="text-white font-medium text-lg">Usage by team</h2>
+                    <h2 className="text-white font-medium text-lg">Usage by user</h2>
                     <p className="text-[#888888] text-sm">Share of total runs</p>
                   </div>
 
                   <div className="space-y-5">
-                    {[
-                      { name: "Engineering", pct: 48 },
-                      { name: "Product", pct: 24 },
-                      { name: "Design", pct: 16 },
-                      { name: "Support", pct: 12 },
-                    ].map((team) => (
-                      <div key={team.name}>
+                    {(usageStats?.team_usage ?? []).slice(0, 6).map((user) => (
+                      <div key={user.user_id}>
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-white text-sm">{team.name}</span>
-                          <span className="text-[#888888] text-sm">{team.pct}%</span>
+                          <span className="text-white text-sm truncate max-w-[120px]" title={user.user_email || user.user_name || user.user_id}>
+                            {user.user_name || user.user_email || 'Unknown'}
+                          </span>
+                          <span className="text-[#888888] text-sm">{user.percentage}%</span>
                         </div>
                         <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-white rounded-full"
-                            style={{ width: `${team.pct}%` }}
+                            className="h-full bg-white rounded-full transition-all"
+                            style={{ width: `${user.percentage}%` }}
                           />
                         </div>
                       </div>
                     ))}
+                    {(!usageStats?.team_usage || usageStats.team_usage.length === 0) && (
+                      <div className="text-[#888888] text-sm text-center py-4">
+                        No usage data available
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

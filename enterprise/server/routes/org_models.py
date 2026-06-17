@@ -720,3 +720,38 @@ class OrgConversationStats(BaseModel):
     total_prompt_tokens: int = 0
     total_completion_tokens: int = 0
     total_tokens: int = 0  # Combined token count
+
+
+class DailyUsageData(BaseModel):
+    """Daily usage data for a single day."""
+
+    date: str  # ISO date string (YYYY-MM-DD)
+    tokens: int = 0
+    conversations: int = 0
+
+
+class TeamUsageData(BaseModel):
+    """Usage data for a single user/team."""
+
+    user_id: str
+    user_email: str | None = None
+    user_name: str | None = None
+    conversation_count: int = 0
+    total_tokens: int = 0
+    percentage: float = 0.0
+
+
+class OrgUsageStats(BaseModel):
+    """Detailed usage statistics for organization dashboard."""
+
+    # Top-level metrics
+    active_users: int = 0  # Users with activity in last 7 days
+    agent_runs: int = 0  # Total conversations in last 7 days
+    total_tokens: int = 0  # Total tokens in last 7 days
+    estimated_spend: float = 0.0  # Estimated cost in last 7 days
+
+    # Daily breakdown (last 7 days)
+    daily_usage: list[DailyUsageData] = Field(default_factory=list)
+
+    # Team breakdown (by user)
+    team_usage: list[TeamUsageData] = Field(default_factory=list)

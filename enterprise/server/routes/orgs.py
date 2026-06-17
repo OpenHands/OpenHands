@@ -40,6 +40,7 @@ from server.routes.org_models import (
     OrgPage,
     OrgResponse,
     OrgUpdate,
+    OrgUsageStats,
     OrphanedUserError,
     RoleNotFoundError,
 )
@@ -1704,6 +1705,63 @@ async def get_org_conversation_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve organization conversation stats',
+        )
+
+
+@org_router.get(
+    '/{org_id}/conversations/usage-stats',
+    response_model=OrgUsageStats,
+)
+async def get_org_conversation_usage_stats(
+    org_id: UUID,
+    days: int = Query(default=7, ge=1, le=90, description='Number of days to look back'),
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_CONVERSATIONS)),
+    service: OrgConversationService = org_conversation_service_dependency,
+) -> OrgUsageStats:
+    """Get detailed usage statistics for organization dashboard.
+
+    Returns detailed metrics including active users, agent runs, token usage,
+    daily breakdown, and team usage for the specified time window.
+
+    **Access Control**: Requires VIEW_ORG_CONVERSATIONS permission (Admin or Owner role).
+
+    Args:
+        org_id: The organization ID
+        days: Number of days to look back (1-90, default 7)
+
+    Returns:
+        OrgUsageStats: Detailed usage statistics for the org
+    """
+    logger.info(
+        'Getting organization conversation usage stats',
+        extra={'user_id': user_id, 'org_id': str(org_id), 'days': days},
+    )
+
+    try:
+        stats = await service.get_usage_stats(org_id=org_id, days=days)
+
+        logger.info(
+            'Successfully retrieved organization conversation usage stats',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'days': days,
+                'active_users': stats.active_users,
+                'agent_runs': stats.agent_runs,
+                'total_tokens': stats.total_tokens,
+            },
+        )
+
+        return stats
+
+    except Exception as e:
+        logger.exception(
+            'Unexpected error getting organization conversation usage stats',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve organization conversation usage stats',
         )
 
 

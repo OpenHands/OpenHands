@@ -259,6 +259,14 @@ export const organizationService = {
     return data;
   },
 
+  getUsageStats: async ({ orgId, days = 7 }: { orgId: string; days?: number }) => {
+    const { data } = await openHands.get<OrgUsageStats>(
+      `/api/organizations/${orgId}/conversations/usage-stats`,
+      { params: { days } },
+    );
+    return data;
+  },
+
   getConversations: async ({
     orgId,
     page = 1,
@@ -376,6 +384,30 @@ interface OrgConversationStats {
   total_prompt_tokens: number;
   total_completion_tokens: number;
   total_tokens: number;
+}
+
+interface DailyUsageData {
+  date: string;
+  tokens: number;
+  conversations: number;
+}
+
+interface TeamUsageData {
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+  conversation_count: number;
+  total_tokens: number;
+  percentage: number;
+}
+
+interface OrgUsageStats {
+  active_users: number;
+  agent_runs: number;
+  total_tokens: number;
+  estimated_spend: number;
+  daily_usage: DailyUsageData[];
+  team_usage: TeamUsageData[];
 }
 
 interface OrgConversationResponse {

@@ -14,9 +14,12 @@ from uuid import UUID
 
 from fastapi import Request
 from server.routes.org_models import (
+    DailyUsageData,
     OrgConversationPage,
     OrgConversationResponse,
     OrgConversationStats,
+    OrgUsageStats,
+    TeamUsageData,
 )
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -400,6 +403,184 @@ class OrgConversationService:
             total_prompt_tokens=int(total_prompt or 0),
             total_completion_tokens=int(total_completion or 0),
             total_tokens=int((total_prompt or 0) + (total_completion or 0)),
+        )
+
+    async def get_usage_stats(
+        self,
+        org_id: UUID,
+        days: int = 7,
+    ) -> OrgUsageStats:
+        """Get detailed usage statistics for organization dashboard.
+
+        Args:
+            org_id: The organization ID
+            days: Number of days to look back (default 7)
+
+        Returns:
+            OrgUsageStats with detailed usage data
+        """
+        now = datetime.now(UTC)
+        cutoff = now - timedelta(days=days)
+
+        # Base filter for org conversations
+        base_filter = [
+            StoredConversationMetadata.conversation_version == 'V1',
+            StoredConversationMetadataSaas.org_id == org_id,
+        ]
+
+        # 1. Active users (users with activity in the time window)
+        active_users_query = (
+            select(func.count(func.distinct(StoredConversationMetadataSaas.user_id)))
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationMetadata.created_at >= cutoff)
+        )
+        result = await self.db_session.execute(active_users_query)
+        active_users = result.scalar() or 0
+
+        # 2. Total agent runs (conversations) in time window
+        agent_runs_query = (
+            select(func.count(StoredConversationMetadata.conversation_id))
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationMetadata.created_at >= cutoff)
+        )
+        result = await self.db_session.execute(agent_runs_query)
+        agent_runs = result.scalar() or 0
+
+        # 3. Total tokens and cost in time window
+        totals_query = (
+            select(
+                func.coalesce(func.sum(StoredConversationMetadata.accumulated_cost), 0),
+                func.coalesce(func.sum(StoredConversationMetadata.prompt_tokens), 0),
+                func.coalesce(func.sum(StoredConversationMetadata.completion_tokens), 0),
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationMetadata.created_at >= cutoff)
+        )
+        result = await self.db_session.execute(totals_query)
+        total_cost, total_prompt_tokens, total_completion_tokens = result.one()
+
+        # 4. Daily usage breakdown
+        daily_usage = []
+        for i in range(days):
+            day_start = (now - timedelta(days=i)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            day_end = day_start + timedelta(days=1)
+
+            daily_query = (
+                select(
+                    func.count(StoredConversationMetadata.conversation_id),
+                    func.coalesce(
+                        func.sum(
+                            StoredConversationMetadata.prompt_tokens
+                            + StoredConversationMetadata.completion_tokens
+                        ),
+                        0,
+                    ),
+                )
+                .select_from(StoredConversationMetadata)
+                .join(
+                    StoredConversationMetadataSaas,
+                    StoredConversationMetadata.conversation_id
+                    == StoredConversationMetadataSaas.conversation_id,
+                )
+                .where(*base_filter)
+                .where(StoredConversationMetadata.created_at >= day_start)
+                .where(StoredConversationMetadata.created_at < day_end)
+            )
+            result = await self.db_session.execute(daily_query)
+            conv_count, token_count = result.one()
+
+            daily_usage.append(
+                DailyUsageData(
+                    date=day_start.strftime('%Y-%m-%d'),
+                    tokens=int(token_count or 0),
+                    conversations=int(conv_count or 0),
+                )
+            )
+
+        # Reverse to get oldest day first
+        daily_usage.reverse()
+
+        # 5. Team usage (by user)
+        team_query = (
+            select(
+                StoredConversationMetadataSaas.user_id,
+                User.email,
+                User.name,
+                func.count(StoredConversationMetadata.conversation_id).label('conv_count'),
+                func.coalesce(
+                    func.sum(
+                        StoredConversationMetadata.prompt_tokens
+                        + StoredConversationMetadata.completion_tokens
+                    ),
+                    0,
+                ).label('token_count'),
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .outerjoin(User, StoredConversationMetadataSaas.user_id == User.id)
+            .where(*base_filter)
+            .where(StoredConversationMetadata.created_at >= cutoff)
+            .group_by(
+                StoredConversationMetadataSaas.user_id,
+                User.email,
+                User.name,
+            )
+            .order_by(func.count(StoredConversationMetadata.conversation_id).desc())
+        )
+        result = await self.db_session.execute(team_query)
+        team_rows = result.all()
+
+        # Calculate percentages
+        total_team_convs = sum(row.conv_count or 0 for row in team_rows)
+        team_usage = []
+        for row in team_rows:
+            pct = (
+                (row.conv_count / total_team_convs * 100)
+                if total_team_convs > 0
+                else 0
+            )
+            team_usage.append(
+                TeamUsageData(
+                    user_id=str(row.user_id),
+                    user_email=row.email,
+                    user_name=row.name,
+                    conversation_count=int(row.conv_count or 0),
+                    total_tokens=int(row.token_count or 0),
+                    percentage=round(pct, 1),
+                )
+            )
+
+        return OrgUsageStats(
+            active_users=int(active_users),
+            agent_runs=int(agent_runs),
+            total_tokens=int(total_prompt_tokens or 0) + int(total_completion_tokens or 0),
+            estimated_spend=float(total_cost or 0),
+            daily_usage=daily_usage,
+            team_usage=team_usage,
         )
 
     async def get_org_conversation(
