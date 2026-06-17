@@ -142,8 +142,6 @@ class TestLiveStatusAppConversationService:
         self.mock_user_context.get_user_email = AsyncMock(return_value=None)
         self.mock_jwt_service = Mock()
         self.mock_sandbox_service = Mock()
-        # Default: check_concurrency_limit does not raise (no limit reached)
-        self.mock_sandbox_service.check_concurrency_limit = AsyncMock()
         self.mock_sandbox_spec_service = Mock()
         self.mock_app_conversation_info_service = Mock()
         self.mock_app_conversation_start_task_service = Mock()
@@ -1818,6 +1816,99 @@ class TestLiveStatusAppConversationService:
         )
         assert saved_info.id == conversation_id
 
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.ConversationInfo'
+    )
+    @pytest.mark.asyncio
+    async def test_start_app_conversation_stores_acp_model_as_llm_model(
+        self, mock_conversation_info_class, mock_remote_workspace_class
+    ):
+        """ACP conversations persist acp_model as llm_model in AppConversationInfo."""
+        from openhands.sdk.settings import ACPAgentSettings
+
+        conversation_id = uuid4()
+
+        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
+        acp_user = _TestUserInfo(
+            id='test_user_123',
+            llm_model='gpt-4',
+            sandbox_grouping_strategy=SandboxGroupingStrategy.NO_GROUPING,
+        )
+        acp_user.agent_settings = ACPAgentSettings(
+            acp_server='codex', acp_model='gpt-5.5/high'
+        )
+        self.mock_user_context.get_user_info = AsyncMock(return_value=acp_user)
+
+        mock_sandbox_spec = Mock(spec=SandboxSpecInfo)
+        mock_sandbox_spec.working_dir = '/test/workspace'
+        self.mock_sandbox.sandbox_spec_id = str(uuid4())
+        self.mock_sandbox.id = str(uuid4())
+        self.mock_sandbox.session_api_key = 'test_session_key'
+        exposed_url = ExposedUrl(
+            name=AGENT_SERVER, url='http://agent-server:8000', port=60000
+        )
+        self.mock_sandbox.exposed_urls = [exposed_url]
+
+        self.mock_sandbox_service.get_sandbox = AsyncMock(
+            return_value=self.mock_sandbox
+        )
+        self.mock_sandbox_spec_service.get_sandbox_spec = AsyncMock(
+            return_value=mock_sandbox_spec
+        )
+        mock_remote_workspace_class.return_value = Mock()
+
+        async def mock_wait_for_sandbox(task):
+            task.sandbox_id = self.mock_sandbox.id
+            yield task
+
+        async def mock_run_setup_scripts(task, sandbox, workspace, agent_server_url):
+            yield task
+
+        self.service._wait_for_sandbox_start = mock_wait_for_sandbox
+        self.service.run_setup_scripts = mock_run_setup_scripts
+        self.service._seed_sandbox_profiles = AsyncMock()
+
+        # ACP start request: agent_kind='acp', acp_model='gpt-5.5/high'
+        mock_acp_agent = Mock()
+        mock_acp_agent.agent_kind = 'acp'
+        mock_acp_agent.acp_model = 'gpt-5.5/high'
+        mock_start_request = Mock(spec=StartConversationRequest)
+        mock_start_request.agent = mock_acp_agent
+        mock_start_request.model_dump.return_value = {}
+
+        self.service._build_start_conversation_request_for_user = AsyncMock(
+            return_value=mock_start_request
+        )
+
+        mock_conversation_info = Mock()
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info_class.model_validate.return_value = (
+            mock_conversation_info
+        )
+
+        mock_response = Mock()
+        mock_response.json.return_value = {'id': str(conversation_id)}
+        mock_response.raise_for_status = Mock()
+        self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
+        self.mock_event_callback_service.save_event_callback = AsyncMock()
+        self.mock_app_conversation_info_service.save_app_conversation_info = AsyncMock()
+
+        async for _ in self.service._start_app_conversation(
+            AppConversationStartRequest()
+        ):
+            pass
+
+        self.mock_app_conversation_info_service.save_app_conversation_info.assert_called_once()
+        saved_info = self.mock_app_conversation_info_service.save_app_conversation_info.call_args[
+            0
+        ][0]
+        assert saved_info.llm_model == 'gpt-5.5/high'
+        assert saved_info.agent_kind == 'acp'
+        assert saved_info.tags.get('acpserver') == 'codex'
+
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_custom_remote_servers(self):
         """Test _configure_llm_and_mcp merges custom remote servers."""
@@ -2342,8 +2433,6 @@ class TestPluginHandling:
         self.mock_user_context.get_user_email = AsyncMock(return_value=None)
         self.mock_jwt_service = Mock()
         self.mock_sandbox_service = Mock()
-        # Default: check_concurrency_limit does not raise (no limit reached)
-        self.mock_sandbox_service.check_concurrency_limit = AsyncMock()
         self.mock_sandbox_spec_service = Mock()
         self.mock_app_conversation_info_service = Mock()
         self.mock_app_conversation_start_task_service = Mock()
@@ -3006,8 +3095,6 @@ class TestLoadHooksFromWorkspace:
         self.mock_user_context = Mock(spec=UserContext)
         self.mock_jwt_service = Mock()
         self.mock_sandbox_service = Mock()
-        # Default: check_concurrency_limit does not raise (no limit reached)
-        self.mock_sandbox_service.check_concurrency_limit = AsyncMock()
         self.mock_sandbox_spec_service = Mock()
         self.mock_app_conversation_info_service = Mock()
         self.mock_app_conversation_start_task_service = Mock()
@@ -3559,158 +3646,3 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         assert request.agent.acp_env.get('GH_TOKEN') == 'explicit-token'
         assert request.secrets.get('GH_TOKEN') is panel_secret
-
-
-class TestConcurrencyLimitCheck:
-    """Test cases for concurrency limit checking in _start_app_conversation."""
-
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.mock_user_context = Mock(spec=UserContext)
-        self.mock_user_auth = Mock()
-        self.mock_user_context.user_auth = self.mock_user_auth
-        self.mock_jwt_service = Mock()
-        self.mock_sandbox_service = Mock()
-        # Default: check_concurrency_limit does not raise (individual tests override this)
-        self.mock_sandbox_service.check_concurrency_limit = AsyncMock()
-        self.mock_sandbox_spec_service = Mock()
-        self.mock_app_conversation_info_service = Mock()
-        self.mock_app_conversation_start_task_service = Mock()
-        self.mock_event_callback_service = Mock()
-        self.mock_event_service = Mock()
-        self.mock_httpx_client = Mock()
-        self.mock_pending_message_service = Mock()
-
-        self.service = LiveStatusAppConversationService(
-            init_git_in_empty_workspace=True,
-            user_context=self.mock_user_context,
-            app_conversation_info_service=self.mock_app_conversation_info_service,
-            app_conversation_start_task_service=self.mock_app_conversation_start_task_service,
-            event_callback_service=self.mock_event_callback_service,
-            event_service=self.mock_event_service,
-            sandbox_service=self.mock_sandbox_service,
-            sandbox_spec_service=self.mock_sandbox_spec_service,
-            jwt_service=self.mock_jwt_service,
-            pending_message_service=self.mock_pending_message_service,
-            sandbox_startup_timeout=30,
-            sandbox_startup_poll_frequency=1,
-            max_num_conversations_per_sandbox=20,
-            httpx_client=self.mock_httpx_client,
-            web_url='https://test.example.com',
-            openhands_provider_base_url='https://provider.example.com',
-            access_token_hard_timeout=None,
-            app_mode='test',
-        )
-
-    @pytest.mark.asyncio
-    async def test_start_app_conversation_checks_concurrency_limit_when_no_sandbox_id(
-        self,
-    ):
-        """Test that _start_app_conversation calls check_concurrency_limit when sandbox_id is not provided."""
-        from openhands.app_server.errors import ConcurrencyLimitError
-
-        # Arrange
-        self.mock_sandbox_service.check_concurrency_limit = AsyncMock(
-            side_effect=ConcurrencyLimitError(
-                detail={
-                    'error': 'CONCURRENCY_LIMIT_REACHED',
-                    'message': 'Limit reached',
-                    'limit': 3,
-                    'current': 3,
-                }
-            )
-        )
-        request = AppConversationStartRequest()  # No sandbox_id
-
-        # Act & Assert
-        with pytest.raises(ConcurrencyLimitError) as exc_info:
-            async for _ in self.service._start_app_conversation(request):
-                pass
-
-        assert exc_info.value.detail['limit'] == 3
-        assert exc_info.value.detail['current'] == 3
-        assert exc_info.value.status_code == 429
-        self.mock_sandbox_service.check_concurrency_limit.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_start_app_conversation_skips_concurrency_check_when_sandbox_id_provided(
-        self,
-    ):
-        """Test that _start_app_conversation skips check_concurrency_limit when sandbox_id is provided."""
-        # Arrange
-        self.mock_sandbox_service.check_concurrency_limit = AsyncMock()
-        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user')
-
-        # Create request with sandbox_id (reusing existing sandbox)
-        request = AppConversationStartRequest(sandbox_id='existing-sandbox-123')
-
-        # Mock the rest of the flow to allow the generator to start
-        # We only need to verify check_concurrency_limit is NOT called
-        # So we can let it fail after that point
-        try:
-            async for _ in self.service._start_app_conversation(request):
-                break  # Just get the first yield, don't need full flow
-        except Exception:
-            pass  # Expected to fail since we didn't mock everything
-
-        # Assert - check_concurrency_limit should NOT have been called
-        self.mock_sandbox_service.check_concurrency_limit.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_start_app_conversation_propagates_concurrency_error(self):
-        """Test that ConcurrencyLimitError is propagated without being caught."""
-        from openhands.app_server.errors import ConcurrencyLimitError
-
-        # Arrange
-        self.mock_sandbox_service.check_concurrency_limit = AsyncMock(
-            side_effect=ConcurrencyLimitError(
-                detail={
-                    'error': 'CONCURRENCY_LIMIT_REACHED',
-                    'message': 'Limit reached',
-                    'limit': 5,
-                    'current': 7,
-                }
-            )
-        )
-        request = AppConversationStartRequest()
-
-        # Act & Assert - error should propagate directly
-        with pytest.raises(ConcurrencyLimitError) as exc_info:
-            async for _ in self.service._start_app_conversation(request):
-                pass
-
-        # Verify it's the exact error we raised, not wrapped
-        assert exc_info.value.detail['limit'] == 5
-        assert exc_info.value.detail['current'] == 7
-
-    @pytest.mark.asyncio
-    async def test_start_app_conversation_concurrency_check_before_task_creation(self):
-        """Test that concurrency limit is checked BEFORE task is created/yielded."""
-        from openhands.app_server.errors import ConcurrencyLimitError
-
-        # Arrange
-        self.mock_sandbox_service.check_concurrency_limit = AsyncMock(
-            side_effect=ConcurrencyLimitError(
-                detail={
-                    'error': 'CONCURRENCY_LIMIT_REACHED',
-                    'message': 'Limit reached',
-                    'limit': 3,
-                    'current': 3,
-                }
-            )
-        )
-        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user')
-
-        request = AppConversationStartRequest()
-
-        # Track if any task was yielded
-        tasks_yielded = []
-
-        # Act
-        with pytest.raises(ConcurrencyLimitError):
-            async for task in self.service._start_app_conversation(request):
-                tasks_yielded.append(task)
-
-        # Assert - no tasks should have been yielded since error happens first
-        assert len(tasks_yielded) == 0
-        self.mock_sandbox_service.check_concurrency_limit.assert_called_once()

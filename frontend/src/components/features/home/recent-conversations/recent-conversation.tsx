@@ -10,8 +10,8 @@ import { I18nKey } from "#/i18n/declaration";
 import { SandboxStatusIndicator } from "./sandbox-status-indicator";
 import RepoForkedIcon from "#/icons/repo-forked.svg?react";
 import { Typography } from "#/ui/typography";
-import CircuitIcon from "#/icons/u-circuit.svg?react";
-import { agentDisplayLabel } from "#/utils/agent-display-label";
+import { resolveAgentChip } from "#/utils/agent-display-label";
+import { AgentChipIcon } from "#/components/shared/agent-chip-icon";
 
 interface RecentConversationProps {
   conversation: V1AppConversation;
@@ -23,10 +23,10 @@ export function RecentConversation({ conversation }: RecentConversationProps) {
 
   const hasRepository =
     conversation.selected_repository && conversation.selected_branch;
-  const agentLabel = agentDisplayLabel(
+  const agentChip = resolveAgentChip(
     conversation.agent_kind,
     conversation.llm_model,
-    conversation.tags,
+    conversation.acp_server,
     config?.acp_providers,
   );
 
@@ -76,15 +76,15 @@ export function RecentConversation({ conversation }: RecentConversationProps) {
           ) : null}
         </div>
         <div className="flex items-center gap-2">
-          {agentLabel && (
+          {agentChip && (
             <span
               className="max-w-[120px] flex items-center gap-1 overflow-hidden"
-              title={conversation.llm_model ?? agentLabel}
+              title={agentChip.tooltip}
               data-testid="recent-conversation-llm-model"
             >
-              <CircuitIcon width={12} height={12} className="shrink-0" />
+              <AgentChipIcon kind={agentChip.kind} />
               <Typography.Text className="text-xs truncate">
-                {agentLabel}
+                {agentChip.text}
               </Typography.Text>
             </span>
           )}

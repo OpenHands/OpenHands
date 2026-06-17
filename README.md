@@ -49,7 +49,9 @@ If you have questions or feedback, please open a GitHub issue or join the [#proj
 > [!NOTE]
 > The code in this repo is moving! See [Agent Canvas transition FAQ](https://github.com/OpenHands/OpenHands/issues/14841)
 >
-> The source code for Agent Canvas lives in [OpenHands/agent-canvas](https://github.com/OpenHands/agent-canvas) for now.
+> The source code for OpenHands Agent and Agent Server lives in [OpenHands/software-agent-sdk](https://github.com/OpenHands/software-agent-sdk).
+>
+> The source code for Agent Canvas lives in [OpenHands/agent-canvas](https://github.com/OpenHands/agent-canvas).
 
 ## Quickstart
 

@@ -31,7 +31,6 @@ from server.auth.auth_error import ExpiredError
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from server.auth.token_manager import TokenManager
 
-from openhands.app_server.errors import ConcurrencyLimitError
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.secrets.secrets_models import Secrets
@@ -263,7 +262,7 @@ class GithubManager(Manager[GithubViewType]):
         try:
             await self.data_collector.process_payload(message)
         except Exception:
-            logger.warning(
+            logger.error(
                 '[Github]: Error processing payload for gh interaction', exc_info=True
             )
 
@@ -426,19 +425,6 @@ class GithubManager(Manager[GithubViewType]):
                 )
 
                 msg_info = get_session_expired_message(user_info.username)
-
-            except ConcurrencyLimitError as e:
-                detail = e.detail if isinstance(e.detail, dict) else {}
-                limit = detail.get('limit', '?')
-                logger.warning(
-                    f'[GitHub] Concurrency limit reached for user {user_info.username}',
-                    extra={'limit': limit, 'current': detail.get('current')},
-                )
-                msg_info = (
-                    f'@{user_info.username} You have reached your limit of {limit} '
-                    'concurrent conversation(s). Please close an existing conversation '
-                    f'to start a new one: {HOST_URL}'
-                )
 
             await self.send_message(msg_info, github_view)
 

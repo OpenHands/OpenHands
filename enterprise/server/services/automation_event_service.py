@@ -552,6 +552,18 @@ class AutomationEventService:
             payload=payload,
         )
 
+    @staticmethod
+    async def _read_response_body(resp: aiohttp.ClientResponse) -> Any:
+        """Return the response body as JSON, falling back to text.
+
+        Infrastructure errors (e.g. 502/503 from a load balancer) often return
+        a non-JSON body, so we can't assume the expected JSON interface.
+        """
+        try:
+            return await resp.json()
+        except (aiohttp.ContentTypeError, ValueError):
+            return await resp.text()
+
     async def _send_source_to_automation_service(
         self,
         source: str,
@@ -598,13 +610,16 @@ class AutomationEventService:
                     headers=headers,
                     timeout=aiohttp.ClientTimeout(total=AUTOMATION_SERVICE_TIMEOUT),
                 ) as resp:
-                    if resp.status >= 400:
-                        # Try JSON first (expected interface), fall back to text
-                        # for infrastructure errors (502/503 from load balancer)
-                        try:
-                            body = await resp.json()
-                        except (aiohttp.ContentTypeError, ValueError):
-                            body = await resp.text()
+                    if resp.status >= 500:
+                        # 5xx = downstream failure, event dropped, user impact
+                        body = await self._read_response_body(resp)
+                        logger.error(
+                            f'[AutomationEventService] Automation service returned '
+                            f'{resp.status} for {source} org {org_id}: {body}'
+                        )
+                    elif resp.status >= 400:
+                        # 4xx = client/contract problem, not a downstream outage
+                        body = await self._read_response_body(resp)
                         logger.warning(
                             f'[AutomationEventService] Automation service returned '
                             f'{resp.status} for {source} org {org_id}: {body}'

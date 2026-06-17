@@ -252,11 +252,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     async def _start_app_conversation(
         self, request: AppConversationStartRequest
     ) -> AsyncGenerator[AppConversationStartTask, None]:
-        # Check concurrency limit before creating task if we might need a new sandbox
-        # This allows the API to return 429 immediately instead of failing asynchronously
-        if not request.sandbox_id:
-            await self.sandbox_service.check_concurrency_limit()
-
         # Create and yield the start task
         user_id = await self.user_context.get_user_id()
         # Prefer the user's email as the Laminar trace user id so traces are
@@ -390,7 +385,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             request_agent = start_conversation_request.agent
             tags: dict[str, str] = {}
             if request_agent.agent_kind == 'acp':
-                llm_model = None
+                llm_model = request_agent.acp_model
                 agent_kind = 'acp'
                 # Persist the active ACP provider key so the conversation UI
                 # can resolve a brand label ("Claude Code", "Codex", …) via

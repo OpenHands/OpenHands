@@ -2,11 +2,7 @@
 
 from uuid import UUID
 
-from server.constants import (
-    DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES,
-    ROLE_ADMIN,
-    ROLE_OWNER,
-)
+from server.constants import ROLE_ADMIN, ROLE_OWNER
 from server.routes.org_models import (
     CannotModifySelfError,
     InsufficientPermissionError,
@@ -22,7 +18,6 @@ from server.routes.org_models import (
 )
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org_member_store import OrgMemberStore
-from storage.org_store import OrgStore
 from storage.role_store import RoleStore
 from storage.user_store import UserStore
 
@@ -64,17 +59,7 @@ class OrgMemberService:
         user = await UserStore.get_user_by_id(str(user_id))
         email = user.email if user and user.email else ''
 
-        # Get org's max_concurrent_sandboxes for effective limit calculation
-        org = await OrgStore.get_org_by_id(org_id)
-        org_max_concurrent_sandboxes = (
-            org.max_concurrent_sandboxes
-            if org and org.max_concurrent_sandboxes
-            else DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES
-        )
-
-        return MeResponse.from_org_member(
-            org_member, role, email, org_max_concurrent_sandboxes
-        )
+        return MeResponse.from_org_member(org_member, role, email)
 
     @staticmethod
     async def get_org_members(
@@ -113,14 +98,6 @@ class OrgMemberService:
             except ValueError:
                 return False, 'invalid_page_id', None
 
-        # Get org's max_concurrent_sandboxes for effective limit calculation
-        org = await OrgStore.get_org_by_id(org_id)
-        org_max_concurrent_sandboxes = (
-            org.max_concurrent_sandboxes
-            if org and org.max_concurrent_sandboxes
-            else DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES
-        )
-
         # Call store to get paginated members
         members, _ = await OrgMemberStore.get_org_members_paginated(
             org_id=org_id,
@@ -136,13 +113,6 @@ class OrgMemberService:
             user = member.user
             role = member.role
 
-            # Calculate effective limit: user override > org default
-            effective_limit = (
-                member.max_concurrent_sandboxes_override
-                if member.max_concurrent_sandboxes_override is not None
-                else org_max_concurrent_sandboxes
-            )
-
             items.append(
                 OrgMemberResponse(
                     user_id=str(member.user_id),
@@ -151,8 +121,6 @@ class OrgMemberService:
                     role=role.name if role else '',
                     role_rank=role.rank if role else 0,
                     status=member.status,
-                    max_concurrent_sandboxes_override=member.max_concurrent_sandboxes_override,
-                    effective_max_concurrent_sandboxes=effective_limit,
                 )
             )
 
@@ -286,7 +254,7 @@ class OrgMemberService:
         current_user_id: UUID,
         update_data: OrgMemberUpdate,
     ) -> OrgMemberResponse:
-        """Update a member's role or settings in an organization.
+        """Update a member's role in an organization.
 
         Permission rules:
         - Owners can modify anyone (including other owners), can set any role
@@ -320,8 +288,8 @@ class OrgMemberService:
         if not requester_membership:
             raise OrgMemberNotFoundError(str(org_id), str(current_user_id))
 
-        # Check if trying to modify self (only for role changes)
-        if str(current_user_id) == str(target_user_id) and new_role_name is not None:
+        # Check if trying to modify self
+        if str(current_user_id) == str(target_user_id):
             raise CannotModifySelfError('modify')
 
         # Get target user's membership
@@ -338,88 +306,56 @@ class OrgMemberService:
         if not target_role:
             raise RoleNotFoundError(target_membership.role_id)
 
-        # Get org for effective limit calculation
-        org = await OrgStore.get_org_by_id(org_id)
-        org_max_concurrent_sandboxes = (
-            org.max_concurrent_sandboxes
-            if org and org.max_concurrent_sandboxes
-            else DEFAULT_PERSONAL_ORG_CONCURRENT_SANDBOXES
+        # If no role change requested, return current state
+        if new_role_name is None:
+            user = await UserStore.get_user_by_id(str(target_user_id))
+            return OrgMemberResponse(
+                user_id=str(target_membership.user_id),
+                email=user.email if user else None,
+                role_id=target_membership.role_id,
+                role=target_role.name,
+                role_rank=target_role.rank,
+                status=target_membership.status,
+            )
+
+        # Validate new role exists
+        new_role = await RoleStore.get_role_by_name(new_role_name.lower())
+        if not new_role:
+            raise InvalidRoleError(new_role_name)
+
+        # Check permission to modify target
+        if not OrgMemberService._can_update_member_role(
+            requester_role.name, target_role.name, new_role.name
+        ):
+            raise InsufficientPermissionError(
+                'You do not have permission to modify this member'
+            )
+
+        # Check if demoting the last owner
+        if (
+            target_role.name == ROLE_OWNER
+            and new_role.name != ROLE_OWNER
+            and await OrgMemberService._is_last_owner(org_id, target_user_id)
+        ):
+            raise LastOwnerError('demote')
+
+        # Perform the update
+        updated_member = await OrgMemberStore.update_user_role_in_org(
+            org_id, target_user_id, new_role.id
         )
-
-        # Track if any updates were made
-        updated = False
-        final_role = target_role
-
-        # Handle role update if requested
-        if new_role_name is not None:
-            # Validate new role exists
-            new_role = await RoleStore.get_role_by_name(new_role_name.lower())
-            if not new_role:
-                raise InvalidRoleError(new_role_name)
-
-            # Check permission to modify target
-            if not OrgMemberService._can_update_member_role(
-                requester_role.name, target_role.name, new_role.name
-            ):
-                raise InsufficientPermissionError(
-                    'You do not have permission to modify this member'
-                )
-
-            # Check if demoting the last owner
-            if (
-                target_role.name == ROLE_OWNER
-                and new_role.name != ROLE_OWNER
-                and await OrgMemberService._is_last_owner(org_id, target_user_id)
-            ):
-                raise LastOwnerError('demote')
-
-            # Perform the role update
-            updated_member = await OrgMemberStore.update_user_role_in_org(
-                org_id, target_user_id, new_role.id
-            )
-            if not updated_member:
-                raise MemberUpdateError('Failed to update member')
-            target_membership = updated_member
-            final_role = new_role
-            updated = True
-
-        # Handle max_concurrent_sandboxes_override update if requested
-        # Only owners/admins can modify this field
-        if update_data.max_concurrent_sandboxes_override is not None:
-            # Check permission (must be owner or admin)
-            if requester_role.name not in [ROLE_OWNER, ROLE_ADMIN]:
-                raise InsufficientPermissionError(
-                    'Only owners and admins can modify sandbox limits'
-                )
-            target_membership.max_concurrent_sandboxes_override = (
-                update_data.max_concurrent_sandboxes_override
-            )
-            await OrgMemberStore.update_org_member(target_membership)
-            updated = True
-
-        if not updated:
-            # No updates requested, return current state
-            pass
+        if not updated_member:
+            raise MemberUpdateError('Failed to update member')
 
         # Get user email for response
         user = await UserStore.get_user_by_id(str(target_user_id))
 
-        # Calculate effective limit
-        effective_limit = (
-            target_membership.max_concurrent_sandboxes_override
-            if target_membership.max_concurrent_sandboxes_override is not None
-            else org_max_concurrent_sandboxes
-        )
-
         return OrgMemberResponse(
-            user_id=str(target_membership.user_id),
+            user_id=str(updated_member.user_id),
             email=user.email if user else None,
-            role_id=target_membership.role_id,
-            role=final_role.name,
-            role_rank=final_role.rank,
-            status=target_membership.status,
-            max_concurrent_sandboxes_override=target_membership.max_concurrent_sandboxes_override,
-            effective_max_concurrent_sandboxes=effective_limit,
+            role_id=updated_member.role_id,
+            role=new_role.name,
+            role_rank=new_role.rank,
+            status=updated_member.status,
         )
 
     @staticmethod
