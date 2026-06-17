@@ -878,7 +878,6 @@ export function AdminDashboard() {
               </span>
             </div>
           </div>
-          </div>
         </div>
           </>
         ) : (
