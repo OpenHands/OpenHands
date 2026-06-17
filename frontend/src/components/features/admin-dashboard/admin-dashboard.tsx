@@ -474,52 +474,229 @@ export function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0D0D0D] text-white">
+    <div className="min-h-screen bg-[#0B0B0B] text-white flex">
+      {/* Left Sidebar */}
+      <aside className="w-[260px] shrink-0 border-r border-white/10 flex flex-col">
+        {/* Sidebar Header */}
+        <div className="p-6 border-b border-white/10">
+          <h1 className="text-white font-bold text-lg">Admin dashboard</h1>
+          <p className="text-[#888888] text-sm mt-1">Organization controls</p>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 p-4">
+          <ul className="space-y-1">
+            <li>
+              <button
+                type="button"
+                onClick={() => setActiveTab("usage")}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === "usage"
+                    ? "bg-white/10 border border-white/20 text-white"
+                    : "text-[#888888] hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 3v18h18" />
+                  <path d="M18 17V9" />
+                  <path d="M13 17V5" />
+                  <path d="M8 17v-3" />
+                </svg>
+                Usage
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                onClick={() => setActiveTab("conversations")}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === "conversations"
+                    ? "bg-white/10 border border-white/20 text-white"
+                    : "text-[#888888] hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                Conversations
+              </button>
+            </li>
+          </ul>
+        </nav>
+      </aside>
+
       {/* Main Content */}
-      <div className="p-6 max-w-[1600px] mx-auto">
-        {/* Header with Tabs */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-white mb-1">Admin Dashboard</h1>
-              <p className="text-[#8C8C8C] text-sm">
+      <main className="flex-1 overflow-auto">
+        {activeTab === "usage" ? (
+          <>
+            {/* Usage Page Header */}
+            <div className="p-8 border-b border-white/10">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <h1 className="text-3xl font-bold text-white tracking-tight">Usage</h1>
+                  <p className="text-[#888888] text-sm mt-2">
+                    At-a-glance OpenHands usage for {currentOrg?.name || 'your organization'}.
+                  </p>
+                  <p className="text-[#888888] text-sm mt-1">
+                    At-a-glance org consumption and activity trends using sample data.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/20 text-sm text-[#888888] hover:text-white hover:border-white/40 transition-colors"
+                >
+                  Last 7 days
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Usage Content */}
+            <div className="p-8">
+              {/* Top Metrics Row - 3 cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                {/* Active Users */}
+                <div className="bg-[#1A1A1A] p-6 rounded-xl border border-white/5">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-[#888888] text-xs font-medium uppercase tracking-wide">Active Users</span>
+                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="text-white text-3xl font-bold tracking-tight mb-2">128</div>
+                  <div className="text-[#888888] text-sm">+14% vs prior week</div>
+                </div>
+
+                {/* Agent Runs */}
+                <div className="bg-[#1A1A1A] p-6 rounded-xl border border-white/5">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-[#888888] text-xs font-medium uppercase tracking-wide">Agent Runs</span>
+                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="22,12 18,12 15,21 9,3 6,12 2,12" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="text-white text-3xl font-bold tracking-tight mb-2">
+                    {stats?.active_conversations ? stats.active_conversations + 350 : 359}
+                  </div>
+                  <div className="text-[#888888] text-sm">51 daily average</div>
+                </div>
+
+                {/* Token Usage */}
+                <div className="bg-[#1A1A1A] p-6 rounded-xl border border-white/5">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-[#888888] text-xs font-medium uppercase tracking-wide">Token Usage</span>
+                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 6v6l4 2" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="text-white text-3xl font-bold tracking-tight mb-2">
+                    {formatTokens(stats?.total_tokens ?? 0)}
+                  </div>
+                  <div className="text-[#888888] text-sm">${(stats?.total_cost ?? 0).toFixed(0)} estimated spend</div>
+                </div>
+              </div>
+
+              {/* Bottom Row - Chart and Team Usage */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* Daily Usage Chart */}
+                <div className="lg:col-span-2 bg-[#1A1A1A] p-6 rounded-xl border border-white/5">
+                  <div className="mb-6">
+                    <h2 className="text-white font-medium text-lg">Daily usage</h2>
+                    <p className="text-[#888888] text-sm">Tokens and conversations by day</p>
+                  </div>
+
+                  {/* Simple Bar Chart */}
+                  <div className="h-48 flex items-end justify-between gap-4 px-2">
+                    {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, i) => {
+                      const tokenHeight = 20 + Math.random() * 60 + (i % 3) * 15;
+                      const convoHeight = 10 + Math.random() * 30 + (i % 2) * 10;
+                      return (
+                        <div key={day} className="flex-1 flex flex-col items-center gap-2">
+                          <div className="w-full flex items-end justify-center gap-1 h-36">
+                            <div
+                              className="w-4 bg-white rounded-sm"
+                              style={{ height: `${tokenHeight}%` }}
+                            />
+                            <div
+                              className="w-4 bg-zinc-600 rounded-sm"
+                              style={{ height: `${convoHeight}%` }}
+                            />
+                          </div>
+                          <span className="text-[#888888] text-xs">{day}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Legend */}
+                  <div className="flex items-center gap-6 mt-6 pt-4 border-t border-white/10">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-sm bg-white" />
+                      <span className="text-[#888888] text-sm">Tokens</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-sm bg-zinc-600" />
+                      <span className="text-[#888888] text-sm">Conversations</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Usage by Team */}
+                <div className="bg-[#1A1A1A] p-6 rounded-xl border border-white/5">
+                  <div className="mb-6">
+                    <h2 className="text-white font-medium text-lg">Usage by team</h2>
+                    <p className="text-[#888888] text-sm">Share of total runs</p>
+                  </div>
+
+                  <div className="space-y-5">
+                    {[
+                      { name: "Engineering", pct: 48 },
+                      { name: "Product", pct: 24 },
+                      { name: "Design", pct: 16 },
+                      { name: "Support", pct: 12 },
+                    ].map((team) => (
+                      <div key={team.name}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-white text-sm">{team.name}</span>
+                          <span className="text-[#888888] text-sm">{team.pct}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-white rounded-full"
+                            style={{ width: `${team.pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Conversations Page Header */}
+            <div className="p-8 pb-0">
+              <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Conversations</h1>
+              <p className="text-[#888888] text-sm">
                 Org-wide OpenHands activity — active sessions, runtimes, and triage.
               </p>
             </div>
-          </div>
 
-          {/* Tab Navigation */}
-          <div className="flex gap-1 border-b border-[#262626]">
-            <button
-              type="button"
-              onClick={() => setActiveTab("conversations")}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === "conversations"
-                  ? "text-white border-b-2 border-white"
-                  : "text-[#8C8C8C] hover:text-white"
-              }`}
-            >
-              Conversations
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("usage")}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === "usage"
-                  ? "text-white border-b-2 border-white"
-                  : "text-[#8C8C8C] hover:text-white"
-              }`}
-            >
-              Usage
-            </button>
-          </div>
-        </div>
-
-        {/* Tab Content */}
-        {activeTab === "conversations" ? (
-          <>
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 px-8 pt-6">
               <KPICard
                 label="Active Conversations"
                 value={stats?.active_conversations ?? "-"}
@@ -547,6 +724,7 @@ export function AdminDashboard() {
             </div>
 
             {/* Filter Bar */}
+
 
         <div className="bg-[#161616] border border-[#262626] rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between mb-4">
@@ -880,155 +1058,8 @@ export function AdminDashboard() {
           </div>
         </div>
           </>
-        ) : (
-          <>
-            {/* Usage Pane - Detailed aggregated stats */}
-            <div className="space-y-6">
-              {/* Cost Summary */}
-              <div className="bg-[#161616] border border-[#262626] rounded-lg p-6">
-                <h2 className="text-lg font-semibold text-white mb-4">Cost Summary</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-[#1E1E1E] rounded-lg">
-                      <DollarIcon />
-                    </div>
-                    <div>
-                      <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-1">
-                        Total Cost
-                      </div>
-                      <div className="text-white text-2xl font-bold">
-                        {formatCost(stats?.total_cost ?? 0)}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-[#1E1E1E] rounded-lg">
-                      <ClockIcon />
-                    </div>
-                    <div>
-                      <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-1">
-                        Completed (24H)
-                      </div>
-                      <div className="text-white text-2xl font-bold">
-                        {stats?.completed_24h ?? 0}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-[#1E1E1E] rounded-lg">
-                      <ChartBarIcon />
-                    </div>
-                    <div>
-                      <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-1">
-                        Completed (7D)
-                      </div>
-                      <div className="text-white text-2xl font-bold">
-                        {stats?.completed_7d ?? 0}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Token Usage */}
-              <div className="bg-[#161616] border border-[#262626] rounded-lg p-6">
-                <h2 className="text-lg font-semibold text-white mb-4">Token Usage</h2>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-[#1E1E1E] rounded-lg">
-                      <TokenIcon />
-                    </div>
-                    <div>
-                      <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-1">
-                        Total Tokens
-                      </div>
-                      <div className="text-white text-2xl font-bold">
-                        {formatTokens(stats?.total_tokens ?? 0)}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-[#1E1E1E] rounded-lg text-[#8C8C8C]">
-                      P
-                    </div>
-                    <div>
-                      <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-1">
-                        Prompt Tokens
-                      </div>
-                      <div className="text-white text-2xl font-bold">
-                        {formatTokens(stats?.total_prompt_tokens ?? 0)}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-[#1E1E1E] rounded-lg text-[#8C8C8C]">
-                      C
-                    </div>
-                    <div>
-                      <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-1">
-                        Completion Tokens
-                      </div>
-                      <div className="text-white text-2xl font-bold">
-                        {formatTokens(stats?.total_tokens 
-                          ? stats.total_tokens - (stats?.total_prompt_tokens ?? 0) 
-                          : 0)}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-[#1E1E1E] rounded-lg text-[#8C8C8C]">
-                      30D
-                    </div>
-                    <div>
-                      <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-1">
-                        Completed (30D)
-                      </div>
-                      <div className="text-white text-2xl font-bold">
-                        {stats?.completed_30d ?? 0}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Cost Per Token Breakdown */}
-              <div className="bg-[#161616] border border-[#262626] rounded-lg p-6">
-                <h2 className="text-lg font-semibold text-white mb-4">Efficiency Metrics</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div>
-                    <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-2">
-                      Cost per 1K Tokens
-                    </div>
-                    <div className="text-white text-xl font-bold">
-                      {stats?.total_tokens && stats.total_tokens > 0
-                        ? `$${((stats.total_cost ?? 0) / (stats.total_tokens / 1000)).toFixed(4)}`
-                        : "$0.00"}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-2">
-                      Avg Cost per Conversation
-                    </div>
-                    <div className="text-white text-xl font-bold">
-                      {stats?.active_conversations && stats.active_conversations > 0
-                        ? `$${((stats.total_cost ?? 0) / stats.active_conversations).toFixed(2)}`
-                        : "$0.00"}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-2">
-                      Active / Running Runtimes
-                    </div>
-                    <div className="text-white text-xl font-bold">
-                      {stats?.active_conversations ?? 0} / {stats?.running_runtimes ?? 0}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
         )}
-      </div>
+      </main>
     </div>
   );
 }
