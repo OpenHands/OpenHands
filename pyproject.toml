@@ -21,7 +21,7 @@ dynamic = [ "version" ]
 
 # Main dependencies (mirrors [tool.poetry.dependencies] for UV compatibility)
 dependencies = [
-  "aiohttp>=3.13.4",
+  "aiohttp>=3.14.1",
   "anthropic[vertex]",
   "anyio==4.9",
   "asyncpg>=0.30",
@@ -161,7 +161,7 @@ authlib = ">=1.6.9"                                # CVE-2026-27962 (fixed in 1.
 orjson = ">=3.11.6"                                # Pinned to fix CVE-2025-67221
 litellm = "1.84.1"                                 # Exact pin to the verified 1.84.1 release; bump explicitly when upgrading (rather than a floor) to ensure only the tested version is used
 openai = "2.33.0"                                  # Pin because litellm 1.84.1 requires 2.33.0 and is incompatible with >=1.100.0 (BerriAI/litellm#13711)
-aiohttp = ">=3.13.4"                               # Keep aiohttp on a fixed-or-newer release while allowing litellm's pinned 3.13.4
+aiohttp = ">=3.14.1"                               # CVE-2026-54278 (fixed in 3.14.1); keep aiohttp on a fixed-or-newer release
 google-genai = "*"                                 # To use litellm with Gemini Pro API
 google-api-python-client = "^2.164.0"              # For Google Sheets API
 google-auth-httplib2 = "*"                         # For Google Sheets authentication
