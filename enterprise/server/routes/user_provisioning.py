@@ -74,6 +74,16 @@ DEFAULT_PROVISIONED_ROLE = 'member'
 _GENERATED_PASSWORD_LENGTH = 24
 
 
+def _utc_now_naive() -> datetime:
+    """Return the current UTC time as a naive ``datetime``.
+
+    ``User.accepted_tos`` (and similar timestamp columns on the user
+    record) are stored as naive UTC datetimes, so we strip the tzinfo
+    after capturing ``now`` in UTC to avoid mixed-awareness comparisons.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def _generate_password(length: int = _GENERATED_PASSWORD_LENGTH) -> str:
     """Generate a strong random password suitable for Keycloak policies.
 
@@ -86,9 +96,10 @@ def _generate_password(length: int = _GENERATED_PASSWORD_LENGTH) -> str:
     # Loop until we have at least one of each character class to
     # satisfy realm password policies that mandate mixed character
     # types. With a 24-character draw from this alphabet the
-    # probability of any class being absent is ~10^-9, so this loop
-    # almost never iterates more than once.
-    while True:
+    # probability of any class being absent is ~10^-9, so a bounded
+    # loop guarantees termination while still effectively always
+    # succeeding on the first iteration.
+    for _ in range(100):
         candidate = ''.join(secrets.choice(alphabet) for _ in range(length))
         if (
             any(c.islower() for c in candidate)
@@ -97,6 +108,12 @@ def _generate_password(length: int = _GENERATED_PASSWORD_LENGTH) -> str:
             and any(c in '!@#$%^&*-_=+' for c in candidate)
         ):
             return candidate
+    # Practically unreachable: after 100 independent 24-char draws the
+    # probability of never satisfying the class constraints is < 10^-87.
+    raise RuntimeError(
+        'Failed to generate a password satisfying character-class '
+        'requirements after 100 attempts.'
+    )
 
 
 class ProvisionUserRequest(BaseModel):
@@ -149,7 +166,7 @@ async def _set_user_provisioned_flags(user_id: str) -> None:
         if not user:
             return
         user.email_verified = True
-        user.accepted_tos = datetime.now(timezone.utc).replace(tzinfo=None)
+        user.accepted_tos = _utc_now_naive()
         user.user_consents_to_analytics = True
         # Provisioned users skip the in-product onboarding form; the
         # admin has already onboarded them out-of-band.
