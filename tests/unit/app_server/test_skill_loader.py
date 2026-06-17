@@ -11,6 +11,7 @@ import httpx
 import pytest
 
 from openhands.app_server.app_conversation.skill_loader import (
+    _MAX_ORG_CANDIDATES,
     OrgConfig,
     SandboxConfig,
     SkillInfo,
@@ -312,6 +313,80 @@ class TestBuildOrgConfigs:
 
         # Assert
         assert {c.repository for c in result} == {'hieptl/.openhands'}
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.app_conversation.skill_loader._get_provider_type')
+    @patch(
+        'openhands.app_server.app_conversation.skill_loader._determine_org_repo_path'
+    )
+    @patch('openhands.app_server.app_conversation.skill_loader._get_org_repository_url')
+    async def test_selected_repo_is_first_for_legacy_org_config(
+        self,
+        mock_get_url,
+        mock_determine_path,
+        mock_get_provider,
+        mock_user_context,
+    ):
+        """The selected repo's config is org_configs[0].
+
+        Older agent-servers read only the first/legacy ``org_config``, so the
+        selected repository's org skills must stay first even when global
+        account/org repos also resolve.
+        """
+        # Arrange: the user also has global account + org repos that resolve.
+        handler = self._make_provider_handler(
+            logins={ProviderType.GITHUB: 'hieptl'},
+            orgs={ProviderType.GITHUB: ['acme']},
+        )
+        mock_user_context.get_provider_handler = AsyncMock(return_value=handler)
+        mock_determine_path.return_value = ('selectedorg/.openhands', 'selectedorg')
+        mock_get_provider.return_value = 'github'
+        mock_get_url.side_effect = lambda path, ctx: f'https://git/{path}.git'
+
+        # Act
+        result = await build_org_configs('selectedorg/web', mock_user_context)
+
+        # Assert
+        assert result[0].repository == 'selectedorg/.openhands'
+        assert result[0].org_name == 'selectedorg'
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.app_conversation.skill_loader._get_org_repository_url')
+    async def test_does_not_enumerate_bitbucket_dc_projects(
+        self, mock_get_url, mock_user_context
+    ):
+        """Bitbucket DC's server-wide project enumeration is never triggered."""
+        # Arrange
+        handler = self._make_provider_handler(
+            logins={ProviderType.BITBUCKET_DATA_CENTER: 'bbuser'}
+        )
+        mock_user_context.get_provider_handler = AsyncMock(return_value=handler)
+        mock_get_url.side_effect = lambda path, ctx: f'https://git/{path}.git'
+
+        # Act
+        await build_org_configs(None, mock_user_context)
+
+        # Assert
+        handler.get_bitbucket_dc_projects.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.app_conversation.skill_loader._get_org_repository_url')
+    async def test_caps_candidate_fan_out(self, mock_get_url, mock_user_context):
+        """No more than _MAX_ORG_CANDIDATES repos are verified per conversation."""
+        # Arrange: 1 login + 40 orgs => 82 GitHub-style candidate paths.
+        orgs = [f'org{i}' for i in range(40)]
+        handler = self._make_provider_handler(
+            logins={ProviderType.GITHUB: 'hieptl'},
+            orgs={ProviderType.GITHUB: orgs},
+        )
+        mock_user_context.get_provider_handler = AsyncMock(return_value=handler)
+        mock_get_url.side_effect = lambda path, ctx: f'https://git/{path}.git'
+
+        # Act
+        await build_org_configs(None, mock_user_context)
+
+        # Assert
+        assert len(mock_get_url.call_args_list) == _MAX_ORG_CANDIDATES
 
 
 class TestBuildSandboxConfig:

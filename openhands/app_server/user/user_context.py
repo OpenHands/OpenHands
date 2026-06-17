@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
 
-from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
+from openhands.app_server.integrations.provider import (
+    PROVIDER_TOKEN_TYPE,
+    ProviderHandler,
+    ProviderType,
+)
 from openhands.app_server.integrations.service_types import UserGitInfo
 from openhands.app_server.services.injector import Injector
 from openhands.app_server.user.user_models import (
@@ -76,6 +80,15 @@ class UserContext(ABC):
     @abstractmethod
     async def get_user_git_info(self) -> UserGitInfo | None:
         """Get an User Meta"""
+
+    async def get_provider_handler(self) -> ProviderHandler:
+        """Get a ProviderHandler bound to this user's provider tokens.
+
+        Not all contexts can build one (e.g. admin-scoped contexts without
+        provider tokens). Such contexts leave this unimplemented; callers are
+        expected to degrade gracefully when it raises.
+        """
+        raise NotImplementedError
 
     async def get_max_concurrent_sandboxes(self, default: int = 10) -> int:
         """Get the user's maximum concurrent sandboxes limit.

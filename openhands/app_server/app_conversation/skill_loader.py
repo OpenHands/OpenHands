@@ -70,7 +70,7 @@ async def _is_gitlab_repository(repo_name: str, user_context: UserContext) -> bo
         True if the repository is hosted on GitLab, False otherwise
     """
     try:
-        provider_handler = await user_context.get_provider_handler()  # type: ignore[attr-defined]
+        provider_handler = await user_context.get_provider_handler()
         repository = await provider_handler.verify_repo_provider(
             repo_name, is_optional=True
         )
@@ -92,7 +92,7 @@ async def _is_azure_devops_repository(
         True if the repository is hosted on Azure DevOps, False otherwise
     """
     try:
-        provider_handler = await user_context.get_provider_handler()  # type: ignore[attr-defined]
+        provider_handler = await user_context.get_provider_handler()
         repository = await provider_handler.verify_repo_provider(
             repo_name, is_optional=True
         )
@@ -248,14 +248,24 @@ async def _enumerate_owners_for_provider(
             owners.extend(await provider_handler.get_gitlab_groups())
         elif provider == ProviderType.BITBUCKET:
             owners.extend(await provider_handler.get_bitbucket_workspaces())
-        elif provider == ProviderType.BITBUCKET_DATA_CENTER:
-            owners.extend(await provider_handler.get_bitbucket_dc_projects())
         elif provider == ProviderType.AZURE_DEVOPS:
             owners.extend(await provider_handler.get_azure_devops_organizations())
+        # Bitbucket Data Center is intentionally excluded: get_bitbucket_dc_projects
+        # hits /rest/api/1.0/projects, which returns every project the user can
+        # *browse* on the server (not their memberships). Enumerating it here would
+        # fan out to ~all projects on the instance and inject their skills into every
+        # conversation. BBDC org skills still load via the selected-repo path.
     except Exception as e:
         _logger.debug(f'Failed to enumerate orgs for provider {provider}: {e}')
 
     return owners
+
+
+# Upper bound on how many global skill repos we will verify for a single
+# conversation, and how many of those verifications run concurrently. These
+# cap the HTTP fan-out against the user's git provider(s) on conversation start.
+_MAX_ORG_CANDIDATES = 30
+_URL_RESOLVE_CONCURRENCY = 8
 
 
 async def build_org_configs(
@@ -283,18 +293,10 @@ async def build_org_configs(
     # Each candidate is (repo_path, org_name, provider_value).
     candidates: list[tuple[str, str, str]] = []
 
-    # 1. Global owners: the user's account plus their orgs/groups, per provider.
-    try:
-        provider_handler = await user_context.get_provider_handler()  # type: ignore[attr-defined]
-        for provider in provider_handler.provider_tokens:
-            owners = await _enumerate_owners_for_provider(provider_handler, provider)
-            for owner in owners:
-                for path in _candidate_repo_paths(provider, owner):
-                    candidates.append((path, owner, provider.value))
-    except Exception as e:
-        _logger.debug(f'Failed to enumerate global skill repos: {e}')
-
-    # 2. Selected repository owner (org-level skills for the chosen repo).
+    # 1. Selected repository owner first. This entry doubles as the legacy
+    #    single ``org_config`` (org_configs[0]) for agent-servers that predate
+    #    the list API, so it must keep the pre-list "selected repo's org skills"
+    #    semantics regardless of which global repos happen to resolve.
     if selected_repository and len(selected_repository.split('/')) >= 2:
         try:
             org_openhands_repo, org_name = await _determine_org_repo_path(
@@ -309,10 +311,24 @@ async def build_org_configs(
         except Exception as e:
             _logger.debug(f'Failed to determine selected-repo org config: {e}')
 
+    # 2. Global owners: the user's account plus their orgs/groups, per provider.
+    try:
+        provider_handler = await user_context.get_provider_handler()
+        for provider in provider_handler.provider_tokens:
+            owners = await _enumerate_owners_for_provider(provider_handler, provider)
+            for owner in owners:
+                for path in _candidate_repo_paths(provider, owner):
+                    candidates.append((path, owner, provider.value))
+    except Exception as e:
+        _logger.debug(f'Failed to enumerate global skill repos: {e}')
+
     if not candidates:
         return []
 
     # 3. Deduplicate by repo path (covers owner == login and org overlaps).
+    #    Dedup is path-only, so the rare case of a same-named owner on two
+    #    providers collapses to the first provider's config; acceptable because
+    #    the resolved authenticated URL determines which repo is actually cloned.
     seen: set[str] = set()
     unique: list[tuple[str, str, str]] = []
     for path, org_name, provider_value in candidates:
@@ -320,10 +336,23 @@ async def build_org_configs(
             seen.add(path)
             unique.append((path, org_name, provider_value))
 
-    # 4. Resolve authenticated URLs concurrently; keep only repos that exist.
-    urls = await asyncio.gather(
-        *[_get_org_repository_url(path, user_context) for path, _, _ in unique]
-    )
+    # 4. Bound the verification fan-out. Because the selected-repo entry is first,
+    #    truncation here can never drop it.
+    if len(unique) > _MAX_ORG_CANDIDATES:
+        _logger.warning(
+            f'Truncating org skill candidates from {len(unique)} to '
+            f'{_MAX_ORG_CANDIDATES}'
+        )
+        unique = unique[:_MAX_ORG_CANDIDATES]
+
+    # 5. Resolve authenticated URLs concurrently (bounded); keep repos that exist.
+    sem = asyncio.Semaphore(_URL_RESOLVE_CONCURRENCY)
+
+    async def _resolve(path: str) -> str | None:
+        async with sem:
+            return await _get_org_repository_url(path, user_context)
+
+    urls = await asyncio.gather(*[_resolve(path) for path, _, _ in unique])
 
     configs: list[OrgConfig] = []
     for (path, org_name, provider_value), org_repo_url in zip(
@@ -332,7 +361,7 @@ async def build_org_configs(
         if org_repo_url:
             configs.append(
                 OrgConfig(
-                    repository=selected_repository or path,
+                    repository=path,
                     provider=provider_value,
                     org_repo_url=org_repo_url,
                     org_name=org_name,
