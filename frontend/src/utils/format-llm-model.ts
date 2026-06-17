@@ -2,13 +2,20 @@ function capitalize(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
 }
 
-// Reasoning-effort qualifiers used as the final slash-segment in model names
-// (e.g. "gpt-5.5/high", "o3/medium"). Keeping this list short avoids
-// false-positive matches on real model name segments.
-// Note: ACP models (which may include xhigh, none, opus[1m], opusplan, etc.)
-// are formatted via registry labels in resolveAgentChip; this is for native
-// OpenHands litellm routing strings only.
-const EFFORT_QUALS = new Set(["high", "medium", "low"]);
+// Reasoning-effort qualifiers that can appear as the final slash-segment in a
+// model name (e.g. "gpt-5.5/xhigh", "o3/medium"). Mirrors the SDK's
+// reasoning_effort vocabulary (low/medium/high/xhigh/none) plus litellm's
+// "minimal", so that the model name is not dropped when the effort isn't one of
+// the three common values. ACP models also resolve their label via the provider
+// registry in resolveAgentChip; this list covers native OpenHands routing strings.
+const EFFORT_QUALS = new Set([
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "none",
+]);
 
 /**
  * Format a raw ``llm_model`` routing string into a short, human-readable
