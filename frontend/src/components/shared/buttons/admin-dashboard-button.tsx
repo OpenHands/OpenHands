@@ -1,13 +1,34 @@
 import React from "react";
 import { useLocation } from "react-router";
-import { useMe } from "#/hooks/query/use-me";
+import { useQuery } from "@tanstack/react-query";
+import { useConfig } from "#/hooks/query/use-config";
+import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { organizationService } from "#/api/organization-service/organization-service.api";
 import { cn } from "#/utils/utils";
 
 export function AdminDashboardButton() {
   const location = useLocation();
-  const { data: me } = useMe();
+  const { data: config } = useConfig();
+  const { organizationId } = useSelectedOrganizationId();
 
-  const isAdmin = me?.role === "owner" || me?.role === "admin";
+  const isSaas = config?.app_mode === "saas";
+
+  // Query the user's role in the current organization
+  // Use this approach instead of useMe to ensure fresh data on org switch
+  const { data: meData, isLoading } = useQuery({
+    queryKey: ["organizations", organizationId, "me"],
+    queryFn: () => organizationService.getMe({ orgId: organizationId! }),
+    enabled: isSaas && !!organizationId,
+    staleTime: 0, // Always fetch fresh data to handle org switches correctly
+    refetchOnMount: true, // Refetch when mounting (e.g., after org switch)
+  });
+
+  const isAdmin = meData?.role === "owner" || meData?.role === "admin";
+
+  // Don't render anything while loading (prevents flash of wrong state)
+  if (!isSaas || isLoading || !organizationId) {
+    return null;
+  }
 
   if (!isAdmin) {
     return null;
