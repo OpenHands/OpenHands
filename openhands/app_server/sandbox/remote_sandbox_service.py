@@ -669,7 +669,11 @@ class RemoteSandboxService(SandboxService):
     async def batch_get_sandboxes(
         self, sandbox_ids: list[str]
     ) -> list[SandboxInfo | None]:
-        """Get a batch of sandboxes, returning None for any which were not found."""
+        """Get a batch of sandboxes, returning None for any which were not found.
+
+        Falls back to returning sandboxes with missing/unknown runtime status if the
+        runtime API is unavailable, rather than failing the entire batch request.
+        """
         if not sandbox_ids:
             return []
         query = await self._secure_select()
@@ -679,9 +683,20 @@ class RemoteSandboxService(SandboxService):
             stored_remote_sandbox[0].id: stored_remote_sandbox[0]
             for stored_remote_sandbox in stored_remote_sandboxes
         }
-        runtimes_by_id = await self._get_runtimes_batch(
-            list(stored_remote_sandboxes_by_id)
-        )
+
+        # Gracefully handle runtime API failures by falling back to empty runtimes.
+        # This mirrors the behavior of get_sandbox which falls back to runtime=None.
+        try:
+            runtimes_by_id = await self._get_runtimes_batch(
+                list(stored_remote_sandboxes_by_id)
+            )
+        except Exception:
+            _logger.exception(
+                'Error getting runtimes batch, falling back to empty runtimes',
+                stack_info=True,
+            )
+            runtimes_by_id = {}
+
         results = []
         for sandbox_id in sandbox_ids:
             stored_remote_sandbox = stored_remote_sandboxes_by_id.get(sandbox_id)
