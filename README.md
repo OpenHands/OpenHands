@@ -28,6 +28,14 @@
 </p>
 <hr>
 
+<p align="center">
+  <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=OpenHands">
+    <img src="./docs/llm-providers/atlas-cloud-logo.png" alt="Atlas Cloud" width="160">
+  </a>
+</p>
+
+> 🎁 **[Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=OpenHands)** is a full-modal, OpenAI-compatible AI inference platform you can use as a drop-in *bring-your-own-model* backend for OpenHands — one API key for DeepSeek, Qwen, GLM, Kimi, MiniMax and more, no extra provider code. See the [Atlas Cloud setup guide](./docs/llm-providers/atlas-cloud.md) · budget-friendly [coding plan](https://www.atlascloud.ai/console/coding-plan).
+
 OpenHands Agent Canvas turns your coding agents into a self-hosted, always-on engineering team. It's a developer control center for starting conversations and automating everyday tasks — like generating reports that publish to Slack or automatically decomposing GitHub issues into tasks.
 
 It runs locally on your machine by default, but can connect to multiple “agent backends”, e.g. running agents in Docker containers, on VMs, or within your company infrastructure. You can optionally choose to run agents on OpenHands Cloud or OpenHands Enterprise infrastructure.
@@ -40,7 +48,7 @@ Agent Canvas runs the open source OpenHands agent out-of-the-box, but can use an
 | [**Switch between different backends**](https://docs.openhands.dev/openhands/usage/agent-canvas/backends) | Switch between local, remote, and cloud agents without losing focus |
 | [**Create automations**](https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations) | Create automations and workflows that integrate with Slack, GitHub, Linear, and more. Run on a schedule or in response to webhook events  |
 | [**Integrate with the tools you use**](https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations) | Connect your automations with third-party services like Slack, GitHub, Notion, and more to automate workflows |
-| [**Bring your own model**](https://docs.openhands.dev/openhands/usage/settings/llm-settings#llm-profiles) | Use with any LLM |
+| [**Bring your own model**](https://docs.openhands.dev/openhands/usage/settings/llm-settings#llm-profiles) | Use with any LLM, including any OpenAI-compatible endpoint such as [Atlas Cloud](./docs/llm-providers/atlas-cloud.md) |
 | [**Use with any agent**](https://docs.openhands.dev/openhands/usage/agent-canvas/acp-agents) | Use with OpenHands, Claude Code, Codex, Gemini, or any agent with Agent-Client Protocol (ACP). |
 
 

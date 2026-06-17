@@ -298,6 +298,17 @@ type = "noop"
 #temperature = 0.1
 #max_input_tokens = 1024
 
+# Example of using an OpenAI-compatible provider (here: Atlas Cloud) as a
+# bring-your-own-model backend. OpenHands routes LLM calls through LiteLLM,
+# so any OpenAI-compatible endpoint works: prefix the model with "openai/"
+# and point base_url at the provider. See docs/llm-providers/atlas-cloud.md.
+#[llm.atlas]
+#model = "openai/deepseek-ai/deepseek-v4-pro"
+#base_url = "https://api.atlascloud.ai/v1"
+#api_key = "<your-atlascloud-api-key>"
+# deepseek-v4-pro is a reasoning model — leave room for the chain-of-thought.
+#max_output_tokens = 4096
+
 ########################### Kubernetes #######################################
 # Kubernetes configuration when using the Kubernetes runtime
 ##############################################################################
