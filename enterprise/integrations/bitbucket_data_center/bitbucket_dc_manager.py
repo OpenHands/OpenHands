@@ -26,7 +26,6 @@ from server.auth.constants import BITBUCKET_DATA_CENTER_BOT_TOKEN
 from server.auth.token_manager import TokenManager
 from storage.bitbucket_dc_webhook_store import BitbucketDCWebhookStore
 
-from openhands.app_server.errors import ConcurrencyLimitError
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.types import (
@@ -433,19 +432,6 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
                     f'[Bitbucket DC] Session expired for {user_info.username}: {e}'
                 )
                 msg_info = get_session_expired_message(user_info.username)
-
-            except ConcurrencyLimitError as e:
-                detail = e.detail if isinstance(e.detail, dict) else {}
-                limit = detail.get('limit', '?')
-                logger.warning(
-                    f'[Bitbucket DC] Concurrency limit reached for user {user_info.username}',
-                    extra={'limit': limit, 'current': detail.get('current')},
-                )
-                msg_info = (
-                    f'@{user_info.username} You have reached your limit of {limit} '
-                    'concurrent conversation(s). Please close an existing conversation '
-                    f'to start a new one: {HOST_URL}'
-                )
 
             await self.send_message(msg_info, bitbucket_view)
 
