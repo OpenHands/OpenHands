@@ -95,7 +95,7 @@ dependencies = [
   "shellingham>=1.5.4",
   "sqlalchemy[asyncio]>=2.0.40",
   "sse-starlette>=3.0.2",
-  "starlette>=0.49.1",
+  "starlette>=1.3.1",
   "tenacity>=8.5,<10",
   "termcolor",
   "toml",
@@ -223,7 +223,7 @@ binaryornot = ">=0.5.0,<1"
 # Explicitly pinned packages for latest versions
 pypdf = "^6.13.3"
 pillow = "^12.1.1"
-starlette = ">=0.49.1,<1.1.0"
+starlette = ">=1.3.1,<2.0.0"
 urllib3 = "^2.7.0"
 requests = "^2.33.0"
 setuptools = ">=78.1.1"
