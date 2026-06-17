@@ -28,6 +28,20 @@ The caller receives the email, password (generated if not supplied) and
 API key in a single response. On failure after the Keycloak user is
 created, the Keycloak user is best-effort cleaned up to keep the
 identity space tidy.
+
+**Partial-cleanup gap.** Steps 3 and 4 are sequenced so the offline
+token is stored before the OpenHands user row is created. That mirrors
+the production OAuth flow (``keycloak_offline_callback`` stores the
+token before any ``UserStore`` interaction) and keeps the unwind
+surface small: if ``UserStore.create_user`` raises, the Keycloak user
+is removed by ``_cleanup_keycloak_user`` and the orphaned offline
+token row is harmless — it is keyed by a Keycloak ``sub`` that no
+longer exists, so it cannot be used to authenticate. The inverse
+ordering (user-first) would leak the *entire* OpenHands cascade
+(user + personal org + default settings + owner member row) instead
+of a single encrypted token blob, which is strictly worse. We accept
+the harmless token row as a known partial-cleanup gap; periodic
+``OfflineTokenStore`` reconciliation (if/when added) can sweep them.
 """
 
 from __future__ import annotations
@@ -129,7 +143,14 @@ class ProvisionUserRequest(BaseModel):
         max_length=256,
         description=(
             'Optional initial password. If omitted, a strong random '
-            'password is generated and returned in the response.'
+            'password is generated and returned in the response. '
+            'When supplied, this value is sent to Keycloak as-is and '
+            'must satisfy the realm password policy (length, character '
+            'classes, blacklist, etc.); a policy violation surfaces as '
+            'a 409 from Keycloak. Generated passwords are constructed '
+            'to satisfy common realm policies (mixed case + digit + '
+            'symbol) — caller-supplied passwords carry no such '
+            'guarantees beyond the ``min_length=8`` floor enforced here.'
         ),
     )
     api_key_name: str | None = Field(
@@ -140,10 +161,26 @@ class ProvisionUserRequest(BaseModel):
 
 
 class ProvisionUserResponse(BaseModel):
-    """Response for ``POST /api/organizations/provision-user``."""
+    """Response for ``POST /api/organizations/provision-user``.
+
+    ``password`` is **intentionally** returned to the caller — this is
+    the *only* time the plaintext is available, because the endpoint
+    bypasses the normal email-based set-password flow. The admin who
+    called this endpoint is expected to hand the credential to the new
+    user out-of-band (e.g. an internal IT system, secrets manager, or
+    direct hand-off). Callers should treat the response body as
+    sensitive: do not log it, and prefer TLS-terminated transport.
+    """
 
     email: str
-    password: str
+    password: str = Field(
+        description=(
+            'Plaintext initial password for the new user. Either the '
+            "caller's supplied value or a freshly generated one. "
+            'Returned so the admin can transmit it out-of-band; this '
+            'is the only point at which it is recoverable.'
+        ),
+    )
     api_key: str
     user_id: str
     org_id: str
@@ -251,6 +288,8 @@ async def provision_user(
 
     # Anything after this point may need to roll back the Keycloak user
     # to avoid orphaning an account that has no matching OpenHands row.
+    # See the module docstring's "Partial-cleanup gap" note for the
+    # rationale behind the step 3 / step 4 ordering below.
     try:
         # 2. Get an offline token for the new user and store it. This
         # mirrors what ``keycloak_offline_callback`` does at the end of
