@@ -105,6 +105,20 @@ class UserAuth(ABC):
         user: UserGitInfo = await client.get_user()
         return user
 
+    async def get_max_concurrent_sandboxes(self, default: int = 10) -> int:
+        """Get the user's maximum concurrent sandboxes limit.
+
+        In OSS mode, this returns the default value.
+        Enterprise implementations can override to check org/user-specific limits.
+
+        Args:
+            default: The fallback limit if no user/org-specific limit is set.
+
+        Returns:
+            The effective maximum number of concurrent sandboxes allowed.
+        """
+        return default
+
     @classmethod
     @abstractmethod
     async def get_instance(cls, request: Request) -> UserAuth:

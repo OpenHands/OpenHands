@@ -7,6 +7,7 @@ Covers:
 - All supported trigger types: labeled issues, issue comments, PR comments, inline PR comments
 """
 
+from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -315,6 +316,63 @@ class TestGithubManagerUserNotFound:
         assert '@testuser' in comment_text
         assert "haven't created an OpenHands account" in comment_text
         assert 'sign up' in comment_text.lower()
+
+    @pytest.mark.asyncio
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    async def test_is_job_requested_ignores_openhands_bot_sender(
+        self,
+        mock_github_integration,
+        mock_auth,
+        mock_token_manager,
+        mock_data_collector,
+        github_issue_message,
+    ):
+        """Test that bot-authored comments from the OpenHands GitHub App do not start jobs."""
+        github_issue_message = deepcopy(github_issue_message)
+        github_issue_message.message['payload']['sender'] = {
+            'id': 188912522,
+            'login': 'openhands-ai[bot]',
+        }
+        github_issue_message.message['payload']['comment']['body'] = (
+            'Documented upstream changes in @openhands/extensions.'
+        )
+
+        manager = GithubManager(mock_token_manager, mock_data_collector)
+        manager._user_has_write_access_to_repo = MagicMock(return_value=True)
+
+        assert await manager.is_job_requested(github_issue_message) is False
+        manager._user_has_write_access_to_repo.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    async def test_receive_message_ignores_openhands_bot_sender_before_processing(
+        self,
+        mock_github_integration,
+        mock_auth,
+        mock_token_manager,
+        mock_data_collector,
+        github_issue_message,
+    ):
+        """Test that ignored bot events are dropped before collection or account lookup."""
+        github_issue_message = deepcopy(github_issue_message)
+        github_issue_message.message['payload']['sender'] = {
+            'id': 188912522,
+            'login': 'openhands-ai[bot]',
+        }
+        github_issue_message.message['payload']['comment']['body'] = (
+            'Documented upstream changes in @openhands/extensions.'
+        )
+
+        manager = GithubManager(mock_token_manager, mock_data_collector)
+        manager.is_job_requested = AsyncMock(return_value=True)
+
+        await manager.receive_message(github_issue_message)
+
+        mock_data_collector.process_payload.assert_not_awaited()
+        manager.is_job_requested.assert_not_awaited()
+        mock_token_manager.get_user_id_from_idp_user_id.assert_not_called()
 
     @patch('integrations.github.github_manager.Auth')
     @patch('integrations.github.github_manager.GithubIntegration')

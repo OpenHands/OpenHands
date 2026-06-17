@@ -145,6 +145,9 @@ class AuthUserContext(UserContext):
     async def get_user_git_info(self) -> UserGitInfo | None:
         return await self.user_auth.get_user_git_info()
 
+    async def get_max_concurrent_sandboxes(self, default: int = 10) -> int:
+        return await self.user_auth.get_max_concurrent_sandboxes(default)
+
 
 USER_ID_ATTR = 'user_id'
 

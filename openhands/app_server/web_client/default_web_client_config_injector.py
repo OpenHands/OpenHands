@@ -184,6 +184,7 @@ def _get_feature_flags() -> WebClientFeatureFlags:
         == 'true',
         enable_acp=os.getenv('ENABLE_ACP', 'false') == 'true',
         enable_onboarding=os.getenv('OH_ENABLE_ONBOARDING', 'false') == 'true',
+        enable_automations=os.getenv('ENABLE_AUTOMATIONS', 'true') == 'true',
     )
 
 

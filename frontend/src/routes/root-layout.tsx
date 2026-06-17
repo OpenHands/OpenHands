@@ -32,6 +32,8 @@ import { cn } from "#/utils/utils";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useAppTitle } from "#/hooks/use-app-title";
 import { useAutoAcceptInvitation } from "#/hooks/use-auto-accept-invitation";
+import { ConversationLimitModal } from "#/components/features/org/conversation-limit-modal";
+import { useConversationLimitStore } from "#/stores/conversation-limit-store";
 
 export function ErrorBoundary() {
   const error = useRouteError();
@@ -88,6 +90,13 @@ export default function MainApp() {
 
   // Accept a pending invitation token once authenticated
   useAutoAcceptInvitation();
+
+  // Conversation limit modal state
+  const {
+    isOpen: isConversationLimitModalOpen,
+    limit: conversationLimit,
+    closeLimitModal,
+  } = useConversationLimitStore();
 
   // Auto-login if login method is stored in local storage
   useAutoLogin();
@@ -267,6 +276,12 @@ export default function MainApp() {
           onClose={() => {
             setConsentFormIsOpen(false);
           }}
+        />
+      )}
+      {isConversationLimitModalOpen && conversationLimit !== null && (
+        <ConversationLimitModal
+          onClose={closeLimitModal}
+          limit={conversationLimit}
         />
       )}
     </div>

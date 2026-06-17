@@ -366,3 +366,35 @@ class TestCleanupOldSandboxes:
         # Verify: No sandboxes should be stopped
         assert result == []
         mock_sandbox_service.pause_sandbox_mock.assert_not_called()
+
+
+class TestCheckConcurrencyLimit:
+    """Test cases for the check_concurrency_limit method."""
+
+    @pytest.mark.asyncio
+    async def test_check_concurrency_limit_default_does_nothing(
+        self, mock_sandbox_service
+    ):
+        """Test that default check_concurrency_limit implementation does nothing.
+
+        The base SandboxService class provides a default no-op implementation
+        that subclasses can override to implement limit checking.
+        """
+        # Execute - should not raise
+        await mock_sandbox_service.check_concurrency_limit()
+
+    @pytest.mark.asyncio
+    async def test_check_concurrency_limit_returns_none(self, mock_sandbox_service):
+        """Test that default check_concurrency_limit returns None (implicitly)."""
+        result = await mock_sandbox_service.check_concurrency_limit()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_check_concurrency_limit_can_be_called_multiple_times(
+        self, mock_sandbox_service
+    ):
+        """Test that check_concurrency_limit can be called multiple times safely."""
+        # Should not raise on any call
+        await mock_sandbox_service.check_concurrency_limit()
+        await mock_sandbox_service.check_concurrency_limit()
+        await mock_sandbox_service.check_concurrency_limit()
