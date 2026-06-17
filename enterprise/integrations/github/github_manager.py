@@ -263,7 +263,7 @@ class GithubManager(Manager[GithubViewType]):
         try:
             await self.data_collector.process_payload(message)
         except Exception:
-            logger.warning(
+            logger.error(
                 '[Github]: Error processing payload for gh interaction', exc_info=True
             )
 
