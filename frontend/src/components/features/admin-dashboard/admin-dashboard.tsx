@@ -1,5 +1,5 @@
 /* eslint-disable i18next/no-literal-string */
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import { useOrganizations } from "#/hooks/query/use-organizations";
@@ -199,6 +199,56 @@ function DollarIcon() {
   );
 }
 
+function ChartBarIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <line x1="18" y1="20" x2="18" y2="10" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12,6 12,12 16,14" />
+    </svg>
+  );
+}
+
+function TokenIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path d="M12 2L2 7l10 5 10-5-10-5z" />
+      <path d="M2 17l10 5 10-5" />
+      <path d="M2 12l10 5 10-5" />
+    </svg>
+  );
+}
+
 // Status badge component
 function StatusBadge({ status }: { status: string | null }) {
   const getStatusStyle = () => {
@@ -312,6 +362,9 @@ const copyToClipboard = (text: string) => {
 
 export function AdminDashboard() {
   const { data: orgData } = useOrganizations();
+  const [activeTab, setActiveTab] = useState<"conversations" | "usage">(
+    "conversations",
+  );
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Use current org from organizations list (first team org)
@@ -424,43 +477,77 @@ export function AdminDashboard() {
     <div className="min-h-screen bg-[#0D0D0D] text-white">
       {/* Main Content */}
       <div className="p-6 max-w-[1600px] mx-auto">
-        {/* Header */}
+        {/* Header with Tabs */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-white mb-1">Conversations</h1>
-          <p className="text-[#8C8C8C] text-sm">
-            Org-wide OpenHands activity — active sessions, runtimes, and triage.
-          </p>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-bold text-white mb-1">Admin Dashboard</h1>
+              <p className="text-[#8C8C8C] text-sm">
+                Org-wide OpenHands activity — active sessions, runtimes, and triage.
+              </p>
+            </div>
+          </div>
+
+          {/* Tab Navigation */}
+          <div className="flex gap-1 border-b border-[#262626]">
+            <button
+              type="button"
+              onClick={() => setActiveTab("conversations")}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === "conversations"
+                  ? "text-white border-b-2 border-white"
+                  : "text-[#8C8C8C] hover:text-white"
+              }`}
+            >
+              Conversations
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("usage")}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === "usage"
+                  ? "text-white border-b-2 border-white"
+                  : "text-[#8C8C8C] hover:text-white"
+              }`}
+            >
+              Usage
+            </button>
+          </div>
         </div>
 
-        {/* KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <KPICard
-            label="Active Conversations"
-            value={stats?.active_conversations ?? "-"}
-            subtext="In-flight agent work"
-            icon={<ActivityIcon />}
-          />
-          <KPICard
-            label="Running Runtimes"
-            value={stats?.running_runtimes ?? "-"}
-            subtext="Connected execution cells"
-            icon={<ServerIcon />}
-          />
-          <KPICard
-            label="Completed (24H)"
-            value={stats?.completed_24h ?? "-"}
-            subtext="Finished in last day"
-            icon={<CheckCircleIcon />}
-          />
-          <KPICard
-            label="Estimated Spend"
-            value={formatCost(stats?.total_cost ?? 0)}
-            subtext={`~${formatTokens(stats?.total_tokens ?? 0)} tokens in dataset`}
-            icon={<DollarIcon />}
-          />
-        </div>
+        {/* Tab Content */}
+        {activeTab === "conversations" ? (
+          <>
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <KPICard
+                label="Active Conversations"
+                value={stats?.active_conversations ?? "-"}
+                subtext="In-flight agent work"
+                icon={<ActivityIcon />}
+              />
+              <KPICard
+                label="Running Runtimes"
+                value={stats?.running_runtimes ?? "-"}
+                subtext="Connected execution cells"
+                icon={<ServerIcon />}
+              />
+              <KPICard
+                label="Completed (24H)"
+                value={stats?.completed_24h ?? "-"}
+                subtext="Finished in last day"
+                icon={<CheckCircleIcon />}
+              />
+              <KPICard
+                label="Estimated Spend"
+                value={formatCost(stats?.total_cost ?? 0)}
+                subtext={`~${formatTokens(stats?.total_tokens ?? 0)} tokens in dataset`}
+                icon={<DollarIcon />}
+              />
+            </div>
 
-        {/* Filter Bar */}
+            {/* Filter Bar */}
+
         <div className="bg-[#161616] border border-[#262626] rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between mb-4">
             <span className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
@@ -791,7 +878,157 @@ export function AdminDashboard() {
               </span>
             </div>
           </div>
+          </div>
         </div>
+          </>
+        ) : (
+          <>
+            {/* Usage Pane - Detailed aggregated stats */}
+            <div className="space-y-6">
+              {/* Cost Summary */}
+              <div className="bg-[#161616] border border-[#262626] rounded-lg p-6">
+                <h2 className="text-lg font-semibold text-white mb-4">Cost Summary</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-[#1E1E1E] rounded-lg">
+                      <DollarIcon />
+                    </div>
+                    <div>
+                      <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-1">
+                        Total Cost
+                      </div>
+                      <div className="text-white text-2xl font-bold">
+                        {formatCost(stats?.total_cost ?? 0)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-[#1E1E1E] rounded-lg">
+                      <ClockIcon />
+                    </div>
+                    <div>
+                      <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-1">
+                        Completed (24H)
+                      </div>
+                      <div className="text-white text-2xl font-bold">
+                        {stats?.completed_24h ?? 0}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-[#1E1E1E] rounded-lg">
+                      <ChartBarIcon />
+                    </div>
+                    <div>
+                      <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-1">
+                        Completed (7D)
+                      </div>
+                      <div className="text-white text-2xl font-bold">
+                        {stats?.completed_7d ?? 0}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Token Usage */}
+              <div className="bg-[#161616] border border-[#262626] rounded-lg p-6">
+                <h2 className="text-lg font-semibold text-white mb-4">Token Usage</h2>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-[#1E1E1E] rounded-lg">
+                      <TokenIcon />
+                    </div>
+                    <div>
+                      <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-1">
+                        Total Tokens
+                      </div>
+                      <div className="text-white text-2xl font-bold">
+                        {formatTokens(stats?.total_tokens ?? 0)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-[#1E1E1E] rounded-lg text-[#8C8C8C]">
+                      P
+                    </div>
+                    <div>
+                      <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-1">
+                        Prompt Tokens
+                      </div>
+                      <div className="text-white text-2xl font-bold">
+                        {formatTokens(stats?.total_prompt_tokens ?? 0)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-[#1E1E1E] rounded-lg text-[#8C8C8C]">
+                      C
+                    </div>
+                    <div>
+                      <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-1">
+                        Completion Tokens
+                      </div>
+                      <div className="text-white text-2xl font-bold">
+                        {formatTokens(stats?.total_tokens 
+                          ? stats.total_tokens - (stats?.total_prompt_tokens ?? 0) 
+                          : 0)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-[#1E1E1E] rounded-lg text-[#8C8C8C]">
+                      30D
+                    </div>
+                    <div>
+                      <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-1">
+                        Completed (30D)
+                      </div>
+                      <div className="text-white text-2xl font-bold">
+                        {stats?.completed_30d ?? 0}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cost Per Token Breakdown */}
+              <div className="bg-[#161616] border border-[#262626] rounded-lg p-6">
+                <h2 className="text-lg font-semibold text-white mb-4">Efficiency Metrics</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-2">
+                      Cost per 1K Tokens
+                    </div>
+                    <div className="text-white text-xl font-bold">
+                      {stats?.total_tokens && stats.total_tokens > 0
+                        ? `$${((stats.total_cost ?? 0) / (stats.total_tokens / 1000)).toFixed(4)}`
+                        : "$0.00"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-2">
+                      Avg Cost per Conversation
+                    </div>
+                    <div className="text-white text-xl font-bold">
+                      {stats?.active_conversations && stats.active_conversations > 0
+                        ? `$${((stats.total_cost ?? 0) / stats.active_conversations).toFixed(2)}`
+                        : "$0.00"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide mb-2">
+                      Active / Running Runtimes
+                    </div>
+                    <div className="text-white text-xl font-bold">
+                      {stats?.active_conversations ?? 0} / {stats?.running_runtimes ?? 0}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
