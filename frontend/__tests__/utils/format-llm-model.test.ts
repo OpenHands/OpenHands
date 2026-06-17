@@ -61,25 +61,6 @@ describe("formatLlmModel", () => {
     ])("formats %s", (raw, expected) => {
       expect(formatLlmModel(raw)).toBe(expected);
     });
-
-    it.each([
-      ["openai/gpt-5.5/high", "GPT-5.5 (high)"],
-      ["openai/gpt-5.5/medium", "GPT-5.5 (medium)"],
-      ["gpt-5.5/high", "GPT-5.5 (high)"],
-    ])("preserves reasoning-effort qualifier: %s", (raw, expected) => {
-      expect(formatLlmModel(raw)).toBe(expected);
-    });
-
-    it.each([
-      ["openai/gpt-5.5/xhigh", "GPT-5.5 (xhigh)"],
-      ["openai/gpt-5/minimal", "GPT-5 (minimal)"],
-      ["litellm_proxy/openai/gpt-5.5/none", "GPT-5.5 (none)"],
-    ])(
-      "preserves the full reasoning-effort vocabulary (xhigh/none/minimal): %s",
-      (raw, expected) => {
-        expect(formatLlmModel(raw)).toBe(expected);
-      },
-    );
   });
 
   describe("o-series", () => {
@@ -88,16 +69,6 @@ describe("formatLlmModel", () => {
       ["openai/o3-mini", "o3-mini"],
       ["openai/o4-mini", "o4-mini"],
     ])("formats %s", (raw, expected) => {
-      expect(formatLlmModel(raw)).toBe(expected);
-    });
-
-    it.each([
-      ["openai/o3/high", "o3 (high)"],
-      ["openai/o4-mini/medium", "o4-mini (medium)"],
-      ["o3/low", "o3 (low)"],
-      ["openai/o3/xhigh", "o3 (xhigh)"],
-      ["o4-mini/none", "o4-mini (none)"],
-    ])("preserves reasoning-effort qualifier: %s", (raw, expected) => {
       expect(formatLlmModel(raw)).toBe(expected);
     });
   });

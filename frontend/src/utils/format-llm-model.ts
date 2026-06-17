@@ -2,21 +2,6 @@ function capitalize(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
 }
 
-// Reasoning-effort qualifiers that can appear as the final slash-segment in a
-// model name (e.g. "gpt-5.5/xhigh", "o3/medium"). Mirrors the SDK's
-// reasoning_effort vocabulary (low/medium/high/xhigh/none) plus litellm's
-// "minimal", so that the model name is not dropped when the effort isn't one of
-// the three common values. ACP models also resolve their label via the provider
-// registry in resolveAgentChip; this list covers native OpenHands routing strings.
-const EFFORT_QUALS = new Set([
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "none",
-]);
-
 /**
  * Format a raw ``llm_model`` routing string into a short, human-readable
  * label suitable for the conversation chip.
@@ -25,12 +10,16 @@ const EFFORT_QUALS = new Set([
  *   "anthropic/claude-sonnet-4-5-20250929" -> "Claude Sonnet 4.5"
  *   "openai/gpt-4o"                        -> "GPT-4o"
  *   "openai/gpt-4o-mini"                   -> "GPT-4o mini"
- *   "openai/gpt-5.5/high"                  -> "GPT-5.5 (high)"
  *   "gemini/gemini-2.5-pro"                -> "Gemini 2.5 Pro"
  *   "openhands/o3"                         -> "o3"
- *   "openai/o4-mini/medium"                -> "o4-mini (medium)"
+ *   "openai/o4-mini"                       -> "o4-mini"
  *   "litellm_proxy/anthropic/claude-3-5-sonnet-20241022" -> "Claude 3.5 Sonnet"
  *   "litellm_proxy/my-finetune"            -> "my-finetune"
+ *
+ * This handles native OpenHands ``LLM.model`` strings, where the reasoning
+ * effort is a separate field — it is never embedded in the model id. (ACP
+ * conversations resolve their label from the provider registry instead, so
+ * effort-suffixed ids like ``gpt-5.5/high`` never reach this function.)
  *
  * Unknown models pass through with the routing prefix stripped. The raw
  * string should still be surfaced as a tooltip elsewhere.
@@ -38,18 +27,10 @@ const EFFORT_QUALS = new Set([
 export function formatLlmModel(raw: string): string {
   if (!raw) return raw;
 
-  // Strip routing prefix, preserving model-internal slashes when the last
-  // segment is a known effort qualifier (e.g. "openai/gpt-5.5/high" → "gpt-5.5/high").
+  // Strip the routing prefix — keep only the final segment (e.g.
+  // "litellm_proxy/anthropic/claude-3-5-sonnet" → "claude-3-5-sonnet").
   const lastSlash = raw.lastIndexOf("/");
-  const lastSegment = lastSlash >= 0 ? raw.slice(lastSlash + 1) : raw;
-  let stripped: string;
-  if (EFFORT_QUALS.has(lastSegment.toLowerCase()) && lastSlash >= 0) {
-    // Back up one level so the effort qualifier stays attached to the model.
-    const prevSlash = raw.lastIndexOf("/", lastSlash - 1);
-    stripped = prevSlash >= 0 ? raw.slice(prevSlash + 1) : raw;
-  } else {
-    stripped = lastSegment;
-  }
+  const stripped = lastSlash >= 0 ? raw.slice(lastSlash + 1) : raw;
 
   // Strip trailing date suffix: -YYYYMMDD or -YYYY-MM-DD.
   const noDate = stripped
@@ -79,19 +60,13 @@ export function formatLlmModel(raw: string): string {
   }
 
   // GPT family: gpt-{rest}
-  //   gpt-4o           -> GPT-4o
-  //   gpt-4o-mini      -> GPT-4o mini
-  //   gpt-4.1          -> GPT-4.1
-  //   gpt-5            -> GPT-5
-  //   gpt-5.5/high     -> GPT-5.5 (high)
+  //   gpt-4o      -> GPT-4o
+  //   gpt-4o-mini -> GPT-4o mini
+  //   gpt-4.1     -> GPT-4.1
+  //   gpt-5       -> GPT-5
   m = lower.match(/^gpt-(.+)$/);
   if (m) {
     const rest = m[1];
-    // Reasoning-effort qualifier via slash: "5.5/high" → "GPT-5.5 (high)"
-    const slashIdx = rest.indexOf("/");
-    if (slashIdx >= 0) {
-      return `GPT-${rest.slice(0, slashIdx)} (${rest.slice(slashIdx + 1)})`;
-    }
     // Split off optional "-{suffix}" once we've consumed the version token.
     const versionMatch = rest.match(/^([\d.]+[a-z]?)(?:-(.+))?$/);
     if (versionMatch) {
@@ -102,13 +77,10 @@ export function formatLlmModel(raw: string): string {
     return `GPT-${rest}`;
   }
 
-  // o-series (OpenAI reasoning): o1, o3, o3-mini, o4-mini, o3/high, etc.
-  //   o3        -> o3
-  //   o4-mini   -> o4-mini
-  //   o3/high   -> o3 (high)
-  m = lower.match(/^(o\d+(?:-[a-z]+)?)(?:\/(.+))?$/);
+  // o-series (OpenAI reasoning): o1, o3, o3-mini, o4-mini, …
+  m = lower.match(/^(o\d+(?:-[a-z]+)?)$/);
   if (m) {
-    return m[2] ? `${m[1]} (${m[2]})` : m[1];
+    return m[1];
   }
 
   // Gemini: gemini-{ver}[-{tier}[-{rest}]]

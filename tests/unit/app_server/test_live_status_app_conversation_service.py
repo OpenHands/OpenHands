@@ -1829,10 +1829,7 @@ class TestLiveStatusAppConversationService:
         self, mock_conversation_info_class, mock_remote_workspace_class
     ):
         """ACP conversations persist acp_model as llm_model in AppConversationInfo."""
-        try:
-            from openhands.sdk.settings import ACPAgentSettings
-        except ImportError:
-            pytest.skip('ACPAgentSettings not available in this SDK build')
+        from openhands.sdk.settings import ACPAgentSettings
 
         conversation_id = uuid4()
 
