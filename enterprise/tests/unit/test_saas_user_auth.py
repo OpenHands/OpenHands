@@ -286,7 +286,9 @@ class TestGetProviderTokensBitbucketDCHost:
                 'bitbucket.company.com',
             ),
         ):
-            mock_tm.get_idp_token_by_user_id = AsyncMock(return_value='bdc_access_token')
+            mock_tm.get_idp_token_by_user_id = AsyncMock(
+                return_value='bdc_access_token'
+            )
             user_auth, mock_session = self._make_user_auth(mock_session_maker)
             user_auth.get_secrets = AsyncMock(return_value=None)
 
@@ -309,7 +311,9 @@ class TestGetProviderTokensBitbucketDCHost:
                 'bitbucket.company.com',
             ),
         ):
-            mock_tm.get_idp_token_by_user_id = AsyncMock(return_value='bdc_access_token')
+            mock_tm.get_idp_token_by_user_id = AsyncMock(
+                return_value='bdc_access_token'
+            )
             user_auth, mock_session = self._make_user_auth(mock_session_maker)
             user_secrets = Secrets(
                 provider_tokens={
@@ -337,7 +341,9 @@ class TestGetProviderTokensBitbucketDCHost:
             patch('server.auth.saas_user_auth.a_session_maker') as mock_session_maker,
             patch('server.auth.saas_user_auth.BITBUCKET_DATA_CENTER_HOST', ''),
         ):
-            mock_tm.get_idp_token_by_user_id = AsyncMock(return_value='bdc_access_token')
+            mock_tm.get_idp_token_by_user_id = AsyncMock(
+                return_value='bdc_access_token'
+            )
             user_auth, mock_session = self._make_user_auth(mock_session_maker)
             user_auth.get_secrets = AsyncMock(return_value=None)
 

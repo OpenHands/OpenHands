@@ -414,9 +414,7 @@ class SaasUserAuth(UserAuth):
             # missing/revoked offline session must not turn a valid key into a
             # 401. Degrade to None instead of raising.
             if self.auth_type == AuthType.BEARER:
-                logger.warning(
-                    'bearer_get_access_token_refresh_failed', exc_info=True
-                )
+                logger.warning('bearer_get_access_token_refresh_failed', exc_info=True)
                 return None
             raise
         except Exception as e:
