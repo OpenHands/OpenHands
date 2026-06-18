@@ -109,8 +109,8 @@ from openhands.app_server.utils.llm_metadata import (
     should_set_litellm_extra_body,
 )
 from openhands.app_server.utils.redis_lock import (
-    RedisLock,
     RedisLockUnavailable,
+    refresh_lock_periodically,
     try_acquire_redis_lock,
 )
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
@@ -173,27 +173,6 @@ class _StreamingZipBuffer(io.RawIOBase):
         chunks = self._chunks
         self._chunks = []
         return chunks
-
-
-async def _refresh_lock_periodically(
-    lock: RedisLock, interval: int, conversation_id: str
-) -> None:
-    """Keep a Redis export lock alive while a streaming response is in flight.
-
-    Runs as a background task (via asyncio.create_task) alongside the streaming
-    generator so the lock TTL is extended without blocking chunk generation.
-    The task is cancelled when the generator's finally-block fires.
-    """
-    try:
-        while True:
-            await asyncio.sleep(interval)
-            if not await lock.refresh():
-                _logger.warning(
-                    'conversation_export:lock_refresh_failed',
-                    extra={'conversation_id': conversation_id},
-                )
-    except asyncio.CancelledError:
-        pass
 
 
 def _expected_sdk_version() -> str | None:
@@ -2416,9 +2395,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             # simple and lock maintenance doesn't block chunk generation.
             refresh_task = (
                 asyncio.create_task(
-                    _refresh_lock_periodically(
-                        export_lock, refresh_interval, str(conversation_id)
-                    )
+                    refresh_lock_periodically(export_lock, refresh_interval)
                 )
                 if export_lock
                 else None

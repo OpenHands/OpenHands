@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import logging
 import os
@@ -97,3 +98,21 @@ async def try_acquire_redis_lock(key: str, ttl_seconds: int) -> RedisLock | None
         token=token,
         ttl_seconds=ttl_seconds,
     )
+
+
+async def refresh_lock_periodically(lock: RedisLock, interval: int) -> None:
+    """Keep a Redis lock alive by refreshing its TTL every *interval* seconds.
+
+    Intended to run as a background task (via ``asyncio.create_task``) alongside
+    a long-running operation.  Cancel the task when the operation finishes; the
+    caller is responsible for releasing the lock afterwards.
+    """
+    try:
+        while True:
+            await asyncio.sleep(interval)
+            if not await lock.refresh():
+                _logger.warning(
+                    'redis_lock:periodic_refresh_failed', extra={'key': lock.key}
+                )
+    except asyncio.CancelledError:
+        pass
