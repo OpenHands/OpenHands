@@ -30,6 +30,7 @@ import hashlib
 import json
 import logging
 import re
+from collections import OrderedDict
 from enum import Enum
 from threading import Lock
 from typing import Any, ClassVar
@@ -152,8 +153,14 @@ _LEAK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 # keyed by conversation id. The chain is best-effort within a process lifetime
 # — it gives operators something concrete to diff against an external log,
 # which is the same property baselines have in the upstream OWASP package.
+#
+# The registry is bounded with LRU eviction so a long-running server cannot
+# accumulate one entry per conversation forever. If an evicted conversation is
+# seen again its chain simply restarts from the genesis value, which is an
+# acceptable degradation for a best-effort, in-process audit trail.
 _CHAIN_LOCK = Lock()
-_FINGERPRINTS: dict[UUID, str] = {}
+_MAX_TRACKED_CONVERSATIONS = 10_000
+_FINGERPRINTS: OrderedDict[UUID, str] = OrderedDict()
 
 
 def _extend_chain(conversation_id: UUID, event: Event, text: str) -> str:
@@ -166,6 +173,9 @@ def _extend_chain(conversation_id: UUID, event: Event, text: str) -> str:
         h.update(text.encode('utf-8', errors='replace'))
         new_fp = h.hexdigest()
         _FINGERPRINTS[conversation_id] = new_fp
+        _FINGERPRINTS.move_to_end(conversation_id)
+        while len(_FINGERPRINTS) > _MAX_TRACKED_CONVERSATIONS:
+            _FINGERPRINTS.popitem(last=False)
     return new_fp
 
 
@@ -318,8 +328,11 @@ class MemoryIntegrityCallbackProcessor(EventCallbackProcessor):
         an INFO entry so operators can diff against an external audit log.
     """
 
-    # Marker so other code can find this processor without an isinstance
-    # import (avoids touching modules that don't already depend on this one).
+    # Load-bearing: do NOT remove. Although the discriminated-union ``kind``
+    # discriminator is derived from the class name, dropping this marker makes
+    # the full ``pytest --forked`` suite fail EventCallback validation
+    # (``conversation_id`` wrongly reported as required) through
+    # discriminated-union schema-build ordering. Keep it explicit.
     KIND: ClassVar[str] = 'MemoryIntegrityCallbackProcessor'
 
     policy: MemoryIntegrityPolicy = Field(default=MemoryIntegrityPolicy.AUDIT)
