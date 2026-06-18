@@ -187,13 +187,14 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
         if not self.is_job_requested(message):
             return
 
-        # Bitbucket DC posts (reply + reaction) require the bot account. Without
-        # it we can't post results, and falling back to the user's token would
-        # re-fire the webhook -- so skip the event, like the Jira DC gate.
-        if not BITBUCKET_DATA_CENTER_BOT_TOKEN:
+        # The bot account is required as one unit: the token to post results, and
+        # the username to skip the bot's own replies (below). With either missing
+        # we'd risk re-firing the webhook on our own "@openhands" comment, so skip
+        # the event -- like the Jira DC service-account gate.
+        if not (BITBUCKET_DATA_CENTER_BOT_TOKEN and BITBUCKET_DATA_CENTER_BOT_USERNAME):
             logger.error(
-                '[Bitbucket DC] BITBUCKET_DATA_CENTER_BOT_TOKEN is not '
-                'configured (required); skipping event'
+                '[Bitbucket DC] BITBUCKET_DATA_CENTER_BOT_TOKEN and '
+                'BITBUCKET_DATA_CENTER_BOT_USERNAME are both required; skipping event'
             )
             return
 
@@ -203,8 +204,7 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
         # BBDC's stable author id is the (lowercased) slug.
         actor = (message.message.get('payload') or {}).get('actor') or {}
         if (
-            BITBUCKET_DATA_CENTER_BOT_USERNAME
-            and extract_actor_slug(actor).lower()
+            extract_actor_slug(actor).lower()
             == BITBUCKET_DATA_CENTER_BOT_USERNAME.lower()
         ):
             logger.info(

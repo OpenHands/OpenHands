@@ -126,6 +126,10 @@ async def test_receive_message_runs_job_as_mentioner_when_linked_in_keycloak():
             'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
             'bot-pat',
         ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_USERNAME',
+            'openhands-bot',
+        ),
         patch.object(
             manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
         ),
@@ -164,6 +168,10 @@ async def test_receive_message_asks_unenrolled_mentioner_to_sign_up():
             'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
             'bot-pat',
         ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_USERNAME',
+            'openhands-bot',
+        ),
         patch.object(
             manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
         ),
@@ -201,6 +209,10 @@ async def test_receive_message_drops_event_when_keycloak_lookup_raises():
             'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
             'bot-pat',
         ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_USERNAME',
+            'openhands-bot',
+        ),
         patch.object(
             manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
         ),
@@ -229,6 +241,41 @@ async def test_receive_message_skips_when_bot_token_unset():
     with (
         patch(
             'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            '',
+        ),
+        patch.object(
+            manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
+        ),
+        patch.object(manager, '_commenter_has_write_access', return_value=True),
+        patch.object(manager, 'start_job', new=AsyncMock()) as mock_start,
+        patch.object(
+            manager, '_send_user_not_found_message', new=AsyncMock()
+        ) as mock_not_found,
+    ):
+        await manager.receive_message(_comment_message())
+
+    mock_start.assert_not_called()
+    mock_not_found.assert_not_called()
+    token_manager.get_user_id_from_idp_user_id.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_receive_message_skips_when_bot_username_unset():
+    """Drop the event when the bot username is missing even if the token is set.
+
+    Token + username are one required unit: without the username the self-author
+    guard can't run, so a bot reply could re-trigger a job -- so gate on both.
+    """
+    token_manager = AsyncMock()
+    manager = BitbucketDCManager(token_manager)
+
+    with (
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            'bot-pat',
+        ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_USERNAME',
             '',
         ),
         patch.object(
@@ -323,6 +370,10 @@ async def test_receive_message_skips_when_commenter_lacks_write_access():
             'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
             'bot-pat',
         ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_USERNAME',
+            'openhands-bot',
+        ),
         patch.object(
             manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
         ),
@@ -342,6 +393,10 @@ async def test_receive_message_skips_when_no_installer_recorded_for_repo():
         patch(
             'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
             'bot-pat',
+        ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_USERNAME',
+            'openhands-bot',
         ),
         patch.object(manager.webhook_store, 'get_webhook_user_id', return_value=None),
         patch.object(manager, 'start_job', new=AsyncMock()) as mock_start,
