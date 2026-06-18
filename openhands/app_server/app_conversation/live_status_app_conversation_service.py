@@ -100,6 +100,7 @@ from openhands.app_server.utils.llm_metadata import (
     should_set_litellm_extra_body,
 )
 from openhands.app_server.utils.redis_lock import (
+    LockError,
     RedisLockUnavailable,
     refresh_lock_periodically,
     try_acquire_redis_lock,
@@ -2501,7 +2502,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             await self._validate_conversation_export_size(conversation_id)
         except Exception:
             if export_lock:
-                await export_lock.release()
+                try:
+                    await export_lock.release()
+                except LockError:
+                    pass
             raise
 
         refresh_interval = self._conversation_export_lock_refresh_interval()
@@ -2525,7 +2529,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 if refresh_task is not None:
                     refresh_task.cancel()
                 if export_lock:
-                    await export_lock.release()
+                    try:
+                        await export_lock.release()
+                    except LockError:
+                        _logger.warning(
+                            'conversation_export:lock_release_failed',
+                            extra={'conversation_id': str(conversation_id)},
+                        )
 
         return stream()
 
