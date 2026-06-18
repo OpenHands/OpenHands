@@ -273,7 +273,10 @@ def seed_data(
     conversations_per_org: int = 30,
     users_per_org: int = 10,
 ) -> None:
-    """Seed the database with conversation data."""
+    """Seed the database with conversation data.
+    
+    Uses the correct OpenHands schema: org, user, org_member tables.
+    """
 
     engine = create_engine(db_url)
     create_tables_if_not_exist(engine)
@@ -283,17 +286,17 @@ def seed_data(
 
     try:
         with session.begin():
-            # Create organizations
+            # Create orgs
             org_ids = []
-            print(f'Creating {org_count} organizations...')
+            print(f'Creating {org_count} orgs...')
             for i in range(org_count):
                 org_id = str(uuid.uuid4())
                 org_ids.append(org_id)
 
                 session.execute(
                     text("""
-                        INSERT INTO organizations (id, name, created_at, updated_at, is_github_org, org_type, github_installation_id, gitlab_group_id)
-                        VALUES (:id, :name, :created_at, :updated_at, false, 'team', NULL, NULL)
+                        INSERT INTO org (id, name, created_at, updated_at, is_github_org, org_type)
+                        VALUES (:id, :name, :created_at, :updated_at, false, 'team')
                         ON CONFLICT (id) DO NOTHING
                     """),
                     {
@@ -304,7 +307,7 @@ def seed_data(
                     },
                 )
 
-            print(f'Created {len(org_ids)} organizations')
+            print(f'Created {len(org_ids)} orgs')
 
             # Create users and conversations for each org
             total_conversations = 0
@@ -320,34 +323,36 @@ def seed_data(
                     last_name = random.choice(LAST_NAMES)
                     email = random_email(first_name, last_name)
 
+                    # First user is the owner, next 2 are admins, rest are members
+                    role_id = 1 if j == 0 else (2 if j < 3 else 3)  # owner, admin, member
+
                     session.execute(
                         text("""
-                            INSERT INTO users (id, email, name, avatar_url, created_at, updated_at)
-                            VALUES (:id, :email, :name, :avatar_url, :created_at, :updated_at)
+                            INSERT INTO "user" (id, current_org_id, role_id, email, created_at, updated_at)
+                            VALUES (:id, :current_org_id, :role_id, :email, :created_at, :updated_at)
                             ON CONFLICT (id) DO NOTHING
                         """),
                         {
                             'id': user_id,
+                            'current_org_id': org_id,
+                            'role_id': role_id,
                             'email': email,
-                            'name': f'{first_name} {last_name}',
-                            'avatar_url': f'https://api.dicebear.com/7.x/initials/svg?seed={first_name}%20{last_name}',
                             'created_at': datetime.now(UTC),
                             'updated_at': datetime.now(UTC),
                         },
                     )
 
-                    # Add user to organization
-                    role = 'owner' if j == 0 else ('admin' if j < 3 else 'member')
+                    # Add user to org_member
                     session.execute(
                         text("""
-                            INSERT INTO organization_members (organization_id, user_id, role, created_at, updated_at)
-                            VALUES (:org_id, :user_id, :role, :created_at, :updated_at)
-                            ON CONFLICT (organization_id, user_id) DO NOTHING
+                            INSERT INTO org_member (org_id, user_id, role_id, _llm_api_key, status, agent_settings_diff, conversation_settings_diff, has_custom_llm_api_key, created_at, updated_at)
+                            VALUES (:org_id, :user_id, :role_id, '', 'active', '{}', '{}', false, :created_at, :updated_at)
+                            ON CONFLICT (org_id, user_id) DO NOTHING
                         """),
                         {
                             'org_id': org_id,
                             'user_id': user_id,
-                            'role': role,
+                            'role_id': role_id,
                             'created_at': datetime.now(UTC),
                             'updated_at': datetime.now(UTC),
                         },
