@@ -23,6 +23,11 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     ConversationTrigger,
 )
+from openhands.app_server.app_conversation.app_conversation_service import (
+    ConversationExportAlreadyRunning,
+    ConversationExportLockUnavailable,
+    ConversationExportTooLarge,
+)
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     LiveStatusAppConversationService,
 )
@@ -42,11 +47,34 @@ from openhands.app_server.settings.settings_models import (
     Settings,
 )
 from openhands.app_server.user.user_context import UserContext
+from openhands.app_server.utils.redis_lock import RedisLockUnavailable
 from openhands.sdk import Agent, Event
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
+
+
+def _async_iter(items):
+    async def iter_items():
+        for item in items:
+            yield item
+
+    return iter_items()
+
+
+class _FakeExportLock:
+    def __init__(self):
+        self.released = False
+        self.refreshed = False
+
+    async def refresh(self):
+        self.refreshed = True
+        return True
+
+    async def release(self):
+        self.released = True
+        return True
 
 
 def _build_test_user_agent_settings(user: SimpleNamespace) -> OpenHandsAgentSettings:
@@ -1371,18 +1399,11 @@ class TestLiveStatusAppConversationService:
             return_value={'id': str(mock_event2.id), 'type': 'observation'}
         )
 
-        # Mock event service search_events to return paginated results
-        mock_event_page1 = Mock()
-        mock_event_page1.items = [mock_event1]
-        mock_event_page1.next_page_id = 'page2'
-
-        mock_event_page2 = Mock()
-        mock_event_page2.items = [mock_event2]
-        mock_event_page2.next_page_id = None
-
-        self.mock_event_service.search_events = AsyncMock(
-            side_effect=[mock_event_page1, mock_event_page2]
+        self.mock_event_service.count_events = AsyncMock(return_value=2)
+        self.mock_event_service.iter_events_for_export = Mock(
+            return_value=_async_iter([mock_event1, mock_event2])
         )
+        self.mock_event_service.search_events = AsyncMock()
 
         # Act
         result = await self.service.export_conversation(conversation_id)
@@ -1421,7 +1442,11 @@ class TestLiveStatusAppConversationService:
         self.mock_app_conversation_info_service.get_app_conversation_info.assert_called_once_with(
             conversation_id
         )
-        assert self.mock_event_service.search_events.call_count == 2
+        self.mock_event_service.count_events.assert_awaited_once_with(conversation_id)
+        self.mock_event_service.iter_events_for_export.assert_called_once_with(
+            conversation_id
+        )
+        self.mock_event_service.search_events.assert_not_called()
         mock_conversation_info.model_dump_json.assert_called_once_with(indent=2)
 
     @pytest.mark.asyncio
@@ -1432,6 +1457,8 @@ class TestLiveStatusAppConversationService:
         self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
             return_value=None
         )
+        self.mock_event_service.count_events = AsyncMock()
+        self.mock_event_service.iter_events_for_export = Mock()
 
         # Act & Assert
         with pytest.raises(
@@ -1443,7 +1470,8 @@ class TestLiveStatusAppConversationService:
         self.mock_app_conversation_info_service.get_app_conversation_info.assert_called_once_with(
             conversation_id
         )
-        self.mock_event_service.search_events.assert_not_called()
+        self.mock_event_service.count_events.assert_not_called()
+        self.mock_event_service.iter_events_for_export.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_export_conversation_empty_events(self):
@@ -1463,12 +1491,10 @@ class TestLiveStatusAppConversationService:
             return_value=mock_conversation_info
         )
 
-        # Mock empty event page
-        mock_event_page = Mock()
-        mock_event_page.items = []
-        mock_event_page.next_page_id = None
-
-        self.mock_event_service.search_events = AsyncMock(return_value=mock_event_page)
+        self.mock_event_service.count_events = AsyncMock(return_value=0)
+        self.mock_event_service.iter_events_for_export = Mock(
+            return_value=_async_iter([])
+        )
 
         # Act
         result = await self.service.export_conversation(conversation_id)
@@ -1489,18 +1515,16 @@ class TestLiveStatusAppConversationService:
         self.mock_app_conversation_info_service.get_app_conversation_info.assert_called_once_with(
             conversation_id
         )
-        self.mock_event_service.search_events.assert_called_once()
+        self.mock_event_service.count_events.assert_awaited_once_with(conversation_id)
+        self.mock_event_service.iter_events_for_export.assert_called_once_with(
+            conversation_id
+        )
 
     @pytest.mark.asyncio
-    async def test_export_conversation_calls_search_events_with_correct_parameter_name(
+    async def test_export_conversation_calls_iterator_with_conversation_id(
         self,
     ):
-        """Test that export_conversation calls search_events with 'conversation_id' parameter, not 'conversation_id__eq'.
-
-        This test verifies the fix for a bug where page_iterator was called with
-        conversation_id__eq instead of conversation_id, causing a TypeError since
-        the search_events method expects conversation_id as its parameter name.
-        """
+        """Test that export_conversation calls the export iterator with conversation_id."""
         # Arrange
         conversation_id = uuid4()
 
@@ -1513,31 +1537,23 @@ class TestLiveStatusAppConversationService:
             return_value=mock_conversation_info
         )
 
-        # Mock empty event page to simplify test
-        mock_event_page = Mock()
-        mock_event_page.items = []
-        mock_event_page.next_page_id = None
-
-        self.mock_event_service.search_events = AsyncMock(return_value=mock_event_page)
+        self.mock_event_service.count_events = AsyncMock(return_value=0)
+        self.mock_event_service.iter_events_for_export = Mock(
+            return_value=_async_iter([])
+        )
+        self.mock_event_service.search_events = AsyncMock()
 
         # Act
         await self.service.export_conversation(conversation_id)
 
-        # Assert - Verify search_events was called with 'conversation_id', not 'conversation_id__eq'
-        self.mock_event_service.search_events.assert_called()
-        call_kwargs = self.mock_event_service.search_events.call_args[1]
-
-        assert 'conversation_id' in call_kwargs, (
-            "search_events should be called with 'conversation_id' parameter"
+        self.mock_event_service.iter_events_for_export.assert_called_once_with(
+            conversation_id
         )
-        assert 'conversation_id__eq' not in call_kwargs, (
-            "search_events should NOT be called with 'conversation_id__eq' parameter"
-        )
-        assert call_kwargs['conversation_id'] == conversation_id
+        self.mock_event_service.search_events.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_export_conversation_large_pagination(self):
-        """Test download with multiple pages of events."""
+    async def test_export_conversation_large_iterator(self):
+        """Test download with many events from one export iterator pass."""
         # Arrange
         conversation_id = uuid4()
 
@@ -1553,43 +1569,25 @@ class TestLiveStatusAppConversationService:
             return_value=mock_conversation_info
         )
 
-        # Create multiple pages of events
-        events_per_page = 3
-        total_pages = 4
+        total_events = 12
         all_events = []
 
-        for page_num in range(total_pages):
-            page_events = []
-            for i in range(events_per_page):
-                mock_event = Mock(spec=Event)
-                mock_event.id = uuid4()
-                mock_event.model_dump = Mock(
-                    return_value={
-                        'id': str(mock_event.id),
-                        'type': f'event_page_{page_num}_item_{i}',
-                    }
-                )
-                page_events.append(mock_event)
-                all_events.append(mock_event)
-
-            mock_event_page = Mock()
-            mock_event_page.items = page_events
-            mock_event_page.next_page_id = (
-                f'page{page_num + 1}' if page_num < total_pages - 1 else None
+        for i in range(total_events):
+            mock_event = Mock(spec=Event)
+            mock_event.id = uuid4()
+            mock_event.model_dump = Mock(
+                return_value={
+                    'id': str(mock_event.id),
+                    'type': f'event_{i}',
+                }
             )
+            all_events.append(mock_event)
 
-            if page_num == 0:
-                first_page = mock_event_page
-            elif page_num == 1:
-                second_page = mock_event_page
-            elif page_num == 2:
-                third_page = mock_event_page
-            else:
-                fourth_page = mock_event_page
-
-        self.mock_event_service.search_events = AsyncMock(
-            side_effect=[first_page, second_page, third_page, fourth_page]
+        self.mock_event_service.count_events = AsyncMock(return_value=total_events)
+        self.mock_event_service.iter_events_for_export = Mock(
+            return_value=_async_iter(all_events)
         )
+        self.mock_event_service.search_events = AsyncMock()
 
         # Act
         result = await self.service.export_conversation(conversation_id)
@@ -1605,12 +1603,141 @@ class TestLiveStatusAppConversationService:
             # Should contain meta.json and all event files
             assert 'meta.json' in file_list
             event_files = [f for f in file_list if f.startswith('event_')]
-            assert (
-                len(event_files) == total_pages * events_per_page
-            )  # Should have all events
+            assert len(event_files) == total_events
 
-        # Verify service calls - should call search_events for each page
-        assert self.mock_event_service.search_events.call_count == total_pages
+        self.mock_event_service.iter_events_for_export.assert_called_once_with(
+            conversation_id
+        )
+        self.mock_event_service.search_events.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_open_conversation_export_streams_with_lock(self):
+        """Test streaming export acquires and releases the conversation export lock."""
+        conversation_id = uuid4()
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.model_dump_json = Mock(return_value='{}')
+
+        mock_event = Mock(spec=Event)
+        mock_event.id = uuid4()
+        mock_event.model_dump = Mock(return_value={'id': str(mock_event.id)})
+
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+        self.mock_event_service.count_events = AsyncMock(return_value=1)
+        self.mock_event_service.iter_events_for_export = Mock(
+            return_value=_async_iter([mock_event])
+        )
+
+        fake_lock = _FakeExportLock()
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.try_acquire_redis_lock',
+            new=AsyncMock(return_value=fake_lock),
+        ) as mock_acquire_lock:
+            stream = await self.service.open_conversation_export(conversation_id)
+            result = b''.join([chunk async for chunk in stream])
+
+        assert result
+        assert fake_lock.released is True
+        mock_acquire_lock.assert_awaited_once_with(
+            f'app_conversation_export:{conversation_id.hex}',
+            self.service.export_lock_ttl_seconds,
+        )
+
+    @pytest.mark.asyncio
+    async def test_open_conversation_export_rejects_duplicate_export(self):
+        """Test streaming export rejects duplicate export attempts."""
+        conversation_id = uuid4()
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.model_dump_json = Mock(return_value='{}')
+
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.try_acquire_redis_lock',
+            new=AsyncMock(return_value=None),
+        ):
+            with pytest.raises(ConversationExportAlreadyRunning):
+                await self.service.open_conversation_export(conversation_id)
+
+        self.mock_event_service.count_events.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_open_conversation_export_fails_closed_when_lock_unavailable(self):
+        """Test streaming export fails closed when Redis lock cannot be checked."""
+        conversation_id = uuid4()
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.model_dump_json = Mock(return_value='{}')
+
+        self.service.export_lock_required = True
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.try_acquire_redis_lock',
+            new=AsyncMock(side_effect=RedisLockUnavailable()),
+        ):
+            with pytest.raises(ConversationExportLockUnavailable):
+                await self.service.open_conversation_export(conversation_id)
+
+        self.mock_event_service.count_events.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_open_conversation_export_proceeds_when_lock_not_required(self):
+        """Test non-SaaS export proceeds without Redis when locking is best effort."""
+        conversation_id = uuid4()
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.model_dump_json = Mock(return_value='{}')
+
+        mock_event = Mock(spec=Event)
+        mock_event.id = uuid4()
+        mock_event.model_dump = Mock(return_value={'id': str(mock_event.id)})
+
+        self.service.export_lock_required = False
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+        self.mock_event_service.count_events = AsyncMock(return_value=1)
+        self.mock_event_service.iter_events_for_export = Mock(
+            return_value=_async_iter([mock_event])
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.try_acquire_redis_lock',
+            new=AsyncMock(side_effect=RedisLockUnavailable()),
+        ):
+            stream = await self.service.open_conversation_export(conversation_id)
+            result = b''.join([chunk async for chunk in stream])
+
+        assert result
+        self.mock_event_service.count_events.assert_awaited_once_with(conversation_id)
+
+    @pytest.mark.asyncio
+    async def test_export_conversation_rejects_too_many_events(self):
+        """Test export rejects conversations over the configured event limit."""
+        conversation_id = uuid4()
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.model_dump_json = Mock(return_value='{}')
+
+        self.service.export_max_events = 1
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+        self.mock_event_service.count_events = AsyncMock(return_value=2)
+        self.mock_event_service.iter_events_for_export = Mock()
+
+        with pytest.raises(ConversationExportTooLarge):
+            await self.service.export_conversation(conversation_id)
+
+        self.mock_event_service.iter_events_for_export.assert_not_called()
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
