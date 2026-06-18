@@ -163,10 +163,9 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
     ) -> None:
         """Ask an unenrolled mentioner to sign up in a PR reply.
 
-        The mentioner has no OHE account, so there is no token to post as
-        them; the reply goes out under the installer's BBDC token (the
-        installer has write access -- the closest analog to GitHub's
-        installation token). Best-effort: a failure here must not raise out
+        The mentioner has no OHE account.  The reply is posted as the bot
+        account (via ``send_message → _posting_service()``), like every other
+        Bitbucket DC comment.  Best-effort: a failure here must not raise out
         of ``receive_message``.
         """
         try:
