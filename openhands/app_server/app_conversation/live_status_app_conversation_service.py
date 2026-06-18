@@ -4,7 +4,6 @@ import json
 import logging
 import os
 import re
-import time
 import zipfile
 from collections import defaultdict
 from collections.abc import Mapping
@@ -101,6 +100,7 @@ from openhands.app_server.utils.llm_metadata import (
     should_set_litellm_extra_body,
 )
 from openhands.app_server.utils.redis_lock import (
+    RedisLock,
     RedisLockUnavailable,
     try_acquire_redis_lock,
 )
@@ -166,6 +166,27 @@ class _StreamingZipBuffer(io.RawIOBase):
         chunks = self._chunks
         self._chunks = []
         return chunks
+
+
+async def _refresh_lock_periodically(
+    lock: RedisLock, interval: int, conversation_id: str
+) -> None:
+    """Keep a Redis export lock alive while a streaming response is in flight.
+
+    Runs as a background task (via asyncio.create_task) alongside the streaming
+    generator so the lock TTL is extended without blocking chunk generation.
+    The task is cancelled when the generator's finally-block fires.
+    """
+    try:
+        while True:
+            await asyncio.sleep(interval)
+            if not await lock.refresh():
+                _logger.warning(
+                    'conversation_export:lock_refresh_failed',
+                    extra={'conversation_id': conversation_id},
+                )
+    except asyncio.CancelledError:
+        pass
 
 
 # Limits for bootstrap-prompt resume (Solution A of issue #14260).
@@ -2510,22 +2531,25 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         refresh_interval = self._conversation_export_lock_refresh_interval()
 
         async def stream():
-            last_refresh = time.monotonic()
+            # Refresh the lock in a background task so the streaming loop stays
+            # simple and lock maintenance doesn't block chunk generation.
+            refresh_task = (
+                asyncio.create_task(
+                    _refresh_lock_periodically(
+                        export_lock, refresh_interval, str(conversation_id)
+                    )
+                )
+                if export_lock
+                else None
+            )
             try:
                 async for chunk in self._stream_conversation_zip(
                     conversation_id, conversation_info
                 ):
-                    now = time.monotonic()
-                    if export_lock and now - last_refresh >= refresh_interval:
-                        refreshed = await export_lock.refresh()
-                        if not refreshed:
-                            _logger.warning(
-                                'conversation_export:lock_refresh_failed',
-                                extra={'conversation_id': str(conversation_id)},
-                            )
-                        last_refresh = now
                     yield chunk
             finally:
+                if refresh_task is not None:
+                    refresh_task.cancel()
                 if export_lock:
                     await export_lock.release()
 
