@@ -4929,6 +4929,23 @@
     "uk": "Організація",
     "ca": "Organització"
   },
+  "SETTINGS$NAV_ADMIN_DASHBOARD": {
+    "en": "Admin Dashboard",
+    "ja": "管理ダッシュボード",
+    "zh-CN": "管理仪表板",
+    "zh-TW": "管理儀表板",
+    "ko-KR": "관리자 대시보드",
+    "no": "Admin Dashboard",
+    "it": "Dashboard Admin",
+    "pt": "Painel Admin",
+    "es": "Panel de Admin",
+    "ar": "لوحة الإدارة",
+    "fr": "Tableau de Bord Admin",
+    "tr": "Yönetici Panosu",
+    "de": "Admin-Dashboard",
+    "uk": "Панель адміністратора",
+    "ca": "Tauler d'Admin"
+  },
   "SETTINGS$NAV_ORG_MEMBERS": {
     "en": "Org Members",
     "ja": "組織メンバー",

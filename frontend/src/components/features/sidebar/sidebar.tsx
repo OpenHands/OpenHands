@@ -7,7 +7,6 @@ import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-
 import { NewProjectButton } from "#/components/shared/buttons/new-project-button";
 import { ConversationPanelButton } from "#/components/shared/buttons/conversation-panel-button";
 import { AutomationsButton } from "#/components/shared/buttons/automations-button";
-import { AdminDashboardButton } from "#/components/shared/buttons/admin-dashboard-button";
 import { SettingsModal } from "#/components/shared/modals/settings/settings-modal";
 import { useSettings } from "#/hooks/query/use-settings";
 import { ConversationPanel } from "../conversation-panel/conversation-panel";
@@ -94,7 +93,6 @@ export function Sidebar() {
                 disabled={settings?.email_verified === false}
               />
             )}
-            <AdminDashboardButton />
           </div>
 
           <div className="flex flex-row md:flex-col md:items-center gap-[26px]">
