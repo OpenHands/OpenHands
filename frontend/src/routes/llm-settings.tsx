@@ -784,6 +784,9 @@ export function LlmSettingsScreen({
             settingsSource: "agent_settings",
             sectionKeys: ["llm"],
             excludeKeys: LLM_EXCLUDED_KEYS,
+            // The "llm" key exists under both the openhands and acp union
+            // variants; target openhands so the acp duplicate is dropped.
+            variant: "openhands",
           },
         ]}
         header={buildHeader}
