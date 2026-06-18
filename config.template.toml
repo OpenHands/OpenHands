@@ -298,6 +298,15 @@ type = "noop"
 #temperature = 0.1
 #max_input_tokens = 1024
 
+# Example of using an OpenAI-compatible provider (here: Pinstripes) as a
+# bring-your-own-model backend. OpenHands routes LLM calls through LiteLLM,
+# so any OpenAI-compatible endpoint works: prefix the model with "openai/"
+# and point base_url at the provider. See docs/llm-providers/pinstripes.md.
+#[llm.pinstripes]
+#model = "openai/ps/deepseek-v4-flash"
+#base_url = "https://pinstripes.io/v1"
+#api_key = "<your-pinstripes-api-key>"
+
 ########################### Kubernetes #######################################
 # Kubernetes configuration when using the Kubernetes runtime
 ##############################################################################
