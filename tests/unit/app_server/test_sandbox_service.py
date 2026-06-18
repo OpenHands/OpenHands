@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_models import (
     SandboxInfo,
     SandboxPage,
@@ -90,6 +91,61 @@ def create_sandbox_info(
 def mock_sandbox_service():
     """Fixture providing a mock sandbox service."""
     return MockSandboxService()
+
+
+class TestWaitForSandboxRunning:
+    """wait_for_sandbox_running surfaces the runtime status_detail in its errors."""
+
+    def _sandbox(self, status, detail):
+        return SandboxInfo(
+            id='sb1',
+            created_by_user_id=None,
+            sandbox_spec_id='test-spec',
+            status=status,
+            session_api_key=None,
+            created_at=datetime.now(timezone.utc),
+            status_detail=detail,
+        )
+
+    @pytest.mark.asyncio
+    async def test_error_state_includes_detail(self, mock_sandbox_service):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.ERROR, 'Insufficient smarter-devices/kvm'
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
+        assert 'Insufficient smarter-devices/kvm' in str(ei.value)
+
+    @pytest.mark.asyncio
+    async def test_error_state_without_detail_has_no_suffix(self, mock_sandbox_service):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.ERROR, None
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
+        assert '(' not in str(ei.value)
+
+    @pytest.mark.asyncio
+    async def test_timeout_includes_detail(self, mock_sandbox_service, monkeypatch):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.STARTING, 'Insufficient smarter-devices/kvm'
+        )
+        calls = {'n': 0}
+
+        def fake_time():
+            calls['n'] += 1
+            return 1000.0 if calls['n'] <= 2 else 2000.0
+
+        monkeypatch.setattr(
+            'openhands.app_server.sandbox.sandbox_service.time.time', fake_time
+        )
+        monkeypatch.setattr(
+            'openhands.app_server.sandbox.sandbox_service.asyncio.sleep', AsyncMock()
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=1)
+        assert 'failed to start within' in str(ei.value)
+        assert 'Insufficient smarter-devices/kvm' in str(ei.value)
 
 
 class TestCleanupOldSandboxes:

@@ -117,13 +117,15 @@ class SandboxService(ABC):
             SandboxError: If sandbox not found, enters ERROR state, or times out
         """
         start = time.time()
+        sandbox: SandboxInfo | None = None
         while time.time() - start <= timeout:
             sandbox = await self.get_sandbox(sandbox_id)
             if sandbox is None:
                 raise SandboxError(f'Sandbox not found: {sandbox_id}')
 
             if sandbox.status == SandboxStatus.ERROR:
-                raise SandboxError(f'Sandbox entered error state: {sandbox_id}')
+                detail = f' ({sandbox.status_detail})' if sandbox.status_detail else ''
+                raise SandboxError(f'Sandbox entered error state: {sandbox_id}{detail}')
 
             if sandbox.status == SandboxStatus.RUNNING:
                 # Optionally verify agent server is alive to avoid race conditions
@@ -137,7 +139,14 @@ class SandboxService(ABC):
 
             await asyncio.sleep(poll_interval)
 
-        raise SandboxError(f'Sandbox failed to start within {timeout}s: {sandbox_id}')
+        detail = (
+            f' ({sandbox.status_detail})'
+            if sandbox is not None and sandbox.status_detail
+            else ''
+        )
+        raise SandboxError(
+            f'Sandbox failed to start within {timeout}s: {sandbox_id}{detail}'
+        )
 
     async def _check_agent_server_alive(
         self, sandbox: SandboxInfo, httpx_client: httpx.AsyncClient
