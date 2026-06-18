@@ -1,3 +1,4 @@
+import importlib
 import logging
 import os
 import secrets
@@ -33,9 +34,8 @@ class RedisLockUnavailable(Exception):
 
 def _get_redis_client_async():
     try:
-        from storage.redis import get_redis_client_async
-
-        return get_redis_client_async()
+        redis_module = importlib.import_module('storage.redis')
+        return redis_module.get_redis_client_async()
     except ImportError:
         pass
 
@@ -72,9 +72,7 @@ class RedisLock:
 
     async def release(self) -> bool:
         try:
-            released = await self.redis.eval(
-                _RELEASE_SCRIPT, 1, self.key, self.token
-            )
+            released = await self.redis.eval(_RELEASE_SCRIPT, 1, self.key, self.token)
             return bool(released)
         except redis_exceptions.RedisError:
             _logger.warning('redis_lock:release_failed', extra={'key': self.key})
