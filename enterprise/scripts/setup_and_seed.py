@@ -158,17 +158,25 @@ def random_datetime(days_back: int = 90) -> datetime:
 
 
 def create_tables(engine):
-    """Create required tables if they don't exist."""
+    """Create required tables if they don't exist.
+    
+    Note: This script seeds data into the OpenHands enterprise schema which uses:
+    - org (not organizations)
+    - user (not users)  
+    - org_member (not organization_members)
+    
+    This schema is created by enterprise/migrations/versions/089_create_org_tables.py
+    """
     print('Creating tables...')
 
     with engine.connect() as _:
-        # Check if organizations table exists
+        # Check if org table exists (we use org, not organizations)
         result = _.execute(
             text("""
             SELECT EXISTS (
                 SELECT FROM information_schema.tables
                 WHERE table_schema = 'public'
-                AND table_name = 'organizations'
+                AND table_name = 'org'
             );
         """)
         )
@@ -178,46 +186,112 @@ def create_tables(engine):
             print('Tables already exist, skipping creation.')
             return
 
-        # Create organizations table
+        # Create role table
         _.execute(
             text("""
-            CREATE TABLE IF NOT EXISTS organizations (
+            CREATE TABLE IF NOT EXISTS role (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR NOT NULL UNIQUE,
+                rank INTEGER NOT NULL
+            );
+        """)
+        )
+
+        # Insert default roles
+        _.execute(
+            text("""
+            INSERT INTO role (name, rank) VALUES ('owner', 10), ('admin', 20), ('member', 1000)
+            ON CONFLICT (name) DO NOTHING;
+        """)
+        )
+
+        # Create org table
+        _.execute(
+            text("""
+            CREATE TABLE IF NOT EXISTS org (
                 id UUID PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                contact_name VARCHAR,
+                contact_email VARCHAR,
+                conversation_expiration INTEGER,
+                agent VARCHAR,
+                default_max_iterations INTEGER,
+                security_analyzer VARCHAR,
+                confirmation_mode BOOLEAN DEFAULT false,
+                default_llm_model VARCHAR,
+                default_llm_base_url VARCHAR,
+                remote_runtime_resource_factor INTEGER,
+                enable_default_condenser BOOLEAN DEFAULT true,
+                billing_margin FLOAT,
+                enable_proactive_conversation_starters BOOLEAN DEFAULT true,
+                sandbox_base_container_image VARCHAR,
+                sandbox_runtime_container_image VARCHAR,
+                org_version INTEGER DEFAULT 0,
+                mcp_config JSON,
+                _search_api_key VARCHAR,
+                _sandbox_api_key VARCHAR,
+                max_budget_per_task FLOAT,
+                enable_solvability_analysis BOOLEAN DEFAULT false,
+                v1_enabled BOOLEAN,
+                condenser_max_size INTEGER,
+                created_at TIMESTAMP WITH TIME ZONE,
+                updated_at TIMESTAMP WITH TIME ZONE,
                 is_github_org BOOLEAN DEFAULT FALSE,
                 org_type VARCHAR(50) DEFAULT 'team',
                 github_installation_id INTEGER,
-                gitlab_group_id INTEGER
+                gitlab_group_id INTEGER,
+                is_default BOOLEAN DEFAULT false
             );
         """)
         )
 
-        # Create users table
+        # Create user table
         _.execute(
             text("""
-            CREATE TABLE IF NOT EXISTS users (
+            CREATE TABLE IF NOT EXISTS "user" (
                 id UUID PRIMARY KEY,
-                email VARCHAR(255) UNIQUE NOT NULL,
-                name VARCHAR(255),
-                avatar_url TEXT,
-                created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+                current_org_id UUID NOT NULL,
+                role_id INTEGER,
+                accepted_tos TIMESTAMP,
+                enable_sound_notifications BOOLEAN DEFAULT false,
+                language VARCHAR,
+                user_consents_to_analytics BOOLEAN,
+                email VARCHAR,
+                email_verified BOOLEAN,
+                git_user_name VARCHAR,
+                git_user_email VARCHAR,
+                sandbox_grouping_strategy VARCHAR,
+                disabled_skills JSON,
+                onboarding_completed BOOLEAN,
+                llm_profiles TEXT,
+                created_at TIMESTAMP WITH TIME ZONE,
+                updated_at TIMESTAMP WITH TIME ZONE
             );
         """)
         )
 
-        # Create organization_members table
+        # Create org_member table
         _.execute(
             text("""
-            CREATE TABLE IF NOT EXISTS organization_members (
-                organization_id UUID NOT NULL,
+            CREATE TABLE IF NOT EXISTS org_member (
+                org_id UUID NOT NULL,
                 user_id UUID NOT NULL,
-                role VARCHAR(50) NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                PRIMARY KEY (organization_id, user_id)
+                role_id INTEGER NOT NULL,
+                _llm_api_key VARCHAR NOT NULL DEFAULT '',
+                _llm_api_key_for_byor VARCHAR,
+                max_iterations INTEGER,
+                llm_model VARCHAR,
+                llm_base_url VARCHAR,
+                status VARCHAR,
+                agent_settings_diff JSON DEFAULT '{}',
+                conversation_settings_diff JSON DEFAULT '{}',
+                has_custom_llm_api_key BOOLEAN DEFAULT false,
+                created_at TIMESTAMP WITH TIME ZONE,
+                updated_at TIMESTAMP WITH TIME ZONE,
+                PRIMARY KEY (org_id, user_id),
+                FOREIGN KEY (org_id) REFERENCES org(id),
+                FOREIGN KEY (user_id) REFERENCES "user"(id),
+                FOREIGN KEY (role_id) REFERENCES role(id)
             );
         """)
         )
@@ -227,26 +301,36 @@ def create_tables(engine):
             text("""
             CREATE TABLE IF NOT EXISTS conversation_metadata (
                 conversation_id VARCHAR(255) PRIMARY KEY,
-                conversation_version VARCHAR(50) NOT NULL,
-                title TEXT,
-                llm_model VARCHAR(255),
-                agent_kind VARCHAR(255),
-                user_id VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                github_user_id VARCHAR,
+                selected_repository VARCHAR,
+                title VARCHAR,
                 last_updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                sandbox_id VARCHAR(255),
-                sandbox_status VARCHAR(50),
-                runtime_url TEXT,
-                execution_status VARCHAR(50),
-                selected_repository TEXT,
-                selected_branch TEXT,
-                trigger VARCHAR(50),
-                accumulated_cost DECIMAL(10, 6) DEFAULT 0,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                selected_branch VARCHAR,
+                user_id VARCHAR,
+                accumulated_cost DOUBLE PRECISION DEFAULT 0,
                 prompt_tokens INTEGER DEFAULT 0,
                 completion_tokens INTEGER DEFAULT 0,
                 total_tokens INTEGER DEFAULT 0,
+                trigger VARCHAR,
+                pr_number JSON,
+                git_provider VARCHAR,
+                llm_model VARCHAR,
+                max_budget_per_task DOUBLE PRECISION,
                 cache_read_tokens INTEGER DEFAULT 0,
-                cache_write_tokens INTEGER DEFAULT 0
+                cache_write_tokens INTEGER DEFAULT 0,
+                reasoning_tokens INTEGER DEFAULT 0,
+                context_window INTEGER DEFAULT 0,
+                per_turn_token INTEGER DEFAULT 0,
+                conversation_version VARCHAR(50) NOT NULL DEFAULT 'V0',
+                sandbox_id VARCHAR,
+                parent_conversation_id VARCHAR,
+                public BOOLEAN,
+                tags JSON,
+                agent_kind VARCHAR,
+                execution_status VARCHAR(50),
+                sandbox_status VARCHAR(50),
+                runtime_url TEXT
             );
         """)
         )
@@ -256,8 +340,11 @@ def create_tables(engine):
             text("""
             CREATE TABLE IF NOT EXISTS conversation_metadata_saas (
                 conversation_id VARCHAR(255) PRIMARY KEY,
+                user_id UUID NOT NULL,
                 org_id UUID NOT NULL,
-                FOREIGN KEY (conversation_id) REFERENCES conversation_metadata(conversation_id) ON DELETE CASCADE
+                FOREIGN KEY (conversation_id) REFERENCES conversation_metadata(conversation_id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES "user"(id),
+                FOREIGN KEY (org_id) REFERENCES org(id)
             );
         """)
         )
@@ -272,23 +359,25 @@ def seed_data(
     conversations_per_org: int = 30,
     users_per_org: int = 10,
 ):
-    """Seed the database with conversation data."""
-
+    """Seed the database with conversation data.
+    
+    Uses the correct OpenHands schema: org, user, org_member tables.
+    """
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
 
     try:
         with session.begin():
-            # Create organizations
+            # Create orgs
             org_ids = []
-            print(f'\nCreating {org_count} organizations...')
+            print(f'\nCreating {org_count} orgs...')
             for i in range(org_count):
                 org_id = str(uuid.uuid4())
                 org_ids.append(org_id)
 
                 session.execute(
                     text("""
-                        INSERT INTO organizations (id, name, created_at, updated_at, is_github_org, org_type)
+                        INSERT INTO org (id, name, created_at, updated_at, is_github_org, org_type)
                         VALUES (:id, :name, :created_at, :updated_at, false, 'team')
                         ON CONFLICT (id) DO NOTHING
                     """),
@@ -300,7 +389,7 @@ def seed_data(
                     },
                 )
 
-            print(f'Created {len(org_ids)} organizations')
+            print(f'Created {len(org_ids)} orgs')
 
             # Create users and conversations for each org
             total_conversations = 0
@@ -316,34 +405,36 @@ def seed_data(
                     last_name = random.choice(LAST_NAMES)
                     email = random_email(first_name, last_name)
 
+                    # First user is the owner/admin, rest are members
+                    role_id = 1 if j == 0 else (2 if j < 3 else 3)  # owner, admin, member
+
                     session.execute(
                         text("""
-                            INSERT INTO users (id, email, name, avatar_url, created_at, updated_at)
-                            VALUES (:id, :email, :name, :avatar_url, :created_at, :updated_at)
+                            INSERT INTO "user" (id, current_org_id, role_id, email, created_at, updated_at)
+                            VALUES (:id, :current_org_id, :role_id, :email, :created_at, :updated_at)
                             ON CONFLICT (id) DO NOTHING
                         """),
                         {
                             'id': user_id,
+                            'current_org_id': org_id,
+                            'role_id': role_id,
                             'email': email,
-                            'name': f'{first_name} {last_name}',
-                            'avatar_url': None,
                             'created_at': datetime.now(UTC),
                             'updated_at': datetime.now(UTC),
                         },
                     )
 
-                    # Add user to organization
-                    role = 'owner' if j == 0 else ('admin' if j < 3 else 'member')
+                    # Add user to org_member
                     session.execute(
                         text("""
-                            INSERT INTO organization_members (organization_id, user_id, role, created_at, updated_at)
-                            VALUES (:org_id, :user_id, :role, :created_at, :updated_at)
-                            ON CONFLICT (organization_id, user_id) DO NOTHING
+                            INSERT INTO org_member (org_id, user_id, role_id, _llm_api_key, status, agent_settings_diff, conversation_settings_diff, has_custom_llm_api_key, created_at, updated_at)
+                            VALUES (:org_id, :user_id, :role_id, '', 'active', '{}', '{}', false, :created_at, :updated_at)
+                            ON CONFLICT (org_id, user_id) DO NOTHING
                         """),
                         {
                             'org_id': org_id,
                             'user_id': user_id,
-                            'role': role,
+                            'role_id': role_id,
                             'created_at': datetime.now(UTC),
                             'updated_at': datetime.now(UTC),
                         },
@@ -442,12 +533,13 @@ def seed_data(
                     # Insert into conversation_metadata_saas
                     session.execute(
                         text("""
-                            INSERT INTO conversation_metadata_saas (conversation_id, org_id)
-                            VALUES (:conversation_id, :org_id)
+                            INSERT INTO conversation_metadata_saas (conversation_id, user_id, org_id)
+                            VALUES (:conversation_id, :user_id, :org_id)
                             ON CONFLICT (conversation_id) DO NOTHING
                         """),
                         {
                             'conversation_id': conversation_id,
+                            'user_id': user_id,
                             'org_id': org_id,
                         },
                     )
@@ -456,7 +548,7 @@ def seed_data(
                 print(f'  Created {conversations_per_org} conversations')
 
         print('\n✅ Seed complete!')
-        print(f'   Organizations: {org_count}')
+        print(f'   Orgs: {org_count}')
         print(f'   Total users: {org_count * users_per_org}')
         print(f'   Total conversations: {total_conversations}')
 
