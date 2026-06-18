@@ -51,6 +51,7 @@ export const useUnifiedGetGitChanges = () => {
         conversationUrl,
         sessionApiKey,
         gitPath,
+        conversationId,
       );
     },
     retry: false,

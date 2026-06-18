@@ -51,10 +51,18 @@ class EventService {
     conversationUrl: string,
     sessionApiKey?: string | null,
   ): Promise<number> {
-    // Build the runtime URL using the conversation URL
-    const runtimeUrl = buildHttpBaseUrl(conversationUrl);
+    // When the centralized WebSocket gateway is enabled, route event count
+    // through the app-server proxy (just like pause does).
+    const useGateway = import.meta.env.VITE_ENABLE_WEBSOCKET_GATEWAY === "true";
 
-    // Build session headers for authentication
+    if (useGateway) {
+      const { data } = await openHands.get<number>(
+        `/api/conversations/${conversationId}/events/count`,
+      );
+      return data;
+    }
+
+    const runtimeUrl = buildHttpBaseUrl(conversationUrl);
     const headers = buildSessionHeaders(sessionApiKey);
 
     const { data } = await axios.get<number>(

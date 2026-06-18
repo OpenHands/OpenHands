@@ -287,6 +287,18 @@ class V1ConversationService {
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
   ): Promise<{ success: boolean }> {
+    // When the centralized WebSocket gateway is enabled, route resume
+    // through the app-server proxy (just like pause does).
+    const useGateway = import.meta.env.VITE_ENABLE_WEBSOCKET_GATEWAY === "true";
+
+    if (useGateway) {
+      const { data } = await openHands.post<{ success: boolean }>(
+        `/api/conversations/${conversationId}/run`,
+        {},
+      );
+      return data;
+    }
+
     const url = this.buildRuntimeUrl(
       conversationUrl,
       `/api/conversations/${conversationId}/run`,

@@ -5,12 +5,27 @@ with pagination support. These endpoints are designed to replace the legacy V0 e
 in openhands/server/routes/git.py.
 """
 
+import uuid
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+import httpx
+from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse, Response
 
-from openhands.app_server.config import depends_user_context, get_global_config
+from openhands.app_server.app_conversation.app_conversation_service import (
+    AppConversationService,
+)
+from openhands.app_server.config import (
+    depends_app_conversation_service,
+    depends_httpx_client,
+    depends_sandbox_service,
+    depends_sandbox_spec_service,
+    depends_user_context,
+    get_global_config,
+)
+from openhands.app_server.sandbox.sandbox_service import SandboxService
+from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.git.git_models import (
     BranchPage,
     InstallationPage,
@@ -329,3 +344,91 @@ async def search_suggested_tasks(
         next_page_id = encode_page_id(page + 1)
 
     return SuggestedTaskPage(items=paginated_tasks, next_page_id=next_page_id)
+
+
+app_conversation_service_dependency = depends_app_conversation_service()
+sandbox_service_dependency = depends_sandbox_service()
+sandbox_spec_service_dependency = depends_sandbox_spec_service()
+httpx_client_dependency = depends_httpx_client()
+
+# Lazy import to avoid circular dependency
+_git_agent_server_context_fn = None
+
+
+def _get_agent_server_context_fn():
+    global _git_agent_server_context_fn
+    if _git_agent_server_context_fn is None:
+        from openhands.app_server.app_conversation.app_conversation_router import (
+            _get_agent_server_context,
+        )
+        _git_agent_server_context_fn = _get_agent_server_context
+    return _git_agent_server_context_fn
+
+
+@router.get('/changes')
+async def git_changes(
+    request: Request,
+    app_conv_svc: AppConversationService = app_conversation_service_dependency,
+    sandbox_svc: SandboxService = sandbox_service_dependency,
+    sandbox_spec_svc: SandboxSpecService = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> Response:
+    """Get git changes by proxying to the agent-server inside the sandbox.
+
+    Expects query params:
+    - conversation_id: The conversation ID to resolve the sandbox.
+    - path: (optional) The git repository path.
+    """
+    conversation_id = request.query_params.get('conversation_id')
+    if not conversation_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='conversation_id query param is required',
+        )
+
+    ctx = await _get_agent_server_context_fn()(
+        uuid.UUID(conversation_id),
+        app_conv_svc,
+        sandbox_svc,
+        sandbox_spec_svc,
+    )
+    if isinstance(ctx, JSONResponse):
+        raise HTTPException(
+            status_code=ctx.status_code,
+            detail=ctx.body.decode() if ctx.body else None,
+        )
+    if ctx is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Conversation {conversation_id} not running',
+        )
+
+    agent_server_url = ctx.agent_server_url
+    session_api_key = ctx.session_api_key
+
+    # Strip conversation_id from proxied query params
+    filtered_params = {
+        k: v for k, v in request.query_params.multi_items()
+        if k != 'conversation_id'
+    }
+
+    headers = {
+        k: v for k, v in request.headers.items()
+        if k.lower() not in ("host", "connection", "transfer-encoding")
+    }
+    if session_api_key:
+        headers["X-Session-API-Key"] = session_api_key
+
+    proxy_request = httpx_client.build_request(
+        method='GET',
+        url=f"{agent_server_url}/api/git/changes",
+        headers=headers,
+        params=filtered_params,
+    )
+    resp = await httpx_client.send(proxy_request, stream=False)
+
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        headers=dict(resp.headers),
+    )
