@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
+from integrations.bitbucket_data_center.bitbucket_dc_service_account import (
+    bitbucket_dc_posting_service,
+)
 from integrations.bitbucket_data_center.bitbucket_dc_view import (
     BitbucketDCFactory,
     BitbucketDCInlinePRComment,
@@ -22,7 +25,10 @@ from integrations.utils import (
 from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
 from pydantic import SecretStr
-from server.auth.constants import BITBUCKET_DATA_CENTER_BOT_TOKEN
+from server.auth.constants import (
+    BITBUCKET_DATA_CENTER_BOT_TOKEN,
+    BITBUCKET_DATA_CENTER_BOT_USERNAME,
+)
 from server.auth.token_manager import TokenManager
 from storage.bitbucket_dc_webhook_store import BitbucketDCWebhookStore
 
@@ -96,39 +102,22 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
             )
             return False
 
-    def _posting_service(self, fallback_external_auth_id: str):
+    def _posting_service(self):
         """Build the Bitbucket DC service used to POST comments/reactions.
 
-        When a bot service-account token is configured
-        (``BITBUCKET_DATA_CENTER_BOT_TOKEN``), every outbound comment and
-        reaction is posted as that bot -- mirroring the GitHub App's
-        ``openhands[bot]`` identity -- instead of as the @-mentioning user or
-        the webhook installer. Otherwise we fall back to the per-user/installer
-        OAuth token (``fallback_external_auth_id``).
+        Always posts as the configured bot account -- mirroring the GitHub
+        App's ``openhands[bot]`` identity. ``receive_message`` gates on the bot
+        token, so this never falls back to a user token.
 
         This affects only who *posts*. The resolver job itself always runs with
         the invoking user's own token (see ``start_job``); the bot token is
         never used to create conversations or touch the repo.
         """
-        from integrations.bitbucket_data_center.bitbucket_dc_service import (
-            SaaSBitbucketDCService,
-        )
-
-        if BITBUCKET_DATA_CENTER_BOT_TOKEN:
-            # BBDC HTTP access tokens authenticate via Bearer. The service's
-            # ``token=`` constructor arg rewrites a colon-less token to
-            # ``x-token-auth:<token>`` (a Bitbucket *Cloud* convention) and
-            # sends it as HTTP Basic, which Data Center rejects with 401. Set
-            # the raw token directly so ``_get_headers`` uses Bearer.
-            service = SaaSBitbucketDCService()
-            service.token = SecretStr(BITBUCKET_DATA_CENTER_BOT_TOKEN)
-            return service
-        return SaaSBitbucketDCService(external_auth_id=fallback_external_auth_id)
+        return bitbucket_dc_posting_service()
 
     async def _add_eyes_reaction(
         self,
         message: Message,
-        reacting_user_id: str,
         project_key: str,
         repo_slug: str,
     ) -> None:
@@ -137,9 +126,7 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
         Mirrors ``GithubManager._add_reaction``: posted once we've decided
         the request will be acted on (permission check passed, mentioner
         resolved), before view construction or conversation creation. Posted
-        as the resolved invoking user (``reacting_user_id`` -- the mentioner's
-        keycloak id, or the installer when the mentioner has no OHE account)
-        so the reaction is attributed to whoever triggered the job.
+        as the bot account, like every other Bitbucket DC comment/reaction.
 
         Any failure here is logged at INFO and swallowed -- older BBDC
         installs return 404/400 on the reactions endpoint, and a missing
@@ -154,7 +141,7 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
             return
 
         try:
-            service = self._posting_service(reacting_user_id)
+            service = self._posting_service()
             await service.add_comment_reaction(
                 owner=project_key,
                 repo_slug=repo_slug,
@@ -198,6 +185,32 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
     async def receive_message(self, message: Message) -> None:
         self._confirm_incoming_source_type(message)
         if not self.is_job_requested(message):
+            return
+
+        # Bitbucket DC posts (reply + reaction) require the bot account. Without
+        # it we can't post results, and falling back to the user's token would
+        # re-fire the webhook -- so skip the event, like the Jira DC gate.
+        if not BITBUCKET_DATA_CENTER_BOT_TOKEN:
+            logger.error(
+                '[Bitbucket DC] BITBUCKET_DATA_CENTER_BOT_TOKEN is not '
+                'configured (required); skipping event'
+            )
+            return
+
+        # Skip events the bot account authored. The agent's reply is posted via
+        # the bot PAT and can contain "@openhands"; without this guard it would
+        # re-trigger a second job. Mirrors the Jira DC service-account guard;
+        # BBDC's stable author id is the (lowercased) slug.
+        actor = (message.message.get('payload') or {}).get('actor') or {}
+        if (
+            BITBUCKET_DATA_CENTER_BOT_USERNAME
+            and extract_actor_slug(actor).lower()
+            == BITBUCKET_DATA_CENTER_BOT_USERNAME.lower()
+        ):
+            logger.info(
+                '[Bitbucket DC] Ignoring event authored by the bot account '
+                f'{BITBUCKET_DATA_CENTER_BOT_USERNAME!r}'
+            )
             return
 
         project_key, repo_slug = self._extract_repo_identity(message)
@@ -291,9 +304,7 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
         # mirroring the GitHub manager. Posted as the resolved invoking user.
         # Best-effort: failures (e.g. legacy BBDC without the reactions
         # endpoint) must not block conversation creation.
-        await self._add_eyes_reaction(
-            message, mentioner_keycloak_id, project_key, repo_slug
-        )
+        await self._add_eyes_reaction(message, project_key, repo_slug)
 
         bitbucket_view = await BitbucketDCFactory.create_bitbucket_dc_view_from_payload(
             message,
@@ -315,9 +326,7 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
     async def send_message(
         self, message: str, bitbucket_view: ResolverViewInterface
     ) -> None:
-        bitbucket_service = self._posting_service(
-            bitbucket_view.user_info.keycloak_user_id
-        )
+        bitbucket_service = self._posting_service()
 
         if isinstance(bitbucket_view, BitbucketDCInlinePRComment):
             await bitbucket_service.reply_to_pr_comment(
