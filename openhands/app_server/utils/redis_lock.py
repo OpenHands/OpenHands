@@ -1,18 +1,12 @@
 import asyncio
-import importlib
 import logging
-import os
 import secrets
-import threading
 from dataclasses import dataclass
 from typing import Any
 
-from redis import asyncio as aioredis
-from redis import exceptions as redis_exceptions
+from openhands.app_server.utils.redis import get_redis_client_async, redis_exceptions
 
 _logger = logging.getLogger(__name__)
-_redis_client_async: aioredis.Redis | None = None
-_redis_lock = threading.Lock()
 
 _RELEASE_SCRIPT = """
 if redis.call("get", KEYS[1]) == ARGV[1] then
@@ -31,27 +25,6 @@ return 0
 
 class RedisLockUnavailable(Exception):
     """Raised when Redis cannot be used to evaluate a lock."""
-
-
-def _get_redis_client_async():
-    try:
-        redis_module = importlib.import_module('storage.redis')
-        return redis_module.get_redis_client_async()
-    except ImportError:
-        pass
-
-    global _redis_client_async
-    if _redis_client_async is None:
-        with _redis_lock:
-            if _redis_client_async is None:
-                _redis_client_async = aioredis.Redis(
-                    host=os.environ.get('REDIS_HOST', 'localhost'),
-                    port=int(os.environ.get('REDIS_PORT', '6379')),
-                    password=os.environ.get('REDIS_PASSWORD', ''),
-                    db=int(os.environ.get('REDIS_DB', '0')),
-                    socket_timeout=2,
-                )
-    return _redis_client_async
 
 
 @dataclass
@@ -82,7 +55,7 @@ class RedisLock:
 
 async def try_acquire_redis_lock(key: str, ttl_seconds: int) -> RedisLock | None:
     """Acquire a Redis lock or return None when another holder owns it."""
-    redis = _get_redis_client_async()
+    redis = get_redis_client_async()
     token = secrets.token_urlsafe(24)
     try:
         acquired = await redis.set(key, token, nx=True, ex=ttl_seconds)
