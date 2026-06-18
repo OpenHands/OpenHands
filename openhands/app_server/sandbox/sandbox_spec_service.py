@@ -69,6 +69,13 @@ def get_agent_server_image() -> str:
     return AGENT_SERVER_IMAGE
 
 
+def is_custom_agent_server_image() -> bool:
+    """True only when an admin pinned a custom sandbox image (tag differs from the
+    release-default tag). Default/upgrade installs keep the release tag, never gated."""
+    tag = os.getenv('AGENT_SERVER_IMAGE_TAG')
+    return bool(tag) and tag != AGENT_SERVER_IMAGE.rsplit(':', 1)[-1]
+
+
 # Prefixes for environment variables that should be auto-forwarded to agent-server
 # These are typically configuration variables that affect the agent's behavior
 AUTO_FORWARD_PREFIXES = ('LLM_', 'LMNR_')
