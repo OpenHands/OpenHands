@@ -52,7 +52,14 @@ import { useAppMode } from "#/hooks/use-app-mode";
 import { useMe } from "#/hooks/query/use-me";
 import { usePermission } from "#/hooks/organizations/use-permissions";
 
-const LLM_EXCLUDED_KEYS = new Set(["llm.model", "llm.api_key", "llm.base_url"]);
+// auth_type/subscription_vendor (SDK 1.29.0) are inert in this form and not BYOK-gated; exclude so they don't leak into Basic.
+const LLM_EXCLUDED_KEYS = new Set([
+  "llm.model",
+  "llm.api_key",
+  "llm.base_url",
+  "llm.auth_type",
+  "llm.subscription_vendor",
+]);
 
 const buildModelId = (provider: string | null, model: string | null) => {
   if (!provider || !model) return null;
