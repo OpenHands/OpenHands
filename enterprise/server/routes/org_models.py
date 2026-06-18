@@ -532,9 +532,7 @@ class MeResponse(BaseModel):
         # Only access member.llm_api_key when has_custom_llm_api_key is True
         # to avoid decryption errors when the key is not set
         llm_api_key = (
-            cls._mask_key(member.llm_api_key)
-            if member.has_custom_llm_api_key
-            else None
+            cls._mask_key(member.llm_api_key) if member.has_custom_llm_api_key else ''
         )
         return cls(
             org_id=str(member.org_id),
