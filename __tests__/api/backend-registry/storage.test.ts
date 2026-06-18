@@ -27,7 +27,7 @@ afterEach(() => {
     configurable: true,
     value: ORIGINAL_LOCATION,
   });
-
+  window.history.pushState({}, "", "/");
   vi.unstubAllEnvs();
 });
 
@@ -344,6 +344,35 @@ describe("backend-registry storage", () => {
     expect(readStoredActiveBackend()).toEqual({
       backendId: "global-backend",
       orgId: null,
+    });
+  });
+
+  it("prefers the URL active selection over stored fallback and records it for the tab", () => {
+    window.localStorage.setItem(
+      ACTIVE_BACKEND_STORAGE_KEY,
+      JSON.stringify({ backendId: "global-backend", orgId: null }),
+    );
+    window.sessionStorage.setItem(
+      ACTIVE_BACKEND_STORAGE_KEY,
+      JSON.stringify({ backendId: "tab-backend", orgId: "org-1" }),
+    );
+    window.history.pushState(
+      {},
+      "",
+      "/conversations/conv-1?backendId=url-backend&orgId=url-org",
+    );
+
+    expect(readStoredActiveBackend()).toEqual({
+      backendId: "url-backend",
+      orgId: "url-org",
+    });
+    expect(
+      JSON.parse(
+        window.sessionStorage.getItem(ACTIVE_BACKEND_STORAGE_KEY) ?? "null",
+      ),
+    ).toEqual({
+      backendId: "url-backend",
+      orgId: "url-org",
     });
   });
 

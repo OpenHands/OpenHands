@@ -22,6 +22,9 @@ import {
   linkPendingTaskMessages,
   schedulePendingTaskMessageReassign,
 } from "#/utils/pending-task-message-link";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { buildConversationUrl } from "#/api/backend-registry/url-selection";
+import { isNoBackend } from "#/api/backend-registry/active-store";
 
 const storeTaskPlugins = (
   task: AppConversationStartTask,
@@ -113,6 +116,7 @@ export const useTaskPollingController = () => {
   const { task, taskId } = polling;
   const { conversationId } = useOptionalConversationId();
   const { navigate } = useNavigation();
+  const { backend: activeBackend, orgId: activeOrgId } = useActiveBackend();
   const handledReadyTaskIdRef = useRef<string | null>(null);
 
   // Reassign optimistic pending messages before paint on the real conversation
@@ -168,9 +172,20 @@ export const useTaskPollingController = () => {
         });
       }
 
-      navigate(`/conversations/${appConversationId}`, { replace: true });
+      navigate(
+        buildConversationUrl(
+          appConversationId,
+          isNoBackend(activeBackend)
+            ? null
+            : {
+                backendId: activeBackend.id,
+                orgId: activeOrgId,
+              },
+        ),
+        { replace: true },
+      );
     })();
-  }, [task, taskId, navigate]);
+  }, [activeBackend.id, activeOrgId, task, taskId, navigate]);
 
   return polling;
 };

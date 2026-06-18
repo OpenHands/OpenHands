@@ -9,6 +9,7 @@ import { NavigationLink } from "#/components/shared/navigation-link";
 function renderNavigationLink(
   currentPath = "/",
   overrides: Partial<NavigationContextValue> = {},
+  to = "/settings/mcp",
 ) {
   const value: NavigationContextValue = {
     currentPath,
@@ -20,7 +21,7 @@ function renderNavigationLink(
 
   const result = render(
     <NavigationProvider value={value}>
-      <NavigationLink to="/settings/mcp">MCP</NavigationLink>
+      <NavigationLink to={to}>MCP</NavigationLink>
     </NavigationProvider>,
   );
 
@@ -53,5 +54,28 @@ describe("NavigationLink", () => {
     expect(navigate).toHaveBeenCalledWith("/settings/mcp", {
       replace: false,
     });
+  });
+
+  it("lets modified clicks use the browser href", () => {
+    const { navigate } = renderNavigationLink();
+    const link = screen.getByRole("link", { name: "MCP" });
+
+    fireEvent.click(link, { ctrlKey: true });
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(link).toHaveAttribute("href", "/settings/mcp");
+  });
+
+  it("matches active state by pathname when the href has query params", () => {
+    renderNavigationLink(
+      "/conversations/abc",
+      {},
+      "/conversations/abc?backendId=cloud-prod&orgId=org-2",
+    );
+
+    expect(screen.getByRole("link", { name: "MCP" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 });

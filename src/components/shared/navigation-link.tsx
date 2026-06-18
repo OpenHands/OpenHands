@@ -25,15 +25,17 @@ function isModifiedEvent(event: React.MouseEvent<HTMLAnchorElement>) {
 }
 
 function isPathActive(currentPath: string, to: string, end: boolean) {
+  const targetPath = to.split(/[?#]/, 1)[0] || "/";
+
   if (to === "/") {
-    return currentPath === to;
+    return currentPath === targetPath;
   }
 
   if (end) {
-    return currentPath === to;
+    return currentPath === targetPath;
   }
 
-  return currentPath === to || currentPath.startsWith(`${to}/`);
+  return currentPath === targetPath || currentPath.startsWith(`${targetPath}/`);
 }
 
 export const NavigationLink = React.forwardRef<

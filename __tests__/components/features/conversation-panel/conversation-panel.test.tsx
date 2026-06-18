@@ -23,6 +23,13 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import type { Backend } from "#/api/backend-registry/types";
 
 // Mock the unified stop conversation hook
 const mockStopConversationMutate = vi.fn();
@@ -107,6 +114,14 @@ describe("ConversationPanel", () => {
     createMockConversation({ id: "3", title: "Conversation 3" }),
   ];
 
+  const cloudBackend: Backend = {
+    id: "cloud-prod",
+    name: "Production",
+    host: "https://app.all-hands.dev",
+    apiKey: "bearer-key",
+    kind: "cloud",
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockStopConversationMutate.mockClear();
@@ -124,6 +139,9 @@ describe("ConversationPanel", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    __resetActiveStoreForTests();
   });
 
   it("should render the conversations", async () => {
@@ -133,6 +151,108 @@ describe("ConversationPanel", () => {
     // NOTE that we filter out conversations that don't have a created_at property
     // (mock data has 4 conversations, but only 3 have a created_at property)
     expect(cards).toHaveLength(3);
+  });
+
+  it("includes the active backend scope in conversation card links", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+
+    const ScopedRouterStub = createRoutesStub([
+      {
+        Component: () => <ConversationPanel onClose={onCloseMock} />,
+        path: "/",
+      },
+      {
+        Component: () => null,
+        path: "/conversations/:conversationId",
+      },
+    ]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <ActiveBackendProvider>
+            <NavigationProvider
+              value={{
+                currentPath: "/",
+                conversationId: null,
+                isNavigating: false,
+                navigate: vi.fn(),
+              }}
+            >
+              <ScopedRouterStub />
+            </NavigationProvider>
+          </ActiveBackendProvider>
+        </I18nextProvider>
+      </QueryClientProvider>,
+    );
+
+    const title = await screen.findByText("Conversation 1");
+    expect(title.closest("a")).toHaveAttribute(
+      "href",
+      "/conversations/1?backendId=cloud-prod&orgId=org-2",
+    );
+  });
+
+  it("includes the active backend scope in compact conversation row links", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "running",
+          title: "Running Conversation",
+          execution_status: ExecutionStatus.RUNNING,
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    const CompactRouterStub = createRoutesStub([
+      {
+        Component: () => <ConversationPanel compact />,
+        path: "/",
+      },
+      {
+        Component: () => null,
+        path: "/conversations/:conversationId",
+      },
+    ]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <ActiveBackendProvider>
+            <NavigationProvider
+              value={{
+                currentPath: "/",
+                conversationId: null,
+                isNavigating: false,
+                navigate: vi.fn(),
+              }}
+            >
+              <CompactRouterStub />
+            </NavigationProvider>
+          </ActiveBackendProvider>
+        </I18nextProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      await screen.findByLabelText("Running Conversation"),
+    ).toHaveAttribute(
+      "href",
+      "/conversations/running?backendId=cloud-prod&orgId=org-2",
+    );
   });
 
   it("should display an empty state when there are no conversations", async () => {
@@ -152,7 +272,10 @@ describe("ConversationPanel", () => {
   });
 
   it("does not show load more when the visible list is empty even if another page exists", async () => {
-    vi.spyOn(AgentServerConversationService, "searchConversations").mockResolvedValue({
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
       items: [],
       next_page_id: "page-2",
     });
@@ -795,9 +918,8 @@ describe("ConversationPanel", () => {
 
     // Test RUNNING conversation - should show stop button
     const runningCard = await getCardByTitle("Running Conversation");
-    const runningEllipsisButton = within(runningCard).getByTestId(
-      "ellipsis-button",
-    );
+    const runningEllipsisButton =
+      within(runningCard).getByTestId("ellipsis-button");
     await user.click(runningEllipsisButton);
 
     expect(await screen.findByTestId("stop-button")).toBeInTheDocument();
@@ -812,9 +934,8 @@ describe("ConversationPanel", () => {
 
     // Test STARTING/RUNNING conversation - should show stop button
     const startingCard = await getCardByTitle("Starting Conversation");
-    const startingEllipsisButton = within(startingCard).getByTestId(
-      "ellipsis-button",
-    );
+    const startingEllipsisButton =
+      within(startingCard).getByTestId("ellipsis-button");
     await user.click(startingEllipsisButton);
 
     expect(await screen.findByTestId("stop-button")).toBeInTheDocument();
@@ -829,9 +950,8 @@ describe("ConversationPanel", () => {
 
     // Test STOPPED conversation - should NOT show stop button
     const stoppedCard = await getCardByTitle("Stopped Conversation");
-    const stoppedEllipsisButton = within(stoppedCard).getByTestId(
-      "ellipsis-button",
-    );
+    const stoppedEllipsisButton =
+      within(stoppedCard).getByTestId("ellipsis-button");
     await user.click(stoppedEllipsisButton);
 
     await waitFor(() => {
