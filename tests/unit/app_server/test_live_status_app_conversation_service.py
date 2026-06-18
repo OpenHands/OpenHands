@@ -43,7 +43,7 @@ from openhands.app_server.settings.settings_models import (
     Settings,
 )
 from openhands.app_server.user.user_context import UserContext
-from openhands.sdk import Agent, Event
+from openhands.sdk import Agent, AgentContext, Event
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
@@ -3465,13 +3465,14 @@ class TestBuildAcpStartConversationRequestSecrets:
             mcp_config=None,
             disabled_skills=[],
         )
+        agent_context = AgentContext(secrets=acp_env) if acp_env else None
         user.agent_settings = ACPAgentSettings(
             acp_server=acp_server,  # type: ignore[arg-type]
             llm=LLM(
                 model='claude-sonnet-4-5',
                 api_key=SecretStr(api_key) if api_key else None,
             ),
-            acp_env=acp_env or {},
+            agent_context=agent_context,
         )
         return user
 
@@ -3526,7 +3527,7 @@ class TestBuildAcpStartConversationRequestSecrets:
 
     @pytest.mark.asyncio
     async def test_explicit_acp_env_preserved(self, service, tmp_path):
-        """Explicit acp_env entries survive when secrets also present."""
+        """Explicit agent_context.secrets entries survive when secrets also present."""
         user = self._make_acp_user(acp_env={'MY_TOKEN': 'explicit-override'})
         other_secret = StaticSecret(value=SecretStr('other-value'))
 
@@ -3537,7 +3538,10 @@ class TestBuildAcpStartConversationRequestSecrets:
             secrets={'OTHER': other_secret},
         )
 
-        assert request.agent.acp_env.get('MY_TOKEN') == 'explicit-override'
+        agent_ctx_secrets = (
+            request.agent.agent_context.secrets if request.agent.agent_context else {}
+        ) or {}
+        assert agent_ctx_secrets.get('MY_TOKEN') == 'explicit-override'
         assert request.secrets.get('OTHER') is other_secret
 
     @pytest.mark.asyncio
@@ -3554,7 +3558,10 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') is None
+        agent_ctx_secrets = (
+            request.agent.agent_context.secrets if request.agent.agent_context else {}
+        ) or {}
+        assert 'ANTHROPIC_API_KEY' not in agent_ctx_secrets
         assert 'ANTHROPIC_API_KEY' not in request.secrets
 
     @pytest.mark.asyncio
@@ -3579,7 +3586,7 @@ class TestBuildAcpStartConversationRequestSecrets:
 
     @pytest.mark.asyncio
     async def test_acp_env_explicit_override(self, service, tmp_path):
-        """Explicit acp_env is independent of request.secrets — both are preserved."""
+        """Explicit agent_context.secrets is independent of request.secrets — both preserved."""
         user = self._make_acp_user(
             acp_server='claude-code',
             acp_env={'ANTHROPIC_API_KEY': 'sk-explicit-override'},
@@ -3587,13 +3594,16 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         request = await self._call_build(service, user, tmp_path)
 
-        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-explicit-override'
-        # No panel secrets → request.secrets is empty (acp_env is a separate channel).
+        agent_ctx_secrets = (
+            request.agent.agent_context.secrets if request.agent.agent_context else {}
+        ) or {}
+        assert agent_ctx_secrets.get('ANTHROPIC_API_KEY') == 'sk-explicit-override'
+        # No panel secrets → request.secrets is empty (agent_context.secrets is a separate channel).
         assert 'ANTHROPIC_API_KEY' not in request.secrets
 
     @pytest.mark.asyncio
     async def test_secrets_forwarded_via_request_secrets(self, service, tmp_path):
-        """Panel secrets flow through request.secrets; not pre-resolved into acp_env."""
+        """Panel secrets flow through request.secrets; not pre-resolved into agent_context."""
         gh_secret = StaticSecret(value=SecretStr('ghp_test123'))
         user = self._make_acp_user()
 
@@ -3604,7 +3614,10 @@ class TestBuildAcpStartConversationRequestSecrets:
             secrets={'GH_TOKEN': gh_secret},
         )
 
-        assert request.agent.acp_env.get('GH_TOKEN') is None
+        agent_ctx_secrets = (
+            request.agent.agent_context.secrets if request.agent.agent_context else {}
+        ) or {}
+        assert 'GH_TOKEN' not in agent_ctx_secrets
         assert request.secrets.get('GH_TOKEN') is gh_secret
 
     @pytest.mark.asyncio
@@ -3624,15 +3637,18 @@ class TestBuildAcpStartConversationRequestSecrets:
             secrets={'ANTHROPIC_API_KEY': panel_secret},
         )
 
-        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') is None
+        agent_ctx_secrets = (
+            request.agent.agent_context.secrets if request.agent.agent_context else {}
+        ) or {}
+        assert 'ANTHROPIC_API_KEY' not in agent_ctx_secrets
         assert request.secrets.get('ANTHROPIC_API_KEY') is panel_secret
 
     @pytest.mark.asyncio
     async def test_explicit_acp_env_and_panel_secret_coexist(self, service, tmp_path):
-        """acp_env and request.secrets are independent channels.
+        """agent_context.secrets and request.secrets are independent channels.
 
-        An explicit acp_env entry takes precedence at subprocess launch, but
-        the panel secret still flows through request.secrets unchanged.
+        An explicit agent_context.secrets entry is available to the subprocess,
+        while the panel secret still flows through request.secrets unchanged.
         """
         panel_secret = StaticSecret(value=SecretStr('panel-token'))
         user = self._make_acp_user(acp_env={'GH_TOKEN': 'explicit-token'})
@@ -3644,5 +3660,8 @@ class TestBuildAcpStartConversationRequestSecrets:
             secrets={'GH_TOKEN': panel_secret},
         )
 
-        assert request.agent.acp_env.get('GH_TOKEN') == 'explicit-token'
+        agent_ctx_secrets = (
+            request.agent.agent_context.secrets if request.agent.agent_context else {}
+        ) or {}
+        assert agent_ctx_secrets.get('GH_TOKEN') == 'explicit-token'
         assert request.secrets.get('GH_TOKEN') is panel_secret
