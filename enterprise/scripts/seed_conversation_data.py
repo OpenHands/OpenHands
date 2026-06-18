@@ -215,7 +215,7 @@ def generate_conversation_data(
         'user_id': user_id,
         'created_at': created_at,
         'last_updated_at': updated_at,
-        'sandbox_id': f'sb-{uuid.uuid4().hex[:12]}' if random.random() > 0.1 else None,
+        'sandbox_id': f'sb-{uuid.uuid4().hex[:12]}',
         'sandbox_status': sandbox_status,
         'runtime_url': f'https://runtime-{uuid.uuid4().hex[:8]}.example.com'
         if sandbox_status == 'RUNNING'
