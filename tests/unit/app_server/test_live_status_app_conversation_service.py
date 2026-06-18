@@ -65,16 +65,15 @@ def _async_iter(items):
 
 class _FakeExportLock:
     def __init__(self):
+        self.name = 'fake-lock'
         self.released = False
-        self.refreshed = False
+        self.reacquired = False
 
-    async def refresh(self):
-        self.refreshed = True
-        return True
+    async def reacquire(self):
+        self.reacquired = True
 
     async def release(self):
         self.released = True
-        return True
 
 
 def _build_test_user_agent_settings(user: SimpleNamespace) -> OpenHandsAgentSettings:
