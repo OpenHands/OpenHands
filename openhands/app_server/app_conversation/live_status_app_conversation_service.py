@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import logging
 import os
@@ -135,7 +136,7 @@ _logger = logging.getLogger(__name__)
 _EXPORT_LOCK_KEY_PREFIX = 'app_conversation_export'
 
 
-class _StreamingZipBuffer:
+class _StreamingZipBuffer(io.RawIOBase):
     """Small non-seekable writer used by zipfile to emit chunks incrementally."""
 
     def __init__(self):
@@ -165,6 +166,7 @@ class _StreamingZipBuffer:
         chunks = self._chunks
         self._chunks = []
         return chunks
+
 
 # Limits for bootstrap-prompt resume (Solution A of issue #14260).
 # Generic rendering is handled by openhands.sdk.event.render_resume_transcript.
