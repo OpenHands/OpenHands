@@ -10,7 +10,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, AsyncGenerator, Sequence, cast
+from typing import Any, AsyncGenerator, BinaryIO, Sequence, cast
 from uuid import UUID, uuid4
 
 import httpx
@@ -2331,7 +2331,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         self, conversation_id: UUID, conversation_info: AppConversationInfo
     ) -> AsyncGenerator[bytes, None]:
         zip_buffer = _StreamingZipBuffer()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        with zipfile.ZipFile(
+            cast(BinaryIO, zip_buffer), 'w', zipfile.ZIP_DEFLATED
+        ) as zipf:
             zipf.writestr('meta.json', conversation_info.model_dump_json(indent=2))
             for chunk in zip_buffer.drain():
                 yield chunk
