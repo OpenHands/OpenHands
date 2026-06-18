@@ -137,7 +137,13 @@ _EXPORT_LOCK_KEY_PREFIX = 'app_conversation_export'
 
 
 class _StreamingZipBuffer(io.RawIOBase):
-    """Small non-seekable writer used by zipfile to emit chunks incrementally."""
+    """Small non-seekable writer used by zipfile to emit chunks incrementally.
+
+    zipfile.ZipFile only needs write() and tell() from its underlying file
+    object when writing to a non-seekable stream.  Everything else
+    (flush, writable, seekable) is either unused by zipfile or already
+    handled by the io.RawIOBase defaults.
+    """
 
     def __init__(self):
         self._chunks: list[bytes] = []
@@ -152,15 +158,6 @@ class _StreamingZipBuffer(io.RawIOBase):
 
     def tell(self) -> int:
         return self._position
-
-    def flush(self):
-        pass
-
-    def writable(self) -> bool:
-        return True
-
-    def seekable(self) -> bool:
-        return False
 
     def drain(self) -> list[bytes]:
         chunks = self._chunks
