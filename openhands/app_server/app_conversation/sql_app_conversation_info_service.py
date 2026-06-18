@@ -69,6 +69,9 @@ class StoredConversationMetadata(Base):
         String, primary_key=True, default=lambda: str(uuid.uuid4())
     )
     selected_repository: Mapped[str | None] = mapped_column(String, nullable=True)
+    dependency_repos: Mapped[list[str] | None] = mapped_column(
+        create_json_type_decorator(list[str]), nullable=True
+    )
     selected_branch: Mapped[str | None] = mapped_column(String, nullable=True)
     git_provider: Mapped[str | None] = mapped_column(
         String, nullable=True
@@ -353,6 +356,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         stored = StoredConversationMetadata(
             conversation_id=str(info.id),
             selected_repository=info.selected_repository,
+            dependency_repos=info.dependency_repos,
             selected_branch=info.selected_branch,
             git_provider=info.git_provider.value if info.git_provider else None,
             title=info.title,
@@ -552,6 +556,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             created_by_user_id=None,  # User ID is now stored in ConversationMetadataSaas
             sandbox_id=sandbox_id,  # Use the asserted non-None value
             selected_repository=stored.selected_repository,
+            dependency_repos=stored.dependency_repos or [],
             selected_branch=stored.selected_branch,
             git_provider=(
                 ProviderType(stored.git_provider) if stored.git_provider else None

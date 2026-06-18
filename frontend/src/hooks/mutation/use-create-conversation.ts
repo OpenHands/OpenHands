@@ -10,6 +10,7 @@ interface CreateConversationVariables {
     name: string;
     gitProvider: Provider;
     branch?: string;
+    dependencyRepos?: string[];
   };
   suggestedTask?: SuggestedTask;
   conversationInstructions?: string;
@@ -57,6 +58,7 @@ export const useCreateConversation = () => {
         parentConversationId,
         agentType,
         plugins,
+        repository?.dependencyRepos,
       );
 
       // Return a special task ID that the frontend will recognize

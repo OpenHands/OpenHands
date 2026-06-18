@@ -22,6 +22,7 @@ class SkillInfo(BaseModel):
     name: str
     type: str  # 'knowledge', 'repo', or 'task'
     source: str  # 'global' or 'user'
+    dependency_repos: list[str] | list[dict[str, str]] | None = None
     triggers: list[str] | None = None
 
 

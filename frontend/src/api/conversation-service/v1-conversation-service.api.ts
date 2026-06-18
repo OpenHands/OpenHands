@@ -70,11 +70,13 @@ class V1ConversationService {
     parent_conversation_id?: string,
     agent_type?: "default" | "plan",
     plugins?: PluginSpec[],
+    dependency_repos?: string[],
     sandbox_id?: string,
     llm_model?: string,
   ): Promise<V1AppConversationStartTask> {
     const body: V1AppConversationStartRequest = {
       selected_repository: selectedRepository,
+      dependency_repos: dependency_repos || [],
       git_provider,
       selected_branch,
       suggested_task: suggestedTask,

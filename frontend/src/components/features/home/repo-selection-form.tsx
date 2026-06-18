@@ -33,6 +33,7 @@ export function RepositorySelectionForm({
   );
   const [selectedProvider, setSelectedProvider] =
     React.useState<Provider | null>(null);
+  const [dependencyReposStr, setDependencyReposStr] = React.useState("");
 
   const { providers } = useUserProviders();
   const {
@@ -176,6 +177,20 @@ export function RepositorySelectionForm({
         {renderBranchSelector()}
       </div>
 
+      <div className="flex flex-col gap-[10px] pb-4">
+        <label className="text-sm text-white font-normal leading-[22px]">
+          Dependency Repositories (optional, comma or newline separated)
+        </label>
+        <textarea
+          value={dependencyReposStr}
+          onChange={(e) => setDependencyReposStr(e.target.value)}
+          placeholder="owner/repo1, owner/repo2"
+          className="w-full bg-[#1e2329] text-white border border-[#3e444b] rounded-md p-2 text-sm"
+          rows={2}
+          disabled={!selectedRepository || isLoadingSettings}
+        />
+      </div>
+
       <BrandButton
         testId="repo-launch-button"
         variant="primary"
@@ -193,15 +208,19 @@ export function RepositorySelectionForm({
             addRecentRepository(selectedRepository);
           }
 
-          createConversation(
-            {
-              repository: {
-                name: selectedRepository?.full_name || "",
-                gitProvider: selectedRepository?.git_provider || "github",
-                branch: selectedBranch?.name || "main",
+            createConversation(
+              {
+                repository: {
+                  name: selectedRepository?.full_name || "",
+                  gitProvider: selectedRepository?.git_provider || "github",
+                  branch: selectedBranch?.name || "main",
+                  dependencyRepos: dependencyReposStr
+                    .split(/[\n,]+/)
+                    .map((s) => s.trim())
+                    .filter((s) => s.length > 0),
+                },
               },
-            },
-            {
+              {
               onSuccess: (data) =>
                 navigate(`/conversations/${data.conversation_id}`),
             },

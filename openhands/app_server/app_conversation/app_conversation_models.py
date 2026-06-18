@@ -118,6 +118,7 @@ class AppConversationInfo(BaseModel):
     sandbox_id: str
 
     selected_repository: str | None = None
+    dependency_repos: list[str] = Field(default_factory=list)
     selected_branch: str | None = None
     git_provider: ProviderType | None = None
     title: str | None = None
@@ -213,6 +214,7 @@ class AppConversationStartRequest(OpenHandsModel):
 
     # Git parameters
     selected_repository: str | None = None
+    dependency_repos: list[str] = Field(default_factory=list)
     selected_branch: str | None = None
     git_provider: ProviderType | None = None
     suggested_task: SuggestedTask | None = None

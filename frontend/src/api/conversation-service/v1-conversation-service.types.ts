@@ -59,6 +59,7 @@ export interface V1AppConversationStartRequest {
   processors?: unknown[]; // EventCallbackProcessor - keeping as unknown for now
   llm_model?: string | null;
   selected_repository?: string | null;
+  dependency_repos?: string[] | null;
   selected_branch?: string | null;
   git_provider?: Provider | null;
   suggested_task?: SuggestedTask | null;

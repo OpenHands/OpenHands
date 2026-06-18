@@ -403,6 +403,24 @@ class AppConversationServiceBase(AppConversationService, ABC):
         if result.exit_code:
             _logger.warning(f'Git checkout failed: {result.stderr}')
 
+        # Clone any dependency repos
+        if request.dependency_repos:
+            for dep_repo in request.dependency_repos:
+                try:
+                    dep_repo_url = await self.user_context.get_authenticated_git_url(dep_repo)
+                    if not dep_repo_url:
+                        _logger.warning(f'Could not authenticate git url for dependency repo {dep_repo}')
+                        continue
+                    dep_dir_name = dep_repo.split('/')[-1]
+                    dep_quoted_url = shlex.quote(dep_repo_url)
+                    dep_quoted_dir = shlex.quote(dep_dir_name)
+                    dep_clone_cmd = f'git clone {dep_quoted_url} {dep_quoted_dir}'
+                    res = await workspace.execute_command(dep_clone_cmd, workspace.working_dir, 120)
+                    if res.exit_code:
+                        _logger.warning(f'Git clone failed for dependency {dep_repo}: {res.stderr}')
+                except Exception as e:
+                    _logger.warning(f'Failed to clone dependency repo {dep_repo}: {e}')
+
     async def _get_azure_devops_bearer_token_for_git(
         self,
         git_provider: ProviderType | None,

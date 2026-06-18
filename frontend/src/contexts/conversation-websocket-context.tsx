@@ -136,6 +136,8 @@ export function ConversationWebSocketProvider({
     conversationId: string;
   } | null>(null);
 
+  const offlineQueueRef = useRef<V1SendMessageRequest[]>([]);
+
   const isPlanFilePath = (path: string | null): boolean =>
     path?.toUpperCase().endsWith("PLAN.MD") ?? false;
 
@@ -899,12 +901,9 @@ export function ConversationWebSocketProvider({
           // Return queued: true so caller knows not to show optimistic UI
           return { queued: true };
         } catch (error) {
-          const errorMessage =
-            error instanceof Error
-              ? error.message
-              : "Failed to queue message for delivery";
-          setErrorMessage(errorMessage);
-          throw error;
+          // If backend queueing fails (e.g., offline), queue in memory
+          offlineQueueRef.current.push(message);
+          return { queued: true };
         }
       }
 
@@ -979,6 +978,23 @@ export function ConversationWebSocketProvider({
       updateState();
     }
   }, [planningAgentSocket, planningAgentWsUrl]);
+
+  // Flush offline queue when main socket becomes OPEN
+  useEffect(() => {
+    if (mainConnectionState === "OPEN" && offlineQueueRef.current.length > 0) {
+      const messagesToFlush = [...offlineQueueRef.current];
+      offlineQueueRef.current = [];
+      messagesToFlush.forEach((msg) => {
+        try {
+          mainSocket?.send(JSON.stringify(msg));
+        } catch (err) {
+          console.error("Failed to flush offline message", err);
+          // Re-queue if it failed
+          offlineQueueRef.current.push(msg);
+        }
+      });
+    }
+  }, [mainConnectionState, mainSocket]);
 
   const contextValue = useMemo(
     () => ({ connectionState, sendMessage, isLoadingHistory }),

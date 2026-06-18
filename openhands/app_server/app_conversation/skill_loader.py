@@ -53,6 +53,7 @@ class SkillInfo(BaseModel):
     name: str
     content: str
     triggers: list[str] = []
+    dependency_repos: list[str] | list[dict[str, str]] | None = None
     source: str | None = None
     description: str | None = None
     is_agentskills_format: bool = False
