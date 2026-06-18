@@ -61,9 +61,85 @@ class GitHubBranchesMixin(GitHubMixinBase):
         return all_branches
 
     async def get_paginated_branches(
-        self, repository: str, page: int = 1, per_page: int = 30
+        self, repository: str, page: int = 1, per_page: int = 30, query: str | None = None
     ) -> PaginatedBranchesResponse:
         """Get branches for a repository with pagination"""
+        if query:
+            # Clamp per_page to GitHub GraphQL limits
+            per_page = min(max(per_page, 1), 100)
+            
+            parts = repository.split('/')
+            if len(parts) < 2:
+                return PaginatedBranchesResponse(
+                    branches=[],
+                    has_next_page=False,
+                    current_page=page,
+                    per_page=per_page,
+                    total_count=0,
+                )
+            owner, name = parts[-2], parts[-1]
+            
+            # Since GitHub GraphQL doesn't natively support page-number based pagination
+            # easily, and we want to emulate REST's limit+1, we fetch up to page*per_page
+            variables = {
+                'owner': owner,
+                'name': name,
+                'query': query,
+                'perPage': page * per_page,
+            }
+            try:
+                result = await self.execute_graphql_query(
+                    search_branches_graphql_query, variables
+                )
+            except Exception as e:
+                logger.warning(f'Failed to search for branches: {e}')
+                result = {}
+
+            repo = result.get('data', {}).get('repository')
+            if not repo or not repo.get('refs'):
+                return PaginatedBranchesResponse(
+                    branches=[],
+                    has_next_page=False,
+                    current_page=page,
+                    per_page=per_page,
+                    total_count=0,
+                )
+
+            all_branches: list[Branch] = []
+            for node in repo['refs'].get('nodes', []):
+                bname = node.get('name') or ''
+                target = node.get('target') or {}
+                typename = target.get('__typename')
+                commit_sha = ''
+                last_push_date = None
+                if typename == 'Commit':
+                    commit_sha = target.get('oid', '') or ''
+                    last_push_date = target.get('committedDate')
+
+                branch = Branch(
+                    name=bname,
+                    commit_sha=commit_sha,
+                    protected=False,  # GraphQL query does not fetch this
+                    last_push_date=last_push_date,
+                )
+                all_branches.append(branch)
+            
+            # Pagination slicing
+            start_idx = (page - 1) * per_page
+            end_idx = start_idx + per_page
+            page_branches = all_branches[start_idx:end_idx]
+            
+            # If we retrieved the full page * per_page, there MIGHT be a next page
+            has_next_page = len(all_branches) == (page * per_page)
+            
+            return PaginatedBranchesResponse(
+                branches=page_branches,
+                has_next_page=has_next_page,
+                current_page=page,
+                per_page=per_page,
+                total_count=None,
+            )
+
         url = f'{self.BASE_URL}/repos/{repository}/branches'
 
         params = {'per_page': str(per_page), 'page': str(page)}
@@ -101,64 +177,3 @@ class GitHubBranchesMixin(GitHubMixinBase):
             per_page=per_page,
             total_count=None,  # GitHub doesn't provide total count in branch API
         )
-
-    async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
-    ) -> list[Branch]:
-        """Search branches by name using GitHub GraphQL with a partial query."""
-        # Require a non-empty query
-        if not query:
-            return []
-
-        # Clamp per_page to GitHub GraphQL limits
-        per_page = min(max(per_page, 1), 100)
-
-        # Extract owner and repo name from the repository string
-        parts = repository.split('/')
-        if len(parts) < 2:
-            return []
-        owner, name = parts[-2], parts[-1]
-
-        variables = {
-            'owner': owner,
-            'name': name,
-            'query': query or '',
-            'perPage': per_page,
-        }
-
-        try:
-            result = await self.execute_graphql_query(
-                search_branches_graphql_query, variables
-            )
-        except Exception as e:
-            logger.warning(f'Failed to search for branches: {e}')
-            # Fallback to empty result on any GraphQL error
-            return []
-
-        repo = result.get('data', {}).get('repository')
-        if not repo or not repo.get('refs'):
-            return []
-
-        branches: list[Branch] = []
-        for node in repo['refs'].get('nodes', []):
-            bname = node.get('name') or ''
-            target = node.get('target') or {}
-            typename = target.get('__typename')
-            commit_sha = ''
-            last_push_date = None
-            if typename == 'Commit':
-                commit_sha = target.get('oid', '') or ''
-                last_push_date = target.get('committedDate')
-
-            protected = node.get('branchProtectionRule') is not None
-
-            branches.append(
-                Branch(
-                    name=bname,
-                    commit_sha=commit_sha,
-                    protected=protected,
-                    last_push_date=last_push_date,
-                )
-            )
-
-        return branches

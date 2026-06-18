@@ -69,7 +69,7 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
         return all_branches
 
     async def get_paginated_branches(
-        self, repository: str, page: int = 1, per_page: int = 30
+        self, repository: str, page: int = 1, per_page: int = 30, query: str | None = None
     ) -> PaginatedBranchesResponse:
         """Get branches for a repository with pagination."""
         # Parse repository string: organization/project/repo
@@ -98,12 +98,19 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
         url = f'https://dev.azure.com/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/refs?api-version=7.1&filter=heads/'
 
         response, _ = await self._make_request(url)
-        branches_data = response.get('value', [])
+        all_branches_data = response.get('value', [])
+
+        # Filter by query if provided
+        if query:
+            all_branches_data = [
+                b for b in all_branches_data 
+                if query.lower() in b.get('name', '').replace('refs/heads/', '').lower()
+            ]
 
         # Calculate pagination
         start_idx = (page - 1) * per_page
         end_idx = start_idx + per_page
-        paginated_data = branches_data[start_idx:end_idx]
+        paginated_data = all_branches_data[start_idx:end_idx]
 
         branches: list[Branch] = []
         for branch_data in paginated_data:
@@ -130,7 +137,7 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
             branches.append(branch)
 
         # Determine if there's a next page
-        has_next_page = end_idx < len(branches_data)
+        has_next_page = end_idx < len(all_branches_data)
 
         return PaginatedBranchesResponse(
             branches=branches,
@@ -138,63 +145,3 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
             current_page=page,
             per_page=per_page,
         )
-
-    async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
-    ) -> list[Branch]:
-        """Search for branches within a repository."""
-        # Parse repository string: organization/project/repo
-        parts = repository.split('/')
-        if len(parts) < 3:
-            raise ValueError(
-                f'Invalid repository format: {repository}. Expected format: organization/project/repo'
-            )
-
-        org = parts[0]
-        project = parts[1]
-        repo_name = parts[2]
-
-        # URL-encode components to handle spaces and special characters
-        org_enc = self._encode_url_component(org)
-        project_enc = self._encode_url_component(project)
-        repo_enc = self._encode_url_component(repo_name)
-
-        url = f'https://dev.azure.com/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/refs?api-version=7.1&filter=heads/'
-
-        try:
-            response, _ = await self._make_request(url)
-            branches_data = response.get('value', [])
-
-            # Filter branches by query
-            filtered_branches = []
-            for branch_data in branches_data:
-                # Extract branch name from the ref (e.g., "refs/heads/main" -> "main")
-                name = branch_data.get('name', '').replace('refs/heads/', '')
-
-                # Check if query matches branch name
-                if query.lower() in name.lower():
-                    object_id = branch_data.get('objectId', '')
-
-                    # Get commit details for this branch
-                    commit_url = f'https://dev.azure.com/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/commits/{object_id}?api-version=7.1'
-                    try:
-                        commit_data, _ = await self._make_request(commit_url)
-                        last_push_date = commit_data.get('committer', {}).get('date')
-                    except Exception:
-                        last_push_date = None
-
-                    branch = Branch(
-                        name=name,
-                        commit_sha=object_id,
-                        protected=False,  # Skip protected check for search to improve performance
-                        last_push_date=last_push_date,
-                    )
-                    filtered_branches.append(branch)
-
-                    if len(filtered_branches) >= per_page:
-                        break
-
-            return filtered_branches
-        except Exception:
-            # Return empty list on error instead of None
-            return []

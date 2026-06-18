@@ -78,7 +78,7 @@ async def test_get_paginated_branches_gitlab_no_next_or_total():
 
 
 @pytest.mark.asyncio
-async def test_search_branches_gitlab_uses_search_param():
+async def test_get_paginated_branches_gitlab_uses_search_param():
     service = GitLabService(token=SecretStr('t'))
 
     mock_response = [
@@ -95,8 +95,8 @@ async def test_search_branches_gitlab_uses_search_param():
     ]
 
     with patch.object(service, '_make_request', return_value=(mock_response, {})) as m:
-        branches = await service.search_branches(
-            'group/repo', query='feat', per_page=50
+        res = await service.get_paginated_branches(
+            'group/repo', page=1, per_page=50, query='feat'
         )
 
         # Verify parameters
@@ -106,9 +106,10 @@ async def test_search_branches_gitlab_uses_search_param():
         assert 'repository/branches' in url
         assert params['per_page'] == '50'
         assert params['search'] == 'feat'
+        assert params['page'] == '1'
 
-        assert len(branches) == 2
-        assert branches[0] == Branch(
+        assert len(res.branches) == 2
+        assert res.branches[0] == Branch(
             name='feat/new',
             commit_sha='111',
             protected=False,
