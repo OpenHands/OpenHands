@@ -180,7 +180,8 @@ class V1ConversationService {
 
   /**
    * Pause a V1 conversation
-   * Uses the custom runtime URL from the conversation
+   * When VITE_ENABLE_WEBSOCKET_GATEWAY=true, routes through the app-server proxy.
+   * Otherwise, calls the agent-server directly.
    *
    * @param conversationId The conversation ID
    * @param conversationUrl The conversation URL (e.g., "http://localhost:54928/api/conversations/...")
@@ -192,6 +193,18 @@ class V1ConversationService {
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
   ): Promise<{ success: boolean }> {
+    // When the centralized WebSocket gateway is enabled, route pause
+    // through the app-server proxy (just like sendMessage does).
+    const useGateway = import.meta.env.VITE_ENABLE_WEBSOCKET_GATEWAY === "true";
+
+    if (useGateway) {
+      const { data } = await openHands.post<{ success: boolean }>(
+        `/api/conversations/${conversationId}/pause`,
+        {},
+      );
+      return data;
+    }
+
     const url = this.buildRuntimeUrl(
       conversationUrl,
       `/api/conversations/${conversationId}/pause`,
