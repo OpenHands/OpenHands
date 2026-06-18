@@ -34,18 +34,18 @@ from openhands.sdk.llm import MetricsSnapshot, TokenUsage
 
 # Valid sort fields
 VALID_SORT_FIELDS = {
-    'created_at': StoredConversationMetadata.created_at,
-    'updated_at': StoredConversationMetadata.last_updated_at,
-    'llm_model': StoredConversationMetadata.llm_model,
-    'accumulated_cost': StoredConversationMetadata.accumulated_cost,
-    'title': StoredConversationMetadata.title,
+    "created_at": StoredConversationMetadata.created_at,
+    "updated_at": StoredConversationMetadata.last_updated_at,
+    "llm_model": StoredConversationMetadata.llm_model,
+    "accumulated_cost": StoredConversationMetadata.accumulated_cost,
+    "title": StoredConversationMetadata.title,
 }
 
 # Time window options (in days)
 TIME_WINDOW_OPTIONS = {
-    '7d': 7,
-    '30d': 30,
-    '90d': 90,
+    "7d": 7,
+    "30d": 30,
+    "90d": 90,
 }
 
 
@@ -64,8 +64,8 @@ class OrgConversationService:
         self,
         org_id: UUID,
         search: str | None = None,
-        sort_by: str = 'updated_at',
-        sort_order: str = 'desc',
+        sort_by: str = "updated_at",
+        sort_order: str = "desc",
         execution_status: list[str] | None = None,
         sandbox_status: list[str] | None = None,
         time_window: str | None = None,
@@ -99,7 +99,7 @@ class OrgConversationService:
                 == StoredConversationMetadataSaas.conversation_id,
             )
             .outerjoin(User, StoredConversationMetadataSaas.user_id == User.id)
-            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadata.conversation_version == "V1")
             .where(StoredConversationMetadataSaas.org_id == org_id)
         )
 
@@ -111,7 +111,7 @@ class OrgConversationService:
 
         # Apply search filter
         if search:
-            search_pattern = f'%{search}%'
+            search_pattern = f"%{search}%"
             query = query.where(
                 or_(
                     StoredConversationMetadata.title.ilike(search_pattern),
@@ -144,7 +144,7 @@ class OrgConversationService:
         sort_column = VALID_SORT_FIELDS.get(
             sort_by, StoredConversationMetadata.last_updated_at
         )
-        if sort_order.lower() == 'asc':
+        if sort_order.lower() == "asc":
             query = query.order_by(sort_column.asc().nullslast())
         else:
             query = query.order_by(sort_column.desc().nullslast())
@@ -173,8 +173,8 @@ class OrgConversationService:
                     sandbox_info_map[sandbox_id] = sandbox_info
             except Exception as e:
                 logger.warning(
-                    'Failed to fetch sandbox info for org conversations',
-                    extra={'org_id': str(org_id), 'error': str(e)},
+                    "Failed to fetch sandbox info for org conversations",
+                    extra={"org_id": str(org_id), "error": str(e)},
                 )
 
         # Apply sandbox_status filter post-query (since it's from sandbox service)
@@ -208,7 +208,7 @@ class OrgConversationService:
                     None,
                 )
                 if agent_server_url:
-                    runtime_url = f'{agent_server_url}/api/conversations/{metadata.conversation_id}'
+                    runtime_url = f"{agent_server_url}/api/conversations/{metadata.conversation_id}"
 
             # Build metrics
             token_usage = TokenUsage(
@@ -230,7 +230,7 @@ class OrgConversationService:
                 id=metadata.conversation_id,
                 title=metadata.title,
                 llm_model=metadata.llm_model,
-                agent_kind=metadata.agent_kind or 'openhands',
+                agent_kind=metadata.agent_kind or "openhands",
                 user_id=str(saas_metadata.user_id),
                 user_email=user.email if user else None,
                 created_at=metadata.created_at,
@@ -246,7 +246,8 @@ class OrgConversationService:
                 accumulated_cost=metrics.accumulated_cost,
                 prompt_tokens=metrics.accumulated_token_usage.prompt_tokens,  # type: ignore[union-attr]
                 completion_tokens=metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
-                total_tokens=metrics.accumulated_token_usage.prompt_tokens + metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
+                total_tokens=metrics.accumulated_token_usage.prompt_tokens
+                + metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
                 cache_read_tokens=metrics.accumulated_token_usage.cache_read_tokens,  # type: ignore[union-attr]
                 cache_write_tokens=metrics.accumulated_token_usage.cache_write_tokens,  # type: ignore[union-attr]
             )
@@ -256,13 +257,13 @@ class OrgConversationService:
         total_pages = math.ceil(total_items / per_page) if total_items > 0 else 0
 
         logger.info(
-            'Listed organization conversations',
+            "Listed organization conversations",
             extra={
-                'org_id': str(org_id),
-                'count': len(items),
-                'total_items': total_items,
-                'page': page,
-                'per_page': per_page,
+                "org_id": str(org_id),
+                "count": len(items),
+                "total_items": total_items,
+                "page": page,
+                "per_page": per_page,
             },
         )
 
@@ -293,7 +294,7 @@ class OrgConversationService:
 
         # Base query for org conversations
         base_filter = [
-            StoredConversationMetadata.conversation_version == 'V1',
+            StoredConversationMetadata.conversation_version == "V1",
             StoredConversationMetadataSaas.org_id == org_id,
         ]
 
@@ -307,7 +308,7 @@ class OrgConversationService:
                 == StoredConversationMetadataSaas.conversation_id,
             )
             .where(*base_filter)
-            .where(StoredConversationMetadata.execution_status == 'running')
+            .where(StoredConversationMetadata.execution_status == "running")
         )
         result = await self.db_session.execute(active_query)
         active_conversations = result.scalar() or 0
@@ -333,7 +334,7 @@ class OrgConversationService:
         total_cost, total_prompt, total_completion = result.one()
 
         # 3. Completed in 24h, 7d, 30d (terminal status = finished, error, stuck)
-        terminal_statuses = ['finished', 'error', 'stuck']
+        terminal_statuses = ["finished", "error", "stuck"]
 
         # Helper to count completed conversations since a given cutoff
         async def count_completed(cutoff: datetime) -> int:
@@ -372,7 +373,7 @@ class OrgConversationService:
                         == StoredConversationMetadataSaas.conversation_id,
                     )
                     .where(*base_filter)
-                    .where(StoredConversationMetadata.execution_status == 'running')
+                    .where(StoredConversationMetadata.execution_status == "running")
                     .where(StoredConversationMetadata.sandbox_id.isnot(None))
                     .distinct()
                 )
@@ -383,14 +384,14 @@ class OrgConversationService:
                 for sandbox_id in sandbox_ids:
                     try:
                         sandbox = await self.sandbox_service.get_sandbox(sandbox_id)
-                        if sandbox and sandbox.status.value == 'RUNNING':
+                        if sandbox and sandbox.status.value == "RUNNING":
                             running_runtimes += 1
                     except Exception:
                         pass
             except Exception as e:
                 logger.warning(
-                    'Failed to get running runtimes count',
-                    extra={'org_id': str(org_id), 'error': str(e)},
+                    "Failed to get running runtimes count",
+                    extra={"org_id": str(org_id), "error": str(e)},
                 )
 
         return OrgConversationStats(
@@ -424,7 +425,7 @@ class OrgConversationService:
 
         # Base filter for org conversations
         base_filter = [
-            StoredConversationMetadata.conversation_version == 'V1',
+            StoredConversationMetadata.conversation_version == "V1",
             StoredConversationMetadataSaas.org_id == org_id,
         ]
 
@@ -463,7 +464,9 @@ class OrgConversationService:
             select(
                 func.coalesce(func.sum(StoredConversationMetadata.accumulated_cost), 0),
                 func.coalesce(func.sum(StoredConversationMetadata.prompt_tokens), 0),
-                func.coalesce(func.sum(StoredConversationMetadata.completion_tokens), 0),
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.completion_tokens), 0
+                ),
             )
             .select_from(StoredConversationMetadata)
             .join(
@@ -511,7 +514,7 @@ class OrgConversationService:
 
             daily_usage.append(
                 DailyUsageData(
-                    date=day_start.strftime('%Y-%m-%d'),
+                    date=day_start.strftime("%Y-%m-%d"),
                     tokens=int(token_count or 0),
                     conversations=int(conv_count or 0),
                 )
@@ -526,14 +529,16 @@ class OrgConversationService:
                 StoredConversationMetadataSaas.user_id,
                 User.email,
                 User.name,
-                func.count(StoredConversationMetadata.conversation_id).label('conv_count'),
+                func.count(StoredConversationMetadata.conversation_id).label(
+                    "conv_count"
+                ),
                 func.coalesce(
                     func.sum(
                         StoredConversationMetadata.prompt_tokens
                         + StoredConversationMetadata.completion_tokens
                     ),
                     0,
-                ).label('token_count'),
+                ).label("token_count"),
             )
             .select_from(StoredConversationMetadata)
             .join(
@@ -559,9 +564,7 @@ class OrgConversationService:
         team_usage = []
         for row in team_rows:
             pct = (
-                (row.conv_count / total_team_convs * 100)
-                if total_team_convs > 0
-                else 0
+                (row.conv_count / total_team_convs * 100) if total_team_convs > 0 else 0
             )
             team_usage.append(
                 TeamUsageData(
@@ -577,7 +580,8 @@ class OrgConversationService:
         return OrgUsageStats(
             active_users=int(active_users),
             agent_runs=int(agent_runs),
-            total_tokens=int(total_prompt_tokens or 0) + int(total_completion_tokens or 0),
+            total_tokens=int(total_prompt_tokens or 0)
+            + int(total_completion_tokens or 0),
             estimated_spend=float(total_cost or 0),
             daily_usage=daily_usage,
             team_usage=team_usage,
@@ -605,7 +609,7 @@ class OrgConversationService:
                 == StoredConversationMetadataSaas.conversation_id,
             )
             .outerjoin(User, StoredConversationMetadataSaas.user_id == User.id)
-            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadata.conversation_version == "V1")
             .where(StoredConversationMetadataSaas.org_id == org_id)
             .where(StoredConversationMetadata.conversation_id == conversation_id)
         )
@@ -627,8 +631,8 @@ class OrgConversationService:
                 )
             except Exception as e:
                 logger.warning(
-                    'Failed to fetch sandbox info for conversation',
-                    extra={'conversation_id': conversation_id, 'error': str(e)},
+                    "Failed to fetch sandbox info for conversation",
+                    extra={"conversation_id": conversation_id, "error": str(e)},
                 )
 
         sandbox_status = sandbox_info.status.value if sandbox_info else None
@@ -646,7 +650,7 @@ class OrgConversationService:
             )
             if agent_server_url:
                 runtime_url = (
-                    f'{agent_server_url}/api/conversations/{metadata.conversation_id}'
+                    f"{agent_server_url}/api/conversations/{metadata.conversation_id}"
                 )
 
         # Build metrics
@@ -668,7 +672,7 @@ class OrgConversationService:
             id=metadata.conversation_id,
             title=metadata.title,
             llm_model=metadata.llm_model,
-            agent_kind=metadata.agent_kind or 'openhands',
+            agent_kind=metadata.agent_kind or "openhands",
             user_id=str(saas_metadata.user_id),
             user_email=user.email if user else None,
             created_at=metadata.created_at,
@@ -684,7 +688,8 @@ class OrgConversationService:
             accumulated_cost=metrics.accumulated_cost,
             prompt_tokens=metrics.accumulated_token_usage.prompt_tokens,  # type: ignore[union-attr]
             completion_tokens=metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
-            total_tokens=metrics.accumulated_token_usage.prompt_tokens + metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
+            total_tokens=metrics.accumulated_token_usage.prompt_tokens
+            + metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
             cache_read_tokens=metrics.accumulated_token_usage.cache_read_tokens,  # type: ignore[union-attr]
             cache_write_tokens=metrics.accumulated_token_usage.cache_write_tokens,  # type: ignore[union-attr]
         )
@@ -713,7 +718,7 @@ class OrgConversationService:
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadata.conversation_version == "V1")
             .where(StoredConversationMetadataSaas.org_id == org_id)
             .where(StoredConversationMetadata.conversation_id == conversation_id)
         )
@@ -727,9 +732,9 @@ class OrgConversationService:
         # Check if there's a sandbox to stop
         if not metadata.sandbox_id:
             return {
-                'success': True,
-                'message': 'Conversation has no running sandbox',
-                'conversation_id': conversation_id,
+                "success": True,
+                "message": "Conversation has no running sandbox",
+                "conversation_id": conversation_id,
             }
 
         # Try to stop via sandbox service
@@ -740,49 +745,49 @@ class OrgConversationService:
                 )
                 if sandbox_info is None:
                     return {
-                        'success': True,
-                        'message': 'Sandbox already stopped or not found',
-                        'conversation_id': conversation_id,
+                        "success": True,
+                        "message": "Sandbox already stopped or not found",
+                        "conversation_id": conversation_id,
                     }
 
                 # Update execution status to indicate stopping
-                metadata.execution_status = 'deleting'
+                metadata.execution_status = "deleting"
                 await self.db_session.commit()
 
                 logger.info(
-                    'Stopping sandbox for org conversation',
+                    "Stopping sandbox for org conversation",
                     extra={
-                        'conversation_id': conversation_id,
-                        'sandbox_id': metadata.sandbox_id,
-                        'user_id': user_id,
+                        "conversation_id": conversation_id,
+                        "sandbox_id": metadata.sandbox_id,
+                        "user_id": user_id,
                     },
                 )
 
                 return {
-                    'success': True,
-                    'message': 'Stop request sent to sandbox',
-                    'conversation_id': conversation_id,
-                    'sandbox_id': metadata.sandbox_id,
+                    "success": True,
+                    "message": "Stop request sent to sandbox",
+                    "conversation_id": conversation_id,
+                    "sandbox_id": metadata.sandbox_id,
                 }
             except Exception as e:
                 logger.exception(
-                    'Failed to stop sandbox',
+                    "Failed to stop sandbox",
                     extra={
-                        'conversation_id': conversation_id,
-                        'sandbox_id': metadata.sandbox_id,
-                        'error': str(e),
+                        "conversation_id": conversation_id,
+                        "sandbox_id": metadata.sandbox_id,
+                        "error": str(e),
                     },
                 )
                 return {
-                    'success': False,
-                    'error': f'Failed to stop sandbox: {str(e)}',
-                    'conversation_id': conversation_id,
+                    "success": False,
+                    "error": f"Failed to stop sandbox: {str(e)}",
+                    "conversation_id": conversation_id,
                 }
         else:
             return {
-                'success': False,
-                'error': 'Sandbox service not available',
-                'conversation_id': conversation_id,
+                "success": False,
+                "error": "Sandbox service not available",
+                "conversation_id": conversation_id,
             }
 
 
