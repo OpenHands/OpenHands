@@ -328,10 +328,15 @@ async def test_ensure_api_key_keeps_valid_key():
 
 @pytest.mark.asyncio
 async def test_ensure_api_key_generates_new_key_when_verification_fails():
-    """When verification fails, a new key should be generated."""
+    """When verification fails, a new managed key is minted under the shared
+    alias after deleting any prior key — symmetric across model types so
+    switching to/from an openhands/* model never orphans a key."""
+    from storage.lite_llm_manager import get_openhands_cloud_key_alias
+
     store = SaasSettingsStore('test-user-id-123')
     new_key = 'sk-new-key'
     item = _make_settings(model='openhands/gpt-4', api_key='sk-invalid-key')
+    expected_alias = get_openhands_cloud_key_alias('test-user-id-123', 'org-123')
 
     with (
         patch(
@@ -340,15 +345,24 @@ async def test_ensure_api_key_generates_new_key_when_verification_fails():
             return_value=False,
         ),
         patch(
+            'storage.saas_settings_store.LiteLlmManager.delete_key_by_alias',
+            new_callable=AsyncMock,
+        ) as mock_delete,
+        patch(
             'storage.saas_settings_store.LiteLlmManager.generate_key',
             new_callable=AsyncMock,
             return_value=new_key,
-        ),
+        ) as mock_generate,
     ):
         await store._ensure_api_key(item, 'org-123', openhands_type=True)
 
-        assert _secret_value(item, 'llm.api_key') is not None
         assert _secret_value(item, 'llm.api_key') == new_key
+        # The openhands branch now deletes the prior key under the shared alias
+        # before minting (previously it skipped the delete and orphaned keys).
+        mock_delete.assert_awaited_once_with(key_alias=expected_alias)
+        mock_generate.assert_awaited_once_with(
+            'test-user-id-123', 'org-123', expected_alias, {'type': 'openhands'}
+        )
 
 
 @pytest.fixture

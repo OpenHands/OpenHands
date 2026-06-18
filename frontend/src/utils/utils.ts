@@ -56,18 +56,24 @@ export const setStyleHeightPx = (el: HTMLElement, height: number): void => {
 };
 
 /**
+ * Detect a phone/tablet user agent (Android, iPhone, iPad, …).
+ * Unlike isMobileDevice, this ignores touch capability, so a desktop OS with
+ * a touchscreen (e.g. a Windows 2-in-1) is NOT matched. Use this when the
+ * decision depends on having a physical keyboard rather than on touch input.
+ */
+export const isMobileUserAgent = (): boolean =>
+  /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent,
+  );
+
+/**
  * Detect if the user is on a mobile device.
  * Touch support alone is not sufficient — touchscreen laptops have touch
  * but use a mouse/trackpad as primary input. We check that the primary
  * pointing device is coarse (finger) to avoid false positives.
  */
 export const isMobileDevice = (): boolean => {
-  if (
-    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-      navigator.userAgent,
-    )
-  )
-    return true;
+  if (isMobileUserAgent()) return true;
 
   const hasTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
   if (!hasTouch) return false;

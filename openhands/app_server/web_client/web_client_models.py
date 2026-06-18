@@ -26,9 +26,17 @@ class WebClientFeatureFlags(BaseModel):
     # workspace users see. UI-level only — the orgs API still returns
     # personal orgs, and disabling the flag restores them.
     hide_personal_workspaces: bool = False
+    # When false, the web client hides the BYOK editing UI (custom model
+    # string, base URL, and API key inputs) in LLM settings, leaving only the
+    # managed model dropdown. Used by OHE installs where admins curate the
+    # model list on the bundled LiteLLM proxy. Defaults to True so SaaS and
+    # existing installs are unaffected. UI-level only — previously saved BYOK
+    # settings keep working at runtime.
+    allow_user_llm_configuration: bool = True
     enable_acp: bool = False
     deployment_mode: DeploymentMode | None = None
     enable_onboarding: bool = False
+    enable_automations: bool = True
 
     # This can be removed / replaced when a DeploymentMode (or similar) env var is created.
     @model_validator(mode='after')

@@ -17,6 +17,11 @@ export interface ModelsResponse {
   verified_providers: string[];
   /** Recommended default model id (e.g. ``openhands/claude-opus-4-5-20251101``). */
   default_model: string;
+  /** ``provider/model`` strings the backend serves but does not promote
+   *  (e.g. legacy alias routes on a managed LiteLLM proxy): not dropdown
+   *  options, but saved settings referencing them still count as available.
+   *  Optional so older backends (no field) behave as before. */
+  hidden_models?: string[];
 }
 
 export interface WebClientFeatureFlags {
@@ -31,9 +36,15 @@ export interface WebClientFeatureFlags {
   /** Hide personal workspaces from the org list/selector for users who
    *  belong to at least one team org (OHE "org-only" installs). */
   hide_personal_workspaces?: boolean;
+  /** When false, hide the BYOK editing UI (custom model, base URL, API key)
+   *  in LLM settings — users only pick from the managed model dropdown.
+   *  Defaults to true (absent ⇒ allowed) so SaaS/existing installs are
+   *  unaffected. Saved BYOK settings keep working at runtime either way. */
+  allow_user_llm_configuration?: boolean;
   enable_acp?: boolean;
   deployment_mode?: DeploymentMode;
   enable_onboarding: boolean;
+  enable_automations?: boolean;
 }
 
 export interface ACPModelOption {

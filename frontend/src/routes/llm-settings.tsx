@@ -1,4 +1,5 @@
 import React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { FaChevronLeft } from "react-icons/fa6";
@@ -45,7 +46,9 @@ import { LlmProfilesManager } from "#/components/features/settings/llm-profiles-
 import { OrgLlmProfilesManager } from "#/components/features/settings/org-llm-profiles-manager";
 import { ProfileNameInput } from "#/components/features/settings/profile-name-input";
 import { Typography } from "#/ui/typography";
+import { providerModelsQueryOptions } from "#/hooks/query/use-provider-models";
 import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
+import { useAppMode } from "#/hooks/use-app-mode";
 import { useMe } from "#/hooks/query/use-me";
 import { usePermission } from "#/hooks/organizations/use-permissions";
 
@@ -111,6 +114,7 @@ export function LlmSettingsScreen({
 }) {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
 
   const { data: settings } = useSettings(scope);
   const { data: schema } = useAgentSettingsSchema(
@@ -185,6 +189,14 @@ export function LlmSettingsScreen({
   );
 
   const isSaasMode = config?.app_mode === "saas";
+  const { isEnterpriseCloud } = useAppMode();
+
+  // OHE installs can disable BYOK via OH_ALLOW_USER_LLM_CONFIGURATION; absent
+  // (SaaS / existing installs) means allowed. This hides the *editing* UI for
+  // custom model / base URL / API key only — saved BYOK settings keep working
+  // at runtime, and the managed model dropdown stays fully functional.
+  const allowUserLlmConfiguration =
+    config?.feature_flags?.allow_user_llm_configuration !== false;
 
   React.useEffect(() => {
     // An open profile form owns the provider selection (blank for create,
@@ -222,6 +234,12 @@ export function LlmSettingsScreen({
       currentSettings: Settings,
       filteredSchema: SettingsSchema,
     ): SettingsView => {
+      // Without BYOK there is nothing for the advanced/all tiers to reveal in
+      // the custom header, so always land on the managed model dropdown.
+      if (!allowUserLlmConfiguration) {
+        return "basic";
+      }
+
       // A hint set by the Profiles mirror-strip beats every other rule —
       // the user explicitly asked for this tier when leaving profiles.
       if (initialViewHint) {
@@ -272,7 +290,14 @@ export function LlmSettingsScreen({
 
       return hasCustomBaseUrl ? "all" : "basic";
     },
-    [editingProfile, initialViewHint, isSaasMode, profileFormMode, scope],
+    [
+      allowUserLlmConfiguration,
+      editingProfile,
+      initialViewHint,
+      isSaasMode,
+      profileFormMode,
+      scope,
+    ],
   );
 
   const buildHeader = React.useCallback(
@@ -292,7 +317,12 @@ export function LlmSettingsScreen({
           : derivedProvider;
       const shouldUseOpenHandsKey =
         isSaasMode && activeProvider === "openhands";
-      const showOpenHandsApiKeyHelp = modelValue.startsWith("openhands/");
+      // The OpenHands key help links to OpenHands Cloud keys/pricing — only
+      // meaningful on enterprise cloud, not self-hosted managed installs.
+      const showOpenHandsApiKeyHelp =
+        isEnterpriseCloud &&
+        modelValue.startsWith("openhands/") &&
+        allowUserLlmConfiguration;
       // While editing, the set-but-unfetchable key indicator must reflect
       // the clicked profile, not whichever profile is currently active.
       const apiKeySet =
@@ -301,6 +331,12 @@ export function LlmSettingsScreen({
           : settings?.llm_api_key_set;
 
       const renderApiKeyInput = (testId: string, helpTestId: string) => {
+        // Managed installs: the admin owns provider keys on the bundled
+        // proxy; users never enter one.
+        if (!allowUserLlmConfiguration) {
+          return null;
+        }
+
         if (shouldUseOpenHandsKey) {
           return null;
         }
@@ -361,7 +397,7 @@ export function LlmSettingsScreen({
             />
           ) : null}
 
-          {view === "basic" ? (
+          {view === "basic" || !allowUserLlmConfiguration ? (
             <div
               className="flex flex-col gap-6"
               data-testid="llm-settings-form-basic"
@@ -434,6 +470,7 @@ export function LlmSettingsScreen({
       );
     },
     [
+      allowUserLlmConfiguration,
       editingProfile,
       infoMessageKey,
       isSaasMode,
@@ -608,22 +645,52 @@ export function LlmSettingsScreen({
     scope,
   ]);
 
-  const openForm = (
+  // Legacy profiles can store a hidden catalog alias (e.g. a pre-rename
+  // proxy route). When the alias maps to a visible model, hydrate the edit
+  // form with that canonical id so the dropdown shows a real selection.
+  const resolveCanonicalModel = async (model: string): Promise<string> => {
+    const { provider, model: modelName } = extractModelAndProvider(model);
+    if (!provider) return model;
+    try {
+      const models = await queryClient.fetchQuery(
+        providerModelsQueryOptions(provider),
+      );
+      const match = models.find((m) => m.name === modelName);
+      if (match?.hidden && match.canonical) {
+        return `${provider}/${match.canonical}`;
+      }
+    } catch {
+      // Catalog unavailable — open with the stored model, exactly as today.
+    }
+    return model;
+  };
+
+  const openForm = async (
     view: SettingsView | null,
     profile: LlmProfileSummary | null = null,
   ) => {
     // The profiles list passes the profile only when editing; Add Profile
     // opens a blank create form.
-    const isEdit = profile !== null;
+    let editProfile = profile;
+    if (editProfile?.model) {
+      // Resolved *before* the form opens: SdkSectionPage re-hydrates (and
+      // resets dirty state) whenever the initial-value overrides change, so
+      // a post-mount translation could clobber in-progress user edits.
+      const canonicalModel = await resolveCanonicalModel(editProfile.model);
+      if (canonicalModel !== editProfile.model) {
+        editProfile = { ...editProfile, model: canonicalModel };
+      }
+    }
+    const isEdit = editProfile !== null;
     setProfileFormMode(isEdit ? "edit" : "create");
-    setEditingProfile(profile);
-    setProfileName(profile?.name ?? "");
-    setInitialProfileName(profile?.name ?? "");
+    setEditingProfile(editProfile);
+    setProfileName(editProfile?.name ?? "");
+    setInitialProfileName(editProfile?.name ?? "");
     setInitialViewHint(view);
     // Blank for create; the edited profile's provider for edit.
     setSelectedProvider(
-      profile?.model
-        ? extractModelAndProvider(profile.model).provider || null
+      editProfile?.model
+        ? extractModelAndProvider(editProfile.model).provider || null
         : null,
     );
     setShowProfiles(false);
@@ -741,7 +808,10 @@ export function LlmSettingsScreen({
             values["llm.model"].trim().length > 0
           )
         }
-        forceShowAdvancedView
+        // Advanced (custom model + base URL) only exists under BYOK; gate the
+        // toggle on it so Basic/Advanced aren't identical when BYOK is off.
+        forceShowAdvancedView={allowUserLlmConfiguration}
+        allowAdvancedView={allowUserLlmConfiguration}
         allowAllView={!isSaasMode}
         testId="llm-settings-screen"
       />

@@ -6,12 +6,12 @@ import { Provider } from "#/types/settings";
 export type AgentKind = "openhands" | "acp";
 
 /**
- * Conversation tags. The backend stamps ``acp_server`` (the ACP provider
+ * Conversation tags. The backend stamps ``acpserver`` (the ACP provider
  * discriminator key) at conversation-create time; other keys carry automation
  * context, skills used, etc., and are open-ended.
  */
 export interface ConversationTags {
-  acp_server?: string;
+  acpserver?: string;
   [key: string]: string | undefined;
 }
 

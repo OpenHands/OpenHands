@@ -1,5 +1,6 @@
 """Unit tests for the methods in LiveStatusAppConversationService."""
 
+import builtins
 import io
 import json
 import os
@@ -1463,6 +1464,68 @@ class TestLiveStatusAppConversationService:
         assert self.mock_event_service.search_events.call_count == 2
         mock_conversation_info.model_dump_json.assert_called_once_with(indent=2)
 
+    async def test_export_conversation_writes_utf8_when_platform_default_cannot_encode(
+        self,
+    ):
+        """Test trajectory export writes JSON as UTF-8 regardless of platform default."""
+        # Arrange
+        conversation_id = uuid4()
+
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.title = 'Café 🔐'
+        mock_conversation_info.model_dump_json = Mock(
+            return_value='{"id": "test", "title": "Café 🔐"}'
+        )
+
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+
+        mock_event = Mock(spec=Event)
+        mock_event.id = uuid4()
+        mock_event.model_dump = Mock(
+            return_value={
+                'id': str(mock_event.id),
+                'type': 'observation',
+                'message': 'résumé 🔐',
+            }
+        )
+
+        mock_event_page = Mock()
+        mock_event_page.items = [mock_event]
+        mock_event_page.next_page_id = None
+        self.mock_event_service.search_events = AsyncMock(return_value=mock_event_page)
+
+        real_open = builtins.open
+
+        def cp1252_default_open(file, mode='r', *args, **kwargs):
+            if 'w' in mode and 'encoding' not in kwargs:
+                kwargs['encoding'] = 'cp1252'
+            return real_open(file, mode, *args, **kwargs)
+
+        # Act
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.open',
+            cp1252_default_open,
+            create=True,
+        ):
+            result = await self.service.export_conversation(conversation_id)
+
+        # Assert
+        with zipfile.ZipFile(io.BytesIO(result), 'r') as zipf:
+            with zipf.open('meta.json') as meta_file:
+                meta_content = meta_file.read().decode('utf-8')
+                assert '"title": "Café 🔐"' in meta_content
+
+            event_files = [
+                name for name in zipf.namelist() if name.startswith('event_')
+            ]
+            assert len(event_files) == 1
+            with zipf.open(event_files[0]) as event_file:
+                event_content = json.loads(event_file.read().decode('utf-8'))
+                assert event_content['message'] == 'résumé 🔐'
+
     @pytest.mark.asyncio
     async def test_export_conversation_conversation_not_found(self):
         """Test download when conversation is not found."""
@@ -1752,6 +1815,99 @@ class TestLiveStatusAppConversationService:
             f'but got "{saved_info.title}"'
         )
         assert saved_info.id == conversation_id
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.ConversationInfo'
+    )
+    @pytest.mark.asyncio
+    async def test_start_app_conversation_stores_acp_model_as_llm_model(
+        self, mock_conversation_info_class, mock_remote_workspace_class
+    ):
+        """ACP conversations persist acp_model as llm_model in AppConversationInfo."""
+        from openhands.sdk.settings import ACPAgentSettings
+
+        conversation_id = uuid4()
+
+        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
+        acp_user = _TestUserInfo(
+            id='test_user_123',
+            llm_model='gpt-4',
+            sandbox_grouping_strategy=SandboxGroupingStrategy.NO_GROUPING,
+        )
+        acp_user.agent_settings = ACPAgentSettings(
+            acp_server='codex', acp_model='gpt-5.5/high'
+        )
+        self.mock_user_context.get_user_info = AsyncMock(return_value=acp_user)
+
+        mock_sandbox_spec = Mock(spec=SandboxSpecInfo)
+        mock_sandbox_spec.working_dir = '/test/workspace'
+        self.mock_sandbox.sandbox_spec_id = str(uuid4())
+        self.mock_sandbox.id = str(uuid4())
+        self.mock_sandbox.session_api_key = 'test_session_key'
+        exposed_url = ExposedUrl(
+            name=AGENT_SERVER, url='http://agent-server:8000', port=60000
+        )
+        self.mock_sandbox.exposed_urls = [exposed_url]
+
+        self.mock_sandbox_service.get_sandbox = AsyncMock(
+            return_value=self.mock_sandbox
+        )
+        self.mock_sandbox_spec_service.get_sandbox_spec = AsyncMock(
+            return_value=mock_sandbox_spec
+        )
+        mock_remote_workspace_class.return_value = Mock()
+
+        async def mock_wait_for_sandbox(task):
+            task.sandbox_id = self.mock_sandbox.id
+            yield task
+
+        async def mock_run_setup_scripts(task, sandbox, workspace, agent_server_url):
+            yield task
+
+        self.service._wait_for_sandbox_start = mock_wait_for_sandbox
+        self.service.run_setup_scripts = mock_run_setup_scripts
+        self.service._seed_sandbox_profiles = AsyncMock()
+
+        # ACP start request: agent_kind='acp', acp_model='gpt-5.5/high'
+        mock_acp_agent = Mock()
+        mock_acp_agent.agent_kind = 'acp'
+        mock_acp_agent.acp_model = 'gpt-5.5/high'
+        mock_start_request = Mock(spec=StartConversationRequest)
+        mock_start_request.agent = mock_acp_agent
+        mock_start_request.model_dump.return_value = {}
+
+        self.service._build_start_conversation_request_for_user = AsyncMock(
+            return_value=mock_start_request
+        )
+
+        mock_conversation_info = Mock()
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info_class.model_validate.return_value = (
+            mock_conversation_info
+        )
+
+        mock_response = Mock()
+        mock_response.json.return_value = {'id': str(conversation_id)}
+        mock_response.raise_for_status = Mock()
+        self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
+        self.mock_event_callback_service.save_event_callback = AsyncMock()
+        self.mock_app_conversation_info_service.save_app_conversation_info = AsyncMock()
+
+        async for _ in self.service._start_app_conversation(
+            AppConversationStartRequest()
+        ):
+            pass
+
+        self.mock_app_conversation_info_service.save_app_conversation_info.assert_called_once()
+        saved_info = self.mock_app_conversation_info_service.save_app_conversation_info.call_args[
+            0
+        ][0]
+        assert saved_info.llm_model == 'gpt-5.5/high'
+        assert saved_info.agent_kind == 'acp'
+        assert saved_info.tags.get('acpserver') == 'codex'
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_custom_remote_servers(self):

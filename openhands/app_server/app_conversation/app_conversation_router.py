@@ -587,6 +587,32 @@ async def send_message_to_conversation(
     )
 
 
+async def _persist_conversation_model(
+    app_conversation_info_service: AppConversationInfoService,
+    conversation_id: UUID,
+    model: str,
+) -> None:
+    """Persist ``llm_model`` on the conversation record so the UI chip/header
+    reflects a model switch on the next fetch.
+
+    Best-effort: a save failure is logged but never undoes the switch the
+    agent-server already accepted.
+    """
+    try:
+        info = await app_conversation_info_service.get_app_conversation_info(
+            conversation_id,
+        )
+        if info is not None and info.llm_model != model:
+            info.llm_model = model
+            await app_conversation_info_service.save_app_conversation_info(info)
+    except Exception:
+        logger.exception(
+            'Failed to persist new llm_model on conversation %s after model '
+            'switch — chip may be stale until the next refresh.',
+            conversation_id,
+        )
+
+
 @router.post(
     '/{conversation_id}/switch_profile',
     responses={
@@ -732,23 +758,10 @@ async def switch_conversation_profile(
             detail='Failed to reach agent server.',
         )
 
-    # Persist the new model on the conversation record so the chat header
-    # (and other callers that read ``conversation.llm_model``) reflect the
-    # swap on the next fetch. Best-effort: a save failure is logged but
-    # does not undo the switch the agent-server already accepted.
-    try:
-        info = await app_conversation_info_service.get_app_conversation_info(
-            conversation_id,
-        )
-        if info is not None and info.llm_model != profile_llm.model:
-            info.llm_model = profile_llm.model
-            await app_conversation_info_service.save_app_conversation_info(info)
-    except Exception:
-        logger.exception(
-            'Failed to persist new llm_model on conversation %s after profile '
-            'switch — header may be stale until the next refresh.',
-            conversation_id,
-        )
+    # Persist the new model so the chat header reflects the swap on next fetch.
+    await _persist_conversation_model(
+        app_conversation_info_service, conversation_id, profile_llm.model
+    )
 
     return Success()
 
@@ -760,9 +773,7 @@ async def switch_conversation_profile(
             'description': 'Agent is not ACP, or provider does not support model switching'
         },
         404: {'description': 'Conversation or sandbox not found'},
-        409: {
-            'description': 'ACP session not initialised yet; send the first message first'
-        },
+        409: {'description': 'Sandbox is paused; resume it before switching models'},
         502: {'description': 'Agent server returned an error'},
         504: {'description': 'ACP server did not respond to the model switch in time'},
     },
@@ -824,9 +835,10 @@ async def switch_conversation_acp_model(
             'Agent server returned error during switch_acp_model: '
             f'{e.response.status_code} - {e.response.text}'
         )
-        # Surface agent-server's 400/409/504 directly — they carry semantics
-        # (not-ACP, no-session, timeout) that the client can act on.
-        if e.response.status_code in (400, 409, 504):
+        # Surface agent-server's 400/504 directly (not-ACP, timeout). The
+        # pre-session 409 band-aid is gone as of SDK #3764: a pre-run switch now
+        # persists and returns 200, so the agent-server no longer 409s here.
+        if e.response.status_code in (400, 504):
             raise HTTPException(
                 status_code=e.response.status_code,
                 detail=f'Agent server error: {e.response.status_code}',
@@ -843,19 +855,9 @@ async def switch_conversation_acp_model(
         )
 
     # Persist so the conversation's model chip reflects the switch on next load.
-    try:
-        info = await app_conversation_info_service.get_app_conversation_info(
-            conversation_id,
-        )
-        if info is not None and info.llm_model != request.model:
-            info.llm_model = request.model
-            await app_conversation_info_service.save_app_conversation_info(info)
-    except Exception:
-        logger.exception(
-            'Failed to persist new llm_model on conversation %s after ACP model '
-            'switch — chip may be stale until the next refresh.',
-            conversation_id,
-        )
+    await _persist_conversation_model(
+        app_conversation_info_service, conversation_id, request.model
+    )
 
     return Success()
 

@@ -229,6 +229,38 @@ async def test_get_idp_token(token_manager, create_keycloak_user_info):
 
 
 @pytest.mark.asyncio
+async def test_get_idp_token_by_user_id(token_manager):
+    """Resolving an IDP token by user_id needs no Keycloak userinfo round-trip.
+
+    The token is read from the auth_tokens store (and refreshed via the
+    provider's OAuth endpoint), so this path is independent of the user's
+    Keycloak offline session.
+    """
+    with (
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info',
+            AsyncMock(),
+        ) as mock_get_user_info,
+        patch('server.auth.token_manager.AuthTokenStore') as mock_token_store_cls,
+    ):
+        mock_token_store = AsyncMock()
+        mock_token_store.return_value.load_tokens.return_value = {
+            'access_token': token_manager.encrypt_text('github_access_token'),
+        }
+        mock_token_store_cls.get_instance = mock_token_store
+
+        token = await token_manager.get_idp_token_by_user_id(
+            'test_user_id', ProviderType.GITHUB
+        )
+
+        assert token == 'github_access_token'
+        mock_token_store_cls.get_instance.assert_called_once_with(
+            keycloak_user_id='test_user_id', idp=ProviderType.GITHUB
+        )
+        mock_get_user_info.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_refresh(token_manager):
     """Test refreshing a token."""
     mock_tokens = {

@@ -136,3 +136,46 @@ class TestDeploymentModeInConfig:
             assert 'FEATURE_FLAGS' in config
             assert 'DEPLOYMENT_MODE' in config['FEATURE_FLAGS']
             assert config['FEATURE_FLAGS']['DEPLOYMENT_MODE'] == 'self_hosted'
+
+
+class TestEnableAutomationsInConfig:
+    """Tests for enable_automations flag in SaaSServerConfig and get_config()."""
+
+    def test_enable_automations_true_in_feature_flags(self):
+        """Test that ENABLE_AUTOMATIONS: True is included in FEATURE_FLAGS."""
+        from server.config import SaaSServerConfig
+
+        with patch('server.config.ENABLE_AUTOMATIONS', True):
+            saas_config = SaaSServerConfig()
+            saas_config.enable_automations = True
+            config = saas_config.get_config()
+
+            assert 'FEATURE_FLAGS' in config
+            assert 'ENABLE_AUTOMATIONS' in config['FEATURE_FLAGS']
+            assert config['FEATURE_FLAGS']['ENABLE_AUTOMATIONS'] is True
+
+    def test_enable_automations_false_in_feature_flags(self):
+        """Test that ENABLE_AUTOMATIONS: False is included in FEATURE_FLAGS."""
+        from server.config import SaaSServerConfig
+
+        with patch('server.config.ENABLE_AUTOMATIONS', False):
+            saas_config = SaaSServerConfig()
+            saas_config.enable_automations = False
+            config = saas_config.get_config()
+
+            assert 'FEATURE_FLAGS' in config
+            assert 'ENABLE_AUTOMATIONS' in config['FEATURE_FLAGS']
+            assert config['FEATURE_FLAGS']['ENABLE_AUTOMATIONS'] is False
+
+    def test_enable_automations_defaults_to_true_for_saas(self):
+        """Test that enable_automations defaults to True in SaaSServerConfig (SaaS default)."""
+        import importlib
+
+        import server.auth.constants as constants_module
+
+        with patch.dict('os.environ', {}, clear=True):
+            import os
+
+            os.environ.pop('ENABLE_AUTOMATIONS', None)
+            importlib.reload(constants_module)
+            assert constants_module.ENABLE_AUTOMATIONS is True

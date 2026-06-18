@@ -116,6 +116,7 @@ export interface V1AppConversation {
   pr_number: number[];
   llm_model: string | null;
   agent_kind?: AgentKind;
+  acp_server?: string | null;
   tags?: ConversationTags;
   metrics: V1MetricsSnapshot | null;
   created_at: string;

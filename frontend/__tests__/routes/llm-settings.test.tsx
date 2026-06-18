@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
+import { http, HttpResponse } from "msw";
 
 import OrgProfilesService from "#/api/organization-service/org-profiles-service.api";
 import { organizationService } from "#/api/organization-service/organization-service.api";
@@ -14,6 +15,7 @@ import {
   MOCK_DEFAULT_USER_SETTINGS,
   resetTestHandlersMockSettings,
 } from "#/mocks/handlers";
+import { server } from "#/mocks/node";
 import LlmSettingsScreen, { clientLoader } from "#/routes/llm-settings";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 import { Organization, OrganizationMember } from "#/types/org";
@@ -272,6 +274,7 @@ async function renderLlmSettingsScreen({
   scope = "personal",
   view = "form",
   profile,
+  featureFlags,
 }: {
   appMode?: "oss" | "saas";
   organizationId?: string;
@@ -289,6 +292,9 @@ async function renderLlmSettingsScreen({
   // Override fields on the seeded edit profile when a test needs it to
   // *differ* from the active settings.
   profile?: Partial<LlmProfileSummary>;
+  // Web-client feature flags merged into the mocked /config payload, e.g.
+  // ``{ allow_user_llm_configuration: false }`` for managed OHE installs.
+  featureFlags?: Record<string, unknown>;
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -298,7 +304,10 @@ async function renderLlmSettingsScreen({
 
   useSelectedOrganizationStore.setState({ organizationId });
   mockUseConfig.mockReturnValue({
-    data: { app_mode: appMode },
+    data: {
+      app_mode: appMode,
+      ...(featureFlags ? { feature_flags: featureFlags } : {}),
+    },
     isLoading: false,
   });
 
@@ -826,14 +835,31 @@ describe("LlmSettingsScreen", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("hides the API key input for OpenHands provider in SaaS mode", async () => {
+  it("hides the API key input for OpenHands provider on enterprise cloud", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
 
-    await renderLlmSettingsScreen({ appMode: "saas" });
+    await renderLlmSettingsScreen({
+      appMode: "saas",
+      featureFlags: { deployment_mode: "cloud" },
+    });
 
     await screen.findByTestId("llm-settings-screen");
     expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
     expect(screen.getByTestId("openhands-api-key-help")).toBeInTheDocument();
+  });
+
+  it("hides the OpenHands API key help on self-hosted OHE", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+
+    await renderLlmSettingsScreen({
+      appMode: "saas",
+      featureFlags: { deployment_mode: "self_hosted" },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(
+      screen.queryByTestId("openhands-api-key-help"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the API key input for non-OpenHands providers in SaaS mode", async () => {
@@ -2755,9 +2781,7 @@ describe("LlmSettingsScreen", () => {
       expect(screen.getByTestId("llm-model-input")).toHaveValue("");
       // No provider selected yet, so the API key input isn't rendered (it
       // appears once a key-taking provider is chosen).
-      expect(
-        screen.queryByTestId("llm-api-key-input"),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
 
       await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
 
@@ -2790,9 +2814,7 @@ describe("LlmSettingsScreen", () => {
       // rendering it only to remove it again when a managed provider is
       // picked was jarring.
       await screen.findByTestId("llm-settings-form-basic");
-      expect(
-        screen.queryByTestId("llm-api-key-input"),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
 
       // Picking a key-taking provider reveals the input.
       await selectProvider("OpenAI");
@@ -2801,9 +2823,7 @@ describe("LlmSettingsScreen", () => {
       // The managed OpenHands provider keeps it hidden in SaaS mode (keys
       // are auto-provisioned).
       await selectProvider("OpenHands");
-      expect(
-        screen.queryByTestId("llm-api-key-input"),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
     });
 
     it("keeps Save disabled in the create form until a model is chosen", async () => {
@@ -2969,6 +2989,119 @@ describe("LlmSettingsScreen", () => {
       });
     });
 
+    it("hydrates the edit form with the canonical model when the profile stores a hidden alias", async () => {
+      // Legacy profile model "openhands/custom-llm" is a hidden alias that
+      // the catalog maps to the visible claude-sonnet model.
+      server.use(
+        http.get("/api/v1/config/models/search", () =>
+          HttpResponse.json({
+            items: [
+              {
+                provider: "openhands",
+                name: "claude-sonnet-4-5-20250929",
+                verified: true,
+              },
+              {
+                provider: "openhands",
+                name: "custom-llm",
+                verified: false,
+                hidden: true,
+                canonical: "claude-sonnet-4-5-20250929",
+              },
+            ],
+            next_page_id: null,
+          }),
+        ),
+      );
+      const saveSettingsSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+
+      await renderLlmSettingsScreen({
+        appMode: "oss",
+        profile: {
+          name: "legacy-profile",
+          model: "openhands/custom-llm",
+          base_url: null,
+        },
+      });
+
+      await screen.findByTestId("llm-settings-form-basic");
+      await waitFor(() => {
+        expect(screen.getByTestId("llm-provider-input")).toHaveValue(
+          "OpenHands",
+        );
+        expect(screen.getByTestId("llm-model-input")).toHaveValue(
+          "claude-sonnet-4-5-20250929",
+        );
+      });
+      expect(
+        screen.queryByTestId("model-unavailable-warning"),
+      ).not.toBeInTheDocument();
+
+      // A pristine save persists the canonical id — deliberately migrating
+      // the profile off the legacy alias (both names route on the proxy).
+      await userEvent.click(screen.getByTestId("save-button"));
+      await waitFor(() => {
+        expect(saveSettingsSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            agent_settings_diff: expect.objectContaining({
+              llm: expect.objectContaining({
+                model: "openhands/claude-sonnet-4-5-20250929",
+              }),
+            }),
+          }),
+        );
+      });
+    });
+
+    it("keeps the stored alias when a hidden model has no canonical mapping", async () => {
+      server.use(
+        http.get("/api/v1/config/models/search", () =>
+          HttpResponse.json({
+            items: [
+              {
+                provider: "openhands",
+                name: "claude-sonnet-4-5-20250929",
+                verified: true,
+              },
+              // Hidden but with no canonical mapping — nothing to translate.
+              {
+                provider: "openhands",
+                name: "orphan-alias",
+                verified: false,
+                hidden: true,
+              },
+            ],
+            next_page_id: null,
+          }),
+        ),
+      );
+
+      await renderLlmSettingsScreen({
+        appMode: "oss",
+        profile: {
+          name: "orphan-profile",
+          model: "openhands/orphan-alias",
+          base_url: null,
+        },
+      });
+
+      await screen.findByTestId("llm-settings-form-basic");
+      await waitFor(() => {
+        expect(screen.getByTestId("llm-provider-input")).toHaveValue(
+          "OpenHands",
+        );
+      });
+      // Unchanged today-behavior: hidden aliases are never dropdown options,
+      // so the selection renders empty — and no unavailable badge, since the
+      // proxy still serves the alias.
+      expect(screen.getByTestId("llm-model-input")).toHaveValue("");
+      expect(
+        screen.queryByTestId("model-unavailable-warning"),
+      ).not.toBeInTheDocument();
+    });
+
     it("opens edit on advanced with the profile's custom base URL while the active settings are plain", async () => {
       vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
         buildSettings({
@@ -3096,6 +3229,139 @@ describe("LlmSettingsScreen", () => {
       expect(screen.getByTestId("llm-profile-name-input")).toHaveValue(
         "openai_gpt-4o",
       );
+    });
+  });
+
+  describe("managed LLM configuration gating (allow_user_llm_configuration=false)", () => {
+    const MANAGED_FLAGS = { allow_user_llm_configuration: false };
+
+    it("hides BYOK inputs and lands on the model dropdown even when a custom base URL is saved", async () => {
+      // A saved custom base URL normally opens the advanced form with the
+      // custom-model + base-URL inputs. With BYOK disallowed the user lands
+      // on the managed dropdown instead — the saved settings themselves are
+      // untouched and keep working at runtime.
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings({
+          llm_model: "openai/gpt-4o",
+          llm_base_url: "https://custom.example/v1",
+          agent_settings: {
+            llm: {
+              model: "openai/gpt-4o",
+              base_url: "https://custom.example/v1",
+            },
+          },
+        }),
+      );
+
+      await renderLlmSettingsScreen({
+        appMode: "oss",
+        featureFlags: MANAGED_FLAGS,
+      });
+
+      await screen.findByTestId("llm-settings-form-basic");
+      expect(screen.getByTestId("llm-provider-input")).toBeInTheDocument();
+      expect(screen.getByTestId("llm-model-input")).toBeInTheDocument();
+      expect(screen.getByTestId("save-button")).toBeInTheDocument();
+
+      expect(
+        screen.queryByTestId("llm-settings-form-advanced"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("llm-custom-model-input"),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
+      // No BYOK and no schema-driven advanced fields → no Advanced toggle.
+      expect(
+        screen.queryByTestId("sdk-section-advanced-toggle"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("suppresses the Advanced toggle when BYOK is off, even with schema-driven advanced fields", async () => {
+      // Without BYOK the LLM Advanced view (custom model + base URL) has
+      // nothing to show, so Basic and Advanced would be identical. The
+      // Advanced toggle is hidden entirely — even when the schema carries
+      // advanced fields that would otherwise surface it.
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettingsWithAdvancedToggle({
+          llm_model: "openai/gpt-4o",
+          agent_settings: { llm: { model: "openai/gpt-4o" } },
+        }),
+      );
+
+      await renderLlmSettingsScreen({
+        appMode: "oss",
+        featureFlags: MANAGED_FLAGS,
+      });
+
+      await screen.findByTestId("llm-settings-form-basic");
+
+      expect(
+        screen.queryByTestId("sdk-section-advanced-toggle"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("llm-settings-form-advanced"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("llm-custom-model-input"),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
+    });
+
+    it("hides BYOK inputs on the org-defaults form in SaaS mode", async () => {
+      vi.spyOn(
+        organizationService,
+        "getOrganizationSettings",
+      ).mockResolvedValue(
+        buildSettings({
+          agent_settings: { llm: { model: "openai/gpt-4o" } },
+        }),
+      );
+
+      await renderLlmSettingsScreen({
+        appMode: "saas",
+        scope: "org",
+        featureFlags: MANAGED_FLAGS,
+      });
+
+      await screen.findByTestId("llm-settings-form-basic");
+      expect(screen.getByTestId("llm-provider-input")).toBeInTheDocument();
+      expect(screen.getByTestId("llm-model-input")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("sdk-section-advanced-toggle"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("llm-custom-model-input"),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
+    });
+
+    it("keeps BYOK inputs when the flag is explicitly true", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings(),
+      );
+
+      await renderLlmSettingsScreen({
+        appMode: "oss",
+        featureFlags: { allow_user_llm_configuration: true },
+      });
+
+      await screen.findByTestId("llm-settings-form-basic");
+      expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
+      expect(
+        screen.getByTestId("sdk-section-advanced-toggle"),
+      ).toBeInTheDocument();
+
+      await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
+
+      expect(
+        screen.getByTestId("llm-settings-form-advanced"),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("llm-custom-model-input")).toBeInTheDocument();
+      expect(screen.getByTestId("base-url-input")).toBeInTheDocument();
     });
   });
 });

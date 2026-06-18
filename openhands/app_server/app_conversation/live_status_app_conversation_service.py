@@ -1,4 +1,5 @@
 import asyncio
+import importlib.metadata
 import json
 import logging
 import os
@@ -6,13 +7,14 @@ import tempfile
 import zipfile
 from collections import defaultdict
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, AsyncGenerator, Sequence, cast
 from uuid import UUID, uuid4
 
 import httpx
 from fastapi import Request
+from packaging.version import InvalidVersion, Version
 from pydantic import Field, SecretStr, TypeAdapter
 
 from openhands.agent_server.models import (
@@ -25,6 +27,7 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
     AppConversationInfoService,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
+    ACP_SERVER_TAG_KEY,
     AgentType,
     AppConversation,
     AppConversationInfo,
@@ -48,6 +51,9 @@ from openhands.app_server.app_conversation.app_conversation_service_base import 
 )
 from openhands.app_server.app_conversation.app_conversation_start_task_service import (
     AppConversationStartTaskService,
+)
+from openhands.app_server.app_conversation.conversation_secret_enricher import (
+    ConversationSecretEnricher,
 )
 from openhands.app_server.app_conversation.hook_loader import (
     load_hooks_from_agent_server,
@@ -80,7 +86,11 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import SandboxService
-from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
+from openhands.app_server.sandbox.sandbox_spec_service import (
+    SandboxSpecService,
+    get_agent_server_image,
+    is_custom_agent_server_image,
+)
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.settings.llm_profiles import resolve_profile_llm
@@ -90,6 +100,7 @@ from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
 from openhands.app_server.utils.git import ensure_valid_git_branch_name
+from openhands.app_server.utils.import_utils import get_impl
 from openhands.app_server.utils.llm_metadata import (
     get_llm_metadata,
     should_set_litellm_extra_body,
@@ -121,6 +132,14 @@ from openhands.tools.preset.planning import (
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
+
+
+def _expected_sdk_version() -> str | None:
+    """App's pinned openhands-sdk version, or None if its metadata is unresolvable."""
+    try:
+        return importlib.metadata.version('openhands-sdk')
+    except importlib.metadata.PackageNotFoundError:
+        return None
 
 
 # Planning agent instruction to prevent "Ready to proceed?" behavior
@@ -158,6 +177,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     web_url: str | None
     openhands_provider_base_url: str | None
     access_token_hard_timeout: timedelta | None
+    conversation_secret_enricher: ConversationSecretEnricher = field(
+        default_factory=ConversationSecretEnricher
+    )
     app_mode: str | None = None
 
     async def _get_sandbox_grouping_strategy(self) -> SandboxGroupingStrategy:
@@ -284,6 +306,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             assert sandbox is not None
             agent_server_url = self._get_agent_server_url(sandbox)
 
+            # Custom sandbox images can ship an incompatible openhands-sdk; fail
+            # fast with a clear error instead of an opaque 500 on create.
+            await self._verify_agent_server_version(
+                agent_server_url, sandbox.session_api_key
+            )
+
             # Mirror the user's LLM profiles into the sandbox so the agent's
             # built-in switch_llm tool can resolve them (in SaaS profiles live
             # on the app-server, not the sandbox filesystem). Before conversation
@@ -327,6 +355,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     working_dir,
                     request.agent_type,
                     request.llm_model,
+                    trigger=request.trigger,
                     remote_workspace=remote_workspace,
                     selected_repository=request.selected_repository,
                     plugins=request.plugins,
@@ -368,7 +397,22 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 timeout=self.sandbox_startup_timeout,
             )
 
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                # A custom image that 500s on create is usually an openhands-sdk
+                # mismatch /server_info couldn't reveal; add an actionable hint.
+                if is_custom_agent_server_image():
+                    expected = _expected_sdk_version()
+                    raise SandboxError(
+                        f'Conversation create failed (HTTP '
+                        f'{exc.response.status_code}) on custom sandbox image '
+                        f'{get_agent_server_image()}. Verify its openhands-sdk '
+                        f'matches this release'
+                        + (f' ({expected})' if expected else '')
+                        + '; rebuild/re-pin the image if not.'
+                    ) from exc
+                raise
             info = ConversationInfo.model_validate(response.json())
             # Determine kind / llm_model from the request we built (its
             # ``agent`` is the source of truth here): the response echoes
@@ -376,14 +420,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             request_agent = start_conversation_request.agent
             tags: dict[str, str] = {}
             if request_agent.agent_kind == 'acp':
-                llm_model = None
+                llm_model = request_agent.acp_model
                 agent_kind = 'acp'
                 # Persist the active ACP provider key so the conversation UI
                 # can resolve a brand label ("Claude Code", "Codex", …) via
                 # the SDK registry without keeping a per-conversation column.
+                # Surfaced to the UI as the projected ``acp_server`` field.
                 acp_user = await self.user_context.get_user_info()
                 if isinstance(acp_user.agent_settings, ACPAgentSettings):
-                    tags['acp_server'] = acp_user.agent_settings.acp_server
+                    tags[ACP_SERVER_TAG_KEY] = acp_user.agent_settings.acp_server
             else:
                 llm_model = request_agent.llm.model
                 agent_kind = 'openhands'
@@ -783,6 +828,57 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             httpx_client=self.httpx_client,
         )
 
+    async def _verify_agent_server_version(
+        self, agent_server_url: str, session_api_key: str | None
+    ) -> None:
+        """Fail fast with a clear error when an admin-pinned custom sandbox image
+        runs a different openhands-sdk minor than this app, instead of the opaque
+        500 the agent-server returns on create. Best-effort: only custom images are
+        checked, and we fail open on anything we can't read."""
+        if os.getenv('OH_SKIP_AGENT_SERVER_VERSION_CHECK', '').strip().lower() in (
+            '1',
+            'true',
+            'yes',
+        ):
+            return
+        # Proxy-default images move with the release; only custom-pinned can drift.
+        if not is_custom_agent_server_image():
+            return
+        expected = _expected_sdk_version()
+        if not expected:
+            return
+        try:
+            headers = {'X-Session-API-Key': session_api_key} if session_api_key else {}
+            resp = await self.httpx_client.get(
+                f'{agent_server_url.rstrip("/")}/server_info',
+                headers=headers,
+                timeout=30.0,
+            )
+            resp.raise_for_status()
+            reported = str(resp.json().get('sdk_version', '')).strip()
+        except Exception:
+            # 404 (image predates /server_info) or transient errors: can't verify,
+            # so don't block — the create POST still surfaces a custom-image hint.
+            _logger.warning(
+                'Could not read /server_info to verify agent-server SDK version',
+                exc_info=True,
+            )
+            return
+        # Endpoint present but metadata missing -> nothing to compare against.
+        if reported in ('', 'unknown'):
+            return
+        try:
+            if Version(reported).release[:2] == Version(expected).release[:2]:
+                return
+        except InvalidVersion:
+            return
+        raise SandboxError(
+            f'Sandbox image {get_agent_server_image()} runs openhands-sdk '
+            f'{reported}, but this release requires {expected}. Rebuild/re-pin the '
+            'custom sandbox image to a matching openhands-sdk, or set '
+            'OH_SKIP_AGENT_SERVER_VERSION_CHECK=1 to bypass.'
+        )
+
     async def _seed_sandbox_profiles(
         self, agent_server_url: str, session_api_key: str | None
     ) -> None:
@@ -967,42 +1063,78 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             PROVIDER_TOKEN_TYPE | None,
             await self.user_context.get_provider_tokens(),
         )
-        if not provider_tokens:
-            return secrets
+        if provider_tokens:
+            # Create secrets for each provider token
+            for provider_type, provider_token in provider_tokens.items():
+                if not provider_token.token:
+                    continue
 
-        # Create secrets for each provider token
-        for provider_type, provider_token in provider_tokens.items():
-            if not provider_token.token:
-                continue
+                secret_name = f'{provider_type.name}_TOKEN'
+                description = f'{provider_type.name} authentication token'
 
-            secret_name = f'{provider_type.name}_TOKEN'
-            description = f'{provider_type.name} authentication token'
-
-            if self.web_url:
-                # Create an access token for web-based authentication
-                access_token = self.jwt_service.create_jws_token(
-                    payload={
-                        'user_id': user.id,
-                        'provider_type': provider_type.value,
-                    },
-                    expires_in=self.access_token_hard_timeout,
-                )
-                headers = {'X-Access-Token': access_token}
-
-                secrets[secret_name] = LookupSecret(
-                    url=self.web_url + '/api/v1/webhooks/secrets',
-                    headers=headers,
-                    description=description,
-                )
-            else:
-                # Use static token for environments without web URL access
-                static_token = await self.user_context.get_latest_token(provider_type)
-                if static_token:
-                    secrets[secret_name] = StaticSecret(
-                        value=SecretStr(static_token), description=description
+                if self.web_url:
+                    # Create an access token for web-based authentication
+                    access_token = self.jwt_service.create_jws_token(
+                        payload={
+                            'user_id': user.id,
+                            'provider_type': provider_type.value,
+                        },
+                        expires_in=self.access_token_hard_timeout,
                     )
+                    headers = {'X-Access-Token': access_token}
+
+                    secrets[secret_name] = LookupSecret(
+                        url=self.web_url + '/api/v1/webhooks/secrets',
+                        headers=headers,
+                        description=description,
+                    )
+                else:
+                    # Use static token for environments without web URL access
+                    static_token = await self.user_context.get_latest_token(
+                        provider_type
+                    )
+                    if static_token:
+                        secrets[secret_name] = StaticSecret(
+                            value=SecretStr(static_token), description=description
+                        )
 
         return secrets
+
+    async def _setup_conversation_secrets(
+        self,
+        user: UserInfo,
+        trigger: ConversationTrigger | None,
+        system_message_suffix: str | None,
+    ) -> tuple[dict, str | None]:
+        """Set up custom, git provider, and integration-scoped secrets.
+
+        Args:
+            user: User information containing authentication details
+            trigger: Trigger that started the conversation.
+            system_message_suffix: Current system message suffix.
+
+        Returns:
+            Tuple of secrets and updated system message suffix.
+        """
+        secrets = await self._setup_secrets_for_git_providers(user)
+
+        enrichment = await self.conversation_secret_enricher.enrich(
+            user_context=self.user_context,
+            user=user,
+            trigger=trigger,
+            system_message_suffix=system_message_suffix,
+            web_url=self.web_url,
+            jwt_service=self.jwt_service,
+            access_token_hard_timeout=self.access_token_hard_timeout,
+        )
+        for name, source in enrichment.secrets.items():
+            if name in secrets:
+                _logger.warning(
+                    'Integration-provided secret %r overrides existing secret', name
+                )
+            secrets[name] = source
+
+        return secrets, enrichment.system_message_suffix
 
     def _configure_llm(self, user: UserInfo, llm_model: str | None) -> LLM:
         """Configure LLM settings.
@@ -1319,6 +1451,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         working_dir: str,
         agent_type: AgentType = AgentType.DEFAULT,
         llm_model: str | None = None,
+        trigger: ConversationTrigger | None = None,
         remote_workspace: AsyncRemoteWorkspace | None = None,
         selected_repository: str | None = None,
         plugins: list[PluginSpec] | None = None,
@@ -1343,6 +1476,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             working_dir: Working directory path
             agent_type: Type of agent (DEFAULT or PLAN)
             llm_model: Optional specific LLM model to use
+            trigger: Optional conversation trigger.
             remote_workspace: Optional remote workspace instance
             selected_repository: Optional repository name
             plugins: Optional list of plugins to load
@@ -1359,6 +1493,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 sandbox=sandbox,
                 conversation_id=conversation_id,
                 initial_message=initial_message,
+                system_message_suffix=system_message_suffix,
+                trigger=trigger,
                 working_dir=working_dir,
                 selected_repository=selected_repository,
                 plugins=plugins,
@@ -1380,7 +1516,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # --- secrets --------------------------------------------------------
         # Start with secrets from git providers and database
-        secrets = await self._setup_secrets_for_git_providers(user)
+        secrets, system_message_suffix = await self._setup_conversation_secrets(
+            user,
+            trigger,
+            system_message_suffix,
+        )
 
         # Merge API-provided secrets (they take precedence over existing ones)
         if api_secrets:
@@ -1595,6 +1735,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         conversation_id: UUID,
         initial_message: SendMessageRequest | None,
         working_dir: str,
+        system_message_suffix: str | None = None,
+        trigger: ConversationTrigger | None = None,
         selected_repository: str | None = None,
         plugins: list[PluginSpec] | None = None,
         api_secrets: dict[str, SecretStr] | None = None,
@@ -1616,6 +1758,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             conversation_id: Unique conversation identifier
             initial_message: Optional initial message to send
             working_dir: Working directory path
+            system_message_suffix: Optional suffix for system message.
+            trigger: Optional conversation trigger.
             selected_repository: Optional repository name
             plugins: Optional list of plugins to load
             api_secrets: Optional secrets passed directly via the API.
@@ -1630,9 +1774,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # (e.g. X-Access-Token) are redacted by the SDK serializer because
         # "TOKEN" matches SECRET_KEY_PATTERNS, leaving headers: {} and
         # causing provider auth to silently fail at subprocess launch.
-        # Use the raw custom secrets directly, then fold in git provider tokens
-        # as StaticSecrets (bypassing the LookupSecret wrapping that
-        # _setup_secrets_for_git_providers does for non-ACP paths).
+        # Use raw custom secrets, static git provider tokens, and static
+        # integration-scoped secrets for ACP conversations.
         secrets: dict = await self.user_context.get_secrets()
         provider_tokens = cast(
             PROVIDER_TOKEN_TYPE | None,
@@ -1649,6 +1792,23 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                         value=SecretStr(static_token),
                         description=f'{provider_type.name} authentication token',
                     )
+
+        enrichment = await self.conversation_secret_enricher.enrich(
+            user_context=self.user_context,
+            user=user,
+            trigger=trigger,
+            system_message_suffix=system_message_suffix,
+            web_url=None,
+            jwt_service=self.jwt_service,
+            access_token_hard_timeout=self.access_token_hard_timeout,
+        )
+        for name, source in enrichment.secrets.items():
+            if name in secrets:
+                _logger.warning(
+                    'Integration-provided secret %r overrides existing secret', name
+                )
+            secrets[name] = source
+        system_message_suffix = enrichment.system_message_suffix
 
         if api_secrets:
             from openhands.app_server.constants import (
@@ -1674,14 +1834,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # across pause/resume — matching the regular-agent lifecycle (#1274).
         # Strip llm.api_key/base_url to prevent proxy settings from leaking
         # into the subprocess env (ACP CLIs handle their own LLM calls).
-        acp_settings_for_agent = acp_settings.model_copy(
-            update={
-                'acp_isolate_data_dir': True,
-                'llm': acp_settings.llm.model_copy(
-                    update={'api_key': None, 'base_url': None}
-                ),
-            }
-        )
+        settings_update: dict[str, Any] = {
+            'acp_isolate_data_dir': True,
+            'llm': acp_settings.llm.model_copy(
+                update={'api_key': None, 'base_url': None}
+            ),
+        }
+        if system_message_suffix:
+            settings_update['agent_context'] = AgentContext(
+                system_message_suffix=system_message_suffix
+            )
+        acp_settings_for_agent = acp_settings.model_copy(update=settings_update)
         acp_agent = acp_settings_for_agent.create_agent()
 
         sdk_plugins: list[PluginSource] | None = None
@@ -2110,7 +2273,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 event_filename = f'event_{i:06d}_{event.id}.json'
                 event_path = os.path.join(temp_dir, event_filename)
 
-                with open(event_path, 'w') as f:
+                with open(event_path, 'w', encoding='utf-8') as f:
                     # Use model_dump with mode='json' to handle UUID serialization
                     event_data = event.model_dump(mode='json')
                     json.dump(event_data, f, indent=2)
@@ -2118,7 +2281,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
             # Create meta.json with conversation info
             meta_path = os.path.join(temp_dir, 'meta.json')
-            with open(meta_path, 'w') as f:
+            with open(meta_path, 'w', encoding='utf-8') as f:
                 f.write(conversation_info.model_dump_json(indent=2))
 
             # Create zip file in memory
@@ -2209,12 +2372,18 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
 
             # Get app_mode for SaaS mode
             app_mode = None
+            conversation_secret_enricher = ConversationSecretEnricher()
             try:
                 from openhands.app_server.shared import server_config
 
                 app_mode = (
                     server_config.app_mode.value if server_config.app_mode else None
                 )
+                enricher_cls = get_impl(
+                    ConversationSecretEnricher,
+                    server_config.conversation_secret_enricher_class,
+                )
+                conversation_secret_enricher = enricher_cls()
             except (ImportError, AttributeError):
                 # If server_config is not available (e.g., in tests), continue without it
                 pass
@@ -2237,5 +2406,6 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 web_url=web_url,
                 openhands_provider_base_url=config.openhands_provider_base_url,
                 access_token_hard_timeout=access_token_hard_timeout,
+                conversation_secret_enricher=conversation_secret_enricher,
                 app_mode=app_mode,
             )
