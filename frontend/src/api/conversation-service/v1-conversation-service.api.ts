@@ -233,6 +233,18 @@ class V1ConversationService {
     question: string,
     sessionApiKey?: string | null,
   ): Promise<{ response: string }> {
+    // When the centralized WebSocket gateway is enabled, route ask_agent
+    // through the app-server proxy (just like pause does).
+    const useGateway = import.meta.env.VITE_ENABLE_WEBSOCKET_GATEWAY === "true";
+
+    if (useGateway) {
+      const { data } = await openHands.post<{ response: string }>(
+        `/api/conversations/${conversationId}/ask_agent`,
+        { question },
+      );
+      return data;
+    }
+
     const url = this.buildRuntimeUrl(
       conversationUrl,
       `/api/conversations/${conversationId}/ask_agent`,

@@ -51,8 +51,15 @@ async def _proxy_to_agent_server(
     agent_server_url: str,
     session_api_key: str | None,
     path: str,
+    timeout: float | None = None,
 ) -> Response:
-    """Forward an HTTP request to the agent-server inside the sandbox."""
+    """Forward an HTTP request to the agent-server inside the sandbox.
+
+    Args:
+        timeout: Optional timeout in seconds. If provided, a temporary client
+                 is created with this timeout to avoid httpx version
+                 incompatibility (send() dropped timeout kwarg in 0.28+).
+    """
     headers = {
         k: v for k, v in request.headers.items()
         if k.lower() not in ("host", "connection", "transfer-encoding")
@@ -63,14 +70,28 @@ async def _proxy_to_agent_server(
     url = f"{agent_server_url}{path}"
     conversation_logger.info('Proxying to agent-server: %s', url)
 
-    proxy_request = httpx_client.build_request(
-        method=request.method,
-        url=url,
-        headers=headers,
-        params=request.query_params,
-        content=request.stream(),
-    )
-    resp = await httpx_client.send(proxy_request, stream=False)
+    # Read body once so it can be reused regardless of which client sends it.
+    body = await request.body()
+
+    if timeout is not None:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            proxy_request = client.build_request(
+                method=request.method,
+                url=url,
+                headers=headers,
+                params=request.query_params,
+                content=body,
+            )
+            resp = await client.send(proxy_request, stream=False)
+    else:
+        proxy_request = httpx_client.build_request(
+            method=request.method,
+            url=url,
+            headers=headers,
+            params=request.query_params,
+            content=body,
+        )
+        resp = await httpx_client.send(proxy_request, stream=False)
 
     return Response(
         content=resp.content,
@@ -227,6 +248,47 @@ async def events_count(
         )
     except Exception as exc:
         conversation_logger.error('Events count proxy failed for %s: %s', conversation_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Failed to reach agent-server',
+        )
+
+
+
+
+@router.post('/{conversation_id}/ask_agent')
+async def ask_agent(
+    request: Request,
+    conversation_id: str,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> Response:
+    """Ask the agent a side question by proxying to the agent-server inside the sandbox.
+
+    This endpoint can take up to 10 minutes to respond as it involves an
+    LLM call on the agent-server side.
+    """
+    agent_server_url, session_api_key = await _resolve_agent_server_context(
+        conversation_id,
+        app_conversation_service,
+        sandbox_service,
+        sandbox_spec_service,
+    )
+    try:
+        return await _proxy_to_agent_server(
+            request,
+            httpx_client,
+            agent_server_url,
+            session_api_key,
+            f'/api/conversations/{conversation_id}/ask_agent',
+            timeout=600,
+        )
+    except Exception as exc:
+        conversation_logger.error('Ask agent proxy failed for %s: %s', conversation_id, exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail='Failed to reach agent-server',

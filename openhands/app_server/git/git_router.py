@@ -432,3 +432,72 @@ async def git_changes(
         status_code=resp.status_code,
         headers=dict(resp.headers),
     )
+
+
+@router.get('/diff')
+async def git_diff(
+    request: Request,
+    app_conv_svc: AppConversationService = app_conversation_service_dependency,
+    sandbox_svc: SandboxService = sandbox_service_dependency,
+    sandbox_spec_svc: SandboxSpecService = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> Response:
+    """Get git diff for a specific file by proxying to the agent-server inside the sandbox.
+
+    Expects query params:
+    - conversation_id: The conversation ID to resolve the sandbox.
+    - path: The file path to get diff for.
+    """
+    conversation_id = request.query_params.get('conversation_id')
+    if not conversation_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='conversation_id query param is required',
+        )
+
+    ctx = await _get_agent_server_context_fn()(
+        uuid.UUID(conversation_id),
+        app_conv_svc,
+        sandbox_svc,
+        sandbox_spec_svc,
+    )
+    if isinstance(ctx, JSONResponse):
+        raise HTTPException(
+            status_code=ctx.status_code,
+            detail=ctx.body.decode() if ctx.body else None,
+        )
+    if ctx is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Conversation {conversation_id} not running',
+        )
+
+    agent_server_url = ctx.agent_server_url
+    session_api_key = ctx.session_api_key
+
+    # Strip conversation_id from proxied query params
+    filtered_params = {
+        k: v for k, v in request.query_params.multi_items()
+        if k != 'conversation_id'
+    }
+
+    headers = {
+        k: v for k, v in request.headers.items()
+        if k.lower() not in ("host", "connection", "transfer-encoding")
+    }
+    if session_api_key:
+        headers["X-Session-API-Key"] = session_api_key
+
+    proxy_request = httpx_client.build_request(
+        method='GET',
+        url=f"{agent_server_url}/api/git/diff",
+        headers=headers,
+        params=filtered_params,
+    )
+    resp = await httpx_client.send(proxy_request, stream=False)
+
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        headers=dict(resp.headers),
+    )

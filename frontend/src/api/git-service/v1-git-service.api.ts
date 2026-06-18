@@ -99,13 +99,29 @@ class V1GitService {
    * @param conversationUrl The conversation URL (e.g., "http://localhost:54928/api/conversations/...")
    * @param sessionApiKey Session API key for authentication (required for V1)
    * @param path The file path to get diff for
+   * @param conversationId The conversation ID (required for gateway routing)
    * @returns Git change diff
    */
   static async getGitChangeDiff(
     conversationUrl: string | null | undefined,
     sessionApiKey: string | null | undefined,
     path: string,
+    conversationId?: string,
   ): Promise<GitChangeDiff> {
+    // When the centralized WebSocket gateway is enabled, route git diff
+    // through the app-server proxy (just like getGitChanges does).
+    const useGateway =
+      import.meta.env.VITE_ENABLE_WEBSOCKET_GATEWAY === "true" &&
+      !!conversationId;
+
+    if (useGateway) {
+      const { data } = await openHands.get<GitChangeDiff>(
+        `/api/v1/git/diff`,
+        { params: { conversation_id: conversationId, path } },
+      );
+      return data;
+    }
+
     const url = this.buildRuntimeUrl(conversationUrl, `/api/git/diff`);
     const headers = buildSessionHeaders(sessionApiKey);
 

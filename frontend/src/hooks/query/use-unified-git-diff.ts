@@ -58,6 +58,7 @@ export const useUnifiedGitDiff = (config: UseUnifiedGitDiffConfig) => {
         conversationUrl,
         sessionApiKey,
         absoluteFilePath,
+        conversationId,
       );
     },
     enabled: config.enabled,
