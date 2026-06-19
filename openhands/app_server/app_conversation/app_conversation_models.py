@@ -185,6 +185,11 @@ class AppConversation(AppConversationInfo):  # type: ignore
     session_api_key: str | None = Field(
         default=None, description='The Session Api Key for REST operations.'
     )
+    websocket_url: str | None = Field(
+        default=None,
+        description='Public WebSocket URL for client connections (e.g. via app_server gateway). '
+        'When present, clients should prefer this over deriving WebSocket URL from conversation_url.',
+    )
 
     # JSON fields for complex data types
     pr_number: list[int] = Field(default_factory=list)

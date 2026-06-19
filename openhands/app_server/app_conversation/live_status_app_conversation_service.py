@@ -181,6 +181,27 @@ def _expected_sdk_version() -> str | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Gateway WebSocket URL builder
+# ---------------------------------------------------------------------------
+
+_GW_ENABLED = os.getenv('ENABLE_WEBSOCKET_GATEWAY', 'false').lower() in ('true', '1')
+
+
+def _build_gateway_websocket_url(info: AppConversationInfo) -> str | None:
+    """Return the relative WebSocket gateway path if the gateway is enabled.
+
+    When ENABLE_WEBSOCKET_GATEWAY is true, the app_server exposes
+    /ws/events/{conversation_id} which proxies to the agent-server.
+    The frontend resolves this relative path against the app_server's
+    base URL (from the active backend registry), so no base URL config
+    is needed.
+    """
+    if not _GW_ENABLED:
+        return None
+    return f'/ws/events/{info.id.hex}'
+
+
 # Planning agent instruction to prevent "Ready to proceed?" behavior
 PLANNING_AGENT_INSTRUCTION = """<IMPORTANT_PLANNING_BOUNDARIES>
 You are a Planning Agent that can ONLY create plans - you CANNOT execute code or make changes.
@@ -365,7 +386,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             sandbox_spec = await self.sandbox_spec_service.get_sandbox_spec(
                 sandbox.sandbox_spec_id
             )
-            assert sandbox_spec is not None
+            if not sandbox_spec:
+                _logger.warning(
+                    'Sandbox spec %s not found for sandbox %s - using default.',
+                    sandbox.sandbox_spec_id,
+                    sandbox.id,
+                )
+                sandbox_spec = (
+                    await self.sandbox_spec_service.get_default_sandbox_spec()
+                )
 
             # Set up conversation id
             conversation_id = request.conversation_id or uuid4()
@@ -654,12 +683,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 conversation_url += f'/api/conversations/{app_conversation_info.id.hex}'
             session_api_key = sandbox.session_api_key
 
+        # Build public websocket_url when gateway is enabled so that external
+        # clients (e.g. agent-canvas) can connect without knowing the internal
+        # agent-server address.
+        websocket_url = _build_gateway_websocket_url(app_conversation_info)
+
         return AppConversation(
             **app_conversation_info.model_dump(),
             sandbox_status=sandbox_status,
             execution_status=execution_status,
             conversation_url=conversation_url,
             session_api_key=session_api_key,
+            websocket_url=websocket_url,
         )
 
     def _get_sandbox_id_to_conversation_ids(
