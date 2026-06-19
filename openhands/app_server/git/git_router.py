@@ -240,32 +240,26 @@ async def search_branches(
 
     page = 1
     decoded_page_id = decode_page_id(page_id)
+
     if decoded_page_id is not None:
         page = decoded_page_id
 
     if query:
-        if page != 1:
-            # TODO(#13883): Support pagination for branch search after refactoring.
-            # The search_branches method does not support paging in the same way as
-            # get_branches - those should be merged into a single paginated method
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail='Pagination not yet supported for branch search queries. Use empty query to list all branches with pagination.',
-            )
-        # Get search results - we'll handle pagination ourselves
         branches: list[Branch] = await client.search_branches(
             selected_provider=provider,
             repository=repository,
             query=query,
             per_page=limit + 1,
+            page=page,
         )
     else:
         current_page = await client.get_branches(
             repository=repository,
             specified_provider=provider,
-            page=page,
             per_page=limit + 1,
+            page=page,
         )
+
         branches = current_page.branches
 
     next_page_id = None
