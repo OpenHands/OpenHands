@@ -159,12 +159,12 @@ def random_datetime(days_back: int = 90) -> datetime:
 
 def create_tables(engine):
     """Create required tables if they don't exist.
-    
+
     Note: This script seeds data into the OpenHands enterprise schema which uses:
     - org (not organizations)
-    - user (not users)  
+    - user (not users)
     - org_member (not organization_members)
-    
+
     This schema is created by enterprise/migrations/versions/089_create_org_tables.py
     """
     print('Creating tables...')
@@ -360,7 +360,7 @@ def seed_data(
     users_per_org: int = 10,
 ):
     """Seed the database with conversation data.
-    
+
     Uses the correct OpenHands schema: org, user, org_member tables.
     """
     SessionLocal = sessionmaker(bind=engine)
@@ -406,7 +406,9 @@ def seed_data(
                     email = random_email(first_name, last_name)
 
                     # First user is the owner/admin, rest are members
-                    role_id = 1 if j == 0 else (2 if j < 3 else 3)  # owner, admin, member
+                    role_id = (
+                        1 if j == 0 else (2 if j < 3 else 3)
+                    )  # owner, admin, member
 
                     session.execute(
                         text("""
