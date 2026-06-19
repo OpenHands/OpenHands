@@ -145,6 +145,29 @@ class TestFilesystemEventServiceSearchEvents:
         assert timestamps == sorted(timestamps, reverse=True)
 
     @pytest.mark.asyncio
+    async def test_iter_events_for_export_returns_all_events_in_timestamp_order(
+        self, service: FilesystemEventService
+    ):
+        """Test export iterator returns all events once in timestamp order."""
+        conversation_id = uuid4()
+        events = []
+
+        for _ in range(3):
+            event = create_token_event()
+            events.append(event)
+            await service.save_event(conversation_id, event)
+            time.sleep(0.01)
+
+        result = [
+            event async for event in service.iter_events_for_export(conversation_id)
+        ]
+
+        assert [event.id for event in result] == [event.id for event in events]
+        assert [event.timestamp for event in result] == sorted(
+            event.timestamp for event in result
+        )
+
+    @pytest.mark.asyncio
     async def test_search_events_returns_event_page(
         self, service: FilesystemEventService
     ):
