@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from server.auth.authorization import (
     Permission,
@@ -1714,7 +1714,9 @@ async def get_org_conversation_stats(
 )
 async def get_org_conversation_usage_stats(
     org_id: UUID,
-    days: int = Query(default=7, ge=1, le=90, description='Number of days to look back'),
+    days: int = Query(
+        default=7, ge=1, le=90, description='Number of days to look back'
+    ),
     user_id: str = Depends(require_permission(Permission.VIEW_ORG_CONVERSATIONS)),
     service: OrgConversationService = org_conversation_service_dependency,
 ) -> OrgUsageStats:
