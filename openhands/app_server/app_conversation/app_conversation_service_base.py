@@ -293,7 +293,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
             user_info = await self.user_context.get_user_info()
 
             if user_info.git_user_name:
-                cmd = f'git config --global user.name "{user_info.git_user_name}"'
+                cmd = f'git config --global user.name {shlex.quote(user_info.git_user_name)}'
                 result = await workspace.execute_command(cmd, workspace.working_dir)
                 if result.exit_code:
                     _logger.warning(f'Git config user.name failed: {result.stderr}')
@@ -303,7 +303,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
                     )
 
             if user_info.git_user_email:
-                cmd = f'git config --global user.email "{user_info.git_user_email}"'
+                cmd = f'git config --global user.email {shlex.quote(user_info.git_user_email)}'
                 result = await workspace.execute_command(cmd, workspace.working_dir)
                 if result.exit_code:
                     _logger.warning(f'Git config user.email failed: {result.stderr}')

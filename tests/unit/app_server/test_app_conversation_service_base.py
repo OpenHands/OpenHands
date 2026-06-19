@@ -4,6 +4,7 @@ This module tests the git-related functionality, specifically the clone_or_init_
 and the recent bug fixes for git checkout operations.
 """
 
+import shlex
 import subprocess
 from pathlib import Path
 from types import MethodType
@@ -807,12 +808,12 @@ async def test_configure_git_user_settings_both_name_and_email(mock_workspace):
 
     # Check git config user.name call
     mock_workspace.execute_command.assert_any_call(
-        'git config --global user.name "Test User"', '/workspace/project'
+        "git config --global user.name 'Test User'", '/workspace/project'
     )
 
     # Check git config user.email call
     mock_workspace.execute_command.assert_any_call(
-        'git config --global user.email "test@example.com"', '/workspace/project'
+        'git config --global user.email test@example.com', '/workspace/project'
     )
 
 
@@ -827,7 +828,7 @@ async def test_configure_git_user_settings_only_name(mock_workspace):
     # Verify only user.name was configured
     assert mock_workspace.execute_command.call_count == 1
     mock_workspace.execute_command.assert_called_once_with(
-        'git config --global user.name "Test User"', '/workspace/project'
+        "git config --global user.name 'Test User'", '/workspace/project'
     )
 
 
@@ -842,7 +843,7 @@ async def test_configure_git_user_settings_only_email(mock_workspace):
     # Verify only user.email was configured
     assert mock_workspace.execute_command.call_count == 1
     mock_workspace.execute_command.assert_called_once_with(
-        'git config --global user.email "test@example.com"', '/workspace/project'
+        'git config --global user.email test@example.com', '/workspace/project'
     )
 
 
@@ -856,6 +857,40 @@ async def test_configure_git_user_settings_neither_set(mock_workspace):
 
     # Verify no git config commands were executed
     mock_workspace.execute_command.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_configure_git_user_settings_quotes_shell_metacharacters(mock_workspace):
+    """Regression test for command injection via git_user_name/git_user_email.
+
+    See https://github.com/OpenHands/OpenHands/issues/14903. A malicious
+    user name/email must not be able to break out of the git config command
+    and execute arbitrary shell commands. shlex.quote() neutralizes the
+    payload by wrapping it in a single-quoted literal.
+    """
+    name_payload = '"; touch /tmp/pwned #'
+    email_payload = '$(touch /tmp/pwned)'
+    user_info = MockUserInfo(git_user_name=name_payload, git_user_email=email_payload)
+    service, _ = _create_service_with_mock_user_context(user_info)
+
+    await service._configure_git_user_settings(mock_workspace)
+
+    assert mock_workspace.execute_command.call_count == 2
+    mock_workspace.execute_command.assert_any_call(
+        f'git config --global user.name {shlex.quote(name_payload)}',
+        '/workspace/project',
+    )
+    mock_workspace.execute_command.assert_any_call(
+        f'git config --global user.email {shlex.quote(email_payload)}',
+        '/workspace/project',
+    )
+
+    # Single-quoting is what neutralizes the injection: inside '...' the shell
+    # performs no expansion or command separation, so the payload stays inert.
+    name_command = f'git config --global user.name {shlex.quote(name_payload)}'
+    email_command = f'git config --global user.email {shlex.quote(email_payload)}'
+    assert name_command.endswith("'\"; touch /tmp/pwned #'")
+    assert email_command.endswith("'$(touch /tmp/pwned)'")
 
 
 @pytest.mark.asyncio
@@ -935,16 +970,17 @@ async def test_configure_git_user_settings_email_command_fails(mock_workspace):
 @pytest.mark.asyncio
 async def test_configure_git_user_settings_special_characters_in_name(mock_workspace):
     """Test git user name with special characters."""
-    user_info = MockUserInfo(
-        git_user_name="Test O'Brien", git_user_email='test@example.com'
-    )
+    name = "Test O'Brien"
+    user_info = MockUserInfo(git_user_name=name, git_user_email='test@example.com')
     service, _ = _create_service_with_mock_user_context(user_info)
 
     await service._configure_git_user_settings(mock_workspace)
 
-    # Verify the name is passed with special characters
+    # Verify the name is safely shell-quoted (single quotes embedded in the
+    # value are escaped by shlex.quote).
     mock_workspace.execute_command.assert_any_call(
-        'git config --global user.name "Test O\'Brien"', '/workspace/project'
+        f'git config --global user.name {shlex.quote(name)}',
+        '/workspace/project',
     )
 
 
