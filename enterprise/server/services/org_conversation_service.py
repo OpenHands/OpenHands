@@ -246,8 +246,7 @@ class OrgConversationService:
                 accumulated_cost=metrics.accumulated_cost,
                 prompt_tokens=metrics.accumulated_token_usage.prompt_tokens,  # type: ignore[union-attr]
                 completion_tokens=metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
-                total_tokens=metrics.accumulated_token_usage.prompt_tokens
-                + metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
+                total_tokens=metrics.accumulated_token_usage.prompt_tokens + metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
                 cache_read_tokens=metrics.accumulated_token_usage.cache_read_tokens,  # type: ignore[union-attr]
                 cache_write_tokens=metrics.accumulated_token_usage.cache_write_tokens,  # type: ignore[union-attr]
             )
@@ -528,7 +527,7 @@ class OrgConversationService:
             select(
                 StoredConversationMetadataSaas.user_id,
                 User.email,
-                User.name,
+                User.name,  # type: ignore[attr-defined]
                 func.count(StoredConversationMetadata.conversation_id).label(
                     "conv_count"
                 ),
@@ -552,7 +551,7 @@ class OrgConversationService:
             .group_by(
                 StoredConversationMetadataSaas.user_id,
                 User.email,
-                User.name,
+                User.name,  # type: ignore[attr-defined]
             )
             .order_by(func.count(StoredConversationMetadata.conversation_id).desc())
         )
@@ -688,8 +687,7 @@ class OrgConversationService:
             accumulated_cost=metrics.accumulated_cost,
             prompt_tokens=metrics.accumulated_token_usage.prompt_tokens,  # type: ignore[union-attr]
             completion_tokens=metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
-            total_tokens=metrics.accumulated_token_usage.prompt_tokens
-            + metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
+            total_tokens=metrics.accumulated_token_usage.prompt_tokens + metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
             cache_read_tokens=metrics.accumulated_token_usage.cache_read_tokens,  # type: ignore[union-attr]
             cache_write_tokens=metrics.accumulated_token_usage.cache_write_tokens,  # type: ignore[union-attr]
         )
