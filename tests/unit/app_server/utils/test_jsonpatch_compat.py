@@ -129,6 +129,24 @@ class TestDeepMergeWithWholesaleKeys:
 
         assert result['mcp_config']['mcpServers'] == {}
 
+    def test_wholesale_key_none_deletes(self):
+        """A None value for a wholesale key should remove it, not leave None.
+
+        deep_merge documents None as "remove the key", so passing
+        ``mcp_config: None`` to clear it must drop the key entirely rather than
+        re-adding it with a None value.
+        """
+        base = {
+            'llm': {'model': 'gpt-4'},
+            'mcp_config': {'mcpServers': {'server1': {'url': 'https://s1.com'}}},
+        }
+        updates = {'mcp_config': None}
+
+        result = deep_merge_with_wholesale_keys(base, updates)
+
+        assert 'mcp_config' not in result
+        assert result == {'llm': {'model': 'gpt-4'}}
+
     def test_custom_wholesale_keys(self):
         """Should support custom wholesale keys via parameter."""
         base = {'custom_dict': {'a': 1, 'b': 2, 'c': 3}}

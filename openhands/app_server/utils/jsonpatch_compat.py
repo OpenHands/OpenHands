@@ -52,6 +52,9 @@ def deep_merge_with_wholesale_keys(
 
     result = deep_merge(base, updates)
     for key in wholesale_keys:
-        if key in updates:
+        # A None update means "remove the key" (deep_merge already popped it), so
+        # only re-apply a wholesale value when one was actually provided —
+        # otherwise we'd resurrect the key with a None value.
+        if key in updates and updates[key] is not None:
             result[key] = updates[key]
     return result
