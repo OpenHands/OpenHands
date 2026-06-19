@@ -17,8 +17,8 @@
 </div>
 <div align="center">
   <a href="#quickstart">Quickstart</a> |
-  <a href="./docs/README.md">Docs</a> |
-  <a href="./docs/SELF_HOSTING.md">Self-Hosting</a> |
+  <a href="https://docs.openhands.dev/overview/introduction">Docs</a> |
+  <a href="https://docs.openhands.dev/openhands/usage/agent-canvas/backend-setup/vm">Self-Hosting</a> |
   <a href="https://docs.openhands.dev/openhands/usage/agent-canvas/acp-agents">ACP Agents</a> |
   <a href="https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations">Automations</a> |
   <a href="https://go.openhands.dev/slack">Slack</a>
@@ -144,7 +144,7 @@ The Agent Server is often paired with an [Automation Server](https://github.com/
 
 ## More documentation
 
-- [Documentation index](./docs/README.md)
-- [Architecture overview](./docs/architecture.md)
-- [Development guide](./docs/DEVELOPMENT.md)
-- [Self-hosting guide](./docs/SELF_HOSTING.md)
+- [Documentation index](https://docs.openhands.dev/overview/introduction)
+- [Architecture overview](#architecture)
+- [Development guide](./Development.md)
+- [Self-hosting guide](https://docs.openhands.dev/openhands/usage/agent-canvas/backend-setup/vm)
