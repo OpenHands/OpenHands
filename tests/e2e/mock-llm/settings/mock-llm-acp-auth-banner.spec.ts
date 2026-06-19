@@ -123,6 +123,28 @@ test.describe("mock-LLM ACP credentials-configured banner (#1244)", () => {
     await dismissAnalyticsModal(page);
     await waitForTestId(page, "agent-settings-screen");
 
+    const configuredBanner = page.getByTestId("settings-acp-auth-configured");
+    const signedInBanner = page.getByTestId("settings-acp-auth-detected");
+    const checkingBanner = page.getByTestId("settings-acp-auth-checking");
+
+    // Arm the probe-settled wait BEFORE selecting the provider (selecting the
+    // Claude Code preset is what fires the host-login probe). The probe POSTs
+    // the provider's status command to the agent-server bash endpoint, so
+    // settling on that response is deterministic. Waiting for the "checking"
+    // banner to hide is not: `waitFor({ state: "hidden" })` is satisfied by
+    // "not in the DOM", so it resolves immediately if the spinner hasn't
+    // painted yet, and the skip-precondition below would then be read too
+    // early — on a host with a real login the probe later reports "signed in"
+    // and the test false-fails instead of skipping (see #1244).
+    const probeSettled = page
+      .waitForResponse(
+        (res) =>
+          res.url().includes("/api/bash/execute_bash_command") &&
+          res.request().method() === "POST",
+        { timeout: 10_000 },
+      )
+      .catch(() => null);
+
     // ── Select ACP → Claude Code ─────────────────────────────────────────
     await selectDropdownOption(page, /Agent/, /ACP/);
     await selectDropdownOption(
@@ -137,16 +159,13 @@ test.describe("mock-LLM ACP credentials-configured banner (#1244)", () => {
     );
     await expect(tokenField).toBeVisible({ timeout: 10_000 });
 
-    const configuredBanner = page.getByTestId("settings-acp-auth-configured");
-    const signedInBanner = page.getByTestId("settings-acp-auth-detected");
-
-    // Let the host-login probe settle (it's gated to local backends and runs
-    // once per provider). If it reports a real login, the "configured"
-    // precondition is unreachable on this host — skip rather than false-fail.
-    const checkingBanner = page.getByTestId("settings-acp-auth-checking");
-    await checkingBanner
-      .waitFor({ state: "hidden", timeout: 10_000 })
-      .catch(() => {});
+    // Let the host-login probe settle: wait for its bash response, then for
+    // React Query to render the terminal banner state (the spinner clears).
+    // The probe is gated to local backends and runs once per provider. If it
+    // reports a real login, the "configured" precondition is unreachable on
+    // this host — skip rather than false-fail.
+    await probeSettled;
+    await expect(checkingBanner).toHaveCount(0, { timeout: 10_000 });
     test.skip(
       (await signedInBanner.count()) > 0,
       "host-login probe reported a verified login; the credentials-configured " +
