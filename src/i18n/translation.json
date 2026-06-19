@@ -271,6 +271,23 @@
     "zh-CN": "正在检查现有的 {{provider}} 登录…",
     "zh-TW": "正在檢查現有的 {{provider}} 登入…"
   },
+  "ONBOARDING$ACP_CREDENTIALS_CONFIGURED": {
+    "ar": "بيانات اعتماد {{provider}} مُهيّأة — يمكنك ترك الحقول أدناه فارغة.",
+    "ca": "Les credencials de {{provider}} estan configurades — pots deixar els camps de sota en blanc.",
+    "de": "Die Anmeldedaten für {{provider}} sind konfiguriert — Sie können die folgenden Felder leer lassen.",
+    "en": "Credentials for {{provider}} are configured — you can leave the fields below blank.",
+    "es": "Las credenciales de {{provider}} están configuradas — puedes dejar los campos de abajo en blanco.",
+    "fr": "Les identifiants pour {{provider}} sont configurés — vous pouvez laisser les champs ci-dessous vides.",
+    "it": "Le credenziali per {{provider}} sono configurate — puoi lasciare vuoti i campi qui sotto.",
+    "ja": "{{provider}}の認証情報が設定されています — 以下のフィールドは空欄のままで構いません。",
+    "ko-KR": "{{provider}}의 자격 증명이 구성되어 있습니다 — 아래 항목은 비워 두셔도 됩니다.",
+    "no": "Legitimasjonen for {{provider}} er konfigurert — du kan la feltene nedenfor stå tomme.",
+    "pt": "As credenciais de {{provider}} estão configuradas — pode deixar os campos abaixo em branco.",
+    "tr": "{{provider}} kimlik bilgileri yapılandırıldı — aşağıdaki alanları boş bırakabilirsiniz.",
+    "uk": "Облікові дані для {{provider}} налаштовано — поля нижче можна залишити порожніми.",
+    "zh-CN": "{{provider}} 的凭据已配置 — 下面的字段可以留空。",
+    "zh-TW": "{{provider}} 的憑證已設定 — 下方欄位可以留空。"
+  },
   "MAINTENANCE$SCHEDULED_MESSAGE": {
     "en": "Scheduled maintenance will begin at {{time}}",
     "ja": "予定されたメンテナンスは{{time}}に開始されます",
