@@ -141,4 +141,40 @@ describe("AcpCredentialsSection", () => {
       screen.queryByTestId("settings-acp-auth-checking"),
     ).not.toBeInTheDocument();
   });
+
+  it("shows the 'credentials configured' banner when a credential is stored but the probe can't confirm a login (Docker/cloud)", async () => {
+    acpAuthStatusMock.mockReturnValue({
+      status: "unknown",
+      isChecking: false,
+      isSupported: true,
+    });
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([
+      { name: "ANTHROPIC_API_KEY" },
+    ]);
+    renderSection("claude-code");
+    expect(
+      await screen.findByTestId("settings-acp-auth-configured"),
+    ).toBeInTheDocument();
+    // A stored credential must never overstate itself as a verified login.
+    expect(
+      screen.queryByTestId("settings-acp-auth-detected"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not treat a stored non-credential field (base URL) as configured", async () => {
+    acpAuthStatusMock.mockReturnValue({
+      status: "unknown",
+      isChecking: false,
+      isSupported: true,
+    });
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([
+      { name: "ANTHROPIC_BASE_URL" },
+    ]);
+    renderSection("claude-code");
+    // Wait for the secrets query to settle on a stable element, then assert.
+    await screen.findByTestId("settings-acp-secret-ANTHROPIC_API_KEY");
+    expect(
+      screen.queryByTestId("settings-acp-auth-configured"),
+    ).not.toBeInTheDocument();
+  });
 });
