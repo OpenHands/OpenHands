@@ -76,6 +76,18 @@ async function seedBackend(page: Page) {
 test.describe.configure({ mode: "serial" });
 
 test.describe("mock-LLM ACP credentials-configured banner (#1244)", () => {
+  test.beforeAll(async ({ request }) => {
+    // Start from a clean store so the no-secret baseline holds even if a prior
+    // run's best-effort afterAll cleanup didn't complete (crash / network blip).
+    await request
+      .delete(`${BACKEND_URL}/api/settings/secrets/${OAUTH_TOKEN_SECRET}`, {
+        headers: { "X-Session-API-Key": SESSION_API_KEY },
+      })
+      .catch(() => {
+        // best-effort — the secret may simply not exist yet
+      });
+  });
+
   test.beforeEach(async ({ page }) => {
     await seedBackend(page);
   });
