@@ -177,4 +177,25 @@ describe("AcpCredentialsSection", () => {
       screen.queryByTestId("settings-acp-auth-configured"),
     ).not.toBeInTheDocument();
   });
+
+  it("treats a stored file-blob credential as configured for a non-Claude provider (Codex)", async () => {
+    // The configured signal is provider-generic, not Claude-specific, and a
+    // multiline file-content blob (Codex auth.json) is a credential the same as
+    // an API key or OAuth token.
+    acpAuthStatusMock.mockReturnValue({
+      status: "unknown",
+      isChecking: false,
+      isSupported: true,
+    });
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([
+      { name: "CODEX_AUTH_JSON" },
+    ]);
+    renderSection("codex");
+    expect(
+      await screen.findByTestId("settings-acp-auth-configured"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("settings-acp-auth-detected"),
+    ).not.toBeInTheDocument();
+  });
 });

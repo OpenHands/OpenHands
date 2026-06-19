@@ -98,6 +98,10 @@ export function useAcpCredentialForm(
     secretExists,
     hasValueFor,
     conflicts: getAcpCredentialConflicts(providerKey, hasValueFor),
+    // `=== true` is the intended strict check: only a credential-bearing field
+    // (API key, OAuth token, file blob) counts — never a base URL or GCP scalar,
+    // which omit `secret` entirely. A field must never set `secret: false` to
+    // opt out; omit the flag instead.
     credentialsConfigured: fields.some(
       (field) => field.secret === true && secretExists(field.name),
     ),
