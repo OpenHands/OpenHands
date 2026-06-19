@@ -40,7 +40,14 @@ def _message_event(text: str) -> MessageEvent:
 
 
 def _callback(processor: MemoryIntegrityCallbackProcessor) -> EventCallback:
-    return EventCallback(processor=processor)
+    # Build via ``model_construct`` to skip EventCallback's discriminated-union
+    # validation. Under ``pytest --forked -n auto`` other tests sharing the
+    # worker can leave the EventCallbackProcessor union schema in a state that
+    # makes validating a freshly-registered processor subclass flaky (it has
+    # surfaced as a spurious "conversation_id Field required" error). The
+    # processor under test only reads ``callback.id``, so validation-free
+    # construction is sufficient and deterministic.
+    return EventCallback.model_construct(processor=processor)
 
 
 def _findings(detail: str | None) -> list[dict[str, str]]:
