@@ -71,6 +71,15 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
 app.include_router(v1_router.router)
 app.include_router(health_router)
 
+# Branch/reset endpoints at /api/conversations/ (V1-compatible)
+from openhands.app_server.conversation_router import router as conversation_router
+app.include_router(conversation_router)
+
+# Mount WebSocket routes at /ws BEFORE static files to ensure WebSockets are handled properly
+if os.getenv('ENABLE_WEBSOCKET_GATEWAY', 'false').lower() in ('true', '1'):
+    from openhands.app_server.v1_router import websocket_routes
+    app.mount('/ws', websocket_routes, name='websocket')
+
 # Middleware and static file setup (merged from listen.py)
 if os.getenv('SERVE_FRONTEND', 'true').lower() == 'true':
     if os.path.isdir('./frontend/build'):
