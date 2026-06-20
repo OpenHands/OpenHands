@@ -24,8 +24,6 @@ from openhands.app_server.config import (
     depends_user_context,
     get_global_config,
 )
-from openhands.app_server.sandbox.sandbox_service import SandboxService
-from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.git.git_models import (
     BranchPage,
     InstallationPage,
@@ -40,6 +38,8 @@ from openhands.app_server.integrations.service_types import (
     Repository,
     SuggestedTask,
 )
+from openhands.app_server.sandbox.sandbox_service import SandboxService
+from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.paging_utils import (
@@ -361,6 +361,7 @@ def _get_agent_server_context_fn():
         from openhands.app_server.app_conversation.app_conversation_router import (
             _get_agent_server_context,
         )
+
         _git_agent_server_context_fn = _get_agent_server_context
     return _git_agent_server_context_fn
 
@@ -408,20 +409,20 @@ async def git_changes(
 
     # Strip conversation_id from proxied query params
     filtered_params = {
-        k: v for k, v in request.query_params.multi_items()
-        if k != 'conversation_id'
+        k: v for k, v in request.query_params.multi_items() if k != 'conversation_id'
     }
 
     headers = {
-        k: v for k, v in request.headers.items()
-        if k.lower() not in ("host", "connection", "transfer-encoding")
+        k: v
+        for k, v in request.headers.items()
+        if k.lower() not in ('host', 'connection', 'transfer-encoding')
     }
     if session_api_key:
-        headers["X-Session-API-Key"] = session_api_key
+        headers['X-Session-API-Key'] = session_api_key
 
     proxy_request = httpx_client.build_request(
         method='GET',
-        url=f"{agent_server_url}/api/git/changes",
+        url=f'{agent_server_url}/api/git/changes',
         headers=headers,
         params=filtered_params,
     )
@@ -477,20 +478,20 @@ async def git_diff(
 
     # Strip conversation_id from proxied query params
     filtered_params = {
-        k: v for k, v in request.query_params.multi_items()
-        if k != 'conversation_id'
+        k: v for k, v in request.query_params.multi_items() if k != 'conversation_id'
     }
 
     headers = {
-        k: v for k, v in request.headers.items()
-        if k.lower() not in ("host", "connection", "transfer-encoding")
+        k: v
+        for k, v in request.headers.items()
+        if k.lower() not in ('host', 'connection', 'transfer-encoding')
     }
     if session_api_key:
-        headers["X-Session-API-Key"] = session_api_key
+        headers['X-Session-API-Key'] = session_api_key
 
     proxy_request = httpx_client.build_request(
         method='GET',
-        url=f"{agent_server_url}/api/git/diff",
+        url=f'{agent_server_url}/api/git/diff',
         headers=headers,
         params=filtered_params,
     )

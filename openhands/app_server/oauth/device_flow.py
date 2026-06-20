@@ -20,6 +20,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 # In-memory store for pending device authorizations
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PendingDeviceAuth:
     device_code: str
@@ -29,6 +30,7 @@ class PendingDeviceAuth:
     denied: bool = False
     # Filled once the user confirms
     access_token: str | None = None
+
 
 DEVICE_STORE: dict[str, PendingDeviceAuth] = {}  # keyed by device_code
 USER_CODE_INDEX: dict[str, str] = {}  # user_code -> device_code
@@ -43,7 +45,7 @@ def _generate_device_code() -> str:
 def _generate_user_code() -> str:
     chars = string.ascii_uppercase + string.digits
     while True:
-        code = "".join(secrets.choice(chars) for _ in range(8))
+        code = ''.join(secrets.choice(chars) for _ in range(8))
         if code not in USER_CODE_INDEX:
             return code
 
@@ -51,7 +53,8 @@ def _generate_user_code() -> str:
 def _cleanup_expired() -> None:
     now = time.time()
     expired = [
-        dc for dc, entry in DEVICE_STORE.items()
+        dc
+        for dc, entry in DEVICE_STORE.items()
         if now - entry.created_at > DEVICE_CODE_EXPIRY
     ]
     for dc in expired:
@@ -63,10 +66,10 @@ def _cleanup_expired() -> None:
 # Router
 # ---------------------------------------------------------------------------
 
-router = APIRouter(prefix="/oauth", tags=["OAuth Device Flow"])
+router = APIRouter(prefix='/oauth', tags=['OAuth Device Flow'])
 
 
-@router.post("/device/authorize")
+@router.post('/device/authorize')
 async def device_authorize(request: Request):
     """
     RFC 8628 §3.1 — Device Authorization Request.
@@ -87,27 +90,29 @@ async def device_authorize(request: Request):
 
     # Build the verification URI pointing back to this OIO server.
     # Agent Canvas opens this URL in a popup for the user to confirm.
-    host = request.headers.get("host", "localhost:3000")
-    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get('host', 'localhost:3000')
+    proto = request.headers.get('x-forwarded-proto', request.url.scheme)
     # Default to https for known cloud domains even if proxy forgets X-Forwarded-Proto
-    if proto != "https" and host.startswith("oio.ai-1"):
-        proto = "https"
-    scheme = "https" if proto == "https" else "http"
-    base = f"{scheme}://{host}"
-    verification_uri = f"{base}/oauth/device/verify"
-    verification_uri_complete = f"{verification_uri}?user_code={user_code}"
+    if proto != 'https' and host.startswith('oio.ai-1'):
+        proto = 'https'
+    scheme = 'https' if proto == 'https' else 'http'
+    base = f'{scheme}://{host}'
+    verification_uri = f'{base}/oauth/device/verify'
+    verification_uri_complete = f'{verification_uri}?user_code={user_code}'
 
-    return JSONResponse({
-        "device_code": device_code,
-        "user_code": user_code,
-        "verification_uri": verification_uri,
-        "verification_uri_complete": verification_uri_complete,
-        "expires_in": DEVICE_CODE_EXPIRY,
-        "interval": 3,
-    })
+    return JSONResponse(
+        {
+            'device_code': device_code,
+            'user_code': user_code,
+            'verification_uri': verification_uri,
+            'verification_uri_complete': verification_uri_complete,
+            'expires_in': DEVICE_CODE_EXPIRY,
+            'interval': 3,
+        }
+    )
 
 
-@router.post("/device/token")
+@router.post('/device/token')
 async def device_token(request: Request):
     """
     RFC 8628 §3.4 — Client Credential Request (Token polling).
@@ -118,41 +123,43 @@ async def device_token(request: Request):
     _cleanup_expired()
 
     body = await request.form()
-    grant_type = body.get("grant_type")
-    device_code = body.get("device_code")
+    grant_type = body.get('grant_type')
+    device_code = body.get('device_code')
 
-    if grant_type != "urn:ietf:params:oauth:grant-type:device_code":
-        raise HTTPException(status_code=400, detail="invalid_grant")
+    if grant_type != 'urn:ietf:params:oauth:grant-type:device_code':
+        raise HTTPException(status_code=400, detail='invalid_grant')
 
     entry = DEVICE_STORE.get(device_code)
     if entry is None:
         # Device code expired or unknown
         return JSONResponse(
             status_code=400,
-            content={"error": "expired_token"},
+            content={'error': 'expired_token'},
         )
 
     if entry.denied:
         return JSONResponse(
             status_code=400,
-            content={"error": "access_denied"},
+            content={'error': 'access_denied'},
         )
 
     if not entry.authorized:
         # User has not confirmed yet — continue polling
         return JSONResponse(
             status_code=400,
-            content={"error": "authorization_pending", "interval": 3},
+            content={'error': 'authorization_pending', 'interval': 3},
         )
 
     # Authorized — return access token
-    return JSONResponse({
-        "access_token": entry.access_token,
-        "token_type": "Bearer",
-    })
+    return JSONResponse(
+        {
+            'access_token': entry.access_token,
+            'token_type': 'Bearer',
+        }
+    )
 
 
-@router.post("/device/verify-authenticated")
+@router.post('/device/verify-authenticated')
 async def device_verify_authenticated(request: Request):
     """
     Confirm device authorization from the browser popup.
@@ -161,18 +168,18 @@ async def device_verify_authenticated(request: Request):
     mark the pending device auth as approved and generate an API key.
     """
     form = await request.form()
-    user_code = form.get("user_code", "")
+    user_code = form.get('user_code', '')
 
     device_code = USER_CODE_INDEX.get(user_code)
     if not device_code:
-        raise HTTPException(status_code=404, detail="user_code not found")
+        raise HTTPException(status_code=404, detail='user_code not found')
 
     entry = DEVICE_STORE.get(device_code)
     if entry is None:
-        raise HTTPException(status_code=404, detail="device_code expired")
+        raise HTTPException(status_code=404, detail='device_code expired')
 
     # Generate an API key that agent-canvas will use as X-Session-API-Key
-    api_key = "sk-" + secrets.token_urlsafe(32)
+    api_key = 'sk-' + secrets.token_urlsafe(32)
 
     entry.authorized = True
     entry.access_token = api_key
@@ -180,7 +187,7 @@ async def device_verify_authenticated(request: Request):
     # Clean up index
     USER_CODE_INDEX.pop(user_code, None)
 
-    return JSONResponse({"success": True})
+    return JSONResponse({'success': True})
 
 
 # ---------------------------------------------------------------------------
@@ -312,7 +319,7 @@ _VERIFY_TEMPLATE = """\
 """
 
 
-@router.get("/device/verify", response_class=HTMLResponse)
+@router.get('/device/verify', response_class=HTMLResponse)
 async def device_verify_page(
     user_code: str | None = Query(default=None),
 ):

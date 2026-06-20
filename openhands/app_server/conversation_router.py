@@ -4,25 +4,13 @@ These endpoints live at /api/conversations/ (not /api/v1) to match the frontend 
 They support V1 conversations only (V0 has been removed upstream).
 """
 
-import asyncio
 import logging
-import os
-import subprocess
 import uuid
-from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel
 
-from openhands.agent_server.models import Success
-from openhands.app_server.app_conversation.app_conversation_info_service import (
-    AppConversationInfoService,
-)
-from openhands.app_server.app_conversation.app_conversation_models import (
-    ConversationTrigger,
-)
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
 )
@@ -36,13 +24,14 @@ from openhands.app_server.config import (
 )
 from openhands.app_server.sandbox.sandbox_service import SandboxService
 from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
-from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.logger import openhands_logger as conversation_logger
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix='/api/conversations', tags=['Conversations'], dependencies=get_dependencies())
+router = APIRouter(
+    prefix='/api/conversations', tags=['Conversations'], dependencies=get_dependencies()
+)
 
 
 async def _proxy_to_agent_server(
@@ -61,13 +50,14 @@ async def _proxy_to_agent_server(
                  incompatibility (send() dropped timeout kwarg in 0.28+).
     """
     headers = {
-        k: v for k, v in request.headers.items()
-        if k.lower() not in ("host", "connection", "transfer-encoding")
+        k: v
+        for k, v in request.headers.items()
+        if k.lower() not in ('host', 'connection', 'transfer-encoding')
     }
     if session_api_key:
-        headers["X-Session-API-Key"] = session_api_key
+        headers['X-Session-API-Key'] = session_api_key
 
-    url = f"{agent_server_url}{path}"
+    url = f'{agent_server_url}{path}'
     conversation_logger.info('Proxying to agent-server: %s', url)
 
     # Read body once so it can be reused regardless of which client sends it.
@@ -125,6 +115,7 @@ async def _resolve_agent_server_context(
         )
     return ctx.agent_server_url, ctx.session_api_key
 
+
 app_conversation_service_dependency = depends_app_conversation_service()
 app_conversation_info_service_dependency = depends_app_conversation_info_service()
 httpx_client_dependency = depends_httpx_client()
@@ -142,10 +133,9 @@ def _get_agent_server_context_fn():
         from openhands.app_server.app_conversation.app_conversation_router import (
             _get_agent_server_context,
         )
+
         _agent_server_context_fn = _get_agent_server_context
     return _agent_server_context_fn
-
-
 
 
 @router.post('/{conversation_id}/pause')
@@ -182,8 +172,6 @@ async def pause_conversation(
         )
 
 
-
-
 @router.post('/{conversation_id}/run')
 async def resume_conversation(
     request: Request,
@@ -218,8 +206,6 @@ async def resume_conversation(
         )
 
 
-
-
 @router.get('/{conversation_id}/events/count')
 async def events_count(
     request: Request,
@@ -247,13 +233,13 @@ async def events_count(
             f'/api/conversations/{conversation_id}/events/count',
         )
     except Exception as exc:
-        conversation_logger.error('Events count proxy failed for %s: %s', conversation_id, exc)
+        conversation_logger.error(
+            'Events count proxy failed for %s: %s', conversation_id, exc
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail='Failed to reach agent-server',
         )
-
-
 
 
 @router.post('/{conversation_id}/ask_agent')
@@ -288,10 +274,10 @@ async def ask_agent(
             timeout=600,
         )
     except Exception as exc:
-        conversation_logger.error('Ask agent proxy failed for %s: %s', conversation_id, exc)
+        conversation_logger.error(
+            'Ask agent proxy failed for %s: %s', conversation_id, exc
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail='Failed to reach agent-server',
         )
-
-

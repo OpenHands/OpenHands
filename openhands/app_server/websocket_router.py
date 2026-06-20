@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 import websockets
@@ -30,7 +30,7 @@ MAX_RECONNECT_ATTEMPTS = 5  # Maximum reconnection attempts
 RECONNECT_DELAY = 2  # Initial delay between reconnection attempts (seconds)
 
 
-async def _keepalive_task(websocket_conn: websockets.WebSocketClientProtocol):
+async def _keepalive_task(websocket_conn: Any):
     """Send periodic ping/pong to keep connection alive and prevent timeout."""
     try:
         while True:
@@ -43,7 +43,7 @@ async def _keepalive_task(websocket_conn: websockets.WebSocketClientProtocol):
 
 async def _proxy_websocket_messages(
     client_ws: WebSocket,
-    agent_server_ws: websockets.WebSocketClientProtocol,
+    agent_server_ws: Any,
 ):
     """Proxy messages bidirectionally between client and agent server with proper cleanup."""
 

@@ -46,13 +46,14 @@ async def _proxy_request(
 ) -> Response | None:
     """Forward the raw HTTP request to the agent-server inside the sandbox."""
     headers = {
-        k: v for k, v in request.headers.items()
-        if k.lower() not in ("host", "connection", "transfer-encoding")
+        k: v
+        for k, v in request.headers.items()
+        if k.lower() not in ('host', 'connection', 'transfer-encoding')
     }
     if session_api_key:
-        headers["X-Session-API-Key"] = session_api_key
+        headers['X-Session-API-Key'] = session_api_key
 
-    url = f"{agent_server_url}/api/conversations/{path_suffix}"
+    url = f'{agent_server_url}/api/conversations/{path_suffix}'
 
     try:
         proxy_request = http_client.build_request(
@@ -70,7 +71,7 @@ async def _proxy_request(
             headers=dict(resp.headers),
         )
     except Exception as exc:
-        logger.warning("Event proxy failed for %s: %s", path_suffix, exc)
+        logger.warning('Event proxy failed for %s: %s', path_suffix, exc)
         return None
 
 
@@ -116,10 +117,10 @@ async def search_events(
         Query(title='The max number of results in the page', gt=0, le=100),
     ] = 100,
     event_service: EventService = event_service_dependency,
-    app_conversation_service: Any = depends_app_conversation_service(),
-    sandbox_service: Any = depends_sandbox_service(),
-    sandbox_spec_service: Any = depends_sandbox_spec_service(),
-    httpx_client: httpx.AsyncClient = depends_httpx_client(),
+    app_conversation_service: Any = Depends(depends_app_conversation_service),
+    sandbox_service: Any = Depends(depends_sandbox_service),
+    sandbox_spec_service: Any = Depends(depends_sandbox_spec_service),
+    httpx_client: httpx.AsyncClient = Depends(depends_httpx_client),
 ) -> Response | EventPage:
     """Search / List events. Falls back to agent-server proxy if local store is empty."""
     local_result = await event_service.search_events(
@@ -148,13 +149,16 @@ async def search_events(
     if ctx is None:
         return local_result
 
-    return await _proxy_request(
-        request=request,
-        http_client=httpx_client,
-        agent_server_url=ctx.agent_server_url,
-        session_api_key=ctx.session_api_key,
-        path_suffix=f'{conversation_id}/events/search',
-    ) or local_result
+    return (
+        await _proxy_request(
+            request=request,
+            http_client=httpx_client,
+            agent_server_url=ctx.agent_server_url,
+            session_api_key=ctx.session_api_key,
+            path_suffix=f'{conversation_id}/events/search',
+        )
+        or local_result
+    )
 
 
 @router.get('/count', response_model=None)
@@ -174,10 +178,10 @@ async def count_events(
         Query(title='Optional filter by timestamp less than'),
     ] = None,
     event_service: EventService = event_service_dependency,
-    app_conversation_service: Any = depends_app_conversation_service(),
-    sandbox_service: Any = depends_sandbox_service(),
-    sandbox_spec_service: Any = depends_sandbox_spec_service(),
-    httpx_client: httpx.AsyncClient = depends_httpx_client(),
+    app_conversation_service: Any = Depends(depends_app_conversation_service),
+    sandbox_service: Any = Depends(depends_sandbox_service),
+    sandbox_spec_service: Any = Depends(depends_sandbox_spec_service),
+    httpx_client: httpx.AsyncClient = Depends(depends_httpx_client),
 ) -> Response | int:
     """Count events matching the given filters. Falls back to agent-server proxy if local store is empty."""
     local_count = await event_service.count_events(

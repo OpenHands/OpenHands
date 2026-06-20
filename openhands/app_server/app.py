@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 
 from openhands.app_server import v1_router
 from openhands.app_server.config import get_app_lifespan_service
-from openhands.app_server.oauth.device_flow import router as oauth_device_router
+from openhands.app_server.conversation_router import router as conversation_router
 from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.mcp.mcp_router import init_tavily_proxy, mcp_server
 from openhands.app_server.middleware import (
@@ -24,6 +24,7 @@ from openhands.app_server.middleware import (
     LocalhostCORSMiddleware,
     RateLimitMiddleware,
 )
+from openhands.app_server.oauth.device_flow import router as oauth_device_router
 from openhands.app_server.static import SPAStaticFiles
 from openhands.app_server.status.status_router import router as health_router
 from openhands.app_server.version import get_version
@@ -72,14 +73,12 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
 app.include_router(v1_router.router)
 app.include_router(health_router)
 app.include_router(oauth_device_router)
-
-# Branch/reset endpoints at /api/conversations/ (V1-compatible)
-from openhands.app_server.conversation_router import router as conversation_router
 app.include_router(conversation_router)
 
 # Mount WebSocket routes at /ws BEFORE static files to ensure WebSockets are handled properly
 if os.getenv('ENABLE_WEBSOCKET_GATEWAY', 'false').lower() in ('true', '1'):
     from openhands.app_server.v1_router import websocket_routes
+
     app.mount('/ws', websocket_routes, name='websocket')
 
 # Middleware and static file setup (merged from listen.py)
