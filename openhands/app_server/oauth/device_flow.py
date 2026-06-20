@@ -88,13 +88,10 @@ async def device_authorize(request: Request):
     )
     USER_CODE_INDEX[user_code] = device_code
 
-    # Build the verification URI pointing back to this OIO server.
+    # Build the verification URI pointing back to this OpenHands server.
     # Agent Canvas opens this URL in a popup for the user to confirm.
     host = request.headers.get('host', 'localhost:3000')
     proto = request.headers.get('x-forwarded-proto', request.url.scheme)
-    # Default to https for known cloud domains even if proxy forgets X-Forwarded-Proto
-    if proto != 'https' and host.startswith('oio.ai-1'):
-        proto = 'https'
     scheme = 'https' if proto == 'https' else 'http'
     base = f'{scheme}://{host}'
     verification_uri = f'{base}/oauth/device/verify'

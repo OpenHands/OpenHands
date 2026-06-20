@@ -253,11 +253,7 @@ async def ask_agent(
     sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
     httpx_client: httpx.AsyncClient = httpx_client_dependency,
 ) -> Response:
-    """Ask the agent a side question by proxying to the agent-server inside the sandbox.
-
-    This endpoint can take up to 10 minutes to respond as it involves an
-    LLM call on the agent-server side.
-    """
+    """Ask the agent a side question by proxying to the agent-server inside the sandbox."""
     agent_server_url, session_api_key = await _resolve_agent_server_context(
         conversation_id,
         app_conversation_service,
