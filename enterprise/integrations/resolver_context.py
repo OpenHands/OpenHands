@@ -22,9 +22,19 @@ class ResolverUserContext(UserContext):
         self.saas_user_auth = saas_user_auth
         self.resolver_org_id = resolver_org_id
         self._provider_handler: ProviderHandler | None = None
+        # SaasUserAuth supports this resolver override; other UserAuth
+        # implementations may not, so keep the call defensive.
+        set_effective_org_id_override = getattr(
+            type(self.saas_user_auth), 'set_effective_org_id_override', None
+        )
+        if resolver_org_id is not None and callable(set_effective_org_id_override):
+            set_effective_org_id_override(self.saas_user_auth, resolver_org_id)
 
     async def get_user_id(self) -> str | None:
         return await self.saas_user_auth.get_user_id()
+
+    async def get_user_email(self) -> str | None:
+        return await self.saas_user_auth.get_user_email()
 
     async def get_user_info(self) -> UserInfo:
         user_settings = await self.saas_user_auth.get_user_settings()
@@ -81,8 +91,8 @@ class ResolverUserContext(UserContext):
             converted_secrets = {}
             for key, custom_secret in secrets.custom_secrets.items():
                 # Extract the secret value from CustomSecret and convert to StaticSecret
-                secret_value = custom_secret.secret.get_secret_value()
-                converted_secrets[key] = StaticSecret(value=secret_value)
+                secret_source: SecretSource = StaticSecret(value=custom_secret.secret)
+                converted_secrets[key] = secret_source
             return converted_secrets
         return {}
 

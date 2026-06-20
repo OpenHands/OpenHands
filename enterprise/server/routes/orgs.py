@@ -664,7 +664,7 @@ async def delete_org(
         )
     except OrphanedUserError as e:
         logger.warning(
-            'Cannot delete organization: users would be orphaned',
+            'Cannot delete organization: other members would be orphaned',
             extra={
                 'user_id': user_id,
                 'org_id': str(org_id),

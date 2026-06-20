@@ -5,7 +5,7 @@ Views are responsible for:
 - Creating conversations using V1 app conversation system
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 from integrations.jira_dc.jira_dc_types import (
@@ -18,6 +18,7 @@ from integrations.resolver_context import ResolverUserContext
 from integrations.resolver_org_router import resolve_org_for_repo
 from integrations.utils import CONVERSATION_URL
 from jinja2 import Environment
+from server.auth.constants import JIRA_DC_ENABLE_OAUTH
 from storage.jira_dc_conversation import JiraDcConversation
 from storage.jira_dc_integration_store import JiraDcIntegrationStore
 from storage.jira_dc_user import JiraDcUser
@@ -51,16 +52,15 @@ class JiraDcNewConversationView(JiraDcViewInterface):
     selected_repo: str | None
     conversation_id: str
 
-    # Decrypted API key (set by manager)
-    _decrypted_api_key: str = field(default='', repr=False)
-
     # Resolved org ID for V1 conversations
     resolved_org_id: UUID | None = None
 
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         """Instructions passed when conversation is first initialized."""
         instructions_template = jinja_env.get_template('jira_dc_instructions.j2')
-        instructions = instructions_template.render()
+        instructions = instructions_template.render(
+            jira_dc_oauth_enabled=JIRA_DC_ENABLE_OAUTH
+        )
 
         user_msg_template = jinja_env.get_template('jira_dc_new_conversation.j2')
 
@@ -69,6 +69,7 @@ class JiraDcNewConversationView(JiraDcViewInterface):
             issue_title=self.job_context.issue_title,
             issue_description=self.job_context.issue_description,
             user_message=self.job_context.user_msg or '',
+            previous_comments=self.job_context.previous_comments,
         )
 
         return instructions, user_msg
@@ -163,7 +164,6 @@ class JiraDcNewConversationView(JiraDcViewInterface):
             issue_key=self.job_context.issue_key,
             workspace_name=self.jira_dc_workspace.name,
             base_api_url=self.job_context.base_api_url,
-            svc_acc_api_key=self._decrypted_api_key,
         )
 
     async def _get_git_provider(self) -> ProviderType | None:
@@ -231,6 +231,7 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
             user_message=self.job_context.user_msg or '',
             issue_title=self.job_context.issue_title,
             issue_description=self.job_context.issue_description,
+            previous_comments=self.job_context.previous_comments,
         )
 
         return '', user_msg
@@ -309,7 +310,7 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
             )
 
             url = (
-                f"{agent_server_url.rstrip('/')}"
+                f'{agent_server_url.rstrip("/")}'
                 f'/api/conversations/{self.conversation_id}/messages'
             )
             headers = {'X-Session-API-Key': sandbox.session_api_key}
@@ -351,23 +352,20 @@ class JiraDcFactory:
         jira_dc_user: JiraDcUser,
         jira_dc_workspace: JiraDcWorkspace,
     ) -> JiraDcViewInterface:
-        """Create appropriate Jira DC view based on the payload."""
+        """Create a Jira DC view for the payload.
+
+        Always starts a NEW conversation (and a fresh runtime/sandbox) per mention,
+        matching the GitHub and Bitbucket Data Center integrations. JDC previously
+        reused the existing conversation for (issue, user) via
+        ``get_user_conversations_by_issue_id`` + ``JiraDcExistingConversationView``,
+        but that path sends the message into a possibly-recycled sandbox and gets a
+        404 ("Sorry, there was an unexpected error starting the job."). Creating a
+        fresh conversation each time sidesteps the stale-sandbox failure entirely.
+        ``JiraDcExistingConversationView`` is intentionally kept for a future,
+        robust conversation-continuity feature (resume-then-send).
+        """
         if not jira_dc_user or not saas_user_auth or not jira_dc_workspace:
             raise StartingConvoException('User not authenticated with Jira integration')
-
-        conversation = await integration_store.get_user_conversations_by_issue_id(
-            job_context.issue_id, jira_dc_user.id
-        )
-
-        if conversation:
-            return JiraDcExistingConversationView(
-                job_context=job_context,
-                saas_user_auth=saas_user_auth,
-                jira_dc_user=jira_dc_user,
-                jira_dc_workspace=jira_dc_workspace,
-                selected_repo=None,
-                conversation_id=conversation.conversation_id,
-            )
 
         return JiraDcNewConversationView(
             job_context=job_context,

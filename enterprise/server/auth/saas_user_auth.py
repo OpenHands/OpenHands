@@ -5,7 +5,7 @@ from uuid import UUID
 
 import jwt
 from fastapi import HTTPException, Request
-from keycloak.exceptions import KeycloakError
+from keycloak.exceptions import KeycloakConnectionError
 from pydantic import SecretStr
 from server.auth.auth_error import (
     AuthError,
@@ -18,10 +18,12 @@ from server.auth.authorization import (
     get_role_permissions,
     get_user_org_role,
 )
-from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
+from server.auth.constants import AZURE_DEVOPS_ORGANIZATION, BITBUCKET_DATA_CENTER_HOST
+from server.auth.cookie_chunking import read_chunked_cookie
 from server.auth.token_manager import TokenManager
 from server.logger import logger
 from server.rate_limit import RateLimiter, create_redis_rate_limiter
+from server.utils.rate_limit_utils import RATE_LIMIT_AUTH_WINDOWS
 from sqlalchemy import delete, select
 from storage.api_key_store import ApiKeyStore
 from storage.auth_tokens import AuthTokens
@@ -48,7 +50,7 @@ from openhands.app_server.user_auth.user_auth import AuthType, UserAuth
 token_manager = TokenManager()
 
 
-rate_limiter: RateLimiter = create_redis_rate_limiter('10/second; 100/minute')
+rate_limiter: RateLimiter = create_redis_rate_limiter(RATE_LIMIT_AUTH_WINDOWS)
 
 
 @dataclass
@@ -79,6 +81,9 @@ class SaasUserAuth(UserAuth):
     # Per-request `X-Org-Id` header (raw, unvalidated); see
     # `enterprise/server/auth/org_context.py` for resolution rules.
     _x_org_id_header: str | None = None
+    # Trusted server-side override used by background resolver contexts after
+    # they have already resolved and membership-checked the target org.
+    effective_org_id_override: UUID | None = None
     # Cached result of `get_effective_org_id()`. The `_resolved` flag is
     # needed to distinguish "not yet computed" from "computed and None".
     _effective_org_id: UUID | None = None
@@ -93,18 +98,89 @@ class SaasUserAuth(UserAuth):
         """
         return self.api_key_org_id
 
+    def set_effective_org_id_override(self, org_id: UUID | None) -> None:
+        """Set a trusted server-side org override and clear org-scoped caches."""
+        self.effective_org_id_override = org_id
+        self._clear_org_scoped_caches()
+
+    def _clear_org_scoped_caches(self) -> None:
+        """Clear cached data that depends on the effective organization."""
+        self._effective_org_id = None
+        self._effective_org_id_resolved = False
+        self.settings_store = None
+        self.secrets_store = None
+        self._settings = None
+        self._secrets = None
+        self.provider_tokens = None
+        self._org_id = None
+        self._org_name = None
+        self._role = None
+        self._permissions = None
+        self._org_info_loaded = False
+
+    async def _resolve_and_verify_override_org(self) -> UUID | None:
+        """Verify and return the trusted resolver org override, if present."""
+        if self.effective_org_id_override is None:
+            return None
+
+        # Import locally to avoid a circular import via authorization.py.
+        from fastapi import status
+        from storage.org_member_store import OrgMemberStore
+
+        override_org_id = self.effective_org_id_override
+        if self.api_key_org_id is not None and self.api_key_org_id != override_org_id:
+            logger.warning(
+                'effective_org_id_override_api_key_mismatch',
+                extra={
+                    'user_id': self.user_id,
+                    'api_key_org_id': str(self.api_key_org_id),
+                    'effective_org_id_override': str(override_org_id),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='API key is not authorized for this organization',
+            )
+        try:
+            user_uuid = UUID(self.user_id)
+        except ValueError as exc:
+            logger.error(
+                'effective_org_id_override_invalid_user_id',
+                extra={'user_id': self.user_id},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='User is not a member of the requested organization',
+            ) from exc
+
+        member = await OrgMemberStore.get_org_member(override_org_id, user_uuid)
+        if member is None:
+            logger.warning(
+                'effective_org_id_override_not_a_member',
+                extra={
+                    'user_id': self.user_id,
+                    'effective_org_id_override': str(override_org_id),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='User is not a member of the requested organization',
+            )
+        return override_org_id
+
     async def get_effective_org_id(self) -> UUID | None:
         """Resolve the effective organization ID for this request.
 
         Precedence (highest first):
 
-        1. ``api_key_org_id`` — if the request is authenticated with an
+        1. ``effective_org_id_override`` — trusted server-side resolver context.
+        2. ``api_key_org_id`` — if the request is authenticated with an
            org-bound API key, that org wins. If the caller also sent an
            ``X-Org-Id`` header that disagrees, raise 403.
-        2. ``X-Org-Id`` header — explicit, per-request override. The
+        3. ``X-Org-Id`` header — explicit, per-request override. The
            authenticated user must be a member of that org or we raise
            403. Malformed UUIDs raise 400.
-        3. ``user.current_org_id`` — server-side default.
+        4. ``user.current_org_id`` — server-side default.
 
         The resolved value is cached on the auth instance for the rest
         of the request, so callers can invoke this freely.
@@ -116,9 +192,14 @@ class SaasUserAuth(UserAuth):
         if self._effective_org_id_resolved:
             return self._effective_org_id
 
-        # Import locally to avoid a circular import via authorization.py.
         from fastapi import status
         from storage.org_member_store import OrgMemberStore
+
+        override_org_id = await self._resolve_and_verify_override_org()
+        if override_org_id is not None:
+            self._effective_org_id = override_org_id
+            self._effective_org_id_resolved = True
+            return self._effective_org_id
 
         header_value = self._x_org_id_header
         requested: UUID | None = None
@@ -196,14 +277,39 @@ class SaasUserAuth(UserAuth):
         return self.user_id
 
     async def get_user_email(self) -> str | None:
+        # Email lives in the local DB (User row), not only in the Keycloak
+        # token. Sourcing it here lets API-key (bearer) auth — which no longer
+        # refreshes against Keycloak — still resolve the email. Cookie auth
+        # already has ``self.email`` set from the signed token, so the lookup
+        # is skipped in that case.
+        if self.email is None:
+            user = await UserStore.get_user_by_id(self.user_id)
+            if user:
+                self.email = user.email
+                self.email_verified = user.email_verified
         return self.email
 
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_fixed(1),
-        retry=retry_if_exception_type(KeycloakError),
+        # Only retry transient connection failures. A deterministic
+        # ``invalid_grant`` (revoked/expired offline session) is a
+        # ``KeycloakPostError`` and must not be retried 3x.
+        retry=retry_if_exception_type(KeycloakConnectionError),
     )
     async def refresh(self):
+        # API-key (bearer) auth does not carry an offline token. Load it lazily
+        # here, and only when a Keycloak access token is genuinely needed, so
+        # that authentication itself never depends on the offline session.
+        if (
+            self.auth_type == AuthType.BEARER
+            and not self.refresh_token.get_secret_value()
+        ):
+            offline_token = await token_manager.load_offline_token(self.user_id)
+            if not offline_token:
+                raise ExpiredError()
+            self.refresh_token = SecretStr(offline_token)
+
         if self._is_token_expired(self.refresh_token):
             logger.debug('saas_user_auth_refresh:expired')
             raise ExpiredError()
@@ -248,7 +354,9 @@ class SaasUserAuth(UserAuth):
         settings_store = await self.get_user_settings_store()
         settings = await settings_store.load()
         if settings:
-            settings.email = self.email
+            # Resolve email via get_user_email() so it is populated (from the DB)
+            # for bearer auth, which no longer eagerly refreshes from Keycloak.
+            settings.email = await self.get_user_email()
             settings.email_verified = self.email_verified
             self._settings = settings
         return settings
@@ -300,8 +408,19 @@ class SaasUserAuth(UserAuth):
                 await self.refresh()
             return self.access_token
         except AuthError:
+            # A Keycloak access token requires the user's offline session. For
+            # API-key (bearer) auth that session is optional: provider tokens
+            # and the rest of the request context resolve independently, so a
+            # missing/revoked offline session must not turn a valid key into a
+            # 401. Degrade to None instead of raising.
+            if self.auth_type == AuthType.BEARER:
+                logger.warning('bearer_get_access_token_refresh_failed', exc_info=True)
+                return None
             raise
         except Exception as e:
+            if self.auth_type == AuthType.BEARER:
+                logger.warning('bearer_get_access_token_failed', exc_info=True)
+                return None
             raise AuthError() from e
 
     async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:
@@ -309,9 +428,6 @@ class SaasUserAuth(UserAuth):
         if self.provider_tokens is not None:
             return self.provider_tokens
         provider_tokens = {}
-        access_token = await self.get_access_token()
-        if not access_token:
-            raise AuthError()
 
         user_secrets = await self.get_secrets()
 
@@ -335,8 +451,15 @@ class SaasUserAuth(UserAuth):
                     if idp_type == ProviderType.BITBUCKET_DATA_CENTER and not host:
                         host = BITBUCKET_DATA_CENTER_HOST or None
 
-                    provider_token = await token_manager.get_idp_token(
-                        access_token.get_secret_value(),
+                    if idp_type == ProviderType.AZURE_DEVOPS and not host:
+                        host = AZURE_DEVOPS_ORGANIZATION or None
+
+                    # Resolve the provider token by user_id directly. This reads
+                    # the encrypted token from the auth_tokens table and refreshes
+                    # via the provider's OAuth endpoint — no Keycloak access
+                    # token / offline session required.
+                    provider_token = await token_manager.get_idp_token_by_user_id(
+                        self.user_id,
                         idp=idp_type,
                     )
                     # TODO: Currently we don't store the IDP user id in our refresh table. We should.
@@ -523,11 +646,13 @@ class SaasUserAuth(UserAuth):
 
     @classmethod
     async def get_for_user(cls, user_id: str) -> UserAuth:
-        offline_token = await token_manager.load_offline_token(user_id)
-        assert offline_token is not None
+        # Background / integration resolver contexts must not depend on the
+        # user's Keycloak offline session either. The offline token (if any) is
+        # loaded lazily by refresh() only when a Keycloak access token is
+        # actually required; provider tokens resolve by user_id directly.
         return SaasUserAuth(
             user_id=user_id,
-            refresh_token=SecretStr(offline_token),
+            refresh_token=SecretStr(''),
             auth_type=AuthType.BEARER,
         )
 
@@ -558,26 +683,27 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
         validation_result = await api_key_store.validate_api_key(api_key)
         if not validation_result:
             return None
-        offline_token = await token_manager.load_offline_token(
-            validation_result.user_id
-        )
-        saas_user_auth = SaasUserAuth(
+        # API-key auth is intentionally decoupled from the Keycloak offline
+        # session: we do NOT load an offline token or refresh here. A valid API
+        # key alone authenticates the request. Any provider/access token needed
+        # downstream is resolved independently (see get_provider_tokens /
+        # get_access_token), so a missing or revoked offline session no longer
+        # turns a valid key into a 401 BearerTokenError.
+        return SaasUserAuth(
             user_id=validation_result.user_id,
-            refresh_token=SecretStr(offline_token),
+            refresh_token=SecretStr(''),
             auth_type=AuthType.BEARER,
             api_key_org_id=validation_result.org_id,
             api_key_id=validation_result.key_id,
             api_key_name=validation_result.key_name,
         )
-        await saas_user_auth.refresh()
-        return saas_user_auth
     except Exception as exc:
         raise BearerTokenError from exc
 
 
 async def saas_user_auth_from_cookie(request: Request) -> SaasUserAuth | None:
     try:
-        signed_token = request.cookies.get('keycloak_auth')
+        signed_token = read_chunked_cookie(request, 'keycloak_auth')
         if not signed_token:
             return None
         return await saas_user_auth_from_signed_token(signed_token)
@@ -634,12 +760,12 @@ async def saas_user_auth_from_signed_token(signed_token: str) -> SaasUserAuth:
 
 
 async def get_user_auth_from_keycloak_id(keycloak_user_id: str) -> UserAuth:
-    offline_token = await token_manager.load_offline_token(keycloak_user_id)
-    if offline_token is None:
-        logger.info('no_offline_token_found')
-
-    user_auth = SaasUserAuth(
+    # Like get_for_user, this is a background / integration entry point that must
+    # not require the offline session. Mark it BEARER so get_access_token()
+    # degrades gracefully and refresh() lazily loads the offline token only if a
+    # Keycloak access token is genuinely needed.
+    return SaasUserAuth(
         user_id=keycloak_user_id,
-        refresh_token=SecretStr(offline_token),
+        refresh_token=SecretStr(''),
+        auth_type=AuthType.BEARER,
     )
-    return user_auth

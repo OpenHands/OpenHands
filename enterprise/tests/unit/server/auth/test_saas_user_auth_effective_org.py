@@ -150,6 +150,88 @@ class TestGetEffectiveOrgId:
         assert effective == other_org_id
 
     @pytest.mark.asyncio
+    async def test_server_side_override_wins_when_user_is_member(
+        self, async_session_maker, user_id, org_id, other_org_id
+    ):
+        await _seed_minimal(async_session_maker, user_id, org_id, other_org_id)
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('mock'),
+            effective_org_id_override=other_org_id,
+        )
+        with _stores_patched(async_session_maker)[2]:
+            effective = await user_auth.get_effective_org_id()
+
+        assert effective == other_org_id
+
+    @pytest.mark.asyncio
+    async def test_server_side_override_with_non_member_org_raises_403(
+        self, async_session_maker, user_id, org_id, other_org_id
+    ):
+        await _seed_minimal(async_session_maker, user_id, org_id)
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('mock'),
+            effective_org_id_override=other_org_id,
+        )
+        with _stores_patched(async_session_maker)[2]:
+            with pytest.raises(HTTPException) as exc_info:
+                await user_auth.get_effective_org_id()
+
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_server_side_override_api_key_org_mismatch_raises_403(
+        self, user_id, org_id, other_org_id
+    ):
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('mock'),
+            api_key_org_id=org_id,
+            effective_org_id_override=other_org_id,
+        )
+        with pytest.raises(HTTPException) as exc_info:
+            await user_auth.get_effective_org_id()
+
+        assert exc_info.value.status_code == 403
+
+    def test_set_effective_org_id_override_clears_org_scoped_caches(
+        self, user_id, org_id
+    ):
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('mock'),
+        )
+        user_auth._effective_org_id = uuid.uuid4()
+        user_auth._effective_org_id_resolved = True
+        user_auth.settings_store = object()
+        user_auth.secrets_store = object()
+        user_auth._settings = object()
+        user_auth._secrets = object()
+        user_auth.provider_tokens = {}
+        user_auth._org_id = 'old-org'
+        user_auth._org_name = 'Old Org'
+        user_auth._role = 'member'
+        user_auth._permissions = ['read']
+        user_auth._org_info_loaded = True
+
+        user_auth.set_effective_org_id_override(org_id)
+
+        assert user_auth.effective_org_id_override == org_id
+        assert user_auth._effective_org_id is None
+        assert user_auth._effective_org_id_resolved is False
+        assert user_auth.settings_store is None
+        assert user_auth.secrets_store is None
+        assert user_auth._settings is None
+        assert user_auth._secrets is None
+        assert user_auth.provider_tokens is None
+        assert user_auth._org_id is None
+        assert user_auth._org_name is None
+        assert user_auth._role is None
+        assert user_auth._permissions is None
+        assert user_auth._org_info_loaded is False
+
+    @pytest.mark.asyncio
     async def test_header_with_non_member_org_raises_403(
         self, async_session_maker, user_id, org_id, other_org_id
     ):

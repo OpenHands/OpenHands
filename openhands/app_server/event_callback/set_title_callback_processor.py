@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import ClassVar
 from uuid import UUID
 
 import httpx
@@ -11,6 +12,7 @@ from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
     EventCallbackStatus,
+    EventKind,
 )
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
@@ -79,6 +81,8 @@ async def _poll_for_title(
 
 class SetTitleCallbackProcessor(EventCallbackProcessor):
     """Callback processor which sets conversation titles."""
+
+    event_kind: ClassVar[EventKind] = 'MessageEvent'
 
     async def __call__(
         self,

@@ -15,6 +15,7 @@ interface ProfilesBodyProps {
   onRename: (profile: LlmProfileSummary) => void;
   onDelete: (profile: LlmProfileSummary) => void;
   isActivating: boolean;
+  canManage?: boolean;
 }
 
 export function ProfilesBody({
@@ -27,6 +28,7 @@ export function ProfilesBody({
   onRename,
   onDelete,
   isActivating,
+  canManage = true,
 }: ProfilesBodyProps) {
   const { t } = useTranslation();
 
@@ -63,6 +65,7 @@ export function ProfilesBody({
           onRename={onRename}
           onDelete={onDelete}
           isActivating={isActivating}
+          canManage={canManage}
         />
       ))}
     </div>

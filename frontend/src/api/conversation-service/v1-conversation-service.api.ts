@@ -250,6 +250,16 @@ class V1ConversationService {
     );
   }
 
+  static async switchAcpModel(
+    conversationId: string,
+    model: string,
+  ): Promise<void> {
+    await openHands.post(
+      `/api/v1/app-conversations/${conversationId}/switch_acp_model`,
+      { model },
+    );
+  }
+
   /**
    * Resume a V1 conversation
    * Uses the custom runtime URL from the conversation

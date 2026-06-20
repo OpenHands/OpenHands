@@ -1,14 +1,10 @@
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { CopyableContentWrapper } from "#/components/shared/buttons/copyable-content-wrapper";
-import type {
-  BitbucketDCResource,
-  BitbucketDCWebhookEnrollmentResult,
-} from "#/api/integration-service/integration-service.types";
+import type { BitbucketDCResource } from "#/api/integration-service/integration-service.types";
 import { useBitbucketDCResources } from "#/hooks/query/use-bitbucket-dc-resources-list";
-import { useEnrollBitbucketDCWebhook } from "#/hooks/mutation/use-enroll-bitbucket-dc-webhook";
-import { useUpdateBitbucketDCWebhookId } from "#/hooks/mutation/use-update-bitbucket-dc-webhook-id";
+import { useReinstallBitbucketDCWebhook } from "#/hooks/mutation/use-reinstall-bitbucket-dc-webhook";
+import { useUninstallBitbucketDCWebhook } from "#/hooks/mutation/use-uninstall-bitbucket-dc-webhook";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { Typography } from "#/ui/typography";
@@ -39,115 +35,47 @@ function StatusBadge({ enrolled }: { enrolled: boolean }) {
   );
 }
 
-function SetupValue({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <Typography.Text className="text-xs uppercase text-gray-500">
-        {label}
-      </Typography.Text>
-      <CopyableContentWrapper text={value}>
-        <code className="block rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-gray-200 break-all">
-          {value}
-        </code>
-      </CopyableContentWrapper>
-    </div>
-  );
-}
-
-function EnrollmentSetup({
-  result,
-}: {
-  result: BitbucketDCWebhookEnrollmentResult;
-}) {
-  const { t } = useTranslation();
-
-  if (!result.success || !result.webhook_url || !result.webhook_secret) {
-    return null;
-  }
-
-  return (
-    <div className="mt-3 flex flex-col gap-3 rounded border border-neutral-700 bg-neutral-900/60 p-3">
-      <Typography.Text className="text-sm text-gray-300">
-        {t(I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_SETUP_DESCRIPTION)}
-      </Typography.Text>
-      <div className="grid gap-3 md:grid-cols-2">
-        <SetupValue
-          label={t(I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_FIELD_NAME)}
-          value={result.webhook_name}
-        />
-        <SetupValue
-          label={t(I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_FIELD_URL)}
-          value={result.webhook_url}
-        />
-        <SetupValue
-          label={t(I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_FIELD_SECRET)}
-          value={result.webhook_secret}
-        />
-        <SetupValue
-          label={t(I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_FIELD_EVENTS)}
-          value={result.events.join(", ")}
-        />
-      </div>
-    </div>
-  );
-}
-
 export function BitbucketDCWebhookManager({
   className,
 }: BitbucketDCWebhookManagerProps) {
   const { t } = useTranslation();
-  const [enrollingResource, setEnrollingResource] = useState<string | null>(
+  const [installingResource, setInstallingResource] = useState<string | null>(
     null,
   );
-  const [enrollmentResults, setEnrollmentResults] = useState<
-    Map<string, BitbucketDCWebhookEnrollmentResult>
-  >(new Map());
-  const [webhookIds, setWebhookIds] = useState<Map<string, string>>(new Map());
+  const [uninstallingResource, setUninstallingResource] = useState<
+    string | null
+  >(null);
 
   const { data, isLoading, isError } = useBitbucketDCResources(true);
-  const enrollMutation = useEnrollBitbucketDCWebhook();
-  const updateWebhookIdMutation = useUpdateBitbucketDCWebhookId();
+  const reinstallMutation = useReinstallBitbucketDCWebhook();
+  const uninstallMutation = useUninstallBitbucketDCWebhook();
 
   const resources = data?.resources || [];
 
-  const handleEnroll = async (resource: BitbucketDCResource) => {
+  const handleReinstall = async (resource: BitbucketDCResource) => {
     const key = resourceKey(resource);
-    setEnrollingResource(key);
-    const nextResults = new Map(enrollmentResults);
-    nextResults.delete(key);
-    setEnrollmentResults(nextResults);
-
+    setInstallingResource(key);
     try {
-      const result = await enrollMutation.mutateAsync({
+      await reinstallMutation.mutateAsync({
         project_key: resource.project_key,
         repo_slug: resource.repo_slug,
       });
-      setEnrollmentResults(new Map(nextResults).set(key, result));
     } finally {
-      setEnrollingResource(null);
+      setInstallingResource(null);
     }
   };
 
-  const handleWebhookIdChange = (key: string, value: string) => {
-    const nextWebhookIds = new Map(webhookIds);
-    nextWebhookIds.set(key, value);
-    setWebhookIds(nextWebhookIds);
-  };
-
-  const handleWebhookIdSave = async (resource: BitbucketDCResource) => {
+  const handleUninstall = async (resource: BitbucketDCResource) => {
     const key = resourceKey(resource);
-    const webhookId = (webhookIds.get(key) ?? resource.webhook_id ?? "").trim();
-    if (!webhookId) {
-      return;
-    }
-
-    await updateWebhookIdMutation.mutateAsync({
-      resource: {
+    setUninstallingResource(key);
+    try {
+      await uninstallMutation.mutateAsync({
         project_key: resource.project_key,
         repo_slug: resource.repo_slug,
-      },
-      webhookId,
-    });
+      });
+    } finally {
+      setUninstallingResource(null);
+    }
   };
 
   if (isLoading) {
@@ -212,9 +140,6 @@ export function BitbucketDCWebhookManager({
                 {t(I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_COLUMN_STATUS)}
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                {t(I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_COLUMN_WEBHOOK_ID)}
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                 {t(I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_COLUMN_ACTION)}
               </th>
             </tr>
@@ -222,22 +147,22 @@ export function BitbucketDCWebhookManager({
           <tbody className="divide-y divide-neutral-700">
             {resources.map((resource) => {
               const key = resourceKey(resource);
-              const result = enrollmentResults.get(key);
-              const isEnrolling = enrollingResource === key;
-              const webhookId =
-                webhookIds.get(key) ?? resource.webhook_id ?? "";
-              let enrollButtonLabel = t(
-                I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_ENROLL,
-              );
-              if (resource.webhook_enrolled) {
-                enrollButtonLabel = t(
-                  I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_REGENERATE,
+              const isInstalling = installingResource === key;
+              const isUninstalling = uninstallingResource === key;
+              const anyMutationPending =
+                installingResource !== null || uninstallingResource !== null;
+
+              let installLabel: string;
+              if (isInstalling) {
+                installLabel = t(
+                  I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_INSTALLING,
                 );
-              }
-              if (isEnrolling) {
-                enrollButtonLabel = t(
-                  I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_GENERATING,
+              } else if (resource.webhook_enrolled) {
+                installLabel = t(
+                  I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_REINSTALL,
                 );
+              } else {
+                installLabel = t(I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_INSTALL);
               }
 
               return (
@@ -263,7 +188,6 @@ export function BitbucketDCWebhookManager({
                           )}
                         </Typography.Text>
                       )}
-                      {result && <EnrollmentSetup result={result} />}
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -271,42 +195,35 @@ export function BitbucketDCWebhookManager({
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={webhookId}
-                        onChange={(event) =>
-                          handleWebhookIdChange(key, event.target.value)
-                        }
-                        placeholder={t(
-                          I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_OPTIONAL_PLACEHOLDER,
-                        )}
-                        className="w-28 rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm text-white"
-                        data-testid={`bbdc-webhook-id-${key}`}
-                      />
                       <BrandButton
                         type="button"
-                        variant="secondary"
-                        onClick={() => handleWebhookIdSave(resource)}
-                        isDisabled={
-                          updateWebhookIdMutation.isPending || !webhookId.trim()
-                        }
-                        testId={`bbdc-save-webhook-id-${key}`}
+                        variant="primary"
+                        onClick={() => handleReinstall(resource)}
+                        isDisabled={anyMutationPending}
+                        className="cursor-pointer"
+                        testId={`bbdc-install-webhook-${key}`}
                       >
-                        {t(I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_SAVE)}
+                        {installLabel}
                       </BrandButton>
+                      {resource.webhook_enrolled && (
+                        <BrandButton
+                          type="button"
+                          variant="secondary"
+                          onClick={() => handleUninstall(resource)}
+                          isDisabled={anyMutationPending}
+                          className="cursor-pointer"
+                          testId={`bbdc-uninstall-webhook-${key}`}
+                        >
+                          {isUninstalling
+                            ? t(
+                                I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_UNINSTALLING,
+                              )
+                            : t(
+                                I18nKey.BITBUCKET_DATA_CENTER$WEBHOOK_UNINSTALL,
+                              )}
+                        </BrandButton>
+                      )}
                     </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <BrandButton
-                      type="button"
-                      variant="primary"
-                      onClick={() => handleEnroll(resource)}
-                      isDisabled={enrollingResource !== null}
-                      className="cursor-pointer"
-                      testId={`bbdc-enroll-webhook-${key}`}
-                    >
-                      {enrollButtonLabel}
-                    </BrandButton>
                   </td>
                 </tr>
               );

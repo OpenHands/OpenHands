@@ -19,8 +19,7 @@ IS_FEATURE_ENV = (
 IS_LOCAL_ENV = bool(HOST == 'localhost')
 
 
-# _is_all_hands_managed_domain() can be removed/replaced when a self-hosted specific
-# env var is created (e.g is_self_hosted` or `deployment_mode`)
+# Explicit OH_DEPLOYMENT_MODE wins; _is_all_hands_managed_domain() is the host fallback.
 def _is_all_hands_managed_domain(host: str) -> bool:
     """Check if the host is an All-Hands managed domain."""
     return (
@@ -32,12 +31,14 @@ def _is_all_hands_managed_domain(host: str) -> bool:
 
 
 def _get_deployment_mode() -> str:
-    """Determine deployment mode based on WEB_HOST.
+    """Determine deployment mode.
 
-    Returns:
-        'cloud' for All-Hands managed infrastructure (app.all-hands.dev, etc.)
-        'self_hosted' for enterprise self-hosted deployments (customer domains)
+    Honors an explicit OH_DEPLOYMENT_MODE ('cloud' | 'self_hosted'); otherwise
+    infers from WEB_HOST (managed domain -> 'cloud', else 'self_hosted').
     """
+    explicit = os.getenv('OH_DEPLOYMENT_MODE', '').strip().lower()
+    if explicit in ('cloud', 'self_hosted'):
+        return explicit
     if _is_all_hands_managed_domain(HOST):
         return 'cloud'
     return 'self_hosted'
@@ -60,9 +61,8 @@ PERSONAL_WORKSPACE_VERSION_TO_MODEL = {
     2: 'claude-3-7-sonnet-20250219',
     3: 'claude-sonnet-4-20250514',
     4: 'claude-sonnet-4-20250514',
-    # Minimax is now the default as it gives results close to claude in terms of quality
-    # but at a much lower price
     5: 'minimax-m2.5',
+    6: 'minimax-m2.7',
 }
 
 LITELLM_DEFAULT_MODEL = os.getenv('LITELLM_DEFAULT_MODEL')

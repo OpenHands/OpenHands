@@ -18,6 +18,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.util import await_only
 
 from openhands.app_server.services.injector import Injector, InjectorState
+from openhands.db.ssl import build_asyncpg_connect_args, build_pg8000_connect_args
 
 _logger = logging.getLogger(__name__)
 DB_SESSION_ATTR = 'db_session'
@@ -38,6 +39,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
     gcp_db_instance: str | None = None
     gcp_project: str | None = None
     gcp_region: str | None = None
+    ssl_mode: str | None = None
 
     # Private attrs
     _engine: Engine | None = PrivateAttr(default=None)
@@ -48,7 +50,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
 
     @model_validator(mode='after')
     def fill_empty_fields(self):
-        """Override any defaults with values from legacy enviroment variables"""
+        """Override any defaults with values from legacy environment variables"""
         if self.host is None:
             self.host = os.getenv('DB_HOST')
         if self.port is None:
@@ -65,6 +67,8 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
             self.gcp_project = os.getenv('GCP_PROJECT')
         if self.gcp_region is None:
             self.gcp_region = os.getenv('GCP_REGION')
+        if self.ssl_mode is None:
+            self.ssl_mode = os.getenv('DB_SSL_MODE') or os.getenv('PGSSLMODE')
         return self
 
     def _create_gcp_db_connection(self):
@@ -189,6 +193,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
             if self.host:
                 async_engine = create_async_engine(
                     url,
+                    connect_args=build_asyncpg_connect_args(self.ssl_mode),
                     pool_size=self.pool_size,
                     max_overflow=self.max_overflow,
                     pool_recycle=self.pool_recycle,
@@ -232,6 +237,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
                 url = f'sqlite:///{self.persistence_dir}/openhands.db'
             engine = create_engine(
                 url,
+                connect_args=build_pg8000_connect_args(self.ssl_mode),
                 pool_size=self.pool_size,
                 max_overflow=self.max_overflow,
                 pool_recycle=self.pool_recycle,

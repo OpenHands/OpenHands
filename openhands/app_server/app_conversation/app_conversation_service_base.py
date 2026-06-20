@@ -26,8 +26,10 @@ from openhands.app_server.app_conversation.skill_loader import (
     build_sandbox_config,
     load_skills_from_agent_server,
 )
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.user.user_context import UserContext
+from openhands.app_server.utils.auth import looks_like_jwt
 from openhands.app_server.utils.git import ensure_valid_git_branch_name
 from openhands.sdk import Agent, LLMSummarizingCondenser
 from openhands.sdk.context import AgentContext
@@ -251,7 +253,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         task.status = AppConversationStartTaskStatus.PREPARING_REPOSITORY
         yield task
-        await self.clone_or_init_git_repo(task, workspace)
+        await self.clone_or_init_git_repo(task, workspace, sandbox)
 
         # Compute the project root — the cloned repo directory when a repo is
         # selected, or the sandbox working_dir otherwise.  This must be used
@@ -318,6 +320,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         self,
         task: AppConversationStartTask,
         workspace: AsyncRemoteWorkspace,
+        sandbox: SandboxInfo | None = None,
     ):
         request = task.request
 
@@ -355,14 +358,35 @@ class AppConversationServiceBase(AppConversationService, ABC):
         dir_name = request.selected_repository.split('/')[-1]
         quoted_remote_repo_url = shlex.quote(remote_repo_url)
         quoted_dir_name = shlex.quote(dir_name)
+        git_dir = Path(workspace.working_dir) / dir_name
+        azure_devops_bearer_token = await self._get_azure_devops_bearer_token_for_git(
+            request.git_provider,
+            remote_repo_url,
+        )
 
         # Clone the repo - this is the slow part!
-        clone_command = f'git clone {quoted_remote_repo_url} {quoted_dir_name}'
+        if azure_devops_bearer_token:
+            auth_header = shlex.quote(
+                f'Authorization: Bearer {azure_devops_bearer_token}'
+            )
+            clone_command = (
+                f'git -c http.extraheader={auth_header} clone '
+                f'{quoted_remote_repo_url} {quoted_dir_name}'
+            )
+        else:
+            clone_command = f'git clone {quoted_remote_repo_url} {quoted_dir_name}'
         result = await workspace.execute_command(
             clone_command, workspace.working_dir, 120
         )
         if result.exit_code:
             _logger.warning(f'Git clone failed: {result.stderr}')
+        elif azure_devops_bearer_token:
+            await self._configure_azure_devops_git_credential_helper(
+                workspace,
+                git_dir,
+                request.selected_repository,
+                sandbox,
+            )
 
         # Checkout the appropriate branch
         if request.selected_branch:
@@ -375,10 +399,105 @@ class AppConversationServiceBase(AppConversationService, ABC):
             checkout_command = (
                 f'git checkout -b {shlex.quote(openhands_workspace_branch)}'
             )
-        git_dir = Path(workspace.working_dir) / dir_name
         result = await workspace.execute_command(checkout_command, git_dir)
         if result.exit_code:
             _logger.warning(f'Git checkout failed: {result.stderr}')
+
+    async def _get_azure_devops_bearer_token_for_git(
+        self,
+        git_provider: ProviderType | None,
+        remote_repo_url: str,
+    ) -> str | None:
+        if (
+            git_provider != ProviderType.AZURE_DEVOPS
+            and 'dev.azure.com' not in remote_repo_url
+        ):
+            return None
+
+        try:
+            token = await self.user_context.get_latest_token(ProviderType.AZURE_DEVOPS)
+        except Exception as exc:
+            _logger.warning(f'Failed to get Azure DevOps token for git: {exc}')
+            return None
+        if token and looks_like_jwt(token):
+            return token
+        return None
+
+    async def _configure_azure_devops_git_credential_helper(
+        self,
+        workspace: AsyncRemoteWorkspace,
+        git_dir: Path,
+        selected_repository: str,
+        sandbox: SandboxInfo | None,
+    ) -> None:
+        if sandbox is None:
+            _logger.warning(
+                'Skipping Azure DevOps git credential helper setup: missing sandbox'
+            )
+            return
+
+        org = selected_repository.split('/')[0]
+        helper_path = git_dir / '.git' / 'openhands-azure-devops-credential-helper'
+        secret_path = (
+            f'/api/v1/sandboxes/{sandbox.id}/settings/secrets/azure_devops_token'
+        )
+        web_url = getattr(self, 'web_url', None)
+        if web_url is None:
+            _logger.debug(
+                'Azure DevOps git credential helper has no configured web_url; '
+                'it will rely on OH_WEBHOOKS_0_BASE_URL at runtime.'
+            )
+        app_base_url = shlex.quote(web_url if isinstance(web_url, str) else '')
+        helper_script = f"""#!/bin/sh
+if [ "$1" != "get" ]; then
+  exit 0
+fi
+
+session_api_key="${{OH_SESSION_API_KEYS_0:-${{SESSION_API_KEY:-}}}}"
+webhook_url="${{OH_WEBHOOKS_0_BASE_URL:-}}"
+app_base_url={app_base_url}
+if [ -n "$webhook_url" ]; then
+  base_url="${{webhook_url%/api/v1/webhooks}}"
+else
+  base_url="$app_base_url"
+fi
+if [ -z "$session_api_key" ] || [ -z "$base_url" ]; then
+  exit 0
+fi
+
+secret_url="$base_url{secret_path}"
+token="$(curl -fsS \\
+  -H "X-Session-API-Key: $session_api_key" \\
+  "$secret_url" 2>/dev/null)" || exit 0
+if [ -z "$token" ]; then
+  exit 0
+fi
+
+printf '%s\\n' "username=oauth2"
+printf 'password=%s\\n' "$token"
+"""
+        helper_path_quoted = shlex.quote(str(helper_path))
+        helper_value = shlex.quote(f'!{shlex.quote(str(helper_path))}')
+        extraheader_key = shlex.quote(f'http.https://dev.azure.com/{org}/.extraheader')
+        credential_username_key = shlex.quote(
+            f'credential.https://dev.azure.com/{org}.username'
+        )
+        credential_helper_key = shlex.quote(
+            f'credential.https://dev.azure.com/{org}.helper'
+        )
+        command = (
+            f'printf %s {shlex.quote(helper_script)} > {helper_path_quoted}'
+            f' && chmod 700 {helper_path_quoted}'
+            f' && (git config --local --unset-all {extraheader_key} || true)'
+            f' && git config --local {credential_username_key} oauth2'
+            f' && git config --local {credential_helper_key} {helper_value}'
+            ' && git config --local credential.useHttpPath true'
+        )
+        result = await workspace.execute_command(command, git_dir)
+        if result.exit_code:
+            _logger.warning(
+                f'Azure DevOps git credential helper setup failed: {result.stderr}'
+            )
 
     async def maybe_run_setup_script(
         self,
