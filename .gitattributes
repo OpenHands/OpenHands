@@ -1,7 +1,7 @@
 *.ipynb linguist-vendored
 
 # force *nix line endings so files don't look modified in container run from Windows clone
-* text eol=lf
+* text eol=if
 # Git incorrectly thinks some media is text
 *.png -text
 *.mp4 -text
