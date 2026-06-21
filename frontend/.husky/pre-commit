@@ -6,4 +6,9 @@ npx lint-staged
 # Run backend pre-commit
 echo "Running backend pre-commit..."
 cd ..
-poetry run pre-commit run --files openhands/**/* evaluation/**/* tests/**/* --show-diff-on-failure --config ./dev_config/python/.pre-commit-config.yaml
+# Pre-commit defaults to operating on staged files; the per-hook ``types_or``
+# and ``exclude`` filters keep Python-only hooks (ruff, mypy, …) from running on
+# unrelated files. The previous ``--files openhands/**/* evaluation/**/* tests/**/*``
+# argument relied on bash globstar which husky's /bin/sh does not enable, so the
+# patterns matched only one directory level deep and silently skipped most files.
+poetry run pre-commit run --show-diff-on-failure --config ./dev_config/python/.pre-commit-config.yaml

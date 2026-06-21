@@ -74,7 +74,13 @@ export function PostHogWrapper({ children }: { children: React.ReactNode }) {
       options={{
         api_host: "https://us.i.posthog.com",
         person_profiles: "identified_only",
+        capture_performance: {
+          network_timing: true,
+          web_vitals: true,
+        },
+        capture_exceptions: true,
         bootstrap: bootstrapIds,
+        __add_tracing_headers: [window.location.hostname],
       }}
     >
       {children}

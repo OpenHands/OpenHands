@@ -9,6 +9,10 @@ interface ViewToggleProps {
   showAdvanced: boolean;
   showAll: boolean;
   isDisabled?: boolean;
+  // Extra buttons rendered in the same flex row as Basic/Advanced/All,
+  // placed after them. Used to slot section-level nav (e.g. a Profiles
+  // button) into the same control strip as the view toggles.
+  trailing?: React.ReactNode;
 }
 
 export function ViewToggle({
@@ -17,22 +21,26 @@ export function ViewToggle({
   showAdvanced,
   showAll,
   isDisabled = false,
+  trailing,
 }: ViewToggleProps) {
   const { t } = useTranslation();
 
-  if (!showAdvanced && !showAll) return null;
+  const hasViewButtons = showAdvanced || showAll;
+  if (!hasViewButtons && !trailing) return null;
 
   return (
-    <div className="flex items-center gap-2 mb-6">
-      <BrandButton
-        testId="sdk-section-basic-toggle"
-        variant={view === "basic" ? "primary" : "secondary"}
-        type="button"
-        isDisabled={isDisabled}
-        onClick={() => setView("basic")}
-      >
-        {t(I18nKey.SETTINGS$BASIC)}
-      </BrandButton>
+    <div className="flex items-center gap-2 mb-6 flex-wrap">
+      {hasViewButtons ? (
+        <BrandButton
+          testId="sdk-section-basic-toggle"
+          variant={view === "basic" ? "primary" : "secondary"}
+          type="button"
+          isDisabled={isDisabled}
+          onClick={() => setView("basic")}
+        >
+          {t(I18nKey.SETTINGS$BASIC)}
+        </BrandButton>
+      ) : null}
       {showAdvanced ? (
         <BrandButton
           testId="sdk-section-advanced-toggle"
@@ -55,6 +63,7 @@ export function ViewToggle({
           {t(I18nKey.SETTINGS$ALL)}
         </BrandButton>
       ) : null}
+      {trailing}
     </div>
   );
 }

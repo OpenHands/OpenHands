@@ -5,7 +5,7 @@ from integrations.types import SummaryExtractionTracker
 from jinja2 import Environment
 from storage.slack_user import SlackUser
 
-from openhands.server.user_auth.user_auth import UserAuth
+from openhands.app_server.user_auth.user_auth import UserAuth
 
 
 @dataclass
@@ -53,7 +53,7 @@ class SlackMessageView:
             SlackMessageView if all required fields are available,
             None if required fields are missing or bot token unavailable.
         """
-        from openhands.core.logger import openhands_logger as logger
+        from openhands.app_server.utils.logger import openhands_logger as logger
 
         team_id = payload.get('team', {}).get('id') or payload.get('team_id')
         channel_id = (
@@ -95,8 +95,13 @@ class SlackMessageView:
         )
 
 
+@dataclass
 class SlackViewInterface(SlackMessageView, SummaryExtractionTracker, ABC):
     """Interface for authenticated Slack views that can create conversations.
+
+    Note: The @dataclass decorator is required to resolve __replace__ method
+    incompatibility between parent dataclasses (SlackMessageView and
+    SummaryExtractionTracker). See: https://github.com/python/mypy/issues/5580
 
     All fields are required (non-None) because this interface is only used
     for users who have linked their Slack account to OpenHands.
@@ -112,7 +117,6 @@ class SlackViewInterface(SlackMessageView, SummaryExtractionTracker, ABC):
     should_extract: bool
     send_summary_instruction: bool
     conversation_id: str
-    v1_enabled: bool
 
     @abstractmethod
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:

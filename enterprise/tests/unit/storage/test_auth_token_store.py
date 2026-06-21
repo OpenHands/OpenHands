@@ -15,7 +15,7 @@ from storage.auth_token_store import (
 from storage.auth_tokens import AuthTokens
 from storage.base import Base
 
-from openhands.integrations.service_types import ProviderType
+from openhands.app_server.integrations.service_types import ProviderType
 
 
 @pytest.fixture

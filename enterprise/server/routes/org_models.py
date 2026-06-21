@@ -14,8 +14,16 @@ from storage.org import Org
 from storage.org_member import OrgMember
 from storage.role import Role
 
-from openhands.sdk.settings import AgentSettings, ConversationSettings
-from openhands.utils.llm import MASKED_API_KEY, resolve_llm_base_url
+from openhands.app_server.settings.settings_models import (
+    _load_persisted_agent_settings,
+    _load_persisted_conversation_settings,
+)
+from openhands.app_server.utils.llm import MASKED_API_KEY, resolve_llm_base_url
+from openhands.sdk.settings import (
+    AgentSettingsConfig,
+    ConversationSettings,
+    OpenHandsAgentSettings,
+)
 
 
 class OrgCreationError(Exception):
@@ -58,12 +66,22 @@ class OrgAuthorizationError(OrgDeletionError):
 
 
 class OrphanedUserError(OrgDeletionError):
-    """Raised when deleting an org would leave users without any organization."""
+    """Raised when deleting an org would leave OTHER users (not the requester)
+    without any organization.
+
+    A user is "orphaned" when their only ``org_member`` row is for the org being
+    deleted. The deletion path tolerates *the requester themselves* being orphaned
+    (the personal-org self-service case — the requester is consenting to their
+    own deletion by calling ``DELETE``), but refuses to silently destroy the
+    accounts of other members. In that case it raises this error so the org
+    owner can transfer or remove those members first.
+    """
 
     def __init__(self, user_ids: list[str]):
         self.user_ids = user_ids
         super().__init__(
-            f'Cannot delete organization: {len(user_ids)} user(s) would have no remaining organization'
+            f'Cannot delete organization: {len(user_ids)} other user(s) '
+            'would have no remaining organization'
         )
 
 
@@ -155,14 +173,13 @@ class OrgResponse(BaseModel):
     sandbox_base_container_image: str | None = None
     sandbox_runtime_container_image: str | None = None
     org_version: int = 0
-    agent_settings: AgentSettings = Field(default_factory=AgentSettings)
+    agent_settings: AgentSettingsConfig = Field(default_factory=OpenHandsAgentSettings)
     conversation_settings: ConversationSettings = Field(
         default_factory=ConversationSettings
     )
     search_api_key: str | None = None
     sandbox_api_key: str | None = None
     max_budget_per_task: float | None = None
-    enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
     credits: float | None = None
     is_personal: bool = False
@@ -175,8 +192,8 @@ class OrgResponse(BaseModel):
         return cls(
             id=str(org.id),
             name=org.name,
-            contact_name=org.contact_name,
-            contact_email=org.contact_email,
+            contact_name=org.contact_name,  # type: ignore[arg-type]
+            contact_email=org.contact_email,  # type: ignore[arg-type]
             conversation_expiration=org.conversation_expiration,
             remote_runtime_resource_factor=org.remote_runtime_resource_factor,
             billing_margin=org.billing_margin,
@@ -186,16 +203,13 @@ class OrgResponse(BaseModel):
             sandbox_base_container_image=org.sandbox_base_container_image,
             sandbox_runtime_container_image=org.sandbox_runtime_container_image,
             org_version=org.org_version if org.org_version is not None else 0,
-            agent_settings=AgentSettings.model_validate(
-                dict(org.agent_settings) if org.agent_settings else {}
-            ),
-            conversation_settings=ConversationSettings.model_validate(
-                dict(org.conversation_settings) if org.conversation_settings else {}
+            agent_settings=_load_persisted_agent_settings(org.agent_settings),
+            conversation_settings=_load_persisted_conversation_settings(
+                org.conversation_settings
             ),
             search_api_key=None,
             sandbox_api_key=None,
             max_budget_per_task=org.max_budget_per_task,
-            enable_solvability_analysis=org.enable_solvability_analysis,
             v1_enabled=org.v1_enabled,
             credits=credits,
             is_personal=str(org.id) == user_id if user_id else False,
@@ -232,7 +246,6 @@ class OrgUpdate(BaseModel):
     sandbox_runtime_container_image: str | None = None
     sandbox_api_key: str | None = None
     max_budget_per_task: float | None = Field(default=None, gt=0)
-    enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
     search_api_key: str | None = None
     llm_api_key: str | None = None
@@ -366,7 +379,7 @@ class OrgUpdate(BaseModel):
         member_settings = OrgMemberSettingsUpdate(
             agent_settings_diff=self.agent_settings_diff,
             conversation_settings_diff=self.conversation_settings_diff,
-            llm_api_key=self.llm_api_key or None,
+            llm_api_key=SecretStr(self.llm_api_key) if self.llm_api_key else None,
         )
         return member_settings if member_settings.has_updates() else None
 
@@ -374,7 +387,7 @@ class OrgUpdate(BaseModel):
 class OrgDefaultsSettingsResponse(BaseModel):
     """Response model for organization default settings."""
 
-    agent_settings: AgentSettings = Field(default_factory=AgentSettings)
+    agent_settings: AgentSettingsConfig = Field(default_factory=OpenHandsAgentSettings)
     conversation_settings: ConversationSettings = Field(
         default_factory=ConversationSettings
     )
@@ -397,53 +410,33 @@ class OrgDefaultsSettingsResponse(BaseModel):
     def from_org(cls, org: Org) -> 'OrgDefaultsSettingsResponse':
         """Create response from Org entity.
 
-        Denormalizes the SDK's ``litellm_proxy/`` prefix back to
-        ``openhands/`` so the frontend's basic-view provider/model dropdowns
-        can be populated, and nulls ``api_key`` so neither the raw secret
-        nor the ``MASKED_API_KEY`` marker leaks in the response.
-        ``base_url`` is returned exactly as stored so ``org.agent_settings``,
-        ``org_member.agent_settings_diff`` and this response always carry
-        the same value.
+        The SDK now keeps ``openhands/`` as the public/stored provider prefix
+        and translates to ``litellm_proxy/`` only at the transport boundary, so
+        organization responses should not reverse-map model names. Secret
+        values are still stripped before returning the response.
         """
-        agent_settings = AgentSettings.model_validate(
-            dict(org.agent_settings) if org.agent_settings else {}
-        )
-        cls._denormalize_llm_for_response(agent_settings)
+        agent_settings = _load_persisted_agent_settings(org.agent_settings)
+        cls._prepare_llm_for_response(agent_settings)
         return cls(
             agent_settings=agent_settings,
-            conversation_settings=ConversationSettings.model_validate(
-                dict(org.conversation_settings) if org.conversation_settings else {}
+            conversation_settings=_load_persisted_conversation_settings(
+                org.conversation_settings
             ),
             llm_api_key_set=org.llm_api_key is not None,
             search_api_key=cls._mask_key(org.search_api_key),
         )
 
     @staticmethod
-    def _denormalize_llm_for_response(agent_settings: AgentSettings) -> None:
-        """Rewrite ``agent_settings.llm`` in-place for UI consumption.
-
-        * ``litellm_proxy/X`` → ``openhands/X`` so the basic-view provider
-          dropdown matches (the SDK's ``AgentSettings`` validator
-          normalizes the other direction on load).
-        * ``base_url`` is returned **as stored** so the three sync targets
-          (``org.agent_settings.llm.base_url``,
-          ``org_member.agent_settings_diff.llm.base_url``, and the GET
-          response) always agree. The frontend is responsible for
-          recognizing the managed LiteLLM proxy URL / provider-default URL
-          as "basic mode" — see ``KNOWN_PROVIDER_DEFAULT_BASE_URLS`` in
-          ``frontend/src/routes/llm-settings.tsx``.
-        * ``api_key`` is nulled so neither the raw secret nor the
-          ``MASKED_API_KEY`` marker leaks in the response — the frontend
-          reads ``llm_api_key_set`` to know whether a key exists.
-
-        Pydantic v2 field assignment bypasses ``field_validator`` /
-        ``model_validator`` by default (``validate_assignment`` is off on
-        the SDK's ``LLM`` model), so the rename survives without being
-        re-normalized back to ``litellm_proxy/``.
-        """
+    def _prepare_llm_for_response(agent_settings: AgentSettingsConfig) -> None:
+        """Strip response-only LLM fields without changing provider names."""
         llm = agent_settings.llm
-        if llm.model and llm.model.startswith('litellm_proxy/'):
-            llm.model = f'openhands/{llm.model.removeprefix("litellm_proxy/")}'
+        if (
+            llm.model
+            and llm.model.startswith('openhands/')
+            and llm.base_url
+            and llm.base_url.rstrip('/') == LITE_LLM_API_URL.rstrip('/')
+        ):
+            llm.base_url = None
         llm.api_key = None
 
 
@@ -553,7 +546,6 @@ class OrgAppSettingsResponse(BaseModel):
     """Response model for organization app settings."""
 
     enable_proactive_conversation_starters: bool = True
-    enable_solvability_analysis: bool | None = None
     max_budget_per_task: float | None = None
 
     @classmethod
@@ -570,7 +562,6 @@ class OrgAppSettingsResponse(BaseModel):
             enable_proactive_conversation_starters=org.enable_proactive_conversation_starters
             if org.enable_proactive_conversation_starters is not None
             else True,
-            enable_solvability_analysis=org.enable_solvability_analysis,
             max_budget_per_task=org.max_budget_per_task,
         )
 
@@ -579,7 +570,6 @@ class OrgAppSettingsUpdate(BaseModel):
     """Request model for updating organization app settings."""
 
     enable_proactive_conversation_starters: bool | None = None
-    enable_solvability_analysis: bool | None = None
     max_budget_per_task: float | None = None
 
     @field_validator('max_budget_per_task')
@@ -590,7 +580,13 @@ class OrgAppSettingsUpdate(BaseModel):
         return v
 
 
-VALID_GIT_PROVIDERS = {'github', 'gitlab', 'bitbucket'}
+VALID_GIT_PROVIDERS = {
+    'github',
+    'gitlab',
+    'bitbucket',
+    'bitbucket_data_center',
+    'azure_devops',
+}
 
 
 class GitOrgClaimRequest(BaseModel):

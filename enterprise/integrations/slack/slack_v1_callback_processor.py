@@ -1,17 +1,17 @@
 import logging
+from typing import ClassVar
 from uuid import UUID
 
 import httpx
-from integrations.utils import get_summary_instruction
 from integrations.v1_utils import handle_callback_error
 from pydantic import Field
 from slack_sdk import WebClient
 from storage.slack_team_store import SlackTeamStore
 
-from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
+    EventKind,
 )
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
@@ -30,6 +30,8 @@ _logger = logging.getLogger(__name__)
 
 class SlackV1CallbackProcessor(EventCallbackProcessor):
     """Callback processor for Slack V1 integrations."""
+
+    event_kind: ClassVar[EventKind] = 'ConversationStateUpdateEvent'
 
     slack_view_data: dict[str, str | None] = Field(default_factory=dict)
 
@@ -50,20 +52,25 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
         # Log ALL terminal states for monitoring (finished, error, stuck)
         _logger.info('[Slack V1] Callback agent state was %s', event)
 
-        # Only request summary when execution has finished successfully
+        # Only post the final response when execution has finished successfully
         if event.value != 'finished':
             return None
 
         try:
-            summary = await self._request_summary(conversation_id)
-            await self._post_summary_to_slack(summary)
+            _logger.info(f'[Slack V1] Fetching final response {conversation_id}')
+            final_response = await self._request_final_response(conversation_id)
+            _logger.info(
+                f'[Slack V1] Posting final response {conversation_id}',
+                extra={'final_response': final_response},
+            )
+            await self._post_summary_to_slack(final_response)
 
             return EventCallbackResult(
                 status=EventCallbackResultStatus.SUCCESS,
                 event_callback_id=callback.id,
                 event_id=event.id,
                 conversation_id=conversation_id,
-                detail=summary,
+                detail=final_response,
             )
         except Exception as e:
             await handle_callback_error(
@@ -97,7 +104,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
         return bot_access_token
 
     async def _post_summary_to_slack(self, summary: str) -> None:
-        """Post a summary message to the configured Slack channel."""
+        """Post a resolver response message to the configured Slack channel."""
         bot_access_token = await self._get_bot_access_token()
         if not bot_access_token:
             raise RuntimeError('Missing Slack bot access token')
@@ -110,9 +117,9 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
         client = WebClient(token=bot_access_token)
 
         try:
-            # Post the summary as a threaded reply
+            # Post the response as a threaded reply.
             # Use markdown_text instead of text to properly render standard Markdown
-            # (e.g., **bold**, [link](url)) which is used throughout the codebase
+            # (e.g., **bold**, [link](url)) which is used throughout the codebase.
             response = client.chat_postMessage(
                 channel=channel_id,
                 markdown_text=summary,
@@ -123,11 +130,12 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
 
             if not response['ok']:
                 raise RuntimeError(
-                    f"Slack API error: {response.get('error', 'Unknown error')}"
+                    f'Slack API error: {response.get("error", "Unknown error")}'
                 )
 
             _logger.info(
-                '[Slack V1] Successfully posted summary to channel %s', channel_id
+                '[Slack V1] Successfully posted final response to channel %s',
+                channel_id,
             )
 
         except Exception as e:
@@ -138,35 +146,36 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
     # Agent / sandbox helpers
     # -------------------------------------------------------------------------
 
-    async def _ask_question(
+    async def _get_final_response(
         self,
         httpx_client: httpx.AsyncClient,
         agent_server_url: str,
         conversation_id: UUID,
         session_api_key: str,
-        message_content: str,
     ) -> str:
-        """Send a message to the agent server via the V1 API and return response text."""
-        send_message_request = AskAgentRequest(question=message_content)
-
+        """Fetch the agent's final response from the V1 API."""
         url = (
-            f"{agent_server_url.rstrip('/')}"
-            f"/api/conversations/{conversation_id}/ask_agent"
+            f'{agent_server_url.rstrip("/")}'
+            f'/api/conversations/{conversation_id}/agent_final_response'
         )
         headers = {'X-Session-API-Key': session_api_key}
-        payload = send_message_request.model_dump()
 
         try:
-            response = await httpx_client.post(
+            response = await httpx_client.get(
                 url,
-                json=payload,
                 headers=headers,
                 timeout=30.0,
             )
             response.raise_for_status()
 
-            agent_response = AskAgentResponse.model_validate(response.json())
-            return agent_response.response
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise RuntimeError('Invalid agent final response payload')
+
+            final_response = str(payload.get('response') or '').strip()
+            if not final_response:
+                raise RuntimeError('Agent final response was empty')
+            return final_response
 
         except httpx.HTTPStatusError as e:
             error_detail = f'HTTP {e.response.status_code} error'
@@ -178,47 +187,33 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
                 pass
 
             _logger.error(
-                '[Slack V1] HTTP error sending message to %s: %s. '
-                'Request payload: %s. Response headers: %s',
+                '[Slack V1] HTTP error fetching final response from %s: %s. '
+                'Response headers: %s',
                 url,
                 error_detail,
-                payload,
                 dict(e.response.headers),
                 exc_info=True,
             )
-            raise Exception(f'Failed to send message to agent server: {error_detail}')
+            raise Exception(
+                f'Failed to fetch final response from agent server: {error_detail}'
+            )
 
         except httpx.TimeoutException:
             error_detail = f'Request timeout after 30 seconds to {url}'
-            _logger.error(
-                '[Slack V1] %s. Request payload: %s',
-                error_detail,
-                payload,
-                exc_info=True,
-            )
+            _logger.error('[Slack V1] %s', error_detail, exc_info=True)
             raise Exception(error_detail)
 
         except httpx.RequestError as e:
             error_detail = f'Request error to {url}: {str(e)}'
-            _logger.error(
-                '[Slack V1] %s. Request payload: %s',
-                error_detail,
-                payload,
-                exc_info=True,
-            )
+            _logger.error('[Slack V1] %s', error_detail, exc_info=True)
             raise Exception(error_detail)
 
     # -------------------------------------------------------------------------
-    # Summary orchestration
+    # Final response orchestration
     # -------------------------------------------------------------------------
 
-    async def _request_summary(self, conversation_id: UUID) -> str:
-        """Ask the agent to produce a summary of its work and return the agent response.
-
-        NOTE: This method now returns a string (the agent server's response text)
-        and raises exceptions on errors. The wrapping into EventCallbackResult
-        is handled by __call__.
-        """
+    async def _request_final_response(self, conversation_id: UUID) -> str:
+        """Return the agent's final response without asking the LLM to summarize."""
         # Import services within the method to avoid circular imports
         from openhands.app_server.config import (
             get_app_conversation_info_service,
@@ -254,21 +249,16 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
                 app_conversation_info.sandbox_id,
             )
 
-            assert (
-                sandbox.session_api_key is not None
-            ), f'No session API key for sandbox: {sandbox.id}'
+            assert sandbox.session_api_key is not None, (
+                f'No session API key for sandbox: {sandbox.id}'
+            )
 
-            # 3. URL + instruction
+            # 3. URL
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)
 
-            # Prepare message based on agent state
-            message_content = get_summary_instruction()
-
-            # Ask the agent and return the response text
-            return await self._ask_question(
+            return await self._get_final_response(
                 httpx_client=httpx_client,
                 agent_server_url=agent_server_url,
                 conversation_id=conversation_id,
                 session_api_key=sandbox.session_api_key,
-                message_content=message_content,
             )

@@ -8,7 +8,6 @@ import { useConversationStore } from "#/stores/conversation-store";
 import { I18nKey } from "#/i18n/declaration";
 import TerminalIcon from "#/icons/terminal.svg?react";
 import GlobeIcon from "#/icons/globe.svg?react";
-import ServerIcon from "#/icons/server.svg?react";
 import GitChanges from "#/icons/git_changes.svg?react";
 import VSCodeIcon from "#/icons/vscode.svg?react";
 import PillIcon from "#/icons/pill.svg?react";
@@ -45,7 +44,6 @@ export function ConversationTabsContextMenu({
     { tab: "editor", icon: GitChanges, i18nKey: I18nKey.COMMON$CHANGES },
     { tab: "vscode", icon: VSCodeIcon, i18nKey: I18nKey.COMMON$CODE },
     { tab: "terminal", icon: TerminalIcon, i18nKey: I18nKey.COMMON$TERMINAL },
-    { tab: "served", icon: ServerIcon, i18nKey: I18nKey.COMMON$APP },
     { tab: "browser", icon: GlobeIcon, i18nKey: I18nKey.COMMON$BROWSER },
   ];
 

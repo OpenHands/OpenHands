@@ -40,8 +40,8 @@ from storage.org_member_store import OrgMemberStore
 from storage.role import Role
 from storage.role_store import RoleStore
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.server.user_auth import get_user_auth, get_user_id
+from openhands.app_server.user_auth import get_user_auth, get_user_id
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class Permission(str, Enum):
@@ -296,6 +296,18 @@ def require_permission(permission: Permission):
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail='API key is not authorized for this organization',
                 )
+
+        # If the route does not carry an ``{org_id}`` path parameter,
+        # resolve the effective org for the request — which honors any
+        # ``X-Org-Id`` header override (and validates membership /
+        # API-key binding in the process). This keeps endpoints that
+        # implicitly operate on the "current org" consistent with the
+        # rest of the codebase.
+        if org_id is None:
+            # Local import to avoid circular import via saas_user_auth.
+            from server.auth.org_context import maybe_resolve_effective_org_id
+
+            org_id = await maybe_resolve_effective_org_id(request)
 
         user_role = await get_user_org_role(user_id, org_id)
 

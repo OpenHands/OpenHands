@@ -54,7 +54,7 @@ class ResendSyncedUserStore:
         self,
         email: str,
         audience_id: str,
-        keycloak_user_id: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> ResendSyncedUser:
         """Mark a user as synced to a specific audience.
 
@@ -64,7 +64,7 @@ class ResendSyncedUserStore:
         Args:
             email: The email address of the user.
             audience_id: The Resend audience ID.
-            keycloak_user_id: Optional Keycloak user ID.
+            user_id: Optional OpenHands user ID. Stored in the legacy keycloak_user_id column.
 
         Returns:
             The ResendSyncedUser record.
@@ -78,7 +78,7 @@ class ResendSyncedUserStore:
                 .values(
                     email=email.lower(),
                     audience_id=audience_id,
-                    keycloak_user_id=keycloak_user_id,
+                    keycloak_user_id=user_id,
                     synced_at=datetime.now(UTC),
                 )
                 .on_conflict_do_nothing(constraint='uq_resend_synced_email_audience')

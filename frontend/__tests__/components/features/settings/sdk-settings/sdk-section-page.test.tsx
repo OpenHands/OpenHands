@@ -154,7 +154,9 @@ describe("SdkSectionPage", () => {
     );
 
     renderSdkSectionPage({
-      sectionKeys: ["llm"],
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
       getInitialView: () => "advanced",
     });
 
@@ -222,7 +224,9 @@ describe("SdkSectionPage", () => {
 
       return (
         <SdkSectionPage
-          sectionKeys={["llm"]}
+          settingsSources={[
+            { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+          ]}
           header={() => (
             <input
               data-testid="external-state-input"
@@ -236,7 +240,9 @@ describe("SdkSectionPage", () => {
 
     render(<Wrapper />, {
       wrapper: ({ children }) => (
-        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
       ),
     });
 
@@ -247,7 +253,9 @@ describe("SdkSectionPage", () => {
     await userEvent.type(screen.getByTestId("external-state-input"), "a");
 
     await waitFor(() => {
-      expect(screen.getByTestId("sdk-settings-llm.base_url")).toBeInTheDocument();
+      expect(
+        screen.getByTestId("sdk-settings-llm.base_url"),
+      ).toBeInTheDocument();
     });
   });
 
@@ -302,32 +310,46 @@ describe("SdkSectionPage", () => {
     const getSettingsSpy = vi
       .spyOn(SettingsService, "getSettings")
       .mockImplementation(async () => structuredClone(persistedSettings));
-    vi.spyOn(SettingsService, "saveSettings").mockImplementation(async (payload) => {
-      const agentSettings = payload.agent_settings_diff as Record<string, unknown>;
-      const llmSettings = (agentSettings.llm ?? {}) as Record<string, unknown>;
+    vi.spyOn(SettingsService, "saveSettings").mockImplementation(
+      async (payload) => {
+        const agentSettings = payload.agent_settings_diff as Record<
+          string,
+          unknown
+        >;
+        const llmSettings = (agentSettings.llm ?? {}) as Record<
+          string,
+          unknown
+        >;
 
-      persistedSettings = buildSettings({
-        agent_settings_schema: schema,
-        agent_settings: {
-          llm: {
-            endpoint:
-              typeof llmSettings.endpoint === "string"
-                ? llmSettings.endpoint
-                : "https://api.example.com",
+        persistedSettings = buildSettings({
+          agent_settings_schema: schema,
+          agent_settings: {
+            llm: {
+              endpoint:
+                typeof llmSettings.endpoint === "string"
+                  ? llmSettings.endpoint
+                  : "https://api.example.com",
+            },
           },
-        },
-      });
+        });
 
-      return true;
+        return true;
+      },
+    );
+
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
     });
-
-    renderSdkSectionPage({ sectionKeys: ["llm"] });
 
     await screen.findByTestId("sdk-section-advanced-toggle");
     await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
     await screen.findByTestId("sdk-settings-llm.api_version");
 
-    const endpointInput = await screen.findByTestId("sdk-settings-llm.endpoint");
+    const endpointInput = await screen.findByTestId(
+      "sdk-settings-llm.endpoint",
+    );
     await userEvent.clear(endpointInput);
     await userEvent.type(endpointInput, "https://api.changed.example.com");
     await userEvent.click(screen.getByTestId("save-button"));
@@ -394,32 +416,46 @@ describe("SdkSectionPage", () => {
     const getSettingsSpy = vi
       .spyOn(SettingsService, "getSettings")
       .mockImplementation(async () => structuredClone(persistedSettings));
-    vi.spyOn(SettingsService, "saveSettings").mockImplementation(async (payload) => {
-      const agentSettings = payload.agent_settings_diff as Record<string, unknown>;
-      const llmSettings = (agentSettings.llm ?? {}) as Record<string, unknown>;
+    vi.spyOn(SettingsService, "saveSettings").mockImplementation(
+      async (payload) => {
+        const agentSettings = payload.agent_settings_diff as Record<
+          string,
+          unknown
+        >;
+        const llmSettings = (agentSettings.llm ?? {}) as Record<
+          string,
+          unknown
+        >;
 
-      persistedSettings = buildSettings({
-        agent_settings_schema: schema,
-        agent_settings: {
-          llm: {
-            endpoint:
-              typeof llmSettings.endpoint === "string"
-                ? llmSettings.endpoint
-                : "https://api.example.com",
+        persistedSettings = buildSettings({
+          agent_settings_schema: schema,
+          agent_settings: {
+            llm: {
+              endpoint:
+                typeof llmSettings.endpoint === "string"
+                  ? llmSettings.endpoint
+                  : "https://api.example.com",
+            },
           },
-        },
-      });
+        });
 
-      return true;
+        return true;
+      },
+    );
+
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
     });
-
-    renderSdkSectionPage({ sectionKeys: ["llm"] });
 
     await screen.findByTestId("sdk-section-all-toggle");
     await userEvent.click(screen.getByTestId("sdk-section-all-toggle"));
     await screen.findByTestId("sdk-settings-llm.timeout");
 
-    const endpointInput = await screen.findByTestId("sdk-settings-llm.endpoint");
+    const endpointInput = await screen.findByTestId(
+      "sdk-settings-llm.endpoint",
+    );
     await userEvent.clear(endpointInput);
     await userEvent.type(endpointInput, "https://api.changed.example.com");
     await userEvent.click(screen.getByTestId("save-button"));
@@ -429,25 +465,32 @@ describe("SdkSectionPage", () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByTestId("sdk-settings-llm.timeout")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("sdk-settings-llm.timeout"),
+      ).not.toBeInTheDocument();
     });
   });
 
-
-
   it("shows the advanced toggle when it is forced for a critical-only schema", async () => {
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSavableSettings());
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSavableSettings(),
+    );
 
     renderSdkSectionPage({
-      sectionKeys: ["llm"],
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
       forceShowAdvancedView: true,
     });
 
     await screen.findByTestId("sdk-section-basic-toggle");
-    expect(screen.getByTestId("sdk-section-advanced-toggle")).toBeInTheDocument();
-    expect(screen.queryByTestId("sdk-section-all-toggle")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("sdk-section-advanced-toggle"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sdk-section-all-toggle"),
+    ).not.toBeInTheDocument();
   });
-
 
   it("shows the all toggle instead of an empty advanced tier for minor-only schemas", async () => {
     const schema: NonNullable<Settings["agent_settings_schema"]> = {
@@ -498,7 +541,11 @@ describe("SdkSectionPage", () => {
       }),
     );
 
-    renderSdkSectionPage({ sectionKeys: ["condenser"] });
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["condenser"] },
+      ],
+    });
 
     await screen.findByTestId("sdk-section-basic-toggle");
     expect(
@@ -550,20 +597,101 @@ describe("SdkSectionPage", () => {
       buildSettings({
         agent_settings_schema: schema,
         agent_settings: {
-          "verification.critic_enabled": true,
-          "verification.critic_server_url": "https://critic.example.com",
+          verification: {
+            critic_enabled: true,
+            critic_server_url: "https://critic.example.com",
+          },
         },
       }),
     );
 
     renderSdkSectionPage({
-      sectionKeys: ["verification"],
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["verification"] },
+      ],
       getInitialView: () => "all",
     });
 
     expect(
       await screen.findByTestId("sdk-settings-verification.critic_server_url"),
     ).toHaveAttribute("type", "url");
+  });
+
+  it("shows iterative refinement in the basic view once critic is enabled", async () => {
+    const schema: NonNullable<Settings["agent_settings_schema"]> = {
+      model_name: "AgentSettings",
+      sections: [
+        {
+          key: "verification",
+          label: "Verification",
+          fields: [
+            {
+              key: "verification.critic_enabled",
+              label: "Enable critic",
+              section: "verification",
+              section_label: "Verification",
+              value_type: "boolean",
+              default: true,
+              choices: [],
+              depends_on: [],
+              prominence: "critical",
+              secret: false,
+              required: true,
+            },
+            {
+              key: "verification.enable_iterative_refinement",
+              label: "Enable iterative refinement",
+              section: "verification",
+              section_label: "Verification",
+              value_type: "boolean",
+              default: false,
+              choices: [],
+              depends_on: ["verification.critic_enabled"],
+              prominence: "critical",
+              secret: false,
+              required: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings_schema: schema,
+        agent_settings: {
+          verification: {
+            critic_enabled: false,
+            enable_iterative_refinement: false,
+          },
+        },
+      }),
+    );
+
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["verification"] },
+      ],
+    });
+
+    expect(
+      await screen.findByTestId("sdk-settings-verification.critic_enabled"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId(
+        "sdk-settings-verification.enable_iterative_refinement",
+      ),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByTestId("sdk-settings-verification.critic_enabled"),
+    );
+
+    expect(
+      await screen.findByTestId(
+        "sdk-settings-verification.enable_iterative_refinement",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("shows a success toast after saving settings", async () => {
@@ -576,7 +704,11 @@ describe("SdkSectionPage", () => {
       "displaySuccessToast",
     );
 
-    renderSdkSectionPage({ sectionKeys: ["llm"] });
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
+    });
 
     const endpointInput = await screen.findByTestId(
       "sdk-settings-llm.endpoint",
@@ -599,7 +731,11 @@ describe("SdkSectionPage", () => {
     );
     const displayErrorToastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
 
-    renderSdkSectionPage({ sectionKeys: ["llm"] });
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
+    });
 
     const endpointInput = await screen.findByTestId(
       "sdk-settings-llm.endpoint",
@@ -613,6 +749,94 @@ describe("SdkSectionPage", () => {
     });
   });
 
+  it("renders trailingActions after the view toggle buttons", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSavableSettings(),
+    );
+
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
+      trailingActions: (
+        <button type="button" data-testid="trailing-action">
+          Extra
+        </button>
+      ),
+    });
+
+    // The slot has no view toggles (buildSavableSettings schema has only a
+    // critical field), so this also locks the behavior that trailingActions
+    // alone is enough to force the strip to render.
+    expect(await screen.findByTestId("trailing-action")).toBeInTheDocument();
+  });
+
+  it("drops duplicate union sections that don't match the source variant", async () => {
+    // SDK agent-settings is a discriminated union: the "llm" key exists under
+    // both the "openhands" and "acp" variants (#14892). A variant-targeted
+    // source must render only its variant's section, not the duplicate.
+    const llmField = (key: string, label: string) => ({
+      key,
+      label,
+      description: null,
+      section: "llm",
+      section_label: "LLM",
+      value_type: "string" as const,
+      default: null,
+      choices: [],
+      depends_on: [],
+      prominence: "critical" as const,
+      secret: false,
+      required: false,
+    });
+    const schema: NonNullable<Settings["agent_settings_schema"]> = {
+      model_name: "AgentSettings",
+      sections: [
+        {
+          key: "llm",
+          label: "LLM",
+          variant: "openhands",
+          fields: [
+            llmField("llm.model", "Model"),
+            llmField("llm.auth_type", "Authentication"),
+          ],
+        },
+        {
+          key: "llm",
+          label: "LLM",
+          variant: "acp",
+          fields: [
+            llmField("llm.model", "Model"),
+            llmField("llm.acp_only", "ACP Only"),
+          ],
+        },
+      ],
+    };
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ agent_settings_schema: schema }),
+    );
+
+    renderSdkSectionPage({
+      settingsSources: [
+        {
+          settingsSource: "agent_settings",
+          sectionKeys: ["llm"],
+          variant: "openhands",
+        },
+      ],
+    });
+
+    expect(
+      await screen.findByTestId("sdk-settings-llm.auth_type"),
+    ).toBeInTheDocument();
+    // openhands fields render exactly once; the acp duplicate is dropped.
+    expect(screen.getAllByTestId("sdk-settings-llm.model")).toHaveLength(1);
+    expect(
+      screen.queryByTestId("sdk-settings-llm.acp_only"),
+    ).not.toBeInTheDocument();
+  });
+
   it("allows saving custom payloads when only external state is dirty", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
     const saveSettingsSpy = vi
@@ -620,7 +844,9 @@ describe("SdkSectionPage", () => {
       .mockResolvedValue(true);
 
     renderSdkSectionPage({
-      sectionKeys: ["llm"],
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
       extraDirty: true,
       buildPayload: (payload) => ({
         ...payload,

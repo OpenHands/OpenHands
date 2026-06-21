@@ -29,7 +29,6 @@ def mock_org():
     org = MagicMock(spec=Org)
     org.id = uuid.uuid4()
     org.enable_proactive_conversation_starters = True
-    org.enable_solvability_analysis = False
     org.max_budget_per_task = 25.0
     return org
 
@@ -42,8 +41,15 @@ def mock_store():
 
 @pytest.fixture
 def mock_user_context(user_id):
-    """Create a mock UserContext that returns the user_id."""
+    """Create a mock UserContext that returns the user_id.
+
+    Explicitly sets ``user_auth = None`` so the service's effective-org
+    resolver falls back to the legacy ``get_current_org_by_user_id``
+    path; otherwise ``MagicMock`` would auto-create a ``user_auth``
+    attribute whose ``get_effective_org_id`` would not be awaitable.
+    """
     context = MagicMock()
+    context.user_auth = None
     context.get_user_id = AsyncMock(return_value=user_id)
     return context
 
@@ -67,7 +73,6 @@ async def test_get_org_app_settings_success(
     # Assert
     assert isinstance(result, OrgAppSettingsResponse)
     assert result.enable_proactive_conversation_starters is True
-    assert result.enable_solvability_analysis is False
     assert result.max_budget_per_task == 25.0
     mock_store.get_current_org_by_user_id.assert_called_once_with(user_id)
 

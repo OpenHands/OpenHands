@@ -3,12 +3,14 @@ import typing
 from datetime import UTC, datetime
 from decimal import Decimal
 from enum import Enum
+from uuid import UUID
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from integrations import stripe_service
 from pydantic import BaseModel
+from server.auth.org_context import EFFECTIVE_ORG_ID
 from server.constants import STRIPE_API_KEY
 from server.logger import logger
 from server.utils.url_utils import get_web_url
@@ -20,17 +22,16 @@ from storage.org import Org
 from storage.subscription_access import SubscriptionAccess
 from storage.user_store import UserStore
 
+from openhands.analytics import get_analytics_service
 from openhands.app_server.config import get_global_config
-from openhands.server.user_auth import get_user_id
+from openhands.app_server.user_auth import get_user_id
 
 stripe.api_key = STRIPE_API_KEY
 billing_router = APIRouter(prefix='/api/billing', tags=['Billing'])
 
 
 async def validate_billing_enabled() -> None:
-    """
-    Validate that the billing feature flag is enabled
-    """
+    """Validate that the billing feature flag is enabled"""
     config = get_global_config()
     web_client_config = await config.web_client.get_web_client_config()
     if not web_client_config.feature_flags.enable_billing:
@@ -87,17 +88,17 @@ def calculate_credits(user_info: LiteLlmUserInfo) -> float:
 
 # Endpoint to retrieve the current organization's credit balance
 @billing_router.get('/credits')
-async def get_credits(user_id: str = Depends(get_user_id)) -> GetCreditsResponse:
+async def get_credits(
+    user_id: str = Depends(get_user_id),
+    effective_org_id: UUID = EFFECTIVE_ORG_ID,
+) -> GetCreditsResponse:
     if not stripe_service.STRIPE_API_KEY:
         return GetCreditsResponse()
-    user = await UserStore.get_user_by_id(user_id)
-    if user is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail='User not found')
     user_team_info = await LiteLlmManager.get_user_team_info(
-        user_id, str(user.current_org_id)
+        user_id, str(effective_org_id)
     )
     max_budget, spend = LiteLlmManager.get_budget_from_team_info(
-        user_team_info, user_id, str(user.current_org_id)
+        user_team_info, user_id, str(effective_org_id)
     )
     credits = max(max_budget - spend, 0)
     return GetCreditsResponse(credits=Decimal('{:.2f}'.format(credits)))
@@ -133,19 +134,28 @@ async def get_subscription_access(
 
 # Endpoint to check if a user has entered a payment method into stripe
 @billing_router.post('/has-payment-method')
-async def has_payment_method(user_id: str = Depends(get_user_id)) -> bool:
+async def has_payment_method(
+    user_id: str = Depends(get_user_id),
+    effective_org_id: UUID = EFFECTIVE_ORG_ID,
+) -> bool:
     if not user_id:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
-    return await stripe_service.has_payment_method_by_user_id(user_id)
+    return await stripe_service.has_payment_method_by_user_id(
+        user_id, org_id=effective_org_id
+    )
 
 
 # Endpoint to create a new setup intent in stripe
 @billing_router.post('/create-customer-setup-session')
 async def create_customer_setup_session(
-    request: Request, user_id: str = Depends(get_user_id)
+    request: Request,
+    user_id: str = Depends(get_user_id),
+    effective_org_id: UUID = EFFECTIVE_ORG_ID,
 ) -> CreateBillingSessionResponse:
     await validate_billing_enabled()
-    customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
+    customer_info = await stripe_service.find_or_create_customer_by_user_id(
+        user_id, org_id=effective_org_id
+    )
     if not customer_info:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -159,7 +169,7 @@ async def create_customer_setup_session(
         success_url=f'{base_url}?setup=success',
         cancel_url=f'{base_url}',
     )
-    return CreateBillingSessionResponse(redirect_url=checkout_session.url)
+    return CreateBillingSessionResponse(redirect_url=checkout_session.url)  # type: ignore[arg-type]
 
 
 # Endpoint to create a new Stripe checkout session for credit purchase
@@ -168,10 +178,13 @@ async def create_checkout_session(
     body: CreateCheckoutSessionRequest,
     request: Request,
     user_id: str = Depends(get_user_id),
+    effective_org_id: UUID = EFFECTIVE_ORG_ID,
 ) -> CreateBillingSessionResponse:
     await validate_billing_enabled()
     base_url = get_web_url(request)
-    customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
+    customer_info = await stripe_service.find_or_create_customer_by_user_id(
+        user_id, org_id=effective_org_id
+    )
     if not customer_info:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -222,7 +235,7 @@ async def create_checkout_session(
         session.add(billing_session)
         await session.commit()
 
-    return CreateBillingSessionResponse(redirect_url=checkout_session.url)
+    return CreateBillingSessionResponse(redirect_url=checkout_session.url)  # type: ignore[arg-type]
 
 
 # Callback endpoint for successful Stripe payments - updates user credits and billing session status
@@ -298,6 +311,27 @@ async def success_callback(session_id: str, request: Request):
             },
         )
         await session.commit()
+
+        # Analytics: credit purchased event (fires after commit so event only fires on success)
+        try:
+            analytics = get_analytics_service()
+            if analytics and user:
+                from openhands.analytics.analytics_context import AnalyticsContext
+
+                ctx = AnalyticsContext(
+                    user_id=billing_session.user_id,
+                    consented=user.user_consents_to_analytics is True,
+                    org_id=str(user.current_org_id) if user.current_org_id else None,
+                    user=user,
+                )
+                analytics.track_credit_purchased(
+                    ctx=ctx,
+                    amount_usd=add_credits,
+                    credit_balance_before=max_budget,
+                    credit_balance_after=new_max_budget,
+                )
+        except Exception:
+            logger.exception('analytics:credit_purchased:failed')
 
     return RedirectResponse(
         f'{get_web_url(request)}/settings/billing?checkout=success', status_code=302

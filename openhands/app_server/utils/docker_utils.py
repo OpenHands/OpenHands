@@ -1,6 +1,6 @@
 from urllib.parse import urlparse, urlunparse
 
-from openhands.utils.environment import is_running_in_docker
+from openhands.app_server.utils.environment import is_running_in_docker
 
 
 def replace_localhost_hostname_for_docker(

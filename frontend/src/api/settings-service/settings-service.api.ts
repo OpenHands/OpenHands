@@ -37,8 +37,8 @@ class SettingsService {
   static async saveSettings(
     settings: Partial<Settings> & Record<string, unknown>,
   ): Promise<boolean> {
-    const data = await openHands.post("/api/v1/settings", settings);
-    return data.status === 200;
+    const response = await openHands.post("/api/v1/settings", settings);
+    return response.status === 200;
   }
 }
 
