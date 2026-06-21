@@ -7,6 +7,7 @@ class ApiKeyScopeName(str, Enum):
     FULL = 'full'
     SANDBOX = 'sandbox'
 
+
 class ScopeInfo(BaseModel):
     name: ApiKeyScopeName
     description: str
@@ -14,6 +15,7 @@ class ScopeInfo(BaseModel):
     is_visible_to_users: bool = True
     # If None, grants all permissions. If set, grants only specific permissions.
     permissions: set[str] | None = None
+
 
 SCOPE_MANIFEST: dict[ApiKeyScopeName, ScopeInfo] = {
     ApiKeyScopeName.FULL: ScopeInfo(
@@ -26,9 +28,10 @@ SCOPE_MANIFEST: dict[ApiKeyScopeName, ScopeInfo] = {
         name=ApiKeyScopeName.SANDBOX,
         description='Restricted access strictly for automated sandboxes. Can access runtime settings but cannot manage secrets, API keys, or organizations.',
         is_default=False,
-        permissions=set(), # No SaaS permissions
+        permissions=set(),  # No SaaS permissions
     ),
 }
+
 
 def get_scope_info() -> list[ScopeInfo]:
     """Returns all scopes that are visible to users (for UI rendering)."""
