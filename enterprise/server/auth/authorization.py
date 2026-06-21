@@ -353,8 +353,8 @@ def require_permission(permission: Permission):
                         'scope_permissions': {
                             name: (
                                 None
-                                if SCOPE_MANIFEST.get(name) is None
-                                else SCOPE_MANIFEST.get(name).permissions
+                                if (info := SCOPE_MANIFEST.get(name)) is None
+                                else info.permissions
                             )
                             for name in api_key_scopes
                         },
