@@ -39,9 +39,17 @@ class TestDeepMergeWithWholesaleKeys:
     """Tests for deep_merge_with_wholesale_keys function."""
 
     def test_default_wholesale_keys(self):
-        """Verify default wholesale keys include mcp_config."""
-        assert 'mcp_config' in WHOLESALE_REPLACEMENT_KEYS
-        assert 'acp_env' not in WHOLESALE_REPLACEMENT_KEYS
+        """Pin the exact wholesale-replacement keyset.
+
+        ``mcp_config`` is the only member-private agent-settings collection.
+        The legacy ``acp_env`` channel was removed in SDK 1.29.0 (ACP
+        provider creds now ride the per-user Secrets panel, not
+        agent_settings), so it is intentionally absent. Adding a key here
+        also makes it member-private in SaaS (see
+        ``saas_settings_store.MEMBER_PRIVATE_AGENT_KEYS``), so this asserts
+        the full set to force a conscious update.
+        """
+        assert WHOLESALE_REPLACEMENT_KEYS == frozenset({'mcp_config'})
 
     def test_mcp_config_replaced_wholesale(self):
         """mcp_config should be replaced, not merged."""

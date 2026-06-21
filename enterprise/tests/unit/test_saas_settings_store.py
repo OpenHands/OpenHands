@@ -936,6 +936,62 @@ async def test_load_drops_legacy_org_level_mcp_config(
 
 
 @pytest.mark.asyncio
+async def test_load_drops_legacy_org_level_acp_env(
+    session_maker, async_session_maker, org_with_multiple_members_fixture
+):
+    """A legacy org-level ``acp_env`` ACP credential must not reach a member.
+
+    Before SDK 1.29.0, ACP creds could be carried in the ``acp_env``
+    agent-settings field, which was broadcast at the org level (it was never
+    added to ``MEMBER_PRIVATE_AGENT_KEYS``). SDK 1.29.0 removed the field, so
+    the shared loader drops it: a stale value left in ``org.agent_settings``
+    can no longer leak to other members. (ACP provider creds now ride the
+    per-user Secrets panel, not agent_settings.)
+    """
+    from sqlalchemy import select
+    from storage.org import Org
+    from storage.user import User
+
+    fixture = org_with_multiple_members_fixture
+    org_id = fixture['org_id']
+    member1_user_id = str(fixture['member1_user_id'])
+
+    leaked_cred = 'sk-leaked-acp-cred'
+    with session_maker() as session:
+        org = session.execute(select(Org).where(Org.id == org_id)).scalars().first()
+        # Simulate a pre-1.29.0 row: an ACP org whose agent_settings still
+        # carries an acp_env provider credential.
+        org.agent_settings = {
+            'agent_kind': 'acp',
+            'acp_server': 'claude-code',
+            'acp_env': {'ANTHROPIC_API_KEY': leaked_cred},
+        }
+        user = (
+            session.execute(select(User).where(User.id == fixture['member1_user_id']))
+            .scalars()
+            .first()
+        )
+        user.enable_sound_notifications = False
+        session.commit()
+
+    store = SaasSettingsStore(member1_user_id)
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+    ):
+        loaded = await store.load()
+
+    # The stale acp_env is dropped on load; member1 never sees the cred.
+    assert loaded is not None
+    assert loaded.agent_settings.agent_kind == 'acp'
+    assert not hasattr(loaded.agent_settings, 'acp_env')
+    dumped = loaded.agent_settings.model_dump(mode='json')
+    assert 'acp_env' not in dumped
+    assert leaked_cred not in repr(dumped)
+
+
+@pytest.mark.asyncio
 async def test_store_and_load_llm_profiles_round_trip(
     async_session_maker, org_with_multiple_members_fixture
 ):
