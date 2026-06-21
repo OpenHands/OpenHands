@@ -7,7 +7,9 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select, update
+from sqlalchemy.orm import selectinload
 from storage.api_key import ApiKey
+from storage.api_key_scope import ApiKeyScope
 from storage.database import a_session_maker
 from storage.user_store import UserStore
 
@@ -22,6 +24,7 @@ class ApiKeyValidationResult:
     org_id: UUID | None  # None for legacy API keys without org binding
     key_id: int
     key_name: str | None
+    scopes: list[str]
 
 
 @dataclass
@@ -56,6 +59,7 @@ class ApiKeyStore:
         name: str | None = None,
         expires_at: datetime | None = None,
         org_id: UUID | None = None,
+        scopes: list[str] | None = None,
     ) -> str:
         """Create a new API key for a user.
 
@@ -68,6 +72,7 @@ class ApiKeyStore:
                 to the user's persisted ``current_org_id``. Callers in
                 request context should pass the effective org id (see
                 ``SaasUserAuth.get_effective_org_id``).
+            scopes: Optional list of scopes. If omitted, defaults to full access.
 
         Returns:
             The generated API key
@@ -91,6 +96,8 @@ class ApiKeyStore:
                 name=name,
                 expires_at=expires_at,
             )
+            if scopes:
+                key_record.scopes = [ApiKeyScope(scope=s) for s in scopes]
             session.add(key_record)
             await session.commit()
 
@@ -213,7 +220,11 @@ class ApiKeyStore:
         now = datetime.now(UTC)
 
         async with a_session_maker() as session:
-            result = await session.execute(select(ApiKey).filter(ApiKey.key == api_key))
+            result = await session.execute(
+                select(ApiKey)
+                .options(selectinload(ApiKey.scopes))
+                .filter(ApiKey.key == api_key)
+            )
             key_record = result.scalars().first()
 
             if not key_record:
@@ -237,11 +248,14 @@ class ApiKeyStore:
             )
             await session.commit()
 
+            scopes_list = [s.scope for s in key_record.scopes] if key_record.scopes else ['full']
+
             return ApiKeyValidationResult(
                 user_id=key_record.user_id,
                 org_id=key_record.org_id,
                 key_id=key_record.id,
                 key_name=key_record.name,
+                scopes=scopes_list,
             )
 
     async def delete_api_key(self, api_key: str) -> bool:

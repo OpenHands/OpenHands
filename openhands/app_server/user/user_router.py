@@ -8,6 +8,7 @@ from openhands.app_server.integrations.service_types import UserGitInfo
 from openhands.app_server.sandbox.session_auth import validate_session_key_ownership
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
+from openhands.app_server.user_auth.scope_manifest import ScopeInfo, get_scope_info
 from openhands.app_server.utils.dependencies import get_dependencies
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
@@ -56,3 +57,11 @@ async def get_current_user_git_info(
             detail='Git provider not connected',
         )
     return user
+
+
+@router.get('/auth/scopes')
+async def get_available_scopes(
+    user_context: UserContext = user_dependency,
+) -> list[ScopeInfo]:
+    """Get the available API key scopes and their descriptions for the consent UI."""
+    return get_scope_info()

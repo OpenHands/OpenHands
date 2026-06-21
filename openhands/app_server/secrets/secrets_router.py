@@ -30,12 +30,13 @@ from openhands.app_server.user_auth import (
 )
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.models import EditResponse
+from openhands.app_server.utils.scope_dependencies import require_scope
 
 # Create router with /api/v1/secrets prefix
 router = APIRouter(
     prefix='/secrets',
     tags=['Secrets'],
-    dependencies=get_dependencies(),
+    dependencies=get_dependencies() + [Depends(require_scope(['full']))],
 )
 
 

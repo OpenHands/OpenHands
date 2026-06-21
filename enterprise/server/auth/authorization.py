@@ -1,5 +1,4 @@
-"""
-Permission-based authorization dependencies for API endpoints.
+"""Permission-based authorization dependencies for API endpoints.
 
 This module provides FastAPI dependencies for checking user permissions
 within organizations. It uses a permission-based authorization model where
@@ -174,8 +173,7 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
 
 
 async def get_user_org_role(user_id: str, org_id: UUID | None) -> Role | None:
-    """
-    Get the user's role in an organization.
+    """Get the user's role in an organization.
 
     Args:
         user_id: User ID (string that will be converted to UUID)
@@ -199,8 +197,7 @@ async def get_user_org_role(user_id: str, org_id: UUID | None) -> Role | None:
 
 
 def get_role_permissions(role_name: str) -> frozenset[Permission]:
-    """
-    Get the permissions for a role.
+    """Get the permissions for a role.
 
     Args:
         role_name: Name of the role
@@ -216,8 +213,7 @@ def get_role_permissions(role_name: str) -> frozenset[Permission]:
 
 
 def has_permission(user_role: Role, permission: Permission) -> bool:
-    """
-    Check if a role has a specific permission.
+    """Check if a role has a specific permission.
 
     Args:
         user_role: User's Role object
@@ -244,8 +240,7 @@ async def get_api_key_org_id_from_request(request: Request) -> UUID | None:
 
 
 def require_permission(permission: Permission):
-    """
-    Factory function that creates a dependency to require a specific permission.
+    """Factory function that creates a dependency to require a specific permission.
 
     This creates a FastAPI dependency that:
     1. Extracts org_id from the path parameter
@@ -321,6 +316,35 @@ def require_permission(permission: Permission):
                 detail='User is not a member of this organization',
             )
 
+        # Enforce API Key Scopes
+        user_auth = getattr(request.state, 'user_auth', None)
+        api_key_scopes = getattr(user_auth, 'api_key_scopes', None)
+        if api_key_scopes is not None:
+            from openhands.app_server.user_auth.scope_manifest import SCOPE_MANIFEST
+            
+            has_scope = False
+            for scope_name in api_key_scopes:
+                scope_info = SCOPE_MANIFEST.get(scope_name)
+                if not scope_info:
+                    continue
+                if scope_info.permissions is None or permission.value in scope_info.permissions:
+                    has_scope = True
+                    break
+                    
+            if not has_scope:
+                logger.warning(
+                    'API key scope does not allow this operation',
+                    extra={
+                        'user_id': user_id,
+                        'scopes': api_key_scopes,
+                        'required_permission': permission.value,
+                    },
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f'API key scope restricts access to {permission.value}',
+                )
+
         if not has_permission(user_role, permission):
             logger.warning(
                 'Insufficient permissions',
@@ -346,8 +370,7 @@ async def require_financial_data_access(
     org_id: UUID,
     user_id: str | None = Depends(get_user_id),
 ) -> str:
-    """
-    Authorization dependency for accessing organization financial data.
+    """Authorization dependency for accessing organization financial data.
 
     Allows access if ANY of these conditions are met:
     1. User has Admin or Owner role in the organization
@@ -399,6 +422,33 @@ async def require_financial_data_access(
             extra={'user_id': user_id, 'org_id': str(org_id)},
         )
         return user_id
+
+    # Enforce API Key Scopes
+    api_key_scopes = getattr(user_auth, 'api_key_scopes', None)
+    if api_key_scopes is not None:
+        from openhands.app_server.user_auth.scope_manifest import SCOPE_MANIFEST
+        has_scope = False
+        for scope_name in api_key_scopes:
+            scope_info = SCOPE_MANIFEST.get(scope_name)
+            if not scope_info:
+                continue
+            # For financial data access, require FULL scope since it's highly privileged
+            if scope_info.permissions is None:
+                has_scope = True
+                break
+                
+        if not has_scope:
+            logger.warning(
+                'API key scope does not allow financial data access',
+                extra={
+                    'user_id': user_id,
+                    'scopes': api_key_scopes,
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='API key scope restricts access to financial data',
+            )
 
     # Check if user has Admin or Owner role in the organization
     user_role = await get_user_org_role(user_id, org_id)
