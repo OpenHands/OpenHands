@@ -110,10 +110,6 @@ dependencies = [
 urls.Homepage = "https://github.com/OpenHands/OpenHands"
 urls.Repository = "https://github.com/OpenHands/OpenHands"
 
-[tool.uv]
-exclude-newer = "7 days"
-exclude-newer-package = { openhands-aci = "0 days", openhands-agent-server = "0 days", openhands-sdk = "0 days", openhands-tools = "0 days" }
-
 [dependency-groups]
 dev = [
   "build",
@@ -349,3 +345,7 @@ lint.flake8-quotes.inline-quotes = "single"
 concurrency = [ "gevent" ]
 relative_files = true
 omit = [ "enterprise/tests/*", "**/test_*" ]
+
+[tool.uv]
+exclude-newer = "7 days"
+exclude-newer-package = { openhands-aci = false, openhands-agent-server = false, openhands-sdk = false, openhands-tools = false }

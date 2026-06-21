@@ -21,7 +21,7 @@ This is the frontend of the OpenHands project. It is a React application that pr
 ### Prerequisites
 
 - Node.js 22.12.x or later
-- `npm`, `bun`, or any other package manager that supports the `package.json` file
+- npm 11.17.0 or later. The frontend pins this version in `package.json`; use Corepack so installs honor the pinned package manager and repo-local `.npmrc` settings.
 
 ### Installation
 
@@ -33,7 +33,7 @@ git clone https://github.com/OpenHands/OpenHands.git
 cd OpenHands/frontend
 
 # Install the dependencies
-npm install
+corepack npm install
 ```
 
 ### Running the Application in Development Mode

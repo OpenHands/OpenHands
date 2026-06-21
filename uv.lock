@@ -11,14 +11,14 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-03-27T09:46:46.200739978Z"
+exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
 exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
-openhands-agent-server = { timestamp = "2026-04-03T09:46:46.200757912Z", span = "PT0S" }
-openhands-tools = { timestamp = "2026-04-03T09:46:46.200759726Z", span = "PT0S" }
-openhands-sdk = { timestamp = "2026-04-03T09:46:46.200758864Z", span = "PT0S" }
-openhands-aci = { timestamp = "2026-04-03T09:46:46.200751141Z", span = "PT0S" }
+openhands-agent-server = false
+openhands-tools = false
+openhands-sdk = false
+openhands-aci = false
 
 [[package]]
 name = "agent-client-protocol"
