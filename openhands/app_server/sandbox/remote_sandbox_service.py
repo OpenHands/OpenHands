@@ -372,6 +372,29 @@ class RemoteSandboxService(SandboxService):
             )
             return self._to_sandbox_info(stored_sandbox, None)
 
+    async def _get_user_running_sandboxes(self) -> list[StoredRemoteSandbox]:
+        """Return the DB records for sandboxes that are actually running right now.
+
+        Calls the runtime /list endpoint (which returns all running sessions across
+        all users) and cross-references with the current user's DB records.  This
+        is the authoritative source of truth: a sandbox only counts as running if
+        the runtime says it is — stale or expired DB rows are automatically excluded.
+        """
+        response = await self._send_runtime_api_request('GET', '/list')
+        response.raise_for_status()
+        running_session_ids = {
+            runtime['session_id']
+            for runtime in response.json().get('runtimes', [])
+            if 'session_id' in runtime
+        }
+
+        query = await self._secure_select()
+        query = query.filter(StoredRemoteSandbox.id.in_(running_session_ids)).order_by(
+            StoredRemoteSandbox.created_at.asc()
+        )
+        result = await self.db_session.execute(query)
+        return list(result.scalars().all())
+
     async def get_sandbox_record_by_session_api_key(
         self, session_api_key: str
     ) -> SandboxRecord | None:
@@ -414,7 +437,6 @@ class RemoteSandboxService(SandboxService):
                     raise ValueError('Sandbox Spec not found')
                 sandbox_spec = sandbox_spec_maybe
 
-            # Create a unique id, use provided sandbox_id if available
             if sandbox_id is None:
                 sandbox_id = base62.encodebytes(os.urandom(16))
 
@@ -574,58 +596,38 @@ class RemoteSandboxService(SandboxService):
             return False
 
     async def pause_old_sandboxes(self, max_num_sandboxes: int) -> list[str]:
-        """Pause the oldest sandboxes if there are more than max_num_sandboxes running.
-        In a multi user environment, this will pause sandboxes only for the current user.
+        """Pause the oldest running sandboxes until at most max_num_sandboxes remain.
 
-        Args:
-            max_num_sandboxes: Maximum number of sandboxes to keep running
-
-        Returns:
-            List of sandbox IDs that were paused
+        Uses _get_user_running_sandboxes (runtime /list + DB cross-reference) so
+        only sandboxes that are actually running are considered.
         """
         if max_num_sandboxes <= 0:
             raise ValueError('max_num_sandboxes must be greater than 0')
 
-        response = await self._send_runtime_api_request(
-            'GET',
-            '/list',
-        )
-        content = response.json()
-        running_session_ids = [
-            runtime.get('session_id') for runtime in content['runtimes']
-        ]
+        running = await self._get_user_running_sandboxes()
 
-        query = await self._secure_select()
-        query = query.filter(StoredRemoteSandbox.id.in_(running_session_ids)).order_by(
-            StoredRemoteSandbox.created_at.desc()
-        )
-        running_sandboxes = list(await self.db_session.execute(query))
-
-        # If we're within the limit, no cleanup needed
-        if len(running_sandboxes) <= max_num_sandboxes:
+        if len(running) <= max_num_sandboxes:
             return []
 
-        # Determine how many to pause
-        num_to_pause = len(running_sandboxes) - max_num_sandboxes
-        sandboxes_to_pause = running_sandboxes[:num_to_pause]
-
-        # Stop the oldest sandboxes
-        paused_sandbox_ids = []
-        for sandbox in sandboxes_to_pause:
+        # running is sorted oldest-first; pause the oldest to make room
+        num_to_pause = len(running) - max_num_sandboxes
+        paused_ids: list[str] = []
+        for sandbox in running[:num_to_pause]:
             try:
-                success = await self.pause_sandbox(sandbox.id)
-                if success:
-                    paused_sandbox_ids.append(sandbox.id)
+                if await self.pause_sandbox(sandbox.id):
+                    paused_ids.append(sandbox.id)
             except Exception:
-                # Continue trying to pause other sandboxes even if one fails
                 pass
-
-        return paused_sandbox_ids
+        return paused_ids
 
     async def batch_get_sandboxes(
         self, sandbox_ids: list[str]
     ) -> list[SandboxInfo | None]:
-        """Get a batch of sandboxes, returning None for any which were not found."""
+        """Get a batch of sandboxes, returning None for any which were not found.
+
+        Falls back to returning sandboxes with missing/unknown runtime status if the
+        runtime API is unavailable, rather than failing the entire batch request.
+        """
         if not sandbox_ids:
             return []
         query = await self._secure_select()
@@ -635,9 +637,20 @@ class RemoteSandboxService(SandboxService):
             stored_remote_sandbox[0].id: stored_remote_sandbox[0]
             for stored_remote_sandbox in stored_remote_sandboxes
         }
-        runtimes_by_id = await self._get_runtimes_batch(
-            list(stored_remote_sandboxes_by_id)
-        )
+
+        # Gracefully handle runtime API failures by falling back to empty runtimes.
+        # This mirrors the behavior of get_sandbox which falls back to runtime=None.
+        try:
+            runtimes_by_id = await self._get_runtimes_batch(
+                list(stored_remote_sandboxes_by_id)
+            )
+        except Exception:
+            _logger.exception(
+                'Error getting runtimes batch, falling back to empty runtimes',
+                stack_info=True,
+            )
+            runtimes_by_id = {}
+
         results = []
         for sandbox_id in sandbox_ids:
             stored_remote_sandbox = stored_remote_sandboxes_by_id.get(sandbox_id)

@@ -4,6 +4,8 @@ from uuid import UUID, uuid4
 import pytest
 
 from openhands.app_server.app_conversation.app_conversation_models import (
+    ACP_SERVER_TAG_KEY,
+    AppConversation,
     AppConversationInfo,
     AppConversationStartRequest,
     AppConversationUpdateRequest,
@@ -99,6 +101,58 @@ def test_app_conversation_update_request_title_field_updates_conversation_info()
         'Title was not updated on AppConversationInfo. '
         "Ensure 'title' is in AppConversationUpdateRequest.model_fields_set."
     )
+
+
+class TestAcpServerProjection:
+    """``AppConversationInfo.acp_server`` projects the ``acpserver`` tag.
+
+    The conversation UI on the cloud backend reads this top-level field to
+    resolve a provider brand label and render the model picker.
+    """
+
+    def _acp_info(self, **overrides) -> AppConversationInfo:
+        kwargs: dict = {
+            'created_by_user_id': 'u',
+            'sandbox_id': 'sb',
+            'agent_kind': 'acp',
+            'tags': {ACP_SERVER_TAG_KEY: 'codex'},
+        }
+        kwargs.update(overrides)
+        return AppConversationInfo(**kwargs)
+
+    def test_projects_provider_key_from_tag(self):
+        assert self._acp_info().acp_server == 'codex'
+
+    def test_serialized_into_json_for_the_canvas(self):
+        info = self._acp_info()
+        assert info.model_dump()['acp_server'] == 'codex'
+        assert info.model_dump_json().find('"acp_server":"codex"') != -1
+
+    def test_survives_db_roundtrip_via_tags_only(self):
+        # The list endpoint rebuilds info from stored columns; ``tags`` is the
+        # only carrier, so re-deriving from it alone must still yield the key.
+        info = self._acp_info()
+        restored = AppConversationInfo(
+            created_by_user_id=None,
+            sandbox_id='sb',
+            agent_kind='acp',
+            tags=info.tags,
+        )
+        assert restored.acp_server == 'codex'
+
+    def test_survives_app_conversation_build(self):
+        # ``_build_conversation`` does ``AppConversation(**info.model_dump())``.
+        info = self._acp_info()
+        conv = AppConversation(**info.model_dump())
+        assert conv.acp_server == 'codex'
+
+    def test_none_for_openhands_even_with_stray_tag(self):
+        info = self._acp_info(agent_kind='openhands')
+        assert info.acp_server is None
+
+    def test_none_when_tag_absent(self):
+        info = self._acp_info(tags={})
+        assert info.acp_server is None
 
 
 class TestPluginSpecSourceRedaction:

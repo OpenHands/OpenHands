@@ -11,6 +11,7 @@ from integrations.jira_dc.jira_dc_service_account import (
 from integrations.jira_dc.jira_dc_types import (
     JiraDcViewInterface,
 )
+from integrations.jira_dc.jira_dc_user_token import JiraDcUserTokenError
 from integrations.jira_dc.jira_dc_view import (
     JiraDcExistingConversationView,
     JiraDcFactory,
@@ -22,6 +23,7 @@ from integrations.utils import (
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
     filter_potential_repos_by_user_msg,
     get_account_not_linked_message,
+    get_jira_dc_relink_message,
     get_session_expired_message,
     get_user_not_found_message,
     infer_repo_from_message,
@@ -507,6 +509,10 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         except SessionExpiredError as e:
             logger.warning(f'[Jira DC] Session expired: {str(e)}')
             msg_info = get_session_expired_message()
+
+        except JiraDcUserTokenError as e:
+            logger.warning(f'[Jira DC] User token unavailable: {str(e)}')
+            msg_info = get_jira_dc_relink_message(jira_dc_view.job_context.display_name)
 
         except Exception as e:
             logger.error(
