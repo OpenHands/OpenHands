@@ -8,12 +8,11 @@ from storage.base import Base
 
 if TYPE_CHECKING:
     from storage.org import Org
+    from storage.api_key_scope import ApiKeyScope
 
 
 class ApiKey(Base):
-    """
-    Represents an API key for a user.
-    """
+    """Represents an API key for a user."""
 
     __tablename__ = 'api_keys'
 
@@ -32,3 +31,4 @@ class ApiKey(Base):
 
     # Relationships
     org: Mapped['Org | None'] = relationship('Org', back_populates='api_keys')
+    scopes: Mapped[list['ApiKeyScope']] = relationship('ApiKeyScope', back_populates='api_key', cascade='all, delete-orphan')

@@ -8,8 +8,14 @@ export function useCreateApiKey() {
   const { organizationId } = useSelectedOrganizationId();
 
   return useMutation({
-    mutationFn: async (name: string): Promise<CreateApiKeyResponse> =>
-      ApiKeysClient.createApiKey(name),
+    mutationFn: async ({
+      name,
+      scopes,
+    }: {
+      name: string;
+      scopes?: string[];
+    }): Promise<CreateApiKeyResponse> =>
+      ApiKeysClient.createApiKey(name, scopes),
     onSuccess: () => {
       // Invalidate the API keys query to trigger a refetch
       queryClient.invalidateQueries({

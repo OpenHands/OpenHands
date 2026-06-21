@@ -1,4 +1,5 @@
 from storage.api_key import ApiKey
+from storage.api_key_scope import ApiKeyScope
 from storage.auth_tokens import AuthTokens
 from storage.billing_session import BillingSession
 from storage.billing_session_type import BillingSessionType
@@ -41,6 +42,7 @@ from storage.user_settings import UserSettings
 
 __all__ = [
     'ApiKey',
+    'ApiKeyScope',
     'AuthTokens',
     'BillingSession',
     'BillingSessionType',
