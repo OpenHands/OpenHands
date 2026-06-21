@@ -47,55 +47,55 @@ class Permission(str, Enum):
     """Permissions that can be assigned to roles."""
 
     # Secrets
-    MANAGE_SECRETS = "manage_secrets"
+    MANAGE_SECRETS = 'manage_secrets'
 
     # MCP
-    MANAGE_MCP = "manage_mcp"
+    MANAGE_MCP = 'manage_mcp'
 
     # Integrations
-    MANAGE_INTEGRATIONS = "manage_integrations"
+    MANAGE_INTEGRATIONS = 'manage_integrations'
 
     # Application Settings
-    MANAGE_APPLICATION_SETTINGS = "manage_application_settings"
+    MANAGE_APPLICATION_SETTINGS = 'manage_application_settings'
 
     # API Keys
-    MANAGE_API_KEYS = "manage_api_keys"
+    MANAGE_API_KEYS = 'manage_api_keys'
 
     # LLM Settings
-    VIEW_LLM_SETTINGS = "view_llm_settings"
-    EDIT_LLM_SETTINGS = "edit_llm_settings"
+    VIEW_LLM_SETTINGS = 'view_llm_settings'
+    EDIT_LLM_SETTINGS = 'edit_llm_settings'
 
     # Billing
-    VIEW_BILLING = "view_billing"
-    ADD_CREDITS = "add_credits"
+    VIEW_BILLING = 'view_billing'
+    ADD_CREDITS = 'add_credits'
 
     # Organization Members
-    INVITE_USER_TO_ORGANIZATION = "invite_user_to_organization"
-    CHANGE_USER_ROLE_MEMBER = "change_user_role:member"
-    CHANGE_USER_ROLE_ADMIN = "change_user_role:admin"
-    CHANGE_USER_ROLE_OWNER = "change_user_role:owner"
+    INVITE_USER_TO_ORGANIZATION = 'invite_user_to_organization'
+    CHANGE_USER_ROLE_MEMBER = 'change_user_role:member'
+    CHANGE_USER_ROLE_ADMIN = 'change_user_role:admin'
+    CHANGE_USER_ROLE_OWNER = 'change_user_role:owner'
 
     # Organization Management
-    VIEW_ORG_SETTINGS = "view_org_settings"
-    CHANGE_ORGANIZATION_NAME = "change_organization_name"
-    DELETE_ORGANIZATION = "delete_organization"
+    VIEW_ORG_SETTINGS = 'view_org_settings'
+    CHANGE_ORGANIZATION_NAME = 'change_organization_name'
+    DELETE_ORGANIZATION = 'delete_organization'
 
     # Temporary permissions until we finish the API updates.
-    EDIT_ORG_SETTINGS = "edit_org_settings"
+    EDIT_ORG_SETTINGS = 'edit_org_settings'
 
     # Git organization claims
-    MANAGE_ORG_CLAIMS = "manage_org_claims"
+    MANAGE_ORG_CLAIMS = 'manage_org_claims'
 
     # Manage Automations
-    MANAGE_AUTOMATIONS = "manage_automations"
+    MANAGE_AUTOMATIONS = 'manage_automations'
 
 
 class RoleName(str, Enum):
     """Role names used in the system."""
 
-    OWNER = "owner"
-    ADMIN = "admin"
-    MEMBER = "member"
+    OWNER = 'owner'
+    ADMIN = 'admin'
+    MEMBER = 'member'
 
 
 # Permission mappings for each role
@@ -233,8 +233,8 @@ async def get_api_key_org_id_from_request(request: Request) -> UUID | None:
     - Not authenticated via API key (cookie auth)
     - API key is a legacy key without org binding
     """
-    user_auth = getattr(request.state, "user_auth", None)
-    if user_auth and hasattr(user_auth, "get_api_key_org_id"):
+    user_auth = getattr(request.state, 'user_auth', None)
+    if user_auth and hasattr(user_auth, 'get_api_key_org_id'):
         return user_auth.get_api_key_org_id()
     return None
 
@@ -272,7 +272,7 @@ def require_permission(permission: Permission):
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not authenticated",
+                detail='User not authenticated',
             )
 
         # Validate API key organization binding
@@ -280,16 +280,16 @@ def require_permission(permission: Permission):
         if api_key_org_id is not None and org_id is not None:
             if api_key_org_id != org_id:
                 logger.warning(
-                    "API key organization mismatch",
+                    'API key organization mismatch',
                     extra={
-                        "user_id": user_id,
-                        "api_key_org_id": str(api_key_org_id),
-                        "target_org_id": str(org_id),
+                        'user_id': user_id,
+                        'api_key_org_id': str(api_key_org_id),
+                        'target_org_id': str(org_id),
                     },
                 )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="API key is not authorized for this organization",
+                    detail='API key is not authorized for this organization',
                 )
 
         # If the route does not carry an ``{org_id}`` path parameter,
@@ -308,17 +308,17 @@ def require_permission(permission: Permission):
 
         if not user_role:
             logger.warning(
-                "User not a member of organization",
-                extra={"user_id": user_id, "org_id": str(org_id)},
+                'User not a member of organization',
+                extra={'user_id': user_id, 'org_id': str(org_id)},
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="User is not a member of this organization",
+                detail='User is not a member of this organization',
             )
 
         # Enforce API Key Scopes
-        user_auth = getattr(request.state, "user_auth", None)
-        api_key_scopes = getattr(user_auth, "api_key_scopes", None)
+        user_auth = getattr(request.state, 'user_auth', None)
+        api_key_scopes = getattr(user_auth, 'api_key_scopes', None)
         if api_key_scopes:
             from openhands.app_server.user_auth.scope_manifest import SCOPE_MANIFEST
 
@@ -336,31 +336,31 @@ def require_permission(permission: Permission):
 
             if not has_scope:
                 logger.warning(
-                    "API key scope does not allow this operation",
+                    'API key scope does not allow this operation',
                     extra={
-                        "user_id": user_id,
-                        "scopes": api_key_scopes,
-                        "required_permission": permission.value,
+                        'user_id': user_id,
+                        'scopes': api_key_scopes,
+                        'required_permission': permission.value,
                     },
                 )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"API key scope restricts access to {permission.value}",
+                    detail=f'API key scope restricts access to {permission.value}',
                 )
 
         if not has_permission(user_role, permission):
             logger.warning(
-                "Insufficient permissions",
+                'Insufficient permissions',
                 extra={
-                    "user_id": user_id,
-                    "org_id": str(org_id),
-                    "user_role": user_role.name,
-                    "required_permission": permission.value,
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                    'user_role': user_role.name,
+                    'required_permission': permission.value,
                 },
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Requires {permission.value} permission",
+                detail=f'Requires {permission.value} permission',
             )
 
         return user_id
@@ -395,7 +395,7 @@ async def require_financial_data_access(
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not authenticated",
+            detail='User not authenticated',
         )
 
     # Validate API key organization binding
@@ -403,31 +403,31 @@ async def require_financial_data_access(
     if api_key_org_id is not None:
         if api_key_org_id != org_id:
             logger.warning(
-                "API key organization mismatch for financial data access",
+                'API key organization mismatch for financial data access',
                 extra={
-                    "user_id": user_id,
-                    "api_key_org_id": str(api_key_org_id),
-                    "target_org_id": str(org_id),
+                    'user_id': user_id,
+                    'api_key_org_id': str(api_key_org_id),
+                    'target_org_id': str(org_id),
                 },
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="API key is not authorized for this organization",
+                detail='API key is not authorized for this organization',
             )
 
     # Check if user has @openhands.dev email
     user_auth = await get_user_auth(request)
     user_email = await user_auth.get_user_email()
 
-    if user_email and user_email.endswith("@openhands.dev"):
+    if user_email and user_email.endswith('@openhands.dev'):
         logger.debug(
-            "Financial data access granted via @openhands.dev email",
-            extra={"user_id": user_id, "org_id": str(org_id)},
+            'Financial data access granted via @openhands.dev email',
+            extra={'user_id': user_id, 'org_id': str(org_id)},
         )
         return user_id
 
     # Enforce API Key Scopes
-    api_key_scopes = getattr(user_auth, "api_key_scopes", None)
+    api_key_scopes = getattr(user_auth, 'api_key_scopes', None)
     if api_key_scopes:
         from openhands.app_server.user_auth.scope_manifest import SCOPE_MANIFEST
 
@@ -443,15 +443,15 @@ async def require_financial_data_access(
 
         if not has_scope:
             logger.warning(
-                "API key scope does not allow financial data access",
+                'API key scope does not allow financial data access',
                 extra={
-                    "user_id": user_id,
-                    "scopes": api_key_scopes,
+                    'user_id': user_id,
+                    'scopes': api_key_scopes,
                 },
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="API key scope restricts access to financial data",
+                detail='API key scope restricts access to financial data',
             )
 
     # Check if user has Admin or Owner role in the organization
@@ -459,30 +459,30 @@ async def require_financial_data_access(
 
     if not user_role:
         logger.warning(
-            "Financial data access denied - user not a member of organization",
-            extra={"user_id": user_id, "org_id": str(org_id)},
+            'Financial data access denied - user not a member of organization',
+            extra={'user_id': user_id, 'org_id': str(org_id)},
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User is not a member of this organization",
+            detail='User is not a member of this organization',
         )
 
     if user_role.name not in (RoleName.OWNER.value, RoleName.ADMIN.value):
         logger.warning(
-            "Financial data access denied - insufficient role",
+            'Financial data access denied - insufficient role',
             extra={
-                "user_id": user_id,
-                "org_id": str(org_id),
-                "user_role": user_role.name,
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'user_role': user_role.name,
             },
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access restricted to organization admins, owners, or OpenHands members",
+            detail='Access restricted to organization admins, owners, or OpenHands members',
         )
 
     logger.debug(
-        "Financial data access granted via admin/owner role",
-        extra={"user_id": user_id, "org_id": str(org_id), "role": user_role.name},
+        'Financial data access granted via admin/owner role',
+        extra={'user_id': user_id, 'org_id': str(org_id), 'role': user_role.name},
     )
     return user_id
