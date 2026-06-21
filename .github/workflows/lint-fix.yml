@@ -29,7 +29,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         working-directory: ./frontend
-        run: corepack npm ci
+        run: npm ci
       - name: Generate i18n and route types
         run: |
           cd frontend

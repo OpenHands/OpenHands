@@ -190,7 +190,7 @@ install-frontend-dependencies: check-npm check-nodejs
 	@echo "$(YELLOW)Detect Node.js version...$(RESET)"
 	@cd frontend && node ./scripts/detect-node-version.js
 	echo "$(BLUE)Installing frontend dependencies with npm...$(RESET)"
-	@cd frontend && corepack npm install
+	@cd frontend && npm install
 	@echo "$(GREEN)Frontend dependencies installed successfully.$(RESET)"
 
 install-pre-commit-hooks: check-python check-poetry install-python-dependencies
