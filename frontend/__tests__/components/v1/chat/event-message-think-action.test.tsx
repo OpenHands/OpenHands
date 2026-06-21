@@ -89,7 +89,7 @@ describe("EventMessage - ThinkAction rendering", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.INIT,
+      curAgentState: AgentState.INIT, isArchived: false,
     });
   });
 

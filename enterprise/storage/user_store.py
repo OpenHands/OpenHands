@@ -11,7 +11,8 @@ from server.constants import (
     LITE_LLM_API_URL,
     ORG_SETTINGS_VERSION,
     PERSONAL_WORKSPACE_VERSION_TO_MODEL,
-    get_default_litellm_model,
+    get_default_llm_base_url,
+    get_default_llm_model,
 )
 from server.logger import logger
 from sqlalchemy import select, text
@@ -49,7 +50,25 @@ class UserStore:
         user_info: dict,
         role_id: Optional[int] = None,
     ) -> User | None:
-        """Create a new user."""
+        """Create a new user.
+
+        Identity-preservation contract (load-bearing for
+        ``OrgStore.delete_org_cascade``): both ``Org.id`` and ``User.id``
+        are derived from the caller-provided ``user_id`` (the Keycloak
+        ``sub`` claim, stable across logins). This means a user whose
+        personal org was previously cascade-deleted will be re-onboarded
+        here with the **same** ``User.id`` / ``Org.id`` as before,
+        restoring the ``User.id == Org.id == UUID(keycloak.sub)``
+        invariant that downstream lookups keyed on ``keycloak_user_id``
+        depend on.
+
+        If this derivation ever changes (for example, switching to a
+        server-generated UUID), the personal-org self-service recovery
+        path in ``delete_org_cascade`` step 3a will silently break:
+        re-login will succeed but the new IDs will not match the
+        deleted-tenant IDs, breaking any external reference that pinned
+        on the old values.
+        """
         async with a_session_maker() as session:
             # create personal org
             org = Org(
@@ -109,10 +128,10 @@ class UserStore:
 
     @staticmethod
     def _get_redis_client():
-        """Get the Redis client from the Socket.IO manager."""
-        from openhands.server.shared import sio
+        """Get the shared async Redis client from enterprise storage."""
+        from storage.redis import get_redis_client_async
 
-        return getattr(sio.manager, 'redis', None)
+        return get_redis_client_async()
 
     @staticmethod
     async def _acquire_user_creation_lock(user_id: str) -> bool:
@@ -121,19 +140,21 @@ class UserStore:
         Returns True if the lock was acquired or if Redis is unavailable (fallback to no locking).
         Returns False if another process holds the lock.
         """
+        from storage.redis import redis_exceptions
+
         redis_client = UserStore._get_redis_client()
-        if redis_client is None:
+        try:
+            user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
+            lock_acquired = await redis_client.set(
+                user_key, 1, nx=True, ex=_REDIS_CREATE_TIMEOUT_SECONDS
+            )
+            return bool(lock_acquired)
+        except redis_exceptions.RedisError:
             logger.warning(
-                'user_store:_acquire_user_creation_lock:no_redis_client',
+                'user_store:_acquire_user_creation_lock:redis_error',
                 extra={'user_id': user_id},
             )
-            return True  # Proceed without locking if Redis is unavailable
-
-        user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
-        lock_acquired = await redis_client.set(
-            user_key, 1, nx=True, ex=_REDIS_CREATE_TIMEOUT_SECONDS
-        )
-        return bool(lock_acquired)
+            return True  # Proceed without locking on error
 
     @staticmethod
     async def _release_user_creation_lock(user_id: str) -> bool:
@@ -142,17 +163,19 @@ class UserStore:
         Returns True if the lock was released or if Redis is unavailable.
         Returns False if the lock could not be released.
         """
+        from storage.redis import redis_exceptions
+
         redis_client = UserStore._get_redis_client()
-        if redis_client is None:
+        try:
+            user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
+            deleted = await redis_client.delete(user_key)
+            return bool(deleted)
+        except redis_exceptions.RedisError:
             logger.warning(
-                'user_store:_release_user_creation_lock:no_redis_client',
+                'user_store:_release_user_creation_lock:redis_error',
                 extra={'user_id': user_id},
             )
-            return True  # Nothing to release if Redis is unavailable
-
-        user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
-        deleted = await redis_client.delete(user_key)
-        return bool(deleted)
+            return True  # Proceed without locking on error
 
     @staticmethod
     async def migrate_user(
@@ -931,7 +954,7 @@ class UserStore:
     from typing import TYPE_CHECKING
 
     if TYPE_CHECKING:
-        from openhands.storage.data_models.settings import Settings
+        from openhands.app_server.settings.settings_models import Settings
 
     @staticmethod
     async def create_default_settings(
@@ -945,7 +968,7 @@ class UserStore:
         if not org_id:
             return None
 
-        from openhands.storage.data_models.settings import Settings
+        from openhands.app_server.settings.settings_models import Settings
 
         default_settings = Settings(
             language='en', enable_proactive_conversation_starters=True
@@ -1049,7 +1072,6 @@ class UserStore:
             if org.sandbox_api_key
             else None,
             max_budget_per_task=org.max_budget_per_task,
-            enable_solvability_analysis=org.enable_solvability_analysis,
             v1_enabled=org.v1_enabled,
             sandbox_grouping_strategy=org.sandbox_grouping_strategy,
             agent_settings=agent_settings,
@@ -1071,8 +1093,8 @@ class UserStore:
             org_kwargs['agent_settings'] = {
                 'schema_version': AGENT_SETTINGS_SCHEMA_VERSION,
                 'llm': {
-                    'model': get_default_litellm_model(),
-                    'base_url': LITE_LLM_API_URL,
+                    'model': get_default_llm_model(),
+                    'base_url': get_default_llm_base_url(),
                 },
             }
 

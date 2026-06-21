@@ -2,8 +2,8 @@ from integrations.github.github_service import SaaSGitHubService
 from pydantic import SecretStr
 from server.auth.auth_utils import user_verifier
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.github.github_types import GitHubUser
+from openhands.app_server.integrations.github.github_types import GitHubUser
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 def is_user_allowed(user_login: str):
@@ -29,7 +29,7 @@ async def authenticate_github_user_id(auth_user_id: str) -> GitHubUser | None:
 
         return None
     except:  # noqa: E722
-        logger.warning("GitHub user doens't have valid token")
+        logger.warning("GitHub user doesn't have valid token")
         return None
 
 
@@ -46,5 +46,5 @@ async def authenticate_github_user_token(access_token: str):
 
         return None
     except:  # noqa: E722
-        logger.warning("GitHub user doens't have valid token")
+        logger.warning("GitHub user doesn't have valid token")
         return None

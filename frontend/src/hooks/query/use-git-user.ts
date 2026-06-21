@@ -3,7 +3,7 @@ import React from "react";
 import { usePostHog } from "posthog-js/react";
 import { useConfig } from "./use-config";
 import UserService from "#/api/user-service/user-service.api";
-import { useShouldShowUserFeatures } from "#/hooks/use-should-show-user-features";
+import { useShouldShowGitFeatures } from "#/hooks/use-should-show-git-features";
 import { useLogout } from "../mutation/use-logout";
 
 export const useGitUser = () => {
@@ -11,8 +11,9 @@ export const useGitUser = () => {
   const { data: config } = useConfig();
   const logout = useLogout();
 
-  // Use the shared hook to determine if we should fetch user data
-  const shouldFetchUser = useShouldShowUserFeatures();
+  // Use the Git-specific hook to determine if we should fetch user data.
+  // This requires a Git provider to be configured, not just authentication.
+  const shouldFetchUser = useShouldShowGitFeatures();
 
   const user = useQuery({
     queryKey: ["user"],

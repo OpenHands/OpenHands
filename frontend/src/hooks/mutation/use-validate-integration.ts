@@ -21,6 +21,12 @@ export function useValidateIntegration(
   const { t } = useTranslation();
 
   return useMutation({
+    // The 404 from .../workspaces/validate/{name} is an expected signal that the
+    // workspace isn't configured yet (handled below by advancing the form), not
+    // an error. Opt out of the global MutationCache error toast so it doesn't
+    // surface a spurious "Request failed with status 404"; onError still toasts
+    // genuine (non-404) failures itself.
+    meta: { disableToast: true },
     mutationFn: (workspace?: string) => {
       const workspaceParam = workspace ? `/${workspace}` : "";
       return openHands.get(

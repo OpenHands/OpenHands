@@ -13,7 +13,7 @@ from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker
 from storage.org_invitation import OrgInvitation
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Invitation token configuration
 INVITATION_TOKEN_PREFIX = 'inv-'
@@ -114,6 +114,62 @@ class OrgInvitationStore:
                 select(OrgInvitation)
                 .options(joinedload(OrgInvitation.org), joinedload(OrgInvitation.role))
                 .filter(OrgInvitation.token == token)
+            )
+            return result.scalars().first()
+
+    @staticmethod
+    async def get_pending_invitations_for_email(email: str) -> list[OrgInvitation]:
+        """Get all pending invitations addressed to an email, oldest first.
+
+        Args:
+            email: Invitee email address (matched case-insensitively)
+
+        Returns:
+            List of pending OrgInvitation rows across all orgs
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(OrgInvitation)
+                .filter(
+                    and_(
+                        OrgInvitation.email == email.lower().strip(),
+                        OrgInvitation.status == OrgInvitation.STATUS_PENDING,
+                    )
+                )
+                .order_by(OrgInvitation.created_at.asc())
+            )
+            return list(result.scalars().all())
+
+    @staticmethod
+    async def get_pending_invitations_for_org(org_id: UUID) -> list[OrgInvitation]:
+        """Get all pending invitations for an organization, newest first.
+
+        Args:
+            org_id: Organization UUID
+
+        Returns:
+            List of pending OrgInvitation rows
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(OrgInvitation)
+                .options(joinedload(OrgInvitation.role))
+                .filter(
+                    and_(
+                        OrgInvitation.org_id == org_id,
+                        OrgInvitation.status == OrgInvitation.STATUS_PENDING,
+                    )
+                )
+                .order_by(OrgInvitation.created_at.desc())
+            )
+            return list(result.scalars().all())
+
+    @staticmethod
+    async def get_invitation_by_id(invitation_id: int) -> Optional[OrgInvitation]:
+        """Get an invitation by its primary key."""
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(OrgInvitation).filter(OrgInvitation.id == invitation_id)
             )
             return result.scalars().first()
 

@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from storage.database import a_session_maker
 from storage.gitlab_webhook import GitlabWebhook
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass
@@ -198,7 +198,7 @@ class GitlabWebhookStore:
 
     async def get_webhook_secret(self, webhook_uuid: str, user_id: str) -> str | None:
         """
-        Get's webhook secret given the webhook uuid and admin keycloak user id
+        Gets webhook secret given the webhook uuid and admin keycloak user id
         """
         async with a_session_maker() as session:
             query = (

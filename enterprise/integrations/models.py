@@ -1,14 +1,17 @@
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from openhands.core.schema import AgentState
+from openhands.app_server.integrations.service_types import Comment
 
 
 class SourceType(str, Enum):
     GITHUB = 'github'
     GITLAB = 'gitlab'
+    BITBUCKET = 'bitbucket'
+    BITBUCKET_DATA_CENTER = 'bitbucket_data_center'
+    AZURE_DEVOPS = 'azure_devops'
     OPENHANDS = 'openhands'
     SLACK = 'slack'
     JIRA = 'jira'
@@ -41,21 +44,5 @@ class JobContext(BaseModel):
     base_api_url: str = ''
     issue_title: str = ''
     issue_description: str = ''
-
-
-class JobResult:
-    result: str
-    explanation: str
-
-
-class GithubResolverJob:
-    type: SourceType
-    status: AgentState
-    result: JobResult
-    owner: str
-    repo: str
-    installation_token: str
-    issue_number: int
-    runtime_id: int
-    created_at: int
-    completed_at: int
+    comment_id: str = ''
+    previous_comments: list[Comment] = Field(default_factory=list)

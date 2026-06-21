@@ -49,7 +49,7 @@ describe("EventMessage - PlanPreview rendering", () => {
     });
     // Default mock for useAgentState
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.INIT,
+      curAgentState: AgentState.INIT, isArchived: false,
     });
   });
 
@@ -183,7 +183,7 @@ describe("EventMessage - PlanPreview rendering", () => {
 
       useConversationStore.setState({ planContent });
       vi.mocked(useAgentState).mockReturnValue({
-        curAgentState: AgentState.RUNNING,
+        curAgentState: AgentState.RUNNING, isArchived: false,
       });
 
       renderWithProviders(
@@ -208,7 +208,7 @@ describe("EventMessage - PlanPreview rendering", () => {
 
       useConversationStore.setState({ planContent });
       vi.mocked(useAgentState).mockReturnValue({
-        curAgentState: AgentState.RUNNING,
+        curAgentState: AgentState.RUNNING, isArchived: false,
       });
 
       renderWithProviders(
@@ -233,7 +233,7 @@ describe("EventMessage - PlanPreview rendering", () => {
 
       useConversationStore.setState({ planContent });
       vi.mocked(useAgentState).mockReturnValue({
-        curAgentState: AgentState.AWAITING_USER_INPUT,
+        curAgentState: AgentState.AWAITING_USER_INPUT, isArchived: false,
       });
 
       renderWithProviders(
@@ -258,7 +258,7 @@ describe("EventMessage - PlanPreview rendering", () => {
 
       useConversationStore.setState({ planContent });
       vi.mocked(useAgentState).mockReturnValue({
-        curAgentState: AgentState.FINISHED,
+        curAgentState: AgentState.FINISHED, isArchived: false,
       });
 
       renderWithProviders(

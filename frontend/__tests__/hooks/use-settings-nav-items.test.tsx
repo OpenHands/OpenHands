@@ -129,9 +129,12 @@ describe("useSettingsNavItems", () => {
     const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
 
     await waitFor(() => {
-      // OSS mode should return items matching OSS_NAV_ITEMS paths
+      // OSS mode should return items matching OSS_NAV_ITEMS paths,
+      // minus any items hidden behind a feature flag that's off by default.
       const navItems = getNavItems(result.current);
-      const ossPaths = OSS_NAV_ITEMS.map((item) => item.to);
+      const ossPaths = OSS_NAV_ITEMS.map(
+        (item) => item.to,
+      );
       const resultPaths = navItems.map((item) =>
         item.type === "item" ? item.item.to : null,
       );
@@ -547,5 +550,32 @@ describe("useSettingsNavItems", () => {
         ).toBeDefined();
       });
     });
+  });
+});
+
+describe("disabledByAcp flags (ACP-incompatible settings surfaces)", () => {
+  // The ACP sub-agent owns its own LLM and condenser, so those pages stay
+  // greyed-out/redirected under ACP. MCP is intentionally NOT gated: servers
+  // configured on the MCP page are forwarded to the ACP subprocess at session
+  // creation, so the page is meaningful for ACP agents too.
+  it.each([
+    ["SAAS_NAV_ITEMS", SAAS_NAV_ITEMS],
+    ["OSS_NAV_ITEMS", OSS_NAV_ITEMS],
+  ])("does not gate the MCP page for ACP in %s", (_name, items) => {
+    const mcp = items.find((item) => item.to === "/settings/mcp");
+    expect(mcp).toBeDefined();
+    expect(mcp?.disabledByAcp ?? false).toBe(false);
+  });
+
+  it.each([
+    ["SAAS_NAV_ITEMS", SAAS_NAV_ITEMS],
+    ["OSS_NAV_ITEMS", OSS_NAV_ITEMS],
+  ])("still gates LLM and condenser for ACP in %s", (_name, items) => {
+    expect(items.find((item) => item.to === "/settings")?.disabledByAcp).toBe(
+      true,
+    );
+    expect(
+      items.find((item) => item.to === "/settings/condenser")?.disabledByAcp,
+    ).toBe(true);
   });
 });

@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
 
+from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
+from openhands.app_server.integrations.service_types import UserGitInfo
 from openhands.app_server.services.injector import Injector
 from openhands.app_server.user.user_models import (
     UserInfo,
 )
-from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
-from openhands.integrations.service_types import UserGitInfo
 from openhands.sdk.secret import SecretSource
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
@@ -18,6 +18,20 @@ class UserContext(ABC):
     @abstractmethod
     async def get_user_id(self) -> str | None:
         """Get the user id"""
+
+    @abstractmethod
+    async def get_user_email(self) -> str | None:
+        """Get the email for the current user, if available.
+
+        Returns the user's email address for attribution in observability
+        traces (e.g. Laminar). In SaaS/enterprise mode this is typically
+        the Keycloak email; in OSS mode or for admin-scoped contexts this
+        returns ``None`` so callers can fall back to the internal user id.
+
+        Note: this value is considered PII and may be forwarded to
+        third-party observability services. Treat it accordingly when
+        adding new callers.
+        """
 
     @abstractmethod
     async def get_user_info(self) -> UserInfo:

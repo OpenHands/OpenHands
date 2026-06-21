@@ -18,6 +18,18 @@ from openhands.sdk.utils.models import DiscriminatedUnionMixin
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 
+class ConversationExportAlreadyRunning(Exception):
+    """Raised when another worker is already exporting the same conversation."""
+
+
+class ConversationExportLockUnavailable(Exception):
+    """Raised when the export lock cannot be checked."""
+
+
+class ConversationExportTooLarge(Exception):
+    """Raised when a conversation exceeds the configured export event limit."""
+
+
 class AppConversationService(ABC):
     """Service for managing conversations running in sandboxes."""
 
@@ -159,6 +171,21 @@ class AppConversationService(ABC):
 
         Returns the zip file as bytes.
         """
+
+    async def open_conversation_export(
+        self, conversation_id: UUID
+    ) -> AsyncGenerator[bytes, None]:
+        """Prepare a streaming conversation trajectory export.
+
+        Implementations may override this to acquire locks or stream zip data.
+        The default preserves compatibility with byte-returning exporters.
+        """
+        content = await self.export_conversation(conversation_id)
+
+        async def stream():
+            yield content
+
+        return stream()
 
 
 class AppConversationServiceInjector(

@@ -1,24 +1,27 @@
+import logging
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, AsyncGenerator
 
 from fastapi import Request
 from pydantic import PrivateAttr, SecretStr
 
 from openhands.app_server.errors import AuthError
-from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
-from openhands.app_server.user.user_context import UserContext, UserContextInjector
-from openhands.app_server.user.user_models import UserInfo
-from openhands.integrations.provider import (
+from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderHandler,
     ProviderType,
 )
-from openhands.integrations.service_types import UserGitInfo
+from openhands.app_server.integrations.service_types import UserGitInfo
+from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
+from openhands.app_server.user.user_context import UserContext, UserContextInjector
+from openhands.app_server.user.user_models import UserInfo
+from openhands.app_server.user_auth.user_auth import UserAuth, get_user_auth
 from openhands.sdk.secret import SecretSource, StaticSecret
-from openhands.server.user_auth.user_auth import UserAuth, get_user_auth
 
 USER_AUTH_ATTR = 'user_auth'
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -35,6 +38,9 @@ class AuthUserContext(UserContext):
         # it means we are in OpenHands (OSS mode).
         user_id = await self.user_auth.get_user_id()
         return user_id
+
+    async def get_user_email(self) -> str | None:
+        return await self.user_auth.get_user_email()
 
     async def get_user_info(self) -> UserInfo:
         user_info = self._user_info
@@ -66,9 +72,23 @@ class AuthUserContext(UserContext):
         results: dict[str, str] = {}
         if provider_tokens:
             for provider_type, provider_token in provider_tokens.items():
-                if provider_token.token:
-                    env_key = ProviderHandler.get_provider_env_key(provider_type)
-                    results[env_key] = provider_token.token.get_secret_value()
+                env_key = ProviderHandler.get_provider_env_key(provider_type)
+                latest_token = None
+                if provider_type == ProviderType.AZURE_DEVOPS:
+                    try:
+                        latest_token = await self.get_latest_token(provider_type)
+                    except Exception as exc:
+                        _logger.warning(
+                            'Failed to refresh provider token for %s: %s',
+                            provider_type.value,
+                            exc,
+                        )
+                if latest_token:
+                    results[env_key] = latest_token
+                elif provider_token.token:
+                    token_value = provider_token.token.get_secret_value()
+                    if token_value:
+                        results[env_key] = token_value
         return results
 
     async def get_provider_handler(self):
@@ -76,6 +96,8 @@ class AuthUserContext(UserContext):
         if not provider_handler:
             provider_tokens = await self.user_auth.get_provider_tokens()
             assert provider_tokens is not None
+            if not isinstance(provider_tokens, MappingProxyType):
+                provider_tokens = MappingProxyType(provider_tokens)
             user_id = await self.get_user_id()
             provider_handler = ProviderHandler(
                 provider_tokens=provider_tokens, external_auth_id=user_id
@@ -103,7 +125,7 @@ class AuthUserContext(UserContext):
     async def get_secrets(self) -> dict[str, SecretSource]:
         results: dict[str, SecretSource] = {}
 
-        # Include custom secrets
+        # Include custom secrets (includes OPENHANDS_API_KEY in SaaS mode)
         secrets = await self.user_auth.get_secrets()
         if secrets:
             for name, custom_secret in secrets.custom_secrets.items():

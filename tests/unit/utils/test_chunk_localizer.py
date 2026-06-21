@@ -1,6 +1,6 @@
 import pytest
 
-from openhands.utils.chunk_localizer import (
+from openhands.app_server.utils.chunk_localizer import (
     Chunk,
     create_chunks,
     get_top_k_chunk_matches,

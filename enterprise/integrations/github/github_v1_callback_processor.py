@@ -1,18 +1,17 @@
 import logging
-from typing import Any
+from typing import Any, ClassVar
 from uuid import UUID
 
 import httpx
 from github import Auth, Github, GithubException, GithubIntegration
-from integrations.utils import get_summary_instruction
 from integrations.v1_utils import handle_callback_error
 from pydantic import Field
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 
-from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
+    EventKind,
 )
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
@@ -31,6 +30,8 @@ _logger = logging.getLogger(__name__)
 
 class GithubV1CallbackProcessor(EventCallbackProcessor):
     """Callback processor for GitHub V1 integrations."""
+
+    event_kind: ClassVar[EventKind] = 'ConversationStateUpdateEvent'
 
     github_view_data: dict[str, Any] = Field(default_factory=dict)
     should_request_summary: bool = Field(default=True)
@@ -53,12 +54,12 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
         # Log ALL terminal states for monitoring (finished, error, stuck)
         _logger.info('[GitHub V1] Callback agent state was %s', event)
 
-        # Only request summary when execution has finished successfully
+        # Only post the final response when execution has finished successfully
         if event.value != 'finished':
             return None
 
         _logger.info(
-            '[GitHub V1] Should request summary: %s', self.should_request_summary
+            '[GitHub V1] Should post final response: %s', self.should_request_summary
         )
 
         if not self.should_request_summary:
@@ -67,20 +68,20 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
         self.should_request_summary = False
 
         try:
-            _logger.info(f'[GitHub V1] Requesting summary {conversation_id}')
-            summary = await self._request_summary(conversation_id)
+            _logger.info(f'[GitHub V1] Fetching final response {conversation_id}')
+            final_response = await self._request_final_response(conversation_id)
             _logger.info(
-                f'[GitHub V1] Posting summary {conversation_id}',
-                extra={'summary': summary},
+                f'[GitHub V1] Posting final response {conversation_id}',
+                extra={'final_response': final_response},
             )
-            await self._post_summary_to_github(summary)
+            await self._post_summary_to_github(final_response)
 
             return EventCallbackResult(
                 status=EventCallbackResultStatus.SUCCESS,
                 event_callback_id=callback.id,
                 event_id=event.id,
                 conversation_id=conversation_id,
-                detail=summary,
+                detail=final_response,
             )
         except Exception as e:
             # Check if we have installation ID and credentials before posting
@@ -128,7 +129,7 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
         return token_data.token
 
     async def _post_summary_to_github(self, summary: str) -> None:
-        """Post a summary comment to the configured GitHub issue."""
+        """Post a resolver response comment to the configured GitHub issue."""
         installation_token = self._get_installation_access_token()
 
         if not installation_token:
@@ -166,35 +167,36 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
     # Agent / sandbox helpers
     # -------------------------------------------------------------------------
 
-    async def _ask_question(
+    async def _get_final_response(
         self,
         httpx_client: httpx.AsyncClient,
         agent_server_url: str,
         conversation_id: UUID,
         session_api_key: str,
-        message_content: str,
     ) -> str:
-        """Send a message to the agent server via the V1 API and return response text."""
-        send_message_request = AskAgentRequest(question=message_content)
-
+        """Fetch the agent's final response from the V1 API."""
         url = (
-            f"{agent_server_url.rstrip('/')}"
-            f"/api/conversations/{conversation_id}/ask_agent"
+            f'{agent_server_url.rstrip("/")}'
+            f'/api/conversations/{conversation_id}/agent_final_response'
         )
         headers = {'X-Session-API-Key': session_api_key}
-        payload = send_message_request.model_dump()
 
         try:
-            response = await httpx_client.post(
+            response = await httpx_client.get(
                 url,
-                json=payload,
                 headers=headers,
                 timeout=30.0,
             )
             response.raise_for_status()
 
-            agent_response = AskAgentResponse.model_validate(response.json())
-            return agent_response.response
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise RuntimeError('Invalid agent final response payload')
+
+            final_response = str(payload.get('response') or '').strip()
+            if not final_response:
+                raise RuntimeError('Agent final response was empty')
+            return final_response
 
         except httpx.HTTPStatusError as e:
             error_detail = f'HTTP {e.response.status_code} error'
@@ -206,47 +208,33 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 pass
 
             _logger.error(
-                '[GitHub V1] HTTP error sending message to %s: %s. '
-                'Request payload: %s. Response headers: %s',
+                '[GitHub V1] HTTP error fetching final response from %s: %s. '
+                'Response headers: %s',
                 url,
                 error_detail,
-                payload,
                 dict(e.response.headers),
                 exc_info=True,
             )
-            raise Exception(f'Failed to send message to agent server: {error_detail}')
+            raise Exception(
+                f'Failed to fetch final response from agent server: {error_detail}'
+            )
 
         except httpx.TimeoutException:
             error_detail = f'Request timeout after 30 seconds to {url}'
-            _logger.error(
-                '[GitHub V1] %s. Request payload: %s',
-                error_detail,
-                payload,
-                exc_info=True,
-            )
+            _logger.error('[GitHub V1] %s', error_detail, exc_info=True)
             raise Exception(error_detail)
 
         except httpx.RequestError as e:
             error_detail = f'Request error to {url}: {str(e)}'
-            _logger.error(
-                '[GitHub V1] %s. Request payload: %s',
-                error_detail,
-                payload,
-                exc_info=True,
-            )
+            _logger.error('[GitHub V1] %s', error_detail, exc_info=True)
             raise Exception(error_detail)
 
     # -------------------------------------------------------------------------
-    # Summary orchestration
+    # Final response orchestration
     # -------------------------------------------------------------------------
 
-    async def _request_summary(self, conversation_id: UUID) -> str:
-        """Ask the agent to produce a summary of its work and return the agent response.
-
-        NOTE: This method now returns a string (the agent server's response text)
-        and raises exceptions on errors. The wrapping into EventCallbackResult
-        is handled by __call__.
-        """
+    async def _request_final_response(self, conversation_id: UUID) -> str:
+        """Return the agent's final response without asking the LLM to summarize."""
         # Import services within the method to avoid circular imports
         from openhands.app_server.config import (
             get_app_conversation_info_service,
@@ -282,22 +270,13 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 app_conversation_info.sandbox_id,
             )
 
-            assert (
-                sandbox.session_api_key is not None
-            ), f'No session API key for sandbox: {sandbox.id}'
+            assert sandbox.session_api_key is not None, (
+                f'No session API key for sandbox: {sandbox.id}'
+            )
 
-            # 3. URL + instruction
-            agent_server_url = get_agent_server_url_from_sandbox(sandbox)
-            agent_server_url = get_agent_server_url_from_sandbox(sandbox)
-
-            # Prepare message based on agent state
-            message_content = get_summary_instruction()
-
-            # Ask the agent and return the response text
-            return await self._ask_question(
+            return await self._get_final_response(
                 httpx_client=httpx_client,
-                agent_server_url=agent_server_url,
+                agent_server_url=get_agent_server_url_from_sandbox(sandbox),
                 conversation_id=conversation_id,
                 session_api_key=sandbox.session_api_key,
-                message_content=message_content,
             )

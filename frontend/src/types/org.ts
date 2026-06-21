@@ -42,6 +42,32 @@ export interface OrganizationMembersPage {
   per_page: number;
 }
 
+export interface OrganizationInvitation {
+  id: number;
+  email: string;
+  role: string;
+  status: string;
+  created_at: string;
+  expires_at: string;
+  inviter_email?: string | null;
+  /** Acceptance link; only returned by admin/owner-gated endpoints. */
+  invite_url?: string | null;
+}
+
+export interface BatchInvitationResult {
+  successful: OrganizationInvitation[];
+  failed: { email: string; error: string }[];
+  /** False when the instance has no email provider configured. */
+  email_delivery_configured: boolean;
+}
+
+export interface PendingInvitationsPage {
+  items: OrganizationInvitation[];
+  email_delivery_configured: boolean;
+  /** Sign-in alone already adds users to this org; invites only pre-assign roles. */
+  auto_add_enabled: boolean;
+}
+
 /** org_id and user_id are provided via URL params */
 export type UpdateOrganizationMemberParams = Partial<
   Omit<OrganizationMember, "org_id" | "user_id">

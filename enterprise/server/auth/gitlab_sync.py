@@ -3,9 +3,9 @@ import asyncio
 from pydantic import SecretStr
 from sqlalchemy import select
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.service_types import ProviderType
-from openhands.server.types import AppMode
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.types import AppMode
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 async def _user_has_gitlab_provider(user_id: str) -> bool:
@@ -55,7 +55,7 @@ def schedule_gitlab_repo_sync(
 
             # Lazy import to avoid circular dependency:
             # middleware -> gitlab_sync -> integrations.gitlab.gitlab_service
-            # -> openhands.integrations.gitlab.gitlab_service -> get_impl
+            # -> openhands.app_server.integrations.gitlab.gitlab_service -> get_impl
             # -> integrations.gitlab.gitlab_service (circular)
             from integrations.gitlab.gitlab_service import SaaSGitLabService
 
@@ -68,4 +68,4 @@ def schedule_gitlab_repo_sync(
         except Exception:
             logger.warning('gitlab_repo_sync_failed', exc_info=True)
 
-    asyncio.create_task(_run())
+    _ = asyncio.create_task(_run())

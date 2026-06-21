@@ -7,8 +7,8 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from openhands.integrations.protocols.http_client import HTTPClient
-from openhands.integrations.service_types import (
+from openhands.app_server.integrations.protocols.http_client import HTTPClient
+from openhands.app_server.integrations.service_types import (
     AuthenticationError,
     ProviderTimeoutError,
     RateLimitError,
@@ -223,7 +223,7 @@ class TestHTTPClient:
 
     def test_runtime_checkable(self):
         """Test that HTTPClient is runtime checkable."""
-        from openhands.integrations.protocols.http_client import HTTPClient
+        from openhands.app_server.integrations.protocols.http_client import HTTPClient
 
         # Test that our testable client implements the protocol
         assert isinstance(self.client, HTTPClient)

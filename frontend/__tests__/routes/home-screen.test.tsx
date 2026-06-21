@@ -24,6 +24,7 @@ const { DEFAULT_FEATURE_FLAGS, useIsAuthedMock, useConfigMock, mockUseAppMode } 
       hide_users_page: false,
       hide_billing_page: false,
       hide_integrations_page: false,
+      enable_onboarding: false,
     };
 
     return {

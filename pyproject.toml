@@ -21,7 +21,7 @@ dynamic = [ "version" ]
 
 # Main dependencies (mirrors [tool.poetry.dependencies] for UV compatibility)
 dependencies = [
-  "aiohttp>=3.13.5",
+  "aiohttp>=3.14.1",
   "anthropic[vertex]",
   "anyio==4.9",
   "asyncpg>=0.30",
@@ -35,6 +35,7 @@ dependencies = [
   "docker",
   "fastapi",
   "fastmcp>=3.2,<4",
+  "gitpython>=3.1.49",
   "google-api-python-client>=2.164",
   "google-auth-httplib2",
   "google-auth-oauthlib",
@@ -45,21 +46,20 @@ dependencies = [
   "ipywidgets>=8.1.5",
   "jinja2>=3.1.6",
   "joblib",
+  "joserfc>=1.0.0",
   "json-repair",
   "jupyter-kernel-gateway",
-  "jwcrypto>=1.5.6",
   "kubernetes>=33.1",
   "libtmux>=0.46.2",
-  "litellm!=1.64.4,!=1.67.*,>=1.74.3",
+  "litellm==1.84.1",
   "lmnr>=0.7.20",
   "mcp>=1.25",
   "memory-profiler>=0.61",
   "numpy",
-  "openai==2.8",
-  "openhands-aci==0.3.3",
-  "openhands-agent-server==1.17",
-  "openhands-sdk==1.17",
-  "openhands-tools==1.17",
+  "openai==2.33.0",
+  "openhands-agent-server==1.29.0",
+  "openhands-sdk==1.29.0",
+  "openhands-tools==1.29.0",
   "opentelemetry-api>=1.33.1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
   "orjson>=3.11.6",
@@ -68,20 +68,20 @@ dependencies = [
   "pg8000>=1.31.5",
   "pillow>=12.1.1",
   "playwright>=1.55",
-  "poetry>=2.3.3",
+  "poetry>=2.3.4,<2.4.0",
   "prompt-toolkit>=3.0.50",
   "protobuf>=5.29.6,<6",
   "psutil",
   "pybase62>=1",
   "pygithub>=2.5",
-  "pyjwt>=2.12",
+  "pyjwt>=2.13.0",
   "pylatexenc",
-  "pypdf>=6.9.2",
+  "pypdf>=6.10.2",
   "python-docx",
   "python-dotenv",
   "python-frontmatter>=1.1",
   "python-json-logger>=3.2.1",
-  "python-multipart>=0.0.26",
+  "python-multipart>=0.0.30",
   "python-pptx",
   "python-socketio==5.14",
   "pythonnet; sys_platform=='win32'",
@@ -99,8 +99,9 @@ dependencies = [
   "termcolor",
   "toml",
   "tornado>=6.5",
+  "tree-sitter-language-pack>=0.7.3",
   "types-toml",
-  "urllib3>=2.6.3",
+  "urllib3>=2.7.0",
   "uvicorn",
   "whatthepatch>=1.0.6",
   "zope-interface==7.2",
@@ -139,7 +140,7 @@ runtime = [
 
 [tool.poetry]
 name = "openhands-ai"
-version = "1.6.0"
+version = "1.8.0"
 description = "OpenHands: Code Less, Make More"
 authors = [ "OpenHands" ]
 license = "MIT"
@@ -158,9 +159,9 @@ include = [
 python = "^3.12,<3.14"
 authlib = ">=1.6.9"                                # CVE-2026-27962 (fixed in 1.6.9)
 orjson = ">=3.11.6"                                # Pinned to fix CVE-2025-67221
-litellm = ">=1.74.3, !=1.64.4, !=1.67.*"           # avoid 1.64.4 (known bug) & 1.67.* (known bug #10272)
-openai = "2.8.0"                                   # Pin due to litellm incompatibility with >=1.100.0 (BerriAI/litellm#13711)
-aiohttp = ">=3.13.5"                               # Pin to avoid CVE-2026-22815 (vulnerable versions < 3.13.4)
+litellm = "1.84.1"                                 # Exact pin to the verified 1.84.1 release; bump explicitly when upgrading (rather than a floor) to ensure only the tested version is used
+openai = "2.33.0"                                  # Pin because litellm 1.84.1 requires 2.33.0 and is incompatible with >=1.100.0 (BerriAI/litellm#13711)
+aiohttp = ">=3.14.1"                               # CVE-2026-54278 (fixed in 3.14.1); keep aiohttp on a fixed-or-newer release
 google-genai = "*"                                 # To use litellm with Gemini Pro API
 google-api-python-client = "^2.164.0"              # For Google Sheets API
 google-auth-httplib2 = "*"                         # For Google Sheets authentication
@@ -179,15 +180,16 @@ html2text = "*"
 deprecated = "*"
 pexpect = "*"
 jinja2 = "^3.1.6"
-python-multipart = ">=0.0.26"
+python-multipart = ">=0.0.30"
 tenacity = ">=8.5,<10.0"
 zope-interface = "7.2"
 pathspec = ">=0.12.1,<1.1.0"
-pyjwt = "^2.12.0"
+pyjwt = "^2.13.0"
 dirhash = "*"
 tornado = ">=6.5"
 python-dotenv = "*"
 rapidfuzz = "^3.9.0"
+tree-sitter-language-pack = "^0.7.3"
 whatthepatch = "^1.0.6"
 protobuf = ">=5.29.6,<6.0.0"                       # Updated to fix CVE-2026-0994
 opentelemetry-api = "^1.33.1"
@@ -196,13 +198,13 @@ opentelemetry-exporter-otlp-proto-grpc = "^1.33.1"
 libtmux = ">=0.46.2"
 pygithub = "^2.5.0"
 joblib = "*"
-openhands-aci = "0.3.3"
+gitpython = ">=3.1.49"
 python-socketio = "5.14.0"
 sse-starlette = "^3.0.2"
 psutil = "*"
 python-json-logger = ">=3.2.1,<5.0.0"
 prompt-toolkit = "^3.0.50"
-poetry = "^2.3.3"
+poetry = ">=2.3.4,<2.4.0"
 anyio = "4.9.0"
 pythonnet = { version = "*", markers = "sys_platform == 'win32'" }
 fastmcp = ">=3.2,<4"
@@ -217,10 +219,10 @@ python-docx = "*"
 bashlex = "^0.18"
 
 # Explicitly pinned packages for latest versions
-pypdf = "^6.9.2"
+pypdf = "^6.10.2"
 pillow = "^12.1.1"
 starlette = ">=0.49.1,<1.1.0"
-urllib3 = "^2.6.3"
+urllib3 = "^2.7.0"
 requests = "^2.33.0"
 setuptools = ">=78.1.1"
 
@@ -244,10 +246,10 @@ e2b-code-interpreter = { version = "^2.0.0", optional = true }
 pybase62 = "^1.0.0"
 
 # V1 dependencies
-openhands-sdk = "1.17.0"
-openhands-agent-server = "1.17.0"
-openhands-tools = "1.17.0"
-jwcrypto = ">=1.5.6"
+openhands-sdk = "==1.29.0"
+openhands-agent-server = "==1.29.0"
+openhands-tools = "==1.29.0"
+joserfc = ">=1.0.0"
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"
 asyncpg = ">=0.30,<0.32"
@@ -302,10 +304,42 @@ ignore = [ "E501" ]
 skip-string-normalization = true
 
 [tool.ruff]
-lint.select = [ "D" ]
-# ignore warnings for missing docstrings
-lint.ignore = [ "D1" ]
-lint.pydocstyle.convention = "google"
+exclude = [ "enterprise/" ]
+format.quote-style = "single"
+lint.select = [
+  "ASYNC",
+  "B",
+  "E",
+  "F",
+  "I",
+  "Q",
+  "UP006",
+  "UP007",
+  "UP008",
+  "W",
+]
+lint.ignore = [
+  "ASYNC109",
+  "ASYNC110",
+  "ASYNC220",
+  "ASYNC221",
+  "ASYNC230",
+  "ASYNC251",
+  "B003",
+  "B007",
+  "B009",
+  "B010",
+  "B018",
+  "B904",
+  "E501",
+]
+lint.flake8-bugbear.extend-immutable-calls = [
+  "Depends",
+  "fastapi.Depends",
+  "fastapi.params.Depends",
+]
+lint.flake8-quotes.docstring-quotes = "double"
+lint.flake8-quotes.inline-quotes = "single"
 
 [tool.coverage.run]
 concurrency = [ "gevent" ]

@@ -129,6 +129,8 @@ export function ChangeAgentButton() {
     setConversationMode("code");
   };
 
+  const isAcp = conversation?.agent_kind === "acp";
+
   const isExecutionAgent = conversationMode === "code";
 
   const buttonLabel = useMemo(() => {
@@ -144,6 +146,8 @@ export function ChangeAgentButton() {
     }
     return <LessonPlanIcon width={18} height={18} color="#ffffff" />;
   }, [isExecutionAgent]);
+
+  if (isAcp) return null;
 
   return (
     <div className="relative">

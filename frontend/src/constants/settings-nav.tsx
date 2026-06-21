@@ -4,6 +4,7 @@ import KeyIcon from "#/icons/key.svg?react";
 import LightbulbIcon from "#/icons/lightbulb.svg?react";
 import LockIcon from "#/icons/lock.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
+import RobotIcon from "#/icons/u-robot.svg?react";
 import ServerProcessIcon from "#/icons/server-process.svg?react";
 import SettingsGearIcon from "#/icons/settings-gear.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
@@ -22,6 +23,15 @@ export interface SettingsNavItem {
   to: string;
   text: string;
   section?: SettingsNavSection;
+  // When true, this item is greyed out (and its route redirects to
+  // ``/settings/agent``) while the personal-scope active agent is ACP.
+  // The ACP sub-agent manages its own LLM and condenser, so those
+  // OpenHands-side surfaces have no useful content. (MCP is intentionally
+  // NOT flagged: MCP servers configured here are forwarded to the ACP
+  // subprocess at session creation, so the page is meaningful under ACP.)
+  // Drives both the navigation disable in ``use-settings-nav-items.ts``
+  // and the server-side redirect in ``routes/settings.tsx`` from one source.
+  disabledByAcp?: boolean;
 }
 
 export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
@@ -56,16 +66,24 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
     section: "org",
   },
   {
+    icon: <RobotIcon width={22} height={22} />,
+    to: "/settings/agent",
+    text: "SETTINGS$AGENT",
+    section: "personal",
+  },
+  {
     icon: <CircuitIcon width={22} height={22} />,
     to: "/settings",
     text: "COMMON$LANGUAGE_MODEL_LLM",
     section: "personal",
+    disabledByAcp: true,
   },
   {
     icon: <MemoryIcon width={22} height={22} />,
     to: "/settings/condenser",
     text: "SETTINGS$NAV_CONDENSER",
     section: "personal",
+    disabledByAcp: true,
   },
   {
     icon: <LockIcon width={22} height={22} />,
@@ -125,14 +143,21 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
 
 export const OSS_NAV_ITEMS: SettingsNavItem[] = [
   {
+    icon: <RobotIcon width={22} height={22} />,
+    to: "/settings/agent",
+    text: "SETTINGS$AGENT",
+  },
+  {
     icon: <CircuitIcon width={22} height={22} />,
     to: "/settings",
     text: "SETTINGS$NAV_LLM",
+    disabledByAcp: true,
   },
   {
     icon: <MemoryIcon width={22} height={22} />,
     to: "/settings/condenser",
     text: "SETTINGS$NAV_CONDENSER",
+    disabledByAcp: true,
   },
   {
     icon: <LockIcon width={22} height={22} />,

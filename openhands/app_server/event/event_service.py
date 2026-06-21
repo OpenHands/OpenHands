@@ -2,6 +2,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
+from typing import AsyncGenerator
 from uuid import UUID
 
 from openhands.agent_server.models import EventPage, EventSortOrder
@@ -9,6 +10,7 @@ from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.app_server.services.injector import Injector
 from openhands.sdk import Event
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
+from openhands.sdk.utils.paging import page_iterator
 
 _logger = logging.getLogger(__name__)
 
@@ -42,6 +44,18 @@ class EventService(ABC):
         timestamp__lt: datetime | None = None,
     ) -> int:
         """Count events matching the given filters."""
+
+    async def iter_events_for_export(
+        self, conversation_id: UUID
+    ) -> AsyncGenerator[Event, None]:
+        """Iterate all events for a conversation in export order.
+
+        Implementations can override this to avoid paginated searches that reload the
+        full event history for each page.
+        """
+        events = page_iterator(self.search_events, conversation_id=conversation_id)
+        async for event in events:
+            yield event
 
     @abstractmethod
     async def save_event(self, conversation_id: UUID, event: Event):

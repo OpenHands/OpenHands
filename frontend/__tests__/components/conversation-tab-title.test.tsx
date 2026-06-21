@@ -70,6 +70,7 @@ vi.mock("#/hooks/use-runtime-is-ready", () => ({
 vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: vi.fn(() => ({
     curAgentState: AgentState.AWAITING_USER_INPUT,
+    isArchived: false,
   })),
 }));
 

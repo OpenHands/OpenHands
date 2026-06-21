@@ -1,5 +1,4 @@
 import React from "react";
-import { usePostHog } from "posthog-js/react";
 import { cn } from "#/utils/utils";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
@@ -10,6 +9,7 @@ import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
 import { SandboxStatusBadges } from "./sandbox-status-badges";
 import { useDownloadConversation } from "#/hooks/use-download-conversation";
+import type { AgentChip } from "#/utils/agent-display-label";
 
 interface ConversationCardProps {
   onClick?: () => void;
@@ -25,7 +25,7 @@ interface ConversationCardProps {
   conversationId?: string; // Optional conversation ID for VS Code URL
   contextMenuOpen?: boolean;
   onContextMenuToggle?: (isOpen: boolean) => void;
-  llmModel?: string | null;
+  agentChip?: AgentChip | null;
 }
 
 export function ConversationCard({
@@ -44,9 +44,8 @@ export function ConversationCard({
   sandboxStatus,
   contextMenuOpen = false,
   onContextMenuToggle,
-  llmModel,
+  agentChip,
 }: ConversationCardProps) {
-  const posthog = usePostHog();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
   const { mutateAsync: downloadConversation } = useDownloadConversation();
 
@@ -83,7 +82,6 @@ export function ConversationCard({
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    posthog.capture("download_via_vscode_button_clicked");
 
     // Fetch the VS Code URL from the API
     if (conversationId) {
@@ -160,7 +158,7 @@ export function ConversationCard({
         lastUpdatedAt={lastUpdatedAt}
         createdAt={createdAt}
         sandboxStatus={sandboxStatus}
-        llmModel={llmModel}
+        agentChip={agentChip}
       />
     </div>
   );
