@@ -4,7 +4,7 @@ import threading
 
 from pydantic import model_validator
 
-from openhands.app_server.file_store.files import FileStore
+from openhands.app_server.file_store.files import TEXT_ENCODING, FileStore
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 
@@ -27,12 +27,15 @@ class LocalFileStore(FileStore):
         full_path = self.get_full_path(path)
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
         mode = 'w' if isinstance(contents, str) else 'wb'
+        # Persist text as UTF-8 explicitly so files round-trip correctly
+        # regardless of the platform default encoding.
+        encoding = TEXT_ENCODING if isinstance(contents, str) else None
 
         # Use atomic write: write to temp file, then rename
         # This prevents race conditions where concurrent writes could corrupt the file
         temp_path = f'{full_path}.tmp.{os.getpid()}.{threading.get_ident()}'
         try:
-            with open(temp_path, mode) as f:
+            with open(temp_path, mode, encoding=encoding) as f:
                 f.write(contents)
                 f.flush()
                 os.fsync(f.fileno())
@@ -44,7 +47,7 @@ class LocalFileStore(FileStore):
 
     def read(self, path: str) -> str:
         full_path = self.get_full_path(path)
-        with open(full_path, 'r') as f:
+        with open(full_path, 'r', encoding=TEXT_ENCODING) as f:
             return f.read()
 
     def list(self, path: str) -> list[str]:

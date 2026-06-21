@@ -2,7 +2,7 @@ import os
 
 from pydantic import Field
 
-from openhands.app_server.file_store.files import FileStore
+from openhands.app_server.file_store.files import TEXT_ENCODING, FileStore
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 
@@ -11,7 +11,7 @@ class InMemoryFileStore(FileStore):
 
     def write(self, path: str, contents: str | bytes) -> None:
         if isinstance(contents, bytes):
-            contents = contents.decode('utf-8')
+            contents = contents.decode(TEXT_ENCODING)
         self.files[path] = contents
 
     def read(self, path: str) -> str:

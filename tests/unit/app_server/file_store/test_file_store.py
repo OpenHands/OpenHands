@@ -13,7 +13,7 @@ from unittest.mock import patch
 import botocore.exceptions
 from google.api_core.exceptions import NotFound
 
-from openhands.app_server.file_store.files import FileStore
+from openhands.app_server.file_store.files import TEXT_ENCODING, FileStore
 from openhands.app_server.file_store.google_cloud import GoogleCloudFileStore
 from openhands.app_server.file_store.local import LocalFileStore
 from openhands.app_server.file_store.memory import InMemoryFileStore
@@ -34,6 +34,8 @@ class _MockGoogleCloudClient:
 @dataclass
 class _MockGoogleCloudBucket:
     blobs_by_path: dict[str, '_MockGoogleCloudBlob'] = field(default_factory=dict)
+    # Records the encoding requested by the most recent blob.open() call.
+    last_open_encoding: str | None = None
 
     def blob(self, path: str | None = None) -> '_MockGoogleCloudBlob':
         return self.blobs_by_path.get(path) or _MockGoogleCloudBlob(self, path)
@@ -51,7 +53,10 @@ class _MockGoogleCloudBlob:
     name: str
     content: str | bytes | None = None
 
-    def open(self, op: str):
+    def open(self, op: str, encoding: str | None = None):
+        # Record the encoding the production code requested so tests can
+        # assert text I/O is pinned to UTF-8.
+        self.bucket.last_open_encoding = encoding
         if op == 'r':
             if self.content is None:
                 raise FileNotFoundError()
@@ -184,6 +189,14 @@ class _StorageTest(ABC):
         with self.assertRaises(FileNotFoundError):
             store.read(filename)
 
+    def test_non_ascii_roundtrip(self):
+        """Non-ASCII text content round-trips on every backend (UTF-8)."""
+        store = self.get_store()
+        contents = 'café — 日本語 — Привет — 🚀'
+        store.write('unicode.txt', contents)
+        self.assertEqual(store.read('unicode.txt'), contents)
+        store.delete('unicode.txt')
+
     def test_complex_path_fileops(self):
         filenames = ['foo.bar.baz', './foo/bar/baz', 'foo/bar/baz', '/foo/bar/baz']
         store = self.get_store()
@@ -267,6 +280,31 @@ class TestLocalFileStore(TestCase, _StorageTest):
                 f'Failed to remove temporary directory {self.temp_dir}: {e}'
             )
 
+    def test_non_ascii_roundtrip_under_non_utf8_default(self):
+        """Non-ASCII content must round-trip regardless of platform encoding.
+
+        LocalFileStore performs text I/O, so it must pin the encoding to
+        UTF-8 explicitly. This simulates a platform whose default text
+        encoding is not UTF-8 (e.g. Windows cp1252 or a POSIX/C 'ascii'
+        locale): without an explicit encoding the text-mode open() would
+        inherit that default and raise/corrupt on non-ASCII content.
+        """
+        real_open = open
+
+        def ascii_default_open(file, mode='r', *args, **kwargs):
+            # Force a non-UTF-8 default only for text-mode opens that do
+            # not pass an explicit encoding, mimicking the platform default.
+            if 'b' not in mode and kwargs.get('encoding') is None:
+                kwargs['encoding'] = 'ascii'
+            return real_open(file, mode, *args, **kwargs)
+
+        store = self.get_store()
+        contents = 'café — 日本語 — Привет — 🚀'
+        with patch('builtins.open', ascii_default_open):
+            store.write('unicode.txt', contents)
+            self.assertEqual(store.read('unicode.txt'), contents)
+        store.delete('unicode.txt')
+
     def test_concurrent_writes_no_corruption(self):
         """Test that concurrent writes don't corrupt file content.
 
@@ -331,6 +369,14 @@ class TestInMemoryFileStore(TestCase, _StorageTest):
 class TestGoogleCloudFileStore(TestCase, _StorageTest):
     def setUp(self):
         self.store = GoogleCloudFileStore(bucket_name='dear-liza')
+
+    def test_text_io_uses_utf8_encoding(self):
+        """Text blobs must be opened with an explicit UTF-8 encoding."""
+        store = self.get_store()
+        store.write('u.txt', 'café')
+        self.assertEqual(store.bucket.last_open_encoding, TEXT_ENCODING)
+        self.assertEqual(store.read('u.txt'), 'café')
+        self.assertEqual(store.bucket.last_open_encoding, TEXT_ENCODING)
 
 
 @patch('boto3.client', lambda service, **kwargs: _MockS3Client())

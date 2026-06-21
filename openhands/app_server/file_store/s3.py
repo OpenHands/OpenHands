@@ -5,7 +5,7 @@ import boto3
 import botocore
 from pydantic import Field, PrivateAttr
 
-from openhands.app_server.file_store.files import FileStore
+from openhands.app_server.file_store.files import TEXT_ENCODING, FileStore
 
 
 class S3ObjectDict(TypedDict):
@@ -57,7 +57,9 @@ class S3FileStore(FileStore):
     def write(self, path: str, contents: str | bytes) -> None:
         try:
             as_bytes = (
-                contents.encode('utf-8') if isinstance(contents, str) else contents
+                contents.encode(TEXT_ENCODING)
+                if isinstance(contents, str)
+                else contents
             )
             self.client.put_object(
                 Bucket=self._get_bucket_name(), Key=path, Body=as_bytes
@@ -81,7 +83,7 @@ class S3FileStore(FileStore):
                 Bucket=self._get_bucket_name(), Key=path
             )
             with response['Body'] as stream:
-                return str(stream.read().decode('utf-8'))
+                return str(stream.read().decode(TEXT_ENCODING))
         except botocore.exceptions.ClientError as e:
             # Catch all S3-related errors
             if e.response['Error']['Code'] == 'NoSuchBucket':

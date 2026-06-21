@@ -17,6 +17,7 @@ from google.cloud.storage.client import Client
 from openhands.app_server.config import get_app_conversation_info_service
 from openhands.app_server.event.event_service import EventService, EventServiceInjector
 from openhands.app_server.event.event_service_base import EventServiceBase
+from openhands.app_server.file_store.files import TEXT_ENCODING
 from openhands.app_server.services.injector import InjectorState
 from openhands.sdk import Event
 
@@ -44,7 +45,7 @@ class GoogleCloudEventService(EventServiceBase):
         """Get the event at the path given."""
         blob: Blob = self.bucket.blob(str(path))
         try:
-            with blob.open('r') as f:
+            with blob.open('r', encoding=TEXT_ENCODING) as f:
                 json_data = f.read()
             event = Event.model_validate_json(json_data)
             return event
@@ -58,7 +59,7 @@ class GoogleCloudEventService(EventServiceBase):
         """Store the event given at the path given."""
         blob: Blob = self.bucket.blob(str(path))
         data = event.model_dump(mode='json')
-        with blob.open('w') as f:
+        with blob.open('w', encoding=TEXT_ENCODING) as f:
             f.write(json.dumps(data, indent=2))
 
     def _search_paths(self, prefix: Path, page_id: str | None = None) -> list[Path]:

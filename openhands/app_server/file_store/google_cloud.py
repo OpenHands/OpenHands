@@ -7,7 +7,7 @@ from google.cloud.storage.bucket import Bucket
 from google.cloud.storage.client import Client
 from pydantic import Field, PrivateAttr
 
-from openhands.app_server.file_store.files import FileStore
+from openhands.app_server.file_store.files import TEXT_ENCODING, FileStore
 
 
 class GoogleCloudFileStore(FileStore):
@@ -47,13 +47,15 @@ class GoogleCloudFileStore(FileStore):
     def write(self, path: str, contents: str | bytes) -> None:
         blob: Blob = self.bucket.blob(path)
         mode = 'wb' if isinstance(contents, bytes) else 'w'
-        with blob.open(mode) as f:
+        # Text blobs are written as UTF-8 explicitly; binary blobs take no encoding.
+        encoding = None if isinstance(contents, bytes) else TEXT_ENCODING
+        with blob.open(mode, encoding=encoding) as f:
             f.write(contents)
 
     def read(self, path: str) -> str:
         blob: Blob = self.bucket.blob(path)
         try:
-            with blob.open('r') as f:
+            with blob.open('r', encoding=TEXT_ENCODING) as f:
                 return str(f.read())
         except NotFound as err:
             raise FileNotFoundError(err)
