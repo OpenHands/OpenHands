@@ -131,41 +131,41 @@ class SaasUserAuth(UserAuth):
         override_org_id = self.effective_org_id_override
         if self.api_key_org_id is not None and self.api_key_org_id != override_org_id:
             logger.warning(
-                'effective_org_id_override_api_key_mismatch',
+                "effective_org_id_override_api_key_mismatch",
                 extra={
-                    'user_id': self.user_id,
-                    'api_key_org_id': str(self.api_key_org_id),
-                    'effective_org_id_override': str(override_org_id),
+                    "user_id": self.user_id,
+                    "api_key_org_id": str(self.api_key_org_id),
+                    "effective_org_id_override": str(override_org_id),
                 },
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail='API key is not authorized for this organization',
+                detail="API key is not authorized for this organization",
             )
         try:
             user_uuid = UUID(self.user_id)
         except ValueError as exc:
             logger.error(
-                'effective_org_id_override_invalid_user_id',
-                extra={'user_id': self.user_id},
+                "effective_org_id_override_invalid_user_id",
+                extra={"user_id": self.user_id},
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail='User is not a member of the requested organization',
+                detail="User is not a member of the requested organization",
             ) from exc
 
         member = await OrgMemberStore.get_org_member(override_org_id, user_uuid)
         if member is None:
             logger.warning(
-                'effective_org_id_override_not_a_member',
+                "effective_org_id_override_not_a_member",
                 extra={
-                    'user_id': self.user_id,
-                    'effective_org_id_override': str(override_org_id),
+                    "user_id": self.user_id,
+                    "effective_org_id_override": str(override_org_id),
                 },
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail='User is not a member of the requested organization',
+                detail="User is not a member of the requested organization",
             )
         return override_org_id
 
@@ -209,28 +209,28 @@ class SaasUserAuth(UserAuth):
                 requested = UUID(header_value)
             except ValueError as exc:
                 logger.warning(
-                    'x_org_id_invalid',
-                    extra={'user_id': self.user_id, 'header': header_value},
+                    "x_org_id_invalid",
+                    extra={"user_id": self.user_id, "header": header_value},
                 )
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail='Invalid X-Org-Id header (must be a UUID)',
+                    detail="Invalid X-Org-Id header (must be a UUID)",
                 ) from exc
 
         # Case 1: API key binds the org.
         if self.api_key_org_id is not None:
             if requested is not None and requested != self.api_key_org_id:
                 logger.warning(
-                    'x_org_id_api_key_mismatch',
+                    "x_org_id_api_key_mismatch",
                     extra={
-                        'user_id': self.user_id,
-                        'api_key_org_id': str(self.api_key_org_id),
-                        'x_org_id': str(requested),
+                        "user_id": self.user_id,
+                        "api_key_org_id": str(self.api_key_org_id),
+                        "x_org_id": str(requested),
                     },
                 )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail='API key is not authorized for this organization',
+                    detail="API key is not authorized for this organization",
                 )
             self._effective_org_id = self.api_key_org_id
             self._effective_org_id_resolved = True
@@ -243,25 +243,25 @@ class SaasUserAuth(UserAuth):
             except ValueError as exc:
                 # Shouldn't happen, but treat as not-a-member.
                 logger.error(
-                    'x_org_id_invalid_user_id',
-                    extra={'user_id': self.user_id},
+                    "x_org_id_invalid_user_id",
+                    extra={"user_id": self.user_id},
                 )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail='User is not a member of the requested organization',
+                    detail="User is not a member of the requested organization",
                 ) from exc
             member = await OrgMemberStore.get_org_member(requested, user_uuid)
             if member is None:
                 logger.warning(
-                    'x_org_id_not_a_member',
+                    "x_org_id_not_a_member",
                     extra={
-                        'user_id': self.user_id,
-                        'x_org_id': str(requested),
+                        "user_id": self.user_id,
+                        "x_org_id": str(requested),
                     },
                 )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail='User is not a member of the requested organization',
+                    detail="User is not a member of the requested organization",
                 )
             self._effective_org_id = requested
             self._effective_org_id_resolved = True
@@ -312,37 +312,37 @@ class SaasUserAuth(UserAuth):
             self.refresh_token = SecretStr(offline_token)
 
         if self._is_token_expired(self.refresh_token):
-            logger.debug('saas_user_auth_refresh:expired')
+            logger.debug("saas_user_auth_refresh:expired")
             raise ExpiredError()
 
         tokens = await token_manager.refresh(self.refresh_token.get_secret_value())
-        self.access_token = SecretStr(tokens['access_token'])
-        self.refresh_token = SecretStr(tokens['refresh_token'])
+        self.access_token = SecretStr(tokens["access_token"])
+        self.refresh_token = SecretStr(tokens["refresh_token"])
         self.refreshed = True
         if not self.email or not self.email_verified or not self.user_id:
             # We don't need to verify the signature here because we just refreshed
             # this token from the IDP via token_manager.refresh()
             access_token_payload = jwt.decode(
-                tokens['access_token'], options={'verify_signature': False}
+                tokens["access_token"], options={"verify_signature": False}
             )
-            self.user_id = access_token_payload['sub']
-            self.email = access_token_payload['email']
-            self.email_verified = access_token_payload['email_verified']
+            self.user_id = access_token_payload["sub"]
+            self.email = access_token_payload["email"]
+            self.email_verified = access_token_payload["email_verified"]
 
     def _is_token_expired(self, token: SecretStr):
-        logger.debug('saas_user_auth_is_token_expired')
+        logger.debug("saas_user_auth_is_token_expired")
         # Decode token payload - works with both access and refresh tokens
         payload = jwt.decode(
-            token.get_secret_value(), options={'verify_signature': False}
+            token.get_secret_value(), options={"verify_signature": False}
         )
 
         # Sanity check - make sure we refer to current user
-        assert payload['sub'] == self.user_id
+        assert payload["sub"] == self.user_id
 
         # Check token expiration
-        expiration = payload.get('exp')
+        expiration = payload.get("exp")
         if expiration:
-            logger.debug('saas_user_auth_is_token_expired expiration is %d', expiration)
+            logger.debug("saas_user_auth_is_token_expired expiration is %d", expiration)
         return expiration and expiration < time.time()
 
     def get_auth_type(self) -> AuthType | None:
@@ -363,7 +363,7 @@ class SaasUserAuth(UserAuth):
         return settings
 
     async def get_secrets_store(self) -> SaasSecretsStore:
-        logger.debug('saas_user_auth_get_secrets_store')
+        logger.debug("saas_user_auth_get_secrets_store")
         secrets_store = self.secrets_store
         if secrets_store:
             return secrets_store
@@ -390,9 +390,9 @@ class SaasUserAuth(UserAuth):
         openhands_api_key = await self._get_openhands_api_key()
         if openhands_api_key:
             custom_secrets = dict(user_secrets.custom_secrets) if user_secrets else {}
-            custom_secrets['OPENHANDS_API_KEY'] = CustomSecret(
+            custom_secrets["OPENHANDS_API_KEY"] = CustomSecret(
                 secret=SecretStr(openhands_api_key),
-                description='OpenHands Cloud API Key for automations and integrations (system-managed)',
+                description="OpenHands Cloud API Key for automations and integrations (system-managed)",
             )
             user_secrets = Secrets(
                 custom_secrets=custom_secrets,
@@ -403,7 +403,7 @@ class SaasUserAuth(UserAuth):
         return user_secrets
 
     async def get_access_token(self) -> SecretStr | None:
-        logger.debug('saas_user_auth_get_access_token')
+        logger.debug("saas_user_auth_get_access_token")
         try:
             if self.access_token is None or self._is_token_expired(self.access_token):
                 await self.refresh()
@@ -415,17 +415,17 @@ class SaasUserAuth(UserAuth):
             # missing/revoked offline session must not turn a valid key into a
             # 401. Degrade to None instead of raising.
             if self.auth_type == AuthType.BEARER:
-                logger.warning('bearer_get_access_token_refresh_failed', exc_info=True)
+                logger.warning("bearer_get_access_token_refresh_failed", exc_info=True)
                 return None
             raise
         except Exception as e:
             if self.auth_type == AuthType.BEARER:
-                logger.warning('bearer_get_access_token_failed', exc_info=True)
+                logger.warning("bearer_get_access_token_failed", exc_info=True)
                 return None
             raise AuthError() from e
 
     async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:
-        logger.debug('saas_user_auth_get_provider_tokens')
+        logger.debug("saas_user_auth_get_provider_tokens")
         if self.provider_tokens is not None:
             return self.provider_tokens
         provider_tokens = {}
@@ -470,10 +470,10 @@ class SaasUserAuth(UserAuth):
                 except Exception as e:
                     # If there was a problem with a refresh token we log and delete it
                     logger.error(
-                        f'Error refreshing provider_token token: {e}',
+                        f"Error refreshing provider_token token: {e}",
                         extra={
-                            'user_id': self.user_id,
-                            'idp_type': token.identity_provider,
+                            "user_id": self.user_id,
+                            "idp_type": token.identity_provider,
                         },
                     )
                     async with a_session_maker() as session:
@@ -518,10 +518,10 @@ class SaasUserAuth(UserAuth):
         if not mcp_api_key:
             mcp_api_key = await api_key_store.create_api_key(
                 self.user_id,
-                'MCP_API_KEY',
+                "MCP_API_KEY",
                 None,
                 org_id=effective_org_id,
-                scopes=['sandbox'],
+                scopes=["sandbox"],
             )
         return mcp_api_key
 
@@ -538,13 +538,13 @@ class SaasUserAuth(UserAuth):
         """
         effective_org_id = await self.get_effective_org_id()
         if effective_org_id is None:
-            raise ValueError(f'User {self.user_id} has no current organization')
+            raise ValueError(f"User {self.user_id} has no current organization")
 
         api_key_store = ApiKeyStore.get_instance()
         openhands_api_key = await api_key_store.get_or_create_system_api_key(
             user_id=self.user_id,
             org_id=effective_org_id,
-            name='OPENHANDS_API_KEY',
+            name="OPENHANDS_API_KEY",
         )
         return openhands_api_key
 
@@ -564,10 +564,10 @@ class SaasUserAuth(UserAuth):
             if self._org_id is None:
                 return None
             return {
-                'org_id': self._org_id,
-                'org_name': self._org_name,
-                'role': self._role,
-                'permissions': self._permissions,
+                "org_id": self._org_id,
+                "org_name": self._org_name,
+                "role": self._role,
+                "permissions": self._permissions,
             }
 
         # Mark as loaded to avoid repeated attempts on failure
@@ -581,14 +581,14 @@ class SaasUserAuth(UserAuth):
             effective_org_id = await self.get_effective_org_id()
             if effective_org_id is None:
                 logger.warning(
-                    f'No effective org for user {self.user_id} in get_org_info'
+                    f"No effective org for user {self.user_id} in get_org_info"
                 )
                 return None
 
             org = await OrgStore.get_org_by_id(effective_org_id)
             if not org:
                 logger.warning(
-                    f'Organization {effective_org_id} not found for user {self.user_id}'
+                    f"Organization {effective_org_id} not found for user {self.user_id}"
                 )
                 return None
 
@@ -609,41 +609,41 @@ class SaasUserAuth(UserAuth):
             self._permissions = permissions
 
             return {
-                'org_id': self._org_id,
-                'org_name': self._org_name,
-                'role': self._role,
-                'permissions': self._permissions,
+                "org_id": self._org_id,
+                "org_name": self._org_name,
+                "role": self._role,
+                "permissions": self._permissions,
             }
         except HTTPException:
             # Propagate validation errors raised by get_effective_org_id().
             raise
         except Exception as e:
-            logger.error(f'Error fetching org info for user {self.user_id}: {e}')
+            logger.error(f"Error fetching org info for user {self.user_id}: {e}")
             return None
 
     @classmethod
     async def get_instance(cls, request: Request) -> UserAuth:
-        logger.debug('saas_user_auth_get_instance')
+        logger.debug("saas_user_auth_get_instance")
         # First we check for for an API Key...
-        logger.debug('saas_user_auth_get_instance:check_bearer')
+        logger.debug("saas_user_auth_get_instance:check_bearer")
         instance = await saas_user_auth_from_bearer(request)
         if instance is None:
-            logger.debug('saas_user_auth_get_instance:check_cookie')
+            logger.debug("saas_user_auth_get_instance:check_cookie")
             instance = await saas_user_auth_from_cookie(request)
         if instance is None:
-            logger.debug('saas_user_auth_get_instance:no_credentials')
-            raise NoCredentialsError('failed to authenticate')
+            logger.debug("saas_user_auth_get_instance:no_credentials")
+            raise NoCredentialsError("failed to authenticate")
         # Capture the raw X-Org-Id header (if any) so it can be validated
         # lazily by `get_effective_org_id()` the first time the request
         # needs an org context. See `server.auth.org_context`.
-        instance._x_org_id_header = request.headers.get('X-Org-Id')
-        if not getattr(request.state, 'user_rate_limit_processed', False):
+        instance._x_org_id_header = request.headers.get("X-Org-Id")
+        if not getattr(request.state, "user_rate_limit_processed", False):
             user_id = await instance.get_user_id()
             if user_id:
                 # Ensure requests are only counted once
                 request.state.user_rate_limit_processed = True
                 # Will raise if rate limit is reached.
-                await rate_limiter.hit('auth_uid', user_id)
+                await rate_limiter.hit("auth_uid", user_id)
         return instance
 
     @classmethod
@@ -654,25 +654,25 @@ class SaasUserAuth(UserAuth):
         # actually required; provider tokens resolve by user_id directly.
         return SaasUserAuth(
             user_id=user_id,
-            refresh_token=SecretStr(''),
+            refresh_token=SecretStr(""),
             auth_type=AuthType.BEARER,
         )
 
 
 def get_api_key_from_header(request: Request):
-    auth_header = request.headers.get('Authorization')
-    if auth_header and auth_header.startswith('Bearer '):
-        return auth_header.replace('Bearer ', '')
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header.replace("Bearer ", "")
 
     # This is a temp hack
     # Streamable HTTP MCP Client works via redirect requests, but drops the Authorization header for reason
     # We include `X-Session-API-Key` header by default due to nested runtimes, so it used as a drop in replacement here
-    session_api_key = request.headers.get('X-Session-API-Key')
+    session_api_key = request.headers.get("X-Session-API-Key")
     if session_api_key:
         return session_api_key
 
     # Fallback to X-Access-Token header as an additional option
-    return request.headers.get('X-Access-Token')
+    return request.headers.get("X-Access-Token")
 
 
 async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
@@ -693,7 +693,7 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
         # turns a valid key into a 401 BearerTokenError.
         return SaasUserAuth(
             user_id=validation_result.user_id,
-            refresh_token=SecretStr(''),
+            refresh_token=SecretStr(""),
             auth_type=AuthType.BEARER,
             api_key_org_id=validation_result.org_id,
             api_key_id=validation_result.key_id,
@@ -706,7 +706,7 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
 
 async def saas_user_auth_from_cookie(request: Request) -> SaasUserAuth | None:
     try:
-        signed_token = read_chunked_cookie(request, 'keycloak_auth')
+        signed_token = read_chunked_cookie(request, "keycloak_auth")
         if not signed_token:
             return None
         return await saas_user_auth_from_signed_token(signed_token)
@@ -715,41 +715,41 @@ async def saas_user_auth_from_cookie(request: Request) -> SaasUserAuth | None:
 
 
 async def saas_user_auth_from_signed_token(signed_token: str) -> SaasUserAuth:
-    logger.debug('saas_user_auth_from_signed_token')
+    logger.debug("saas_user_auth_from_signed_token")
     from storage.encrypt_utils import get_jwt_service
 
     decoded = get_jwt_service().verify_jws_token(signed_token)
-    logger.debug('saas_user_auth_from_signed_token:decoded')
-    access_token = decoded['access_token']
-    refresh_token = decoded['refresh_token']
+    logger.debug("saas_user_auth_from_signed_token:decoded")
+    access_token = decoded["access_token"]
+    refresh_token = decoded["refresh_token"]
     logger.debug(
-        'saas_user_auth_from_signed_token',
+        "saas_user_auth_from_signed_token",
         extra={
-            'access_token': access_token,
-            'refresh_token': refresh_token,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
         },
     )
-    accepted_tos = decoded.get('accepted_tos')
+    accepted_tos = decoded.get("accepted_tos")
 
     # The access token was encoded using HS256 on keycloak. Since we signed it, we can trust is was
     # created by us. So we can grab the user_id and expiration from it without going back to keycloak.
-    access_token_payload = jwt.decode(access_token, options={'verify_signature': False})
-    user_id = access_token_payload['sub']
-    email = access_token_payload['email']
-    email_verified = access_token_payload['email_verified']
+    access_token_payload = jwt.decode(access_token, options={"verify_signature": False})
+    user_id = access_token_payload["sub"]
+    email = access_token_payload["email"]
+    email_verified = access_token_payload["email_verified"]
 
     # Check if email is blacklisted (whitelist takes precedence)
     if email:
         auth_type = await UserAuthorizationStore.get_authorization_type(email, None)
         if auth_type == UserAuthorizationType.BLACKLIST:
             logger.warning(
-                f'Blocked authentication attempt for existing user with email: {email}'
+                f"Blocked authentication attempt for existing user with email: {email}"
             )
             raise AuthError(
-                'Access denied: Your email domain is not allowed to access this service'
+                "Access denied: Your email domain is not allowed to access this service"
             )
 
-    logger.debug('saas_user_auth_from_signed_token:return')
+    logger.debug("saas_user_auth_from_signed_token:return")
 
     return SaasUserAuth(
         access_token=SecretStr(access_token),
@@ -769,6 +769,6 @@ async def get_user_auth_from_keycloak_id(keycloak_user_id: str) -> UserAuth:
     # Keycloak access token is genuinely needed.
     return SaasUserAuth(
         user_id=keycloak_user_id,
-        refresh_token=SecretStr(''),
+        refresh_token=SecretStr(""),
         auth_type=AuthType.BEARER,
     )
