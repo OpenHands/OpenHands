@@ -319,7 +319,7 @@ def require_permission(permission: Permission):
         # Enforce API Key Scopes
         user_auth = getattr(request.state, "user_auth", None)
         api_key_scopes = getattr(user_auth, "api_key_scopes", None)
-        if api_key_scopes is not None:
+        if api_key_scopes:
             from openhands.app_server.user_auth.scope_manifest import SCOPE_MANIFEST
 
             has_scope = False
@@ -428,7 +428,7 @@ async def require_financial_data_access(
 
     # Enforce API Key Scopes
     api_key_scopes = getattr(user_auth, "api_key_scopes", None)
-    if api_key_scopes is not None:
+    if api_key_scopes:
         from openhands.app_server.user_auth.scope_manifest import SCOPE_MANIFEST
 
         has_scope = False
