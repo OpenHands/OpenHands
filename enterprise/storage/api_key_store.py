@@ -24,7 +24,7 @@ class ApiKeyValidationResult:
     org_id: UUID | None  # None for legacy API keys without org binding
     key_id: int
     key_name: str | None
-    scopes: list[str]
+    scopes: list[str] | None = None
 
 
 @dataclass
