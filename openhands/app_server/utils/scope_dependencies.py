@@ -14,7 +14,6 @@ def require_scope(allowed_scopes: list[str]):
         request: Request,
         user_id: str | None = Depends(get_user_id),
     ) -> str | None:
-
         user_auth = getattr(request.state, 'user_auth', None)
         api_key_scopes = getattr(user_auth, 'api_key_scopes', None)
 
