@@ -454,6 +454,7 @@ def _create_mock_request(api_key_org_id=None):
     mock_request = MagicMock()
     mock_user_auth = MagicMock()
     mock_user_auth.get_api_key_org_id.return_value = api_key_org_id
+    mock_user_auth.api_key_scopes = None
     mock_request.state.user_auth = mock_user_auth
     return mock_request
 
@@ -1025,6 +1026,7 @@ def _create_mock_request_with_email(api_key_org_id=None, user_email='user@exampl
     mock_user_auth = MagicMock()
     # get_api_key_org_id is sync, not async
     mock_user_auth.get_api_key_org_id.return_value = api_key_org_id
+    mock_user_auth.api_key_scopes = None
     # get_user_email is async
     mock_user_auth.get_user_email = AsyncMock(return_value=user_email)
     mock_request.state.user_auth = mock_user_auth
