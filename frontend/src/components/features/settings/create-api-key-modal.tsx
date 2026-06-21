@@ -9,6 +9,7 @@ import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { mutateWithToast } from "#/utils/mutate-with-toast";
 import { ApiKeyModalBase } from "./api-key-modal-base";
 import { useCreateApiKey } from "#/hooks/mutation/use-create-api-key";
+import { useAuthScopes } from "#/hooks/query/use-auth-scopes";
 
 interface CreateApiKeyModalProps {
   isOpen: boolean;
@@ -23,6 +24,17 @@ export function CreateApiKeyModal({
 }: CreateApiKeyModalProps) {
   const { t } = useTranslation();
   const [newKeyName, setNewKeyName] = useState("");
+  const { data: authScopes, isLoading: isLoadingScopes } = useAuthScopes();
+  const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
+
+  // Set default scopes when data is loaded
+  React.useEffect(() => {
+    if (authScopes && isOpen) {
+      setSelectedScopes(
+        authScopes.filter((s) => s.is_default).map((s) => s.name),
+      );
+    }
+  }, [authScopes, isOpen]);
 
   const createApiKeyMutation = useCreateApiKey();
 
@@ -32,20 +44,38 @@ export function CreateApiKeyModal({
       return;
     }
 
-    const newKey = await mutateWithToast(createApiKeyMutation, newKeyName, {
-      success: t(I18nKey.SETTINGS$API_KEY_CREATED),
-      error: t(I18nKey.ERROR$GENERIC),
-    }).catch(() => null);
+    if (selectedScopes.length === 0) {
+      displayErrorToast("Please select at least one scope.");
+      return;
+    }
+
+    const newKey = await mutateWithToast(
+      createApiKeyMutation,
+      { name: newKeyName, scopes: selectedScopes },
+      {
+        success: t(I18nKey.SETTINGS$API_KEY_CREATED),
+        error: t(I18nKey.ERROR$GENERIC),
+      },
+    ).catch(() => null);
 
     if (newKey) {
       onKeyCreated(newKey);
       setNewKeyName("");
+      // Reset selected scopes on next open
     }
   };
 
   const handleCancel = () => {
     setNewKeyName("");
     onClose();
+  };
+
+  const toggleScope = (scopeName: string) => {
+    setSelectedScopes((prev) =>
+      prev.includes(scopeName)
+        ? prev.filter((s) => s !== scopeName)
+        : [...prev, scopeName],
+    );
   };
 
   const modalFooter = (
@@ -94,6 +124,40 @@ export function CreateApiKeyModal({
           className="w-full mt-4"
           type="text"
         />
+
+        <div className="mt-6">
+          {/* eslint-disable-next-line i18next/no-literal-string */}
+          <div className="block text-sm font-medium mb-2">API Key Scopes</div>
+          <div className="space-y-3 bg-base-tertiary p-4 rounded-md">
+            {isLoadingScopes ? (
+              <div className="flex justify-center py-2">
+                <LoadingSpinner size="small" />
+              </div>
+            ) : (
+              authScopes?.map((scope) => (
+                <div key={scope.name} className="flex items-start gap-3 group">
+                  <input
+                    id={`scope-${scope.name}`}
+                    type="checkbox"
+                    className="mt-1 flex-shrink-0 cursor-pointer accent-blue-500"
+                    checked={selectedScopes.includes(scope.name)}
+                    onChange={() => toggleScope(scope.name)}
+                    aria-label={scope.name}
+                  />
+                  <label
+                    htmlFor={`scope-${scope.name}`}
+                    className="cursor-pointer"
+                  >
+                    <div className="text-sm font-semibold">{scope.name}</div>
+                    <div className="text-xs text-gray-400 group-hover:text-gray-300 transition-colors">
+                      {scope.description}
+                    </div>
+                  </label>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     </ApiKeyModalBase>
   );

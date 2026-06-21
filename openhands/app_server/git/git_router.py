@@ -8,7 +8,7 @@ in openhands/server/routes/git.py.
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from openhands.app_server.config import depends_user_context, get_global_config
 from openhands.app_server.git.git_models import (
@@ -32,6 +32,7 @@ from openhands.app_server.utils.paging_utils import (
     encode_page_id,
     paginate_results,
 )
+from openhands.app_server.utils.scope_dependencies import require_scope
 
 if TYPE_CHECKING:
     from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE
@@ -41,7 +42,7 @@ if TYPE_CHECKING:
 router = APIRouter(
     prefix='/git',
     tags=['Git'],
-    dependencies=get_dependencies(),
+    dependencies=get_dependencies() + [Depends(require_scope(['full']))],
 )
 user_context_dependency = depends_user_context()
 

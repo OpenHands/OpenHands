@@ -29,11 +29,20 @@ class ApiKeysClient {
   /**
    * Create a new API key
    * @param name - A descriptive name for the API key
+   * @param scopes - Optional list of scopes to grant to the API key
    */
-  static async createApiKey(name: string): Promise<CreateApiKeyResponse> {
-    const { data } = await openHands.post<CreateApiKeyResponse>("/api/keys", {
-      name,
-    });
+  static async createApiKey(
+    name: string,
+    scopes?: string[],
+  ): Promise<CreateApiKeyResponse> {
+    const payload: { name: string; scopes?: string[] } = { name };
+    if (scopes && scopes.length > 0) {
+      payload.scopes = scopes;
+    }
+    const { data } = await openHands.post<CreateApiKeyResponse>(
+      "/api/keys",
+      payload,
+    );
     return data;
   }
 

@@ -72,6 +72,7 @@ class SaasUserAuth(UserAuth):
     api_key_org_id: UUID | None = None  # Org bound to the API key used for auth
     api_key_id: int | None = None
     api_key_name: str | None = None
+    api_key_scopes: list[str] | None = None
     # Organization context fields - populated lazily via get_org_info()
     _org_id: str | None = None
     _org_name: str | None = None
@@ -520,6 +521,7 @@ class SaasUserAuth(UserAuth):
                 'MCP_API_KEY',
                 None,
                 org_id=effective_org_id,
+                scopes=['sandbox'],
             )
         return mcp_api_key
 
@@ -696,6 +698,7 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
             api_key_org_id=validation_result.org_id,
             api_key_id=validation_result.key_id,
             api_key_name=validation_result.key_name,
+            api_key_scopes=validation_result.scopes,
         )
     except Exception as exc:
         raise BearerTokenError from exc
