@@ -9,6 +9,7 @@ def require_scope(allowed_scopes: list[str]):
     Factory function that creates a dependency to require a specific API key scope.
     This is useful for protecting OSS routes that don't use SaaS permission checks.
     """
+
     async def scope_checker(
         request: Request,
         user_id: str | None = Depends(get_user_id),
