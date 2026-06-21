@@ -1,8 +1,10 @@
 import asyncio
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import AsyncGenerator
 from uuid import UUID
 
 from openhands.agent_server.models import EventPage, EventSortOrder
@@ -12,10 +14,18 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
+from openhands.app_server.conversation_paths import V1_CONVERSATIONS_DIR
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
 from openhands.sdk.utils.paging import page_iterator
+
+
+def _event_load_concurrency() -> int:
+    try:
+        return max(1, int(os.getenv('EVENT_SERVICE_LOAD_EVENT_CONCURRENCY', '10')))
+    except ValueError:
+        return 10
 
 
 @dataclass
@@ -43,6 +53,16 @@ class EventServiceBase(EventService, ABC):
     def _search_paths(self, prefix: Path) -> list[Path]:
         """Search paths."""
 
+    async def _load_events_from_paths(self, paths: list[Path]) -> list[Event | None]:
+        loop = asyncio.get_running_loop()
+        semaphore = asyncio.Semaphore(_event_load_concurrency())
+
+        async def load_event(path: Path) -> Event | None:
+            async with semaphore:
+                return await loop.run_in_executor(None, self._load_event, path)
+
+        return await asyncio.gather(*(load_event(path) for path in paths))
+
     async def get_conversation_path(self, conversation_id: UUID) -> Path:
         """Get a path for a conversation. Ensure user_id is included if possible."""
         path = self.prefix
@@ -60,7 +80,7 @@ class EventServiceBase(EventService, ABC):
             conversation_info = await task
             if conversation_info and conversation_info.created_by_user_id:
                 path /= conversation_info.created_by_user_id
-        path = path / 'v1_conversations' / conversation_id.hex
+        path = path / V1_CONVERSATIONS_DIR / conversation_id.hex
         return path
 
     async def get_event(self, conversation_id: UUID, event_id: UUID) -> Event | None:
@@ -86,20 +106,21 @@ class EventServiceBase(EventService, ABC):
         prefix = await self.get_conversation_path(conversation_id)
         paths = await loop.run_in_executor(None, self._search_paths, prefix)
 
-        # Type error: run_in_executor expects a return value, but self._load_event is typed return Event | None.
-        events = await asyncio.gather(
-            *[loop.run_in_executor(None, self._load_event, path) for path in paths]  # type: ignore[arg-type]
-        )
+        events = await self._load_events_from_paths(paths)
+        # Convert datetime filters to ISO strings so they can be compared
+        # against event.timestamp (which is stored as an ISO 8601 string).
+        timestamp_gte_str = timestamp__gte.isoformat() if timestamp__gte else None
+        timestamp_lt_str = timestamp__lt.isoformat() if timestamp__lt else None
+
         items = []
         for event in events:
             if not event:
                 continue
             if kind__eq and event.kind != kind__eq:
                 continue
-            # TODO: Are these comparison operators valid?
-            if timestamp__gte and event.timestamp < timestamp__gte:  # type: ignore[operator]
+            if timestamp_gte_str and event.timestamp < timestamp_gte_str:
                 continue
-            if timestamp__lt and event.timestamp >= timestamp__lt:  # type: ignore[operator]
+            if timestamp_lt_str and event.timestamp >= timestamp_lt_str:
                 continue
             items.append(event)
 
@@ -120,6 +141,19 @@ class EventServiceBase(EventService, ABC):
             items = items[:limit]
 
         return EventPage(items=items, next_page_id=next_page_id)
+
+    async def iter_events_for_export(
+        self, conversation_id: UUID
+    ) -> AsyncGenerator[Event, None]:
+        """Iterate all events once in timestamp order for trajectory export."""
+        loop = asyncio.get_running_loop()
+        prefix = await self.get_conversation_path(conversation_id)
+        paths = await loop.run_in_executor(None, self._search_paths, prefix)
+        events = await self._load_events_from_paths(paths)
+        items = [event for event in events if event]
+        items.sort(key=lambda event: event.timestamp)
+        for event in items:
+            yield event
 
     async def count_events(
         self,

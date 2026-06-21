@@ -15,8 +15,8 @@ from storage.database import a_session_maker
 from storage.gitlab_webhook import GitlabWebhook, WebhookStatus
 from storage.gitlab_webhook_store import GitlabWebhookStore
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.app_server.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 if TYPE_CHECKING:
     from integrations.gitlab.gitlab_service import SaaSGitLabService
@@ -119,7 +119,7 @@ class VerifyWebhookStatus:
         Rows with valid conditions with contain (webhook_exists=False, status=WebhookStatus.VERIFIED)
 
         Conditions we check for
-            1. Resoure exists
+            1. Resource exists
                 - user could have deleted resource
             2. User has admin access to resource
                 - user's permissions to install webhook could have changed

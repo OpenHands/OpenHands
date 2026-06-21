@@ -10,7 +10,7 @@ from sqlalchemy import and_, select
 from storage.database import a_session_maker
 from storage.org_git_claim import OrgGitClaim
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class OrgGitClaimStore:

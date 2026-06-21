@@ -9,7 +9,7 @@ from storage.user_repo_map_store import UserRepositoryMapStore
 
 @pytest.fixture
 def user_repo_map_store():
-    return UserRepositoryMapStore(config=None)
+    return UserRepositoryMapStore()
 
 
 @pytest.mark.asyncio

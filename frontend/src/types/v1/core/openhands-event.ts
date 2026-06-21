@@ -1,5 +1,6 @@
 // Import all event types
 import {
+  ACPToolCallEvent,
   ActionEvent,
   MessageEvent,
   ObservationEvent,
@@ -28,6 +29,8 @@ export type OpenHandsEvent =
   | UserRejectObservation
   | AgentErrorEvent
   | SystemPromptEvent
+  // ACP sub-agent tool call events
+  | ACPToolCallEvent
   // Hook events
   | HookExecutionEvent
   // Conversation management events

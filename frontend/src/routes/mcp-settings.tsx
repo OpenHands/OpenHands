@@ -49,6 +49,7 @@ function MCPSettingsScreen() {
   const { data: config } = useConfig();
   const { mutate: saveSettings, isPending: isSavingSearchApiKey } =
     useSaveSettings();
+
   const { mutate: deleteMcpServer } = useDeleteMcpServer();
   const { mutate: addMcpServer } = useAddMcpServer();
   const { mutate: updateMcpServer } = useUpdateMcpServer();

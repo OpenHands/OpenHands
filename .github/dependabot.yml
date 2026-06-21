@@ -4,6 +4,8 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       # put packages in their own group if they have a history of breaking the build or needing to be reverted
@@ -29,6 +31,8 @@ updates:
     directory: "/frontend"
     schedule:
       interval: "daily"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       docusaurus:
@@ -51,6 +55,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "wednesday"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       docusaurus:
@@ -69,9 +75,14 @@ updates:
           - "*"
 
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/docker-image-tags"
+      - "/.github/actions/docker-merge-manifest"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
 
   - package-ecosystem: "docker"
@@ -79,4 +90,6 @@ updates:
       - "containers/*"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5

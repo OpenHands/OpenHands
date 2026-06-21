@@ -1,23 +1,28 @@
-import os
+from redis import Redis
+from redis import asyncio as aioredis
+from redis import exceptions as redis_exceptions
 
-import redis
+from openhands.app_server.utils.redis import (
+    REDIS_DB,
+    REDIS_HOST,
+    REDIS_PASSWORD,
+    REDIS_PORT,
+    REDIS_SOCKET_TIMEOUT,
+    get_redis_authed_url,
+    get_redis_client,
+    get_redis_client_async,
+)
 
-# Redis configuration
-REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
-REDIS_PORT = int(os.environ.get('REDIS_PORT', '6379'))
-REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', '')
-REDIS_DB = int(os.environ.get('REDIS_DB', '0'))
-
-
-def create_redis_client():
-    return redis.Redis(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        password=REDIS_PASSWORD,
-        db=REDIS_DB,
-        socket_timeout=2,
-    )
-
-
-def get_redis_authed_url():
-    return f'redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}'
+__all__ = [
+    'REDIS_DB',
+    'REDIS_HOST',
+    'REDIS_PASSWORD',
+    'REDIS_PORT',
+    'REDIS_SOCKET_TIMEOUT',
+    'Redis',
+    'aioredis',
+    'get_redis_client',
+    'get_redis_client_async',
+    'get_redis_authed_url',
+    'redis_exceptions',
+]

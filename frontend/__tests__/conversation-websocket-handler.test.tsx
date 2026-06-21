@@ -51,6 +51,7 @@ vi.mock("#/hooks/query/use-user-conversation", () => ({
       status: "RUNNING",
     },
     isLoading: false,
+    isFetched: true,
     error: null,
   })),
 }));
