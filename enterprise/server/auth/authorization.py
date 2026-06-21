@@ -328,10 +328,18 @@ def require_permission(permission: Permission):
                 scope_info = SCOPE_MANIFEST.get(scope_name)
                 if not scope_info:
                     continue
-                if (
-                    scope_info.permissions is None
-                    or permission.value in scope_info.permissions
-                ):
+
+                scope_perms = scope_info.permissions
+                # None means "full access" in the current manifest semantics
+                if scope_perms is None:
+                    has_scope = True
+                    break
+
+                # Normalize the permissions in the manifest to strings and compare
+                normalized_perms = {
+                    (p.value if hasattr(p, 'value') else p) for p in scope_perms
+                }
+                if permission.value in normalized_perms:
                     has_scope = True
                     break
 
@@ -342,6 +350,14 @@ def require_permission(permission: Permission):
                         'user_id': user_id,
                         'scopes': api_key_scopes,
                         'required_permission': permission.value,
+                        'scope_permissions': {
+                            name: (
+                                None
+                                if SCOPE_MANIFEST.get(name) is None
+                                else SCOPE_MANIFEST.get(name).permissions
+                            )
+                            for name in api_key_scopes
+                        },
                     },
                 )
                 raise HTTPException(
