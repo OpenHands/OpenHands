@@ -216,6 +216,40 @@ class TestGetFeatureFlags:
             result = _get_feature_flags()
             assert result.enable_linear is True
 
+    def test_allow_user_llm_configuration_true_when_env_var_unset(self):
+        """OH_ALLOW_USER_LLM_CONFIGURATION defaults to True when unset.
+
+        Critical: SaaS and existing installs never set this env var, so the
+        BYOK editing UI must stay visible for them.
+        """
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {}, clear=True):
+            result = _get_feature_flags()
+            assert result.allow_user_llm_configuration is True
+
+    def test_allow_user_llm_configuration_true_when_env_var_true(self):
+        """When OH_ALLOW_USER_LLM_CONFIGURATION is 'true', the flag is True."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {'OH_ALLOW_USER_LLM_CONFIGURATION': 'true'}):
+            result = _get_feature_flags()
+            assert result.allow_user_llm_configuration is True
+
+    def test_allow_user_llm_configuration_false_when_env_var_false(self):
+        """When OH_ALLOW_USER_LLM_CONFIGURATION is 'false', the flag is False."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {'OH_ALLOW_USER_LLM_CONFIGURATION': 'false'}):
+            result = _get_feature_flags()
+            assert result.allow_user_llm_configuration is False
+
     def test_multiple_flags_can_be_set(self):
         """Multiple feature flags can be enabled simultaneously."""
         from openhands.app_server.web_client.default_web_client_config_injector import (
@@ -237,6 +271,79 @@ class TestGetFeatureFlags:
             assert result.enable_jira is False
             assert result.enable_jira_dc is False
             assert result.enable_linear is True
+
+    def test_enable_automations_true_by_default(self):
+        """When ENABLE_AUTOMATIONS is unset, enable_automations defaults to True."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.pop('ENABLE_AUTOMATIONS', None)
+            result = _get_feature_flags()
+            assert result.enable_automations is True
+
+    def test_enable_automations_false_when_env_var_false(self):
+        """When ENABLE_AUTOMATIONS is 'false', enable_automations flag is False."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {'ENABLE_AUTOMATIONS': 'false'}):
+            result = _get_feature_flags()
+            assert result.enable_automations is False
+
+    def test_enable_automations_true_when_env_var_true(self):
+        """When ENABLE_AUTOMATIONS is 'true', enable_automations flag is True."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {'ENABLE_AUTOMATIONS': 'true'}):
+            result = _get_feature_flags()
+            assert result.enable_automations is True
+
+
+class TestGetJiraDcServiceAccountConfig:
+    """Test cases for Jira DC service-account web-client config helpers."""
+
+    def test_managed_when_email_and_pat_are_set(self):
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_jira_dc_service_account_config_error,
+            _get_jira_dc_service_account_email,
+            _is_jira_dc_service_account_managed,
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                'JIRA_DC_SERVICE_ACCOUNT_EMAIL': 'service@example.com',
+                'JIRA_DC_SERVICE_ACCOUNT_PAT': 'pat',
+            },
+        ):
+            assert _is_jira_dc_service_account_managed() is True
+            assert _get_jira_dc_service_account_email() == 'service@example.com'
+            assert _get_jira_dc_service_account_config_error() is None
+
+    def test_config_error_when_partially_configured(self):
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_jira_dc_service_account_config_error,
+            _get_jira_dc_service_account_email,
+            _is_jira_dc_service_account_managed,
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                'JIRA_DC_SERVICE_ACCOUNT_EMAIL': 'service@example.com',
+                'JIRA_DC_SERVICE_ACCOUNT_PAT': '',
+            },
+        ):
+            assert _is_jira_dc_service_account_managed() is False
+            assert _get_jira_dc_service_account_email() is None
+            assert 'partially configured' in (
+                _get_jira_dc_service_account_config_error() or ''
+            )
 
 
 class TestGetMaintenanceStartTime:
@@ -317,6 +424,8 @@ class TestGetProvidersConfigured:
                 'GITHUB_APP_CLIENT_ID',
                 'GITLAB_APP_CLIENT_ID',
                 'BITBUCKET_APP_CLIENT_ID',
+                'BITBUCKET_DATA_CENTER_CLIENT_ID',
+                'AZURE_DEVOPS_CLIENT_ID',
                 'ENABLE_ENTERPRISE_SSO',
             ]:
                 os.environ.pop(var, None)
@@ -355,6 +464,30 @@ class TestGetProvidersConfigured:
         with patch.dict(os.environ, {'BITBUCKET_APP_CLIENT_ID': 'some-client-id'}):
             result = _get_providers_configured()
             assert ProviderType.BITBUCKET in result
+
+    def test_includes_bitbucket_data_center_when_client_id_set(self):
+        """When BITBUCKET_DATA_CENTER_CLIENT_ID is set, include BBDC in providers."""
+        from openhands.app_server.integrations.service_types import ProviderType
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_providers_configured,
+        )
+
+        with patch.dict(
+            os.environ, {'BITBUCKET_DATA_CENTER_CLIENT_ID': 'some-client-id'}
+        ):
+            result = _get_providers_configured()
+            assert ProviderType.BITBUCKET_DATA_CENTER in result
+
+    def test_includes_azure_devops_when_client_id_set(self):
+        """When AZURE_DEVOPS_CLIENT_ID is set, include Azure DevOps in providers."""
+        from openhands.app_server.integrations.service_types import ProviderType
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_providers_configured,
+        )
+
+        with patch.dict(os.environ, {'AZURE_DEVOPS_CLIENT_ID': 'some-client-id'}):
+            result = _get_providers_configured()
+            assert ProviderType.AZURE_DEVOPS in result
 
     def test_includes_enterprise_sso_when_enabled(self):
         """When ENABLE_ENTERPRISE_SSO is set, include Enterprise SSO in providers."""
@@ -402,6 +535,8 @@ class TestGetProvidersConfigured:
                 'GITHUB_APP_CLIENT_ID': 'github-id',
                 'GITLAB_APP_CLIENT_ID': 'gitlab-id',
                 'BITBUCKET_APP_CLIENT_ID': '',
+                'BITBUCKET_DATA_CENTER_CLIENT_ID': 'bbdc-id',
+                'AZURE_DEVOPS_CLIENT_ID': 'azure-id',
                 'ENABLE_ENTERPRISE_SSO': 'enabled',
             },
         ):
@@ -409,8 +544,10 @@ class TestGetProvidersConfigured:
             assert ProviderType.GITHUB in result
             assert ProviderType.GITLAB in result
             assert ProviderType.BITBUCKET not in result
+            assert ProviderType.BITBUCKET_DATA_CENTER in result
+            assert ProviderType.AZURE_DEVOPS in result
             assert ProviderType.ENTERPRISE_SSO in result
-            assert len(result) == 3
+            assert len(result) == 5
 
 
 class TestGetGithubAppSlug:

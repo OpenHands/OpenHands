@@ -112,7 +112,7 @@ describe("Manage Organization Members Route", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
-        enable_onboarding: false,
+          enable_onboarding: false,
         },
       }),
     );
@@ -123,6 +123,13 @@ describe("Manage Organization Members Route", () => {
     queryClient.setQueryData(["organizations"], {
       items: INITIAL_MOCK_ORGS,
       currentOrgId: MOCK_TEAM_ORG_ACME.id,
+    });
+
+    // Default: no pending invitations (individual tests override)
+    vi.spyOn(organizationService, "getPendingInvitations").mockResolvedValue({
+      items: [],
+      email_delivery_configured: false,
+      auto_add_enabled: false,
     });
 
     // Set default mock for user (admin role has invite permission)
@@ -598,7 +605,6 @@ describe("Manage Organization Members Route", () => {
     expect(screen.queryByText("charlie@acme.org")).not.toBeInTheDocument();
   });
 
-
   describe("Inviting Organization Members", () => {
     it("should render an invite organization member button", async () => {
       await setupInviteTest();
@@ -1034,6 +1040,62 @@ describe("Manage Organization Members Route", () => {
 
       // Verify no API call was made
       expect(updateMemberRoleSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("pending invitations rows", () => {
+    const PENDING_INVITATION = {
+      id: 5,
+      email: "pending@acme.org",
+      role: "member",
+      status: "pending",
+      created_at: "2026-01-01T00:00:00Z",
+      expires_at: "2026-01-08T00:00:00Z",
+      invite_url: "https://app.example.com/accept?token=inv-abc",
+    };
+
+    it("should render pending invitations as rows in the members list with copy + revoke actions", async () => {
+      vi.spyOn(organizationService, "getPendingInvitations").mockResolvedValue({
+        items: [PENDING_INVITATION],
+        email_delivery_configured: false,
+        auto_add_enabled: false,
+      });
+
+      renderManageOrganizationMembers();
+
+      const row = await screen.findByTestId("pending-invitation-item");
+      expect(within(row).getByText("pending@acme.org")).toBeInTheDocument();
+      expect(
+        within(row).getByTestId("copy-invite-link-button"),
+      ).toBeInTheDocument();
+      expect(
+        within(row).getByTestId("revoke-invitation-button"),
+      ).toBeInTheDocument();
+    });
+
+    it("should revoke an invitation when the revoke button is clicked", async () => {
+      vi.spyOn(organizationService, "getPendingInvitations").mockResolvedValue({
+        items: [PENDING_INVITATION],
+        email_delivery_configured: false,
+        auto_add_enabled: false,
+      });
+      const revokeSpy = vi
+        .spyOn(organizationService, "revokeInvitation")
+        .mockResolvedValue(undefined);
+
+      renderManageOrganizationMembers();
+
+      const row = await screen.findByTestId("pending-invitation-item");
+      await userEvent.click(
+        within(row).getByTestId("revoke-invitation-button"),
+      );
+
+      await waitFor(() =>
+        expect(revokeSpy).toHaveBeenCalledExactlyOnceWith({
+          orgId: MOCK_TEAM_ORG_ACME.id,
+          invitationId: 5,
+        }),
+      );
     });
   });
 });

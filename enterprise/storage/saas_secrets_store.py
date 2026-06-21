@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from uuid import UUID
 
 from sqlalchemy import delete, select
 from storage.database import a_session_maker
@@ -17,12 +18,18 @@ from openhands.app_server.utils.logger import openhands_logger as logger
 class SaasSecretsStore(SecretsStore):
     user_id: str
     _jwt_svc: JwtService = field(repr=False)
+    # When set, overrides the user's `current_org_id` for both load and
+    # store. Used to honor a request's effective org (api_key_org_id >
+    # X-Org-Id header > user.current_org_id). Secrets are stored per
+    # (user_id, org_id), so the effective org must flow through here for
+    # the right rows to be read/written.
+    effective_org_id: UUID | None = None
 
     async def load(self) -> Secrets | None:
         if not self.user_id:
             return None
         user = await UserStore.get_user_by_id(self.user_id)
-        org_id = user.current_org_id if user else None
+        org_id = self.effective_org_id or (user.current_org_id if user else None)
 
         async with a_session_maker() as session:
             # Fetch all secrets for the given user ID
@@ -52,12 +59,13 @@ class SaasSecretsStore(SecretsStore):
         user = await UserStore.get_user_by_id(self.user_id)
         if user is None:
             raise ValueError(f'User not found: {self.user_id}')
-        org_id = user.current_org_id
+        org_id = self.effective_org_id or user.current_org_id
 
         async with a_session_maker() as session:
             # Incoming secrets are always the most updated ones
             # Delete existing records for this user AND organization only
-            # Note: user.current_org_id is non-nullable, so org_id is always set
+            # org_id is always set: it's either the effective org from
+            # the request or the user's non-nullable current_org_id.
             delete_query = delete(StoredCustomSecrets).filter(
                 StoredCustomSecrets.keycloak_user_id == self.user_id,
                 StoredCustomSecrets.org_id == org_id,
@@ -117,15 +125,28 @@ class SaasSecretsStore(SecretsStore):
                 kwargs[key] = self._jwt_svc.encrypt_value(value)
 
     @classmethod
-    async def get_instance(
+    async def get_instance(  # type: ignore[override]
         cls,
-        user_id: str,  # type: ignore[override]
+        user_id: str,
+        effective_org_id: UUID | None = None,
     ) -> SaasSecretsStore:
         """Get a SaasSecretsStore instance for the given user.
+
+        Args:
+            user_id: Keycloak user id.
+            effective_org_id: Optional org id resolved from the request
+                (see SaasUserAuth.get_effective_org_id). When None the
+                store falls back to ``user.current_org_id`` to preserve
+                legacy behavior for background / non-request callers
+                (e.g. webhook resolvers).
 
         TODO: This method should be replaced with dependency injection.
         """
         logger.debug(f'saas_secrets_store.get_instance::{user_id}')
         from storage.encrypt_utils import get_jwt_service
 
-        return SaasSecretsStore(user_id, get_jwt_service())
+        return SaasSecretsStore(
+            user_id,
+            get_jwt_service(),
+            effective_org_id=effective_org_id,
+        )

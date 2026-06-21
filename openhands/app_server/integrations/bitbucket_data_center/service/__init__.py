@@ -3,6 +3,7 @@ from .branches import BitbucketDCBranchesMixin
 from .prs import BitbucketDCPRsMixin
 from .repos import BitbucketDCReposMixin
 from .resolver import BitbucketDCResolverMixin
+from .webhooks import BitbucketDCWebhooksMixin
 
 __all__ = [
     'BitbucketDCMixinBase',
@@ -10,4 +11,5 @@ __all__ = [
     'BitbucketDCPRsMixin',
     'BitbucketDCReposMixin',
     'BitbucketDCResolverMixin',
+    'BitbucketDCWebhooksMixin',
 ]

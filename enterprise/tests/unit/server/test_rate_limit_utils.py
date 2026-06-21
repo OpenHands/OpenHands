@@ -1,3 +1,4 @@
+import importlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -268,3 +269,57 @@ async def test_rate_limit_different_users_have_separate_limits(
             True,
             RATE_LIMIT_USER_SECONDS,
         ) in call_args_list
+
+
+class TestRateLimitEnvConfiguration:
+    """Rate limit windows are read from environment variables at import time,
+    with a default value for each when the variable is unset."""
+
+    @pytest.mark.parametrize(
+        'const_name,expected_default',
+        [
+            ('RATE_LIMIT_AUTH_WINDOWS', '10/second; 100/minute'),
+            ('RATE_LIMIT_USER_SECONDS', 120),
+            ('RATE_LIMIT_IP_SECONDS', 300),
+            ('RATE_LIMIT_AUTH_VERIFY_EMAIL_USER_SECONDS', 60),
+            ('RATE_LIMIT_AUTH_VERIFY_EMAIL_IP_SECONDS', 120),
+            ('RATE_LIMIT_EMAIL_RESEND_USER_SECONDS', 30),
+            ('RATE_LIMIT_EMAIL_RESEND_IP_SECONDS', 60),
+            ('RATE_LIMIT_ORG_INVITATION_USER_SECONDS', 6),
+        ],
+    )
+    def test_default_values(self, const_name, expected_default):
+        import server.utils.rate_limit_utils as rate_limit_utils
+
+        assert getattr(rate_limit_utils, const_name) == expected_default
+
+    def test_environment_variables_override_defaults(self, monkeypatch):
+        import server.utils.rate_limit_utils as rate_limit_utils
+
+        overrides = {
+            'RATE_LIMIT_AUTH_WINDOWS': '5/second; 50/minute',
+            'RATE_LIMIT_USER_SECONDS': '11',
+            'RATE_LIMIT_IP_SECONDS': '22',
+            'RATE_LIMIT_AUTH_VERIFY_EMAIL_USER_SECONDS': '33',
+            'RATE_LIMIT_AUTH_VERIFY_EMAIL_IP_SECONDS': '44',
+            'RATE_LIMIT_EMAIL_RESEND_USER_SECONDS': '55',
+            'RATE_LIMIT_EMAIL_RESEND_IP_SECONDS': '66',
+            'RATE_LIMIT_ORG_INVITATION_USER_SECONDS': '77',
+        }
+        for key, value in overrides.items():
+            monkeypatch.setenv(key, value)
+
+        try:
+            importlib.reload(rate_limit_utils)
+            assert rate_limit_utils.RATE_LIMIT_AUTH_WINDOWS == '5/second; 50/minute'
+            assert rate_limit_utils.RATE_LIMIT_USER_SECONDS == 11
+            assert rate_limit_utils.RATE_LIMIT_IP_SECONDS == 22
+            assert rate_limit_utils.RATE_LIMIT_AUTH_VERIFY_EMAIL_USER_SECONDS == 33
+            assert rate_limit_utils.RATE_LIMIT_AUTH_VERIFY_EMAIL_IP_SECONDS == 44
+            assert rate_limit_utils.RATE_LIMIT_EMAIL_RESEND_USER_SECONDS == 55
+            assert rate_limit_utils.RATE_LIMIT_EMAIL_RESEND_IP_SECONDS == 66
+            assert rate_limit_utils.RATE_LIMIT_ORG_INVITATION_USER_SECONDS == 77
+        finally:
+            # Restore module-level defaults so other tests are unaffected.
+            monkeypatch.undo()
+            importlib.reload(rate_limit_utils)

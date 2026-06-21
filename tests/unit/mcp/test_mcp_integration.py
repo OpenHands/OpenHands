@@ -9,14 +9,14 @@ from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.sdk.llm import LLM
-from openhands.sdk.settings import AgentSettings
+from openhands.sdk.settings import OpenHandsAgentSettings
 
 
 @pytest.mark.asyncio
 async def test_user_auth_returns_stored_settings():
     """Test that user auth returns stored settings."""
     stored_settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='anthropic/claude-sonnet-4-5-20250929'),
             mcp_config=MCPConfig(
                 mcpServers={
@@ -50,7 +50,7 @@ async def test_user_auth_returns_stored_settings():
 async def test_user_auth_caching_behavior():
     """Test that user auth caches settings correctly."""
     stored_settings = Settings(
-        agent_settings=AgentSettings(
+        agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='anthropic/claude-sonnet-4-5-20250929'),
             mcp_config=MCPConfig(
                 mcpServers={

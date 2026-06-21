@@ -87,14 +87,14 @@ class BitBucketReposMixin(BitBucketMixinBase):
 
     async def _get_user_workspaces(self) -> list[dict[str, Any]]:
         """Get all workspaces the user has access to"""
-        url = f'{self.BASE_URL}/workspaces'
+        url = f'{self.BASE_URL}/user/workspaces'
         data, _ = await self._make_request(url)
         return data.get('values', [])
 
     async def get_installations(
         self, query: str | None = None, limit: int = 100
     ) -> list[str]:
-        workspaces_url = f'{self.BASE_URL}/workspaces'
+        workspaces_url = f'{self.BASE_URL}/user/workspaces'
         params = {}
         if query:
             params['q'] = f'name~"{query}"'
@@ -103,7 +103,7 @@ class BitBucketReposMixin(BitBucketMixinBase):
 
         installations: list[str] = []
         for workspace in workspaces:
-            installations.append(workspace['slug'])
+            installations.append(workspace['workspace']['slug'])
 
         return installations
 
@@ -204,11 +204,11 @@ class BitBucketReposMixin(BitBucketMixinBase):
         repositories: list[Repository] = []
 
         # Get user's workspaces with pagination
-        workspaces_url = f'{self.BASE_URL}/workspaces'
+        workspaces_url = f'{self.BASE_URL}/user/workspaces'
         workspaces = await self._fetch_paginated_data(workspaces_url, {}, MAX_REPOS)
 
         for workspace in workspaces:
-            workspace_slug = workspace.get('slug')
+            workspace_slug = workspace.get('workspace', {}).get('slug')
             if not workspace_slug:
                 continue
 

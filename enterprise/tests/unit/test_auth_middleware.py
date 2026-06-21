@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from pydantic import SecretStr
 from server.auth.auth_error import (
     AuthError,
+    BearerTokenError,
     CookieError,
     ExpiredError,
     NoCredentialsError,
@@ -202,6 +203,118 @@ async def test_middleware_with_other_auth_error(middleware, mock_request):
             assert 'set-cookie' in result.headers
             # Logger should be called for non-NoCredentialsError
             mock_logger.warning.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_middleware_bearer_only_auth_error_does_not_revoke_offline_token(
+    middleware, mock_request
+):
+    """Bearer-only auth failures must not revoke the offline session.
+
+    A bearer-only request whose route handler raises ``BearerTokenError``
+    must NOT trigger a Keycloak logout — that would revoke the user's
+    offline session and brick every API key minted for them. The cookie
+    deletion side effect also must not happen because there was no
+    cookie.
+    """
+    mock_request.cookies = {}  # bearer-only: no keycloak_auth cookie
+    mock_call_next = AsyncMock(
+        side_effect=BearerTokenError('refresh failed transiently')
+    )
+
+    with patch.object(middleware, '_logout', new=AsyncMock()) as mock_logout:
+        result = await middleware(mock_request, mock_call_next)
+
+    # _logout must not be called for bearer-only failures.
+    mock_logout.assert_not_called()
+
+    assert isinstance(result, JSONResponse)
+    assert result.status_code == status.HTTP_401_UNAUTHORIZED
+    # There was no cookie, so we must not emit a Set-Cookie header.
+    assert 'set-cookie' not in result.headers
+
+
+@pytest.mark.asyncio
+async def test_middleware_cookie_auth_error_still_triggers_logout(
+    middleware, mock_request
+):
+    """Cookie-bearing requests that fail auth still log out at Keycloak.
+
+    That's the legitimate cookie-session-going-bad case the middleware
+    was designed for, and the new bearer guard must not break it.
+    """
+    with _mock_jwt_decode():
+        mock_request.cookies = {'keycloak_auth': 'test_cookie'}
+        mock_call_next = AsyncMock(side_effect=AuthError('General auth error'))
+
+        with patch.object(middleware, '_logout', new=AsyncMock()) as mock_logout:
+            result = await middleware(mock_request, mock_call_next)
+
+        mock_logout.assert_awaited_once_with(mock_request)
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == status.HTTP_401_UNAUTHORIZED
+        # Cookie must still be deleted.
+        assert 'set-cookie' in result.headers
+
+
+@pytest.mark.asyncio
+async def test_logout_skips_keycloak_for_bearer_auth():
+    """``_logout`` must skip Keycloak when the resolved auth is bearer.
+
+    Defense-in-depth: even if ``_logout`` is reached for a bearer-auth
+    user (e.g., from a future call site), the offline_token must not be
+    revoked. Only ``AuthType.COOKIE`` sessions get logged out at
+    Keycloak.
+    """
+    middleware = SetAuthCookieMiddleware()
+    mock_request = MagicMock(spec=Request)
+    mock_request.cookies = {}
+
+    bearer_user_auth = MagicMock(spec=SaasUserAuth)
+    bearer_user_auth.auth_type = AuthType.BEARER
+    bearer_user_auth.refresh_token = SecretStr('the-users-offline-token')
+
+    with (
+        patch(
+            'server.middleware.get_user_auth',
+            new=AsyncMock(return_value=bearer_user_auth),
+        ),
+        patch(
+            'server.middleware.token_manager.logout', new=AsyncMock()
+        ) as mock_kc_logout,
+    ):
+        await middleware._logout(mock_request)
+
+    mock_kc_logout.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_logout_invokes_keycloak_for_cookie_auth():
+    """Cookie auth must still terminate the Keycloak session.
+
+    This is the path the middleware was originally written for; the new
+    bearer-vs-cookie guard inside ``_logout`` must not regress it.
+    """
+    middleware = SetAuthCookieMiddleware()
+    mock_request = MagicMock(spec=Request)
+    mock_request.cookies = {'keycloak_auth': 'test_cookie'}
+
+    cookie_user_auth = MagicMock(spec=SaasUserAuth)
+    cookie_user_auth.auth_type = AuthType.COOKIE
+    cookie_user_auth.refresh_token = SecretStr('cookie-refresh-token')
+
+    with (
+        patch(
+            'server.middleware.get_user_auth',
+            new=AsyncMock(return_value=cookie_user_auth),
+        ),
+        patch(
+            'server.middleware.token_manager.logout', new=AsyncMock()
+        ) as mock_kc_logout,
+    ):
+        await middleware._logout(mock_request)
+
+    mock_kc_logout.assert_awaited_once_with('cookie-refresh-token')
 
 
 @pytest.mark.asyncio

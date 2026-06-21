@@ -15,6 +15,10 @@ from server.constants import (
     LITE_LLM_TEAM_ID,
     ORG_SETTINGS_VERSION,
     get_default_litellm_model,
+    get_default_llm_api_key,
+    get_default_llm_base_url,
+    get_default_llm_model,
+    should_use_direct_llm_defaults,
 )
 from server.logger import logger
 from storage.user_settings import UserSettings
@@ -71,6 +75,18 @@ def get_byor_key_alias(keycloak_user_id: str, org_id: str) -> str:
     return f'BYOR Key - user {keycloak_user_id}, org {org_id}'
 
 
+def get_org_team_alias(org_id: str, org_name: str | None, user_id: str | None) -> str:
+    """Human-readable LiteLLM team_alias for an org's team.
+
+    Personal orgs (org_id == user_id) get "Personal Workspace"; team orgs use
+    their display name. Falls back to the id when no name is available, never
+    the bare user uid (which made teams indistinguishable in the dashboard).
+    """
+    if str(org_id) == str(user_id):
+        return 'Personal Workspace'
+    return org_name or f'Organization {org_id}'
+
+
 class LiteLlmManager:
     """Manage LiteLLM interactions."""
 
@@ -113,6 +129,24 @@ class LiteLlmManager:
             'SettingsStore:update_settings_with_litellm_default:start',
             extra={'org_id': org_id, 'user_id': keycloak_user_id},
         )
+        if should_use_direct_llm_defaults():
+            llm_settings: dict[str, Any] = {
+                'model': get_default_llm_model(),
+                'base_url': get_default_llm_base_url(),
+            }
+            default_api_key = get_default_llm_api_key()
+            if default_api_key:
+                llm_settings['api_key'] = default_api_key
+            oss_settings.update(
+                {
+                    'agent_settings_diff': {
+                        'agent': 'CodeActAgent',
+                        'llm': llm_settings,
+                    }
+                }
+            )
+            return oss_settings
+
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return None
@@ -158,8 +192,11 @@ class LiteLlmManager:
                         extra={'org_id': org_id, 'user_id': keycloak_user_id},
                     )
 
+                team_alias = await LiteLlmManager._team_alias_for_org(
+                    org_id, keycloak_user_id
+                )
                 await LiteLlmManager._create_team(
-                    client, keycloak_user_id, org_id, team_budget
+                    client, team_alias, org_id, team_budget
                 )
 
                 if create_user:
@@ -202,7 +239,7 @@ class LiteLlmManager:
                 try:
                     await LiteLlmManager._delete_key_by_alias(client, key_alias)
                 except httpx.HTTPStatusError as ex:
-                    if ex.status_code == 404:
+                    if ex.response and ex.response.status_code == 404:
                         logger.debug(f'Key "{key_alias}" did not exist - continuing')
                     else:
                         raise
@@ -327,9 +364,10 @@ class LiteLlmManager:
                     'LiteLlmManager:migrate_lite_llm_entries:create_team',
                     extra={'org_id': org_id, 'user_id': keycloak_user_id},
                 )
-                await LiteLlmManager._create_team(
-                    client, keycloak_user_id, org_id, credits
+                team_alias = await LiteLlmManager._team_alias_for_org(
+                    org_id, keycloak_user_id
                 )
+                await LiteLlmManager._create_team(client, team_alias, org_id, credits)
 
                 logger.debug(
                     'LiteLlmManager:migrate_lite_llm_entries:update_user',
@@ -370,7 +408,7 @@ class LiteLlmManager:
                 llm_base_url = llm_cfg.get('base_url')
                 if llm_base_url == LITE_LLM_API_URL:
                     db_key = llm_cfg.get('api_key')
-                    if hasattr(db_key, 'get_secret_value'):
+                    if db_key is not None and hasattr(db_key, 'get_secret_value'):
                         db_key = db_key.get_secret_value()
 
                 if db_key:
@@ -584,6 +622,29 @@ class LiteLlmManager:
                 )
 
     @staticmethod
+    async def _team_alias_for_org(org_id: str, keycloak_user_id: str) -> str:
+        """Resolve the dashboard-friendly team_alias for an org (its display
+        name, or 'Personal Workspace' for the user's personal org). The org
+        name is looked up lazily; lookup failures fall back to a stable label."""
+        if str(org_id) == str(keycloak_user_id):
+            return get_org_team_alias(org_id, None, keycloak_user_id)
+        # Lazy import: org_store imports this module at load time.
+        from uuid import UUID
+
+        from storage.org_store import OrgStore
+
+        org_name = None
+        try:
+            org = await OrgStore.get_org_by_id(UUID(org_id))
+            org_name = org.name if org else None
+        except Exception:
+            logger.warning(
+                'Failed to resolve org name for LiteLLM team_alias',
+                extra={'org_id': org_id},
+            )
+        return get_org_team_alias(org_id, org_name, keycloak_user_id)
+
+    @staticmethod
     async def _create_team(
         client: httpx.AsyncClient,
         team_alias: str,
@@ -622,7 +683,7 @@ class LiteLlmManager:
             json=json_data,
         )
 
-        # Team failed to create in litellm - this is an unforseen error state...
+        # Team failed to create in litellm - this is an unforeseen error state...
         if not response.is_success:
             if (
                 response.status_code == 400
@@ -685,7 +746,7 @@ class LiteLlmManager:
             json=json_data,
         )
 
-        # Team failed to update in litellm - this is an unforseen error state...
+        # Team failed to update in litellm - this is an unforeseen error state...
         if not response.is_success:
             logger.error(
                 'error_updating_litellm_team',
@@ -780,7 +841,7 @@ class LiteLlmManager:
                 },
             )
 
-            # User failed to create in litellm - this is an unforseen error state...
+            # User failed to create in litellm - this is an unforeseen error state...
             if not response.is_success:
                 if (
                     response.status_code in (400, 409)
@@ -1066,7 +1127,7 @@ class LiteLlmManager:
             json=json_data,
         )
 
-        # Failed to add user to team - this is an unforseen error state...
+        # Failed to add user to team - this is an unforeseen error state...
         if not response.is_success:
             if (
                 response.status_code == 400
@@ -1161,7 +1222,7 @@ class LiteLlmManager:
             json=json_data,
         )
 
-        # Failed to update user in team - this is an unforseen error state...
+        # Failed to update user in team - this is an unforeseen error state...
         if not response.is_success:
             logger.error(
                 'error_updating_litellm_user_in_team',
@@ -1242,7 +1303,7 @@ class LiteLlmManager:
             f'{LITE_LLM_API_URL}/key/generate',
             json=json_data,
         )
-        # Failed to generate user key for team - this is an unforseen error state...
+        # Failed to generate user key for team - this is an unforeseen error state...
         if not response.is_success:
             logger.error(
                 'error_generate_user_team_key',
@@ -1613,8 +1674,9 @@ class LiteLlmManager:
     ) -> Callable[..., Awaitable[Any]]:
         @functools.wraps(internal_fn)
         async def wrapper(*args, **kwargs):
+            headers = {'x-goog-api-key': LITE_LLM_API_KEY} if LITE_LLM_API_KEY else {}
             async with httpx.AsyncClient(
-                headers={'x-goog-api-key': LITE_LLM_API_KEY},
+                headers=headers,
                 timeout=httpx.Timeout(30.0),
             ) as client:
                 return await internal_fn(client, *args, **kwargs)

@@ -9,11 +9,11 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, AsyncGenerator, Literal
+from typing import Annotated, Any, AsyncGenerator, Literal
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,10 +38,14 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     HookEventResponse,
     HookMatcherResponse,
     SkillResponse,
+    SwitchAcpModelRequest,
     SwitchProfileRequest,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
+    ConversationExportAlreadyRunning,
+    ConversationExportLockUnavailable,
+    ConversationExportTooLarge,
 )
 from openhands.app_server.app_conversation.app_conversation_service_base import (
     AppConversationServiceBase,
@@ -74,6 +78,7 @@ from openhands.app_server.services.httpx_client_injector import (
     set_httpx_client_keep_open,
 )
 from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.settings.llm_profiles import resolve_profile_llm
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
@@ -83,7 +88,6 @@ from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
-from openhands.app_server.utils.llm import resolve_llm_base_url
 from openhands.sdk.skills import KeywordTrigger, TaskTrigger
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
@@ -586,6 +590,32 @@ async def send_message_to_conversation(
     )
 
 
+async def _persist_conversation_model(
+    app_conversation_info_service: AppConversationInfoService,
+    conversation_id: UUID,
+    model: str,
+) -> None:
+    """Persist ``llm_model`` on the conversation record so the UI chip/header
+    reflects a model switch on the next fetch.
+
+    Best-effort: a save failure is logged but never undoes the switch the
+    agent-server already accepted.
+    """
+    try:
+        info = await app_conversation_info_service.get_app_conversation_info(
+            conversation_id,
+        )
+        if info is not None and info.llm_model != model:
+            info.llm_model = model
+            await app_conversation_info_service.save_app_conversation_info(info)
+    except Exception:
+        logger.exception(
+            'Failed to persist new llm_model on conversation %s after model '
+            'switch — chip may be stale until the next refresh.',
+            conversation_id,
+        )
+
+
 @router.post(
     '/{conversation_id}/switch_profile',
     responses={
@@ -627,16 +657,15 @@ async def switch_conversation_profile(
             detail=f"Profile '{request.profile_name}' not found",
         )
 
-    # Mirror the activate_profile fixup so a profile with an empty base_url
-    # picks up the provider default (e.g. the OpenHands LiteLLM proxy).
-    profile_llm = profile_llm.model_copy(
-        update={
-            'base_url': resolve_llm_base_url(
-                model=profile_llm.model,
-                base_url=profile_llm.base_url,
-                managed_proxy_url=LITE_LLM_API_URL,
-            ),
-        }
+    # Resolve the saved profile for the agent server: provider-default base_url,
+    # plus the effective settings key when the profile carries none (managed
+    # profiles persist a masked key, so without this the agent server would hit
+    # the litellm proxy unauthenticated). Locally, profiles carry their own key.
+    settings_llm = getattr(user_settings.agent_settings, 'llm', None)
+    profile_llm = resolve_profile_llm(
+        profile_llm,
+        managed_proxy_url=LITE_LLM_API_URL,
+        fallback_api_key=getattr(settings_llm, 'api_key', None),
     )
 
     # The agent-server's LLM registry is first-write-wins by ``usage_id``:
@@ -732,23 +761,106 @@ async def switch_conversation_profile(
             detail='Failed to reach agent server.',
         )
 
-    # Persist the new model on the conversation record so the chat header
-    # (and other callers that read ``conversation.llm_model``) reflect the
-    # swap on the next fetch. Best-effort: a save failure is logged but
-    # does not undo the switch the agent-server already accepted.
+    # Persist the new model so the chat header reflects the swap on next fetch.
+    await _persist_conversation_model(
+        app_conversation_info_service, conversation_id, profile_llm.model
+    )
+
+    return Success()
+
+
+@router.post(
+    '/{conversation_id}/switch_acp_model',
+    responses={
+        400: {
+            'description': 'Agent is not ACP, or provider does not support model switching'
+        },
+        404: {'description': 'Conversation or sandbox not found'},
+        409: {'description': 'Sandbox is paused; resume it before switching models'},
+        502: {'description': 'Agent server returned an error'},
+        504: {'description': 'ACP server did not respond to the model switch in time'},
+    },
+)
+async def switch_conversation_acp_model(
+    conversation_id: UUID,
+    request: SwitchAcpModelRequest,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    app_conversation_info_service: AppConversationInfoService = (
+        app_conversation_info_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> Success:
+    """Switch the model of a running ACP conversation in place.
+
+    Proxies to the agent-server's ``switch_acp_model`` endpoint, which issues
+    a protocol-level ``session/set_model`` call to the ACP subprocess so the
+    new model applies to subsequent turns without losing context. Persists the
+    new model on the conversation record so the UI chip stays current.
+    """
+    ctx = await _get_agent_server_context(
+        conversation_id,
+        app_conversation_service,
+        sandbox_service,
+        sandbox_spec_service,
+    )
+    if isinstance(ctx, JSONResponse):
+        raise HTTPException(
+            status_code=ctx.status_code,
+            detail=f'Conversation {conversation_id} is not reachable',
+        )
+    if ctx is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail='Sandbox is paused; resume it before switching models.',
+        )
+
+    headers = {'X-Session-API-Key': ctx.session_api_key} if ctx.session_api_key else {}
+
     try:
-        info = await app_conversation_info_service.get_app_conversation_info(
-            conversation_id,
+        switch_response = await httpx_client.post(
+            f'{ctx.agent_server_url}/api/conversations/{conversation_id}/switch_acp_model',
+            json={'model': request.model},
+            headers=headers,
+            timeout=30.0,
         )
-        if info is not None and info.llm_model != profile_llm.model:
-            info.llm_model = profile_llm.model
-            await app_conversation_info_service.save_app_conversation_info(info)
-    except Exception:
-        logger.exception(
-            'Failed to persist new llm_model on conversation %s after profile '
-            'switch — header may be stale until the next refresh.',
+        switch_response.raise_for_status()
+        logger.info(
+            'Switched ACP conversation %s to model %r',
             conversation_id,
+            request.model,
         )
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            'Agent server returned error during switch_acp_model: '
+            f'{e.response.status_code} - {e.response.text}'
+        )
+        # Surface agent-server's 400/504 directly (not-ACP, timeout). The
+        # pre-session 409 band-aid is gone as of SDK #3764: a pre-run switch now
+        # persists and returns 200, so the agent-server no longer 409s here.
+        if e.response.status_code in (400, 504):
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=f'Agent server error: {e.response.status_code}',
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f'Agent server error: {e.response.status_code}',
+        )
+    except httpx.RequestError as e:
+        logger.error(f'Failed to reach agent server during switch_acp_model: {e}')
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Failed to reach agent server.',
+        )
+
+    # Persist so the conversation's model chip reflects the switch on next load.
+    await _persist_conversation_model(
+        app_conversation_info_service, conversation_id, request.model
+    )
 
     return Success()
 
@@ -1058,6 +1170,140 @@ async def read_conversation_file(
     return ''
 
 
+async def _proxy_git_runtime_call(
+    conversation_id: UUID,
+    runtime_path: str,
+    path: str,
+    ref: str | None,
+    app_conversation_service: AppConversationService,
+    sandbox_service: SandboxService,
+    sandbox_spec_service: SandboxSpecService,
+    httpx_client: httpx.AsyncClient,
+) -> Any:
+    """Resolve the conversation's runtime and proxy a GET to ``runtime_path``.
+
+    Browsers can't reach runtime sandboxes directly (no CORS for non-localhost
+    origins on most paths), so the frontend hits these endpoints on the cloud
+    API host instead and we make the runtime hop server-side using the
+    sandbox's session API key.
+    """
+    ctx = await _get_agent_server_context(
+        conversation_id,
+        app_conversation_service,
+        sandbox_service,
+        sandbox_spec_service,
+    )
+    if isinstance(ctx, JSONResponse):
+        raise HTTPException(
+            status_code=ctx.status_code,
+            detail=f'Conversation {conversation_id} is not reachable',
+        )
+    if ctx is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail='Sandbox is paused; resume it before reading git state.',
+        )
+
+    headers = {'X-Session-API-Key': ctx.session_api_key} if ctx.session_api_key else {}
+    params: dict[str, str] = {'path': path}
+    if ref is not None:
+        params['ref'] = ref
+
+    try:
+        upstream = await httpx_client.get(
+            f'{ctx.agent_server_url}{runtime_path}',
+            params=params,
+            headers=headers,
+            timeout=30.0,
+        )
+        upstream.raise_for_status()
+        return upstream.json()
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            'Agent server returned error during %s: %s - %s',
+            runtime_path,
+            e.response.status_code,
+            e.response.text,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f'Agent server error: {e.response.status_code}',
+        )
+    except (json.JSONDecodeError, httpx.DecodingError) as e:
+        logger.error('Agent server returned non-JSON during %s: %s', runtime_path, e)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Agent server returned unexpected response.',
+        )
+    except httpx.RequestError as e:
+        logger.error('Failed to reach agent server during %s: %s', runtime_path, e)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Failed to reach agent server.',
+        )
+
+
+@router.get('/{conversation_id}/git/changes')
+async def get_conversation_git_changes(
+    conversation_id: UUID,
+    path: Annotated[
+        str,
+        Query(
+            description=(
+                'Absolute path to the git repository root (e.g. /workspace/project)'
+            ),
+        ),
+    ],
+    ref: Annotated[
+        str | None, Query(description='Optional git ref to diff against')
+    ] = None,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> Any:
+    """Proxy ``GET /api/git/changes`` on the conversation's runtime."""
+    return await _proxy_git_runtime_call(
+        conversation_id,
+        '/api/git/changes',
+        path,
+        ref,
+        app_conversation_service,
+        sandbox_service,
+        sandbox_spec_service,
+        httpx_client,
+    )
+
+
+@router.get('/{conversation_id}/git/diff')
+async def get_conversation_git_diff(
+    conversation_id: UUID,
+    path: Annotated[str, Query(description='The file path to diff')],
+    ref: Annotated[
+        str | None, Query(description='Optional git ref to diff against')
+    ] = None,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> Any:
+    """Proxy ``GET /api/git/diff`` on the conversation's runtime."""
+    return await _proxy_git_runtime_call(
+        conversation_id,
+        '/api/git/diff',
+        path,
+        ref,
+        app_conversation_service,
+        sandbox_service,
+        sandbox_spec_service,
+        httpx_client,
+    )
+
+
 @router.get('/{conversation_id}/skills')
 async def get_conversation_skills(
     conversation_id: UUID,
@@ -1320,8 +1566,9 @@ async def export_conversation(
         A zip file containing the conversation trajectory
     """
     try:
-        # Get the zip file content
-        zip_content = await app_conversation_service.export_conversation(
+        # Prepare the zip stream before sending headers so lock and validation
+        # errors can still be returned as HTTP status codes.
+        zip_stream = await app_conversation_service.open_conversation_export(
             conversation_id
         )
 
@@ -1348,9 +1595,8 @@ async def export_conversation(
         except Exception:
             logger.exception('analytics:trajectory_downloaded:failed')
 
-        # Return as a downloadable zip file
-        return Response(
-            content=zip_content,
+        return StreamingResponse(
+            zip_stream,
             media_type='application/zip',
             headers={
                 'Content-Disposition': f'attachment; filename="conversation_{conversation_id}.zip"'
@@ -1358,6 +1604,12 @@ async def export_conversation(
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ConversationExportAlreadyRunning as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ConversationExportLockUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except ConversationExportTooLarge as e:
+        raise HTTPException(status_code=413, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f'Failed to download trajectory: {str(e)}'

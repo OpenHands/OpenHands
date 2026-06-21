@@ -20,8 +20,23 @@ class WebClientFeatureFlags(BaseModel):
     hide_users_page: bool = False
     hide_billing_page: bool = False
     hide_integrations_page: bool = False
+    # When true, the web client hides personal workspaces from the org list
+    # and selector for users who belong to at least one team org. Used by
+    # OHE installs that bootstrap a default org and want it to be the only
+    # workspace users see. UI-level only — the orgs API still returns
+    # personal orgs, and disabling the flag restores them.
+    hide_personal_workspaces: bool = False
+    # When false, the web client hides the BYOK editing UI (custom model
+    # string, base URL, and API key inputs) in LLM settings, leaving only the
+    # managed model dropdown. Used by OHE installs where admins curate the
+    # model list on the bundled LiteLLM proxy. Defaults to True so SaaS and
+    # existing installs are unaffected. UI-level only — previously saved BYOK
+    # settings keep working at runtime.
+    allow_user_llm_configuration: bool = True
+    enable_acp: bool = False
     deployment_mode: DeploymentMode | None = None
     enable_onboarding: bool = False
+    enable_automations: bool = True
 
     # This can be removed / replaced when a DeploymentMode (or similar) env var is created.
     @model_validator(mode='after')
@@ -29,6 +44,21 @@ class WebClientFeatureFlags(BaseModel):
         if self.deployment_mode is None:
             self.deployment_mode = get_deployment_mode()
         return self
+
+
+class ACPModelOption(BaseModel):
+    id: str
+    label: str
+
+
+class ACPProviderConfig(BaseModel):
+    key: str
+    display_name: str
+    default_command: list[str]
+    default_model: str | None = None
+    available_models: list[ACPModelOption] = Field(default_factory=list)
+    api_key_env_var: str | None = None
+    base_url_env_var: str | None = None
 
 
 class WebClientConfig(DiscriminatedUnionMixin):
@@ -46,3 +76,14 @@ class WebClientConfig(DiscriminatedUnionMixin):
     gitlab_enabled: bool = False
     provider_default_hosts: dict[str, str] = Field(default_factory=dict)
     slack_enabled: bool = False
+    acp_providers: list[ACPProviderConfig] = Field(default_factory=list)
+    # Hostname of the Jira Data Center server when DC OAuth is configured, so the
+    # configure form can pre-fill and lock the host field (the OAuth callback only
+    # accepts this exact host). None in email-match mode / when DC isn't configured.
+    jira_dc_oauth_host: str | None = None
+    # Optional OpenHands Enterprise/KOTS-managed Jira DC service account. When
+    # configured, the frontend hides the in-app service-account secret entry and
+    # the backend always prefers the env credentials at runtime.
+    jira_dc_service_account_managed: bool = False
+    jira_dc_service_account_email: str | None = None
+    jira_dc_service_account_config_error: str | None = None

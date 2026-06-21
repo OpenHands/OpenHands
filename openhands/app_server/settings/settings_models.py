@@ -31,10 +31,10 @@ from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.utils.jsonpatch_compat import deep_merge
 from openhands.sdk.settings import (
     ACPAgentSettings,
-    AgentSettings,
     AgentSettingsConfig,
     ConversationSettings,
     OpenHandsAgentSettings,
+    apply_agent_settings_diff,
     default_agent_settings,
     validate_agent_settings,
 )
@@ -65,11 +65,12 @@ def _load_persisted_agent_settings(
 ) -> OpenHandsAgentSettings | ACPAgentSettings:
     """Load persisted agent settings via the SDK loader.
 
-    Routes the raw payload through :meth:`AgentSettings.from_persisted` so any
-    schema migrations registered with the SDK are applied before validation
-    against the discriminated :data:`AgentSettingsConfig` union.
+    Routes the raw payload through :func:`validate_agent_settings`, which
+    applies registered schema migrations, canonicalizes the legacy
+    ``agent_kind: 'llm'`` tag to ``'openhands'``, and validates against the
+    discriminated :data:`AgentSettingsConfig` union.
     """
-    return AgentSettings.from_persisted(data or {})
+    return validate_agent_settings(data or {})
 
 
 def _load_persisted_conversation_settings(data: Any) -> ConversationSettings:
@@ -206,21 +207,25 @@ class Settings(BaseModel):
                     _coerce_value(value) if not isinstance(value, dict) else value
                 )
 
+            # ``mcp_config`` replaces wholesale rather than deep-merging, so
+            # hold it back from the variant-aware merge and apply it after.
             replace_mcp_config = 'mcp_config' in agent_update
             mcp_config = coerced.pop('mcp_config', None) if replace_mcp_config else None
 
-            merged = deep_merge(
-                self.agent_settings.model_dump(
-                    mode='json', context={'expose_secrets': True}
-                ),
-                coerced,
-            )
+            # The SDK owns the discriminated-union merge: replace on
+            # ``agent_kind`` change, deep-merge within a variant. Cross-kind
+            # config preservation tracked in OpenHands/OpenHands#14370.
+            new_settings = apply_agent_settings_diff(self.agent_settings, coerced)
             if replace_mcp_config:
-                merged['mcp_config'] = mcp_config
+                dumped = new_settings.model_dump(
+                    mode='json', context={'expose_secrets': True}
+                )
+                dumped['mcp_config'] = mcp_config
+                new_settings = validate_agent_settings(dumped)
 
             # Use object.__setattr__ to avoid validate_assignment
             # side-effects on other fields.
-            object.__setattr__(self, 'agent_settings', validate_agent_settings(merged))
+            object.__setattr__(self, 'agent_settings', new_settings)
 
         conv_update = payload.get('conversation_settings_diff')
         if isinstance(conv_update, dict):
@@ -382,15 +387,7 @@ class Settings(BaseModel):
         return self.agent_settings
 
     def get_agent_settings_display(self) -> dict[str, Any]:
-        """Return agent_settings dict with display-friendly model names.
-
-        ``litellm_proxy/`` prefixes are normalised to ``openhands/`` only when
-        using the OpenHands proxy URL. Custom litellm_proxy endpoints keep their
-        litellm_proxy/ prefix.
-        The LiteLLM proxy ``base_url`` is cleared for managed models so
-        that the frontend can display "basic" mode.
-        Secrets are masked by Pydantic's default serialiser.
-        """
+        """Return agent_settings with display-only defaults removed."""
         from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
         from openhands.app_server.utils.llm import is_openhands_model
 
@@ -399,16 +396,6 @@ class Settings(BaseModel):
         if isinstance(llm, dict):
             model = llm.get('model')
             base_url = llm.get('base_url')
-
-            # Only convert litellm_proxy/ to openhands/ if using the OpenHands proxy
-            if isinstance(model, str) and model.startswith('litellm_proxy/'):
-                normalized_base = (base_url or '').rstrip('/')
-                normalized_proxy = LITE_LLM_API_URL.rstrip('/')
-                if normalized_base == normalized_proxy:
-                    llm['model'] = f'openhands/{model.removeprefix("litellm_proxy/")}'
-
-            # Clear the proxy base_url for managed models so the frontend
-            # sees null and can display the simple "basic" settings view.
             if is_openhands_model(model):
                 normalized_base = (base_url or '').rstrip('/')
                 normalized_proxy = LITE_LLM_API_URL.rstrip('/')

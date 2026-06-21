@@ -17,6 +17,7 @@ from storage.lite_llm_manager import (
     LiteLlmManager,
     get_byor_key_alias,
     get_openhands_cloud_key_alias,
+    get_org_team_alias,
 )
 from storage.user_settings import UserSettings
 
@@ -35,6 +36,58 @@ def _secret_value(settings: Settings, key: str):
     """Navigate into settings.agent_settings and unwrap SecretStr values."""
     secret = _agent_value(settings, key)
     return secret.get_secret_value() if secret else None
+
+
+class TestOrgTeamAlias:
+    """Human-readable LiteLLM team_alias derivation."""
+
+    def test_personal_org_labeled_personal_workspace(self):
+        # Personal org: org_id == user_id.
+        assert get_org_team_alias('user-1', 'ignored', 'user-1') == 'Personal Workspace'
+
+    def test_team_org_uses_display_name(self):
+        assert get_org_team_alias('org-2', 'Acme Inc', 'user-1') == 'Acme Inc'
+
+    def test_team_org_without_name_falls_back_to_id_not_uid(self):
+        # Never the bare user uid (the old behavior that hid teams).
+        assert get_org_team_alias('org-2', None, 'user-1') == 'Organization org-2'
+
+    @pytest.mark.asyncio
+    async def test_team_alias_for_org_personal_skips_lookup(self):
+        # Personal org short-circuits without touching OrgStore.
+        with patch(
+            'storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock
+        ) as mock_get:
+            alias = await LiteLlmManager._team_alias_for_org('user-1', 'user-1')
+        assert alias == 'Personal Workspace'
+        mock_get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_team_alias_for_org_team_resolves_name(self):
+        org = MagicMock()
+        org.name = 'Acme Inc'
+        with patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=org,
+        ):
+            alias = await LiteLlmManager._team_alias_for_org(
+                '11111111-1111-1111-1111-111111111111', 'user-1'
+            )
+        assert alias == 'Acme Inc'
+
+    @pytest.mark.asyncio
+    async def test_team_alias_for_org_lookup_failure_falls_back(self):
+        # A lookup failure must not crash team creation.
+        with patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            side_effect=RuntimeError('db down'),
+        ):
+            alias = await LiteLlmManager._team_alias_for_org(
+                '11111111-1111-1111-1111-111111111111', 'user-1'
+            )
+        assert alias == 'Organization 11111111-1111-1111-1111-111111111111'
 
 
 class TestDefaultInitialBudget:
@@ -241,6 +294,42 @@ class TestLiteLlmManager:
                         'test-org-id', 'test-user-id', mock_settings, create_user=True
                     )
                     assert result is None
+
+    @pytest.mark.asyncio
+    async def test_create_entries_direct_defaults_skip_litellm(self, mock_settings):
+        """Test direct LLM defaults without provisioning LiteLLM users or keys."""
+        with (
+            patch(
+                'storage.lite_llm_manager.should_use_direct_llm_defaults',
+                return_value=True,
+            ),
+            patch(
+                'storage.lite_llm_manager.get_default_llm_model',
+                return_value='openai/anthropic/claude-sonnet',
+            ),
+            patch(
+                'storage.lite_llm_manager.get_default_llm_base_url',
+                return_value='https://bifrost.example.com/openai/v1',
+            ),
+            patch(
+                'storage.lite_llm_manager.get_default_llm_api_key',
+                return_value='sk-bf-shared-smoke-test',
+            ),
+            patch('httpx.AsyncClient') as mock_client_class,
+        ):
+            result = await LiteLlmManager.create_entries(
+                'test-org-id', 'test-user-id', mock_settings, create_user=True
+            )
+
+            assert result is not None
+            assert _agent_value(result, 'agent') == 'CodeActAgent'
+            assert _agent_value(result, 'llm.model') == 'openai/anthropic/claude-sonnet'
+            assert (
+                _agent_value(result, 'llm.base_url')
+                == 'https://bifrost.example.com/openai/v1'
+            )
+            assert _secret_value(result, 'llm.api_key') == 'sk-bf-shared-smoke-test'
+            mock_client_class.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_create_entries_local_deployment(self, mock_settings):
@@ -2496,9 +2585,9 @@ class TestBudgetPayloadHandling:
 
         # Verify that max_budget IS in the JSON payload with the correct value
         json_payload = call_args[1]['json']
-        assert (
-            'max_budget' in json_payload
-        ), 'max_budget should be in payload when set to a value'
+        assert 'max_budget' in json_payload, (
+            'max_budget should be in payload when set to a value'
+        )
         assert json_payload['max_budget'] == 100.0
 
     @pytest.mark.asyncio
@@ -2557,9 +2646,9 @@ class TestBudgetPayloadHandling:
 
         # Verify that max_budget_in_team IS in the JSON payload
         json_payload = call_args[1]['json']
-        assert (
-            'max_budget_in_team' in json_payload
-        ), 'max_budget_in_team should be in payload when set to a value'
+        assert 'max_budget_in_team' in json_payload, (
+            'max_budget_in_team should be in payload when set to a value'
+        )
         assert json_payload['max_budget_in_team'] == 50.0
 
     @pytest.mark.asyncio
@@ -2618,9 +2707,9 @@ class TestBudgetPayloadHandling:
 
         # Verify that max_budget_in_team IS in the JSON payload
         json_payload = call_args[1]['json']
-        assert (
-            'max_budget_in_team' in json_payload
-        ), 'max_budget_in_team should be in payload when set to a value'
+        assert 'max_budget_in_team' in json_payload, (
+            'max_budget_in_team should be in payload when set to a value'
+        )
         assert json_payload['max_budget_in_team'] == 75.0
 
 

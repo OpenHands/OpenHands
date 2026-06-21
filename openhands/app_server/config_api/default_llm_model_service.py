@@ -6,7 +6,7 @@ in-memory so that the router stays thin.
 """
 
 import logging
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Callable
 
 import httpx
 from fastapi import Request
@@ -40,28 +40,57 @@ _VERIFIED_MODEL_SET: set[str] = {
 }
 
 
-def _to_llm_models(models_response: ModelsResponse) -> list[LLMModel]:
-    """Convert raw model strings into ``LLMModel`` objects with verified flags."""
+def _to_llm_models(
+    models_response: ModelsResponse,
+    is_verified: Callable[[str, str, ModelsResponse], bool] | None = None,
+) -> list[LLMModel]:
+    """Convert raw model strings into ``LLMModel`` objects with verified flags.
+
+    Hidden models (served by the backend but not promoted, e.g. legacy alias
+    routes on a managed LiteLLM proxy) are appended after the visible ones
+    with ``hidden=True`` so clients can keep them out of dropdown options
+    while still treating saved settings that reference them as available.
+    A hidden model with a known canonical mapping carries the visible model
+    name it aliases in ``canonical``.
+    """
     results: list[LLMModel] = []
-    for model_name in models_response.models:
+    flagged_models = [(m, False) for m in models_response.models] + [
+        (m, True) for m in models_response.hidden_models
+    ]
+    for model_name, hidden in flagged_models:
         parts = model_name.split('/', 1)
         if len(parts) == 2:
             provider, name = parts
         else:
             provider = None
             name = parts[0]
+        canonical = None
+        if hidden:
+            canonical_full = models_response.hidden_model_canonicals.get(model_name)
+            if canonical_full:
+                # Same bare-name convention as ``name`` — the alias and its
+                # canonical model always share the provider.
+                canonical = canonical_full.split('/', 1)[-1]
         results.append(
             LLMModel(
                 provider=provider,
                 name=name,
-                verified=model_name in _VERIFIED_MODEL_SET,
+                verified=(
+                    is_verified(model_name, name, models_response)
+                    if is_verified is not None
+                    else model_name in _VERIFIED_MODEL_SET
+                ),
+                hidden=hidden,
+                canonical=canonical,
             )
         )
     return results
 
 
 def _to_providers(models_response: ModelsResponse) -> list[Provider]:
-    """Extract unique providers, sorted verified-first then alphabetically."""
+    """Extract unique providers, sorted with ``openhands`` first, then other
+    verified providers alphabetically, then unverified providers alphabetically.
+    """
     verified_set = set(models_response.verified_providers)
     seen: set[str] = set()
     providers: list[Provider] = []
@@ -73,7 +102,10 @@ def _to_providers(models_response: ModelsResponse) -> list[Provider]:
         if name not in seen:
             seen.add(name)
             providers.append(Provider(name=name, verified=name in verified_set))
-    providers.sort(key=lambda p: (not p.verified, p.name))
+    # ``openhands`` is the managed provider and should always appear first,
+    # followed by other verified providers (alphabetical), then unverified
+    # providers (alphabetical).
+    providers.sort(key=lambda p: (not p.verified, p.name != 'openhands', p.name))
     return providers
 
 
@@ -148,6 +180,13 @@ class DefaultLLMModelService(LLMModelService):
         )
         return self._cached_response
 
+    def _is_model_verified(
+        self, model_name: str, name: str, models_response: ModelsResponse
+    ) -> bool:
+        """Whether a model is shown as "verified". Default is the static SDK
+        catalogue; subclasses (e.g. the managed proxy) override this."""
+        return model_name in _VERIFIED_MODEL_SET
+
     # ------------------------------------------------------------------
     # LLMModelService interface
     # ------------------------------------------------------------------
@@ -162,7 +201,7 @@ class DefaultLLMModelService(LLMModelService):
         limit: int = 50,
     ) -> LLMModelPage:
         raw = await self._get_models_response()
-        models = _to_llm_models(raw)
+        models = _to_llm_models(raw, self._is_model_verified)
 
         if query is not None:
             query_lower = query.lower()

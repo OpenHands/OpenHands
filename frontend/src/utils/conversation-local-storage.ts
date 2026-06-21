@@ -35,6 +35,36 @@ const DEFAULT_CONVERSATION_STATE: ConversationState = {
   draftMessage: null,
 };
 
+const REMOVED_CONVERSATION_TABS: ReadonlySet<string> = new Set([
+  "served",
+  "app",
+]);
+
+function sanitizeStoredState(
+  stored: Partial<ConversationState>,
+): Partial<ConversationState> {
+  let result: Partial<ConversationState> = stored;
+
+  if (
+    typeof result.selectedTab === "string" &&
+    REMOVED_CONVERSATION_TABS.has(result.selectedTab)
+  ) {
+    result = { ...result };
+    delete result.selectedTab;
+  }
+
+  if (result.unpinnedTabs) {
+    const filtered = result.unpinnedTabs.filter(
+      (tab) => !REMOVED_CONVERSATION_TABS.has(tab),
+    );
+    if (filtered.length !== result.unpinnedTabs.length) {
+      result = { ...result, unpinnedTabs: filtered };
+    }
+  }
+
+  return result;
+}
+
 /**
  * Check if a conversation ID is a temporary task ID that should not be persisted.
  * Task IDs have the format "task-{uuid}" and are used during V1 conversation initialization.
@@ -56,7 +86,10 @@ export function getConversationState(
     const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
     const item = localStorage.getItem(key);
     if (item !== null) {
-      return { ...DEFAULT_CONVERSATION_STATE, ...JSON.parse(item) };
+      return {
+        ...DEFAULT_CONVERSATION_STATE,
+        ...sanitizeStoredState(JSON.parse(item)),
+      };
     }
     return DEFAULT_CONVERSATION_STATE;
   } catch {

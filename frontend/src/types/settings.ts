@@ -27,6 +27,7 @@ export type ProviderToken = {
 };
 
 export type MCPSSEServer = {
+  name?: string;
   url: string;
   api_key?: string;
 };
@@ -39,6 +40,7 @@ export type MCPStdioServer = {
 };
 
 export type MCPSHTTPServer = {
+  name?: string;
   url: string;
   api_key?: string;
   timeout?: number;
@@ -94,6 +96,9 @@ export type SettingsSectionSchema = {
   key: string;
   label: string;
   fields: SettingsFieldSchema[];
+  // SDK agent-settings is a discriminated union; non-shared sections are
+  // tagged with their variant ("openhands"/"acp"). null/absent = shared.
+  variant?: string | null;
 };
 
 export type SettingsSchema = {

@@ -54,7 +54,9 @@ jobs:
 
       - name: Get short SHA
         id: short_sha
-        run: echo "SHORT_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: printf 'SHORT_SHA=%s\n' "${PR_HEAD_SHA:0:7}" >> "$GITHUB_OUTPUT"
 
       - name: Update PR Description
         env:

@@ -10,6 +10,7 @@ interface SettingsInputProps {
   value?: string;
   placeholder?: string;
   showOptionalTag?: boolean;
+  description?: React.ReactNode;
   isDisabled?: boolean;
   startContent?: React.ReactNode;
   className?: string;
@@ -20,6 +21,7 @@ interface SettingsInputProps {
   step?: number;
   pattern?: string;
   labelClassName?: string;
+  autoComplete?: string;
 }
 
 export function SettingsInput({
@@ -31,6 +33,7 @@ export function SettingsInput({
   value,
   placeholder,
   showOptionalTag,
+  description,
   isDisabled,
   startContent,
   className,
@@ -41,6 +44,7 @@ export function SettingsInput({
   step,
   pattern,
   labelClassName,
+  autoComplete,
 }: SettingsInputProps) {
   return (
     <label className={cn("flex flex-col gap-2.5 w-fit", className)}>
@@ -49,6 +53,7 @@ export function SettingsInput({
         <span className={cn("text-sm", labelClassName)}>{label}</span>
         {showOptionalTag && <OptionalTag />}
       </div>
+      {description}
       <input
         data-testid={testId}
         onChange={(e) => onChange && onChange(e.target.value)}
@@ -63,6 +68,7 @@ export function SettingsInput({
         step={step}
         required={required}
         pattern={pattern}
+        autoComplete={autoComplete}
         className={cn(
           "bg-tertiary border border-[#717888] h-10 w-full max-w-[680px] rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt",
           "disabled:bg-[#2D2F36] disabled:border-[#2D2F36] disabled:cursor-not-allowed",

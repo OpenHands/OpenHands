@@ -1,11 +1,15 @@
 import React from "react";
 import { useParams } from "react-router";
 import { useTranslation } from "react-i18next";
+import { Typography } from "#/ui/typography";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useConfig } from "#/hooks/query/use-config";
 import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation";
 import { useConversationNameContextMenu } from "#/hooks/use-conversation-name-context-menu";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
+import { resolveAgentChip } from "#/utils/agent-display-label";
+import { AgentChipIcon } from "#/components/shared/agent-chip-icon";
 import { EllipsisButton } from "../conversation-panel/ellipsis-button";
 import { ConversationNameContextMenu } from "./conversation-name-context-menu";
 import { SystemMessageModal } from "../conversation-panel/system-message-modal";
@@ -14,12 +18,12 @@ import { HooksModal } from "../conversation-panel/hooks-modal";
 import { ConfirmDeleteModal } from "../conversation-panel/confirm-delete-modal";
 import { ConfirmStopModal } from "../conversation-panel/confirm-stop-modal";
 import { MetricsModal } from "./metrics-modal/metrics-modal";
-import CircuitIcon from "#/icons/u-circuit.svg?react";
 
 export function ConversationName() {
   const { t } = useTranslation();
   const { conversationId } = useParams<{ conversationId: string }>();
   const { data: conversation } = useActiveConversation();
+  const { data: config } = useConfig();
   const { mutate: updateConversation } = useUpdateConversation();
 
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
@@ -131,6 +135,13 @@ export function ConversationName() {
     return null;
   }
 
+  const agentChip = resolveAgentChip(
+    conversation.agent_kind,
+    conversation.llm_model,
+    conversation.acp_server,
+    config?.acp_providers,
+  );
+
   return (
     <>
       <div
@@ -159,14 +170,16 @@ export function ConversationName() {
           </div>
         )}
 
-        {titleMode !== "edit" && conversation.llm_model && (
+        {titleMode !== "edit" && agentChip && (
           <span
-            className="text-xs text-[#A3A3A3] flex items-center gap-1 whitespace-nowrap"
-            title={conversation.llm_model}
+            className="text-xs text-[#A3A3A3] max-w-[150px] flex items-center gap-1 overflow-hidden"
+            title={agentChip.tooltip}
             data-testid="conversation-name-llm-model"
           >
-            <CircuitIcon width={12} height={12} className="shrink-0" />
-            <span>{conversation.llm_model}</span>
+            <AgentChipIcon kind={agentChip.kind} />
+            <Typography.Text className="text-xs text-[#A3A3A3] truncate">
+              {agentChip.text}
+            </Typography.Text>
           </span>
         )}
 

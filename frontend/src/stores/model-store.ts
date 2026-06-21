@@ -15,6 +15,15 @@ export interface ModelListEntry {
 
 interface ModelState {
   entriesByConversation: Record<string, ModelListEntry[]>;
+  /**
+   * The profile most recently switched-to per conversation, set optimistically
+   * when a switch succeeds. The chat switch button reads this so it reflects
+   * the choice immediately and unambiguously — without waiting for the
+   * conversation record's `llm_model` to round-trip back (which can lag, and in
+   * SaaS collides when several managed profiles share the same `litellm_proxy/`
+   * model string).
+   */
+  activeProfileByConversation: Record<string, string>;
 }
 
 interface ModelActions {
@@ -36,6 +45,7 @@ export const useModelStore = create<ModelStore>()(
   devtools(
     (set) => ({
       entriesByConversation: {},
+      activeProfileByConversation: {},
       show: (conversationId, anchorEventId, profiles) =>
         set((s) => ({
           entriesByConversation: {
@@ -59,6 +69,10 @@ export const useModelStore = create<ModelStore>()(
                 switchedTo: profileName,
               },
             ],
+          },
+          activeProfileByConversation: {
+            ...s.activeProfileByConversation,
+            [conversationId]: profileName,
           },
         })),
     }),

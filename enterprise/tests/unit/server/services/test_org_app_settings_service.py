@@ -41,8 +41,15 @@ def mock_store():
 
 @pytest.fixture
 def mock_user_context(user_id):
-    """Create a mock UserContext that returns the user_id."""
+    """Create a mock UserContext that returns the user_id.
+
+    Explicitly sets ``user_auth = None`` so the service's effective-org
+    resolver falls back to the legacy ``get_current_org_by_user_id``
+    path; otherwise ``MagicMock`` would auto-create a ``user_auth``
+    attribute whose ``get_effective_org_id`` would not be awaitable.
+    """
     context = MagicMock()
+    context.user_auth = None
     context.get_user_id = AsyncMock(return_value=user_id)
     return context
 

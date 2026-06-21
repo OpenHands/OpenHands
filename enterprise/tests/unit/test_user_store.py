@@ -789,6 +789,10 @@ def test_get_org_kwargs_for_migration_uses_minimal_org_defaults_for_custom_llm()
     )
     from storage.user_settings import UserSettings
 
+    # Use the SDK's current schema version - migration logic should always
+    # output settings matching the SDK's expected schema, regardless of input version
+    from openhands.sdk.settings import AGENT_SETTINGS_SCHEMA_VERSION
+
     user_settings = UserSettings(
         keycloak_user_id='test',
         user_version=3,
@@ -807,7 +811,7 @@ def test_get_org_kwargs_for_migration_uses_minimal_org_defaults_for_custom_llm()
 
     assert org_kwargs['org_version'] == ORG_SETTINGS_VERSION
     assert org_kwargs['agent_settings'] == {
-        'schema_version': 1,
+        'schema_version': AGENT_SETTINGS_SCHEMA_VERSION,
         'llm': {
             'model': get_default_litellm_model(),
             'base_url': LITE_LLM_API_URL,
@@ -1275,9 +1279,9 @@ async def test_migrate_user_sql_type_handling(async_session_maker):
             )
         )
         saas_metadata = result.scalars().first()
-        assert (
-            saas_metadata is not None
-        ), 'conversation_metadata_saas record should exist'
+        assert saas_metadata is not None, (
+            'conversation_metadata_saas record should exist'
+        )
         assert saas_metadata.user_id == user_uuid, 'user_id should be UUID type'
         assert saas_metadata.org_id == user_uuid, 'org_id should be UUID type'
 
@@ -1287,9 +1291,9 @@ async def test_migrate_user_sql_type_handling(async_session_maker):
         )
         stripe_record = result.scalars().first()
         assert stripe_record is not None
-        assert (
-            stripe_record.org_id == user_uuid
-        ), 'stripe_customers.org_id should be UUID'
+        assert stripe_record.org_id == user_uuid, (
+            'stripe_customers.org_id should be UUID'
+        )
 
         # Verify slack_users org_id was set
         result = await session.execute(
@@ -1297,9 +1301,9 @@ async def test_migrate_user_sql_type_handling(async_session_maker):
         )
         slack_user_record = result.scalars().first()
         assert slack_user_record is not None
-        assert (
-            slack_user_record.org_id == user_uuid
-        ), 'slack_users.org_id should be UUID'
+        assert slack_user_record.org_id == user_uuid, (
+            'slack_users.org_id should be UUID'
+        )
 
         # Verify slack_conversation org_id was set
         result = await session.execute(
@@ -1309,9 +1313,9 @@ async def test_migrate_user_sql_type_handling(async_session_maker):
         )
         slack_conv_record = result.scalars().first()
         assert slack_conv_record is not None
-        assert (
-            slack_conv_record.org_id == user_uuid
-        ), 'slack_conversation.org_id should be UUID'
+        assert slack_conv_record.org_id == user_uuid, (
+            'slack_conversation.org_id should be UUID'
+        )
 
         # Verify api_keys org_id was set
         result = await session.execute(select(ApiKey).filter(ApiKey.user_id == user_id))
@@ -1327,9 +1331,9 @@ async def test_migrate_user_sql_type_handling(async_session_maker):
         )
         custom_secret_record = result.scalars().first()
         assert custom_secret_record is not None
-        assert (
-            custom_secret_record.org_id == user_uuid
-        ), 'custom_secrets.org_id should be UUID'
+        assert custom_secret_record.org_id == user_uuid, (
+            'custom_secrets.org_id should be UUID'
+        )
 
         # Verify billing_sessions org_id was set
         result = await session.execute(
@@ -1337,9 +1341,9 @@ async def test_migrate_user_sql_type_handling(async_session_maker):
         )
         billing_record = result.scalars().first()
         assert billing_record is not None
-        assert (
-            billing_record.org_id == user_uuid
-        ), 'billing_sessions.org_id should be UUID'
+        assert billing_record.org_id == user_uuid, (
+            'billing_sessions.org_id should be UUID'
+        )
 
 
 @pytest.mark.asyncio
@@ -1406,9 +1410,9 @@ async def test_migrate_user_sql_no_matching_records(async_session_maker):
             )
         )
         records = result.scalars().all()
-        assert (
-            len(records) == 0
-        ), 'No records should be created for non-matching user_id'
+        assert len(records) == 0, (
+            'No records should be created for non-matching user_id'
+        )
 
 
 @pytest.mark.asyncio
@@ -1453,9 +1457,9 @@ async def test_migrate_user_sql_multiple_conversations(async_session_maker):
             text('SELECT conversation_id, user_id FROM conversation_metadata')
         )
         conv_rows = result.fetchall()
-        assert (
-            len(conv_rows) == 3
-        ), f'Expected 3 conversation_metadata rows, got {len(conv_rows)}'
+        assert len(conv_rows) == 3, (
+            f'Expected 3 conversation_metadata rows, got {len(conv_rows)}'
+        )
 
         # Execute migration SQL
         await session.execute(
@@ -1487,12 +1491,12 @@ async def test_migrate_user_sql_multiple_conversations(async_session_maker):
 
         # Verify the user_id and org_id values
         for row in saas_rows:
-            assert (
-                row.user_id == user_uuid_str
-            ), f'user_id should match: {row.user_id} vs {user_uuid_str}'
-            assert (
-                row.org_id == user_uuid_str
-            ), f'org_id should match: {row.org_id} vs {user_uuid_str}'
+            assert row.user_id == user_uuid_str, (
+                f'user_id should match: {row.user_id} vs {user_uuid_str}'
+            )
+            assert row.org_id == user_uuid_str, (
+                f'org_id should match: {row.org_id} vs {user_uuid_str}'
+            )
 
 
 # Note: The v1_enabled logic in migrate_user follows the same pattern as OrgStore.create_org:

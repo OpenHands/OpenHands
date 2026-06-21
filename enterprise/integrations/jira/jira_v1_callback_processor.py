@@ -1,4 +1,5 @@
 import logging
+from typing import ClassVar
 from uuid import UUID
 
 import httpx
@@ -9,6 +10,7 @@ from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
+    EventKind,
 )
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
@@ -30,6 +32,8 @@ JIRA_CLOUD_API_URL = 'https://api.atlassian.com/ex/jira'
 
 class JiraV1CallbackProcessor(EventCallbackProcessor):
     """Callback processor for Jira V1 integrations."""
+
+    event_kind: ClassVar[EventKind] = 'ConversationStateUpdateEvent'
 
     should_request_summary: bool = Field(default=True)
     svc_acc_email: str
@@ -127,9 +131,9 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
                 app_conversation_info.sandbox_id,
             )
 
-            assert (
-                sandbox.session_api_key is not None
-            ), f'No session API key for sandbox: {sandbox.id}'
+            assert sandbox.session_api_key is not None, (
+                f'No session API key for sandbox: {sandbox.id}'
+            )
 
             # 3. URL + instruction
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)
@@ -158,8 +162,8 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
         send_message_request = AskAgentRequest(question=message_content)
 
         url = (
-            f"{agent_server_url.rstrip('/')}"
-            f"/api/conversations/{conversation_id}/ask_agent"
+            f'{agent_server_url.rstrip("/")}'
+            f'/api/conversations/{conversation_id}/ask_agent'
         )
         headers = {'X-Session-API-Key': session_api_key}
         payload = send_message_request.model_dump()

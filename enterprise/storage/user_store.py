@@ -11,7 +11,8 @@ from server.constants import (
     LITE_LLM_API_URL,
     ORG_SETTINGS_VERSION,
     PERSONAL_WORKSPACE_VERSION_TO_MODEL,
-    get_default_litellm_model,
+    get_default_llm_base_url,
+    get_default_llm_model,
 )
 from server.logger import logger
 from sqlalchemy import select, text
@@ -49,7 +50,25 @@ class UserStore:
         user_info: dict,
         role_id: Optional[int] = None,
     ) -> User | None:
-        """Create a new user."""
+        """Create a new user.
+
+        Identity-preservation contract (load-bearing for
+        ``OrgStore.delete_org_cascade``): both ``Org.id`` and ``User.id``
+        are derived from the caller-provided ``user_id`` (the Keycloak
+        ``sub`` claim, stable across logins). This means a user whose
+        personal org was previously cascade-deleted will be re-onboarded
+        here with the **same** ``User.id`` / ``Org.id`` as before,
+        restoring the ``User.id == Org.id == UUID(keycloak.sub)``
+        invariant that downstream lookups keyed on ``keycloak_user_id``
+        depend on.
+
+        If this derivation ever changes (for example, switching to a
+        server-generated UUID), the personal-org self-service recovery
+        path in ``delete_org_cascade`` step 3a will silently break:
+        re-login will succeed but the new IDs will not match the
+        deleted-tenant IDs, breaking any external reference that pinned
+        on the old values.
+        """
         async with a_session_maker() as session:
             # create personal org
             org = Org(
@@ -1074,8 +1093,8 @@ class UserStore:
             org_kwargs['agent_settings'] = {
                 'schema_version': AGENT_SETTINGS_SCHEMA_VERSION,
                 'llm': {
-                    'model': get_default_litellm_model(),
-                    'base_url': LITE_LLM_API_URL,
+                    'model': get_default_llm_model(),
+                    'base_url': get_default_llm_base_url(),
                 },
             }
 
