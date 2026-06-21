@@ -5,10 +5,14 @@ from unittest.mock import patch
 import pytest
 from pydantic import SecretStr
 
-from openhands.integrations.bitbucket.bitbucket_service import BitBucketService
-from openhands.integrations.service_types import OwnerType, Repository
-from openhands.integrations.service_types import ProviderType as ServiceProviderType
-from openhands.server.types import AppMode
+from openhands.app_server.integrations.bitbucket.bitbucket_service import (
+    BitBucketService,
+)
+from openhands.app_server.integrations.service_types import OwnerType, Repository
+from openhands.app_server.integrations.service_types import (
+    ProviderType as ServiceProviderType,
+)
+from openhands.app_server.types import AppMode
 
 
 @pytest.fixture

@@ -39,6 +39,7 @@
   "overrides": [
     {
       "files": ["*.ts", "*.tsx"],
+      "excludedFiles": ["src/hooks/query/query-keys.ts"],
       "rules": {
         // Allow state modification in reduce and Redux reducers
         "no-param-reassign": [
@@ -48,8 +49,13 @@
             "ignorePropertyModificationsFor": ["acc", "state"],
           },
         ],
-        // For https://stackoverflow.com/questions/55844608/stuck-with-eslint-error-i-e-separately-loops-should-be-avoided-in-favor-of-arra
-        "no-restricted-syntax": "off",
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "Property[key.name='queryKey'] > ArrayExpression[elements.0.value='settings']",
+            "message": "Use SETTINGS_QUERY_KEYS helpers instead of raw settings query key arrays."
+          }
+        ],
         "react/require-default-props": "off",
         "import/prefer-default-export": "off",
         "no-underscore-dangle": "off",

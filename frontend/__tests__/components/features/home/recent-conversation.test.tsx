@@ -53,8 +53,8 @@ const renderRecentConversation = (conversation: V1AppConversation) =>
     </BrowserRouter>,
   );
 
-describe("RecentConversation - llm_model", () => {
-  it("should render the llm model when provided", () => {
+describe("RecentConversation - chip", () => {
+  it("renders prettified model text with raw model in the tooltip", () => {
     renderRecentConversation({
       ...baseConversation,
       llm_model: "anthropic/claude-sonnet-4-20250514",
@@ -62,20 +62,31 @@ describe("RecentConversation - llm_model", () => {
 
     const model = screen.getByTestId("recent-conversation-llm-model");
     expect(model).toBeInTheDocument();
-    expect(model).toHaveTextContent("anthropic/claude-sonnet-4-20250514");
+    expect(model).toHaveTextContent("Claude Sonnet 4");
     expect(model).toHaveAttribute(
       "title",
       "anthropic/claude-sonnet-4-20250514",
     );
     expect(model.querySelector("svg")).toBeInTheDocument();
 
-    // Verify truncation structure: text is wrapped in a span with truncate class
     const textSpan = model.querySelector("span.truncate");
     expect(textSpan).toBeInTheDocument();
-    expect(textSpan).toHaveTextContent("anthropic/claude-sonnet-4-20250514");
+    expect(textSpan).toHaveTextContent("Claude Sonnet 4");
   });
 
-  it("should not render the llm model when not provided", () => {
+  it("falls back to 'ACP' for ACP conversations with no llm_model", () => {
+    renderRecentConversation({
+      ...baseConversation,
+      agent_kind: "acp",
+      llm_model: null,
+    });
+
+    const model = screen.getByTestId("recent-conversation-llm-model");
+    expect(model).toHaveTextContent("ACP");
+    expect(model).toHaveAttribute("title", "ACP");
+  });
+
+  it("hides the chip when neither llm_model nor ACP", () => {
     renderRecentConversation(baseConversation);
 
     expect(

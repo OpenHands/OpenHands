@@ -4,7 +4,7 @@ FastAPI-based application server that provides REST API endpoints for OpenHands 
 
 ## Overview
 
-As of 2025-09-29, much of the code in the OpenHands repository can be regarded as legacy, having been superseded by the code in AgentSDK. This package provides endpoints to interface with the new agent SDK and bridge the gap with the existing OpenHands project.
+This package provides server and sandbox functionality to interact with the OpenHands Software Agent SDK. It exposes REST API endpoints for managing conversations, sandboxes, events, and user settings.
 
 ## Architecture
 

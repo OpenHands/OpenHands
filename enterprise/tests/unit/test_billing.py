@@ -20,6 +20,7 @@ from server.routes.billing import (
     success_callback,
 )
 from sqlalchemy import select
+from starlette.datastructures import URL
 from storage.billing_session import BillingSession
 from storage.org import Org
 from storage.user import User
@@ -235,7 +236,10 @@ async def test_create_checkout_session_stripe_error(
         patch('server.routes.billing.validate_billing_enabled'),
     ):
         await create_checkout_session(
-            CreateCheckoutSessionRequest(amount=25), mock_checkout_request, 'mock_user'
+            CreateCheckoutSessionRequest(amount=25),
+            mock_checkout_request,
+            'mock_user',
+            test_org.id,
         )
 
 
@@ -263,7 +267,10 @@ async def test_create_checkout_session_success(
         patch('server.routes.billing.validate_billing_enabled'),
     ):
         result = await create_checkout_session(
-            CreateCheckoutSessionRequest(amount=25), mock_checkout_request, 'mock_user'
+            CreateCheckoutSessionRequest(amount=25),
+            mock_checkout_request,
+            'mock_user',
+            test_org.id,
         )
 
         assert isinstance(result, CreateBillingSessionResponse)
@@ -597,19 +604,21 @@ async def test_cancel_callback_success(
 @pytest.mark.parametrize('has_method', [True, False])
 async def test_has_payment_method(has_method):
     """Test has_payment_method reflects the underlying stripe service result."""
+    effective_org_id = uuid.uuid4()
     mock_fn = AsyncMock(return_value=has_method)
     with patch(
         'server.routes.billing.stripe_service.has_payment_method_by_user_id',
         mock_fn,
     ):
-        result = await has_payment_method('mock_user')
+        result = await has_payment_method('mock_user', effective_org_id)
         assert result is has_method
-    mock_fn.assert_called_once_with('mock_user')
+    mock_fn.assert_called_once_with('mock_user', org_id=effective_org_id)
 
 
 @pytest.mark.asyncio
 async def test_create_customer_setup_session_success(mock_setup_request):
     """Test successful creation of customer setup session."""
+    effective_org_id = uuid.uuid4()
     mock_customer_info = {'customer_id': 'mock-customer-id', 'org_id': 'mock-org-id'}
     mock_session = MagicMock()
     mock_session.url = 'https://checkout.stripe.com/test-session'
@@ -623,7 +632,9 @@ async def test_create_customer_setup_session_success(mock_setup_request):
         patch('stripe.checkout.Session.create_async', mock_create),
         patch('server.routes.billing.validate_billing_enabled'),
     ):
-        result = await create_customer_setup_session(mock_setup_request, 'mock_user')
+        result = await create_customer_setup_session(
+            mock_setup_request, 'mock_user', effective_org_id
+        )
 
         assert isinstance(result, billing.CreateBillingSessionResponse)
         assert result.redirect_url == 'https://checkout.stripe.com/test-session'
@@ -636,3 +647,246 @@ async def test_create_customer_setup_session_success(mock_setup_request):
             success_url='https://test.com?setup=success',
             cancel_url='https://test.com',
         )
+
+
+# ---------------------------------------------------------------------------
+# Tests for analytics tracking in success_callback
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_success_callback_tracks_credit_purchased_analytics(
+    async_session_maker, test_org, test_user
+):
+    """Test that success_callback calls track_credit_purchased on analytics service."""
+    mock_request = Request(scope={'type': 'http'})
+    mock_request._url = URL('http://test.com/')
+
+    session_id = 'test_analytics_session'
+    async with async_session_maker() as session:
+        billing_session = BillingSession(
+            id=session_id,
+            user_id=str(test_user.id),
+            org_id=test_org.id,
+            status='in_progress',
+            price=50,
+            price_code='NA',
+        )
+        session.add(billing_session)
+        await session.commit()
+
+    mock_analytics = MagicMock()
+    mock_analytics.track_credit_purchased = MagicMock()
+
+    mock_user = MagicMock()
+    mock_user.current_org_id = test_org.id
+    mock_user.user_consents_to_analytics = True
+
+    with (
+        patch('server.routes.billing.a_session_maker', async_session_maker),
+        patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
+        patch(
+            'storage.user_store.UserStore.get_user_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_user,
+        ),
+        patch(
+            'storage.lite_llm_manager.LiteLlmManager.get_user_team_info',
+            return_value={
+                'spend': 10.0,
+                'max_budget_in_team': 100.0,
+            },
+        ),
+        patch('storage.lite_llm_manager.LiteLlmManager.update_team_and_users_budget'),
+        patch(
+            'server.routes.billing.get_analytics_service', return_value=mock_analytics
+        ),
+    ):
+        mock_stripe_retrieve.return_value = MagicMock(
+            status='complete', amount_subtotal=5000, customer='mock_customer_id'
+        )
+
+        await success_callback(session_id, mock_request)
+
+    mock_analytics.track_credit_purchased.assert_called_once()
+    call_kwargs = mock_analytics.track_credit_purchased.call_args.kwargs
+    assert call_kwargs['ctx'].user_id == str(test_user.id)
+    assert call_kwargs['ctx'].consented is True
+    assert call_kwargs['amount_usd'] == 50.0
+    assert call_kwargs['credit_balance_before'] == 100.0
+    assert call_kwargs['credit_balance_after'] == 150.0
+
+
+@pytest.mark.asyncio
+async def test_success_callback_skips_analytics_when_service_is_none(
+    async_session_maker, test_org, test_user
+):
+    """Test that success_callback doesn't fail when analytics service is None."""
+    mock_request = Request(scope={'type': 'http'})
+    mock_request._url = URL('http://test.com/')
+
+    session_id = 'test_no_analytics_session'
+    async with async_session_maker() as session:
+        billing_session = BillingSession(
+            id=session_id,
+            user_id=str(test_user.id),
+            org_id=test_org.id,
+            status='in_progress',
+            price=25,
+            price_code='NA',
+        )
+        session.add(billing_session)
+        await session.commit()
+
+    mock_user = MagicMock()
+    mock_user.current_org_id = test_org.id
+    mock_user.user_consents_to_analytics = True
+
+    with (
+        patch('server.routes.billing.a_session_maker', async_session_maker),
+        patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
+        patch(
+            'storage.user_store.UserStore.get_user_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_user,
+        ),
+        patch(
+            'storage.lite_llm_manager.LiteLlmManager.get_user_team_info',
+            return_value={
+                'spend': 0.0,
+                'max_budget_in_team': 50.0,
+            },
+        ),
+        patch('storage.lite_llm_manager.LiteLlmManager.update_team_and_users_budget'),
+        patch('server.routes.billing.get_analytics_service', return_value=None),
+    ):
+        mock_stripe_retrieve.return_value = MagicMock(
+            status='complete', amount_subtotal=2500, customer='mock_customer_id'
+        )
+
+        # Should not raise even without analytics service
+        response = await success_callback(session_id, mock_request)
+        assert response.status_code == 302
+
+
+@pytest.mark.asyncio
+async def test_success_callback_analytics_respects_consent_false(
+    async_session_maker, test_org, test_user
+):
+    """Test that success_callback passes consented=False when user has not consented."""
+    mock_request = Request(scope={'type': 'http'})
+    mock_request._url = URL('http://test.com/')
+
+    session_id = 'test_no_consent_session'
+    async with async_session_maker() as session:
+        billing_session = BillingSession(
+            id=session_id,
+            user_id=str(test_user.id),
+            org_id=test_org.id,
+            status='in_progress',
+            price=25,
+            price_code='NA',
+        )
+        session.add(billing_session)
+        await session.commit()
+
+    mock_analytics = MagicMock()
+    mock_analytics.track_credit_purchased = MagicMock()
+
+    mock_user = MagicMock()
+    mock_user.current_org_id = test_org.id
+    mock_user.user_consents_to_analytics = False  # User has NOT consented
+
+    with (
+        patch('server.routes.billing.a_session_maker', async_session_maker),
+        patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
+        patch(
+            'storage.user_store.UserStore.get_user_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_user,
+        ),
+        patch(
+            'storage.lite_llm_manager.LiteLlmManager.get_user_team_info',
+            return_value={
+                'spend': 0.0,
+                'max_budget_in_team': 50.0,
+            },
+        ),
+        patch('storage.lite_llm_manager.LiteLlmManager.update_team_and_users_budget'),
+        patch(
+            'server.routes.billing.get_analytics_service', return_value=mock_analytics
+        ),
+    ):
+        mock_stripe_retrieve.return_value = MagicMock(
+            status='complete', amount_subtotal=2500, customer='mock_customer_id'
+        )
+
+        await success_callback(session_id, mock_request)
+
+    call_kwargs = mock_analytics.track_credit_purchased.call_args.kwargs
+    assert call_kwargs['ctx'].consented is False
+
+
+@pytest.mark.asyncio
+async def test_success_callback_analytics_exception_does_not_fail_checkout(
+    async_session_maker, test_org, test_user
+):
+    """Test that analytics exception doesn't prevent successful checkout completion."""
+    mock_request = Request(scope={'type': 'http'})
+    mock_request._url = URL('http://test.com/')
+
+    session_id = 'test_analytics_error_session'
+    async with async_session_maker() as session:
+        billing_session = BillingSession(
+            id=session_id,
+            user_id=str(test_user.id),
+            org_id=test_org.id,
+            status='in_progress',
+            price=25,
+            price_code='NA',
+        )
+        session.add(billing_session)
+        await session.commit()
+
+    mock_analytics = MagicMock()
+    mock_analytics.track_credit_purchased.side_effect = RuntimeError('PostHog error')
+
+    mock_user = MagicMock()
+    mock_user.current_org_id = test_org.id
+    mock_user.user_consents_to_analytics = True
+
+    with (
+        patch('server.routes.billing.a_session_maker', async_session_maker),
+        patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
+        patch(
+            'storage.user_store.UserStore.get_user_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_user,
+        ),
+        patch(
+            'storage.lite_llm_manager.LiteLlmManager.get_user_team_info',
+            return_value={
+                'spend': 0.0,
+                'max_budget_in_team': 50.0,
+            },
+        ),
+        patch('storage.lite_llm_manager.LiteLlmManager.update_team_and_users_budget'),
+        patch(
+            'server.routes.billing.get_analytics_service', return_value=mock_analytics
+        ),
+    ):
+        mock_stripe_retrieve.return_value = MagicMock(
+            status='complete', amount_subtotal=2500, customer='mock_customer_id'
+        )
+
+        # Should not raise even when analytics fails
+        response = await success_callback(session_id, mock_request)
+        assert response.status_code == 302
+
+    # Verify database was still updated
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(BillingSession).where(BillingSession.id == session_id)
+        )
+        billing_session = result.scalar_one_or_none()
+        assert billing_session.status == 'completed'

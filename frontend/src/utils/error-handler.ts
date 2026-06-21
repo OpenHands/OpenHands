@@ -1,4 +1,3 @@
-import type { PostHog } from "posthog-js";
 import { handleStatusMessage } from "#/services/actions";
 import { displayErrorToast } from "./custom-toast-handlers";
 
@@ -7,31 +6,19 @@ interface ErrorDetails {
   source?: string;
   metadata?: Record<string, unknown>;
   msgId?: string;
-  posthog?: PostHog;
 }
 
-export function trackError({
-  message,
-  source,
-  metadata = {},
-  posthog,
-}: ErrorDetails) {
-  if (!posthog) return;
-
-  const error = new Error(message);
-  posthog.captureException(error, {
-    error_source: source || "unknown",
-    ...metadata,
-  });
-}
+// PostHog capture removed — error tracking is now handled server-side
+export function trackError(
+  details: ErrorDetails, // eslint-disable-line @typescript-eslint/no-unused-vars
+): void {}
 
 export function showErrorToast({
   message,
   source,
   metadata = {},
-  posthog,
 }: ErrorDetails) {
-  trackError({ message, source, metadata, posthog });
+  trackError({ message, source, metadata });
   displayErrorToast(message);
 }
 
@@ -40,9 +27,8 @@ export function showChatError({
   source,
   metadata = {},
   msgId,
-  posthog,
 }: ErrorDetails) {
-  trackError({ message, source, metadata, posthog });
+  trackError({ message, source, metadata });
   handleStatusMessage({
     type: "error",
     message,
@@ -52,9 +38,18 @@ export function showChatError({
 }
 
 /**
- * Checks if an error message indicates a budget or credit limit issue
+ * Checks if an error message indicates an OpenHands budget or credit limit issue.
+ * Provider-side errors can also mention "credits"; those should stay as raw
+ * provider errors instead of being rewritten as OpenHands billing failures.
  */
 export function isBudgetOrCreditError(errorMessage: string): boolean {
   const lowerCaseError = errorMessage.toLowerCase();
-  return lowerCaseError.includes("budget") || lowerCaseError.includes("credit");
+  const isBudgetLimitError =
+    lowerCaseError.includes("budget") &&
+    /(exceed|exceeded|limit|max budget|spent)/.test(lowerCaseError);
+  const isOpenHandsCreditError =
+    /openhands\s+credits?/.test(lowerCaseError) ||
+    lowerCaseError.includes("credit limit reached");
+
+  return isBudgetLimitError || isOpenHandsCreditError;
 }

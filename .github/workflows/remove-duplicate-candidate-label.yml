@@ -1,0 +1,30 @@
+---
+name: Remove duplicate candidate label on activity
+
+on:
+    issue_comment:
+        types: [created]
+
+permissions:
+    issues: write
+
+concurrency:
+    group: remove-duplicate-${{ github.repository }}-${{ github.event.issue.number }}
+    cancel-in-progress: false
+
+jobs:
+    remove-duplicate-candidate:
+        if: |
+            github.event.issue.state == 'open' &&
+            github.event.issue.pull_request == null &&
+            contains(github.event.issue.labels.*.name, 'duplicate-candidate') &&
+            github.event.comment.user.type != 'Bot' &&
+            !startsWith(github.event.comment.body || '', '<!-- openhands-duplicate-check') &&
+            !startsWith(github.event.comment.body || '', '<!-- openhands-duplicate-veto')
+        runs-on: ubuntu-latest
+        steps:
+            - name: Remove duplicate-candidate label
+              uses: OpenHands/extensions/plugins/issue-duplicate-checker@v0.4.1
+              with:
+                  mode: remove-label
+                  github-token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}

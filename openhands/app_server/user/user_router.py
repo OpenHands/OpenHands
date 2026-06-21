@@ -4,11 +4,11 @@ from fastapi import APIRouter, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from openhands.app_server.config import depends_user_context
+from openhands.app_server.integrations.service_types import UserGitInfo
 from openhands.app_server.sandbox.session_auth import validate_session_key_ownership
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.integrations.service_types import UserGitInfo
 
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
 # is protected. The actual protection is provided by SetAuthCookieMiddleware
@@ -48,5 +48,11 @@ async def get_current_user_git_info(
     """Get the current authenticated user's metadata from the git provider."""
     user = await user_context.get_user_git_info()
     if user is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail='Not authenticated')
+        # Return 403 Forbidden (not 401) when user has no git provider connected
+        # 401 would trigger frontend logout, but the user IS authenticated - they just
+        # don't have a git provider (e.g., logged in via SAML without GitHub linked)
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail='Git provider not connected',
+        )
     return user

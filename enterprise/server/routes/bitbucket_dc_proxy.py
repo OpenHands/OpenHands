@@ -3,11 +3,22 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
 
-from openhands.utils.http_session import httpx_verify_option
+from openhands.app_server.utils.http_session import httpx_verify_option
 
 router = APIRouter(prefix='/bitbucket-dc-proxy')
 
 BITBUCKET_DC_TIMEOUT = 10  # seconds
+
+
+def _select_user_data(users: list[dict], username: str) -> dict | None:
+    username_folded = username.casefold()
+    for user in users:
+        for key in ('name', 'emailAddress', 'slug'):
+            value = user.get(key)
+            if isinstance(value, str) and value.casefold() == username_folded:
+                return user
+
+    return users[0] if users else None
 
 
 # Bitbucket Data Center is not an OIDC provider, so keycloak
@@ -42,8 +53,9 @@ async def userinfo(request: Request):
 
         # Step 2: get user details
         user_resp = await client.get(
-            f'{bitbucket_base_url}/rest/api/latest/users/{username}',
+            f'{bitbucket_base_url}/rest/api/latest/users',
             headers=headers,
+            params={'filter': username},
             timeout=BITBUCKET_DC_TIMEOUT,
         )
         if user_resp.status_code != 200:
@@ -51,7 +63,12 @@ async def userinfo(request: Request):
                 {'error': f'bitbucket_error: {user_resp.status_code}'},
                 status_code=user_resp.status_code,
             )
-        user_data = user_resp.json()
+        user_data = _select_user_data(user_resp.json().get('values', []), username)
+        if not user_data:
+            return JSONResponse(
+                {'error': f'user_not_found: {username}'},
+                status_code=404,
+            )
 
     return JSONResponse(
         {

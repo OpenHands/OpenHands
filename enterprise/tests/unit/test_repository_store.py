@@ -8,7 +8,7 @@ from storage.stored_repository import StoredRepository
 
 @pytest.fixture
 def repository_store():
-    return RepositoryStore(config=None)
+    return RepositoryStore()
 
 
 @pytest.mark.asyncio

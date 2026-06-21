@@ -3,10 +3,10 @@ from dataclasses import dataclass
 from fastapi import Request
 
 from openhands.app_server.errors import OpenHandsError
+from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
+from openhands.app_server.integrations.service_types import UserGitInfo
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
-from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
-from openhands.integrations.service_types import UserGitInfo
 from openhands.sdk.secret import SecretSource
 
 
@@ -18,6 +18,9 @@ class SpecifyUserContext(UserContext):
 
     async def get_user_id(self) -> str | None:
         return self.user_id
+
+    async def get_user_email(self) -> str | None:
+        return None
 
     async def get_user_info(self) -> UserInfo:
         raise NotImplementedError()

@@ -5,7 +5,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.middleware.cors import CORSMiddleware
 
-from openhands.server.middleware import LocalhostCORSMiddleware
+from openhands.app_server.middleware import (
+    InMemoryRateLimiter,
+    LocalhostCORSMiddleware,
+    RateLimitMiddleware,
+)
 
 
 @pytest.fixture
@@ -28,7 +32,7 @@ def test_localhost_cors_middleware_init_with_config():
         'https://test.com',
     ]
     with patch(
-        'openhands.server.middleware.get_global_config', return_value=mock_config
+        'openhands.app_server.middleware.get_global_config', return_value=mock_config
     ):
         app = FastAPI()
         middleware = LocalhostCORSMiddleware(app)
@@ -44,7 +48,7 @@ def test_localhost_cors_middleware_init_without_config():
     mock_config = MagicMock()
     mock_config.permitted_cors_origins = []
     with patch(
-        'openhands.server.middleware.get_global_config', return_value=mock_config
+        'openhands.app_server.middleware.get_global_config', return_value=mock_config
     ):
         app = FastAPI()
         middleware = LocalhostCORSMiddleware(app)
@@ -58,7 +62,7 @@ def test_localhost_cors_middleware_is_allowed_origin_localhost(app):
     mock_config = MagicMock()
     mock_config.permitted_cors_origins = []
     with patch(
-        'openhands.server.middleware.get_global_config', return_value=mock_config
+        'openhands.app_server.middleware.get_global_config', return_value=mock_config
     ):
         app.add_middleware(LocalhostCORSMiddleware)
         client = TestClient(app)
@@ -90,7 +94,7 @@ def test_localhost_cors_middleware_is_allowed_origin_non_localhost(app):
     mock_config = MagicMock()
     mock_config.permitted_cors_origins = ['https://example.com']
     with patch(
-        'openhands.server.middleware.get_global_config', return_value=mock_config
+        'openhands.app_server.middleware.get_global_config', return_value=mock_config
     ):
         app.add_middleware(LocalhostCORSMiddleware)
         client = TestClient(app)
@@ -112,7 +116,7 @@ def test_localhost_cors_middleware_missing_origin(app):
     mock_config = MagicMock()
     mock_config.permitted_cors_origins = []
     with patch(
-        'openhands.server.middleware.get_global_config', return_value=mock_config
+        'openhands.app_server.middleware.get_global_config', return_value=mock_config
     ):
         app.add_middleware(LocalhostCORSMiddleware)
         client = TestClient(app)
@@ -134,7 +138,7 @@ def test_localhost_cors_middleware_cors_parameters():
     mock_config = MagicMock()
     mock_config.permitted_cors_origins = []
     with patch(
-        'openhands.server.middleware.get_global_config', return_value=mock_config
+        'openhands.app_server.middleware.get_global_config', return_value=mock_config
     ):
         # We need to inspect the initialization parameters rather than attributes
         # since CORSMiddleware doesn't expose these as attributes
@@ -150,3 +154,29 @@ def test_localhost_cors_middleware_cors_parameters():
             assert kwargs['allow_credentials'] is True
             assert kwargs['allow_methods'] == ['*']
             assert kwargs['allow_headers'] == ['*']
+
+
+def test_rate_limit_middleware_exempts_sandbox_resume():
+    """Resume requests should not compete with bursty reopen polling."""
+    app = FastAPI()
+
+    @app.post('/api/v1/sandboxes/{sandbox_id}/resume')
+    def resume_sandbox(sandbox_id: str):
+        return {'sandbox_id': sandbox_id}
+
+    @app.get('/api/v1/app-conversations')
+    def batch_get_app_conversations(ids: str):
+        return {'ids': ids}
+
+    app.add_middleware(
+        RateLimitMiddleware,
+        rate_limiter=InMemoryRateLimiter(requests=0, seconds=60, sleep_seconds=0),
+    )
+    client = TestClient(app)
+
+    rate_limited_response = client.get('/api/v1/app-conversations?ids=conv-123')
+    resume_response = client.post('/api/v1/sandboxes/sandbox-123/resume')
+
+    assert rate_limited_response.status_code == 429
+    assert resume_response.status_code == 200
+    assert resume_response.json() == {'sandbox_id': 'sandbox-123'}

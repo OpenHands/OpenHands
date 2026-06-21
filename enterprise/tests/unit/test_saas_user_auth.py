@@ -15,6 +15,7 @@ from server.auth.auth_error import (
 from server.auth.saas_user_auth import (
     SaasUserAuth,
     get_api_key_from_header,
+    get_user_auth_from_keycloak_id,
     saas_user_auth_from_bearer,
     saas_user_auth_from_cookie,
     saas_user_auth_from_signed_token,
@@ -22,8 +23,9 @@ from server.auth.saas_user_auth import (
 from storage.api_key_store import ApiKeyValidationResult
 from storage.user_authorization import UserAuthorizationType
 
-from openhands.integrations.provider import ProviderToken, ProviderType
-from openhands.storage.data_models.secrets import Secrets
+from openhands.app_server.integrations.provider import ProviderToken, ProviderType
+from openhands.app_server.secrets.secrets_models import Secrets
+from openhands.app_server.user_auth.user_auth import AuthType
 
 
 @pytest.fixture
@@ -71,10 +73,14 @@ def mock_token_manager():
 
 @pytest.fixture
 def mock_config():
-    with patch('server.auth.saas_user_auth.get_config') as mock_get_config:
-        mock_cfg = mock_get_config.return_value
-        mock_cfg.jwt_secret.get_secret_value.return_value = 'test_secret'
-        yield mock_cfg
+    from openhands.app_server.services.jwt_service import JwtService
+    from openhands.app_server.utils.encryption_key import EncryptionKey
+
+    jwt_svc = JwtService(
+        keys=[EncryptionKey(kid='test', key=SecretStr('test_secret'), active=True)]
+    )
+    with patch('storage.encrypt_utils.get_jwt_service', return_value=jwt_svc):
+        yield
 
 
 @pytest.mark.asyncio
@@ -280,7 +286,9 @@ class TestGetProviderTokensBitbucketDCHost:
                 'bitbucket.company.com',
             ),
         ):
-            mock_tm.get_idp_token = AsyncMock(return_value='bdc_access_token')
+            mock_tm.get_idp_token_by_user_id = AsyncMock(
+                return_value='bdc_access_token'
+            )
             user_auth, mock_session = self._make_user_auth(mock_session_maker)
             user_auth.get_secrets = AsyncMock(return_value=None)
 
@@ -303,7 +311,9 @@ class TestGetProviderTokensBitbucketDCHost:
                 'bitbucket.company.com',
             ),
         ):
-            mock_tm.get_idp_token = AsyncMock(return_value='bdc_access_token')
+            mock_tm.get_idp_token_by_user_id = AsyncMock(
+                return_value='bdc_access_token'
+            )
             user_auth, mock_session = self._make_user_auth(mock_session_maker)
             user_secrets = Secrets(
                 provider_tokens={
@@ -331,7 +341,9 @@ class TestGetProviderTokensBitbucketDCHost:
             patch('server.auth.saas_user_auth.a_session_maker') as mock_session_maker,
             patch('server.auth.saas_user_auth.BITBUCKET_DATA_CENTER_HOST', ''),
         ):
-            mock_tm.get_idp_token = AsyncMock(return_value='bdc_access_token')
+            mock_tm.get_idp_token_by_user_id = AsyncMock(
+                return_value='bdc_access_token'
+            )
             user_auth, mock_session = self._make_user_auth(mock_session_maker)
             user_auth.get_secrets = AsyncMock(return_value=None)
 
@@ -364,22 +376,165 @@ async def test_get_provider_tokens_cached(mock_token_manager):
     mock_token_manager.get_idp_token.assert_not_called()
 
 
+# =============================================================================
+# API-key (bearer) decoupling from Keycloak offline sessions
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_user_email_lazy_loads_from_db():
+    """Bearer auth resolves email from the DB (User row), not from Keycloak."""
+    # Arrange
+    user_auth = SaasUserAuth(
+        user_id='test_user_id',
+        refresh_token=SecretStr(''),
+        auth_type=AuthType.BEARER,
+    )
+    mock_user = MagicMock()
+    mock_user.email = 'user@example.com'
+    mock_user.email_verified = True
+
+    with patch('server.auth.saas_user_auth.UserStore') as mock_user_store:
+        mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+
+        # Act
+        email = await user_auth.get_user_email()
+
+    # Assert
+    assert email == 'user@example.com'
+    assert user_auth.email_verified is True
+
+
+@pytest.mark.asyncio
+async def test_get_access_token_returns_none_for_bearer_when_session_revoked():
+    """Bearer get_access_token degrades to None when the offline session is gone.
+
+    A revoked offline session surfaces as a Keycloak refresh failure
+    (``invalid_grant``). For API-key auth that must not raise a 401 — the
+    Keycloak access token is optional.
+    """
+    # Arrange
+    from keycloak.exceptions import KeycloakPostError
+
+    offline_token = jwt.encode(
+        {'sub': 'test_user_id', 'exp': int(time.time()) + 3600},
+        'secret',
+        algorithm='HS256',
+    )
+    user_auth = SaasUserAuth(
+        user_id='test_user_id',
+        refresh_token=SecretStr(''),
+        auth_type=AuthType.BEARER,
+    )
+
+    with patch('server.auth.saas_user_auth.token_manager') as mock_tm:
+        mock_tm.load_offline_token = AsyncMock(return_value=offline_token)
+        mock_tm.refresh = AsyncMock(
+            side_effect=KeycloakPostError(
+                'invalid_grant: Offline user session not found'
+            )
+        )
+
+        # Act
+        result = await user_auth.get_access_token()
+
+    # Assert
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_provider_tokens_succeeds_without_offline_session():
+    """Provider tokens resolve by user_id with no offline session / refresh.
+
+    The core decoupling: a key whose Keycloak offline session is gone (empty
+    refresh token) still gets provider tokens, which come from the auth_tokens
+    table + provider OAuth — never a Keycloak refresh.
+    """
+    # Arrange
+    mock_auth_token = MagicMock()
+    mock_auth_token.identity_provider = 'github'
+    mock_auth_token.id = 'token-id-1'
+
+    mock_session = AsyncMock()
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [mock_auth_token]
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
+    user_auth = SaasUserAuth(
+        user_id='test_user_id',
+        refresh_token=SecretStr(''),
+        auth_type=AuthType.BEARER,
+    )
+    user_auth.get_secrets = AsyncMock(return_value=None)
+
+    with (
+        patch('server.auth.saas_user_auth.token_manager') as mock_tm,
+        patch('server.auth.saas_user_auth.a_session_maker') as mock_session_maker,
+    ):
+        mock_session_maker.return_value = mock_session
+        mock_tm.get_idp_token_by_user_id = AsyncMock(return_value='github_token')
+        mock_tm.refresh = AsyncMock()
+        mock_tm.load_offline_token = AsyncMock()
+
+        # Act
+        result = await user_auth.get_provider_tokens()
+
+    # Assert
+    assert result[ProviderType.GITHUB].token.get_secret_value() == 'github_token'
+    mock_tm.get_idp_token_by_user_id.assert_called_once_with(
+        'test_user_id', idp=ProviderType.GITHUB
+    )
+    mock_tm.refresh.assert_not_called()
+    mock_tm.load_offline_token.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'build',
+    [
+        lambda: SaasUserAuth.get_for_user('test_user_id'),
+        lambda: get_user_auth_from_keycloak_id('test_user_id'),
+    ],
+    ids=['get_for_user', 'get_user_auth_from_keycloak_id'],
+)
+async def test_background_user_auth_does_not_require_offline_session(build):
+    """Background/integration entry points build BEARER auth with no offline token."""
+    # Act
+    built = await build()
+
+    # Assert
+    assert built.user_id == 'test_user_id'
+    assert built.auth_type == AuthType.BEARER
+    assert built.refresh_token.get_secret_value() == ''
+
+
 @pytest.mark.asyncio
 async def test_get_user_settings_store():
     """Test that get_user_settings_store returns a settings store."""
-    with patch('server.auth.saas_user_auth.SaasSettingsStore') as mock_store_cls:
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    mock_user = MagicMock()
+    mock_user.current_org_id = org_id
+
+    with (
+        patch('server.auth.saas_user_auth.SaasSettingsStore') as mock_store_cls,
+        patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+    ):
         mock_store = MagicMock()
         mock_store_cls.return_value = mock_store
+        mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
 
         user_auth = SaasUserAuth(
-            user_id='test_user_id',
+            user_id=user_id,
             refresh_token=SecretStr('refresh_token'),
         )
 
         result = await user_auth.get_user_settings_store()
 
         assert result == mock_store
-        mock_store_cls.assert_called_once()
+        mock_store_cls.assert_called_once_with(user_id, effective_org_id=org_id)
         assert user_auth.settings_store == mock_store
 
 
@@ -459,17 +614,15 @@ async def test_get_instance_no_auth(mock_request):
 
 @pytest.mark.asyncio
 async def test_saas_user_auth_from_bearer_success():
-    """Test successful authentication from bearer token sets user_id and api_key_org_id."""
+    """A valid API key authenticates with no Keycloak round-trip.
+
+    Bearer auth must not load an offline token or call refresh(): the key
+    alone authenticates the request, so a missing/revoked offline session can
+    no longer turn a valid key into a 401.
+    """
     # Arrange
     mock_request = MagicMock()
     mock_request.headers = {'Authorization': 'Bearer test_api_key'}
-
-    # Create a valid offline token (refresh token)
-    offline_token = jwt.encode(
-        {'sub': 'test_user_id', 'exp': int(time.time()) + 3600},
-        'secret',
-        algorithm='HS256',
-    )
 
     mock_org_id = uuid.uuid4()
     mock_validation_result = ApiKeyValidationResult(
@@ -488,22 +641,23 @@ async def test_saas_user_auth_from_bearer_success():
             return_value=mock_validation_result
         )
         mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+        mock_token_manager.load_offline_token = AsyncMock()
+        mock_token_manager.refresh = AsyncMock()
 
-        mock_token_manager.load_offline_token = AsyncMock(return_value=offline_token)
-        mock_token_manager.refresh = AsyncMock(
-            return_value=create_mock_jwt_tokens('test_user_id')
-        )
-
+        # Act
         result = await saas_user_auth_from_bearer(mock_request)
 
+        # Assert
         assert isinstance(result, SaasUserAuth)
         assert result.user_id == 'test_user_id'
         assert result.api_key_org_id == mock_org_id
         assert result.api_key_id == 42
         assert result.api_key_name == 'Test Key'
+        assert result.auth_type == AuthType.BEARER
         mock_api_key_store.validate_api_key.assert_called_once_with('test_api_key')
-        mock_token_manager.load_offline_token.assert_called_once_with('test_user_id')
-        mock_token_manager.refresh.assert_called_once_with(offline_token)
+        # Decoupled from Keycloak: no offline-session load, no refresh.
+        mock_token_manager.load_offline_token.assert_not_called()
+        mock_token_manager.refresh.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -910,3 +1064,255 @@ async def test_saas_user_auth_from_signed_token_domain_blocking_inactive(mock_co
         mock_user_auth_store.get_authorization_type.assert_called_once_with(
             'user@colsch.us', None
         )
+
+
+# =============================================================================
+# Tests for OPENHANDS_API_KEY injection
+# =============================================================================
+
+
+class TestOpenHandsApiKey:
+    """Tests for OPENHANDS_API_KEY system secret generation and injection."""
+
+    @pytest.mark.asyncio
+    async def test_get_openhands_api_key_creates_system_key(self):
+        """Test that _get_openhands_api_key creates a system key via ApiKeyStore."""
+        user_id = 'test_user_id'
+        org_id = uuid.uuid4()
+        expected_api_key = 'sk-oh-test-key-12345'
+
+        # Create mock user
+        mock_user = MagicMock()
+        mock_user.current_org_id = org_id
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+
+            mock_api_key_store = MagicMock()
+            mock_api_key_store.get_or_create_system_api_key = AsyncMock(
+                return_value=expected_api_key
+            )
+            mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+
+            # Act
+            result = await user_auth._get_openhands_api_key()
+
+            # Assert
+            assert result == expected_api_key
+            mock_user_store.get_user_by_id.assert_called_once_with(user_id)
+            mock_api_key_store.get_or_create_system_api_key.assert_called_once_with(
+                user_id=user_id,
+                org_id=org_id,
+                name='OPENHANDS_API_KEY',
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_openhands_api_key_raises_for_missing_user(self):
+        """Test that _get_openhands_api_key raises ValueError if user not found.
+
+        The error message now collapses ``user not found`` and
+        ``user without org`` into a single ``has no current organization``
+        case, since both ultimately mean we cannot resolve an effective
+        org for the request.
+        """
+        user_id = 'nonexistent_user'
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with patch('server.auth.saas_user_auth.UserStore') as mock_user_store:
+            mock_user_store.get_user_by_id = AsyncMock(return_value=None)
+
+            # Act & Assert
+            with pytest.raises(
+                ValueError, match=f'User {user_id} has no current organization'
+            ):
+                await user_auth._get_openhands_api_key()
+
+    @pytest.mark.asyncio
+    async def test_get_openhands_api_key_raises_for_user_without_org(self):
+        """Test that _get_openhands_api_key raises ValueError if user has no org."""
+        user_id = 'test_user_id'
+
+        # Create mock user with no current organization
+        mock_user = MagicMock()
+        mock_user.current_org_id = None
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with patch('server.auth.saas_user_auth.UserStore') as mock_user_store:
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+
+            # Act & Assert
+            with pytest.raises(ValueError, match='has no current organization'):
+                await user_auth._get_openhands_api_key()
+
+    @pytest.mark.asyncio
+    async def test_get_secrets_includes_openhands_api_key(self):
+        """Test that get_secrets injects OPENHANDS_API_KEY into custom_secrets."""
+        user_id = 'test_user_id'
+        org_id = uuid.uuid4()
+        expected_api_key = 'sk-oh-test-key-12345'
+
+        # Create mock user
+        mock_user = MagicMock()
+        mock_user.current_org_id = org_id
+
+        # Create mock secrets from store (without OPENHANDS_API_KEY)
+        mock_stored_secrets = Secrets(
+            custom_secrets={
+                'MY_SECRET': {
+                    'secret': 'my-secret-value',
+                    'description': 'My custom secret',
+                }
+            }
+        )
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls,
+            patch(
+                'server.auth.saas_user_auth.SaasSecretsStore'
+            ) as mock_secrets_store_cls,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+
+            mock_api_key_store = MagicMock()
+            mock_api_key_store.get_or_create_system_api_key = AsyncMock(
+                return_value=expected_api_key
+            )
+            mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+
+            mock_secrets_store = MagicMock()
+            mock_secrets_store.load = AsyncMock(return_value=mock_stored_secrets)
+            mock_secrets_store_cls.get_instance = AsyncMock(
+                return_value=mock_secrets_store
+            )
+
+            # Act
+            result = await user_auth.get_secrets()
+
+            # Assert
+            assert result is not None
+            assert 'OPENHANDS_API_KEY' in result.custom_secrets
+            assert (
+                result.custom_secrets['OPENHANDS_API_KEY'].secret.get_secret_value()
+                == expected_api_key
+            )
+            assert (
+                'system-managed'
+                in result.custom_secrets['OPENHANDS_API_KEY'].description
+            )
+            # Original secret should still be present
+            assert 'MY_SECRET' in result.custom_secrets
+
+    @pytest.mark.asyncio
+    async def test_get_secrets_caches_result(self):
+        """Test that get_secrets caches the result and doesn't call store again."""
+        user_id = 'test_user_id'
+        org_id = uuid.uuid4()
+        expected_api_key = 'sk-oh-test-key-12345'
+
+        mock_user = MagicMock()
+        mock_user.current_org_id = org_id
+
+        mock_stored_secrets = Secrets()
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls,
+            patch(
+                'server.auth.saas_user_auth.SaasSecretsStore'
+            ) as mock_secrets_store_cls,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+
+            mock_api_key_store = MagicMock()
+            mock_api_key_store.get_or_create_system_api_key = AsyncMock(
+                return_value=expected_api_key
+            )
+            mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+
+            mock_secrets_store = MagicMock()
+            mock_secrets_store.load = AsyncMock(return_value=mock_stored_secrets)
+            mock_secrets_store_cls.get_instance = AsyncMock(
+                return_value=mock_secrets_store
+            )
+
+            # Act - call get_secrets twice
+            result1 = await user_auth.get_secrets()
+            result2 = await user_auth.get_secrets()
+
+            # Assert - store.load should only be called once (caching)
+            assert result1 is result2
+            mock_secrets_store.load.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_secrets_handles_empty_stored_secrets(self):
+        """Test that get_secrets works when store returns empty Secrets."""
+        user_id = 'test_user_id'
+        org_id = uuid.uuid4()
+        expected_api_key = 'sk-oh-test-key-12345'
+
+        mock_user = MagicMock()
+        mock_user.current_org_id = org_id
+
+        # Empty secrets from store
+        mock_stored_secrets = Secrets()
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('refresh_token'),
+        )
+
+        with (
+            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
+            patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls,
+            patch(
+                'server.auth.saas_user_auth.SaasSecretsStore'
+            ) as mock_secrets_store_cls,
+        ):
+            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+
+            mock_api_key_store = MagicMock()
+            mock_api_key_store.get_or_create_system_api_key = AsyncMock(
+                return_value=expected_api_key
+            )
+            mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+
+            mock_secrets_store = MagicMock()
+            mock_secrets_store.load = AsyncMock(return_value=mock_stored_secrets)
+            mock_secrets_store_cls.get_instance = AsyncMock(
+                return_value=mock_secrets_store
+            )
+
+            # Act
+            result = await user_auth.get_secrets()
+
+            # Assert - should have only OPENHANDS_API_KEY
+            assert result is not None
+            assert 'OPENHANDS_API_KEY' in result.custom_secrets
+            assert len(result.custom_secrets) == 1

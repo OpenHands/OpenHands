@@ -20,7 +20,7 @@ class TestGetCurrentUserGitInfo:
 
     async def test_returns_user_git_info_when_authenticated(self, mock_user_context):
         """Authenticated user with git info returns the git info."""
-        from openhands.integrations.service_types import UserGitInfo
+        from openhands.app_server.integrations.service_types import UserGitInfo
 
         expected_git_info = UserGitInfo(
             id='user-123',
@@ -47,7 +47,7 @@ class TestGetCurrentUserGitInfo:
 
     async def test_returns_user_git_info_with_minimal_fields(self, mock_user_context):
         """User git info with only required fields returns successfully."""
-        from openhands.integrations.service_types import UserGitInfo
+        from openhands.app_server.integrations.service_types import UserGitInfo
 
         minimal_git_info = UserGitInfo(
             id='user-456',
@@ -67,8 +67,13 @@ class TestGetCurrentUserGitInfo:
         assert result.name is None
         assert result.email is None
 
-    async def test_raises_401_when_user_git_info_is_none(self, mock_user_context):
-        """When get_user_git_info returns None, raises 401 Unauthorized."""
+    async def test_raises_403_when_user_git_info_is_none(self, mock_user_context):
+        """When get_user_git_info returns None, raises 403 Forbidden.
+
+        We use 403 (not 401) because the user IS authenticated - they just don't
+        have a git provider connected (e.g., logged in via SAML without GitHub linked).
+        Using 401 would trigger frontend logout behavior.
+        """
         from fastapi import HTTPException
 
         mock_user_context.get_user_git_info = AsyncMock(return_value=None)
@@ -78,15 +83,15 @@ class TestGetCurrentUserGitInfo:
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user_git_info(user_context=mock_user_context)
 
-        assert exc_info.value.status_code == 401
-        assert 'Not authenticated' in exc_info.value.detail
+        assert exc_info.value.status_code == 403
+        assert 'Git provider not connected' in exc_info.value.detail
         mock_user_context.get_user_git_info.assert_called_once()
 
     async def test_raises_401_when_user_git_info_returns_none_for_company(
         self, mock_user_context
     ):
         """Ensure None values in optional fields don't trigger 401."""
-        from openhands.integrations.service_types import UserGitInfo
+        from openhands.app_server.integrations.service_types import UserGitInfo
 
         git_info = UserGitInfo(
             id='user-789',
@@ -123,7 +128,7 @@ class TestUserGitInfoModel:
 
     def test_user_git_info_full_fields(self):
         """Test UserGitInfo with all fields populated."""
-        from openhands.integrations.service_types import UserGitInfo
+        from openhands.app_server.integrations.service_types import UserGitInfo
 
         git_info = UserGitInfo(
             id='full-user',
@@ -143,7 +148,7 @@ class TestUserGitInfoModel:
 
     def test_user_git_info_model_dump_json(self):
         """Test UserGitInfo serializes correctly to JSON."""
-        from openhands.integrations.service_types import UserGitInfo
+        from openhands.app_server.integrations.service_types import UserGitInfo
 
         git_info = UserGitInfo(
             id='json-user',
@@ -164,7 +169,7 @@ class TestUserGitInfoModel:
 
     def test_user_git_info_model_dump(self):
         """Test UserGitInfo model_dump works correctly."""
-        from openhands.integrations.service_types import UserGitInfo
+        from openhands.app_server.integrations.service_types import UserGitInfo
 
         git_info = UserGitInfo(
             id='dump-user',

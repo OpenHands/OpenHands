@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "last-release-sha": "94c60d78545895e198bb1df9d9463c96e2e2b7b2",
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "changelog-type": "github",
+      "skip-changelog": true,
+      "include-component-in-tag": false,
+      "include-v-in-tag": false,
+      "include-v-in-release-name": false,
+      "exclude-paths": ["enterprise"],
+      "extra-files": [
+        { "type": "toml", "path": "pyproject.toml", "jsonpath": "$.tool.poetry.version" },
+        { "type": "json", "path": "frontend/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "frontend/package-lock.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "frontend/package-lock.json", "jsonpath": "$.packages[''].version" }
+      ]
+    }
+  }
+}

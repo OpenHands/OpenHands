@@ -48,7 +48,6 @@ class TestGitlabOrgRouting(TestCase):
             description='',
             previous_comments=[],
             is_mr=False,
-            v1_enabled=True,
         )
 
     @pytest.mark.asyncio

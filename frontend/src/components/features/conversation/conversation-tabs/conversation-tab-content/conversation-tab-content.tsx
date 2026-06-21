@@ -13,7 +13,6 @@ import { useConversationId } from "#/hooks/use-conversation-id";
 // Lazy load all tab components
 const EditorTab = lazy(() => import("#/routes/changes-tab"));
 const BrowserTab = lazy(() => import("#/routes/browser-tab"));
-const ServedTab = lazy(() => import("#/routes/served-tab"));
 const VSCodeTab = lazy(() => import("#/routes/vscode-tab"));
 const PlannerTab = lazy(() => import("#/routes/planner-tab"));
 const TaskListTab = lazy(() => import("#/routes/task-list-tab"));
@@ -30,10 +29,6 @@ const TAB_CONFIG = {
   browser: {
     component: BrowserTab,
     titleKey: I18nKey.COMMON$BROWSER,
-  },
-  served: {
-    component: ServedTab,
-    titleKey: I18nKey.COMMON$APP,
   },
   vscode: {
     component: VSCodeTab,
@@ -55,7 +50,8 @@ export function ConversationTabContent() {
   const { t } = useTranslation();
 
   const activeTab = useMemo(
-    () => TAB_CONFIG[selectedTab ?? "editor"],
+    () =>
+      TAB_CONFIG[selectedTab as keyof typeof TAB_CONFIG] ?? TAB_CONFIG.editor,
     [selectedTab],
   );
 

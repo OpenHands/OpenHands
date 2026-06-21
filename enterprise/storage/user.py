@@ -3,13 +3,14 @@ SQLAlchemy model for User.
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from storage.base import Base
+from storage.encrypt_utils import EncryptedJSON
 
 if TYPE_CHECKING:
     from storage.org import Org
@@ -19,7 +20,10 @@ if TYPE_CHECKING:
 
 
 class User(Base):
-    """User model with organizational relationships."""
+    """User model with organizational relationships.
+
+    This model satisfies the UserBase protocol via structural typing.
+    """
 
     __tablename__ = 'user'
 
@@ -36,6 +40,9 @@ class User(Base):
     git_user_email: Mapped[str | None] = mapped_column(String, nullable=True)
     sandbox_grouping_strategy: Mapped[str | None] = mapped_column(String, nullable=True)
     disabled_skills: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    llm_profiles: Mapped[dict[str, Any] | None] = mapped_column(
+        EncryptedJSON, nullable=True
+    )
     onboarding_completed: Mapped[bool | None] = mapped_column(
         nullable=True, default=False
     )

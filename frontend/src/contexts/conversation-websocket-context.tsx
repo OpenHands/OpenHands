@@ -8,9 +8,11 @@ import React, {
   useRef,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { usePostHog } from "posthog-js/react";
 import { useWebSocket, WebSocketHookOptions } from "#/hooks/use-websocket";
 import { useEventStore } from "#/stores/use-event-store";
+import { useModelStore } from "#/stores/model-store";
+import { getRenderedV1Events } from "#/components/v1/chat/event-content-helpers/should-render-event";
+import { updateConversationLlmModelInCache } from "#/hooks/mutation/conversation-mutation-utils";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useV1ConversationStateStore } from "#/stores/v1-conversation-state-store";
@@ -25,6 +27,7 @@ import {
   isFullStateConversationStateUpdateEvent,
   isAgentStatusConversationStateUpdateEvent,
   isStatsConversationStateUpdateEvent,
+  isSwitchLLMObservationEvent,
   isExecuteBashActionEvent,
   isExecuteBashObservationEvent,
   isDisplayableErrorEvent,
@@ -47,7 +50,6 @@ import EventService from "#/api/event-service/event-service.api";
 import PendingMessageService from "#/api/pending-message-service/pending-message-service.api";
 import { useConversationStore } from "#/stores/conversation-store";
 import { isBudgetOrCreditError, trackError } from "#/utils/error-handler";
-import { useTracking } from "#/hooks/use-tracking";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore from "#/stores/metrics-store";
 import { I18nKey } from "#/i18n/declaration";
@@ -101,14 +103,12 @@ export function ConversationWebSocketProvider({
   const hasConnectedRefMain = React.useRef(false);
   const hasConnectedRefPlanning = React.useRef(false);
 
-  const posthog = usePostHog();
   const queryClient = useQueryClient();
   const { addEvent } = useEventStore();
   const { setErrorMessage, removeErrorMessage } = useErrorMessageStore();
   const { removeOptimisticUserMessage } = useOptimisticUserMessageStore();
   const { setExecutionStatus } = useV1ConversationStateStore();
   const { appendInput, appendOutput } = useCommandStore();
-  const { trackCreditLimitReached } = useTracking();
 
   // History loading state - separate per connection
   const [isLoadingHistoryMain, setIsLoadingHistoryMain] = useState(true);
@@ -337,20 +337,29 @@ export function ConversationWebSocketProvider({
     latestPlanningFileEventRef.current = null;
   }, [conversationId]);
 
-  const { data: preloadedEvents } = useConversationHistory(conversationId);
+  const { data: preloadedEvents, isFetched: isHistoryFetched } =
+    useConversationHistory(conversationId);
 
   useEffect(() => {
+    // Don't do anything until the history query has completed
+    // This prevents prematurely setting loading to false before data is available
+    if (!isHistoryFetched) {
+      return;
+    }
+
+    // If no events (empty conversation or query returned empty), just stop loading
     if (!preloadedEvents || preloadedEvents.length === 0) {
       setIsLoadingHistoryMain(false);
       return;
     }
 
+    // Add all preloaded events to the store
     for (const event of preloadedEvents) {
       addEvent(event);
     }
 
     setIsLoadingHistoryMain(false);
-  }, [preloadedEvents, addEvent]);
+  }, [preloadedEvents, isHistoryFetched, addEvent]);
 
   // Separate message handlers for each connection
   const handleMainMessage = useCallback(
@@ -388,13 +397,9 @@ export function ConversationWebSocketProvider({
                 eventId: errorEvent.id,
                 errorCode: errorEvent.code,
               },
-              posthog,
             });
             if (isBudgetOrCreditError(errorEvent.detail)) {
               setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
-              trackCreditLimitReached({
-                conversationId: conversationId || "unknown",
-              });
             } else {
               setErrorMessage(errorEvent.detail);
             }
@@ -412,9 +417,13 @@ export function ConversationWebSocketProvider({
                 toolName: event.tool_name,
                 toolCallId: event.tool_call_id,
               },
-              posthog,
             });
-            setErrorMessage(event.error);
+            // Use friendly i18n message for budget/credit errors instead of raw error
+            if (isBudgetOrCreditError(event.error)) {
+              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+            } else {
+              setErrorMessage(event.error);
+            }
           }
 
           // Clear optimistic user message when a user message is confirmed
@@ -448,6 +457,45 @@ export function ConversationWebSocketProvider({
             }
             if (isStatsConversationStateUpdateEvent(event)) {
               updateMetricsFromStats(event);
+            }
+          }
+
+          // The agent switched its own LLM (via the built-in switch_llm tool).
+          // Mirror the manual-switch UX: record the new profile (so the
+          // switch-profile button flips by name, unambiguous even when several
+          // profiles share a model string) and patch the running model into the
+          // conversation cache so the chat header updates instantly.
+          //
+          // We deliberately do NOT invalidate the conversation query here. The
+          // app-server only learns of the switch via the webhook, which is
+          // batched (``event_buffer_size`` / ``flush_delay``), and the
+          // conversation endpoint reports the *persisted* ``llm_model`` (not the
+          // sandbox's live model). An immediate refetch would therefore read the
+          // pre-switch model and clobber the patch above. The persisted value
+          // catches up on the next poll once the webhook has flushed.
+          if (
+            conversationId &&
+            isSwitchLLMObservationEvent(event) &&
+            !event.observation.is_error
+          ) {
+            const last = getRenderedV1Events(
+              useEventStore.getState().uiEvents,
+            ).at(-1);
+            const anchorEventId = last ? String(last.id) : null;
+            useModelStore
+              .getState()
+              .recordSwitch(
+                conversationId,
+                anchorEventId,
+                event.observation.profile_name,
+              );
+
+            if (event.observation.active_model) {
+              updateConversationLlmModelInCache(
+                queryClient,
+                conversationId,
+                event.observation.active_model,
+              );
             }
           }
 
@@ -500,8 +548,6 @@ export function ConversationWebSocketProvider({
       appendInput,
       appendOutput,
       updateMetricsFromStats,
-      trackCreditLimitReached,
-      posthog,
     ],
   );
 
@@ -545,13 +591,9 @@ export function ConversationWebSocketProvider({
                 eventId: errorEvent.id,
                 errorCode: errorEvent.code,
               },
-              posthog,
             });
             if (isBudgetOrCreditError(errorEvent.detail)) {
               setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
-              trackCreditLimitReached({
-                conversationId: conversationId || "unknown",
-              });
             } else {
               setErrorMessage(errorEvent.detail);
             }
@@ -569,9 +611,13 @@ export function ConversationWebSocketProvider({
                 toolName: event.tool_name,
                 toolCallId: event.tool_call_id,
               },
-              posthog,
             });
-            setErrorMessage(event.error);
+            // Use friendly i18n message for budget/credit errors instead of raw error
+            if (isBudgetOrCreditError(event.error)) {
+              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+            } else {
+              setErrorMessage(event.error);
+            }
           }
 
           // Clear optimistic user message when a user message is confirmed
@@ -683,8 +729,6 @@ export function ConversationWebSocketProvider({
       readConversationFile,
       setPlanContent,
       updateMetricsFromStats,
-      trackCreditLimitReached,
-      posthog,
     ],
   );
 

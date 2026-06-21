@@ -15,9 +15,9 @@ from server.routes.integration.gitlab import gitlab_events
 @pytest.mark.asyncio
 @patch('server.routes.integration.gitlab.verify_gitlab_signature')
 @patch('server.routes.integration.gitlab.gitlab_manager')
-@patch('server.routes.integration.gitlab.sio')
+@patch('server.routes.integration.gitlab.get_redis_client_async')
 async def test_gitlab_events_deduplication_with_object_id(
-    mock_sio, mock_gitlab_manager, mock_verify_signature
+    mock_get_redis_client_async, mock_gitlab_manager, mock_verify_signature
 ):
     """Test that duplicate GitLab events are deduplicated using object_attributes.id."""
     # Setup mocks
@@ -26,7 +26,7 @@ async def test_gitlab_events_deduplication_with_object_id(
 
     # Mock Redis
     mock_redis = AsyncMock()
-    mock_sio.manager.redis = mock_redis
+    mock_get_redis_client_async.return_value = mock_redis
 
     # First request - Redis returns True (key was set)
     mock_redis.set.return_value = True
@@ -90,9 +90,9 @@ async def test_gitlab_events_deduplication_with_object_id(
 @pytest.mark.asyncio
 @patch('server.routes.integration.gitlab.verify_gitlab_signature')
 @patch('server.routes.integration.gitlab.gitlab_manager')
-@patch('server.routes.integration.gitlab.sio')
+@patch('server.routes.integration.gitlab.get_redis_client_async')
 async def test_gitlab_events_deduplication_without_object_id(
-    mock_sio, mock_gitlab_manager, mock_verify_signature
+    mock_get_redis_client_async, mock_gitlab_manager, mock_verify_signature
 ):
     """Test that GitLab events without object_attributes.id are deduplicated using hash of payload."""
     # Setup mocks
@@ -101,7 +101,7 @@ async def test_gitlab_events_deduplication_without_object_id(
 
     # Mock Redis
     mock_redis = AsyncMock()
-    mock_sio.manager.redis = mock_redis
+    mock_get_redis_client_async.return_value = mock_redis
 
     # First request - Redis returns True (key was set)
     mock_redis.set.return_value = True
@@ -170,9 +170,9 @@ async def test_gitlab_events_deduplication_without_object_id(
 @pytest.mark.asyncio
 @patch('server.routes.integration.gitlab.verify_gitlab_signature')
 @patch('server.routes.integration.gitlab.gitlab_manager')
-@patch('server.routes.integration.gitlab.sio')
+@patch('server.routes.integration.gitlab.get_redis_client_async')
 async def test_gitlab_events_different_payloads_not_deduplicated(
-    mock_sio, mock_gitlab_manager, mock_verify_signature
+    mock_get_redis_client_async, mock_gitlab_manager, mock_verify_signature
 ):
     """Test that different GitLab events are not deduplicated."""
     # Setup mocks
@@ -181,7 +181,7 @@ async def test_gitlab_events_different_payloads_not_deduplicated(
 
     # Mock Redis
     mock_redis = AsyncMock()
-    mock_sio.manager.redis = mock_redis
+    mock_get_redis_client_async.return_value = mock_redis
     mock_redis.set.return_value = True  # Always return True for this test
 
     # First payload with ID 123
@@ -240,9 +240,9 @@ async def test_gitlab_events_different_payloads_not_deduplicated(
 @pytest.mark.asyncio
 @patch('server.routes.integration.gitlab.verify_gitlab_signature')
 @patch('server.routes.integration.gitlab.gitlab_manager')
-@patch('server.routes.integration.gitlab.sio')
+@patch('server.routes.integration.gitlab.get_redis_client_async')
 async def test_gitlab_events_multiple_identical_payloads_deduplicated(
-    mock_sio, mock_gitlab_manager, mock_verify_signature
+    mock_get_redis_client_async, mock_gitlab_manager, mock_verify_signature
 ):
     """Test that multiple identical GitLab events are properly deduplicated."""
     # Setup mocks
@@ -251,7 +251,7 @@ async def test_gitlab_events_multiple_identical_payloads_deduplicated(
 
     # Mock Redis
     mock_redis = AsyncMock()
-    mock_sio.manager.redis = mock_redis
+    mock_get_redis_client_async.return_value = mock_redis
 
     # Create a payload with object_attributes.id
     payload = {

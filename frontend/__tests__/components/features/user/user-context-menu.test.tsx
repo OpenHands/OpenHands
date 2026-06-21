@@ -23,10 +23,10 @@ vi.mock("#/hooks/use-breakpoint", () => ({
   useBreakpoint: vi.fn(() => false), // Default to desktop (not mobile)
 }));
 
-// Mock useTracking hook for CTA
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
+vi.mock("#/hooks/use-client-analytics", () => ({
+  useClientAnalytics: () => ({
     trackSaasSelfhostedInquiry: vi.fn(),
+    trackEnterpriseLeadFormSubmitted: vi.fn(),
   }),
 }));
 
@@ -186,6 +186,7 @@ describe("UserContextMenu", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       }),
     );
@@ -206,7 +207,8 @@ describe("UserContextMenu", () => {
         item.to !== "/settings/org" &&
         item.to !== "/settings/billing" &&
         !item.to.startsWith("/settings/org-defaults") &&
-        !personalLlmPaths.has(item.to),
+        !personalLlmPaths.has(item.to) &&
+        true,
     );
 
     await waitFor(() => {
@@ -229,6 +231,7 @@ describe("UserContextMenu", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       }),
     );
@@ -240,7 +243,9 @@ describe("UserContextMenu", () => {
     // Wait for config to load and verify that navigation items are rendered (except organization-members/org which are filtered out)
     const expectedItems = SAAS_NAV_ITEMS.filter(
       (item) =>
-        item.to !== "/settings/org-members" && item.to !== "/settings/org",
+        item.to !== "/settings/org-members" &&
+        item.to !== "/settings/org" &&
+        true,
     );
 
     await waitFor(() => {
@@ -279,6 +284,7 @@ describe("UserContextMenu", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -343,6 +349,7 @@ describe("UserContextMenu", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -372,6 +379,7 @@ describe("UserContextMenu", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -477,6 +485,7 @@ describe("UserContextMenu", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       }),
     );
@@ -719,6 +728,7 @@ describe("UserContextMenu", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
+        enable_onboarding: false,
         },
       }),
     );
@@ -772,6 +782,7 @@ describe("UserContextMenu", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -812,6 +823,7 @@ describe("UserContextMenu", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );
@@ -841,6 +853,7 @@ describe("UserContextMenu", () => {
             hide_users_page: false,
             hide_billing_page: false,
             hide_integrations_page: false,
+        enable_onboarding: false,
           },
         }),
       );

@@ -325,7 +325,7 @@ export function MCPServerForm({
               testId="timeout-input"
               name="timeout"
               type="number"
-              label="Timeout (seconds)"
+              label={t(I18nKey.SETTINGS$MCP_TIMEOUT_LABEL)}
               className="w-full max-w-[680px]"
               showOptionalTag
               defaultValue={server?.timeout?.toString() || ""}

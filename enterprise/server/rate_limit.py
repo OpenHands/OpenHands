@@ -19,7 +19,7 @@ from starlette.applications import Request, Response, Starlette
 from starlette.exceptions import HTTPException
 from storage.redis import get_redis_authed_url
 
-from openhands.core.logger import openhands_logger as logger
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 def setup_rate_limit_handler(app: Starlette):
@@ -127,7 +127,7 @@ def _rate_limit_exceeded_handler(request: Request, exc: Exception) -> Response:
     logger.info(exc.__class__.__name__)
     if isinstance(exc, RateLimitException):
         response = JSONResponse(
-            {'error': f'Rate limit exceeded: { exc.detail}'}, status_code=429
+            {'error': f'Rate limit exceeded: {exc.detail}'}, status_code=429
         )
         if exc.result:
             exc.result.add_headers(response)
