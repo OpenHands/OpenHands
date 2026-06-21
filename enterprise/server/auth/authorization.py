@@ -316,10 +316,11 @@ def require_permission(permission: Permission):
                 detail='User is not a member of this organization',
             )
 
-        # Enforce API Key Scopes
+        # Enforce API Key Scopes only when authenticated via API key
+        # (get_api_key_org_id_from_request returns None for cookie-authenticated requests)
         user_auth = getattr(request.state, 'user_auth', None)
         api_key_scopes = getattr(user_auth, 'api_key_scopes', None)
-        if api_key_scopes:
+        if api_key_org_id is not None and api_key_scopes:
             from openhands.app_server.user_auth.scope_manifest import SCOPE_MANIFEST
 
             has_scope = False
@@ -426,9 +427,9 @@ async def require_financial_data_access(
         )
         return user_id
 
-    # Enforce API Key Scopes
+    # Enforce API Key Scopes only when authenticated via API key
     api_key_scopes = getattr(user_auth, 'api_key_scopes', None)
-    if api_key_scopes:
+    if api_key_org_id is not None and api_key_scopes:
         from openhands.app_server.user_auth.scope_manifest import SCOPE_MANIFEST
 
         has_scope = False
