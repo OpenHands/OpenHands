@@ -1,0 +1,18 @@
+# First-party OpenHands workflow/action refs that intentionally remain mutable.
+# Third-party non-GitHub actions must be pinned to full 40-character SHAs.
+allowed_mutable_actions:
+  - path: .github/workflows/pr.yml
+    uses: OpenHands/release-actions/.github/workflows/pr-title.yml@main
+    reason: Reusable workflow owned by OpenHands; keep on main so release policy fixes apply immediately across OpenHands repos.
+  - path: .github/workflows/release.yml
+    uses: OpenHands/release-actions/.github/workflows/release-please.yml@main
+    reason: Reusable workflow owned by OpenHands; keep on main so release automation updates apply immediately across OpenHands repos.
+  - path: .github/workflows/qa-changes-by-openhands.yml
+    uses: OpenHands/extensions/plugins/qa-changes@main
+    reason: First-party OpenHands plugin; keep on main so QA policy and prompt fixes roll forward without per-repo SHA bumps.
+  - path: .github/workflows/issue-opened.yml
+    uses: OpenHands/extensions/plugins/issue-duplicate-checker@v0.4.1
+    reason: First-party OpenHands plugin tag; intentionally versioned by plugin release until the owning repo publishes immutable update guidance.
+  - path: .github/workflows/remove-duplicate-candidate-label.yml
+    uses: OpenHands/extensions/plugins/issue-duplicate-checker@v0.4.1
+    reason: First-party OpenHands plugin tag; intentionally versioned by plugin release until the owning repo publishes immutable update guidance.
