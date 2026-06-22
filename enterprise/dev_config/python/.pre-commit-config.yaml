@@ -55,8 +55,9 @@ repos:
           - sqlalchemy>=2.0
         # Use -p (package) to avoid dual module name conflict when using MYPYPATH
         # MYPYPATH=enterprise allows resolving bare imports like "from integrations.xxx"
+        # --explicit-package-bases ensures mypy uses the package structure as-is
         # Note: tests package excluded to avoid conflict with core openhands tests
-        entry: bash -c 'MYPYPATH=enterprise mypy --config-file enterprise/dev_config/python/mypy.ini -p integrations -p server -p storage -p sync'
+        entry: bash -c 'MYPYPATH=enterprise mypy --config-file enterprise/dev_config/python/mypy.ini --explicit-package-bases -p integrations -p server -p storage -p sync'
         always_run: true
         pass_filenames: false
         files: ^enterprise/
