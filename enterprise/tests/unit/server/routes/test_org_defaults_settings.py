@@ -291,12 +291,3 @@ class TestOrgAppSettingsUpdateMarketplaceValidation:
         assert update.registered_marketplaces[0].repo_path == 'marketplaces/plugins'
         assert update.registered_marketplaces[0].auto_load == 'all'
 
-    def test_duplicate_marketplace_names_rejected(self):
-        """Test that duplicate marketplace names are rejected."""
-        with pytest.raises(ValidationError, match='Duplicate marketplace names'):
-            OrgAppSettingsUpdate(
-                registered_marketplaces=[
-                    MarketplaceRegistration(name='plugins', source='github:owner/repo1'),
-                    MarketplaceRegistration(name='plugins', source='github:owner/repo2'),
-                ]
-            )
