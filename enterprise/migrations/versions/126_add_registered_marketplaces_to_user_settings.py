@@ -23,8 +23,7 @@ depends_on: Union[str, None] = None
 
 def upgrade() -> None:
     op.add_column(
-        'user_settings',
-        sa.Column('registered_marketplaces', sa.JSON(), nullable=True)
+        'user_settings', sa.Column('registered_marketplaces', sa.JSON(), nullable=True)
     )
     op.add_column(
         'user_settings',

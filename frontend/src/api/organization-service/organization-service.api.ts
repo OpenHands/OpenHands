@@ -8,7 +8,7 @@ import {
   OrganizationUserRole,
   UpdateOrganizationMemberParams,
 } from "#/types/org";
-import { Settings } from "#/types/settings";
+import { Settings, MarketplaceRegistration } from "#/types/settings";
 import { openHands } from "../open-hands-axios";
 
 type OrganizationSettingsResponse = Pick<

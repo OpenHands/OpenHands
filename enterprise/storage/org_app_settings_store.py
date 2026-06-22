@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import timezone
 from uuid import UUID
 
 from server.constants import (
@@ -109,6 +109,7 @@ class OrgAppSettingsStore:
             Org: The updated organization object, or None if not found
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         result = await self.db_session.execute(
@@ -135,15 +136,15 @@ class OrgAppSettingsStore:
             if current_updated_at > expected_updated_at:
                 logger.info(
                     f"Org '{org.name}' was modified before this update. "
-                    f"Previous timestamp: {expected_updated_at.isoformat()}, "
-                    f"Current timestamp: {current_updated_at.isoformat()}. "
-                    f"Proceeding with update (last-write-wins)."
+                    f'Previous timestamp: {expected_updated_at.isoformat()}, '
+                    f'Current timestamp: {current_updated_at.isoformat()}. '
+                    f'Proceeding with update (last-write-wins).'
                 )
 
         # Handle registered_marketplaces separately (dedicated column)
         update_dict = update_data.model_dump(
             exclude_unset=True,
-            exclude={'expected_updated_at'}  # Don't save this field
+            exclude={'expected_updated_at'},  # Don't save this field
         )
         if 'registered_marketplaces' in update_dict:
             org.registered_marketplaces = update_dict.pop('registered_marketplaces')

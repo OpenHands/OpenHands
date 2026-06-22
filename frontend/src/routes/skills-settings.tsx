@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { Typography } from "#/ui/typography";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
@@ -8,23 +9,20 @@ import { useSaveOrgAppSettings } from "#/hooks/mutation/use-save-org-app-setting
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useSkills } from "#/hooks/query/use-skills";
-import { SkillInfo, MarketplaceRegistration, SkillWithState } from "#/types/settings";
+import { MarketplaceRegistration, SkillWithState } from "#/types/settings";
 import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { I18nKey } from "#/i18n/declaration";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 
 // Validation patterns for marketplace sources (must match backend patterns)
 const MARKETPLACE_PATTERNS = {
-  // github:owner/repo format
-  github: /^github:[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/,
-  // Git URLs (https, git, ssh protocols)
-  gitUrl: /^(https?:\/\/|git@|ssh:\/\/|git:\/\/)[a-zA-Z0-9_.-]+[:\/][a-zA-Z0-9_./-]+$/,
-  // Relative local paths (no absolute paths, no parent traversal, must start with alphanumeric)
+  github: /^github:[a-zA-Z0-9_.-]+[/][a-zA-Z0-9_.-]+$/,
+  gitUrl:
+    /^(https?:\/\/|git@|ssh:\/\/|git:\/\/)[a-zA-Z0-9_.-]+[:/][a-zA-Z0-9_./-]+$/,
   localPath: /^[a-zA-Z0-9_][a-zA-Z0-9_./-]*$/,
 };
 
@@ -79,9 +77,8 @@ function WhiteToggle({
 
 function SkillsSettingsScreen() {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const { mutate: saveSettings, isPending: isSaving } = useSaveSettings();
-  const { mutate: saveOrgAppSettings, isPending: isOrgSaving } = useSaveOrgAppSettings();
+  const { isPending: isSaving } = useSaveSettings();
+  const { mutate: saveOrgAppSettings } = useSaveOrgAppSettings();
   const { data: settings, isLoading: settingsLoading } = useSettings();
   const { data: skills, isLoading: skillsLoading } = useSkills();
 
@@ -107,7 +104,9 @@ function SkillsSettingsScreen() {
   >(null);
 
   // Track expected_updated_at for optimistic locking
-  const [expectedUpdatedAt, setExpectedUpdatedAt] = React.useState<string | null>(null);
+  const [expectedUpdatedAt, setExpectedUpdatedAt] = React.useState<
+    string | null
+  >(null);
 
   React.useEffect(() => {
     if (orgAppSettings?.updated_at) {
@@ -210,10 +209,6 @@ function SkillsSettingsScreen() {
   };
 
   const handleSave = () => {
-    const disabledSkills = skillsState
-      .filter((skill) => !skill.isEnabled)
-      .map((skill) => skill.name);
-
     // Build marketplace list from manually added repositories
     // and skills that have auto_load enabled
     const marketplaceMap = new Map<string, MarketplaceRegistration>();

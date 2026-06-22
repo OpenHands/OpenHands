@@ -8,12 +8,13 @@ export const useSaveOrgAppSettings = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (settings: OrganizationAppSettingsUpdate) => {
-      return organizationService.saveOrganizationAppSettings(settings);
-    },
+    mutationFn: async (settings: OrganizationAppSettingsUpdate) =>
+      organizationService.saveOrganizationAppSettings(settings),
     onSuccess: () => {
       // Invalidate org app settings cache
-      queryClient.invalidateQueries({ queryKey: ["organization-app-settings"] });
+      queryClient.invalidateQueries({
+        queryKey: ["organization-app-settings"],
+      });
     },
     meta: {
       disableToast: true,

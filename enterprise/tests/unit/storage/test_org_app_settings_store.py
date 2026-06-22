@@ -5,7 +5,6 @@ Tests the async database operations for organization app settings.
 """
 
 import uuid
-from datetime import datetime, timedelta, timezone
 
 import pytest
 from server.routes.org_models import OrgAppSettingsUpdate
@@ -179,6 +178,7 @@ async def test_update_org_app_settings_org_not_found(async_session_maker):
 
 # Optimistic Locking Tests (Audit/Monitoring - updates always succeed)
 
+
 @pytest.mark.asyncio
 async def test_update_succeeds_when_expected_updated_at_matches(async_session_maker):
     """
@@ -196,10 +196,10 @@ async def test_update_succeeds_when_expected_updated_at_matches(async_session_ma
         session.add(org)
         await session.commit()
         await session.refresh(org)
-        
+
         original_updated_at = org.updated_at
         org_id = org.id
-        
+
         # Small delay to ensure timestamp differs
         await session.commit()
 
@@ -267,7 +267,7 @@ async def test_update_succeeds_even_with_stale_expected_updated_at(async_session
         session.add(org)
         await session.commit()
         await session.refresh(org)
-        
+
         # Record the original updated_at (simulating what client read)
         stale_updated_at = org.updated_at
         org_id = org.id
@@ -276,7 +276,7 @@ async def test_update_succeeds_even_with_stale_expected_updated_at(async_session
         org.name = 'modified-by-another-request'
         await session.commit()
         await session.refresh(org)
-        
+
         # Now org.updated_at is newer than stale_updated_at
 
         update_data = OrgAppSettingsUpdate(
@@ -310,7 +310,7 @@ async def test_optimistic_lock_with_timezone_aware_dates(async_session_maker):
         session.add(org)
         await session.commit()
         await session.refresh(org)
-        
+
         original_updated_at = org.updated_at
         org_id = org.id
 

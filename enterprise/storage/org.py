@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 from pydantic import SecretStr
 from server.constants import DEFAULT_BILLING_MARGIN
-from sqlalchemy import DateTime, JSON, String
+from sqlalchemy import JSON, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from storage.base import Base
 from storage.encrypt_utils import EncryptedJSON, decrypt_value, encrypt_value

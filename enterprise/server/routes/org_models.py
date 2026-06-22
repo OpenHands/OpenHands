@@ -1,12 +1,7 @@
+import logging
 from datetime import datetime
 from typing import Annotated, Any
-import logging
 
-from openhands.sdk.settings import (
-    AgentSettingsConfig,
-    ConversationSettings,
-    OpenHandsAgentSettings,
-)
 from pydantic import (
     BaseModel,
     EmailStr,
@@ -26,6 +21,11 @@ from openhands.app_server.settings.settings_models import (
     _load_persisted_conversation_settings,
 )
 from openhands.app_server.utils.llm import MASKED_API_KEY, resolve_llm_base_url
+from openhands.sdk.settings import (
+    AgentSettingsConfig,
+    ConversationSettings,
+    OpenHandsAgentSettings,
+)
 from openhands.storage.data_models.settings import MarketplaceRegistration
 
 logger = logging.getLogger(__name__)
@@ -582,12 +582,12 @@ class OrgAppSettingsResponse(BaseModel):
                     marketplaces.append(mp)
                 else:
                     raise ValueError(
-                        f"registered_marketplaces[{i}]: expected dict or "
-                        f"MarketplaceRegistration, got {type(mp).__name__}"
+                        f'registered_marketplaces[{i}]: expected dict or '
+                        f'MarketplaceRegistration, got {type(mp).__name__}'
                     )
             except (ValidationError, ValueError) as e:
                 logger.warning(
-                    f"Skipping invalid marketplace at index {i} in org "
+                    f'Skipping invalid marketplace at index {i} in org '
                     f"'{org.name}' registered_marketplaces: {e}"
                 )
 
