@@ -5,6 +5,7 @@ from uuid import UUID
 import httpx
 
 from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversation,
     AppConversationInfo,
 )
 from openhands.app_server.event_callback.event_callback_models import (
@@ -16,6 +17,7 @@ from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
     EventCallbackResultStatus,
 )
+from openhands.app_server.sandbox.sandbox_service import SandboxService
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
 from openhands.app_server.utils.docker_utils import (
@@ -30,6 +32,30 @@ _logger = logging.getLogger(__name__)
 _POLL_DELAY_S = 3
 # Number of attempts to poll title
 _NUM_POLL_ATTEMPTS = 4
+
+
+async def _resolve_internal_conversation_url(
+    sandbox_service: SandboxService,
+    app_conversation: AppConversation,
+    conversation_id: UUID,
+) -> str:
+    """Resolve the agent-server conversation URL for server-side (app -> agent) use.
+
+    ``app_conversation.conversation_url`` is the *browser-facing* URL. When the
+    runtime proxy is enabled it points at the public ``/runtime/...`` proxy path,
+    which the app server must not call back into. The sandbox always knows the
+    direct internal agent-server URL, so prefer that; fall back to the stored URL
+    (with ``localhost`` rewritten for Docker) for non-proxy deployments or if the
+    sandbox can no longer be resolved.
+    """
+    agent_server_url = await sandbox_service.get_agent_server_url_by_id(
+        app_conversation.sandbox_id
+    )
+    if agent_server_url:
+        return f'{agent_server_url.rstrip("/")}/api/conversations/{conversation_id.hex}'
+    # Fallback for non-proxy deployments; the caller guarantees a URL is present.
+    assert app_conversation.conversation_url is not None
+    return replace_localhost_hostname_for_docker(app_conversation.conversation_url)
 
 
 async def _poll_for_title(
@@ -93,6 +119,7 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
             get_app_conversation_service,
             get_event_callback_service,
             get_httpx_client,
+            get_sandbox_service,
         )
 
         _logger.info(
@@ -108,15 +135,16 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
             get_app_conversation_service(state) as app_conversation_service,
             get_app_conversation_info_service(state) as app_conversation_info_service,
             get_httpx_client(state) as httpx_client,
+            get_sandbox_service(state) as sandbox_service,
         ):
             app_conversation = await app_conversation_service.get_app_conversation(
                 conversation_id
             )
             assert app_conversation is not None
-            app_conversation_url = app_conversation.conversation_url
-            assert app_conversation_url is not None
-            app_conversation_url = replace_localhost_hostname_for_docker(
-                app_conversation_url
+            # Ensures the conversation is running (i.e. has an exposed URL).
+            assert app_conversation.conversation_url is not None
+            app_conversation_url = await _resolve_internal_conversation_url(
+                sandbox_service, app_conversation, conversation_id
             )
 
             title = await _poll_for_title(

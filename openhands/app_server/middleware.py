@@ -132,5 +132,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def is_rate_limited_request(self, request: StarletteRequest) -> bool:
         if request.url.path.startswith('/assets'):
             return False
+        # Traffic proxied to a sandbox agent-server (reverse-proxy deployments) is
+        # already gated by the sandbox session key and can be high-frequency during
+        # an active conversation, so it must not be throttled by the app limiter.
+        if request.url.path.startswith('/runtime/'):
+            return False
         # Put Other non rate limited checks here
         return True

@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import os
 import warnings
 
@@ -14,7 +15,7 @@ from fastapi import (
 from fastapi.responses import JSONResponse
 
 from openhands.app_server import v1_router
-from openhands.app_server.config import get_app_lifespan_service
+from openhands.app_server.config import get_app_lifespan_service, get_global_config
 from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.mcp.mcp_router import init_tavily_proxy, mcp_server
 from openhands.app_server.middleware import (
@@ -26,6 +27,8 @@ from openhands.app_server.middleware import (
 from openhands.app_server.static import SPAStaticFiles
 from openhands.app_server.status.status_router import router as health_router
 from openhands.app_server.version import get_version
+
+_logger = logging.getLogger(__name__)
 
 # Initialize the Tavily MCP proxy before creating the app
 init_tavily_proxy()
@@ -70,6 +73,22 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
 
 app.include_router(v1_router.router)
 app.include_router(health_router)
+
+# When running behind a reverse proxy, expose the runtime proxy so the browser can
+# reach sandbox agent-servers via /runtime/{sandbox_id}/... on the main app domain
+# instead of connecting directly to dynamic host ports. Registered before the SPA
+# static mount so these paths are not swallowed by the catch-all.
+if get_global_config().enable_runtime_proxy:
+    from openhands.app_server.sandbox import sandbox_proxy_router
+
+    app.include_router(sandbox_proxy_router.router)
+    if not get_global_config().web_url:
+        _logger.warning(
+            'OH_ENABLE_RUNTIME_PROXY is set but no web_url is configured '
+            '(set OH_WEB_URL or WEB_HOST). Conversation URLs cannot be rewritten '
+            'to the reverse-proxy path, so the browser will still try to reach '
+            'sandbox agent-servers on dynamic host ports.'
+        )
 
 # Middleware and static file setup (merged from listen.py)
 if os.getenv('SERVE_FRONTEND', 'true').lower() == 'true':

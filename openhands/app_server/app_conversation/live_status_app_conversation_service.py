@@ -156,6 +156,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     openhands_provider_base_url: str | None
     access_token_hard_timeout: timedelta | None
     app_mode: str | None = None
+    # Public app URL (e.g. https://openhands.example.com) used to build
+    # reverse-proxy conversation URLs. Distinct from ``web_url`` which may fall
+    # back to an internal ``host.docker.internal`` address.
+    public_web_url: str | None = None
+    # When True (and ``public_web_url`` is set), conversation URLs handed to the
+    # frontend are rewritten to route agent-server traffic through the app server
+    # at ``/runtime/{sandbox_id}/...`` instead of a direct dynamic host port.
+    enable_runtime_proxy: bool = False
 
     async def _get_sandbox_grouping_strategy(self) -> SandboxGroupingStrategy:
         """Get the sandbox grouping strategy from user settings."""
@@ -511,6 +519,26 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
         return []
 
+    def _maybe_proxy_conversation_url(
+        self, agent_server_url: str, sandbox_id: str
+    ) -> str:
+        """Rewrite the agent-server base URL for reverse-proxy deployments.
+
+        When the runtime proxy is enabled and a public app URL is configured, the
+        agent-server base URL (e.g. ``http://localhost:42031``) is replaced with a
+        stable path on the main app domain (e.g.
+        ``https://openhands.example.com/runtime/{sandbox_id}``). The app server then
+        proxies this traffic to the sandbox, so the browser never needs to reach a
+        dynamic host port. Returns the original URL unchanged when proxying is off.
+        """
+        if not self.enable_runtime_proxy or not self.public_web_url:
+            return agent_server_url
+        from openhands.app_server.sandbox.sandbox_proxy_router import (
+            RUNTIME_PROXY_PREFIX,
+        )
+
+        return f'{self.public_web_url.rstrip("/")}/{RUNTIME_PROXY_PREFIX}/{sandbox_id}'
+
     def _build_conversation(
         self,
         app_conversation_info: AppConversationInfo | None,
@@ -535,6 +563,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 None,
             )
             if conversation_url:
+                # Behind a reverse proxy, the browser cannot reach the sandbox's
+                # dynamic host port directly. Rewrite the base to a stable path on
+                # the main app domain so the app server proxies the traffic.
+                conversation_url = self._maybe_proxy_conversation_url(
+                    conversation_url, sandbox.id
+                )
                 conversation_url += f'/api/conversations/{app_conversation_info.id.hex}'
             session_api_key = sandbox.session_api_key
 
@@ -2059,4 +2093,6 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 openhands_provider_base_url=config.openhands_provider_base_url,
                 access_token_hard_timeout=access_token_hard_timeout,
                 app_mode=app_mode,
+                public_web_url=config.web_url,
+                enable_runtime_proxy=config.enable_runtime_proxy,
             )

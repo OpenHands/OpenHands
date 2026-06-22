@@ -170,6 +170,29 @@ class SandboxService(ABC):
 
         raise SandboxError(f'No agent server URL found for sandbox: {sandbox.id}')
 
+    async def get_agent_server_url_by_id(self, sandbox_id: str) -> str | None:
+        """Resolve the agent-server base URL for a sandbox for server-side access.
+
+        This is used by the reverse proxy router to forward browser traffic to the
+        agent server running inside the sandbox. The returned URL is suitable for
+        access from the app server itself (i.e. ``localhost`` is rewritten to
+        ``host.docker.internal`` when running in Docker).
+
+        Returns ``None`` if the sandbox does not exist, is not running, or does not
+        expose an agent server URL.
+        """
+        sandbox = await self.get_sandbox(sandbox_id)
+        if (
+            sandbox is None
+            or sandbox.status != SandboxStatus.RUNNING
+            or not sandbox.exposed_urls
+        ):
+            return None
+        try:
+            return self._get_agent_server_url(sandbox)
+        except SandboxError:
+            return None
+
     @abstractmethod
     async def pause_sandbox(self, sandbox_id: str) -> bool:
         """Begin the process of pausing a sandbox.

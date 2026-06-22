@@ -14,6 +14,9 @@ from unittest.mock import AsyncMock
 import pytest
 
 from openhands.app_server.sandbox.sandbox_models import (
+    AGENT_SERVER,
+    VSCODE,
+    ExposedUrl,
     SandboxInfo,
     SandboxPage,
     SandboxStatus,
@@ -359,3 +362,58 @@ class TestCleanupOldSandboxes:
         # Verify: No sandboxes should be stopped
         assert result == []
         mock_sandbox_service.pause_sandbox_mock.assert_not_called()
+
+
+class TestGetAgentServerUrlById:
+    """Tests for the get_agent_server_url_by_id resolver used by the proxy."""
+
+    def _running_sandbox(self, urls):
+        return SandboxInfo(
+            id='oh-agent-server-abc',
+            created_by_user_id=None,
+            sandbox_spec_id='spec',
+            status=SandboxStatus.RUNNING,
+            session_api_key='sk',
+            exposed_urls=urls,
+            created_at=datetime.now(timezone.utc),
+        )
+
+    @pytest.mark.asyncio
+    async def test_returns_agent_server_url(self, mock_sandbox_service):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._running_sandbox(
+            [
+                ExposedUrl(name=AGENT_SERVER, url='http://localhost:42031', port=8000),
+                ExposedUrl(name=VSCODE, url='http://localhost:51000', port=8001),
+            ]
+        )
+
+        url = await mock_sandbox_service.get_agent_server_url_by_id(
+            'oh-agent-server-abc'
+        )
+
+        # Not running inside Docker in the test env, so localhost is preserved.
+        assert url == 'http://localhost:42031'
+
+    @pytest.mark.asyncio
+    async def test_returns_none_for_missing_sandbox(self, mock_sandbox_service):
+        mock_sandbox_service.get_sandbox_mock.return_value = None
+        url = await mock_sandbox_service.get_agent_server_url_by_id('missing')
+        assert url is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_for_non_running_sandbox(self, mock_sandbox_service):
+        sandbox = self._running_sandbox(
+            [ExposedUrl(name=AGENT_SERVER, url='http://localhost:42031', port=8000)]
+        )
+        sandbox.status = SandboxStatus.PAUSED
+        mock_sandbox_service.get_sandbox_mock.return_value = sandbox
+        url = await mock_sandbox_service.get_agent_server_url_by_id('x')
+        assert url is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_agent_server_url(self, mock_sandbox_service):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._running_sandbox(
+            [ExposedUrl(name=VSCODE, url='http://localhost:51000', port=8001)]
+        )
+        url = await mock_sandbox_service.get_agent_server_url_by_id('x')
+        assert url is None

@@ -70,6 +70,9 @@ async def test_set_title_callback_processor_fetches_title_from_conversation():
 
     app_conversation_info_service = AsyncMock()
     event_callback_service = AsyncMock()
+    # The sandbox resolves the internal agent-server base URL (server-side path).
+    sandbox_service = AsyncMock()
+    sandbox_service.get_agent_server_url_by_id.return_value = 'http://localhost:8000'
 
     httpx_client = _FakeHttpxClient(titles=[None, None, None, 'Generated Title'])
 
@@ -84,6 +87,9 @@ async def test_set_title_callback_processor_fetches_title_from_conversation():
 
     def get_httpx_client(_state):
         return _ctx(httpx_client)
+
+    def get_sandbox_service(_state):
+        return _ctx(sandbox_service)
 
     callback = EventCallback(
         conversation_id=conversation_id, processor=SetTitleCallbackProcessor()
@@ -109,6 +115,10 @@ async def test_set_title_callback_processor_fetches_title_from_conversation():
             get_event_callback_service,
         ),
         patch('openhands.app_server.config.get_httpx_client', get_httpx_client),
+        patch(
+            'openhands.app_server.config.get_sandbox_service',
+            get_sandbox_service,
+        ),
         patch(
             'openhands.app_server.event_callback.'
             'set_title_callback_processor.asyncio.sleep',
@@ -154,6 +164,8 @@ async def test_set_title_callback_processor_no_title_yet_returns_none():
 
     app_conversation_info_service = AsyncMock()
     event_callback_service = AsyncMock()
+    sandbox_service = AsyncMock()
+    sandbox_service.get_agent_server_url_by_id.return_value = 'http://localhost:8000'
 
     httpx_client = _FakeHttpxClient(titles=[None])
 
@@ -168,6 +180,9 @@ async def test_set_title_callback_processor_no_title_yet_returns_none():
 
     def get_httpx_client(_state):
         return _ctx(httpx_client)
+
+    def get_sandbox_service(_state):
+        return _ctx(sandbox_service)
 
     callback = EventCallback(
         conversation_id=conversation_id, processor=SetTitleCallbackProcessor()
@@ -193,6 +208,10 @@ async def test_set_title_callback_processor_no_title_yet_returns_none():
             get_event_callback_service,
         ),
         patch('openhands.app_server.config.get_httpx_client', get_httpx_client),
+        patch(
+            'openhands.app_server.config.get_sandbox_service',
+            get_sandbox_service,
+        ),
         patch(
             'openhands.app_server.event_callback.'
             'set_title_callback_processor.asyncio.sleep',
@@ -228,6 +247,8 @@ async def test_set_title_callback_processor_request_errors_return_none():
 
     app_conversation_info_service = AsyncMock()
     event_callback_service = AsyncMock()
+    sandbox_service = AsyncMock()
+    sandbox_service.get_agent_server_url_by_id.return_value = 'http://localhost:8000'
 
     httpx_client = _FailingHttpxClient(
         httpx.RequestError(
@@ -249,6 +270,9 @@ async def test_set_title_callback_processor_request_errors_return_none():
 
     def get_httpx_client(_state):
         return _ctx(httpx_client)
+
+    def get_sandbox_service(_state):
+        return _ctx(sandbox_service)
 
     callback = EventCallback(
         conversation_id=conversation_id, processor=SetTitleCallbackProcessor()
@@ -275,6 +299,10 @@ async def test_set_title_callback_processor_request_errors_return_none():
         ),
         patch('openhands.app_server.config.get_httpx_client', get_httpx_client),
         patch(
+            'openhands.app_server.config.get_sandbox_service',
+            get_sandbox_service,
+        ),
+        patch(
             'openhands.app_server.event_callback.'
             'set_title_callback_processor.asyncio.sleep',
             new=AsyncMock(),
@@ -292,3 +320,98 @@ async def test_set_title_callback_processor_request_errors_return_none():
     app_conversation_info_service.save_app_conversation_info.assert_not_called()
     event_callback_service.save_event_callback.assert_not_called()
     assert callback.status == EventCallbackStatus.ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_set_title_uses_internal_sandbox_url_not_proxy_url():
+    """In runtime-proxy mode the app must poll the sandbox directly.
+
+    ``conversation_url`` is the browser-facing ``/runtime/...`` proxy path; the
+    app server must not call back into it. Instead it resolves the direct
+    internal agent-server URL from the sandbox (issue #14905).
+    """
+    conversation_id = uuid4()
+    session_api_key = 'test-session-key'
+    # Browser-facing proxy URL (what the frontend uses).
+    conversation_url = (
+        f'https://openhands.example.com/runtime/sandbox/'
+        f'api/conversations/{conversation_id.hex}'
+    )
+    # Internal agent-server URL the app server should actually poll.
+    internal_base = 'http://host.docker.internal:42031'
+
+    app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='user',
+        sandbox_id='sandbox',
+        title=f'Conversation {conversation_id.hex[:5]}',
+        conversation_url=conversation_url,
+        session_api_key=session_api_key,
+    )
+
+    app_conversation_service = AsyncMock()
+    app_conversation_service.get_app_conversation.return_value = app_conversation
+
+    app_conversation_info_service = AsyncMock()
+    event_callback_service = AsyncMock()
+    sandbox_service = AsyncMock()
+    sandbox_service.get_agent_server_url_by_id.return_value = internal_base
+
+    httpx_client = _FakeHttpxClient(titles=['Generated Title'])
+
+    def get_app_conversation_service(_state):
+        return _ctx(app_conversation_service)
+
+    def get_app_conversation_info_service(_state):
+        return _ctx(app_conversation_info_service)
+
+    def get_event_callback_service(_state):
+        return _ctx(event_callback_service)
+
+    def get_httpx_client(_state):
+        return _ctx(httpx_client)
+
+    def get_sandbox_service(_state):
+        return _ctx(sandbox_service)
+
+    callback = EventCallback(
+        conversation_id=conversation_id, processor=SetTitleCallbackProcessor()
+    )
+    event = MessageEvent(
+        source='user',
+        llm_message=Message(role='user', content=[TextContent(text='hi')]),
+    )
+
+    processor = SetTitleCallbackProcessor()
+
+    with (
+        patch(
+            'openhands.app_server.config.get_app_conversation_service',
+            get_app_conversation_service,
+        ),
+        patch(
+            'openhands.app_server.config.get_app_conversation_info_service',
+            get_app_conversation_info_service,
+        ),
+        patch(
+            'openhands.app_server.config.get_event_callback_service',
+            get_event_callback_service,
+        ),
+        patch('openhands.app_server.config.get_httpx_client', get_httpx_client),
+        patch(
+            'openhands.app_server.config.get_sandbox_service',
+            get_sandbox_service,
+        ),
+        patch(
+            'openhands.app_server.event_callback.'
+            'set_title_callback_processor.asyncio.sleep',
+            new=AsyncMock(),
+        ),
+    ):
+        result = await processor(conversation_id, callback, event)
+
+    assert result is not None
+    # The poll target is the internal URL, never the public proxy URL.
+    polled_url = httpx_client.calls[0][0]
+    assert polled_url == f'{internal_base}/api/conversations/{conversation_id.hex}'
+    assert 'openhands.example.com' not in polled_url

@@ -3123,6 +3123,9 @@ class TestAgentKindConversationUrl:
         service = LiveStatusAppConversationService.__new__(
             LiveStatusAppConversationService
         )
+        # Reverse-proxy rewrite is off by default.
+        service.enable_runtime_proxy = False
+        service.public_web_url = None
 
         info = AppConversationInfo(
             id=UUID('11111111-1111-1111-1111-111111111111'),
@@ -3144,6 +3147,96 @@ class TestAgentKindConversationUrl:
         assert result is not None
         assert result.conversation_url == (
             'http://localhost:8000/api/conversations/11111111111111111111111111111111'
+        )
+
+    def test_build_conversation_url_rewrites_for_runtime_proxy(self):
+        """With the runtime proxy on, conversation URLs route via the app domain.
+
+        Regression for issue #14905: behind a reverse proxy the browser cannot
+        reach the sandbox's dynamic host port, so the URL must be rewritten to
+        ``{web_url}/runtime/{sandbox_id}/...`` which the app server proxies.
+        """
+        from uuid import UUID
+
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            AppConversationInfo,
+        )
+        from openhands.app_server.sandbox.sandbox_models import (
+            AGENT_SERVER,
+            ExposedUrl,
+            SandboxInfo,
+            SandboxStatus,
+        )
+
+        service = LiveStatusAppConversationService.__new__(
+            LiveStatusAppConversationService
+        )
+        service.enable_runtime_proxy = True
+        service.public_web_url = 'https://openhands.example.com'
+
+        info = AppConversationInfo(
+            id=UUID('11111111-1111-1111-1111-111111111111'),
+            created_by_user_id=None,
+            sandbox_id='oh-agent-server-xyz',
+            agent_kind='openhands',
+        )
+        sandbox = SandboxInfo(
+            id='oh-agent-server-xyz',
+            created_by_user_id=None,
+            sandbox_spec_id='spec',
+            status=SandboxStatus.RUNNING,
+            session_api_key='sk',
+            exposed_urls=[
+                ExposedUrl(name=AGENT_SERVER, url='http://localhost:42031', port=8000),
+            ],
+        )
+        result = service._build_conversation(info, sandbox, None)
+        assert result is not None
+        assert result.conversation_url == (
+            'https://openhands.example.com/runtime/oh-agent-server-xyz'
+            '/api/conversations/11111111111111111111111111111111'
+        )
+
+    def test_runtime_proxy_no_rewrite_without_web_url(self):
+        """Proxy enabled but no public web URL -> URL is left unchanged."""
+        from uuid import UUID
+
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            AppConversationInfo,
+        )
+        from openhands.app_server.sandbox.sandbox_models import (
+            AGENT_SERVER,
+            ExposedUrl,
+            SandboxInfo,
+            SandboxStatus,
+        )
+
+        service = LiveStatusAppConversationService.__new__(
+            LiveStatusAppConversationService
+        )
+        service.enable_runtime_proxy = True
+        service.public_web_url = None
+
+        info = AppConversationInfo(
+            id=UUID('11111111-1111-1111-1111-111111111111'),
+            created_by_user_id=None,
+            sandbox_id='oh-agent-server-xyz',
+            agent_kind='openhands',
+        )
+        sandbox = SandboxInfo(
+            id='oh-agent-server-xyz',
+            created_by_user_id=None,
+            sandbox_spec_id='spec',
+            status=SandboxStatus.RUNNING,
+            session_api_key='sk',
+            exposed_urls=[
+                ExposedUrl(name=AGENT_SERVER, url='http://localhost:42031', port=8000),
+            ],
+        )
+        result = service._build_conversation(info, sandbox, None)
+        assert result is not None
+        assert result.conversation_url == (
+            'http://localhost:42031/api/conversations/11111111111111111111111111111111'
         )
 
 

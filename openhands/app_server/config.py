@@ -205,6 +205,17 @@ class AppServerConfig(OpenHandsModel):
             'Falls back to legacy PERMITTED_CORS_ORIGINS env var.'
         ),
     )
+    enable_runtime_proxy: bool = Field(
+        default=False,
+        description=(
+            'When enabled (and web_url is set), the app server proxies all '
+            'agent-server HTTP and WebSocket traffic under the main app domain via '
+            '/runtime/{sandbox_id}/... paths, instead of having the browser connect '
+            'directly to each sandbox container on a dynamic host port. This makes '
+            'OpenHands usable behind a reverse proxy (Traefik/nginx/Caddy) where '
+            'only the app port is exposed. Configure via OH_ENABLE_RUNTIME_PROXY.'
+        ),
+    )
     openhands_provider_base_url: str | None = Field(
         default_factory=get_openhands_provider_base_url,
         description='Base URL for the OpenHands provider',

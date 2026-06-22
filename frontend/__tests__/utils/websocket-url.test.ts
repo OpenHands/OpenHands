@@ -182,4 +182,30 @@ describe("websocket-url utilities", () => {
       );
     });
   });
+
+  // Regression for issue #14905: when OH_ENABLE_RUNTIME_PROXY is set, the backend
+  // hands the frontend a conversation_url of the form
+  // ``{web_url}/runtime/{sandbox_id}/api/conversations/{id}`` so that all
+  // agent-server traffic is proxied through the main app domain (no dynamic host
+  // port reaches the browser). These assert that contract end to end.
+  describe("runtime proxy conversation URLs (issue #14905)", () => {
+    const conversationUrl =
+      "https://openhands.example.com/runtime/oh-agent-server-xyz/api/conversations/abc123";
+
+    it("routes HTTP traffic through the app domain and runtime path", () => {
+      expect(extractBaseHost(conversationUrl)).toBe("openhands.example.com");
+      expect(extractPathPrefix(conversationUrl)).toBe(
+        "/runtime/oh-agent-server-xyz",
+      );
+      expect(buildHttpBaseUrl(conversationUrl)).toBe(
+        "https://openhands.example.com/runtime/oh-agent-server-xyz",
+      );
+    });
+
+    it("routes the WebSocket through the app domain and runtime path", () => {
+      expect(buildWebSocketUrl("abc123", conversationUrl)).toBe(
+        "wss://openhands.example.com/runtime/oh-agent-server-xyz/sockets/events/abc123",
+      );
+    });
+  });
 });
