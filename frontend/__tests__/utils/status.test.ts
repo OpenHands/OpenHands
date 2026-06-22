@@ -103,6 +103,28 @@ describe("getStatusCode", () => {
     // Should show connecting message since task hasn't errored
     expect(result).toBe(I18nKey.CHAT_INTERFACE$CONNECTING);
   });
+
+  it.each([
+    ["WORKING", I18nKey.CONVERSATION$STARTING_CONVERSATION],
+    ["WAITING_FOR_SANDBOX", I18nKey.COMMON$WAITING_FOR_SANDBOX],
+    ["PREPARING_REPOSITORY", I18nKey.CONVERSATION$PREPARING_REPOSITORY],
+    ["RUNNING_SETUP_SCRIPT", I18nKey.CONVERSATION$RUNNING_SETUP_SCRIPT],
+    ["SETTING_UP_GIT_HOOKS", I18nKey.STATUS$SETTING_UP_GIT_HOOKS],
+    ["SETTING_UP_SKILLS", I18nKey.STATUS$SETTING_UP_SKILLS],
+    ["STARTING_CONVERSATION", I18nKey.CONVERSATION$STARTING_CONVERSATION],
+  ] as const)(
+    "should show a task-specific startup label for %s task status",
+    (taskStatus, expectedStatusCode) => {
+      const result = getStatusCode(
+        "OPEN",
+        null,
+        "RUNNING",
+        taskStatus,
+      );
+
+      expect(result).toBe(expectedStatusCode);
+    },
+  );
 });
 
 describe("getIndicatorColor", () => {

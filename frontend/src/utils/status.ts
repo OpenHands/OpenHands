@@ -132,10 +132,11 @@ export function getStatusCode(
       case "STARTING_CONVERSATION":
         return I18nKey.CONVERSATION$STARTING_CONVERSATION;
       case "WORKING":
-      case "PREPARING_REPOSITORY":
-      case "RUNNING_SETUP_SCRIPT":
-        // TODO: These don't have In8n labels.
         return I18nKey.CONVERSATION$STARTING_CONVERSATION;
+      case "PREPARING_REPOSITORY":
+        return I18nKey.CONVERSATION$PREPARING_REPOSITORY;
+      case "RUNNING_SETUP_SCRIPT":
+        return I18nKey.CONVERSATION$RUNNING_SETUP_SCRIPT;
       default:
         throw new Error(`Unknown taskStatus: ${taskStatus}`);
     }
