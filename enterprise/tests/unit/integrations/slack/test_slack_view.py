@@ -28,7 +28,7 @@ from openhands.app_server.user_auth.user_auth import UserAuth
 def mock_jinja_env():
     """Create a mock Jinja environment with test templates."""
     templates = {
-        'user_message_conversation_instructions.j2': 'Previous messages: {{ messages|join(", ") }}\nUser: {{ username }}\nURL: {{ conversation_url }}'
+        'user_message_conversation_instructions.j2': 'Keep replies concise.\nPrevious messages: {{ messages|join(", ") }}\nUser: {{ username }}\nURL: {{ conversation_url }}'
     }
     return Environment(loader=DictLoader(templates))
 
@@ -128,6 +128,44 @@ class TestV1ConversationCreation:
         # Verify
         assert result == slack_new_conversation_view.conversation_id
         mock_create_v1.assert_called_once()
+
+    @patch('integrations.slack.slack_view.WebClient')
+    async def test_new_conversation_includes_slack_response_guidelines_without_thread_context(
+        self,
+        mock_web_client,
+        slack_new_conversation_view,
+        mock_jinja_env,
+    ):
+        """Test that Slack guidance is rendered even without prior messages."""
+        mock_web_client.return_value.conversations_history.return_value = {
+            'messages': [
+                {
+                    'text': '<@B123> summarize the latest deployment',
+                    'blocks': [
+                        {
+                            'type': 'rich_text',
+                            'elements': [
+                                {
+                                    'type': 'rich_text_section',
+                                    'elements': [
+                                        {'type': 'user', 'user_id': 'B123'},
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+
+        user_message, conversation_instructions = (
+            await slack_new_conversation_view._get_instructions(mock_jinja_env)
+        )
+
+        assert user_message == 'summarize the latest deployment'
+        assert 'Keep replies concise.' in conversation_instructions
+        assert 'Previous messages:' in conversation_instructions
+        assert 'User: Test User' in conversation_instructions
 
 
 # ---------------------------------------------------------------------------

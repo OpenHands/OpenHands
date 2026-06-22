@@ -130,19 +130,16 @@ class SlackNewConversationView(SlackViewInterface):
             trigger_msg['text'], trigger_msg['blocks']
         )
 
-        conversation_instructions = ''
-
-        if len(messages) > 1:
-            messages.pop()
-            text_messages = [m['text'] for m in messages if m.get('text')]
-            conversation_instructions_template = jinja_env.get_template(
-                'user_message_conversation_instructions.j2'
-            )
-            conversation_instructions = conversation_instructions_template.render(
-                messages=text_messages,
-                username=user_info.slack_display_name,
-                conversation_url=CONVERSATION_URL,
-            )
+        messages.pop()
+        text_messages = [m['text'] for m in messages if m.get('text')]
+        conversation_instructions_template = jinja_env.get_template(
+            'user_message_conversation_instructions.j2'
+        )
+        conversation_instructions = conversation_instructions_template.render(
+            messages=text_messages,
+            username=user_info.slack_display_name,
+            conversation_url=CONVERSATION_URL,
+        )
 
         return user_message, conversation_instructions
 
