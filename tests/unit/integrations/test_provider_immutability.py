@@ -358,3 +358,71 @@ async def test_get_gitlab_groups_delegates_to_service():
 
         assert result == ['group-a', 'group-b']
         mock_get_service.assert_called_once_with(ProviderType.GITLAB)
+
+
+@pytest.mark.asyncio
+async def test_forgejo_subpath_preserved_in_git_url():
+    """Test that Forgejo instances hosted under a subpath preserve the subpath in git URLs."""
+    tokens = MappingProxyType(
+        {
+            ProviderType.FORGEJO: ProviderToken(
+                token=SecretStr('forgejo-token'),
+                host='https://myserver.com/forgejo',
+            )
+        }
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+
+    with patch.object(handler, 'verify_repo_provider') as mock_verify:
+        mock_verify.return_value.git_provider = ProviderType.FORGEJO
+        mock_verify.return_value.full_name = 'username/reponame'
+
+        remote_url = await handler.get_authenticated_git_url('username/reponame')
+
+    assert (
+        remote_url == 'https://forgejo-token@myserver.com/forgejo/username/reponame.git'
+    )
+
+
+@pytest.mark.asyncio
+async def test_github_enterprise_api_path_stripped():
+    """Test that GitHub Enterprise API paths like /api/v3 are stripped from the domain."""
+    tokens = MappingProxyType(
+        {
+            ProviderType.GITHUB: ProviderToken(
+                token=SecretStr('gh-token'),
+                host='https://github.enterprise.com/api/v3',
+            )
+        }
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+
+    with patch.object(handler, 'verify_repo_provider') as mock_verify:
+        mock_verify.return_value.git_provider = ProviderType.GITHUB
+        mock_verify.return_value.full_name = 'owner/repo'
+
+        remote_url = await handler.get_authenticated_git_url('owner/repo')
+
+    assert remote_url == 'https://gh-token@github.enterprise.com/owner/repo.git'
+
+
+@pytest.mark.asyncio
+async def test_gitlab_api_path_stripped():
+    """Test that GitLab API paths like /api/v4 are stripped from the domain."""
+    tokens = MappingProxyType(
+        {
+            ProviderType.GITLAB: ProviderToken(
+                token=SecretStr('gl-token'),
+                host='https://gitlab.example.com/api/v4',
+            )
+        }
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+
+    with patch.object(handler, 'verify_repo_provider') as mock_verify:
+        mock_verify.return_value.git_provider = ProviderType.GITLAB
+        mock_verify.return_value.full_name = 'owner/repo'
+
+        remote_url = await handler.get_authenticated_git_url('owner/repo')
+
+    assert remote_url == 'https://oauth2:gl-token@gitlab.example.com/owner/repo.git'
