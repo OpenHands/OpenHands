@@ -93,17 +93,7 @@ class SlackNewConversationView(SlackViewInterface):
         return attachment_content.descriptions
 
     def _format_slack_message_context(self, message: dict) -> str:
-        context_parts = []
-        if message.get('text'):
-            context_parts.append(message['text'])
-
-        attachment_descriptions = self._process_attachment_content_for_message(message)
-        if attachment_descriptions:
-            context_parts.append(
-                'Slack attachments:\n' + '\n'.join(attachment_descriptions)
-            )
-
-        return '\n\n'.join(context_parts)
+        return message.get('text') or ''
 
     def _build_message_content(self, text: str) -> list[TextContent | ImageContent]:
         content: list[TextContent | ImageContent] = [TextContent(text=text)]

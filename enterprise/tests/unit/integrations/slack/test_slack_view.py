@@ -120,6 +120,29 @@ def test_build_message_content_includes_slack_attachment_images(
     assert content[1].image_urls == ['data:image/png;base64,aW1hZ2UtYnl0ZXM=']
 
 
+def test_format_slack_message_context_ignores_historical_attachments(
+    slack_new_conversation_view,
+):
+    with patch(
+        'integrations.slack.slack_view.collect_message_attachment_content'
+    ) as mock_collect_attachment_content:
+        context = slack_new_conversation_view._format_slack_message_context(
+            {
+                'text': 'Earlier thread message',
+                'files': [
+                    {
+                        'title': 'earlier-screenshot.png',
+                        'mimetype': 'image/png',
+                    }
+                ],
+            }
+        )
+
+    assert context == 'Earlier thread message'
+    assert slack_new_conversation_view.attachment_image_urls == []
+    mock_collect_attachment_content.assert_not_called()
+
+
 # Test: V1 Conversation Creation
 # ---------------------------------------------------------------------------
 
