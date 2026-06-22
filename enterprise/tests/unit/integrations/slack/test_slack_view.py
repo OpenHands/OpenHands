@@ -102,6 +102,24 @@ def slack_update_conversation_view_v1(mock_slack_user, mock_user_auth):
 
 
 # ---------------------------------------------------------------------------
+
+
+def test_build_message_content_includes_slack_attachment_images(
+    slack_new_conversation_view,
+):
+    slack_new_conversation_view.attachment_image_urls = [
+        'data:image/png;base64,aW1hZ2UtYnl0ZXM='
+    ]
+
+    content = slack_new_conversation_view._build_message_content('hello')
+
+    assert len(content) == 2
+    assert content[0].type == 'text'
+    assert content[0].text == 'hello'
+    assert content[1].type == 'image'
+    assert content[1].image_urls == ['data:image/png;base64,aW1hZ2UtYnl0ZXM=']
+
+
 # Test: V1 Conversation Creation
 # ---------------------------------------------------------------------------
 
