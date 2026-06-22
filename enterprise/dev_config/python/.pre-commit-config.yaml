@@ -53,10 +53,10 @@ repos:
           - openhands-sdk==1.25.0
           - openhands-tools==1.25.0
           - sqlalchemy>=2.0
-        # Use -p (package) and --namespace-packages to avoid dual module name conflicts
+        # Use -p (package) to avoid dual module name conflict when using MYPYPATH
         # MYPYPATH=enterprise (from repo root) allows resolving imports
         # Note: tests package excluded to avoid conflict with core openhands tests
-        entry: bash -c 'MYPYPATH=enterprise mypy --config-file enterprise/dev_config/python/mypy.ini --namespace-packages -p integrations -p server -p storage -p sync'
+        entry: bash -c 'MYPYPATH=enterprise mypy --config-file enterprise/dev_config/python/mypy.ini -p integrations -p server -p storage -p sync'
         always_run: true
         pass_filenames: false
         files: ^enterprise/
