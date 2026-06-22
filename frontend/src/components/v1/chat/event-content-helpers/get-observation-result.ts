@@ -49,6 +49,7 @@ export const getObservationResult = (
       if (observation.error) return "error";
       return "success";
     case "MCPToolObservation":
+    case "TaskObservation":
       if (observation.is_error) return "error";
       return "success";
     default:

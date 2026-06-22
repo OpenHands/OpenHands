@@ -298,6 +298,29 @@ export interface SwitchLLMObservation extends ObservationBase<"SwitchLLMObservat
   active_model: string | null;
 }
 
+export interface TaskObservation extends ObservationBase<"TaskObservation"> {
+  /**
+   * Result content returned by the sub-agent.
+   */
+  content: Array<TextContent | ImageContent>;
+  /**
+   * Whether the task resulted in an error.
+   */
+  is_error: boolean;
+  /**
+   * The unique identifier of the task.
+   */
+  task_id: string;
+  /**
+   * The sub-agent that executed the task.
+   */
+  subagent: string;
+  /**
+   * The status of the task.
+   */
+  status: string;
+}
+
 export type Observation =
   | MCPToolObservation
   | FinishObservation
@@ -311,4 +334,5 @@ export type Observation =
   | PlanningFileEditorObservation
   | GlobObservation
   | GrepObservation
-  | SwitchLLMObservation;
+  | SwitchLLMObservation
+  | TaskObservation;
