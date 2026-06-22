@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-implement import logging
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
