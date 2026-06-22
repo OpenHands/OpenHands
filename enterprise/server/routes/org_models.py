@@ -563,9 +563,10 @@ class OrgAppSettingsResponse(BaseModel):
         Raises:
             ValueError: If registered_marketplaces contains invalid data
         """
-        # Extract registered_marketplaces from extension_settings
-        extension = org.extension_settings or {}
-        marketplaces_raw = extension.get('registered_marketplaces', [])
+        from pydantic import ValidationError
+
+        # Get registered_marketplaces from dedicated column
+        marketplaces_raw = org.registered_marketplaces or []
 
         # Convert dicts to MarketplaceRegistration objects with validation
         marketplaces = []
@@ -580,10 +581,10 @@ class OrgAppSettingsResponse(BaseModel):
                         f"registered_marketplaces[{i}]: expected dict or "
                         f"MarketplaceRegistration, got {type(mp).__name__}"
                     )
-            except Exception as e:
+            except ValidationError as e:
                 raise ValueError(
                     f"Invalid marketplace at index {i} in org '{org.name}' "
-                    f"extension_settings: {e}"
+                    f"registered_marketplaces: {e}"
                 ) from e
 
         return cls(

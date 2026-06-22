@@ -150,37 +150,50 @@ class TestMergeMarketplaces:
         assert personal[0]['source'] == 'github:myorg/plugins'
         assert personal[0]['scope'] == 'personal'
 
-    def test_user_overrides_instance(self):
-        """Test that user can override an instance marketplace."""
+    def test_user_cannot_override_instance(self):
+        """Test that user cannot override an instance marketplace.
+
+        Users can only add NEW personal marketplaces. They cannot modify
+        or override instance marketplace settings.
+        """
         instance = [
             {'source': 'github:OpenHands/skills', 'ref': 'main', 'auto_load': 'all'}
         ]
         user = [{'source': 'github:OpenHands/skills', 'ref': 'v2', 'auto_load': None}]
         inherited, personal = _merge_marketplaces(instance, [], user)
-        # Instance marketplace should be marked as overridden
+        # Instance marketplace remains unchanged
         assert len(inherited) == 1
         assert inherited[0]['source'] == 'github:OpenHands/skills'
-        assert inherited[0]['scope'] == 'personal'
-        assert inherited[0]['overridden'] is True
-        # User's version should be in personal
-        assert len(personal) == 1
-        assert personal[0]['ref'] == 'v2'
-        assert personal[0]['scope'] == 'personal'
+        assert inherited[0]['scope'] == 'instance'
+        assert inherited[0]['ref'] == 'main'
+        assert inherited[0]['auto_load'] == 'all'
+        # User's attempt is ignored - not added to personal
+        assert len(personal) == 0
 
-    def test_user_overrides_org(self):
-        """Test that user can override an org marketplace."""
+    def test_user_cannot_override_org(self):
+        """Test that user cannot override an org marketplace.
+
+        Users can only add NEW personal marketplaces. They cannot modify
+        or override org marketplace settings.
+        """
         org = [{'source': 'github:myorg/plugins', 'ref': 'main', 'auto_load': 'all'}]
         user = [{'source': 'github:myorg/plugins', 'ref': 'v2', 'auto_load': None}]
         inherited, personal = _merge_marketplaces([], org, user)
+        # Org marketplace remains unchanged
         assert len(inherited) == 1
         assert inherited[0]['source'] == 'github:myorg/plugins'
-        assert inherited[0]['scope'] == 'personal'
-        assert inherited[0]['overridden'] is True
-        assert len(personal) == 1
-        assert personal[0]['ref'] == 'v2'
+        assert inherited[0]['scope'] == 'org'
+        assert inherited[0]['ref'] == 'main'
+        assert inherited[0]['auto_load'] == 'all'
+        # User's attempt is ignored - not added to personal
+        assert len(personal) == 0
 
     def test_full_composition(self):
-        """Test full composition with instance, org, and user settings."""
+        """Test full composition with instance, org, and user settings.
+
+        Users can only add NEW personal marketplaces.
+        Users cannot override instance or org marketplace settings.
+        """
         instance = [
             {'source': 'github:OpenHands/skills', 'auto_load': 'all'},
             {'source': 'github:instance/only', 'name': 'instance-only'},
@@ -190,40 +203,38 @@ class TestMergeMarketplaces:
             {'source': 'github:myorg/plugins', 'name': 'org-plugins'},
         ]
         user = [
-            {'source': 'github:OpenHands/skills', 'ref': 'v3'},  # override org
-            {'source': 'github:myorg/plugins', 'auto_load': None},  # override org
-            {'source': 'github:user/custom', 'name': 'user-market'},
+            {'source': 'github:OpenHands/skills', 'ref': 'v3'},  # attempts to override org - IGNORED
+            {'source': 'github:myorg/plugins', 'auto_load': None},  # attempts to override org - IGNORED
+            {'source': 'github:user/custom', 'name': 'user-market'},  # NEW marketplace - should be added
         ]
 
         inherited, personal = _merge_marketplaces(instance, org, user)
 
-        # Check inherited marketplaces
+        # Check inherited marketplaces (3 total)
         assert len(inherited) == 3
         inherited_by_source = {mp['source']: mp for mp in inherited}
 
-        # github:OpenHands/skills should have user's values
-        assert inherited_by_source['github:OpenHands/skills']['ref'] == 'v3'
-        assert inherited_by_source['github:OpenHands/skills']['scope'] == 'personal'
-        assert inherited_by_source['github:OpenHands/skills']['overridden'] is True
+        # github:OpenHands/skills: org overrides instance, user's override is ignored
+        assert inherited_by_source['github:OpenHands/skills']['ref'] == 'v2'  # from org
+        assert inherited_by_source['github:OpenHands/skills']['scope'] == 'org'
 
         # github:instance/only should still be instance-level
         assert inherited_by_source['github:instance/only']['scope'] == 'instance'
-        assert 'overridden' not in inherited_by_source['github:instance/only']
 
-        # github:myorg/plugins should have user's values
-        assert inherited_by_source['github:myorg/plugins']['scope'] == 'personal'
-        assert inherited_by_source['github:myorg/plugins']['overridden'] is True
+        # github:myorg/plugins: org's value preserved, user's override ignored
+        assert inherited_by_source['github:myorg/plugins']['scope'] == 'org'
+        assert inherited_by_source['github:myorg/plugins']['name'] == 'org-plugins'
 
-        # Check personal marketplaces
-        assert len(personal) == 3
-        personal_by_source = {mp['source']: mp for mp in personal}
-
-        assert personal_by_source['github:OpenHands/skills']['ref'] == 'v3'
-        assert personal_by_source['github:myorg/plugins']['auto_load'] is None
-        assert personal_by_source['github:user/custom']['name'] == 'user-market'
+        # Check personal marketplaces - only NEW user's marketplace
+        assert len(personal) == 1
+        assert personal[0]['source'] == 'github:user/custom'
+        assert personal[0]['name'] == 'user-market'
 
     def test_deduplication_by_source(self):
-        """Test that same source from multiple levels results in single entry."""
+        """Test that same source from multiple levels results in single entry.
+
+        User's attempt to override org marketplace is ignored.
+        """
         instance = [
             {'source': 'github:OpenHands/skills', 'ref': 'main', 'auto_load': 'all'}
         ]
@@ -232,16 +243,13 @@ class TestMergeMarketplaces:
 
         inherited, personal = _merge_marketplaces(instance, org, user)
 
-        # Should only have one entry in inherited
+        # Should have org's values (user's override is ignored)
         assert len(inherited) == 1
-        # Should have user's values (highest priority)
-        assert inherited[0]['ref'] == 'user-branch'
-        assert inherited[0]['scope'] == 'personal'
-        assert inherited[0]['overridden'] is True
+        assert inherited[0]['ref'] == 'org-branch'
+        assert inherited[0]['scope'] == 'org'
 
-        # Personal should have user's version
-        assert len(personal) == 1
-        assert personal[0]['ref'] == 'user-branch'
+        # Personal should be empty (user only tried to override, not add new)
+        assert len(personal) == 0
 
     def test_marketplace_with_empty_source_ignored(self):
         """Test that marketplaces with empty source are ignored."""
@@ -257,8 +265,12 @@ class TestMergeMarketplaces:
         assert inherited == []
         assert personal == []
 
-    def test_user_can_override_instance_without_changing_fields(self):
-        """Test that user can override instance marketplace while preserving other fields."""
+    def test_user_cannot_override_instance(self):
+        """Test that user cannot modify instance marketplace fields.
+
+        Users can only add NEW personal marketplaces. They cannot modify
+        instance marketplace settings.
+        """
         instance = [
             {
                 'source': 'github:OpenHands/skills',
@@ -267,27 +279,39 @@ class TestMergeMarketplaces:
                 'auto_load': 'all',
             }
         ]
-        # User only changes auto_load
+        # User tries to change auto_load
         user = [{'source': 'github:OpenHands/skills', 'auto_load': None}]
         inherited, personal = _merge_marketplaces(instance, [], user)
 
+        # Instance marketplace remains unchanged
         assert len(inherited) == 1
-        # Original fields should be preserved where not overridden
         assert inherited[0]['name'] == 'original-name'
         assert inherited[0]['ref'] == 'main'
-        assert inherited[0]['auto_load'] is None
-        assert inherited[0]['overridden'] is True
+        assert inherited[0]['auto_load'] == 'all'  # Not modified by user
+        assert inherited[0]['scope'] == 'instance'
 
-    def test_org_cannot_override_user_marketplace(self):
-        """Test that org cannot override user's personal marketplace (user wins)."""
+        # User's attempt is ignored
+        assert len(personal) == 0
+
+    def test_user_cannot_override_org_marketplace_with_new_user_marketplace(self):
+        """Test that user cannot override org marketplace even if user adds same source.
+
+        When org adds a marketplace, user's attempt to add the same source
+        to personal is ignored.
+        """
+        # User adds marketplace first (personal)
         user = [{'source': 'github:myorg/plugins', 'ref': 'user-branch'}]
+        # Org adds same marketplace
         org = [{'source': 'github:myorg/plugins', 'ref': 'org-branch'}]
         inherited, personal = _merge_marketplaces([], org, user)
 
-        # User's version should be in inherited
+        # Org's version goes to inherited
         assert len(inherited) == 1
-        assert inherited[0]['ref'] == 'user-branch'
-        assert inherited[0]['scope'] == 'personal'
+        assert inherited[0]['ref'] == 'org-branch'
+        assert inherited[0]['scope'] == 'org'
+
+        # User's version is ignored (not added to personal)
+        assert len(personal) == 0
 
     def test_org_overrides_instance_preserves_unmodified_instance_fields(self):
         """Test that org override preserves unmodified instance fields."""
@@ -474,8 +498,8 @@ class TestMarketplaceCompositionIntegration:
     def test_user_cannot_disable_org_marketplace(self):
         """Test that user cannot override org marketplace settings.
 
-        Note: Current implementation allows user to override org.
-        This test documents expected behavior - org settings should be immutable.
+        Users can only add NEW personal marketplaces. They cannot modify
+        or override instance/org marketplace settings.
         """
         org = [
             {
@@ -487,20 +511,19 @@ class TestMarketplaceCompositionIntegration:
         user = [
             {
                 'source': 'github:acme/company-plugins',
-                'auto_load': None,  # User tries to disable
+                'auto_load': None,  # User tries to disable - should be ignored
             }
         ]
 
         inherited, personal = _merge_marketplaces([], org, user)
 
-        # Current behavior: user overrides org
-        # Inherited shows scope changed to personal with overridden flag
+        # Org marketplace remains unchanged - user override is blocked
         assert len(inherited) == 1
-        assert inherited[0]['scope'] == 'personal'
-        assert inherited[0]['overridden'] is True
+        assert inherited[0]['scope'] == 'org'
+        assert inherited[0]['auto_load'] == 'all'  # Still 'all' from org
 
-        # Note: This may need to be changed to enforce org immutability
-        # if AC requires "Users cannot modify instance/org marketplaces"
+        # User's attempt is ignored - not added to personal
+        assert len(personal) == 0
 
     def test_no_confusion_between_name_and_source(self):
         """Test that name field is independent of source for deduplication."""

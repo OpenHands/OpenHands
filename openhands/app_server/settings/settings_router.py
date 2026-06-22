@@ -64,14 +64,21 @@ def _get_instance_default_marketplaces() -> list[dict]:
     Each definition: source[#name[#ref[#repo_path]]]
     Example: github:openhands/extensions#default#main#marketplaces/default
     Or JSON-encoded: [{"source":"github:...","name":"...","ref":"..."}]
+
+    Each parsed marketplace is validated using MarketplaceRegistration model.
+    Invalid entries are logged and skipped.
     """
     import json
+
+    from pydantic import ValidationError
+
+    from openhands.storage.data_models.settings import MarketplaceRegistration
 
     env_value = os.environ.get('INSTANCE_DEFAULT_MARKETPLACES', '')
     if not env_value:
         return []
 
-    marketplaces = []
+    parsed_marketplaces = []
     for definition in env_value.split(','):
         definition = definition.strip()
         if not definition:
@@ -83,11 +90,11 @@ def _get_instance_default_marketplaces() -> list[dict]:
                 parsed = json.loads(definition)
                 if isinstance(parsed, list):
                     for mp in parsed:
-                        marketplaces.append(
+                        parsed_marketplaces.append(
                             {**mp, 'auto_load': mp.get('auto_load', 'all')}
                         )
                 elif isinstance(parsed, dict):
-                    marketplaces.append(
+                    parsed_marketplaces.append(
                         {**parsed, 'auto_load': parsed.get('auto_load', 'all')}
                     )
                 continue
@@ -108,9 +115,22 @@ def _get_instance_default_marketplaces() -> list[dict]:
             marketplace['repo_path'] = parts[3]
         marketplace['auto_load'] = 'all'
 
-        marketplaces.append(marketplace)
+        parsed_marketplaces.append(marketplace)
 
-    return marketplaces
+    # Validate each marketplace using MarketplaceRegistration model
+    validated_marketplaces = []
+    for mp_dict in parsed_marketplaces:
+        try:
+            mp = MarketplaceRegistration.model_validate(mp_dict)
+            validated_marketplaces.append(mp.model_dump())
+        except ValidationError as e:
+            logger.warning(
+                f"Invalid marketplace in INSTANCE_DEFAULT_MARKETPLACES: "
+                f"{mp_dict}, error: {e}"
+            )
+            continue
+
+    return validated_marketplaces
 
 
 async def _get_org_marketplaces(
@@ -170,8 +190,8 @@ async def _get_org_marketplaces(
             result = await session.execute(stmt)
             org = result.scalar_one_or_none()
 
-            if org and org.extension_settings:
-                return org.extension_settings.get('registered_marketplaces', [])
+            if org and org.registered_marketplaces:
+                return org.registered_marketplaces
     except ImportError:
         pass
 
@@ -186,12 +206,12 @@ def _merge_marketplaces(
     """Merge marketplaces from different scopes with proper precedence.
 
     Composition order (additive): Instance -> Org -> User
-    Each level can add more marketplaces, but user overrides earlier definitions.
+    Users cannot override instance or org marketplace settings.
 
     Args:
         instance_marketplaces: From INSTANCE_DEFAULT_MARKETPLACES env var
-        org_marketplaces: From org extension_settings
-        user_marketplaces: From user registered_marketplaces
+        org_marketplaces: From org registered_marketplaces column
+        user_marketplaces: From user registered_marketplaces column
 
     Returns:
         Tuple of (inherited_marketplaces, personal_marketplaces)
@@ -225,21 +245,29 @@ def _merge_marketplaces(
                     inherited[i] = {**imp, **mp, 'scope': 'org'}
                     break
 
-    # User settings (highest priority) - these go to personal list
+    # User settings - users can only add NEW marketplaces
+    # Users cannot override instance or org marketplace settings
     for mp in user_marketplaces:
         source = mp.get('source', '')
+
+        # If source already exists in inherited, check if it's immutable (instance/org)
+        if source in seen_sources:
+            existing = next(
+                (imp for imp in inherited if imp.get('source') == source),
+                None
+            )
+            if existing and existing.get('scope') in ('instance', 'org'):
+                # Cannot override instance or org marketplaces - skip
+                logger.warning(
+                    f"User cannot override {existing['scope']} marketplace: {source}. "
+                    "Contact org admin to modify."
+                )
+                continue
+
+        # Add to personal (only if new source or overriding personal)
         if source and source not in seen_sources:
             personal.append({**mp, 'scope': 'personal'})
             seen_sources.add(source)
-        elif source in seen_sources:
-            # User is modifying an existing marketplace - add to personal
-            # and mark as overridden in inherited
-            personal.append({**mp, 'scope': 'personal'})
-            # Update inherited to show user override
-            for i, imp in enumerate(inherited):
-                if imp.get('source') == source:
-                    inherited[i] = {**imp, 'scope': 'personal', 'overridden': True}
-                    break
 
     return inherited, personal
 

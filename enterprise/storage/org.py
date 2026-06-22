@@ -75,7 +75,7 @@ class Org(Base):
     is_default: Mapped[bool] = mapped_column(nullable=False, default=False)
     # Marketplace registrations at org level for plugin resolution
     # Composable with instance defaults and user personal marketplaces
-    extension_settings: Mapped[dict[str, Any] | None] = mapped_column(
+    registered_marketplaces: Mapped[list[dict[str, Any]] | None] = mapped_column(
         JSON, nullable=True
     )
 

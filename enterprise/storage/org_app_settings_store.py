@@ -112,15 +112,10 @@ class OrgAppSettingsStore:
         if not org:
             return None
 
-        # Separate extension_settings fields from regular org fields
+        # Handle registered_marketplaces separately (dedicated column)
         update_dict = update_data.model_dump(exclude_unset=True)
-
-        # Handle registered_marketplaces -> extension_settings
         if 'registered_marketplaces' in update_dict:
-            marketplaces = update_dict.pop('registered_marketplaces')
-            extension = dict(org.extension_settings or {})
-            extension['registered_marketplaces'] = marketplaces
-            org.extension_settings = extension
+            org.registered_marketplaces = update_dict.pop('registered_marketplaces')
 
         # Update regular org fields
         for field, value in update_dict.items():

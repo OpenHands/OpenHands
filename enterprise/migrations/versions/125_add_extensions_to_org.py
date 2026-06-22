@@ -1,7 +1,7 @@
-"""Add extension_settings column to org table.
+"""Add registered_marketplaces column to org table.
 
-This column stores extensible settings like registered_marketplaces
-for organization-level plugin resolution.
+This column stores marketplace registrations for organization-level
+plugin resolution. Composable with instance defaults and user marketplaces.
 
 Revision ID: 125
 Revises: 124
@@ -24,9 +24,9 @@ depends_on: Union[str, None] = None
 def upgrade() -> None:
     op.add_column(
         'org',
-        sa.Column('extension_settings', sa.JSON(), nullable=True)
+        sa.Column('registered_marketplaces', sa.JSON(), nullable=True)
     )
 
 
 def downgrade() -> None:
-    op.drop_column('org', 'extension_settings')
+    op.drop_column('org', 'registered_marketplaces')
