@@ -256,6 +256,54 @@ async def test_azure_devops_pat_git_url_uses_basic_auth():
 
 
 @pytest.mark.asyncio
+async def test_forgejo_subpath_preserved_in_git_url():
+    """A Forgejo/Gitea host under a subpath keeps the subpath in the clone URL."""
+    tokens = MappingProxyType(
+        {
+            ProviderType.FORGEJO: ProviderToken(
+                token=SecretStr('forgejo-token'),
+                host='https://myserver/forgejo',
+            )
+        }
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+
+    with patch.object(handler, 'verify_repo_provider') as mock_verify:
+        mock_verify.return_value.git_provider = ProviderType.FORGEJO
+        mock_verify.return_value.full_name = 'username/reponame'
+
+        remote_url = await handler.get_authenticated_git_url('username/reponame')
+
+    assert remote_url == (
+        'https://forgejo-token@myserver/forgejo/username/reponame.git'
+    )
+
+
+@pytest.mark.asyncio
+async def test_forgejo_host_api_suffix_stripped():
+    """A host entered with a trailing API path still has that suffix stripped."""
+    tokens = MappingProxyType(
+        {
+            ProviderType.FORGEJO: ProviderToken(
+                token=SecretStr('forgejo-token'),
+                host='https://myserver/forgejo/api/v1',
+            )
+        }
+    )
+    handler = ProviderHandler(provider_tokens=tokens)
+
+    with patch.object(handler, 'verify_repo_provider') as mock_verify:
+        mock_verify.return_value.git_provider = ProviderType.FORGEJO
+        mock_verify.return_value.full_name = 'username/reponame'
+
+        remote_url = await handler.get_authenticated_git_url('username/reponame')
+
+    assert remote_url == (
+        'https://forgejo-token@myserver/forgejo/username/reponame.git'
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_github_organizations_delegates_to_service():
     """Test that get_github_organizations calls get_organizations_from_installations on the GitHub service."""
     tokens = MappingProxyType(
