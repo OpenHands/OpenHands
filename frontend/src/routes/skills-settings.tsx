@@ -1,6 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { Typography } from "#/ui/typography";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
@@ -244,7 +245,7 @@ function SkillsSettingsScreen() {
           displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
           setHasChanges(false);
         },
-        onError: (error: { response?: { status?: number } }) => {
+        onError: (error: AxiosError) => {
           // Handle concurrent modification conflict (HTTP 409)
           if (error.response?.status === 409) {
             displayErrorToast(

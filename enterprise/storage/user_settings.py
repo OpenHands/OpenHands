@@ -5,14 +5,14 @@ from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import SecretStr
-
-logger = logging.getLogger(__name__)
 from server.constants import DEFAULT_BILLING_MARGIN
 from sqlalchemy import DateTime, Identity, String
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 from storage.encrypt_utils import decrypt_legacy_value, encrypt_legacy_value
+
+logger = logging.getLogger(__name__)
 
 
 class UserSettings(Base):
