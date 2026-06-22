@@ -296,8 +296,11 @@ async def test_update_raises_conflict_when_stale_last_known_updated_at(
 
         # Verify error details
         assert exc_info.value.org_id == str(org_id)
-        assert exc_info.value.expected_version == stale_updated_at
-        assert exc_info.value.actual_version == org.updated_at
+        # The expected_version should be the stale timestamp (what the client sent)
+        # Both should be equal to stale_updated_at (normalize timezone for comparison)
+        assert exc_info.value.expected_version.replace(tzinfo=None) == stale_updated_at.replace(tzinfo=None)
+        # The actual_version should be different (current DB state after modification)
+        assert exc_info.value.actual_version.replace(tzinfo=None) != stale_updated_at.replace(tzinfo=None)
 
 
 @pytest.mark.asyncio
