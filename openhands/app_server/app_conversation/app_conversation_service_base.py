@@ -11,8 +11,6 @@ from uuid import UUID
 if TYPE_CHECKING:
     import httpx
 
-    from openhands.storage.data_models.settings import MarketplaceRegistration
-
 import base62
 
 from openhands.app_server.app_conversation.app_conversation_models import (
@@ -46,6 +44,7 @@ from openhands.sdk.security import (
 )
 from openhands.sdk.skills import Skill
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
+from openhands.storage.data_models.settings import MarketplaceRegistration
 
 _logger = logging.getLogger(__name__)
 PRE_COMMIT_HOOK = '.git/hooks/pre-commit'

@@ -4,6 +4,12 @@ from unittest.mock import patch
 
 import pytest
 from fastmcp.mcp_config import MCPConfig
+from pydantic import SecretStr, ValidationError
+
+import openhands.app_server.settings.settings_models as settings_module
+from openhands.app_server.settings.llm_profiles import ProfileNotFoundError
+from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import (
     AGENT_SETTINGS_SCHEMA_VERSION,
@@ -11,12 +17,6 @@ from openhands.sdk.settings import (
     OpenHandsAgentSettings,
 )
 from openhands.sdk.settings.model import CondenserSettings, VerificationSettings
-from pydantic import SecretStr, ValidationError
-
-import openhands.app_server.settings.settings_models as settings_module
-from openhands.app_server.settings.llm_profiles import ProfileNotFoundError
-from openhands.app_server.settings.settings_models import Settings
-from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
 from openhands.storage.data_models.settings import MarketplaceRegistration
 
 
@@ -832,7 +832,9 @@ class TestMarketplaceRegistrationValidationEdgeCases:
 
     def test_name_with_hyphens_and_underscores(self):
         """Test that names with hyphens and underscores are valid."""
-        reg = MarketplaceRegistration(name='my_marketplace-name', source='github:owner/repo')
+        reg = MarketplaceRegistration(
+            name='my_marketplace-name', source='github:owner/repo'
+        )
         assert reg.name == 'my_marketplace-name'
 
     def test_name_with_numbers(self):

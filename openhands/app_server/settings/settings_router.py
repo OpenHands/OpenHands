@@ -10,12 +10,6 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from fastapi.responses import JSONResponse
-from openhands.sdk.llm import LLM
-from openhands.sdk.settings import (
-    ConversationSettings,
-    OpenHandsAgentSettings,
-    export_agent_settings_schema,
-)
 from pydantic import BaseModel, Field
 
 from openhands.analytics import get_analytics_service
@@ -51,6 +45,12 @@ from openhands.app_server.utils.llm import (
     resolve_llm_base_url,
 )
 from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk.llm import LLM
+from openhands.sdk.settings import (
+    ConversationSettings,
+    OpenHandsAgentSettings,
+    export_agent_settings_schema,
+)
 
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
@@ -120,13 +120,24 @@ def _get_instance_default_marketplaces() -> list[dict]:
     # Validate each marketplace using MarketplaceRegistration model
     validated_marketplaces = []
     for mp_dict in parsed_marketplaces:
+        # Auto-generate name from source if not provided
+        if 'name' not in mp_dict or not mp_dict['name']:
+            source = mp_dict.get('source', '')
+            # Extract repo name from source (e.g., "github:owner/repo" -> "repo")
+            if ':' in source:
+                mp_dict['name'] = source.split(':')[-1].split('/')[-1]
+            elif '/' in source:
+                mp_dict['name'] = source.split('/')[-1]
+            else:
+                mp_dict['name'] = source
+
         try:
             mp = MarketplaceRegistration.model_validate(mp_dict)
             validated_marketplaces.append(mp.model_dump())
         except ValidationError as e:
             logger.warning(
-                f"Invalid marketplace in INSTANCE_DEFAULT_MARKETPLACES: "
-                f"{mp_dict}, error: {e}"
+                f'Invalid marketplace in INSTANCE_DEFAULT_MARKETPLACES: '
+                f'{mp_dict}, error: {e}'
             )
             continue
 
@@ -138,7 +149,7 @@ async def _get_org_marketplaces(
 ) -> list[dict]:
     """Get organization-level marketplaces from the database.
 
-    In Enterprise mode, uses OrgAppSettingsService to get the user's org.
+    In Enterprise mode, queries the org directly using OrgAppSettingsStore.
     In OSS mode, queries the default org's extension_settings directly.
 
     Args:
@@ -150,43 +161,29 @@ async def _get_org_marketplaces(
     if not user_id:
         return []
 
-    # Try Enterprise: Use OrgAppSettingsService
+    # Try Enterprise: Query org directly by user_id using store
     try:
-        from enterprise.server.services.org_app_settings_service import (
-            OrgAppSettingsService,
-        )
         from enterprise.storage.org_app_settings_store import OrgAppSettingsStore
+        from openhands.storage.database import a_session_maker
 
-        # Import these at runtime to avoid circular imports
-        from openhands.app_server.config import get_db_session
-        from openhands.app_server.user.user_context import UserContext
-
-        # Create a minimal user context for the user_id
-        class MinimalUserContext(UserContext):
-            async def get_user_id(self) -> str | None:
-                return user_id
-
-        # Get db session and create service
-        async with get_db_session() as db_session:
+        async with a_session_maker() as db_session:
             store = OrgAppSettingsStore(db_session=db_session)
-            service = OrgAppSettingsService(
-                store=store,
-                user_context=MinimalUserContext(),
-            )
-            settings = await service.get_org_app_settings()
-            return [mp.model_dump() for mp in settings.registered_marketplaces]
+            org = await store.get_current_org_by_user_id(user_id)
+
+            if org and org.registered_marketplaces:
+                return org.registered_marketplaces
     except ImportError:
         pass
 
     # OSS fallback: Query default org directly
     try:
-        from openhands.storage.database import a_session_maker
         from sqlalchemy import select
 
         from enterprise.storage.org import Org
+        from openhands.storage.database import a_session_maker
 
         async with a_session_maker() as session:
-            stmt = select(Org).where(Org.is_default == True).limit(1)
+            stmt = select(Org).where(Org.is_default).limit(1)
             result = await session.execute(stmt)
             org = result.scalar_one_or_none()
 
@@ -253,14 +250,13 @@ def _merge_marketplaces(
         # If source already exists in inherited, check if it's immutable (instance/org)
         if source in seen_sources:
             existing = next(
-                (imp for imp in inherited if imp.get('source') == source),
-                None
+                (imp for imp in inherited if imp.get('source') == source), None
             )
             if existing and existing.get('scope') in ('instance', 'org'):
                 # Cannot override instance or org marketplaces - skip
                 logger.warning(
-                    f"User cannot override {existing['scope']} marketplace: {source}. "
-                    "Contact org admin to modify."
+                    f'User cannot override {existing["scope"]} marketplace: {source}. '
+                    'Contact org admin to modify.'
                 )
                 continue
 

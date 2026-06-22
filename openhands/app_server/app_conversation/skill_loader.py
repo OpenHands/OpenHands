@@ -11,7 +11,6 @@ All source-specific skill loading is handled by the agent-server.
 """
 
 import logging
-from typing import TYPE_CHECKING
 
 import httpx
 from pydantic import BaseModel
@@ -21,9 +20,7 @@ from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.user.user_context import UserContext
 from openhands.sdk.skills import KeywordTrigger, Skill, TaskTrigger
-
-if TYPE_CHECKING:
-    from openhands.storage.data_models.settings import MarketplaceRegistration
+from openhands.storage.data_models.settings import MarketplaceRegistration
 
 _logger = logging.getLogger(__name__)
 

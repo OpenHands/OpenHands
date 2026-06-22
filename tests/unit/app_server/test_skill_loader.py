@@ -754,8 +754,9 @@ class TestLoadSkillsWithMarketplaces:
         assert mp1['name'] == 'public'
         assert mp1['source'] == 'github:OpenHands/skills'
         assert mp1['auto_load'] == 'all'
-        assert mp1['ref'] is None
-        assert mp1['repo_path'] is None
+        # None values are stripped by model_dump()
+        assert 'ref' not in mp1
+        assert 'repo_path' not in mp1
 
         # Verify second marketplace
         mp2 = payload['registered_marketplaces'][1]
@@ -763,7 +764,8 @@ class TestLoadSkillsWithMarketplaces:
         assert mp2['source'] == 'github:acme/plugins'
         assert mp2['ref'] == 'v1.0.0'
         assert mp2['repo_path'] == 'marketplaces/internal'
-        assert mp2['auto_load'] is None
+        # None values are stripped by model_dump()
+        assert 'auto_load' not in mp2
 
     @pytest.mark.asyncio
     @patch('httpx.AsyncClient')

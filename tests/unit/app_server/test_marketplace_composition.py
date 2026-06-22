@@ -88,7 +88,8 @@ class TestGetInstanceDefaultMarketplaces:
         assert result[0]['source'] == 'github:OpenHands/skills'
         assert result[0]['ref'] == 'v2'
         assert result[0]['repo_path'] == 'marketplaces/plugins'
-        assert 'name' not in result[0]
+        # name is auto-generated from source when not provided
+        assert result[0]['name'] == 'skills'
 
 
 class TestMergeMarketplaces:
