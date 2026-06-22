@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 from storage.base import Base
 from storage.org import Org
-from storage.org_app_settings_store import OrgAppSettingsStore
+from enterprise.storage.org_app_settings_store import OrgAppSettingsStore
 from storage.user import User
 
 
