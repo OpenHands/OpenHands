@@ -200,6 +200,20 @@ class LiteLlmManager:
                 )
 
                 if create_user:
+                    # create_user is reached only when onboarding a brand-new
+                    # OpenHands user, so a pre-existing LiteLLM record here is a
+                    # stale orphan from a prior teardown (e.g. an account reset
+                    # that dropped the user + org team but left the LiteLLM user).
+                    # Reset it so _create_user rebuilds a clean record instead of
+                    # re-attaching an inconsistent one LiteLLM later fails to
+                    # deserialize — same multi-install trade-off as the key reset.
+                    if await LiteLlmManager._user_exists(client, keycloak_user_id):
+                        logger.info(
+                            'LiteLlmManager:create_entries:reset_stale_litellm_user',
+                            extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                        )
+                        await LiteLlmManager._delete_user(client, keycloak_user_id)
+
                     user_created = await LiteLlmManager._create_user(
                         client, keycloak_user_info.get('email'), keycloak_user_id
                     )
@@ -1049,6 +1063,13 @@ class LiteLlmManager:
         )
 
         if not response.is_success:
+            if response.status_code == 404:
+                # User doesn't exist - delete is idempotent (mirrors _delete_team).
+                logger.info(
+                    'LiteLlmManager:_delete_user:already_deleted_or_missing',
+                    extra={'user_id': keycloak_user_id},
+                )
+                return
             logger.error(
                 'error_deleting_litellm_user',
                 extra={

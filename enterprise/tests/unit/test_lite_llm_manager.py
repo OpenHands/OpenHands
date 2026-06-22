@@ -620,6 +620,146 @@ class TestLiteLlmManager:
             assert exc_info.value.response.status_code == 500
 
     @pytest.mark.asyncio
+    async def test_create_entries_resets_stale_litellm_user(self, mock_settings):
+        """Onboarding a brand-new user must reset a pre-existing LiteLLM record.
+
+        A surviving LiteLLM user under the same id is a stale orphan from a
+        prior teardown (e.g. an account reset), so create_entries deletes it
+        before _create_user rebuilds a clean record.
+        """
+        mock_token_manager = MagicMock()
+        mock_token_manager.return_value.get_user_info_from_user_id = AsyncMock(
+            return_value={'email': 'test@example.com'}
+        )
+
+        mock_client = AsyncMock()
+        mock_client_class = MagicMock()
+        mock_client_class.return_value.__aenter__.return_value = mock_client
+
+        with (
+            patch.dict(os.environ, {'LOCAL_DEPLOYMENT': ''}),
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'),
+            patch('storage.lite_llm_manager.TokenManager', mock_token_manager),
+            patch('httpx.AsyncClient', mock_client_class),
+            patch.object(LiteLlmManager, '_get_team', new=AsyncMock(return_value=None)),
+            patch.object(LiteLlmManager, '_create_team', new=AsyncMock()),
+            patch.object(
+                LiteLlmManager,
+                '_team_alias_for_org',
+                new=AsyncMock(return_value='Personal Workspace'),
+            ),
+            # Pre-check sees the orphan; post-create verify sees the clean user.
+            patch.object(
+                LiteLlmManager, '_user_exists', new=AsyncMock(return_value=True)
+            ),
+            patch.object(LiteLlmManager, '_delete_user', new=AsyncMock()) as mock_del,
+            patch.object(
+                LiteLlmManager, '_create_user', new=AsyncMock(return_value=True)
+            ) as mock_create,
+            patch.object(LiteLlmManager, '_add_user_to_team', new=AsyncMock()),
+            patch.object(LiteLlmManager, '_delete_key_by_alias', new=AsyncMock()),
+            patch.object(
+                LiteLlmManager, '_generate_key', new=AsyncMock(return_value='new-key')
+            ),
+        ):
+            result = await LiteLlmManager.create_entries(
+                'test-user-id', 'test-user-id', mock_settings, create_user=True
+            )
+
+        assert result is not None
+        mock_del.assert_awaited_once_with(mock_client, 'test-user-id')
+        mock_create.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_create_entries_skips_reset_for_fresh_litellm_user(
+        self, mock_settings
+    ):
+        """A genuinely new user (no LiteLLM record) is created without a delete."""
+        mock_token_manager = MagicMock()
+        mock_token_manager.return_value.get_user_info_from_user_id = AsyncMock(
+            return_value={'email': 'test@example.com'}
+        )
+
+        mock_client = AsyncMock()
+        mock_client_class = MagicMock()
+        mock_client_class.return_value.__aenter__.return_value = mock_client
+
+        with (
+            patch.dict(os.environ, {'LOCAL_DEPLOYMENT': ''}),
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'),
+            patch('storage.lite_llm_manager.TokenManager', mock_token_manager),
+            patch('httpx.AsyncClient', mock_client_class),
+            patch.object(LiteLlmManager, '_get_team', new=AsyncMock(return_value=None)),
+            patch.object(LiteLlmManager, '_create_team', new=AsyncMock()),
+            patch.object(
+                LiteLlmManager,
+                '_team_alias_for_org',
+                new=AsyncMock(return_value='Personal Workspace'),
+            ),
+            # Pre-check: absent; post-create verify: present.
+            patch.object(
+                LiteLlmManager,
+                '_user_exists',
+                new=AsyncMock(side_effect=[False, True]),
+            ),
+            patch.object(LiteLlmManager, '_delete_user', new=AsyncMock()) as mock_del,
+            patch.object(
+                LiteLlmManager, '_create_user', new=AsyncMock(return_value=True)
+            ) as mock_create,
+            patch.object(LiteLlmManager, '_add_user_to_team', new=AsyncMock()),
+            patch.object(LiteLlmManager, '_delete_key_by_alias', new=AsyncMock()),
+            patch.object(
+                LiteLlmManager, '_generate_key', new=AsyncMock(return_value='new-key')
+            ),
+        ):
+            result = await LiteLlmManager.create_entries(
+                'test-user-id', 'test-user-id', mock_settings, create_user=True
+            )
+
+        assert result is not None
+        mock_del.assert_not_awaited()
+        mock_create.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_delete_user_idempotent_on_404(self, mock_http_client):
+        """_delete_user treats 404 as success (mirrors _delete_team)."""
+        response = MagicMock()
+        response.is_success = False
+        response.status_code = 404
+        response.text = 'User not found'
+        response.raise_for_status = MagicMock(
+            side_effect=AssertionError('should not raise on 404')
+        )
+        mock_http_client.post.return_value = response
+
+        # Must not raise.
+        await LiteLlmManager._delete_user(mock_http_client, 'missing-user')
+        response.raise_for_status.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_delete_user_raises_on_server_error(self, mock_http_client):
+        """_delete_user still surfaces non-404 failures."""
+        response = MagicMock()
+        response.is_success = False
+        response.status_code = 500
+        response.text = 'Internal server error'
+        response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(
+                message='500', request=MagicMock(), response=response
+            )
+        )
+        mock_http_client.post.return_value = response
+
+        with pytest.raises(httpx.HTTPStatusError):
+            await LiteLlmManager._delete_user(mock_http_client, 'test-user-id')
+
+    @pytest.mark.asyncio
     async def test_migrate_entries_missing_config(self, mock_user_settings):
         """Test migrate_entries when LiteLLM config is missing."""
         with patch.dict(os.environ, {'LITE_LLM_API_KEY': '', 'LITE_LLM_API_URL': ''}):
