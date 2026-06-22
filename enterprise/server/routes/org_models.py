@@ -591,7 +591,9 @@ class OrgAppSettingsResponse(BaseModel):
         Returns:
             OrgAppSettingsResponse with app settings
         """
-        from openhands.storage.marketplace_utils import validate_and_convert_marketplaces
+        from openhands.storage.marketplace_utils import (
+            validate_and_convert_marketplaces,
+        )
 
         # Get registered_marketplaces from dedicated column
         marketplaces = validate_and_convert_marketplaces(

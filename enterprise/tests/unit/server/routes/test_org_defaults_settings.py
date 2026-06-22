@@ -1,12 +1,9 @@
 """Unit tests for organization-default settings models and serialization."""
-import pytest
 
 from unittest.mock import MagicMock
 
+import pytest
 from pydantic import SecretStr, ValidationError
-
-from openhands.storage.data_models.settings import MarketplaceRegistration
-
 from server.constants import LITE_LLM_API_URL
 from server.routes.org_models import (
     MASKED_API_KEY,
@@ -17,6 +14,7 @@ from server.routes.org_models import (
 from storage.org import Org
 
 from openhands.sdk.settings import ACPAgentSettings
+from openhands.storage.data_models.settings import MarketplaceRegistration
 
 
 def test_org_update_keeps_sparse_diff_dicts():
@@ -251,9 +249,7 @@ class TestOrgAppSettingsUpdateMarketplaceValidation:
         """Test that invalid marketplace source is rejected."""
         with pytest.raises(ValidationError):
             OrgAppSettingsUpdate(
-                registered_marketplaces=[
-                    {'name': 'test', 'source': 'invalid!!source'}
-                ]
+                registered_marketplaces=[{'name': 'test', 'source': 'invalid!!source'}]
             )
 
     def test_multiple_valid_marketplaces(self):
@@ -290,4 +286,3 @@ class TestOrgAppSettingsUpdateMarketplaceValidation:
         assert update.registered_marketplaces[0].ref == 'v1.0.0'
         assert update.registered_marketplaces[0].repo_path == 'marketplaces/plugins'
         assert update.registered_marketplaces[0].auto_load == 'all'
-

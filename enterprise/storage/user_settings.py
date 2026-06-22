@@ -99,12 +99,14 @@ class UserSettings(Base):
 
     def to_settings(self):
         from openhands.app_server.settings.settings_models import Settings
-        from openhands.storage.marketplace_utils import validate_and_convert_marketplaces
+        from openhands.storage.marketplace_utils import (
+            validate_and_convert_marketplaces,
+        )
 
         # Validate marketplace data using shared utility
         marketplaces = validate_and_convert_marketplaces(
             self.registered_marketplaces,
-            source_name="user settings",
+            source_name='user settings',
         )
 
         return Settings(

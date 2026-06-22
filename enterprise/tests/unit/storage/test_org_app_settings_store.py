@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 from storage.base import Base
 from storage.org import Org
-from enterprise.storage.org_app_settings_store import OrgAppSettingsStore
 from storage.user import User
+
+from enterprise.storage.org_app_settings_store import OrgAppSettingsStore
 
 
 @pytest.fixture
@@ -251,7 +252,9 @@ async def test_update_succeeds_without_last_known_updated_at(async_session_maker
 
 
 @pytest.mark.asyncio
-async def test_update_raises_conflict_when_stale_last_known_updated_at(async_session_maker):
+async def test_update_raises_conflict_when_stale_last_known_updated_at(
+    async_session_maker,
+):
     """
     GIVEN: An organization exists and another request modified it
     WHEN: update_org_app_settings is called with stale last_known_updated_at

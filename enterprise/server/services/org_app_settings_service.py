@@ -16,8 +16,8 @@ from server.routes.org_models import (
     OrgNotFoundError,
 )
 from storage.org import Org
-from enterprise.storage.org_app_settings_store import OrgAppSettingsStore
 
+from enterprise.storage.org_app_settings_store import OrgAppSettingsStore
 from openhands.app_server.errors import AuthError
 from openhands.app_server.services.injector import Injector, InjectorState
 from openhands.app_server.user.user_context import UserContext
