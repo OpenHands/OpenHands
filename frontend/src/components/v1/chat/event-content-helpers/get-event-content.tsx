@@ -276,8 +276,7 @@ export const getEventContent = (
         />
       );
     } else if (event.observation.kind === "TaskObservation") {
-      // For sub-agent tasks (TaskToolSet), render the Subagent / Task ID /
-      // Query / Result card. The Query comes from the paired action's prompt.
+      // The Query comes from the paired action's prompt.
       details = (
         <SubagentObservationContent
           event={event as ObservationEvent<TaskObservation>}

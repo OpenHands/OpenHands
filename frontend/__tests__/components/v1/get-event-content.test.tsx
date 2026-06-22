@@ -236,6 +236,31 @@ describe("getEventContent", () => {
     );
   });
 
+  it("renders image content in the sub-agent result instead of dropping it", () => {
+    const observationWithImage: ObservationEvent = {
+      ...taskObservationEvent,
+      observation: {
+        kind: "TaskObservation",
+        content: [
+          { type: "text", text: "Here is a screenshot:" },
+          { type: "image", image_urls: ["data:image/png;base64,abc123"] },
+        ],
+        is_error: false,
+        task_id: "task_00000002",
+        subagent: "bash-runner",
+        status: "completed",
+      },
+    };
+
+    const { details } = getEventContent(observationWithImage, taskActionEvent);
+
+    const { container } = render(<div>{details}</div>);
+
+    expect(screen.getByText("Here is a screenshot:")).toBeInTheDocument();
+    const image = container.querySelector("img");
+    expect(image).toHaveAttribute("src", "data:image/png;base64,abc123");
+  });
+
   it("omits the query section when the task observation has no paired action", () => {
     const { details } = getEventContent(taskObservationEvent);
 

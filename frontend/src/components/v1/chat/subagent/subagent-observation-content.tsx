@@ -16,6 +16,11 @@ const getResultText = (observation: TaskObservation): string =>
     .map((c) => c.text)
     .join("\n");
 
+const getResultImages = (observation: TaskObservation): string[] =>
+  observation.content
+    .filter((c) => c.type === "image")
+    .flatMap((c) => c.image_urls);
+
 const getQuery = (correspondingAction?: ActionEvent): string | undefined => {
   const action = correspondingAction?.action;
   return action?.kind === "TaskAction" ? action.prompt : undefined;
@@ -34,6 +39,7 @@ export function SubagentObservationContent({
   const { observation } = event;
   const query = getQuery(correspondingAction);
   const resultText = getResultText(observation);
+  const resultImages = getResultImages(observation);
 
   return (
     <div className="flex flex-col gap-3 text-neutral-300">
@@ -67,7 +73,15 @@ export function SubagentObservationContent({
         <span className="font-bold">
           {t(I18nKey.SUBAGENT_OBSERVATION$RESULT)}
         </span>
-        <MarkdownRenderer>{resultText}</MarkdownRenderer>
+        {resultText && <MarkdownRenderer>{resultText}</MarkdownRenderer>}
+        {resultImages.map((url) => (
+          <img
+            key={url}
+            src={url}
+            alt={t(I18nKey.SUBAGENT_OBSERVATION$RESULT)}
+            className="max-w-full rounded-md"
+          />
+        ))}
       </div>
     </div>
   );
