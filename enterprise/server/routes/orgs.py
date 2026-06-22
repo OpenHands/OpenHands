@@ -447,6 +447,9 @@ async def update_org_app_settings(
     current organization. Access requires the MANAGE_APPLICATION_SETTINGS permission,
     which is granted to all organization members (member, admin, and owner roles).
 
+    The expected_updated_at field is logged for auditing/monitoring but does not
+    block saves - concurrent modifications are allowed (last-write-wins).
+
     Args:
         update_data: App settings update data
         service: OrgAppSettingsService (injected by dependency)

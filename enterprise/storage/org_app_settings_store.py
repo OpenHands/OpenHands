@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from uuid import UUID
 
 from server.constants import (
@@ -97,6 +98,9 @@ class OrgAppSettingsStore:
         Only updates fields that are explicitly provided in update_data.
         Uses flush() - commit happens at request end via DbSessionInjector.
 
+        If expected_updated_at is provided, it's logged for auditing/monitoring
+        purposes but the update always proceeds (last-write-wins semantics).
+
         Args:
             org_id: The organization's ID
             update_data: Pydantic model with fields to update
@@ -104,6 +108,9 @@ class OrgAppSettingsStore:
         Returns:
             Org: The updated organization object, or None if not found
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         result = await self.db_session.execute(
             select(Org).filter(Org.id == org_id).with_for_update()
         )
@@ -112,8 +119,32 @@ class OrgAppSettingsStore:
         if not org:
             return None
 
+        # Log if expected_updated_at was provided (for audit/monitoring)
+        # The update always proceeds - no conflict error thrown
+        if update_data.expected_updated_at is not None:
+            current_updated_at = org.updated_at
+            expected_updated_at = update_data.expected_updated_at
+
+            # Ensure timezone-aware comparison
+            if current_updated_at.tzinfo is None:
+                current_updated_at = current_updated_at.replace(tzinfo=timezone.utc)
+            if expected_updated_at.tzinfo is None:
+                expected_updated_at = expected_updated_at.replace(tzinfo=timezone.utc)
+
+            # Log if concurrent modification detected (informational only)
+            if current_updated_at > expected_updated_at:
+                logger.info(
+                    f"Org '{org.name}' was modified before this update. "
+                    f"Previous timestamp: {expected_updated_at.isoformat()}, "
+                    f"Current timestamp: {current_updated_at.isoformat()}. "
+                    f"Proceeding with update (last-write-wins)."
+                )
+
         # Handle registered_marketplaces separately (dedicated column)
-        update_dict = update_data.model_dump(exclude_unset=True)
+        update_dict = update_data.model_dump(
+            exclude_unset=True,
+            exclude={'expected_updated_at'}  # Don't save this field
+        )
         if 'registered_marketplaces' in update_dict:
             org.registered_marketplaces = update_dict.pop('registered_marketplaces')
 

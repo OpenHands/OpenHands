@@ -175,4 +175,6 @@ export type Settings = {
   sandbox_grouping_strategy?: SandboxGroupingStrategy;
   registered_marketplaces?: MarketplaceRegistration[];
   inherited_marketplaces?: MarketplaceWithScope[];
+  /** For optimistic locking - timestamp of last modification */
+  updated_at?: string;
 };

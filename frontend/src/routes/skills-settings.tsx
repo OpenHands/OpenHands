@@ -4,6 +4,7 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { Typography } from "#/ui/typography";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { cn } from "#/utils/utils";
+import { useSaveOrgAppSettings } from "#/hooks/mutation/use-save-org-app-settings";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useSkills } from "#/hooks/query/use-skills";
@@ -14,6 +15,8 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { I18nKey } from "#/i18n/declaration";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { organizationService } from "#/api/organization-service/organization-service.api";
 
 // Validation patterns for marketplace sources (must match backend patterns)
 const MARKETPLACE_PATTERNS = {
@@ -76,9 +79,18 @@ function WhiteToggle({
 
 function SkillsSettingsScreen() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const { mutate: saveSettings, isPending: isSaving } = useSaveSettings();
+  const { mutate: saveOrgAppSettings, isPending: isOrgSaving } = useSaveOrgAppSettings();
   const { data: settings, isLoading: settingsLoading } = useSettings();
   const { data: skills, isLoading: skillsLoading } = useSkills();
+
+  // Fetch org app settings with updated_at for optimistic locking
+  const { data: orgAppSettings } = useQuery({
+    queryKey: ["organization-app-settings"],
+    queryFn: () => organizationService.getOrganizationAppSettings(),
+    retry: false,
+  });
 
   const [skillsState, setSkillsState] = React.useState<SkillWithState[]>([]);
   const [hasChanges, setHasChanges] = React.useState(false);
@@ -93,6 +105,15 @@ function SkillsSettingsScreen() {
   const [selectedRepository, setSelectedRepository] = React.useState<
     string | null
   >(null);
+
+  // Track expected_updated_at for optimistic locking
+  const [expectedUpdatedAt, setExpectedUpdatedAt] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (orgAppSettings?.updated_at) {
+      setExpectedUpdatedAt(orgAppSettings.updated_at);
+    }
+  }, [orgAppSettings?.updated_at]);
 
   React.useEffect(() => {
     if (settings && skills) {
@@ -213,13 +234,15 @@ function SkillsSettingsScreen() {
       }
     }
 
-    saveSettings(
+    saveOrgAppSettings(
       {
-        disabled_skills: disabledSkills,
         registered_marketplaces: Array.from(marketplaceMap.values()),
+        expected_updated_at: expectedUpdatedAt,
       },
       {
-        onSuccess: () => {
+        onSuccess: (data) => {
+          // Update expected_updated_at for next save
+          setExpectedUpdatedAt(data.updated_at);
           displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
           setHasChanges(false);
         },

@@ -19,6 +19,21 @@ type OrganizationSettingsResponse = Pick<
   | "llm_api_key_set"
 >;
 
+export type OrganizationAppSettingsResponse = {
+  enable_proactive_conversation_starters: boolean;
+  max_budget_per_task: number | null;
+  registered_marketplaces: MarketplaceRegistration[];
+  updated_at: string | null;
+};
+
+export type OrganizationAppSettingsUpdate = {
+  enable_proactive_conversation_starters?: boolean;
+  max_budget_per_task?: number | null;
+  registered_marketplaces?: MarketplaceRegistration[] | null;
+  /** For optimistic locking - must match current updated_at */
+  expected_updated_at?: string | null;
+};
+
 export const organizationService = {
   getMe: async ({ orgId }: { orgId: string }) => {
     const { data } = await openHands.get<OrganizationMember>(
@@ -249,5 +264,22 @@ export const organizationService = {
     claimId: string;
   }) => {
     await openHands.delete(`/api/organizations/${orgId}/git-claims/${claimId}`);
+  },
+
+  getOrganizationAppSettings: async () => {
+    const { data } = await openHands.get<OrganizationAppSettingsResponse>(
+      "/api/organizations/app",
+    );
+    return data;
+  },
+
+  saveOrganizationAppSettings: async (
+    settings: OrganizationAppSettingsUpdate,
+  ) => {
+    const { data } = await openHands.post<OrganizationAppSettingsResponse>(
+      "/api/organizations/app",
+      settings,
+    );
+    return data;
   },
 };

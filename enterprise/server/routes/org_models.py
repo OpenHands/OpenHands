@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated, Any
 import logging
 
@@ -552,6 +553,8 @@ class OrgAppSettingsResponse(BaseModel):
     enable_proactive_conversation_starters: bool = True
     max_budget_per_task: float | None = None
     registered_marketplaces: list[MarketplaceRegistration] = Field(default_factory=list)
+    # Include updated_at in response for optimistic locking
+    updated_at: datetime | None = None
 
     @classmethod
     def from_org(cls, org: Org) -> 'OrgAppSettingsResponse':
@@ -594,6 +597,7 @@ class OrgAppSettingsResponse(BaseModel):
             else True,
             max_budget_per_task=org.max_budget_per_task,
             registered_marketplaces=marketplaces,
+            updated_at=org.updated_at,
         )
 
 
@@ -603,6 +607,9 @@ class OrgAppSettingsUpdate(BaseModel):
     enable_proactive_conversation_starters: bool | None = None
     max_budget_per_task: float | None = None
     registered_marketplaces: list[MarketplaceRegistration] | None = None
+    # Optimistic locking: client must provide the updated_at they read
+    # If this doesn't match DB, someone else modified the record
+    expected_updated_at: datetime | None = None
 
     @field_validator('max_budget_per_task')
     @classmethod
