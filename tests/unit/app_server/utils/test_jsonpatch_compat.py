@@ -42,12 +42,9 @@ class TestDeepMergeWithWholesaleKeys:
         """Pin the exact wholesale-replacement keyset.
 
         ``mcp_config`` is the only member-private agent-settings collection.
-        The legacy ``acp_env`` channel was removed in SDK 1.29.0 (ACP
-        provider creds now ride the per-user Secrets panel, not
-        agent_settings), so it is intentionally absent. Adding a key here
-        also makes it member-private in SaaS (see
-        ``saas_settings_store.MEMBER_PRIVATE_AGENT_KEYS``), so this asserts
-        the full set to force a conscious update.
+        Adding a key here also makes it member-private in SaaS (see
+        ``saas_settings_store.MEMBER_PRIVATE_AGENT_KEYS``), so assert the
+        full set to force a conscious update.
         """
         assert WHOLESALE_REPLACEMENT_KEYS == frozenset({'mcp_config'})
 

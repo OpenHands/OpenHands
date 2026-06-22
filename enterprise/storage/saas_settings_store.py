@@ -39,8 +39,7 @@ from openhands.sdk.llm.utils.openhands_provider import (
 # org-level defaults nor broadcast across the org. Covers ``mcp_config``
 # (per-user MCP server set, a dict-of-items collection). ACP provider
 # creds are not here — they ride the per-user Secrets panel
-# (``request.secrets`` -> ``state.secret_registry``), not agent_settings;
-# the legacy ``acp_env`` settings channel was removed in SDK 1.29.0.
+# (``request.secrets`` -> ``state.secret_registry``), not agent_settings.
 MEMBER_PRIVATE_AGENT_KEYS: frozenset[str] = WHOLESALE_REPLACEMENT_KEYS
 
 
