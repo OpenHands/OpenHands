@@ -1,7 +1,6 @@
 """Shared utilities for marketplace registration validation and conversion."""
 
 import logging
-from typing import Any
 
 from pydantic import ValidationError
 
@@ -12,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 def validate_and_convert_marketplaces(
     raw_marketplaces: list[dict | MarketplaceRegistration] | None,
-    source_name: str = "marketplaces",
+    source_name: str = 'marketplaces',
 ) -> list[MarketplaceRegistration]:
     """Validate and convert raw marketplace data to MarketplaceRegistration objects.
 
@@ -45,11 +44,11 @@ def validate_and_convert_marketplaces(
                 validated.append(mp)
             else:
                 raise ValueError(
-                    f"Expected dict or MarketplaceRegistration, got {type(mp).__name__}"
+                    f'Expected dict or MarketplaceRegistration, got {type(mp).__name__}'
                 )
         except (ValidationError, ValueError) as e:
             logger.warning(
-                f"Skipping invalid marketplace at index {i} in {source_name}: {e}"
+                f'Skipping invalid marketplace at index {i} in {source_name}: {e}'
             )
             continue
 

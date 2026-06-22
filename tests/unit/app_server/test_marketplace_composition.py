@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 # Import from the actual router module
 from openhands.app_server.settings.settings_router import (
     _get_instance_default_marketplaces,
@@ -546,8 +548,9 @@ class TestMarketplaceCompositionIntegration:
 
     def test_security_path_traversal_prevented_at_model_level(self):
         """Test that path traversal is rejected at model validation level."""
-        from openhands.storage.data_models.settings import MarketplaceRegistration
         from pydantic import ValidationError
+
+        from openhands.storage.data_models.settings import MarketplaceRegistration
 
         # Path traversal attempts should be rejected at model validation
         with pytest.raises(ValidationError, match="cannot contain '..'"):
