@@ -103,14 +103,14 @@ function SkillsSettingsScreen() {
     string | null
   >(null);
 
-  // Track expected_updated_at for optimistic locking
-  const [expectedUpdatedAt, setExpectedUpdatedAt] = React.useState<
+  // Track last_known_updated_at for optimistic locking
+  const [lastKnownUpdatedAt, setLastKnownUpdatedAt] = React.useState<
     string | null
   >(null);
 
   React.useEffect(() => {
     if (orgAppSettings?.updated_at) {
-      setExpectedUpdatedAt(orgAppSettings.updated_at);
+      setLastKnownUpdatedAt(orgAppSettings.updated_at);
     }
   }, [orgAppSettings?.updated_at]);
 
@@ -232,12 +232,12 @@ function SkillsSettingsScreen() {
     saveOrgAppSettings(
       {
         registered_marketplaces: Array.from(marketplaceMap.values()),
-        expected_updated_at: expectedUpdatedAt,
+        last_known_updated_at: lastKnownUpdatedAt,
       },
       {
         onSuccess: (data) => {
-          // Update expected_updated_at for next save
-          setExpectedUpdatedAt(data.updated_at);
+          // Update last_known_updated_at for next save
+          setLastKnownUpdatedAt(data.updated_at);
           displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
           setHasChanges(false);
         },

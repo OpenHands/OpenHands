@@ -31,7 +31,7 @@ export type OrganizationAppSettingsUpdate = {
   max_budget_per_task?: number | null;
   registered_marketplaces?: MarketplaceRegistration[] | null;
   /** For optimistic locking - must match current updated_at */
-  expected_updated_at?: string | null;
+  last_known_updated_at?: string | null;
 };
 
 export const organizationService = {

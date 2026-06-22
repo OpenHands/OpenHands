@@ -23,6 +23,7 @@ from server.routes.org_models import (
     OrgAppSettingsResponse,
     OrgAppSettingsUpdate,
     OrgAuthorizationError,
+    OrgConcurrentModificationError,
     OrgCreate,
     OrgDatabaseError,
     OrgDefaultsSettingsResponse,
@@ -447,8 +448,8 @@ async def update_org_app_settings(
     current organization. Access requires the MANAGE_APPLICATION_SETTINGS permission,
     which is granted to all organization members (member, admin, and owner roles).
 
-    The expected_updated_at field is logged for auditing/monitoring but does not
-    block saves - concurrent modifications are allowed (last-write-wins).
+    Implements optimistic locking: if last_known_updated_at is provided and doesn't
+    match the current version, returns 409 Conflict.
 
     Args:
         update_data: App settings update data
@@ -461,11 +462,22 @@ async def update_org_app_settings(
         HTTPException: 401 if user is not authenticated
         HTTPException: 403 if user lacks MANAGE_APPLICATION_SETTINGS permission
         HTTPException: 404 if current organization not found
+        HTTPException: 409 if concurrent modification conflict detected
         HTTPException: 422 if validation errors occur (handled by FastAPI)
         HTTPException: 500 if update fails
     """
     try:
         return await service.update_org_app_settings(update_data)
+    except OrgConcurrentModificationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                'message': str(e),
+                'org_id': e.org_id,
+                'expected_version': e.expected_version.isoformat(),
+                'actual_version': e.actual_version.isoformat(),
+            },
+        )
     except OrgNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

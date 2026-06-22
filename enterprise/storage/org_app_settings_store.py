@@ -98,8 +98,8 @@ class OrgAppSettingsStore:
         Only updates fields that are explicitly provided in update_data.
         Uses flush() - commit happens at request end via DbSessionInjector.
 
-        If expected_updated_at is provided, it's logged for auditing/monitoring
-        purposes but the update always proceeds (last-write-wins semantics).
+        Implements optimistic locking: if last_known_updated_at is provided and
+        doesn't match the current DB version, raises OrgConcurrentModificationError.
 
         Args:
             org_id: The organization's ID
@@ -107,8 +107,13 @@ class OrgAppSettingsStore:
 
         Returns:
             Org: The updated organization object, or None if not found
+
+        Raises:
+            OrgConcurrentModificationError: If optimistic locking detects a conflict
         """
         import logging
+
+        from enterprise.server.routes.org_models import OrgConcurrentModificationError
 
         logger = logging.getLogger(__name__)
 
@@ -120,11 +125,10 @@ class OrgAppSettingsStore:
         if not org:
             return None
 
-        # Log if expected_updated_at was provided (for audit/monitoring)
-        # The update always proceeds - no conflict error thrown
-        if update_data.expected_updated_at is not None:
+        # Optimistic locking: check if record was modified since client read it
+        if update_data.last_known_updated_at is not None:
             current_updated_at = org.updated_at
-            expected_updated_at = update_data.expected_updated_at
+            expected_updated_at = update_data.last_known_updated_at
 
             # Ensure timezone-aware comparison
             if current_updated_at.tzinfo is None:
@@ -132,19 +136,24 @@ class OrgAppSettingsStore:
             if expected_updated_at.tzinfo is None:
                 expected_updated_at = expected_updated_at.replace(tzinfo=timezone.utc)
 
-            # Log if concurrent modification detected (informational only)
-            if current_updated_at > expected_updated_at:
-                logger.info(
-                    f"Org '{org.name}' was modified before this update. "
-                    f'Previous timestamp: {expected_updated_at.isoformat()}, '
-                    f'Current timestamp: {current_updated_at.isoformat()}. '
-                    f'Proceeding with update (last-write-wins).'
+            # Raise conflict error if versions don't match
+            if current_updated_at != expected_updated_at:
+                logger.warning(
+                    f"Org '{org.name}' concurrent modification detected. "
+                    f'Expected: {expected_updated_at.isoformat()}, '
+                    f'Current: {current_updated_at.isoformat()}. '
+                    f'Raising conflict error.'
+                )
+                raise OrgConcurrentModificationError(
+                    org_id=str(org.id),
+                    expected_version=expected_updated_at,
+                    actual_version=current_updated_at,
                 )
 
         # Handle registered_marketplaces separately (dedicated column)
         update_dict = update_data.model_dump(
             exclude_unset=True,
-            exclude={'expected_updated_at'},  # Don't save this field
+            exclude={'last_known_updated_at'},  # Don't save this field
         )
         if 'registered_marketplaces' in update_dict:
             org.registered_marketplaces = update_dict.pop('registered_marketplaces')

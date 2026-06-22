@@ -98,6 +98,31 @@ class OrgNotFoundError(Exception):
         super().__init__(f'Organization with id "{org_id}" not found')
 
 
+class OrgConcurrentModificationError(Exception):
+    """Raised when a concurrent modification conflict is detected.
+
+    This occurs when optimistic locking detects that the resource was modified
+    by another request between when the client read it and when they attempted
+    to update it. The client should re-fetch the latest data and retry.
+    """
+
+    def __init__(
+        self,
+        org_id: str,
+        expected_version: datetime,
+        actual_version: datetime,
+    ):
+        self.org_id = org_id
+        self.expected_version = expected_version
+        self.actual_version = actual_version
+        super().__init__(
+            f'Organization "{org_id}" was modified by another request. '
+            f'Expected version: {expected_version.isoformat()}, '
+            f'actual version: {actual_version.isoformat()}. '
+            'Please refresh and retry.'
+        )
+
+
 class OrgMemberNotFoundError(Exception):
     """Raised when a member is not found in an organization."""
 
@@ -607,9 +632,9 @@ class OrgAppSettingsUpdate(BaseModel):
     enable_proactive_conversation_starters: bool | None = None
     max_budget_per_task: float | None = None
     registered_marketplaces: list[MarketplaceRegistration] | None = None
-    # Optimistic locking: client must provide the updated_at they read
-    # If this doesn't match DB, someone else modified the record
-    expected_updated_at: datetime | None = None
+    # Optimistic locking: client must provide the last_known_updated_at they read
+    # If this doesn't match DB, someone else modified the record and an error is raised
+    last_known_updated_at: datetime | None = None
 
     @field_validator('max_budget_per_task')
     @classmethod

@@ -176,14 +176,14 @@ async def test_update_org_app_settings_org_not_found(async_session_maker):
     assert result is None
 
 
-# Optimistic Locking Tests (Audit/Monitoring - updates always succeed)
+# Optimistic Locking Tests (proper conflict detection)
 
 
 @pytest.mark.asyncio
-async def test_update_succeeds_when_expected_updated_at_matches(async_session_maker):
+async def test_update_succeeds_when_last_known_updated_at_matches(async_session_maker):
     """
     GIVEN: An organization exists with updated_at timestamp
-    WHEN: update_org_app_settings is called with matching expected_updated_at
+    WHEN: update_org_app_settings is called with matching last_known_updated_at
     THEN: The update succeeds and updated_at changes
     """
     # Arrange
@@ -205,7 +205,7 @@ async def test_update_succeeds_when_expected_updated_at_matches(async_session_ma
 
         update_data = OrgAppSettingsUpdate(
             enable_proactive_conversation_starters=False,
-            expected_updated_at=original_updated_at,
+            last_known_updated_at=original_updated_at,
         )
 
         # Act
@@ -219,11 +219,11 @@ async def test_update_succeeds_when_expected_updated_at_matches(async_session_ma
 
 
 @pytest.mark.asyncio
-async def test_update_succeeds_without_expected_updated_at(async_session_maker):
+async def test_update_succeeds_without_last_known_updated_at(async_session_maker):
     """
     GIVEN: An organization exists
-    WHEN: update_org_app_settings is called without expected_updated_at
-    THEN: The update succeeds (backward compatibility)
+    WHEN: update_org_app_settings is called without last_known_updated_at
+    THEN: The update succeeds (backward compatibility - no lock check)
     """
     # Arrange
     async with async_session_maker() as session:
@@ -238,7 +238,7 @@ async def test_update_succeeds_without_expected_updated_at(async_session_maker):
 
         update_data = OrgAppSettingsUpdate(
             enable_proactive_conversation_starters=False,
-            expected_updated_at=None,  # No lock check
+            last_known_updated_at=None,  # No lock check
         )
 
         # Act
@@ -251,12 +251,14 @@ async def test_update_succeeds_without_expected_updated_at(async_session_maker):
 
 
 @pytest.mark.asyncio
-async def test_update_succeeds_even_with_stale_expected_updated_at(async_session_maker):
+async def test_update_raises_conflict_when_stale_last_known_updated_at(async_session_maker):
     """
     GIVEN: An organization exists and another request modified it
-    WHEN: update_org_app_settings is called with stale expected_updated_at
-    THEN: The update still succeeds (last-write-wins, concurrent mods allowed)
+    WHEN: update_org_app_settings is called with stale last_known_updated_at
+    THEN: OrgConcurrentModificationError is raised
     """
+    from enterprise.server.routes.org_models import OrgConcurrentModificationError
+
     # Arrange
     async with async_session_maker() as session:
         org = Org(
@@ -281,24 +283,26 @@ async def test_update_succeeds_even_with_stale_expected_updated_at(async_session
 
         update_data = OrgAppSettingsUpdate(
             enable_proactive_conversation_starters=False,
-            expected_updated_at=stale_updated_at,  # Stale - but update should still succeed
+            last_known_updated_at=stale_updated_at,  # Stale - should raise conflict
         )
 
-        # Act - should NOT raise, just log and proceed
+        # Act & Assert
         store = OrgAppSettingsStore(db_session=session)
-        result = await store.update_org_app_settings(org_id, update_data)
+        with pytest.raises(OrgConcurrentModificationError) as exc_info:
+            await store.update_org_app_settings(org_id, update_data)
 
-    # Assert - update succeeds regardless of staleness
-    assert result is not None
-    assert result.enable_proactive_conversation_starters is False
+        # Verify error details
+        assert exc_info.value.org_id == str(org_id)
+        assert exc_info.value.expected_version == stale_updated_at
+        assert exc_info.value.actual_version == org.updated_at
 
 
 @pytest.mark.asyncio
 async def test_optimistic_lock_with_timezone_aware_dates(async_session_maker):
     """
     GIVEN: An organization exists with timezone-aware updated_at
-    WHEN: update_org_app_settings is called with timezone-naive expected_updated_at
-    THEN: The update succeeds (timezone-naive dates are converted to UTC)
+    WHEN: update_org_app_settings is called with timezone-naive last_known_updated_at
+    THEN: The update succeeds (timezone-naive dates are converted to UTC for comparison)
     """
     # Arrange
     async with async_session_maker() as session:
@@ -314,12 +318,12 @@ async def test_optimistic_lock_with_timezone_aware_dates(async_session_maker):
         original_updated_at = org.updated_at
         org_id = org.id
 
-        # Create a naive datetime (no timezone info)
+        # Create a naive datetime (no timezone info) - same instant
         naive_updated_at = original_updated_at.replace(tzinfo=None)
 
         update_data = OrgAppSettingsUpdate(
             enable_proactive_conversation_starters=False,
-            expected_updated_at=naive_updated_at,
+            last_known_updated_at=naive_updated_at,
         )
 
         # Act
