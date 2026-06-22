@@ -157,6 +157,7 @@ async def _get_org_marketplaces(
 
     Returns:
         List of marketplace dictionaries from org extension_settings.
+        Returns empty list if neither path succeeds.
     """
     if not user_id:
         return []
@@ -173,7 +174,11 @@ async def _get_org_marketplaces(
             if org and org.registered_marketplaces:
                 return org.registered_marketplaces
     except ImportError:
-        pass
+        # Enterprise modules not available, try OSS fallback
+        logger.debug('Enterprise modules not available for org marketplace lookup')
+    except Exception as e:
+        # Log actual errors but don't fail - try OSS fallback
+        logger.error(f'Error fetching org marketplaces (enterprise path): {e}')
 
     # OSS fallback: Query default org directly
     try:
@@ -190,7 +195,10 @@ async def _get_org_marketplaces(
             if org and org.registered_marketplaces:
                 return org.registered_marketplaces
     except ImportError:
-        pass
+        # Neither path available - this is expected in some configurations
+        logger.debug('Enterprise modules not available for OSS fallback')
+    except Exception as e:
+        logger.error(f'Error fetching org marketplaces (OSS fallback): {e}')
 
     return []
 
@@ -222,56 +230,46 @@ def _merge_marketplaces(
     # User settings take precedence over org, org over instance
     seen_sources: set[str] = set()
 
-    # Instance defaults first (lowest priority)
-    for mp in instance_marketplaces:
+    # Helper to add marketplace with deduplication check
+    def add_inherited(mp: dict, scope: str) -> None:
         source = mp.get('source', '')
         if not source:
-            logger.debug('Skipping marketplace with empty source')
-            continue
+            return
         if source not in seen_sources:
-            inherited.append({**mp, 'scope': 'instance'})
+            inherited.append({**mp, 'scope': scope})
             seen_sources.add(source)
-            logger.debug(f'Added instance marketplace: {source}')
-        else:
-            logger.debug(f'Skipping duplicate instance marketplace: {source}')
-
-    # Org settings (override instance)
-    for mp in org_marketplaces:
-        source = mp.get('source', '')
-        if not source:
-            logger.debug('Skipping org marketplace with empty source')
-            continue
-        if source not in seen_sources:
-            inherited.append({**mp, 'scope': 'org'})
-            seen_sources.add(source)
-            logger.debug(f'Added org marketplace: {source}')
-        elif source in seen_sources:
+            logger.debug(f'Added {scope} marketplace: {source}')
+        elif scope == 'org':
             # Override: update existing with org values
             for i, imp in enumerate(inherited):
                 if imp.get('source') == source:
                     inherited[i] = {**imp, **mp, 'scope': 'org'}
-                    logger.debug(f'Org marketplace overridden instance: {source}')
+                    logger.debug(f'{scope} marketplace overrides existing: {source}')
                     break
 
+    # Instance defaults first (lowest priority)
+    for mp in instance_marketplaces:
+        add_inherited(mp, 'instance')
+
+    # Org settings (override instance)
+    for mp in org_marketplaces:
+        add_inherited(mp, 'org')
+
     # User settings - users can only add NEW marketplaces
-    # Users cannot override instance or org marketplace settings
     for mp in user_marketplaces:
         source = mp.get('source', '')
-
         if not source:
-            logger.debug('Skipping user marketplace with empty source')
             continue
 
-        # If source already exists in inherited, check if it's immutable (instance/org)
         if source in seen_sources:
+            # Check if it's an immutable scope (instance/org)
             existing = next(
                 (imp for imp in inherited if imp.get('source') == source), None
             )
             if existing and existing.get('scope') in ('instance', 'org'):
-                # Cannot override instance or org marketplaces - skip
-                logger.warning(
-                    f'User cannot override {existing["scope"]} marketplace: {source}. '
-                    'Contact org admin to modify.'
+                # Cannot override instance or org marketplaces - skip silently
+                logger.debug(
+                    f'User marketplace skipped (immutable {existing["scope"]}): {source}'
                 )
                 continue
             # Else: overriding personal marketplace, continue to update it

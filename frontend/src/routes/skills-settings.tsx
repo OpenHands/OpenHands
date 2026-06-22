@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { Typography } from "#/ui/typography";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
@@ -88,6 +88,9 @@ function SkillsSettingsScreen() {
     queryFn: () => organizationService.getOrganizationAppSettings(),
     retry: false,
   });
+
+  // For cache invalidation on conflict
+  const queryClient = useQueryClient();
 
   const [skillsState, setSkillsState] = React.useState<SkillWithState[]>([]);
   const [hasChanges, setHasChanges] = React.useState(false);
@@ -241,9 +244,20 @@ function SkillsSettingsScreen() {
           displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
           setHasChanges(false);
         },
-        onError: (error) => {
-          const errorMessage = retrieveAxiosErrorMessage(error);
-          displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
+        onError: (error: { response?: { status?: number } }) => {
+          // Handle concurrent modification conflict (HTTP 409)
+          if (error.response?.status === 409) {
+            displayErrorToast(
+              "Your settings are outdated. Please refresh and try again.",
+            );
+            // Force re-fetch the latest settings to get new updated_at
+            queryClient.invalidateQueries({
+              queryKey: ["organization-app-settings"],
+            });
+          } else {
+            const errorMessage = retrieveAxiosErrorMessage(error);
+            displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
+          }
         },
       },
     );

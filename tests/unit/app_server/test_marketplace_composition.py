@@ -544,20 +544,27 @@ class TestMarketplaceCompositionIntegration:
         names = [mp['name'] for mp in personal]
         assert names.count('plugins') == 2  # Same name is allowed for different sources
 
-    def test_security_path_traversal_not_possible(self):
-        """Test that path traversal is prevented in sources."""
-        # This is validated at model level, but verify merge doesn't bypass it
-        instance = [
-            {'source': 'github:owner/repo', 'auto_load': 'all'},
-        ]
-        org = [
-            {'source': '../escape', 'auto_load': 'all'},
-        ]
+    def test_security_path_traversal_prevented_at_model_level(self):
+        """Test that path traversal is rejected at model validation level."""
+        from openhands.storage.data_models.settings import MarketplaceRegistration
+        from pydantic import ValidationError
 
-        # _merge_marketplaces(instance, org, user)
-        inherited, personal = _merge_marketplaces(instance, org, [])
+        # Path traversal attempts should be rejected at model validation
+        with pytest.raises(ValidationError, match="cannot contain '..'"):
+            MarketplaceRegistration(
+                name='test',
+                source='../escape',
+                auto_load='all',
+            )
 
-        # Should have 2 entries - they're different sources
-        assert len(inherited) == 2
-        assert len(personal) == 0
-        # Note: Actual validation happens in MarketplaceRegistration model
+        with pytest.raises(ValidationError, match="cannot contain '..'"):
+            MarketplaceRegistration(
+                name='test',
+                source='path/../escape',
+            )
+
+        with pytest.raises(ValidationError, match='must be relative'):
+            MarketplaceRegistration(
+                name='test',
+                source='/absolute/path',
+            )

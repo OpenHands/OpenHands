@@ -99,22 +99,13 @@ class UserSettings(Base):
 
     def to_settings(self):
         from openhands.app_server.settings.settings_models import Settings
-        from openhands.storage.data_models.settings import MarketplaceRegistration
-        from pydantic import ValidationError
+        from openhands.storage.marketplace_utils import validate_and_convert_marketplaces
 
-        # Validate marketplace data similar to OrgAppSettingsResponse.from_org()
-        marketplaces = []
-        for i, mp in enumerate(self.registered_marketplaces or []):
-            try:
-                if isinstance(mp, dict):
-                    marketplaces.append(MarketplaceRegistration.model_validate(mp))
-                elif isinstance(mp, MarketplaceRegistration):
-                    marketplaces.append(mp)
-            except ValidationError as e:
-                logger.warning(
-                    f"Skipping invalid marketplace at index {i} in user settings: {e}"
-                )
-                continue
+        # Validate marketplace data using shared utility
+        marketplaces = validate_and_convert_marketplaces(
+            self.registered_marketplaces,
+            source_name="user settings",
+        )
 
         return Settings(
             agent_settings=self.agent_settings or {},

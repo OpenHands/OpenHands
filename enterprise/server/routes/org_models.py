@@ -591,30 +591,13 @@ class OrgAppSettingsResponse(BaseModel):
         Returns:
             OrgAppSettingsResponse with app settings
         """
-        from pydantic import ValidationError
+        from openhands.storage.marketplace_utils import validate_and_convert_marketplaces
 
         # Get registered_marketplaces from dedicated column
-        marketplaces_raw = org.registered_marketplaces or []
-
-        # Convert dicts to MarketplaceRegistration objects with validation
-        # Skip invalid entries with warning log instead of crashing
-        marketplaces = []
-        for i, mp in enumerate(marketplaces_raw):
-            try:
-                if isinstance(mp, dict):
-                    marketplaces.append(MarketplaceRegistration.model_validate(mp))
-                elif isinstance(mp, MarketplaceRegistration):
-                    marketplaces.append(mp)
-                else:
-                    raise ValueError(
-                        f'registered_marketplaces[{i}]: expected dict or '
-                        f'MarketplaceRegistration, got {type(mp).__name__}'
-                    )
-            except (ValidationError, ValueError) as e:
-                logger.warning(
-                    f'Skipping invalid marketplace at index {i} in org '
-                    f"'{org.name}' registered_marketplaces: {e}"
-                )
+        marketplaces = validate_and_convert_marketplaces(
+            org.registered_marketplaces,
+            source_name=f"org '{org.name}'",
+        )
 
         return cls(
             enable_proactive_conversation_starters=org.enable_proactive_conversation_starters
