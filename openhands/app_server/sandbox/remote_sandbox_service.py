@@ -24,7 +24,7 @@ from openhands.agent_server.utils import utc_now
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
-from openhands.app_server.errors import ConcurrencyLimitError, SandboxError
+from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     VSCODE,
@@ -212,21 +212,6 @@ class RemoteSandboxService(SandboxService):
             query = query.where(StoredRemoteSandbox.created_by_user_id == user_id)
         return query
 
-    async def _get_user_effective_sandbox_limit(self) -> int:
-        """Get the effective sandbox limit for the current user.
-
-        Delegates to UserContext.get_max_concurrent_sandboxes() which handles:
-        1. OrgMember.max_concurrent_sandboxes_override (if not NULL) - enterprise only
-        2. Org.max_concurrent_sandboxes (org default) - enterprise only
-        3. Global fallback (self.max_num_sandboxes) - OSS mode
-
-        Returns:
-            int: The effective maximum number of concurrent sandboxes
-        """
-        return await self.user_context.get_max_concurrent_sandboxes(
-            self.max_num_sandboxes
-        )
-
     async def _get_stored_sandbox(self, sandbox_id: str) -> StoredRemoteSandbox | None:
         stmt = await self._secure_select()
         stmt = stmt.where(StoredRemoteSandbox.id == sandbox_id)
@@ -410,35 +395,6 @@ class RemoteSandboxService(SandboxService):
         result = await self.db_session.execute(query)
         return list(result.scalars().all())
 
-    async def check_concurrency_limit(self) -> None:
-        """Check if the user has reached their concurrent sandbox limit.
-
-        Uses the runtime /list endpoint as the source of truth so that only
-        sandboxes that are actually running count against the limit.
-
-        Raises:
-            ConcurrencyLimitError: If the user has reached their limit
-        """
-        effective_limit = await self._get_user_effective_sandbox_limit()
-        current_count = len(await self._get_user_running_sandboxes())
-
-        if current_count >= effective_limit:
-            _logger.info(
-                f'User has reached sandbox limit: {current_count}/{effective_limit}'
-            )
-            raise ConcurrencyLimitError(
-                detail={
-                    'error': 'CONCURRENCY_LIMIT_REACHED',
-                    'message': (
-                        f'You have reached your limit of {effective_limit} '
-                        'concurrent conversations. Please close an existing '
-                        'conversation to start a new one.'
-                    ),
-                    'limit': effective_limit,
-                    'current': current_count,
-                }
-            )
-
     async def get_sandbox_record_by_session_api_key(
         self, session_api_key: str
     ) -> SandboxRecord | None:
@@ -465,6 +421,10 @@ class RemoteSandboxService(SandboxService):
     ) -> SandboxInfo:
         """Start a new sandbox by creating a remote runtime."""
         try:
+            # Enforce sandbox limits by cleaning up old sandboxes
+            await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
+
+            # Get sandbox spec
             if sandbox_spec_id is None:
                 sandbox_spec = (
                     await self.sandbox_spec_service.get_default_sandbox_spec()
@@ -480,13 +440,10 @@ class RemoteSandboxService(SandboxService):
             if sandbox_id is None:
                 sandbox_id = base62.encodebytes(os.urandom(16))
 
+            # get user id
             user_id = await self.user_context.get_user_id()
 
-            # Check concurrency limit against actual runtime state (defense in depth;
-            # also checked before this call in live_status_app_conversation_service).
-            await self.check_concurrency_limit()
-
-            # Store the sandbox record
+            # Store the sandbox
             stored_sandbox = StoredRemoteSandbox(
                 id=sandbox_id,
                 created_by_user_id=user_id,
@@ -537,9 +494,6 @@ class RemoteSandboxService(SandboxService):
 
             return self._to_sandbox_info(stored_sandbox, runtime_data)
 
-        except ConcurrencyLimitError:
-            # Re-raise concurrency limit errors without wrapping
-            raise
         except httpx.HTTPError as e:
             _logger.error(f'Failed to start sandbox: {e}')
             raise SandboxError(f'Failed to start sandbox: {e}')
