@@ -83,7 +83,7 @@ class SlackNewConversationView(SlackViewInterface):
                 return block['user_id']
         return ''
 
-    def _collect_attachment_content_for_message(self, message: dict) -> list[str]:
+    def _process_attachment_content_for_message(self, message: dict) -> list[str]:
         attachment_content = collect_message_attachment_content(
             WebClient(token=self.bot_access_token),
             self.bot_access_token,
@@ -97,7 +97,7 @@ class SlackNewConversationView(SlackViewInterface):
         if message.get('text'):
             context_parts.append(message['text'])
 
-        attachment_descriptions = self._collect_attachment_content_for_message(message)
+        attachment_descriptions = self._process_attachment_content_for_message(message)
         if attachment_descriptions:
             context_parts.append(
                 'Slack attachments:\n' + '\n'.join(attachment_descriptions)
@@ -159,7 +159,7 @@ class SlackNewConversationView(SlackViewInterface):
         user_message = self._get_initial_prompt(
             trigger_msg['text'], trigger_msg['blocks']
         )
-        trigger_attachment_descriptions = self._collect_attachment_content_for_message(
+        trigger_attachment_descriptions = self._process_attachment_content_for_message(
             trigger_msg
         )
         if trigger_attachment_descriptions:
@@ -353,7 +353,7 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
         user_message = self._get_initial_prompt(
             slack_message['text'], slack_message['blocks']
         )
-        attachment_descriptions = self._collect_attachment_content_for_message(
+        attachment_descriptions = self._process_attachment_content_for_message(
             slack_message
         )
         if attachment_descriptions:

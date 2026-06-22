@@ -75,9 +75,26 @@ def collect_message_attachment_content(
     for file_info in files[:MAX_SLACK_ATTACHMENTS_PER_MESSAGE]:
         if not isinstance(file_info, dict):
             continue
-        attachment = _collect_file_attachment_content(
-            slack_client, bot_access_token, file_info
-        )
+        try:
+            attachment = _collect_file_attachment_content(
+                slack_client, bot_access_token, file_info
+            )
+        except SlackError:
+            raise
+        except Exception as e:
+            logger.warning(
+                'slack_attachment_collect_failed',
+                extra={
+                    'file_id': file_info.get('id'),
+                    'file_title': _attachment_title(file_info),
+                    'error': str(e),
+                },
+            )
+            attachment = SlackAttachmentContent(
+                descriptions=[
+                    f'- {_attachment_title(file_info)} could not be read due to an error.'
+                ]
+            )
         content.descriptions.extend(attachment.descriptions)
         content.image_urls.extend(attachment.image_urls)
 
