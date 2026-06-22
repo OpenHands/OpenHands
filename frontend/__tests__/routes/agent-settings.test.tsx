@@ -90,7 +90,6 @@ describe("AgentSettingsScreen — minimal generic ACP UX", () => {
         acp_server: "custom",
         acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
         acp_args: [],
-        acp_env: { ANTHROPIC_API_KEY: "sk-test" },
         acp_model: "claude-opus-4",
       },
     });
@@ -117,7 +116,6 @@ describe("AgentSettingsScreen — minimal generic ACP UX", () => {
         acp_server: "custom",
         acp_command: ["claude-agent-acp"],
         acp_args: [],
-        acp_env: { ANTHROPIC_API_KEY: "sk-test" },
         acp_model: "claude-opus-4",
       },
     });
@@ -164,7 +162,6 @@ describe("AgentSettingsScreen — minimal generic ACP UX", () => {
         acp_server: "custom",
         acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
         acp_args: [],
-        acp_env: {},
         acp_model: null,
       },
     });
@@ -217,7 +214,6 @@ describe("AgentSettingsScreen — minimal generic ACP UX", () => {
         acp_server: "claude-code",
         acp_command: ["npx", "-y", "@custom/my-agent"],
         acp_args: [],
-        acp_env: {},
         acp_model: null,
       },
     });
@@ -265,7 +261,6 @@ describe("AgentSettingsScreen — minimal generic ACP UX", () => {
         acp_server: "custom",
         acp_command: [],
         acp_args: [],
-        acp_env: {},
         acp_model: null,
       },
     });

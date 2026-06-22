@@ -636,6 +636,92 @@ class TestGetIssueNumberFromPayload:
         assert result is None
 
 
+class TestReceiveMessagePayloadProcessingError:
+    """Test cases for error logging in receive_message when payload processing fails."""
+
+    @pytest.fixture
+    def mock_token_manager(self):
+        token_manager = MagicMock()
+        token_manager.get_user_id_from_idp_user_id = AsyncMock(return_value=None)
+        return token_manager
+
+    @pytest.fixture
+    def mock_data_collector(self):
+        data_collector = MagicMock()
+        data_collector.process_payload = AsyncMock(
+            side_effect=Exception('Database connection timeout')
+        )
+        return data_collector
+
+    @pytest.fixture
+    def github_message(self):
+        return Message(
+            source=SourceType.GITHUB,
+            message={
+                'installation': 12345,
+                'payload': {
+                    'action': 'created',
+                    'sender': {
+                        'id': 67890,
+                        'login': 'testuser',
+                    },
+                    'repository': {
+                        'owner': {'login': 'test-owner'},
+                        'name': 'test-repo',
+                    },
+                    'issue': {
+                        'number': 42,
+                    },
+                    'comment': {
+                        'body': '@openhands please help with this issue',
+                    },
+                },
+            },
+        )
+
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    @patch('integrations.github.github_manager.logger')
+    async def test_payload_processing_failure_logs_error(
+        self,
+        mock_logger,
+        mock_github_integration,
+        mock_auth,
+        mock_token_manager,
+        mock_data_collector,
+        github_message,
+    ):
+        """Verify payload processing failures are logged at error level, not warning."""
+        manager = GithubManager(mock_token_manager, mock_data_collector)
+
+        await manager.receive_message(github_message)
+
+        expected_message = '[Github]: Error processing payload for gh interaction'
+
+        # The failure is logged at error level with exc_info so the stack trace is preserved.
+        error_calls = [
+            call
+            for call in mock_logger.error.call_args_list
+            if call.args and call.args[0] == expected_message
+        ]
+        assert error_calls, (
+            f'Expected error log about payload processing. '
+            f'Got: {mock_logger.error.call_args_list}'
+        )
+        assert all(call.kwargs.get('exc_info') is True for call in error_calls)
+
+        # It must not be logged at warning level (the bug this fix addresses).
+        warning_calls = [
+            call
+            for call in mock_logger.warning.call_args_list
+            if call.args and call.args[0] == expected_message
+        ]
+        assert not warning_calls, (
+            f'Payload processing error should not be logged at warning level. '
+            f'Got: {warning_calls}'
+        )
+
+
 class TestGetUserNotFoundMessageIntegration:
     """Integration tests to verify the user not found message content matches expectations."""
 
