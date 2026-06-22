@@ -382,7 +382,7 @@ function SkillsSettingsScreen() {
                   {t(I18nKey.SETTINGS$NAME)}
                 </th>
                 <th className="text-left p-3 text-sm font-medium uppercase text-[rgb(140,140,140)]">
-                  {t(I18nKey.SETTINGS$REPOSITORY)}
+                  {t(I18nKey.SETTINGS$MARKETPLACE_SOURCE)}
                 </th>
                 <th className="text-left p-3 text-sm font-medium uppercase text-[rgb(140,140,140)]">
                   {t(I18nKey.SETTINGS$TYPE)}
