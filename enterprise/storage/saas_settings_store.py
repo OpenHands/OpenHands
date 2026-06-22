@@ -215,6 +215,9 @@ class SaasSettingsStore(SettingsStore):
         # Apply default if sandbox_grouping_strategy is None in the database
         if kwargs.get('sandbox_grouping_strategy') is None:
             kwargs.pop('sandbox_grouping_strategy', None)
+        # Apply default if registered_marketplaces is None in the database
+        if kwargs.get('registered_marketplaces') is None:
+            kwargs.pop('registered_marketplaces', None)
         # Profiles in SaaS live on the org (managed via
         # /api/organizations/{org_id}/profiles). Surface them through
         # Settings.llm_profiles so the chat-layer endpoints

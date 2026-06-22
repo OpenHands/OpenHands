@@ -2,10 +2,14 @@
 
 from unittest.mock import MagicMock
 
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
+
+from openhands.storage.data_models.settings import MarketplaceRegistration
+
 from server.constants import LITE_LLM_API_URL
 from server.routes.org_models import (
     MASKED_API_KEY,
+    OrgAppSettingsUpdate,
     OrgDefaultsSettingsResponse,
     OrgUpdate,
 )
@@ -213,3 +217,85 @@ def test_from_org_keeps_custom_base_url_that_is_not_provider_default():
         == 'https://company-proxy.internal/anthropic'
     )
     assert response.search_api_key == '****1234'
+
+
+# --- Tests for OrgAppSettingsUpdate registered_marketplaces ---
+
+
+class TestOrgAppSettingsUpdateMarketplaceValidation:
+    """Tests for registered_marketplaces in OrgAppSettingsUpdate."""
+
+    def test_valid_marketplace_list(self):
+        """Test that OrgAppSettingsUpdate accepts valid marketplace list."""
+        update = OrgAppSettingsUpdate(
+            registered_marketplaces=[
+                MarketplaceRegistration(name='test', source='github:owner/repo')
+            ]
+        )
+        assert len(update.registered_marketplaces) == 1
+        assert update.registered_marketplaces[0].name == 'test'
+        assert update.registered_marketplaces[0].source == 'github:owner/repo'
+
+    def test_null_marketplaces_allowed(self):
+        """Test that None is allowed for PATCH semantics (field not updated)."""
+        update = OrgAppSettingsUpdate()
+        assert update.registered_marketplaces is None
+
+    def test_empty_list_valid(self):
+        """Test that empty list is valid (explicitly clear marketplaces)."""
+        update = OrgAppSettingsUpdate(registered_marketplaces=[])
+        assert update.registered_marketplaces == []
+
+    def test_invalid_marketplace_rejected(self):
+        """Test that invalid marketplace source is rejected."""
+        with pytest.raises(ValidationError):
+            OrgAppSettingsUpdate(
+                registered_marketplaces=[
+                    {'name': 'test', 'source': 'invalid!!source'}
+                ]
+            )
+
+    def test_multiple_valid_marketplaces(self):
+        """Test that multiple valid marketplaces are accepted."""
+        update = OrgAppSettingsUpdate(
+            registered_marketplaces=[
+                MarketplaceRegistration(
+                    name='marketplace-1',
+                    source='github:owner/repo1',
+                    auto_load='all',
+                ),
+                MarketplaceRegistration(
+                    name='marketplace-2',
+                    source='github:owner/repo2',
+                ),
+            ]
+        )
+        assert len(update.registered_marketplaces) == 2
+
+    def test_marketplace_with_all_fields(self):
+        """Test marketplace with all optional fields."""
+        update = OrgAppSettingsUpdate(
+            registered_marketplaces=[
+                MarketplaceRegistration(
+                    name='full-featured',
+                    source='github:owner/repo',
+                    ref='v1.0.0',
+                    repo_path='marketplaces/plugins',
+                    auto_load='all',
+                ),
+            ]
+        )
+        assert update.registered_marketplaces[0].name == 'full-featured'
+        assert update.registered_marketplaces[0].ref == 'v1.0.0'
+        assert update.registered_marketplaces[0].repo_path == 'marketplaces/plugins'
+        assert update.registered_marketplaces[0].auto_load == 'all'
+
+    def test_duplicate_marketplace_names_rejected(self):
+        """Test that duplicate marketplace names are rejected."""
+        with pytest.raises(ValidationError, match='Duplicate marketplace names'):
+            OrgAppSettingsUpdate(
+                registered_marketplaces=[
+                    MarketplaceRegistration(name='plugins', source='github:owner/repo1'),
+                    MarketplaceRegistration(name='plugins', source='github:owner/repo2'),
+                ]
+            )
