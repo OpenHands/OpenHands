@@ -144,65 +144,6 @@ def _get_instance_default_marketplaces() -> list[dict]:
     return validated_marketplaces
 
 
-async def _get_org_marketplaces(
-    user_id: str | None = None,
-) -> list[dict]:
-    """Get organization-level marketplaces from the database.
-
-    In Enterprise mode, queries the org directly using OrgAppSettingsStore.
-    In OSS mode, queries the default org's extension_settings directly.
-
-    Args:
-        user_id: The user ID to get org for
-
-    Returns:
-        List of marketplace dictionaries from org extension_settings.
-        Returns empty list if neither path succeeds.
-    """
-    if not user_id:
-        return []
-
-    # Try Enterprise: Query org directly by user_id using store
-    try:
-        from enterprise.storage.org_app_settings_store import OrgAppSettingsStore
-        from openhands.storage.database import a_session_maker
-
-        async with a_session_maker() as db_session:
-            store = OrgAppSettingsStore(db_session=db_session)
-            org = await store.get_current_org_by_user_id(user_id)
-
-            if org and org.registered_marketplaces:
-                return org.registered_marketplaces
-    except ImportError:
-        # Enterprise modules not available, try OSS fallback
-        logger.debug('Enterprise modules not available for org marketplace lookup')
-    except Exception as e:
-        # Log actual errors but don't fail - try OSS fallback
-        logger.error(f'Error fetching org marketplaces (enterprise path): {e}')
-
-    # OSS fallback: Query default org directly
-    try:
-        from sqlalchemy import select
-
-        from enterprise.storage.org import Org
-        from openhands.storage.database import a_session_maker
-
-        async with a_session_maker() as session:
-            stmt = select(Org).where(Org.is_default).limit(1)
-            result = await session.execute(stmt)
-            org = result.scalar_one_or_none()
-
-            if org and org.registered_marketplaces:
-                return org.registered_marketplaces
-    except ImportError:
-        # Neither path available - this is expected in some configurations
-        logger.debug('Enterprise modules not available for OSS fallback')
-    except Exception as e:
-        logger.error(f'Error fetching org marketplaces (OSS fallback): {e}')
-
-    return []
-
-
 def _merge_marketplaces(
     instance_marketplaces: list[dict],
     org_marketplaces: list[dict],
@@ -394,9 +335,9 @@ async def load_settings(
         settings_with_token_data.sandbox_api_key = None
 
         # Marketplace composition: Instance -> Org -> User
-        user_id = getattr(settings, 'user_id', None)
+        user_id: str | None = getattr(settings, 'user_id', None)
         instance_defaults = _get_instance_default_marketplaces()
-        org_marketplaces = await _get_org_marketplaces(user_id)
+        org_marketplaces = await settings_store.get_org_marketplaces(user_id or '')
         user_marketplaces = [
             mp.model_dump() for mp in (settings.registered_marketplaces or [])
         ]

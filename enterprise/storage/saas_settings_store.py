@@ -496,6 +496,35 @@ class SaasSettingsStore(SettingsStore):
         logger.debug(f'saas_settings_store.get_instance::{user_id}')
         return SaasSettingsStore(user_id, effective_org_id=effective_org_id)
 
+    async def get_org_marketplaces(self, user_id: str) -> list[dict]:
+        """Get organization-level marketplaces from the org's registered_marketplaces.
+
+        Uses the effective_org_id if set, otherwise resolves via user.current_org_id.
+        Returns empty list if no org or org has no registered marketplaces.
+        """
+        try:
+            user = await UserStore.get_user_by_id(user_id)
+            if not user:
+                logger.debug(f'No user found for ID {user_id}')
+                return []
+
+            org_id = self.effective_org_id or user.current_org_id
+            if not org_id:
+                logger.debug(f'No org_id for user {user_id}')
+                return []
+
+            org = await OrgStore.get_org_by_id_async(org_id)
+            if not org:
+                logger.debug(f'Org {org_id} not found for user {user_id}')
+                return []
+
+            if org.registered_marketplaces:
+                return org.registered_marketplaces
+            return []
+        except Exception as e:
+            logger.error(f'Error fetching org marketplaces: {e}')
+            return []
+
     async def _ensure_api_key(
         self, item: Settings, org_id: str, openhands_type: bool = False
     ) -> None:
