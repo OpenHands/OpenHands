@@ -158,9 +158,10 @@ class TestV1ConversationCreation:
             ]
         }
 
-        user_message, conversation_instructions = (
-            await slack_new_conversation_view._get_instructions(mock_jinja_env)
-        )
+        (
+            user_message,
+            conversation_instructions,
+        ) = await slack_new_conversation_view._get_instructions(mock_jinja_env)
 
         assert user_message == 'summarize the latest deployment'
         assert 'Keep replies concise.' in conversation_instructions
