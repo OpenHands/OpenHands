@@ -1,4 +1,5 @@
 """Unit tests for organization-default settings models and serialization."""
+import pytest
 
 from unittest.mock import MagicMock
 
