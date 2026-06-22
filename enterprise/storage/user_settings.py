@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
+implement import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import SecretStr
+
+logger = logging.getLogger(__name__)
 from server.constants import DEFAULT_BILLING_MARGIN
 from sqlalchemy import DateTime, Identity, String
 from sqlalchemy.dialects.postgresql import JSON
@@ -86,12 +89,35 @@ class UserSettings(Base):
     registered_marketplaces: Mapped[list[dict[str, Any]] | None] = mapped_column(
         JSON, nullable=True
     )
+    # Timestamp for optimistic locking - tracks last modification
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
 
     def to_settings(self):
         from openhands.app_server.settings.settings_models import Settings
+        from openhands.storage.data_models.settings import MarketplaceRegistration
+        from pydantic import ValidationError
+
+        # Validate marketplace data similar to OrgAppSettingsResponse.from_org()
+        marketplaces = []
+        for i, mp in enumerate(self.registered_marketplaces or []):
+            try:
+                if isinstance(mp, dict):
+                    marketplaces.append(MarketplaceRegistration.model_validate(mp))
+                elif isinstance(mp, MarketplaceRegistration):
+                    marketplaces.append(mp)
+            except ValidationError as e:
+                logger.warning(
+                    f"Skipping invalid marketplace at index {i} in user settings: {e}"
+                )
+                continue
 
         return Settings(
             agent_settings=self.agent_settings or {},
             conversation_settings=self.conversation_settings or {},
-            registered_marketplaces=self.registered_marketplaces or [],
+            registered_marketplaces=marketplaces,
         )

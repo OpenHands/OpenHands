@@ -225,27 +225,42 @@ def _merge_marketplaces(
     # Instance defaults first (lowest priority)
     for mp in instance_marketplaces:
         source = mp.get('source', '')
-        if source and source not in seen_sources:
+        if not source:
+            logger.debug("Skipping marketplace with empty source")
+            continue
+        if source not in seen_sources:
             inherited.append({**mp, 'scope': 'instance'})
             seen_sources.add(source)
+            logger.debug(f"Added instance marketplace: {source}")
+        else:
+            logger.debug(f"Skipping duplicate instance marketplace: {source}")
 
     # Org settings (override instance)
     for mp in org_marketplaces:
         source = mp.get('source', '')
-        if source and source not in seen_sources:
+        if not source:
+            logger.debug("Skipping org marketplace with empty source")
+            continue
+        if source not in seen_sources:
             inherited.append({**mp, 'scope': 'org'})
             seen_sources.add(source)
+            logger.debug(f"Added org marketplace: {source}")
         elif source in seen_sources:
             # Override: update existing with org values
             for i, imp in enumerate(inherited):
                 if imp.get('source') == source:
                     inherited[i] = {**imp, **mp, 'scope': 'org'}
+                    logger.debug(f"Org marketplace overridden instance: {source}")
                     break
 
     # User settings - users can only add NEW marketplaces
     # Users cannot override instance or org marketplace settings
     for mp in user_marketplaces:
         source = mp.get('source', '')
+
+        if not source:
+            logger.debug("Skipping user marketplace with empty source")
+            continue
 
         # If source already exists in inherited, check if it's immutable (instance/org)
         if source in seen_sources:
@@ -259,11 +274,20 @@ def _merge_marketplaces(
                     'Contact org admin to modify.'
                 )
                 continue
+            # Else: overriding personal marketplace, continue to update it
 
         # Add to personal (only if new source or overriding personal)
-        if source and source not in seen_sources:
+        if source not in seen_sources:
             personal.append({**mp, 'scope': 'personal'})
             seen_sources.add(source)
+            logger.debug(f"Added personal marketplace: {source}")
+        else:
+            # Updating existing personal marketplace
+            for i, pp in enumerate(personal):
+                if pp.get('source') == source:
+                    personal[i] = {**pp, **mp, 'scope': 'personal'}
+                    logger.debug(f"Updated personal marketplace: {source}")
+                    break
 
     return inherited, personal
 

@@ -1,7 +1,8 @@
-"""Add registered_marketplaces column to org table.
+"""Add registered_marketplaces and updated_at columns to org table.
 
 This column stores marketplace registrations for organization-level
 plugin resolution. Composable with instance defaults and user marketplaces.
+Also adds updated_at for optimistic locking.
 
 Revision ID: 125
 Revises: 124
@@ -26,7 +27,17 @@ def upgrade() -> None:
         'org',
         sa.Column('registered_marketplaces', sa.JSON(), nullable=True)
     )
+    op.add_column(
+        'org',
+        sa.Column(
+            'updated_at',
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text('NOW()'),
+        ),
+    )
 
 
 def downgrade() -> None:
+    op.drop_column('org', 'updated_at')
     op.drop_column('org', 'registered_marketplaces')

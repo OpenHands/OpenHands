@@ -115,6 +115,11 @@ export type SkillInfo = {
 
 export type SettingsScope = "personal" | "org";
 
+// IMPORTANT: This type must stay in sync with the backend model in
+// openhands/storage/data_models/settings.py. When modifying fields, update both
+// locations. Consider using OpenAPI/JSON Schema generation to automate
+// this synchronization.
+
 export type MarketplaceRegistration = {
   name: string;
   source: string;

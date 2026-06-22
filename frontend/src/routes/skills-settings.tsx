@@ -15,6 +15,31 @@ import {
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { I18nKey } from "#/i18n/declaration";
 
+// Validation patterns for marketplace sources (must match backend patterns)
+const MARKETPLACE_PATTERNS = {
+  // github:owner/repo format
+  github: /^github:[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/,
+  // Git URLs (https, git, ssh protocols)
+  gitUrl: /^(https?:\/\/|git@|ssh:\/\/|git:\/\/)[a-zA-Z0-9_.-]+[:\/][a-zA-Z0-9_./-]+$/,
+  // Relative local paths (no absolute paths, no parent traversal, must start with alphanumeric)
+  localPath: /^[a-zA-Z0-9_][a-zA-Z0-9_./-]*$/,
+};
+
+/**
+ * Validates if a source string is a valid marketplace source format.
+ * Must match validation patterns in openhands/storage/data_models/settings.py
+ */
+function isValidMarketplaceSource(source: string): boolean {
+  const trimmed = source.trim();
+  if (!trimmed) return false;
+
+  return (
+    MARKETPLACE_PATTERNS.github.test(trimmed) ||
+    MARKETPLACE_PATTERNS.gitUrl.test(trimmed) ||
+    MARKETPLACE_PATTERNS.localPath.test(trimmed)
+  );
+}
+
 function WhiteToggle({
   isToggled,
   onClick,
@@ -207,10 +232,20 @@ function SkillsSettingsScreen() {
   };
 
   const handleAddRepository = () => {
-    if (!repositoryUrl.trim()) return;
+    const trimmedUrl = repositoryUrl.trim();
+    if (!trimmedUrl) return;
+
+    // Validate the source format before adding
+    if (!isValidMarketplaceSource(trimmedUrl)) {
+      displayErrorToast(
+        "Invalid repository format. Use github:owner/repo, a git URL, or a relative path.",
+      );
+      return;
+    }
+
     const newMarketplace: MarketplaceRegistration = {
-      source: repositoryUrl.trim(),
-      name: repositoryUrl.split("/").pop() || repositoryUrl,
+      source: trimmedUrl,
+      name: trimmedUrl.split("/").pop() || trimmedUrl,
       auto_load: "all",
     };
     setRepositories((prev) => [...prev, newMarketplace]);
@@ -289,9 +324,9 @@ function SkillsSettingsScreen() {
 
         <div className="border border-tertiary rounded-md overflow-hidden">
           <table className="w-full">
-            <thead className="[background-color:#1f1f1f99]">
+            <thead className="bg-base-secondary">
               <tr className="grid grid-cols-1 gap-4 items-start">
-                <th className="text-left p-3 text-sm font-medium uppercase text-[rgb(140,140,140)]">
+                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
                   {t(I18nKey.SETTINGS$MARKETPLACE_SOURCE)}
                 </th>
               </tr>
@@ -302,7 +337,7 @@ function SkillsSettingsScreen() {
                   key={repo.source}
                   className="grid grid-cols-1 gap-4 items-start border-t border-tertiary"
                 >
-                  <td className="p-3 text-sm text-content-2 truncate min-w-0 text-[rgb(140,140,140)]">
+                  <td className="p-3 text-sm text-content-2 truncate min-w-0 text-tertiary-alt">
                     {repo.source}
                   </td>
                 </tr>
@@ -311,7 +346,7 @@ function SkillsSettingsScreen() {
                 <tr className="border-t border-tertiary">
                   <td
                     colSpan={1}
-                    className="p-3 text-sm text-center text-[rgb(140,140,140)]"
+                    className="p-3 text-sm text-center text-tertiary-alt"
                   >
                     {t(I18nKey.SETTINGS$MARKETPLACE_ADD_FIRST)}
                   </td>
@@ -376,24 +411,24 @@ function SkillsSettingsScreen() {
 
         <div className="border border-tertiary rounded-md overflow-hidden">
           <table className="w-full">
-            <thead className="[background-color:#1f1f1f99]">
+            <thead className="bg-base-secondary">
               <tr className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr] gap-4 items-start">
-                <th className="text-left p-3 text-sm font-medium uppercase text-[rgb(140,140,140)]">
+                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
                   {t(I18nKey.SETTINGS$NAME)}
                 </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-[rgb(140,140,140)]">
+                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
                   {t(I18nKey.SETTINGS$MARKETPLACE_SOURCE)}
                 </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-[rgb(140,140,140)]">
+                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
                   {t(I18nKey.SETTINGS$TYPE)}
                 </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-[rgb(140,140,140)]">
+                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
                   {t(I18nKey.SETTINGS$SOURCE)}
                 </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-[rgb(140,140,140)]">
+                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
                   {t(I18nKey.SETTINGS$ENABLED)}
                 </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-[rgb(140,140,140)]">
+                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
                   {t(I18nKey.SETTINGS$AUTO_LOAD)}
                 </th>
               </tr>
@@ -407,27 +442,15 @@ function SkillsSettingsScreen() {
                   <td className="p-3 text-sm text-content-2 truncate min-w-0">
                     {skill.name}
                   </td>
-                  <td
-                    className="p-3 text-sm text-content-2 truncate"
-                    style={{ color: "#8c8c8c" }}
-                  >
+                  <td className="p-3 text-sm text-tertiary-alt truncate">
                     {skill.repository}
                   </td>
                   <td className="p-3">
-                    <span
-                      className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium"
-                      style={{
-                        backgroundColor: "rgba(31, 31, 26, 0.6)",
-                        color: "#8c8c8c",
-                      }}
-                    >
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-base-secondary text-tertiary-alt">
                       {skill.type}
                     </span>
                   </td>
-                  <td
-                    className="p-3 text-sm capitalize"
-                    style={{ color: "#8c8c8c" }}
-                  >
+                  <td className="p-3 text-sm text-tertiary-alt capitalize">
                     {getSourceLabel(skill.source)}
                   </td>
                   <td className="p-3">

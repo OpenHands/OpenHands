@@ -934,3 +934,96 @@ class TestSettingsDuplicateMarketplaceNames:
         """Test that Settings allows None registered_marketplaces (uses default)."""
         settings = Settings()
         assert settings.registered_marketplaces == []
+
+
+class TestOrgAppSettingsUpdateMarketplaceValidation:
+    """Tests for registered_marketplaces in OrgAppSettingsUpdate."""
+
+    def test_valid_marketplace_list(self):
+        """Test that OrgAppSettingsUpdate accepts valid marketplace list."""
+        from enterprise.server.routes.org_models import OrgAppSettingsUpdate
+
+        update = OrgAppSettingsUpdate(
+            registered_marketplaces=[
+                MarketplaceRegistration(name='test', source='github:owner/repo')
+            ]
+        )
+        assert len(update.registered_marketplaces) == 1
+        assert update.registered_marketplaces[0].name == 'test'
+        assert update.registered_marketplaces[0].source == 'github:owner/repo'
+
+    def test_null_marketplaces_allowed(self):
+        """Test that None is allowed for PATCH semantics (field not updated)."""
+        from enterprise.server.routes.org_models import OrgAppSettingsUpdate
+
+        update = OrgAppSettingsUpdate()
+        assert update.registered_marketplaces is None
+
+    def test_empty_list_valid(self):
+        """Test that empty list is valid (explicitly clear marketplaces)."""
+        from enterprise.server.routes.org_models import OrgAppSettingsUpdate
+
+        update = OrgAppSettingsUpdate(registered_marketplaces=[])
+        assert update.registered_marketplaces == []
+
+    def test_invalid_marketplace_rejected(self):
+        """Test that invalid marketplace source is rejected."""
+        from enterprise.server.routes.org_models import OrgAppSettingsUpdate
+
+        with pytest.raises(ValidationError):
+            OrgAppSettingsUpdate(
+                registered_marketplaces=[
+                    {'name': 'test', 'source': 'invalid!!source'}
+                ]
+            )
+
+    def test_multiple_valid_marketplaces(self):
+        """Test that multiple valid marketplaces are accepted."""
+        from enterprise.server.routes.org_models import OrgAppSettingsUpdate
+
+        update = OrgAppSettingsUpdate(
+            registered_marketplaces=[
+                MarketplaceRegistration(
+                    name='marketplace-1',
+                    source='github:owner/repo1',
+                    auto_load='all',
+                ),
+                MarketplaceRegistration(
+                    name='marketplace-2',
+                    source='github:owner/repo2',
+                ),
+            ]
+        )
+        assert len(update.registered_marketplaces) == 2
+
+    def test_marketplace_with_all_fields(self):
+        """Test marketplace with all optional fields."""
+        from enterprise.server.routes.org_models import OrgAppSettingsUpdate
+
+        update = OrgAppSettingsUpdate(
+            registered_marketplaces=[
+                MarketplaceRegistration(
+                    name='full-featured',
+                    source='github:owner/repo',
+                    ref='v1.0.0',
+                    repo_path='marketplaces/plugins',
+                    auto_load='all',
+                ),
+            ]
+        )
+        assert update.registered_marketplaces[0].name == 'full-featured'
+        assert update.registered_marketplaces[0].ref == 'v1.0.0'
+        assert update.registered_marketplaces[0].repo_path == 'marketplaces/plugins'
+        assert update.registered_marketplaces[0].auto_load == 'all'
+
+    def test_duplicate_marketplace_names_rejected(self):
+        """Test that duplicate marketplace names are rejected."""
+        from enterprise.server.routes.org_models import OrgAppSettingsUpdate
+
+        with pytest.raises(ValidationError, match='Duplicate marketplace names'):
+            OrgAppSettingsUpdate(
+                registered_marketplaces=[
+                    MarketplaceRegistration(name='plugins', source='github:owner/repo1'),
+                    MarketplaceRegistration(name='plugins', source='github:owner/repo2'),
+                ]
+            )

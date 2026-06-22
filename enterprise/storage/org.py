@@ -1,11 +1,12 @@
 """SQLAlchemy model for Organization."""
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from pydantic import SecretStr
 from server.constants import DEFAULT_BILLING_MARGIN
-from sqlalchemy import JSON, String
+from sqlalchemy import DateTime, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from storage.base import Base
 from storage.encrypt_utils import EncryptedJSON, decrypt_value, encrypt_value
@@ -77,6 +78,13 @@ class Org(Base):
     # Composable with instance defaults and user personal marketplaces
     registered_marketplaces: Mapped[list[dict[str, Any]] | None] = mapped_column(
         JSON, nullable=True
+    )
+    # Timestamp for optimistic locking - tracks last modification
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
     )
 
     # Relationships

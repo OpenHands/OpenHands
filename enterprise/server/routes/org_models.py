@@ -1,4 +1,5 @@
 from typing import Annotated, Any
+import logging
 
 from openhands.sdk.settings import (
     AgentSettingsConfig,
@@ -25,6 +26,8 @@ from openhands.app_server.settings.settings_models import (
 )
 from openhands.app_server.utils.llm import MASKED_API_KEY, resolve_llm_base_url
 from openhands.storage.data_models.settings import MarketplaceRegistration
+
+logger = logging.getLogger(__name__)
 
 
 class OrgCreationError(Exception):
@@ -559,9 +562,6 @@ class OrgAppSettingsResponse(BaseModel):
 
         Returns:
             OrgAppSettingsResponse with app settings
-
-        Raises:
-            ValueError: If registered_marketplaces contains invalid data
         """
         from pydantic import ValidationError
 
@@ -569,6 +569,7 @@ class OrgAppSettingsResponse(BaseModel):
         marketplaces_raw = org.registered_marketplaces or []
 
         # Convert dicts to MarketplaceRegistration objects with validation
+        # Skip invalid entries with warning log instead of crashing
         marketplaces = []
         for i, mp in enumerate(marketplaces_raw):
             try:
@@ -581,11 +582,11 @@ class OrgAppSettingsResponse(BaseModel):
                         f"registered_marketplaces[{i}]: expected dict or "
                         f"MarketplaceRegistration, got {type(mp).__name__}"
                     )
-            except ValidationError as e:
-                raise ValueError(
-                    f"Invalid marketplace at index {i} in org '{org.name}' "
-                    f"registered_marketplaces: {e}"
-                ) from e
+            except (ValidationError, ValueError) as e:
+                logger.warning(
+                    f"Skipping invalid marketplace at index {i} in org "
+                    f"'{org.name}' registered_marketplaces: {e}"
+                )
 
         return cls(
             enable_proactive_conversation_starters=org.enable_proactive_conversation_starters

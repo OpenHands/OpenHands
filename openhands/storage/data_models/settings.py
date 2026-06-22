@@ -13,6 +13,11 @@ _GIT_URL_PATTERN = re.compile(
 # - Relative local paths (no absolute paths, no parent traversal)
 _LOCAL_PATH_PATTERN = re.compile(r'^[a-zA-Z0-9_][a-zA-Z0-9_./-]*$')
 
+# IMPORTANT: This model must stay in sync with the frontend type in
+# frontend/src/types/settings.ts. When modifying fields, update both
+# locations. Consider using OpenAPI/JSON Schema generation to automate
+# this synchronization.
+
 
 class MarketplaceRegistration(BaseModel):
     """Registration for a plugin marketplace.
