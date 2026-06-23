@@ -4,7 +4,6 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from openhands.app_server.settings.settings_models import MarketplaceRegistration
 from pydantic import SecretStr
 from server.constants import DEFAULT_BILLING_MARGIN
 from sqlalchemy import DateTime, Identity, String
@@ -12,6 +11,8 @@ from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 from storage.encrypt_utils import decrypt_legacy_value, encrypt_legacy_value
+
+from openhands.app_server.settings.settings_models import MarketplaceRegistration
 
 logger = logging.getLogger(__name__)
 
@@ -87,9 +88,9 @@ class UserSettings(Base):
     already_migrated: Mapped[bool | None] = mapped_column(
         nullable=True, default=False
     )  # False = not migrated, True = migrated
-    registered_marketplaces: Mapped[list[dict[str, Any] | MarketplaceRegistration] | None] = mapped_column(
-        JSON, nullable=True
-    )
+    registered_marketplaces: Mapped[
+        list[dict[str, Any] | MarketplaceRegistration] | None
+    ] = mapped_column(JSON, nullable=True)
     # Timestamp for optimistic locking - tracks last modification
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
