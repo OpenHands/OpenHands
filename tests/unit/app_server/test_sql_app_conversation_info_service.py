@@ -10,6 +10,7 @@ from typing import AsyncGenerator
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -165,6 +166,53 @@ class TestSQLAppConversationInfoService:
         assert retrieved_info.trigger == sample_conversation_info.trigger
         assert retrieved_info.pr_number == sample_conversation_info.pr_number
         assert retrieved_info.llm_model == sample_conversation_info.llm_model
+
+    @pytest.mark.asyncio
+    async def test_save_recovers_from_integrity_race(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        service: SQLAppConversationInfoService,
+        sample_conversation_info: AppConversationInfo,
+    ):
+        """A concurrent startup/webhook writer can win the insert race.
+
+        The losing writer should roll back and re-merge instead of surfacing a
+        duplicate-key failure that hides an otherwise running conversation.
+        """
+        original_commit = service.db_session.commit
+        original_rollback = service.db_session.rollback
+        calls = {'commit': 0, 'rollback': 0}
+
+        async def flaky_commit():
+            calls['commit'] += 1
+            if calls['commit'] == 1:
+                raise IntegrityError(
+                    'INSERT INTO conversation_metadata ...',
+                    {},
+                    Exception(
+                        'duplicate key value violates unique constraint '
+                        '"conversation_metadata_pkey"'
+                    ),
+                )
+            await original_commit()
+
+        async def tracking_rollback():
+            calls['rollback'] += 1
+            await original_rollback()
+
+        monkeypatch.setattr(service.db_session, 'commit', flaky_commit)
+        monkeypatch.setattr(service.db_session, 'rollback', tracking_rollback)
+
+        saved_info = await service.save_app_conversation_info(sample_conversation_info)
+
+        assert saved_info.id == sample_conversation_info.id
+        assert calls == {'commit': 2, 'rollback': 1}
+        retrieved_info = await service.get_app_conversation_info(
+            sample_conversation_info.id
+        )
+        assert retrieved_info is not None
+        assert retrieved_info.id == sample_conversation_info.id
+        assert retrieved_info.title == sample_conversation_info.title
 
     @pytest.mark.asyncio
     async def test_get_nonexistent_conversation_info(

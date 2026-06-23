@@ -34,6 +34,7 @@ from sqlalchemy import (
     select,
 )
 from sqlalchemy.engine import CursorResult
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -383,8 +384,17 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             tags=info.tags if info.tags else None,
         )
 
-        await self.db_session.merge(stored)
-        await self.db_session.commit()
+        try:
+            await self.db_session.merge(stored)
+            await self.db_session.commit()
+        except IntegrityError:
+            await self.db_session.rollback()
+            logger.info(
+                'Recovering conversation metadata save after integrity race for %s',
+                stored.conversation_id,
+            )
+            await self.db_session.merge(stored)
+            await self.db_session.commit()
         return info
 
     async def update_conversation_statistics(
