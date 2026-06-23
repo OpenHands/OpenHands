@@ -1124,7 +1124,7 @@ class TestLoadAndMergeAllSkills:
         'openhands.app_server.app_conversation.app_conversation_service_base.load_skills_from_agent_server'
     )
     @patch(
-        'openhands.app_server.app_conversation.app_conversation_service_base.build_org_config'
+        'openhands.app_server.app_conversation.app_conversation_service_base.build_org_configs'
     )
     @patch(
         'openhands.app_server.app_conversation.app_conversation_service_base.build_sandbox_config'
@@ -1132,7 +1132,7 @@ class TestLoadAndMergeAllSkills:
     async def test_loads_skills_successfully(
         self,
         mock_build_sandbox_config,
-        mock_build_org_config,
+        mock_build_org_configs,
         mock_load_skills,
     ):
         """Test successfully loading skills from agent-server."""
@@ -1161,7 +1161,7 @@ class TestLoadAndMergeAllSkills:
             skill2.name = 'skill2'
 
             mock_load_skills.return_value = [skill1, skill2]
-            mock_build_org_config.return_value = {'repository': 'owner/repo'}
+            mock_build_org_configs.return_value = []
             mock_build_sandbox_config.return_value = {'exposed_urls': []}
 
             # Act
@@ -1215,7 +1215,7 @@ class TestLoadAndMergeAllSkills:
         'openhands.app_server.app_conversation.app_conversation_service_base.load_skills_from_agent_server'
     )
     @patch(
-        'openhands.app_server.app_conversation.app_conversation_service_base.build_org_config'
+        'openhands.app_server.app_conversation.app_conversation_service_base.build_org_configs'
     )
     @patch(
         'openhands.app_server.app_conversation.app_conversation_service_base.build_sandbox_config'
@@ -1223,7 +1223,7 @@ class TestLoadAndMergeAllSkills:
     async def test_uses_project_dir_when_no_repository(
         self,
         mock_build_sandbox_config,
-        mock_build_org_config,
+        mock_build_org_configs,
         mock_load_skills,
     ):
         """Test uses project_dir directly when no repository is selected."""
@@ -1245,7 +1245,7 @@ class TestLoadAndMergeAllSkills:
             sandbox.session_api_key = 'test-key'
 
             mock_load_skills.return_value = []
-            mock_build_org_config.return_value = None
+            mock_build_org_configs.return_value = []
             mock_build_sandbox_config.return_value = None
 
             # Act
@@ -1262,7 +1262,7 @@ class TestLoadAndMergeAllSkills:
         'openhands.app_server.app_conversation.app_conversation_service_base.load_skills_from_agent_server'
     )
     @patch(
-        'openhands.app_server.app_conversation.app_conversation_service_base.build_org_config'
+        'openhands.app_server.app_conversation.app_conversation_service_base.build_org_configs'
     )
     @patch(
         'openhands.app_server.app_conversation.app_conversation_service_base.build_sandbox_config'
@@ -1270,7 +1270,7 @@ class TestLoadAndMergeAllSkills:
     async def test_handles_exception_gracefully(
         self,
         mock_build_sandbox_config,
-        mock_build_org_config,
+        mock_build_org_configs,
         mock_load_skills,
     ):
         """Test handles exceptions during skill loading."""

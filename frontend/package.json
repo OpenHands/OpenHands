@@ -129,6 +129,6 @@
     ]
   },
   "overrides": {
-    "dompurify": "3.4.0"
+    "dompurify": "3.4.6"
   }
 }
