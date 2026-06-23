@@ -361,8 +361,8 @@ async def test_get_gitlab_groups_delegates_to_service():
 
 
 @pytest.mark.asyncio
-async def test_forgejo_subpath_preserved_in_git_url():
-    """Test that Forgejo instances hosted under a subpath preserve the subpath in git URLs."""
+async def test_forgejo_subpath_preserved_with_fqdn():
+    """Test that Forgejo instances with a FQDN and subpath preserve the subpath in git URLs."""
     tokens = MappingProxyType(
         {
             ProviderType.FORGEJO: ProviderToken(
