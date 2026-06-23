@@ -76,16 +76,25 @@ def grant_create_organization():
 
     The create-org route is gated by
     ``require_permission(Permission.CREATE_ORGANIZATION)``, which is only
-    granted via a super role. This stacks a ``superowner`` patch over the
-    conftest-level ``get_user_super_role -> None`` default so tests that
-    exercise the success path of the route don't have to re-do that
-    plumbing inline.
+    granted via a super role. ``require_permission`` always looks up the
+    org-scoped role first via ``get_user_org_role`` -- without a patch
+    that call hits ``OrgMemberStore`` against a bare in-memory SQLite DB
+    that has no ``org_member`` table. This fixture short-circuits the
+    org-role lookup to ``None`` and stacks a ``superowner`` patch over
+    the conftest-level ``get_user_super_role -> None`` default so the
+    success path of the create-org route works without per-test plumbing.
     """
     superowner = MagicMock()
     superowner.name = 'owner'
-    with patch(
-        'server.auth.authorization.get_user_super_role',
-        AsyncMock(return_value=superowner),
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            'server.auth.authorization.get_user_super_role',
+            AsyncMock(return_value=superowner),
+        ),
     ):
         yield
 
@@ -172,7 +181,7 @@ async def test_create_org_success(mock_app, grant_create_organization):
 
 
 @pytest.mark.asyncio
-async def test_create_org_invalid_email(mock_app):
+async def test_create_org_invalid_email(mock_app, grant_create_organization):
     """
     GIVEN: Request with invalid email format
     WHEN: POST /api/organizations is called
@@ -195,7 +204,7 @@ async def test_create_org_invalid_email(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_create_org_empty_name(mock_app):
+async def test_create_org_empty_name(mock_app, grant_create_organization):
     """
     GIVEN: Request with empty organization name
     WHEN: POST /api/organizations is called
