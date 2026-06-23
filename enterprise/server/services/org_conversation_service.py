@@ -117,7 +117,7 @@ class OrgConversationService:
                     StoredConversationMetadata.title.ilike(search_pattern),
                     StoredConversationMetadata.sandbox_id.ilike(search_pattern),
                     User.email.ilike(search_pattern),
-                    User.name.ilike(search_pattern),  # type: ignore[attr-defined]
+                    User.git_user_name.ilike(search_pattern),
                 )
             )
 
@@ -530,7 +530,7 @@ class OrgConversationService:
             select(
                 StoredConversationMetadataSaas.user_id,
                 User.email,
-                User.name,  # type: ignore[attr-defined]
+                User.git_user_name,
                 func.count(StoredConversationMetadata.conversation_id).label(
                     'conv_count'
                 ),
@@ -554,7 +554,7 @@ class OrgConversationService:
             .group_by(
                 StoredConversationMetadataSaas.user_id,
                 User.email,
-                User.name,  # type: ignore[attr-defined]
+                User.git_user_name,
             )
             .order_by(func.count(StoredConversationMetadata.conversation_id).desc())
         )
@@ -572,7 +572,7 @@ class OrgConversationService:
                 TeamUsageData(
                     user_id=str(row.user_id),
                     user_email=row.email,
-                    user_name=row.name,
+                    user_name=row.git_user_name,
                     conversation_count=int(row.conv_count or 0),
                     total_tokens=int(row.token_count or 0),
                     percentage=round(pct, 1),
