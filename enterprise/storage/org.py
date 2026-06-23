@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
+from openhands.app_server.settings.settings_models import MarketplaceRegistration
 from pydantic import SecretStr
 from server.constants import DEFAULT_BILLING_MARGIN
 from sqlalchemy import JSON, DateTime, String
@@ -76,7 +77,7 @@ class Org(Base):
     is_default: Mapped[bool] = mapped_column(nullable=False, default=False)
     # Marketplace registrations at org level for plugin resolution
     # Composable with instance defaults and user personal marketplaces
-    registered_marketplaces: Mapped[list[dict[str, Any]] | None] = mapped_column(
+    registered_marketplaces: Mapped[list[dict[str, Any] | MarketplaceRegistration] | None] = mapped_column(
         JSON, nullable=True
     )
     # Timestamp for optimistic locking - tracks last modification
