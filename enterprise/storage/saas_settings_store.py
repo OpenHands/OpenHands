@@ -519,7 +519,7 @@ class SaasSettingsStore(SettingsStore):
                 return []
 
             if org.registered_marketplaces:
-                return org.registered_marketplaces
+                return list(org.registered_marketplaces)  # type: ignore[arg-type]
             return []
         except Exception as e:
             logger.error(f'Error fetching org marketplaces: {e}')
