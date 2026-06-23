@@ -14,7 +14,7 @@ from storage.base import Base
 from storage.org import Org
 from storage.user import User
 
-from openhands.storage.org_app_settings_store import OrgAppSettingsStore
+from storage.org_app_settings_store import OrgAppSettingsStore
 
 
 @pytest.fixture
