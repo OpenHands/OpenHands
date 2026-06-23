@@ -3522,7 +3522,9 @@ class TestBuildAcpStartConversationRequestSecrets:
             app_mode='test',
         )
 
-    def _make_acp_user(self, acp_server='claude-code', acp_env=None, api_key=None):
+    def _make_acp_user(
+        self, acp_server='claude-code', context_secrets=None, api_key=None
+    ):
         try:
             from openhands.sdk.settings import (
                 ACPAgentSettings,  # type: ignore[attr-defined]
@@ -3542,7 +3544,9 @@ class TestBuildAcpStartConversationRequestSecrets:
             mcp_config=None,
             disabled_skills=[],
         )
-        agent_context = AgentContext(secrets=acp_env) if acp_env else None
+        agent_context = (
+            AgentContext(secrets=context_secrets) if context_secrets else None
+        )
         user.agent_settings = ACPAgentSettings(
             acp_server=acp_server,  # type: ignore[arg-type]
             llm=LLM(
@@ -3603,9 +3607,9 @@ class TestBuildAcpStartConversationRequestSecrets:
         assert request.secrets.get('GITHUB_TOKEN') is lookup
 
     @pytest.mark.asyncio
-    async def test_explicit_acp_env_preserved(self, service, tmp_path):
+    async def test_explicit_context_secret_preserved(self, service, tmp_path):
         """Explicit agent_context.secrets entries survive when secrets also present."""
-        user = self._make_acp_user(acp_env={'MY_TOKEN': 'explicit-override'})
+        user = self._make_acp_user(context_secrets={'MY_TOKEN': 'explicit-override'})
         other_secret = StaticSecret(value=SecretStr('other-value'))
 
         request = await self._call_build(
@@ -3662,11 +3666,11 @@ class TestBuildAcpStartConversationRequestSecrets:
         assert request.agent.acp_isolate_data_dir is True
 
     @pytest.mark.asyncio
-    async def test_acp_env_explicit_override(self, service, tmp_path):
+    async def test_context_secret_explicit_override(self, service, tmp_path):
         """Explicit agent_context.secrets is independent of request.secrets — both preserved."""
         user = self._make_acp_user(
             acp_server='claude-code',
-            acp_env={'ANTHROPIC_API_KEY': 'sk-explicit-override'},
+            context_secrets={'ANTHROPIC_API_KEY': 'sk-explicit-override'},
         )
 
         request = await self._call_build(service, user, tmp_path)
@@ -3721,14 +3725,16 @@ class TestBuildAcpStartConversationRequestSecrets:
         assert request.secrets.get('ANTHROPIC_API_KEY') is panel_secret
 
     @pytest.mark.asyncio
-    async def test_explicit_acp_env_and_panel_secret_coexist(self, service, tmp_path):
+    async def test_explicit_context_secret_and_panel_secret_coexist(
+        self, service, tmp_path
+    ):
         """agent_context.secrets and request.secrets are independent channels.
 
         An explicit agent_context.secrets entry is available to the subprocess,
         while the panel secret still flows through request.secrets unchanged.
         """
         panel_secret = StaticSecret(value=SecretStr('panel-token'))
-        user = self._make_acp_user(acp_env={'GH_TOKEN': 'explicit-token'})
+        user = self._make_acp_user(context_secrets={'GH_TOKEN': 'explicit-token'})
 
         request = await self._call_build(
             service,
