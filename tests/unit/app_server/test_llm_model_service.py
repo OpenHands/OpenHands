@@ -326,6 +326,7 @@ class TestDefaultLLMModelServiceInjector:
 
         mock_boto3.assert_called_once()
 
+
 @pytest.mark.asyncio
 async def test_includes_nvidia_nim_models():
     service = DefaultLLMModelService()

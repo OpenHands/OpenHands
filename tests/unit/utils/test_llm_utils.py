@@ -168,8 +168,12 @@ class TestGetProviderApiBase:
         # The function should not raise an exception
         assert result is None or isinstance(result, str)
 
+
 def test_nvidia_nim_model_returns_nim_api_base():
-    assert get_provider_api_base('nvidia_nim/meta/llama-3.1-8b-instruct') == NVIDIA_NIM_API_BASE
+    assert (
+        get_provider_api_base('nvidia_nim/meta/llama-3.1-8b-instruct')
+        == NVIDIA_NIM_API_BASE
+    )
 
 
 def test_get_supported_llm_models_includes_nvidia_nim_models():
