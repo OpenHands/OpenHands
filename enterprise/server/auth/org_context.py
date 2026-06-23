@@ -66,18 +66,6 @@ async def resolve_effective_org_id(request: Request) -> UUID:
     return effective_org_id
 
 
-async def maybe_resolve_effective_org_id(request: Request) -> UUID | None:
-    """Variant of :func:`resolve_effective_org_id` that returns ``None``
-    rather than 404 when no effective org can be determined.
-
-    Still raises 400/403 for malformed or unauthorized ``X-Org-Id`` headers.
-    """
-    user_auth = await get_user_auth(request)
-    if not isinstance(user_auth, SaasUserAuth):
-        return None
-    return await user_auth.get_effective_org_id()
-
-
 async def resolve_target_org_id_for_permission_check(
     request: Request,
 ) -> UUID | None:
@@ -172,5 +160,4 @@ async def reject_x_org_id_path_mismatch(
 # Module-level Depends shortcuts so call sites read tidily:
 #     effective_org_id: UUID = EFFECTIVE_ORG_ID,
 EFFECTIVE_ORG_ID = Depends(resolve_effective_org_id)
-MAYBE_EFFECTIVE_ORG_ID = Depends(maybe_resolve_effective_org_id)
 REJECT_X_ORG_ID_PATH_MISMATCH = Depends(reject_x_org_id_path_mismatch)

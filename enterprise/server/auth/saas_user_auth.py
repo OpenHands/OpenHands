@@ -168,38 +168,36 @@ class SaasUserAuth(UserAuth):
             )
         return override_org_id
 
-    async def get_effective_org_id(self) -> UUID | None:
-        """Resolve the effective organization ID for this request.
+    async def _resolve_org_id(self, *, verify_membership: bool) -> UUID | None:
+        """Shared resolver for :meth:`get_effective_org_id` and
+        :meth:`get_target_org_id_for_permission_check`.
 
         Precedence (highest first):
 
-        1. ``effective_org_id_override`` — trusted server-side resolver context.
-        2. ``api_key_org_id`` — if the request is authenticated with an
-           org-bound API key, that org wins. If the caller also sent an
-           ``X-Org-Id`` header that disagrees, raise 403.
-        3. ``X-Org-Id`` header — explicit, per-request override. The
-           authenticated user must be a member of that org or we raise
-           403. Malformed UUIDs raise 400.
-        4. ``user.current_org_id`` — server-side default.
-
-        The resolved value is cached on the auth instance for the rest
-        of the request, so callers can invoke this freely.
+        1. ``effective_org_id_override`` (trusted server-side resolver
+           context; always membership-checked by
+           :meth:`_resolve_and_verify_override_org`).
+        2. ``api_key_org_id`` if the request authenticated with an
+           org-bound API key. An ``X-Org-Id`` header that disagrees with
+           the API key org raises 403.
+        3. ``X-Org-Id`` header. Validated as a UUID; the API-key/header
+           conflict above takes precedence. When ``verify_membership``
+           is ``True`` the user must be a member of the requested org
+           (403 otherwise). When ``False`` the org id is returned
+           verbatim -- the caller is responsible for the access check
+           (used by ``require_permission`` to allow "super" roles to
+           target non-member orgs).
+        4. ``user.current_org_id`` as a default.
 
         Raises:
-            HTTPException: 400 for a malformed header, 403 for
-                membership / API-key conflicts.
+            HTTPException: 400 for a malformed ``X-Org-Id`` header,
+                403 for API-key / membership conflicts.
         """
-        if self._effective_org_id_resolved:
-            return self._effective_org_id
-
         from fastapi import status
-        from storage.org_member_store import OrgMemberStore
 
         override_org_id = await self._resolve_and_verify_override_org()
         if override_org_id is not None:
-            self._effective_org_id = override_org_id
-            self._effective_org_id_resolved = True
-            return self._effective_org_id
+            return override_org_id
 
         header_value = self._x_org_id_header
         requested: UUID | None = None
@@ -231,12 +229,17 @@ class SaasUserAuth(UserAuth):
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail='API key is not authorized for this organization',
                 )
-            self._effective_org_id = self.api_key_org_id
-            self._effective_org_id_resolved = True
-            return self._effective_org_id
+            return self.api_key_org_id
 
-        # Case 2: X-Org-Id override; verify membership.
+        # Case 2: X-Org-Id override.
         if requested is not None:
+            if not verify_membership:
+                # ``require_permission`` will run the org-role + super-role
+                # fallback against this org id and decide.
+                return requested
+
+            from storage.org_member_store import OrgMemberStore
+
             try:
                 user_uuid = UUID(self.user_id)
             except ValueError as exc:
@@ -262,14 +265,29 @@ class SaasUserAuth(UserAuth):
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail='User is not a member of the requested organization',
                 )
-            self._effective_org_id = requested
-            self._effective_org_id_resolved = True
-            return self._effective_org_id
+            return requested
 
         # Case 3: Fall back to the user's currently-selected org.
         user = await UserStore.get_user_by_id(self.user_id)
-        if user is not None:
-            self._effective_org_id = user.current_org_id
+        if user is None:
+            return None
+        return user.current_org_id
+
+    async def get_effective_org_id(self) -> UUID | None:
+        """Resolve the effective organization ID for this request.
+
+        Delegates to :meth:`_resolve_org_id` with ``verify_membership=True``
+        and caches the result on the auth instance for the rest of the
+        request. See the helper for the full precedence rules.
+
+        Raises:
+            HTTPException: 400 for a malformed header, 403 for
+                membership / API-key conflicts.
+        """
+        if self._effective_org_id_resolved:
+            return self._effective_org_id
+
+        self._effective_org_id = await self._resolve_org_id(verify_membership=True)
         self._effective_org_id_resolved = True
         return self._effective_org_id
 
@@ -277,75 +295,18 @@ class SaasUserAuth(UserAuth):
         """Resolve the target organization for a permission check
         **without** requiring the authenticated user to be a member.
 
-        This exists so that ``require_permission`` on routes that do not
-        carry an explicit ``{org_id}`` path parameter can still target
-        the right organization when the caller relies on a "super" role
-        (assigned via ``user.role_id``) instead of org membership.
-
-        Resolution order is the same as :meth:`get_effective_org_id`:
-
-        1. ``effective_org_id_override`` if set (still membership-checked
-           by :meth:`_resolve_and_verify_override_org` because the
-           override is a trusted, server-side resolver mechanism).
-        2. ``api_key_org_id`` if the request authenticated with an
-           org-bound API key. The API-key/header conflict check is
-           preserved.
-        3. ``X-Org-Id`` header -- validated as a UUID and against
-           ``api_key_org_id`` (if set). **Membership is NOT verified**;
-           the caller in ``require_permission`` will look up the user's
-           org and super roles and decide.
-        4. ``user.current_org_id`` as a default.
+        Delegates to :meth:`_resolve_org_id` with ``verify_membership=False``.
+        Used by ``require_permission`` on routes that lack an explicit
+        ``{org_id}`` path parameter so that "super" role users (assigned
+        via ``user.role_id``) can target orgs they have not joined. The
+        result is **not** cached -- callers should treat it as
+        request-scoped and call only once per request.
 
         Raises:
             HTTPException: 400 for a malformed ``X-Org-Id`` header,
                 403 for API-key / header conflicts.
         """
-        from fastapi import status
-
-        override_org_id = await self._resolve_and_verify_override_org()
-        if override_org_id is not None:
-            return override_org_id
-
-        header_value = self._x_org_id_header
-        requested: UUID | None = None
-        if header_value:
-            try:
-                requested = UUID(header_value)
-            except ValueError as exc:
-                logger.warning(
-                    'x_org_id_invalid',
-                    extra={'user_id': self.user_id, 'header': header_value},
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail='Invalid X-Org-Id header (must be a UUID)',
-                ) from exc
-
-        if self.api_key_org_id is not None:
-            if requested is not None and requested != self.api_key_org_id:
-                logger.warning(
-                    'x_org_id_api_key_mismatch',
-                    extra={
-                        'user_id': self.user_id,
-                        'api_key_org_id': str(self.api_key_org_id),
-                        'x_org_id': str(requested),
-                    },
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail='API key is not authorized for this organization',
-                )
-            return self.api_key_org_id
-
-        if requested is not None:
-            # Skip the org_member check -- the caller will decide
-            # whether the user has access via org role or super role.
-            return requested
-
-        user = await UserStore.get_user_by_id(self.user_id)
-        if user is None:
-            return None
-        return user.current_org_id
+        return await self._resolve_org_id(verify_membership=False)
 
     async def get_user_id(self) -> str | None:
         return self.user_id
