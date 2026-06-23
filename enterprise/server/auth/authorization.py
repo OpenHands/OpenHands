@@ -39,6 +39,7 @@ from fastapi import Depends, HTTPException, Request, status
 from storage.org_member_store import OrgMemberStore
 from storage.role import Role
 from storage.role_store import RoleStore
+from storage.user_store import UserStore
 
 from openhands.app_server.user_auth import get_user_auth, get_user_id
 from openhands.app_server.utils.logger import openhands_logger as logger
@@ -92,14 +93,40 @@ class Permission(str, Enum):
 
 
 class RoleName(str, Enum):
-    """Role names used in the system."""
+    """Role names used in the system.
+
+    The same role names (``owner``, ``admin``, ``member``) can be
+    assigned in two distinct places:
+
+    * **Org-scoped role** -- stored on ``org_member.role_id``. Applies
+      only to the user's membership in that organization. Permissions
+      are looked up via :data:`ROLE_PERMISSIONS`.
+    * **Super role** -- stored on ``user.role_id``. Applies to the user
+      across **every** organization. Conceptually these are referred to
+      as ``superowner`` / ``superadmin`` / ``supermember`` (the name
+      simply prepends ``"super"`` to the parallel role name). Super
+      roles reuse the existing role rows in the database and look up
+      permissions via :data:`SUPER_ROLE_PERMISSIONS`, which contains the
+      parallel role's permissions plus any super-only extras from
+      :data:`SUPER_ROLE_ADDITIONAL_PERMISSIONS`.
+    """
 
     OWNER = 'owner'
     ADMIN = 'admin'
     MEMBER = 'member'
 
 
-# Permission mappings for each role
+def super_role_name(role_name: str) -> str:
+    """Return the conceptual super-role label for a regular role name.
+
+    For example, ``super_role_name('admin') == 'superadmin'``. Used only
+    for logging / API responses -- super roles share the same database
+    rows as their parallel regular roles.
+    """
+    return f'super{role_name}'
+
+
+# Base permission mappings for the regular (org-scoped) roles.
 ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
     RoleName.OWNER: frozenset(
         [
@@ -173,6 +200,27 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
 }
 
 
+# Extra permissions granted *only* to a super role on top of the
+# permissions it inherits from its parallel regular role. Add entries
+# here when a super role needs to do something its parallel regular
+# role cannot. The dict is keyed by the parallel regular role
+# (e.g. ``RoleName.ADMIN`` for ``superadmin``).
+SUPER_ROLE_ADDITIONAL_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
+    RoleName.OWNER: frozenset(),
+    RoleName.ADMIN: frozenset(),
+    RoleName.MEMBER: frozenset(),
+}
+
+
+# Effective permissions for super roles: parallel role perms + super-only extras.
+# ``superadmin`` is simply the ``admin`` role row attached to ``user.role_id``,
+# so this mapping is keyed by the same regular ``RoleName`` values.
+SUPER_ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
+    role: ROLE_PERMISSIONS[role] | SUPER_ROLE_ADDITIONAL_PERMISSIONS[role]
+    for role in ROLE_PERMISSIONS
+}
+
+
 async def get_user_org_role(user_id: str, org_id: UUID | None) -> Role | None:
     """
     Get the user's role in an organization.
@@ -198,15 +246,37 @@ async def get_user_org_role(user_id: str, org_id: UUID | None) -> Role | None:
     return await RoleStore.get_role_by_id(org_member.role_id)
 
 
+async def get_user_super_role(user_id: str) -> Role | None:
+    """
+    Get the user's cross-organization ("super") role.
+
+    Super roles live on the ``user`` table (``user.role_id``) and apply to
+    the user across **every** organization, in contrast to the
+    organization-scoped role stored on ``org_member.role_id``.
+
+    Args:
+        user_id: User ID (string that will be converted to UUID)
+
+    Returns:
+        The :class:`Role` referenced by ``user.role_id`` if one is set,
+        otherwise ``None``.
+    """
+    user = await UserStore.get_user_by_id(user_id)
+    if not user or user.role_id is None:
+        return None
+
+    return await RoleStore.get_role_by_id(user.role_id)
+
+
 def get_role_permissions(role_name: str) -> frozenset[Permission]:
     """
-    Get the permissions for a role.
+    Get the org-scoped permissions for a role.
 
     Args:
         role_name: Name of the role
 
     Returns:
-        Set of permissions for the role
+        Set of permissions for the org-scoped role
     """
     try:
         role_enum = RoleName(role_name)
@@ -215,19 +285,48 @@ def get_role_permissions(role_name: str) -> frozenset[Permission]:
         return frozenset()
 
 
-def has_permission(user_role: Role, permission: Permission) -> bool:
+def get_super_role_permissions(role_name: str) -> frozenset[Permission]:
+    """
+    Get the permissions for a "super" role.
+
+    A super role is the same role row (``owner`` / ``admin`` / ``member``)
+    referenced via ``user.role_id`` rather than ``org_member.role_id``;
+    its effective permissions are the parallel role's permissions plus
+    any extras declared in :data:`SUPER_ROLE_ADDITIONAL_PERMISSIONS`.
+
+    Args:
+        role_name: Name of the role (e.g. ``'admin'`` for ``superadmin``)
+
+    Returns:
+        Set of permissions for the super role
+    """
+    try:
+        role_enum = RoleName(role_name)
+        return SUPER_ROLE_PERMISSIONS.get(role_enum, frozenset())
+    except ValueError:
+        return frozenset()
+
+
+def has_permission(
+    user_role: Role, permission: Permission, *, is_super: bool = False
+) -> bool:
     """
     Check if a role has a specific permission.
 
     Args:
         user_role: User's Role object
         permission: Permission to check
+        is_super: If ``True`` the role was looked up from ``user.role_id``
+            and should be treated as a "super" role -- i.e. permissions
+            are read from :data:`SUPER_ROLE_PERMISSIONS` instead of
+            :data:`ROLE_PERMISSIONS`.
 
     Returns:
         True if the role has the permission
     """
-    permissions = get_role_permissions(user_role.name)
-    return permission in permissions
+    if is_super:
+        return permission in get_super_role_permissions(user_role.name)
+    return permission in get_role_permissions(user_role.name)
 
 
 async def get_api_key_org_id_from_request(request: Request) -> UUID | None:
@@ -311,32 +410,62 @@ def require_permission(permission: Permission):
 
         user_role = await get_user_org_role(user_id, org_id)
 
+        # 1. Org-scoped role check (existing behavior).
+        if user_role and has_permission(user_role, permission):
+            return user_id
+
+        # 2. Fall back to the user's "super" role. The role row is the
+        #    same as a regular role, but because it is attached via
+        #    ``user.role_id`` it grants the super-role permission set
+        #    (parallel role perms + super-only extras) across every
+        #    organization the user touches.
+        super_role = await get_user_super_role(user_id)
+        if super_role and has_permission(super_role, permission, is_super=True):
+            logger.debug(
+                'Permission granted via super role',
+                extra={
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                    'super_role': super_role_name(super_role.name),
+                    'required_permission': permission.value,
+                },
+            )
+            return user_id
+
+        # 3. Neither path granted access -- deny.
         if not user_role:
             logger.warning(
-                'User not a member of organization',
-                extra={'user_id': user_id, 'org_id': str(org_id)},
+                'User not a member of organization and lacks super-role permission',
+                extra={
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                    'super_role': (
+                        super_role_name(super_role.name) if super_role else None
+                    ),
+                    'required_permission': permission.value,
+                },
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail='User is not a member of this organization',
             )
 
-        if not has_permission(user_role, permission):
-            logger.warning(
-                'Insufficient permissions',
-                extra={
-                    'user_id': user_id,
-                    'org_id': str(org_id),
-                    'user_role': user_role.name,
-                    'required_permission': permission.value,
-                },
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f'Requires {permission.value} permission',
-            )
-
-        return user_id
+        logger.warning(
+            'Insufficient permissions',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'user_role': user_role.name,
+                'super_role': (
+                    super_role_name(super_role.name) if super_role else None
+                ),
+                'required_permission': permission.value,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f'Requires {permission.value} permission',
+        )
 
     return permission_checker
 

@@ -11,13 +11,18 @@ import pytest
 from fastapi import HTTPException
 from server.auth.authorization import (
     ROLE_PERMISSIONS,
+    SUPER_ROLE_ADDITIONAL_PERMISSIONS,
+    SUPER_ROLE_PERMISSIONS,
     Permission,
     RoleName,
     get_api_key_org_id_from_request,
     get_role_permissions,
+    get_super_role_permissions,
     get_user_org_role,
+    get_user_super_role,
     has_permission,
     require_permission,
+    super_role_name,
 )
 
 # =============================================================================
@@ -458,6 +463,21 @@ def _create_mock_request(api_key_org_id=None):
     return mock_request
 
 
+@pytest.fixture
+def _no_super_role():
+    """Default ``get_user_super_role`` to ``None`` for tests that don't
+    care about the super-role fallback. Individual tests can still
+    re-patch ``server.auth.authorization.get_user_super_role`` inside
+    their own ``with patch(...)`` block to override this default.
+    """
+    with patch(
+        'server.auth.authorization.get_user_super_role',
+        AsyncMock(return_value=None),
+    ) as mocked:
+        yield mocked
+
+
+@pytest.mark.usefixtures('_no_super_role')
 class TestRequirePermission:
     """Tests for require_permission dependency factory."""
 
@@ -689,6 +709,7 @@ class TestRequirePermission:
 # =============================================================================
 
 
+@pytest.mark.usefixtures('_no_super_role')
 class TestPermissionScenarios:
     """Tests for real-world permission scenarios."""
 
@@ -826,6 +847,7 @@ class TestPermissionScenarios:
 # =============================================================================
 
 
+@pytest.mark.usefixtures('_no_super_role')
 class TestApiKeyOrgValidation:
     """Tests for API key organization binding validation in require_permission."""
 
@@ -1243,3 +1265,377 @@ class TestRequireFinancialDataAccess:
 
         assert exc_info.value.status_code == 403
         assert 'API key is not authorized' in exc_info.value.detail
+
+
+# =============================================================================
+# Tests for super-role helpers and fallback logic
+# =============================================================================
+
+
+class TestSuperRoleName:
+    """Tests for the ``super_role_name`` helper."""
+
+    def test_prepends_super_prefix(self):
+        """
+        GIVEN: a regular role name
+        WHEN: super_role_name is called
+        THEN: the returned label is the regular role name prefixed with "super"
+        """
+        assert super_role_name('owner') == 'superowner'
+        assert super_role_name('admin') == 'superadmin'
+        assert super_role_name('member') == 'supermember'
+
+
+class TestSuperRolePermissions:
+    """Tests for super-role permission mappings."""
+
+    def test_super_role_inherits_parallel_permissions(self):
+        """
+        GIVEN: SUPER_ROLE_PERMISSIONS mapping
+        WHEN: looking up a super role
+        THEN: every permission in the parallel regular role is included
+        """
+        for role_name, perms in ROLE_PERMISSIONS.items():
+            assert perms.issubset(SUPER_ROLE_PERMISSIONS[role_name]), (
+                f'super{role_name.value} is missing some {role_name.value} perms'
+            )
+
+    def test_super_role_includes_additional_permissions(self):
+        """
+        GIVEN: a super role with declared SUPER_ROLE_ADDITIONAL_PERMISSIONS
+        WHEN: looking up its effective permissions
+        THEN: the additional permissions are included
+        """
+        for role_name, extras in SUPER_ROLE_ADDITIONAL_PERMISSIONS.items():
+            assert extras.issubset(SUPER_ROLE_PERMISSIONS[role_name])
+
+    def test_super_role_keys_match_regular_role_keys(self):
+        """
+        GIVEN: super roles parallel regular roles 1:1
+        WHEN: comparing the keysets of ROLE_PERMISSIONS and SUPER_ROLE_PERMISSIONS
+        THEN: they match exactly
+        """
+        assert set(SUPER_ROLE_PERMISSIONS.keys()) == set(ROLE_PERMISSIONS.keys())
+
+    def test_get_super_role_permissions_owner(self):
+        """
+        GIVEN: role name 'owner'
+        WHEN: get_super_role_permissions is called
+        THEN: includes owner-only permissions
+        """
+        perms = get_super_role_permissions('owner')
+        assert Permission.DELETE_ORGANIZATION in perms
+        assert Permission.CHANGE_ORGANIZATION_NAME in perms
+
+    def test_get_super_role_permissions_invalid_role(self):
+        """
+        GIVEN: invalid role name
+        WHEN: get_super_role_permissions is called
+        THEN: an empty frozenset is returned
+        """
+        assert get_super_role_permissions('not_a_role') == frozenset()
+
+
+class TestHasPermissionSuper:
+    """Tests for ``has_permission`` with the ``is_super`` flag."""
+
+    def test_super_member_inherits_member_permissions(self):
+        """
+        GIVEN: a member role evaluated as a super role
+        WHEN: checking a member-level permission
+        THEN: the permission is granted
+        """
+        mock_role = MagicMock()
+        mock_role.name = 'member'
+        assert (
+            has_permission(mock_role, Permission.MANAGE_SECRETS, is_super=True) is True
+        )
+
+    def test_super_member_lacks_owner_only_permission(self):
+        """
+        GIVEN: a member role evaluated as a super role with no extras
+        WHEN: checking an owner-only permission
+        THEN: the permission is not granted
+        """
+        mock_role = MagicMock()
+        mock_role.name = 'member'
+        assert (
+            has_permission(mock_role, Permission.DELETE_ORGANIZATION, is_super=True)
+            is False
+        )
+
+    def test_super_owner_has_delete_organization(self):
+        """
+        GIVEN: owner role evaluated as a super role
+        WHEN: checking DELETE_ORGANIZATION
+        THEN: the permission is granted
+        """
+        mock_role = MagicMock()
+        mock_role.name = 'owner'
+        assert (
+            has_permission(mock_role, Permission.DELETE_ORGANIZATION, is_super=True)
+            is True
+        )
+
+
+class TestGetUserSuperRole:
+    """Tests for the ``get_user_super_role`` helper."""
+
+    @pytest.mark.asyncio
+    async def test_returns_role_when_user_has_role_id(self):
+        """
+        GIVEN: a user with a non-null role_id
+        WHEN: get_user_super_role is called
+        THEN: the corresponding Role is returned
+        """
+        user_id = str(uuid4())
+
+        mock_user = MagicMock()
+        mock_user.role_id = 42
+
+        mock_role = MagicMock()
+        mock_role.name = 'admin'
+
+        with (
+            patch(
+                'server.auth.authorization.UserStore.get_user_by_id',
+                AsyncMock(return_value=mock_user),
+            ),
+            patch(
+                'server.auth.authorization.RoleStore.get_role_by_id',
+                AsyncMock(return_value=mock_role),
+            ) as mock_get_role,
+        ):
+            result = await get_user_super_role(user_id)
+            assert result is mock_role
+            mock_get_role.assert_awaited_once_with(42)
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_user_missing(self):
+        """
+        GIVEN: no user with the given id
+        WHEN: get_user_super_role is called
+        THEN: None is returned
+        """
+        user_id = str(uuid4())
+        with patch(
+            'server.auth.authorization.UserStore.get_user_by_id',
+            AsyncMock(return_value=None),
+        ):
+            assert await get_user_super_role(user_id) is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_role_id_is_none(self):
+        """
+        GIVEN: a user with role_id == None
+        WHEN: get_user_super_role is called
+        THEN: None is returned (no DB lookup for the role)
+        """
+        user_id = str(uuid4())
+
+        mock_user = MagicMock()
+        mock_user.role_id = None
+
+        with (
+            patch(
+                'server.auth.authorization.UserStore.get_user_by_id',
+                AsyncMock(return_value=mock_user),
+            ),
+            patch(
+                'server.auth.authorization.RoleStore.get_role_by_id',
+                AsyncMock(return_value=MagicMock()),
+            ) as mock_get_role,
+        ):
+            assert await get_user_super_role(user_id) is None
+            mock_get_role.assert_not_called()
+
+
+def _mock_role(name: str) -> MagicMock:
+    role = MagicMock()
+    role.name = name
+    return role
+
+
+class TestRequirePermissionSuperRoleFallback:
+    """Tests covering the super-role fallback in ``require_permission``."""
+
+    @pytest.mark.asyncio
+    async def test_super_role_grants_when_org_role_lacks_permission(self):
+        """
+        GIVEN: a member in the org (no DELETE_ORGANIZATION) who is a
+               superowner at the user level
+        WHEN: require_permission(DELETE_ORGANIZATION) runs
+        THEN: the super role grants access -- user_id is returned
+        """
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request()
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=_mock_role('member')),
+            ),
+            patch(
+                'server.auth.authorization.get_user_super_role',
+                AsyncMock(return_value=_mock_role('owner')),
+            ),
+        ):
+            permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
+            result = await permission_checker(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
+            assert result == user_id
+
+    @pytest.mark.asyncio
+    async def test_super_role_grants_when_user_not_org_member(self):
+        """
+        GIVEN: a user with no org membership who has a superadmin role
+               on the user record
+        WHEN: require_permission(VIEW_LLM_SETTINGS) runs
+        THEN: the super role grants access -- user_id is returned
+        """
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request()
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=None),
+            ),
+            patch(
+                'server.auth.authorization.get_user_super_role',
+                AsyncMock(return_value=_mock_role('admin')),
+            ),
+        ):
+            permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
+            result = await permission_checker(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
+            assert result == user_id
+
+    @pytest.mark.asyncio
+    async def test_super_role_does_not_help_when_lacks_permission(self):
+        """
+        GIVEN: a member in the org and a supermember at the user level
+               (neither role has DELETE_ORGANIZATION)
+        WHEN: require_permission(DELETE_ORGANIZATION) runs
+        THEN: 403 Forbidden is raised with 'Requires ...' detail
+        """
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request()
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=_mock_role('member')),
+            ),
+            patch(
+                'server.auth.authorization.get_user_super_role',
+                AsyncMock(return_value=_mock_role('member')),
+            ),
+        ):
+            permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
+            with pytest.raises(HTTPException) as exc_info:
+                await permission_checker(
+                    request=mock_request, org_id=org_id, user_id=user_id
+                )
+            assert exc_info.value.status_code == 403
+            assert 'delete_organization' in exc_info.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_non_member_with_insufficient_super_role_returns_403(self):
+        """
+        GIVEN: a non-member user whose super role lacks the required permission
+        WHEN: require_permission(DELETE_ORGANIZATION) runs
+        THEN: 403 with 'not a member' detail is raised
+        """
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request()
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=None),
+            ),
+            patch(
+                'server.auth.authorization.get_user_super_role',
+                AsyncMock(return_value=_mock_role('member')),
+            ),
+        ):
+            permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
+            with pytest.raises(HTTPException) as exc_info:
+                await permission_checker(
+                    request=mock_request, org_id=org_id, user_id=user_id
+                )
+            assert exc_info.value.status_code == 403
+            assert 'not a member' in exc_info.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_org_role_short_circuits_super_role_lookup(self):
+        """
+        GIVEN: an admin in the org who also has a super role
+        WHEN: require_permission(VIEW_LLM_SETTINGS) runs (admin has it)
+        THEN: ``get_user_super_role`` is not called -- the org role
+              already grants access
+        """
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request()
+
+        super_role_mock = AsyncMock(return_value=_mock_role('owner'))
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=_mock_role('admin')),
+            ),
+            patch(
+                'server.auth.authorization.get_user_super_role',
+                super_role_mock,
+            ),
+        ):
+            permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
+            result = await permission_checker(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
+            assert result == user_id
+            super_role_mock.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_log_records_super_role_label(self):
+        """
+        GIVEN: an insufficient-permission scenario where the user has a
+               supermember role (also insufficient)
+        WHEN: require_permission(DELETE_ORGANIZATION) logs the denial
+        THEN: the warning's ``extra`` dict carries the ``supermember``
+              label (i.e. uses the conceptual super-role name)
+        """
+        user_id = str(uuid4())
+        org_id = uuid4()
+        mock_request = _create_mock_request()
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=_mock_role('admin')),
+            ),
+            patch(
+                'server.auth.authorization.get_user_super_role',
+                AsyncMock(return_value=_mock_role('member')),
+            ),
+            patch('server.auth.authorization.logger') as mock_logger,
+        ):
+            permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
+            with pytest.raises(HTTPException):
+                await permission_checker(
+                    request=mock_request, org_id=org_id, user_id=user_id
+                )
+
+            mock_logger.warning.assert_called()
+            extra = mock_logger.warning.call_args[1]['extra']
+            assert extra['user_role'] == 'admin'
+            assert extra['super_role'] == 'supermember'
