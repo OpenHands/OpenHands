@@ -113,7 +113,7 @@ class OrgAppSettingsStore:
         """
         import logging
 
-        from enterprise.server.routes.org_models import OrgConcurrentModificationError
+        from server.routes.org_models import OrgConcurrentModificationError
 
         logger = logging.getLogger(__name__)
 

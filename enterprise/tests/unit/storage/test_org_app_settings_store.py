@@ -260,7 +260,7 @@ async def test_update_raises_conflict_when_stale_last_known_updated_at(
     WHEN: update_org_app_settings is called with stale last_known_updated_at
     THEN: OrgConcurrentModificationError is raised
     """
-    from enterprise.server.routes.org_models import OrgConcurrentModificationError
+    from server.routes.org_models import OrgConcurrentModificationError
 
     # Arrange
     async with async_session_maker() as session:
