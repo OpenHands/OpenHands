@@ -1,10 +1,11 @@
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 
 from integrations.models import Message
 from integrations.resolver_context import ResolverUserContext
 from integrations.resolver_org_router import resolve_org_for_repo
+from integrations.slack.slack_attachments import collect_message_attachment_content
 from integrations.slack.slack_errors import SlackError, SlackErrorCode
 from integrations.slack.slack_types import (
     SlackMessageView,
@@ -37,7 +38,7 @@ from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.app_server.utils.async_utils import GENERAL_TIMEOUT
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.sdk import TextContent
+from openhands.sdk import ImageContent, TextContent
 
 # =================================================
 # SECTION: Slack view types
@@ -64,6 +65,7 @@ class SlackNewConversationView(SlackViewInterface):
     send_summary_instruction: bool
     conversation_id: str
     team_id: str
+    attachment_image_urls: list[str] = field(default_factory=list, init=False)
 
     def _get_initial_prompt(self, text: str, blocks: list[dict]):
         bot_id = self._get_bot_id(blocks)
@@ -81,13 +83,32 @@ class SlackNewConversationView(SlackViewInterface):
                 return block['user_id']
         return ''
 
+    def _process_attachment_content_for_message(self, message: dict) -> list[str]:
+        attachment_content = collect_message_attachment_content(
+            WebClient(token=self.bot_access_token),
+            self.bot_access_token,
+            message,
+        )
+        self.attachment_image_urls.extend(attachment_content.image_urls)
+        return attachment_content.descriptions
+
+    def _format_slack_message_context(self, message: dict) -> str:
+        return message.get('text') or ''
+
+    def _build_message_content(self, text: str) -> list[TextContent | ImageContent]:
+        content: list[TextContent | ImageContent] = [TextContent(text=text)]
+        if self.attachment_image_urls:
+            content.append(ImageContent(image_urls=self.attachment_image_urls))
+        return content
+
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
-        """Instructions passed when conversation is first initialized"""
+        """Return instructions passed when conversation is first initialized."""
         user_info: SlackUser = self.slack_to_openhands_user
+        self.attachment_image_urls = []
 
         messages = []
+        client = WebClient(token=self.bot_access_token)
         if self.thread_ts:
-            client = WebClient(token=self.bot_access_token)
             try:
                 result = client.conversations_replies(
                     channel=self.channel_id,
@@ -104,7 +125,6 @@ class SlackNewConversationView(SlackViewInterface):
             messages = result['messages']
 
         else:
-            client = WebClient(token=self.bot_access_token)
             try:
                 result = client.conversations_history(
                     channel=self.channel_id,
@@ -129,17 +149,30 @@ class SlackNewConversationView(SlackViewInterface):
         user_message = self._get_initial_prompt(
             trigger_msg['text'], trigger_msg['blocks']
         )
+        trigger_attachment_descriptions = self._process_attachment_content_for_message(
+            trigger_msg
+        )
+        if trigger_attachment_descriptions:
+            user_message = user_message or 'Please review the attached Slack file(s).'
+            user_message = (
+                f'{user_message}\n\nSlack attachments included with this message:\n'
+                + '\n'.join(trigger_attachment_descriptions)
+            )
 
         conversation_instructions = ''
 
         if len(messages) > 1:
             messages.pop()
-            text_messages = [m['text'] for m in messages if m.get('text')]
+            context_messages = [
+                formatted_message
+                for message in messages
+                if (formatted_message := self._format_slack_message_context(message))
+            ]
             conversation_instructions_template = jinja_env.get_template(
                 'user_message_conversation_instructions.j2'
             )
             conversation_instructions = conversation_instructions_template.render(
-                messages=text_messages,
+                messages=context_messages,
                 username=user_info.slack_display_name,
                 conversation_url=CONVERSATION_URL,
             )
@@ -190,7 +223,7 @@ class SlackNewConversationView(SlackViewInterface):
         )
 
     async def create_or_update_conversation(self, jinja: Environment) -> str:
-        """Only creates a new conversation"""
+        """Create a new conversation."""
         self._verify_necessary_values_are_set()
 
         provider_tokens = await self.saas_user_auth.get_provider_tokens()
@@ -223,7 +256,7 @@ class SlackNewConversationView(SlackViewInterface):
 
         # Create the initial message request
         initial_message = SendMessageRequest(
-            role='user', content=[TextContent(text=user_instructions)]
+            role='user', content=self._build_message_content(user_instructions)
         )
 
         # Create the Slack V1 callback processor
@@ -291,6 +324,7 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
     slack_conversation: SlackConversation
 
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
+        self.attachment_image_urls = []
         client = WebClient(token=self.bot_access_token)
         try:
             result = client.conversations_replies(
@@ -305,10 +339,19 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
                 raise SlackError(SlackErrorCode.MISSING_SLACK_SCOPES) from e
             raise
 
-        user_message = result['messages'][0]
+        slack_message = result['messages'][0]
         user_message = self._get_initial_prompt(
-            user_message['text'], user_message['blocks']
+            slack_message['text'], slack_message['blocks']
         )
+        attachment_descriptions = self._process_attachment_content_for_message(
+            slack_message
+        )
+        if attachment_descriptions:
+            user_message = user_message or 'Please review the attached Slack file(s).'
+            user_message = (
+                f'{user_message}\n\nSlack attachments included with this message:\n'
+                + '\n'.join(attachment_descriptions)
+            )
 
         return user_message, ''
 
@@ -378,7 +421,7 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
 
             # 5. Create the message request
             send_message_request = SendMessageRequest(
-                role='user', content=[TextContent(text=user_msg)], run=True
+                role='user', content=self._build_message_content(user_msg), run=True
             )
 
             # 6. Send the message to the agent server
