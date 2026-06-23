@@ -1,7 +1,6 @@
 #
 services:
   dev:
-    privileged: true
     build:
       context: ${OPENHANDS_WORKSPACE:-../../}
       dockerfile: ./containers/dev/Dockerfile
@@ -21,7 +20,6 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ${WORKSPACE_BASE:-$PWD/workspace}:/opt/workspace_base
       # source code
       - ${OPENHANDS_WORKSPACE:-../../}:/app

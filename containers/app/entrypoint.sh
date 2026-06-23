@@ -43,19 +43,21 @@ else
     fi
   fi
   usermod -aG openhands enduser
-  # get the user group of /var/run/docker.sock and set openhands to that group
-  DOCKER_SOCKET_GID=$(stat -c '%g' /var/run/docker.sock)
-  echo "Docker socket group id: $DOCKER_SOCKET_GID"
-  if getent group $DOCKER_SOCKET_GID; then
-    echo "Group with id $DOCKER_SOCKET_GID already exists"
-  else
-    echo "Creating group with id $DOCKER_SOCKET_GID"
-    groupadd -g $DOCKER_SOCKET_GID docker
-  fi
-
   mkdir -p /home/enduser/.cache/huggingface/hub/
 
-  usermod -aG $DOCKER_SOCKET_GID enduser
+  if [ -S /var/run/docker.sock ]; then
+    # get the user group of /var/run/docker.sock and set enduser to that group
+    DOCKER_SOCKET_GID=$(stat -c '%g' /var/run/docker.sock)
+    echo "Docker socket group id: $DOCKER_SOCKET_GID"
+    if getent group $DOCKER_SOCKET_GID; then
+      echo "Group with id $DOCKER_SOCKET_GID already exists"
+    else
+      echo "Creating group with id $DOCKER_SOCKET_GID"
+      groupadd -g $DOCKER_SOCKET_GID docker
+    fi
+    usermod -aG $DOCKER_SOCKET_GID enduser
+  fi
+
   echo "Running as enduser"
   su enduser /bin/bash -c "${*@Q}" # This magically runs any arguments passed to the script as a command
 fi

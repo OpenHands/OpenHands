@@ -55,3 +55,15 @@ make docker-dev OPTIONS="--build"
 ```
 
 See [docker compose run](https://docs.docker.com/reference/cli/docker/compose/run/) for more options.
+
+## Optional host Docker access
+
+By default, the dev container does not mount the host Docker socket. This keeps
+the unsupported dev environment from giving code inside the container
+root-equivalent control over the host.
+
+If you explicitly need the container to use the host Docker daemon, opt in:
+
+```bash
+OPENHANDS_DEV_DOCKER_SOCKET=1 ./containers/dev/dev.sh
+```

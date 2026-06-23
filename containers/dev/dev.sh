@@ -34,6 +34,11 @@ export BACKEND_HOST="0.0.0.0"
 export SANDBOX_USER_ID=$(id -u)
 export WORKSPACE_BASE=${WORKSPACE_BASE:-$OPENHANDS_WORKSPACE/workspace}
 
-docker compose run --rm --service-ports "$@" dev
+COMPOSE_FILES=(-f compose.yml)
+if [[ "${OPENHANDS_DEV_DOCKER_SOCKET:-}" == "1" ]]; then
+    COMPOSE_FILES+=(-f compose.docker-socket.yml)
+fi
+
+docker compose "${COMPOSE_FILES[@]}" run --rm --service-ports "$@" dev
 
 ##

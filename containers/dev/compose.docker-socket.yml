@@ -1,0 +1,9 @@
+#
+# Optional local Docker daemon access for the unsupported Docker-based dev
+# environment. Do not load this file unless you explicitly trust the code that
+# will run in the dev container.
+services:
+  dev:
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
