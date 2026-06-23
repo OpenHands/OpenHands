@@ -5,6 +5,7 @@ each running within a dedicated directory.
 """
 
 import asyncio
+import json
 import logging
 import os
 import socket
@@ -13,7 +14,8 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import AsyncGenerator
 
 import base62
@@ -59,6 +61,9 @@ class ProcessInfo(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+PROCESS_INFO_FILENAME = '.openhands-process.json'
+
+
 # Global store
 _processes: dict[str, ProcessInfo] = {}
 
@@ -85,8 +90,155 @@ class ProcessSandboxService(SandboxService):
 
     def __post_init__(self):
         """Initialize the service after dataclass creation."""
-        # Ensure base working directory exists
         os.makedirs(self.base_working_dir, exist_ok=True)
+
+    def _metadata_path(self, working_dir: str | Path) -> Path:
+        return Path(working_dir) / PROCESS_INFO_FILENAME
+
+    def _working_dir_for_sandbox(self, sandbox_id: str) -> str:
+        return os.path.join(self.base_working_dir, sandbox_id)
+
+    def _is_within_base_working_dir(self, working_dir: str) -> bool:
+        try:
+            base = Path(self.base_working_dir).resolve()
+            candidate = Path(working_dir).resolve()
+            return os.path.commonpath([str(base), str(candidate)]) == str(base)
+        except (OSError, ValueError):
+            return False
+
+    def _is_restorable_sandbox_dir(self, sandbox_id: str) -> bool:
+        working_dir = Path(self._working_dir_for_sandbox(sandbox_id))
+        if not working_dir.is_dir():
+            return False
+        if self._metadata_path(working_dir).exists():
+            return True
+        conversations_dir = working_dir / 'workspace' / 'conversations'
+        return conversations_dir.is_dir() and any(
+            (child / 'meta.json').is_file()
+            for child in conversations_dir.iterdir()
+            if child.is_dir()
+        )
+
+    def _save_process_info(self, sandbox_id: str, process_info: ProcessInfo) -> None:
+        if not self._is_within_base_working_dir(process_info.working_dir):
+            raise SandboxError(
+                f'Refusing to persist sandbox metadata outside base dir: {sandbox_id}'
+            )
+        metadata_path = self._metadata_path(process_info.working_dir)
+        metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = process_info.model_dump(mode='json')
+        payload['sandbox_id'] = sandbox_id
+        tmp_path = metadata_path.with_suffix('.json.tmp')
+        with open(tmp_path, 'w') as f:
+            json.dump(payload, f)
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, metadata_path)
+
+    def _load_process_info_file(self, sandbox_id: str) -> ProcessInfo | None:
+        metadata_path = self._metadata_path(self._working_dir_for_sandbox(sandbox_id))
+        if not metadata_path.exists():
+            return None
+        try:
+            payload = json.loads(metadata_path.read_text())
+            stored_sandbox_id = payload.pop('sandbox_id', sandbox_id)
+            if stored_sandbox_id != sandbox_id:
+                _logger.warning(
+                    'Ignoring sandbox metadata %s with mismatched sandbox_id %s',
+                    metadata_path,
+                    stored_sandbox_id,
+                )
+                return None
+            process_info = ProcessInfo.model_validate(payload)
+            if not self._is_within_base_working_dir(process_info.working_dir):
+                _logger.warning(
+                    'Ignoring sandbox metadata %s outside base working dir',
+                    metadata_path,
+                )
+                return None
+            return process_info
+        except Exception:
+            _logger.exception('Failed to load sandbox metadata: %s', metadata_path)
+            return None
+
+    async def _load_or_create_process_info(self, sandbox_id: str) -> ProcessInfo | None:
+        process_info = _processes.get(sandbox_id)
+        if process_info and self._is_within_base_working_dir(process_info.working_dir):
+            return process_info
+
+        process_info = self._load_process_info_file(sandbox_id)
+        if process_info is not None:
+            _processes[sandbox_id] = process_info
+            return process_info
+
+        if not self._is_restorable_sandbox_dir(sandbox_id):
+            return None
+
+        sandbox_spec = await self.sandbox_spec_service.get_default_sandbox_spec()
+        working_dir = self._working_dir_for_sandbox(sandbox_id)
+        created_at = datetime.fromtimestamp(Path(working_dir).stat().st_ctime, UTC)
+        process_info = ProcessInfo(
+            pid=-1,
+            port=-1,
+            user_id=self.user_id,
+            working_dir=working_dir,
+            session_api_key=base62.encodebytes(os.urandom(32)),
+            created_at=created_at,
+            sandbox_spec_id=sandbox_spec.id,
+        )
+        _processes[sandbox_id] = process_info
+        self._save_process_info(sandbox_id, process_info)
+        _logger.info('Recovered persisted process sandbox metadata for %s', sandbox_id)
+        return process_info
+
+    async def _restart_agent_process(
+        self, sandbox_id: str, process_info: ProcessInfo
+    ) -> ProcessInfo | None:
+        sandbox_spec = await self.sandbox_spec_service.get_sandbox_spec(
+            process_info.sandbox_spec_id
+        )
+        if sandbox_spec is None:
+            sandbox_spec = await self.sandbox_spec_service.get_default_sandbox_spec()
+
+        try:
+            if process_info.pid > 0:
+                process = psutil.Process(process_info.pid)
+                if process.is_running():
+                    process.terminate()
+                    try:
+                        process.wait(timeout=10)
+                    except psutil.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=5)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+            pass
+
+        port = self._find_unused_port()
+        working_dir = process_info.working_dir
+        Path(working_dir).mkdir(parents=True, exist_ok=True)
+        process = await self._start_agent_process(
+            sandbox_id=sandbox_id,
+            port=port,
+            working_dir=working_dir,
+            session_api_key=process_info.session_api_key,
+            sandbox_spec=sandbox_spec,
+        )
+        restarted = ProcessInfo(
+            pid=process.pid,
+            port=port,
+            user_id=process_info.user_id or self.user_id,
+            working_dir=working_dir,
+            session_api_key=process_info.session_api_key,
+            created_at=process_info.created_at,
+            sandbox_spec_id=sandbox_spec.id,
+        )
+        _processes[sandbox_id] = restarted
+        self._save_process_info(sandbox_id, restarted)
+        if not await self._wait_for_server_ready(port):
+            _logger.warning(
+                'Restarted agent server for %s did not become ready', sandbox_id
+            )
+            return None
+        return restarted
 
     def _find_unused_port(self) -> int:
         """Find an unused port starting from base_port."""
@@ -120,6 +272,7 @@ class ProcessSandboxService(SandboxService):
         env = os.environ.copy()
         env.update(sandbox_spec.initial_env)
         env['SESSION_API_KEY'] = session_api_key
+        env['OH_SESSION_API_KEYS_0'] = session_api_key
 
         # Prepare command arguments
         cmd = [
@@ -177,6 +330,8 @@ class ProcessSandboxService(SandboxService):
 
     def _get_process_status(self, process_info: ProcessInfo) -> SandboxStatus:
         """Get the status of a process."""
+        if process_info.pid <= 0:
+            return SandboxStatus.MISSING
         try:
             process = psutil.Process(process_info.pid)
             if process.is_running():
@@ -200,6 +355,16 @@ class ProcessSandboxService(SandboxService):
     ) -> SandboxInfo:
         """Convert process info to sandbox info."""
         status = self._get_process_status(process_info)
+        if (
+            status == SandboxStatus.MISSING
+            and Path(process_info.working_dir).is_dir()
+            and self._is_within_base_working_dir(process_info.working_dir)
+        ):
+            # The agent-server process is gone, but the sandbox directory and
+            # conversation files are still restorable. Treat it as PAUSED so the
+            # UI does not mark the conversation archived; resume_sandbox() will
+            # spawn a new agent-server in the same directory.
+            status = SandboxStatus.PAUSED
 
         exposed_urls = None
         session_api_key = None
@@ -241,13 +406,17 @@ class ProcessSandboxService(SandboxService):
         limit: int = 100,
     ) -> SandboxPage:
         """Search for sandboxes."""
-        # Get all process infos
-        all_processes = list(_processes.items())
+        for child in Path(self.base_working_dir).iterdir():
+            if child.is_dir() and child.name not in _processes:
+                await self._load_or_create_process_info(child.name)
 
-        # Sort by creation time (newest first)
+        all_processes = [
+            item
+            for item in _processes.items()
+            if self._is_within_base_working_dir(item[1].working_dir)
+        ]
         all_processes.sort(key=lambda x: x[1].created_at, reverse=True)
 
-        # Apply pagination
         start_idx = 0
         if page_id:
             try:
@@ -258,13 +427,11 @@ class ProcessSandboxService(SandboxService):
         end_idx = start_idx + limit
         paginated_processes = all_processes[start_idx:end_idx]
 
-        # Convert to sandbox infos
         items = []
         for sandbox_id, process_info in paginated_processes:
             sandbox_info = await self._process_to_sandbox_info(sandbox_id, process_info)
             items.append(sandbox_info)
 
-        # Determine next page ID
         next_page_id = None
         if end_idx < len(all_processes):
             next_page_id = str(end_idx)
@@ -273,7 +440,7 @@ class ProcessSandboxService(SandboxService):
 
     async def get_sandbox(self, sandbox_id: str) -> SandboxInfo | None:
         """Get a single sandbox."""
-        process_info = _processes.get(sandbox_id)
+        process_info = await self._load_or_create_process_info(sandbox_id)
         if process_info is None:
             return None
 
@@ -283,9 +450,11 @@ class ProcessSandboxService(SandboxService):
         self, session_api_key: str
     ) -> SandboxInfo | None:
         """Get a single sandbox by session API key."""
-        # Search through all processes to find one with matching session_api_key
-        for sandbox_id, process_info in _processes.items():
-            if process_info.session_api_key == session_api_key:
+        for sandbox_id, process_info in list(_processes.items()):
+            if (
+                self._is_within_base_working_dir(process_info.working_dir)
+                and process_info.session_api_key == session_api_key
+            ):
                 return await self._process_to_sandbox_info(sandbox_id, process_info)
 
         return None
@@ -294,7 +463,6 @@ class ProcessSandboxService(SandboxService):
         self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
     ) -> SandboxInfo:
         """Start a new sandbox."""
-        # Get sandbox spec
         if sandbox_spec_id is None:
             sandbox_spec = await self.sandbox_spec_service.get_default_sandbox_spec()
         else:
@@ -305,19 +473,12 @@ class ProcessSandboxService(SandboxService):
                 raise ValueError('Sandbox Spec not found')
             sandbox_spec = sandbox_spec_maybe
 
-        # Generate unique sandbox ID and session API key
-        # Use provided sandbox_id if available, otherwise generate a random one
         if sandbox_id is None:
             sandbox_id = base62.encodebytes(os.urandom(16))
         session_api_key = base62.encodebytes(os.urandom(32))
-
-        # Find available port
         port = self._find_unused_port()
-
-        # Create sandbox directory
         working_dir = self._create_sandbox_directory(sandbox_id)
 
-        # Start the agent process
         process = await self._start_agent_process(
             sandbox_id=sandbox_id,
             port=port,
@@ -326,7 +487,6 @@ class ProcessSandboxService(SandboxService):
             sandbox_spec=sandbox_spec,
         )
 
-        # Store process info
         process_info = ProcessInfo(
             pid=process.pid,
             port=port,
@@ -337,18 +497,17 @@ class ProcessSandboxService(SandboxService):
             sandbox_spec_id=sandbox_spec.id,
         )
         _processes[sandbox_id] = process_info
+        self._save_process_info(sandbox_id, process_info)
 
-        # Wait for server to be ready
         if not await self._wait_for_server_ready(port):
-            # Clean up if server didn't start properly
             await self.delete_sandbox(sandbox_id)
             raise SandboxError('Agent Server Failed to start properly')
 
         return await self._process_to_sandbox_info(sandbox_id, process_info)
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
-        """Resume a paused sandbox."""
-        process_info = _processes.get(sandbox_id)
+        """Resume a paused or persisted process sandbox."""
+        process_info = await self._load_or_create_process_info(sandbox_id)
         if process_info is None:
             return False
 
@@ -356,13 +515,19 @@ class ProcessSandboxService(SandboxService):
             process = psutil.Process(process_info.pid)
             if process.status() == psutil.STATUS_STOPPED:
                 process.resume()
-            return True
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            return False
+                return True
+            sandbox_info = await self._process_to_sandbox_info(sandbox_id, process_info)
+            if sandbox_info.status == SandboxStatus.RUNNING:
+                return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError):
+            pass
+
+        restarted = await self._restart_agent_process(sandbox_id, process_info)
+        return restarted is not None
 
     async def pause_sandbox(self, sandbox_id: str) -> bool:
         """Pause a running sandbox."""
-        process_info = _processes.get(sandbox_id)
+        process_info = await self._load_or_create_process_info(sandbox_id)
         if process_info is None:
             return False
 
@@ -371,45 +536,35 @@ class ProcessSandboxService(SandboxService):
             if process.is_running():
                 process.suspend()
             return True
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            return False
+        except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError):
+            return Path(process_info.working_dir).is_dir()
 
     async def delete_sandbox(self, sandbox_id: str) -> bool:
         """Delete a sandbox."""
-        process_info = _processes.get(sandbox_id)
+        process_info = await self._load_or_create_process_info(sandbox_id)
         if process_info is None:
             return False
 
         try:
-            # Terminate the process
-            process = psutil.Process(process_info.pid)
-            if process.is_running():
-                # Try graceful termination first
-                process.terminate()
-                try:
-                    process.wait(timeout=10)
-                except psutil.TimeoutExpired:
-                    # Force kill if graceful termination fails
-                    process.kill()
-                    process.wait(timeout=5)
+            if process_info.pid > 0:
+                process = psutil.Process(process_info.pid)
+                if process.is_running():
+                    process.terminate()
+                    try:
+                        process.wait(timeout=10)
+                    except psutil.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=5)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, OSError, ValueError) as e:
+            _logger.warning(f'Error terminating sandbox process {sandbox_id}: {e}')
 
-            # Clean up the working directory
-            import shutil
+        import shutil
 
-            if os.path.exists(process_info.working_dir):
-                shutil.rmtree(process_info.working_dir, ignore_errors=True)
+        if os.path.exists(process_info.working_dir):
+            shutil.rmtree(process_info.working_dir, ignore_errors=True)
 
-            # Remove from our tracking
-            del _processes[sandbox_id]
-
-            return True
-
-        except (psutil.NoSuchProcess, psutil.AccessDenied, OSError) as e:
-            _logger.warning(f'Error deleting sandbox {sandbox_id}: {e}')
-            # Still remove from tracking even if cleanup failed
-            if sandbox_id in _processes:
-                del _processes[sandbox_id]
-            return True
+        _processes.pop(sandbox_id, None)
+        return True
 
 
 class ProcessSandboxServiceInjector(SandboxServiceInjector):
