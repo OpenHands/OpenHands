@@ -488,7 +488,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 llm_model = request_agent.llm.model
                 agent_kind = 'openhands'
 
-            app_conversation_user = await self.user_context.get_user_info()
             app_conversation_info = AppConversationInfo(
                 id=info.id,
                 title=f'Conversation {info.id.hex[:5]}',
@@ -501,11 +500,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 selected_repository=request.selected_repository,
                 selected_branch=request.selected_branch,
                 git_provider=request.git_provider,
-                git_full_clone=bool(
-                    getattr(app_conversation_user, 'git_full_clone', False)
-                )
-                if request.selected_repository
-                else None,
                 trigger=request.trigger,
                 pr_number=request.pr_number,
                 parent_conversation_id=request.parent_conversation_id,

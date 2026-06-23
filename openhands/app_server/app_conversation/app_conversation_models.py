@@ -120,7 +120,6 @@ class AppConversationInfo(BaseModel):
     selected_repository: str | None = None
     selected_branch: str | None = None
     git_provider: ProviderType | None = None
-    git_full_clone: bool | None = None
     title: str | None = None
     trigger: ConversationTrigger | None = None
     pr_number: list[int] = Field(default_factory=list)
