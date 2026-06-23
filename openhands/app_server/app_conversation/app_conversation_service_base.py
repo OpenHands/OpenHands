@@ -28,6 +28,7 @@ from openhands.app_server.app_conversation.skill_loader import (
 )
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
+from openhands.app_server.settings.settings_models import MarketplaceRegistration
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.auth import looks_like_jwt
 from openhands.app_server.utils.git import ensure_valid_git_branch_name
@@ -42,7 +43,6 @@ from openhands.sdk.security import (
     NeverConfirm,
     SecurityAnalyzerBase,
 )
-from openhands.app_server.settings.settings_models import MarketplaceRegistration
 from openhands.sdk.skills import Skill
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 

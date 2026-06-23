@@ -25,6 +25,7 @@ from pydantic import (
     SerializationInfo,
     ValidationError,
     field_serializer,
+    field_validator,
     model_validator,
 )
 

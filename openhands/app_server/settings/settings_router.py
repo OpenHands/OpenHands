@@ -10,7 +10,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from openhands.analytics import get_analytics_service
 from openhands.app_server.integrations.provider import (

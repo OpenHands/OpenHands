@@ -703,7 +703,9 @@ class TestLoadSkillsWithMarketplaces:
     @patch('httpx.AsyncClient')
     async def test_passes_registered_marketplaces_in_payload(self, mock_client_class):
         """Test that registered_marketplaces is included in the API payload."""
-        from openhands.app_server.settings.settings_models import MarketplaceRegistration
+        from openhands.app_server.settings.settings_models import (
+            MarketplaceRegistration,
+        )
 
         # Arrange
         mock_response = MagicMock()
