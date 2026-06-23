@@ -29,6 +29,7 @@ from openhands.app_server.settings.llm_profiles import (
 from openhands.app_server.settings.settings_models import (
     GETSettingsModel,
     Settings,
+    validate_and_convert_marketplaces,
 )
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.user_auth import (
@@ -57,7 +58,7 @@ LITE_LLM_API_URL = os.environ.get(
 )
 
 
-def _get_instance_default_marketplaces() -> list[dict]:
+def _get_instance_default_marketplaces() -> list[dict[str, Any]]:
     """Get instance-level default marketplaces from environment variable.
 
     Format: comma-separated list of marketplace definitions
@@ -143,10 +144,10 @@ def _get_instance_default_marketplaces() -> list[dict]:
 
 
 def _merge_marketplaces(
-    instance_marketplaces: list[dict],
-    org_marketplaces: list[dict],
-    user_marketplaces: list[dict],
-) -> tuple[list[dict], list[dict]]:
+    instance_marketplaces: list[dict[str, Any]],
+    org_marketplaces: list[dict[str, Any]],
+    user_marketplaces: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Merge marketplaces from different scopes with proper precedence.
 
     Composition order (additive): Instance -> Org -> User
@@ -162,15 +163,15 @@ def _merge_marketplaces(
         inherited_marketplaces includes instance + org (read-only)
         personal_marketplaces is user-defined (editable)
     """
-    inherited: list[dict] = []
-    personal: list[dict] = []
+    inherited: list[dict[str, Any]] = []
+    personal: list[dict[str, Any]] = []
 
     # Build lookup by source for deduplication
     # User settings take precedence over org, org over instance
     seen_sources: set[str] = set()
 
     # Helper to add marketplace with deduplication check
-    def add_inherited(mp: dict, scope: str) -> None:
+    def add_inherited(mp: dict[str, Any], scope: str) -> None:
         source = mp.get('source', '')
         if not source:
             return
@@ -345,8 +346,15 @@ async def load_settings(
             instance_defaults, org_marketplaces, user_marketplaces
         )
 
-        settings_with_token_data.inherited_marketplaces = inherited  # type: ignore[assignment]
-        settings_with_token_data.registered_marketplaces = personal  # type: ignore[assignment]
+        # Validate and convert merged marketplaces
+        settings_with_token_data.inherited_marketplaces = (
+            validate_and_convert_marketplaces(
+                inherited, source_name='inherited marketplaces'
+            )
+        )
+        settings_with_token_data.registered_marketplaces = (
+            validate_and_convert_marketplaces(personal, source_name='user marketplaces')
+        )
 
         return settings_with_token_data
     except Exception as e:
@@ -445,6 +453,13 @@ async def store_settings(
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={'message': 'Settings stored'},
+        )
+    except ValueError as e:
+        # Validation errors (e.g., invalid marketplace data) return 400
+        logger.warning(f'Settings validation error: {e}')
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={'error': str(e)},
         )
     except Exception as e:
         logger.warning(f'Something went wrong storing settings: {e}')

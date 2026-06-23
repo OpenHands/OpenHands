@@ -513,6 +513,17 @@ class SaasSettingsStore(SettingsStore):
                 logger.debug(f'No org_id for user {user_id}')
                 return []
 
+            # Validate org_id is a valid UUID before calling get_org_by_id_async
+            try:
+                from uuid import UUID
+
+                UUID(str(org_id))
+            except (ValueError, AttributeError, TypeError) as uuid_error:
+                logger.warning(
+                    f'Invalid org_id format for user {user_id}: {org_id} - {uuid_error}'
+                )
+                return []
+
             org = await OrgStore.get_org_by_id_async(org_id)
             if not org:
                 logger.debug(f'Org {org_id} not found for user {user_id}')

@@ -3,6 +3,7 @@ import {
   organizationService,
   OrganizationAppSettingsUpdate,
 } from "#/api/organization-service/organization-service.api";
+import { ORGANIZATION_APP_SETTINGS_KEY } from "#/hooks/query/query-keys";
 
 export const useSaveOrgAppSettings = () => {
   const queryClient = useQueryClient();
@@ -13,7 +14,7 @@ export const useSaveOrgAppSettings = () => {
     onSuccess: () => {
       // Invalidate org app settings cache
       queryClient.invalidateQueries({
-        queryKey: ["organization-app-settings"],
+        queryKey: ORGANIZATION_APP_SETTINGS_KEY,
       });
     },
     meta: {

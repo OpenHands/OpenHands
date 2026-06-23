@@ -135,6 +135,7 @@ export type MarketplaceWithScope = MarketplaceRegistration & {
 export interface SkillWithState extends SkillInfo {
   id: string;
   repository: string;
+  scope: "instance" | "org" | "personal";
   isEnabled: boolean;
   isAutoLoad: boolean;
 }

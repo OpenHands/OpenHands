@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import re
 from enum import Enum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Sequence
 
 from fastmcp.mcp_config import MCPConfig
 from fastmcp.mcp_config import MCPConfig as SDKMCPConfig
@@ -175,7 +175,7 @@ class MarketplaceRegistration(BaseModel):
 
 
 def validate_and_convert_marketplaces(
-    raw_marketplaces: list[dict[str, Any] | MarketplaceRegistration] | None,
+    raw_marketplaces: Sequence[dict[str, Any] | MarketplaceRegistration] | None,
     source_name: str = 'marketplaces',
 ) -> list[MarketplaceRegistration]:
     """Validate and convert raw marketplace data to MarketplaceRegistration objects.
@@ -359,13 +359,23 @@ class Settings(BaseModel):
         # Collect all marketplace names from all scopes
         all_names = []
 
+        # Helper to extract name from dict or object
+        def get_name(mp):
+            if isinstance(mp, dict):
+                return mp.get('name')
+            return mp.name
+
         # Add inherited (from instance/org)
         for mp in self.inherited_marketplaces:
-            all_names.append(mp.name)
+            name = get_name(mp)
+            if name:
+                all_names.append(name)
 
         # Add personal (user level)
         for mp in self.registered_marketplaces:
-            all_names.append(mp.name)
+            name = get_name(mp)
+            if name:
+                all_names.append(name)
 
         # Check for duplicates
         duplicates = {name for name in all_names if all_names.count(name) > 1}
@@ -483,6 +493,27 @@ class Settings(BaseModel):
                         and SecretStr in getattr(annotation, '__args__', ())
                     ):
                         value = SecretStr(value) if value else None
+                # Validate registered_marketplaces before setting
+                if key == 'registered_marketplaces' and value is not None:
+                    validated = []
+                    for i, mp in enumerate(value):
+                        try:
+                            if isinstance(mp, dict):
+                                validated.append(
+                                    MarketplaceRegistration.model_validate(mp)
+                                )
+                            elif isinstance(mp, MarketplaceRegistration):
+                                validated.append(mp)
+                            else:
+                                raise ValueError(
+                                    f'Expected dict or MarketplaceRegistration, '
+                                    f'got {type(mp).__name__}'
+                                )
+                        except ValidationError as e:
+                            raise ValueError(
+                                f'Invalid marketplace at index {i}: {e.errors()[0]["msg"]}'
+                            ) from e
+                    value = validated
                 setattr(self, key, value)
 
         self.reconcile_active_profile()
