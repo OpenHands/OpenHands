@@ -1,9 +1,22 @@
 /* eslint-disable i18next/no-literal-string */
 import React, { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useSearchParams } from "react-router";
+import toast from "react-hot-toast";
 import { useOrganizations } from "#/hooks/query/use-organizations";
 import { organizationService } from "#/api/organization-service/organization-service.api";
+
+// Conversation statuses from which the user can no longer stop a running
+// agent. Mirrors the terminal-status set used by OrgConversationService.
+const TERMINAL_EXECUTION_STATUSES = new Set([
+  "finished",
+  "error",
+  "stuck",
+  "deleting",
+]);
+
+const isStoppable = (status: string | null | undefined) =>
+  !TERMINAL_EXECUTION_STATUSES.has((status ?? "").toLowerCase());
 
 // Icons as inline SVGs for simplicity
 function SearchIcon() {
@@ -427,6 +440,63 @@ export function AdminDashboard() {
       enabled: !!orgId,
     },
   );
+
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [stoppingIds, setStoppingIds] = useState<Set<string>>(new Set());
+
+  const stopConversation = useMutation({
+    mutationFn: ({ conversationId }: { conversationId: string }) =>
+      organizationService.stopConversation({
+        orgId: orgId!,
+        conversationId,
+      }),
+    onMutate: ({ conversationId }) => {
+      setStoppingIds((prev) => {
+        const next = new Set(prev);
+        next.add(conversationId);
+        return next;
+      });
+      const toastId = toast.loading("Stopping conversation…");
+      return { toastId, conversationId };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.toastId) toast.dismiss(context.toastId);
+      toast.error("Failed to stop conversation");
+    },
+    onSettled: (_data, _err, { conversationId }, context) => {
+      setStoppingIds((prev) => {
+        if (!prev.has(conversationId)) return prev;
+        const next = new Set(prev);
+        next.delete(conversationId);
+        return next;
+      });
+      if (context?.toastId) toast.dismiss(context.toastId);
+    },
+    onSuccess: () => {
+      toast.success("Conversation stopped");
+      queryClient.invalidateQueries({
+        queryKey: ["org-conversations", orgId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["org-conversation-stats", orgId],
+      });
+    },
+  });
+
+  const handleView = (conversationId: string) => {
+    navigate(`/conversations/${conversationId}`);
+  };
+
+  const handleStop = (conversation: { id: string; title: string | null }) => {
+    const label = conversation.title?.trim() || "this conversation";
+    // eslint-disable-next-line no-alert
+    const confirmed = window.confirm(
+      `Stop "${label}"? This will cancel any in-progress agent run.`,
+    );
+    if (!confirmed) return;
+    stopConversation.mutate({ conversationId: conversation.id });
+  };
 
   const updateFilter = (key: string, value: string | string[] | null) => {
     const newParams = new URLSearchParams(searchParams);
@@ -1007,17 +1077,33 @@ export function AdminDashboard() {
                         <div className="flex flex-col gap-1">
                           <button
                             type="button"
+                            onClick={() => handleView(conversation.id)}
                             className="flex items-center gap-1.5 px-2 py-1 text-xs text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors"
+                            title="View conversation"
+                            aria-label="View conversation"
                           >
                             <EyeIcon />
                             View
                           </button>
                           <button
                             type="button"
-                            className="flex items-center gap-1.5 px-2 py-1 text-xs text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors"
+                            onClick={() => handleStop(conversation)}
+                            disabled={
+                              !isStoppable(conversation.execution_status) ||
+                              stoppingIds.has(conversation.id)
+                            }
+                            className="flex items-center gap-1.5 px-2 py-1 text-xs text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#8C8C8C] disabled:cursor-not-allowed"
+                            title={
+                              isStoppable(conversation.execution_status)
+                                ? "Stop conversation"
+                                : "Conversation is not running"
+                            }
+                            aria-label="Stop conversation"
                           >
                             <StopIcon />
-                            Stop
+                            {stoppingIds.has(conversation.id)
+                              ? "Stopping…"
+                              : "Stop"}
                           </button>
                         </div>
                       </td>
