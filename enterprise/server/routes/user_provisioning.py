@@ -272,6 +272,26 @@ async def provision_user(
             detail='Target organization not found',
         )
 
+    # Reject provisioning into a personal workspace.
+    #
+    # The personal-workspace invariant is ``Org.id == User.id == UUID(
+    # keycloak.sub)`` (see ``UserStore.create_user``), so a personal
+    # workspace is detected by comparing ``target_org_id`` to the
+    # *caller's* user id. ``require_permission(PROVISION_USER)`` lets
+    # the call through because every user is the owner of their own
+    # personal org, but the *product* meaning of the permission is
+    # "create members of a team org" — not "every user can mint extra
+    # accounts in their personal workspace and receive credentials/
+    # API keys for them". Mirrors the long-standing personal-workspace
+    # rejection in ``server.services.org_invitation_service`` (and uses
+    # the same 403 status code) so the two endpoints behave
+    # consistently.
+    if str(target_org_id) == caller_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Cannot provision users into a personal workspace',
+        )
+
     token_manager = TokenManager()
 
     # 1. Create the Keycloak user. Any failure here is terminal — we

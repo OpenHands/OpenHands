@@ -290,6 +290,39 @@ class TestProvisionUserHandler:
         handles['token_manager'].create_keycloak_user.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_personal_workspace_rejected_with_403(
+        self, caller_user_id, new_user_id
+    ):
+        """``target_org_id == caller's user id`` is a personal workspace.
+
+        Every user is the owner of their personal org (Org.id ==
+        User.id == UUID(keycloak.sub)), so a bare permission check
+        on ``PROVISION_USER`` would otherwise let any normal user
+        provision additional Keycloak/OpenHands accounts inside
+        their own personal workspace and walk away with the
+        credentials. Mirrors the personal-workspace rejection in
+        ``server.services.org_invitation_service`` (403 Forbidden)
+        and must run *before* Keycloak is touched.
+        """
+        caller_personal_org_id = uuid.UUID(caller_user_id)
+        patches, handles = self._patch_dependencies(new_user_id, caller_personal_org_id)
+        with self._enter_all(patches):
+            with pytest.raises(HTTPException) as exc_info:
+                await provision_user(
+                    body=ProvisionUserRequest(email='bob@example.com'),
+                    caller_user_id=caller_user_id,
+                    target_org_id=caller_personal_org_id,
+                )
+
+        assert exc_info.value.status_code == 403
+        assert 'personal workspace' in exc_info.value.detail.lower()
+        # The rejection must short-circuit before any side effects.
+        handles['token_manager'].create_keycloak_user.assert_not_awaited()
+        handles['delete_org_cascade'].assert_not_awaited()
+        handles['remove_member'].assert_not_awaited()
+        handles['token_manager'].delete_keycloak_user.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_keycloak_failure_returns_409(
         self, caller_user_id, target_org_id, new_user_id
     ):
