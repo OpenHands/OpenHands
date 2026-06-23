@@ -52,13 +52,12 @@ TEST_USER_ID = str(uuid.uuid4())
 
 @pytest.fixture
 def mock_app():
-    """Create a test FastAPI app with organization routes and mocked auth.
+    """Create a test FastAPI app with organization routes and ``get_user_id`` mocked.
 
-    The create-org route requires the ``CREATE_ORGANIZATION`` permission,
-    which is only granted via a super role. This fixture wires the
-    authenticated user to ``TEST_USER_ID`` and patches the auth helpers
-    so the user appears to hold a ``superowner`` role -- granting all
-    super-role permissions, including ``CREATE_ORGANIZATION``.
+    Routes that go through ``require_permission`` rely on the autouse
+    ``_default_no_super_role`` fixture in ``conftest.py`` to default the
+    super-role lookup to ``None``. Tests that need a specific super or
+    org role stack their own ``patch`` on top.
     """
     app = FastAPI()
     app.include_router(org_router)
@@ -68,20 +67,27 @@ def mock_app():
 
     app.dependency_overrides[get_user_id] = mock_get_user_id
 
+    return app
+
+
+@pytest.fixture
+def grant_create_organization():
+    """Make ``CREATE_ORGANIZATION`` succeed by faking a ``superowner`` role.
+
+    The create-org route is gated by
+    ``require_permission(Permission.CREATE_ORGANIZATION)``, which is only
+    granted via a super role. This stacks a ``superowner`` patch over the
+    conftest-level ``get_user_super_role -> None`` default so tests that
+    exercise the success path of the route don't have to re-do that
+    plumbing inline.
+    """
     superowner = MagicMock()
     superowner.name = 'owner'
-
-    with (
-        patch(
-            'server.auth.authorization.get_user_org_role',
-            AsyncMock(return_value=None),
-        ),
-        patch(
-            'server.auth.authorization.get_user_super_role',
-            AsyncMock(return_value=superowner),
-        ),
+    with patch(
+        'server.auth.authorization.get_user_super_role',
+        AsyncMock(return_value=superowner),
     ):
-        yield app
+        yield
 
 
 @pytest.fixture
@@ -110,7 +116,7 @@ def target_user_id():
 
 
 @pytest.mark.asyncio
-async def test_create_org_success(mock_app):
+async def test_create_org_success(mock_app, grant_create_organization):
     """
     GIVEN: Valid organization creation request
     WHEN: POST /api/organizations is called
@@ -212,7 +218,7 @@ async def test_create_org_empty_name(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_create_org_duplicate_name(mock_app):
+async def test_create_org_duplicate_name(mock_app, grant_create_organization):
     """
     GIVEN: Organization name already exists
     WHEN: POST /api/organizations is called
@@ -240,7 +246,7 @@ async def test_create_org_duplicate_name(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_create_org_litellm_failure(mock_app):
+async def test_create_org_litellm_failure(mock_app, grant_create_organization):
     """
     GIVEN: LiteLLM integration fails
     WHEN: POST /api/organizations is called
@@ -268,7 +274,7 @@ async def test_create_org_litellm_failure(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_create_org_database_failure(mock_app):
+async def test_create_org_database_failure(mock_app, grant_create_organization):
     """
     GIVEN: Database operation fails
     WHEN: POST /api/organizations is called
@@ -296,7 +302,7 @@ async def test_create_org_database_failure(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_create_org_unexpected_error(mock_app):
+async def test_create_org_unexpected_error(mock_app, grant_create_organization):
     """
     GIVEN: Unexpected error occurs
     WHEN: POST /api/organizations is called
@@ -364,8 +370,10 @@ async def test_create_org_forbidden_lacks_create_organization():
            with ``CREATE_ORGANIZATION`` (none do) nor a super role that
            grants it (only ``superowner`` / ``superadmin`` / ``superempty`` do)
     WHEN: POST /api/organizations is called
-    THEN: 403 Forbidden is returned, with the missing permission named
-          in the response detail.
+    THEN: 403 Forbidden is returned. ``require_permission`` raises with
+          the "not a member of this organization" detail when the
+          authenticated user is not a member of the target org and has
+          no super role granting the permission.
     """
     # Arrange
     app = FastAPI()
@@ -398,7 +406,7 @@ async def test_create_org_forbidden_lacks_create_organization():
 
     # Assert
     assert response.status_code == status.HTTP_403_FORBIDDEN
-    assert 'create_organization' in response.json()['detail'].lower()
+    assert 'not a member' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
@@ -409,6 +417,9 @@ async def test_create_org_forbidden_for_supermember():
     WHEN: POST /api/organizations is called
     THEN: 403 Forbidden is returned -- only ``superowner`` /
           ``superadmin`` / ``superempty`` may create organizations.
+          ``require_permission`` raises with the "not a member of this
+          organization" detail because the user has no org membership
+          either.
     """
     app = FastAPI()
     app.include_router(org_router)
@@ -441,7 +452,7 @@ async def test_create_org_forbidden_for_supermember():
         response = client.post('/api/organizations', json=request_data)
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
-    assert 'create_organization' in response.json()['detail'].lower()
+    assert 'not a member' in response.json()['detail'].lower()
 
 
 @pytest.mark.parametrize('super_role_name', ['owner', 'admin', 'empty'])
@@ -504,7 +515,7 @@ async def test_create_org_allowed_for_super_roles(super_role_name):
 
 
 @pytest.mark.asyncio
-async def test_create_org_is_not_personal(mock_app):
+async def test_create_org_is_not_personal(mock_app, grant_create_organization):
     """
     GIVEN: Admin creates a new team organization
     WHEN: POST /api/organizations is called
@@ -548,7 +559,9 @@ async def test_create_org_is_not_personal(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_create_org_sensitive_fields_not_exposed(mock_app):
+async def test_create_org_sensitive_fields_not_exposed(
+    mock_app, grant_create_organization
+):
     """
     GIVEN: Organization is created successfully
     WHEN: Response is returned
