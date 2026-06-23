@@ -1793,8 +1793,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         values are never materialised in this process.  In OSS mode (no
         ``web_url``) they remain ``StaticSecret``.  Secrets are passed
         directly as ``secrets=`` to ``create_request()``; no ``AgentContext``
-        relay is needed.  This avoids the deprecated ``acp_env`` channel
-        (software-agent-sdk #3464; OpenHands/agent-canvas#1039).
+        relay is needed (software-agent-sdk #3464;
+        OpenHands/agent-canvas#1039).
 
         Args:
             sandbox: Sandbox information

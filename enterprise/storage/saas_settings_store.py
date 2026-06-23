@@ -35,11 +35,11 @@ from openhands.sdk.llm.utils.openhands_provider import (
     canonicalize_openhands_llm_payload,
 )
 
-# Agent-settings keys that are private to each org member and must never
-# be written to org-level defaults or broadcast across the org. Today this
-# covers ``mcp_config`` (per-user MCP server set) and ``acp_env`` (per-user
-# ACP environment variables) — both are dict-of-items collections that
-# represent one member's personal configuration, not org-wide defaults.
+# Agent-settings keys private to each org member: never written to
+# org-level defaults nor broadcast across the org. Covers ``mcp_config``
+# (per-user MCP server set, a dict-of-items collection). ACP provider
+# creds are not here — they ride the per-user Secrets panel
+# (``request.secrets`` -> ``state.secret_registry``), not agent_settings.
 MEMBER_PRIVATE_AGENT_KEYS: frozenset[str] = WHOLESALE_REPLACEMENT_KEYS
 
 
@@ -174,10 +174,9 @@ class SaasSettingsStore(SettingsStore):
             },
         }
         # Drop member-private keys from the org dump before merging so
-        # legacy values written by older code paths (when mcp_config /
-        # acp_env were broadcast at the org level) can no longer leak
-        # one member's private config to another. Each member's own
-        # ``agent_settings_diff`` still supplies their personal values.
+        # legacy org-level values (older code paths broadcast mcp_config)
+        # can no longer leak one member's private config to another. Each
+        # member's own ``agent_settings_diff`` still supplies their values.
         org_agent_settings_dump = org_agent_settings.model_dump(mode='json')
         for private_key in MEMBER_PRIVATE_AGENT_KEYS:
             org_agent_settings_dump.pop(private_key, None)
@@ -376,11 +375,11 @@ class SaasSettingsStore(SettingsStore):
 
             effective_agent_settings_diff = self._get_persisted_agent_settings(item)
 
-            # Keep mcp_config / acp_env scoped to the acting member only.
+            # Keep mcp_config scoped to the acting member only.
             # ``shared_agent_settings_diff`` is the slice safe for org-wide
             # state; ``private_agent_settings_diff`` is applied below to the
             # acting member's row only so other members don't inherit one
-            # user's MCP servers (or ACP env vars).
+            # user's MCP servers.
             shared_agent_settings_diff, private_agent_settings_diff = (
                 _split_member_private_keys(effective_agent_settings_diff)
             )
@@ -451,9 +450,9 @@ class SaasSettingsStore(SettingsStore):
                 ),
             )
 
-            # Member-private keys (mcp_config, acp_env) live only on the
-            # acting member's row. Use the wholesale-replacement semantics
-            # so deletes stick (APP-1862).
+            # Member-private keys (mcp_config) live only on the acting
+            # member's row. Use the wholesale-replacement semantics so
+            # deletes stick (APP-1862).
             if private_agent_settings_diff:
                 org_member.agent_settings_diff = deep_merge_with_wholesale_keys(
                     dict(org_member.agent_settings_diff),
