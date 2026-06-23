@@ -850,11 +850,37 @@ class TokenManager:
             'emailVerified': email_verified,
         }
         user_id = await keycloak_admin.a_create_user(payload, exist_ok=False)
-        await keycloak_admin.a_set_user_password(
-            user_id=user_id,
-            password=password,
-            temporary=False,
-        )
+        # Setting the password is a separate Keycloak call and can fail
+        # independently — most commonly when the supplied password passes
+        # our local complexity check but violates the realm's password
+        # policy. If that happens, the user row we just created would be
+        # left behind with no usable credentials, so roll it back here
+        # before re-raising. We never want password-setup failure to
+        # produce an orphaned account.
+        try:
+            await keycloak_admin.a_set_user_password(
+                user_id=user_id,
+                password=password,
+                temporary=False,
+            )
+        except Exception:
+            logger.exception(
+                'Failed to set password on newly created Keycloak user; '
+                'rolling back the user to avoid orphaning the account',
+                extra={'user_id': user_id, 'email': email},
+            )
+            try:
+                # Best-effort delete via the same admin client. We do not
+                # want a secondary cleanup failure to mask the original
+                # password-setup exception, so swallow any error and let
+                # the original exception propagate.
+                await asyncio.to_thread(keycloak_admin.delete_user, user_id)
+            except Exception:
+                logger.exception(
+                    'Best-effort cleanup of orphaned Keycloak user failed',
+                    extra={'user_id': user_id, 'email': email},
+                )
+            raise
         logger.info(
             'Created Keycloak user',
             extra={'user_id': user_id, 'email': email},

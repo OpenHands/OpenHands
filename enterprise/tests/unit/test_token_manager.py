@@ -439,3 +439,120 @@ class TestDeleteKeycloakUser:
 
             # Assert
             assert result is False
+
+
+class TestCreateKeycloakUser:
+    """Test cases for the create_keycloak_user helper.
+
+    The helper performs two distinct Keycloak admin calls — ``a_create_user``
+    followed by ``a_set_user_password`` — and must roll the user back if
+    the password call fails, so we never leave behind an account that has
+    no usable credentials.
+    """
+
+    @pytest.mark.asyncio
+    async def test_create_keycloak_user_success(self, token_manager):
+        """Happy path: user is created and password is set, no cleanup runs."""
+        # Arrange
+        email = 'new.user@example.com'
+        password = 'GeneratedPassword-1234'
+        new_user_id = 'kc-user-id-success'
+
+        with (
+            patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin,
+            patch('asyncio.to_thread') as mock_to_thread,
+        ):
+            mock_admin = MagicMock()
+            mock_admin.a_create_user = AsyncMock(return_value=new_user_id)
+            mock_admin.a_set_user_password = AsyncMock(return_value=None)
+            mock_admin.delete_user = MagicMock()
+            mock_get_admin.return_value = mock_admin
+
+            # Act
+            result = await token_manager.create_keycloak_user(
+                email=email, password=password
+            )
+
+            # Assert
+            assert result == new_user_id
+            mock_admin.a_create_user.assert_awaited_once()
+            mock_admin.a_set_user_password.assert_awaited_once_with(
+                user_id=new_user_id,
+                password=password,
+                temporary=False,
+            )
+            # No cleanup path should run on success.
+            mock_to_thread.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_create_keycloak_user_password_failure_cleans_up(self, token_manager):
+        """If a_set_user_password fails, the just-created user is deleted.
+
+        The original exception must still propagate so the route sees a
+        Keycloak failure (and returns 409/500) rather than a silent
+        success that orphans an account.
+        """
+        # Arrange
+        email = 'policy.fail@example.com'
+        password = 'WeakishButPasses-Local-1'
+        new_user_id = 'kc-user-id-policy-fail'
+
+        with (
+            patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin,
+            patch('asyncio.to_thread') as mock_to_thread,
+        ):
+            mock_admin = MagicMock()
+            mock_admin.a_create_user = AsyncMock(return_value=new_user_id)
+            mock_admin.a_set_user_password = AsyncMock(
+                side_effect=KeycloakError('Password policy not met')
+            )
+            mock_admin.delete_user = MagicMock()
+            mock_get_admin.return_value = mock_admin
+            mock_to_thread.return_value = None
+
+            # Act / Assert
+            with pytest.raises(KeycloakError):
+                await token_manager.create_keycloak_user(email=email, password=password)
+
+            # The original create did happen, the password call failed,
+            # and the cleanup must have run via asyncio.to_thread with the
+            # *specific* Keycloak user id we just created.
+            mock_admin.a_create_user.assert_awaited_once()
+            mock_admin.a_set_user_password.assert_awaited_once()
+            mock_to_thread.assert_called_once_with(mock_admin.delete_user, new_user_id)
+
+    @pytest.mark.asyncio
+    async def test_create_keycloak_user_password_failure_cleanup_swallowed(
+        self, token_manager
+    ):
+        """If both password-set and cleanup fail, the original error wins.
+
+        We never want a secondary cleanup error to mask the real reason
+        the request failed, so the password exception must propagate even
+        when ``delete_user`` itself raises.
+        """
+        # Arrange
+        email = 'cleanup.fail@example.com'
+        password = 'AnotherPolicyViolation-1'
+        new_user_id = 'kc-user-id-cleanup-fail'
+
+        with (
+            patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin,
+            patch('asyncio.to_thread') as mock_to_thread,
+        ):
+            mock_admin = MagicMock()
+            mock_admin.a_create_user = AsyncMock(return_value=new_user_id)
+            password_error = KeycloakError('Password policy not met')
+            mock_admin.a_set_user_password = AsyncMock(side_effect=password_error)
+            mock_admin.delete_user = MagicMock()
+            mock_get_admin.return_value = mock_admin
+            mock_to_thread.side_effect = Exception('delete failed')
+
+            # Act / Assert
+            with pytest.raises(KeycloakError) as exc_info:
+                await token_manager.create_keycloak_user(email=email, password=password)
+
+            # The error surfaced is the original password failure, not
+            # the secondary cleanup error.
+            assert exc_info.value is password_error
+            mock_to_thread.assert_called_once_with(mock_admin.delete_user, new_user_id)
