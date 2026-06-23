@@ -15,6 +15,7 @@ from server.auth.auth_error import (
 from server.auth.saas_user_auth import (
     SaasUserAuth,
     get_api_key_from_header,
+    get_user_auth_from_keycloak_id,
     saas_user_auth_from_bearer,
     saas_user_auth_from_cookie,
     saas_user_auth_from_signed_token,
@@ -24,6 +25,7 @@ from storage.user_authorization import UserAuthorizationType
 
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.secrets.secrets_models import Secrets
+from openhands.app_server.user_auth.user_auth import AuthType
 
 
 @pytest.fixture
@@ -284,7 +286,9 @@ class TestGetProviderTokensBitbucketDCHost:
                 'bitbucket.company.com',
             ),
         ):
-            mock_tm.get_idp_token = AsyncMock(return_value='bdc_access_token')
+            mock_tm.get_idp_token_by_user_id = AsyncMock(
+                return_value='bdc_access_token'
+            )
             user_auth, mock_session = self._make_user_auth(mock_session_maker)
             user_auth.get_secrets = AsyncMock(return_value=None)
 
@@ -307,7 +311,9 @@ class TestGetProviderTokensBitbucketDCHost:
                 'bitbucket.company.com',
             ),
         ):
-            mock_tm.get_idp_token = AsyncMock(return_value='bdc_access_token')
+            mock_tm.get_idp_token_by_user_id = AsyncMock(
+                return_value='bdc_access_token'
+            )
             user_auth, mock_session = self._make_user_auth(mock_session_maker)
             user_secrets = Secrets(
                 provider_tokens={
@@ -335,7 +341,9 @@ class TestGetProviderTokensBitbucketDCHost:
             patch('server.auth.saas_user_auth.a_session_maker') as mock_session_maker,
             patch('server.auth.saas_user_auth.BITBUCKET_DATA_CENTER_HOST', ''),
         ):
-            mock_tm.get_idp_token = AsyncMock(return_value='bdc_access_token')
+            mock_tm.get_idp_token_by_user_id = AsyncMock(
+                return_value='bdc_access_token'
+            )
             user_auth, mock_session = self._make_user_auth(mock_session_maker)
             user_auth.get_secrets = AsyncMock(return_value=None)
 
@@ -366,6 +374,140 @@ async def test_get_provider_tokens_cached(mock_token_manager):
     assert result[ProviderType.GITHUB].token.get_secret_value() == 'cached_github_token'
     mock_token_manager.get_user_info_from_user_id.assert_not_called()
     mock_token_manager.get_idp_token.assert_not_called()
+
+
+# =============================================================================
+# API-key (bearer) decoupling from Keycloak offline sessions
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_user_email_lazy_loads_from_db():
+    """Bearer auth resolves email from the DB (User row), not from Keycloak."""
+    # Arrange
+    user_auth = SaasUserAuth(
+        user_id='test_user_id',
+        refresh_token=SecretStr(''),
+        auth_type=AuthType.BEARER,
+    )
+    mock_user = MagicMock()
+    mock_user.email = 'user@example.com'
+    mock_user.email_verified = True
+
+    with patch('server.auth.saas_user_auth.UserStore') as mock_user_store:
+        mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+
+        # Act
+        email = await user_auth.get_user_email()
+
+    # Assert
+    assert email == 'user@example.com'
+    assert user_auth.email_verified is True
+
+
+@pytest.mark.asyncio
+async def test_get_access_token_returns_none_for_bearer_when_session_revoked():
+    """Bearer get_access_token degrades to None when the offline session is gone.
+
+    A revoked offline session surfaces as a Keycloak refresh failure
+    (``invalid_grant``). For API-key auth that must not raise a 401 — the
+    Keycloak access token is optional.
+    """
+    # Arrange
+    from keycloak.exceptions import KeycloakPostError
+
+    offline_token = jwt.encode(
+        {'sub': 'test_user_id', 'exp': int(time.time()) + 3600},
+        'secret',
+        algorithm='HS256',
+    )
+    user_auth = SaasUserAuth(
+        user_id='test_user_id',
+        refresh_token=SecretStr(''),
+        auth_type=AuthType.BEARER,
+    )
+
+    with patch('server.auth.saas_user_auth.token_manager') as mock_tm:
+        mock_tm.load_offline_token = AsyncMock(return_value=offline_token)
+        mock_tm.refresh = AsyncMock(
+            side_effect=KeycloakPostError(
+                'invalid_grant: Offline user session not found'
+            )
+        )
+
+        # Act
+        result = await user_auth.get_access_token()
+
+    # Assert
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_provider_tokens_succeeds_without_offline_session():
+    """Provider tokens resolve by user_id with no offline session / refresh.
+
+    The core decoupling: a key whose Keycloak offline session is gone (empty
+    refresh token) still gets provider tokens, which come from the auth_tokens
+    table + provider OAuth — never a Keycloak refresh.
+    """
+    # Arrange
+    mock_auth_token = MagicMock()
+    mock_auth_token.identity_provider = 'github'
+    mock_auth_token.id = 'token-id-1'
+
+    mock_session = AsyncMock()
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [mock_auth_token]
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
+    user_auth = SaasUserAuth(
+        user_id='test_user_id',
+        refresh_token=SecretStr(''),
+        auth_type=AuthType.BEARER,
+    )
+    user_auth.get_secrets = AsyncMock(return_value=None)
+
+    with (
+        patch('server.auth.saas_user_auth.token_manager') as mock_tm,
+        patch('server.auth.saas_user_auth.a_session_maker') as mock_session_maker,
+    ):
+        mock_session_maker.return_value = mock_session
+        mock_tm.get_idp_token_by_user_id = AsyncMock(return_value='github_token')
+        mock_tm.refresh = AsyncMock()
+        mock_tm.load_offline_token = AsyncMock()
+
+        # Act
+        result = await user_auth.get_provider_tokens()
+
+    # Assert
+    assert result[ProviderType.GITHUB].token.get_secret_value() == 'github_token'
+    mock_tm.get_idp_token_by_user_id.assert_called_once_with(
+        'test_user_id', idp=ProviderType.GITHUB
+    )
+    mock_tm.refresh.assert_not_called()
+    mock_tm.load_offline_token.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'build',
+    [
+        lambda: SaasUserAuth.get_for_user('test_user_id'),
+        lambda: get_user_auth_from_keycloak_id('test_user_id'),
+    ],
+    ids=['get_for_user', 'get_user_auth_from_keycloak_id'],
+)
+async def test_background_user_auth_does_not_require_offline_session(build):
+    """Background/integration entry points build BEARER auth with no offline token."""
+    # Act
+    built = await build()
+
+    # Assert
+    assert built.user_id == 'test_user_id'
+    assert built.auth_type == AuthType.BEARER
+    assert built.refresh_token.get_secret_value() == ''
 
 
 @pytest.mark.asyncio
@@ -472,17 +614,15 @@ async def test_get_instance_no_auth(mock_request):
 
 @pytest.mark.asyncio
 async def test_saas_user_auth_from_bearer_success():
-    """Test successful authentication from bearer token sets user_id and api_key_org_id."""
+    """A valid API key authenticates with no Keycloak round-trip.
+
+    Bearer auth must not load an offline token or call refresh(): the key
+    alone authenticates the request, so a missing/revoked offline session can
+    no longer turn a valid key into a 401.
+    """
     # Arrange
     mock_request = MagicMock()
     mock_request.headers = {'Authorization': 'Bearer test_api_key'}
-
-    # Create a valid offline token (refresh token)
-    offline_token = jwt.encode(
-        {'sub': 'test_user_id', 'exp': int(time.time()) + 3600},
-        'secret',
-        algorithm='HS256',
-    )
 
     mock_org_id = uuid.uuid4()
     mock_validation_result = ApiKeyValidationResult(
@@ -501,22 +641,23 @@ async def test_saas_user_auth_from_bearer_success():
             return_value=mock_validation_result
         )
         mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+        mock_token_manager.load_offline_token = AsyncMock()
+        mock_token_manager.refresh = AsyncMock()
 
-        mock_token_manager.load_offline_token = AsyncMock(return_value=offline_token)
-        mock_token_manager.refresh = AsyncMock(
-            return_value=create_mock_jwt_tokens('test_user_id')
-        )
-
+        # Act
         result = await saas_user_auth_from_bearer(mock_request)
 
+        # Assert
         assert isinstance(result, SaasUserAuth)
         assert result.user_id == 'test_user_id'
         assert result.api_key_org_id == mock_org_id
         assert result.api_key_id == 42
         assert result.api_key_name == 'Test Key'
+        assert result.auth_type == AuthType.BEARER
         mock_api_key_store.validate_api_key.assert_called_once_with('test_api_key')
-        mock_token_manager.load_offline_token.assert_called_once_with('test_user_id')
-        mock_token_manager.refresh.assert_called_once_with(offline_token)
+        # Decoupled from Keycloak: no offline-session load, no refresh.
+        mock_token_manager.load_offline_token.assert_not_called()
+        mock_token_manager.refresh.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -1175,386 +1316,3 @@ class TestOpenHandsApiKey:
             assert result is not None
             assert 'OPENHANDS_API_KEY' in result.custom_secrets
             assert len(result.custom_secrets) == 1
-
-
-class TestGetMaxConcurrentSandboxes:
-    """Tests for SaasUserAuth.get_max_concurrent_sandboxes() method.
-
-    This method resolves concurrent sandbox limits in the following order:
-    1. OrgMember.max_concurrent_sandboxes_override (if not NULL)
-    2. Org.max_concurrent_sandboxes (org default)
-    3. The provided default value
-    """
-
-    @pytest.fixture
-    def user_id(self):
-        """Create a test user ID."""
-        return str(uuid.uuid4())
-
-    @pytest.fixture
-    def org_id(self):
-        """Create a test organization ID."""
-        return uuid.uuid4()
-
-    @pytest.fixture
-    def mock_user(self, org_id):
-        """Create a mock user with current_org_id."""
-        user = MagicMock()
-        user.current_org_id = org_id
-        return user
-
-    @pytest.fixture
-    def mock_org_member_with_override(self, org_id, user_id):
-        """Create a mock org member with override set."""
-        member = MagicMock()
-        member.org_id = org_id
-        member.user_id = uuid.UUID(user_id)
-        member.max_concurrent_sandboxes_override = 15
-        return member
-
-    @pytest.fixture
-    def mock_org_member_no_override(self, org_id, user_id):
-        """Create a mock org member with override as None."""
-        member = MagicMock()
-        member.org_id = org_id
-        member.user_id = uuid.UUID(user_id)
-        member.max_concurrent_sandboxes_override = None
-        return member
-
-    @pytest.fixture
-    def mock_org_with_limit(self, org_id):
-        """Create a mock org with max_concurrent_sandboxes set."""
-        org = MagicMock()
-        org.id = org_id
-        org.max_concurrent_sandboxes = 8
-        return org
-
-    # HAPPY PATH TESTS
-
-    @pytest.mark.asyncio
-    async def test_returns_org_member_override_when_set(
-        self,
-        user_id,
-        org_id,
-        mock_user,
-        mock_org_member_with_override,
-        mock_org_with_limit,
-    ):
-        """
-        GIVEN: User has an org_member with max_concurrent_sandboxes_override set
-        WHEN: get_max_concurrent_sandboxes is called
-        THEN: Returns the override value (15)
-        """
-        user_auth = SaasUserAuth(
-            user_id=user_id,
-            refresh_token=SecretStr('refresh_token'),
-        )
-
-        with (
-            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
-            # OrgMemberStore is imported locally inside the function
-            patch(
-                'storage.org_member_store.OrgMemberStore.get_org_member',
-                new_callable=AsyncMock,
-            ) as mock_get_org_member,
-            patch(
-                'storage.org_store.OrgStore.get_org_by_id',
-                new_callable=AsyncMock,
-            ) as mock_get_org,
-        ):
-            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
-            mock_get_org_member.return_value = mock_org_member_with_override
-            mock_get_org.return_value = mock_org_with_limit
-
-            result = await user_auth.get_max_concurrent_sandboxes()
-
-            assert result == 15
-            # OrgStore should not be called when override exists
-            mock_get_org.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_returns_org_default_when_override_is_none(
-        self,
-        user_id,
-        org_id,
-        mock_user,
-        mock_org_member_no_override,
-        mock_org_with_limit,
-    ):
-        """
-        GIVEN: User has org_member with override=None, org has max_concurrent_sandboxes set
-        WHEN: get_max_concurrent_sandboxes is called
-        THEN: Returns the org's max_concurrent_sandboxes (8)
-        """
-        user_auth = SaasUserAuth(
-            user_id=user_id,
-            refresh_token=SecretStr('refresh_token'),
-        )
-
-        with (
-            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
-            patch(
-                'storage.org_member_store.OrgMemberStore.get_org_member',
-                new_callable=AsyncMock,
-            ) as mock_get_org_member,
-            patch(
-                'storage.org_store.OrgStore.get_org_by_id',
-                new_callable=AsyncMock,
-            ) as mock_get_org,
-        ):
-            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
-            mock_get_org_member.return_value = mock_org_member_no_override
-            mock_get_org.return_value = mock_org_with_limit
-
-            result = await user_auth.get_max_concurrent_sandboxes()
-
-            assert result == 8
-
-    @pytest.mark.asyncio
-    async def test_returns_default_when_both_org_and_override_unset(
-        self, user_id, org_id, mock_user, mock_org_member_no_override
-    ):
-        """
-        GIVEN: User has org_member with override=None, org has max_concurrent_sandboxes=None
-        WHEN: get_max_concurrent_sandboxes is called
-        THEN: Returns the default value (10)
-        """
-        mock_org_no_limit = MagicMock()
-        mock_org_no_limit.id = org_id
-        mock_org_no_limit.max_concurrent_sandboxes = None
-
-        user_auth = SaasUserAuth(
-            user_id=user_id,
-            refresh_token=SecretStr('refresh_token'),
-        )
-
-        with (
-            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
-            patch(
-                'storage.org_member_store.OrgMemberStore.get_org_member',
-                new_callable=AsyncMock,
-            ) as mock_get_org_member,
-            patch(
-                'storage.org_store.OrgStore.get_org_by_id',
-                new_callable=AsyncMock,
-            ) as mock_get_org,
-        ):
-            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
-            mock_get_org_member.return_value = mock_org_member_no_override
-            mock_get_org.return_value = mock_org_no_limit
-
-            result = await user_auth.get_max_concurrent_sandboxes()
-
-            assert result == 10  # default
-
-    @pytest.mark.asyncio
-    async def test_returns_custom_default_when_no_limits_set(
-        self, user_id, org_id, mock_user, mock_org_member_no_override
-    ):
-        """
-        GIVEN: No limits are set anywhere
-        WHEN: get_max_concurrent_sandboxes is called with custom default (5)
-        THEN: Returns the custom default (5)
-        """
-        mock_org_no_limit = MagicMock()
-        mock_org_no_limit.id = org_id
-        mock_org_no_limit.max_concurrent_sandboxes = None
-
-        user_auth = SaasUserAuth(
-            user_id=user_id,
-            refresh_token=SecretStr('refresh_token'),
-        )
-
-        with (
-            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
-            patch(
-                'storage.org_member_store.OrgMemberStore.get_org_member',
-                new_callable=AsyncMock,
-            ) as mock_get_org_member,
-            patch(
-                'storage.org_store.OrgStore.get_org_by_id',
-                new_callable=AsyncMock,
-            ) as mock_get_org,
-        ):
-            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
-            mock_get_org_member.return_value = mock_org_member_no_override
-            mock_get_org.return_value = mock_org_no_limit
-
-            result = await user_auth.get_max_concurrent_sandboxes(default=5)
-
-            assert result == 5
-
-    @pytest.mark.asyncio
-    async def test_returns_default_when_user_has_no_current_org_id(self, user_id):
-        """
-        GIVEN: User has no current_org_id
-        WHEN: get_max_concurrent_sandboxes is called
-        THEN: Returns the default value (10) immediately
-        """
-        mock_user_no_org = MagicMock()
-        mock_user_no_org.current_org_id = None
-
-        user_auth = SaasUserAuth(
-            user_id=user_id,
-            refresh_token=SecretStr('refresh_token'),
-        )
-
-        with patch('server.auth.saas_user_auth.UserStore') as mock_user_store:
-            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user_no_org)
-
-            result = await user_auth.get_max_concurrent_sandboxes()
-
-            assert result == 10
-
-    @pytest.mark.asyncio
-    async def test_returns_default_when_user_does_not_exist(self, user_id):
-        """
-        GIVEN: User does not exist in database
-        WHEN: get_max_concurrent_sandboxes is called
-        THEN: Returns the default value (10)
-        """
-        user_auth = SaasUserAuth(
-            user_id=user_id,
-            refresh_token=SecretStr('refresh_token'),
-        )
-
-        with patch('server.auth.saas_user_auth.UserStore') as mock_user_store:
-            mock_user_store.get_user_by_id = AsyncMock(return_value=None)
-
-            result = await user_auth.get_max_concurrent_sandboxes()
-
-            assert result == 10
-
-    @pytest.mark.asyncio
-    async def test_returns_org_default_when_org_member_not_found(
-        self, user_id, org_id, mock_user, mock_org_with_limit
-    ):
-        """
-        GIVEN: User exists but has no org_member record
-        WHEN: get_max_concurrent_sandboxes is called
-        THEN: Falls back to org's max_concurrent_sandboxes
-        """
-        user_auth = SaasUserAuth(
-            user_id=user_id,
-            refresh_token=SecretStr('refresh_token'),
-        )
-
-        with (
-            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
-            patch(
-                'storage.org_member_store.OrgMemberStore.get_org_member',
-                new_callable=AsyncMock,
-            ) as mock_get_org_member,
-            patch(
-                'storage.org_store.OrgStore.get_org_by_id',
-                new_callable=AsyncMock,
-            ) as mock_get_org,
-        ):
-            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
-            mock_get_org_member.return_value = None
-            mock_get_org.return_value = mock_org_with_limit
-
-            result = await user_auth.get_max_concurrent_sandboxes()
-
-            assert result == 8
-
-    @pytest.mark.asyncio
-    async def test_returns_default_when_org_not_found(
-        self, user_id, org_id, mock_user, mock_org_member_no_override
-    ):
-        """
-        GIVEN: OrgMember exists but org does not exist
-        WHEN: get_max_concurrent_sandboxes is called
-        THEN: Returns the default value (10)
-        """
-        user_auth = SaasUserAuth(
-            user_id=user_id,
-            refresh_token=SecretStr('refresh_token'),
-        )
-
-        with (
-            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
-            patch(
-                'storage.org_member_store.OrgMemberStore.get_org_member',
-                new_callable=AsyncMock,
-            ) as mock_get_org_member,
-            patch(
-                'storage.org_store.OrgStore.get_org_by_id',
-                new_callable=AsyncMock,
-            ) as mock_get_org,
-        ):
-            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
-            mock_get_org_member.return_value = mock_org_member_no_override
-            mock_get_org.return_value = None
-
-            result = await user_auth.get_max_concurrent_sandboxes()
-
-            assert result == 10
-
-    # UNHAPPY PATH TESTS
-
-    @pytest.mark.asyncio
-    async def test_handles_database_error_gracefully(
-        self, user_id, org_id, mock_user, mock_org_member_no_override
-    ):
-        """
-        GIVEN: A database error occurs during lookup
-        WHEN: get_max_concurrent_sandboxes is called
-        THEN: Returns the default value (10) without raising
-        """
-        user_auth = SaasUserAuth(
-            user_id=user_id,
-            refresh_token=SecretStr('refresh_token'),
-        )
-
-        with (
-            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
-            patch(
-                'storage.org_member_store.OrgMemberStore.get_org_member',
-                new_callable=AsyncMock,
-            ) as mock_get_org_member,
-            patch(
-                'storage.org_store.OrgStore.get_org_by_id',
-                new_callable=AsyncMock,
-            ) as mock_get_org,
-        ):
-            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
-            mock_get_org_member.side_effect = Exception('Database connection failed')
-            mock_get_org.return_value = mock_org_member_no_override
-
-            result = await user_auth.get_max_concurrent_sandboxes()
-
-            assert result == 10
-
-    @pytest.mark.asyncio
-    async def test_handles_org_store_error_gracefully(
-        self, user_id, org_id, mock_user, mock_org_member_no_override
-    ):
-        """
-        GIVEN: OrgStore raises an error
-        WHEN: get_max_concurrent_sandboxes is called after org_member check
-        THEN: Returns the default value (10) without raising
-        """
-        user_auth = SaasUserAuth(
-            user_id=user_id,
-            refresh_token=SecretStr('refresh_token'),
-        )
-
-        with (
-            patch('server.auth.saas_user_auth.UserStore') as mock_user_store,
-            patch(
-                'storage.org_member_store.OrgMemberStore.get_org_member',
-                new_callable=AsyncMock,
-            ) as mock_get_org_member,
-            patch(
-                'storage.org_store.OrgStore.get_org_by_id',
-                new_callable=AsyncMock,
-            ) as mock_get_org,
-        ):
-            mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
-            mock_get_org_member.return_value = mock_org_member_no_override
-            mock_get_org.side_effect = Exception('Org lookup failed')
-
-            result = await user_auth.get_max_concurrent_sandboxes()
-
-            assert result == 10

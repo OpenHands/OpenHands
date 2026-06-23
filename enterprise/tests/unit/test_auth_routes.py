@@ -1462,7 +1462,7 @@ class TestKeycloakCallbackRecaptcha:
     """Tests for reCAPTCHA integration in keycloak_callback()."""
 
     @pytest.mark.asyncio
-    async def test_should_verify_recaptcha_and_allow_login_when_score_is_high(
+    async def test_login_allows_when_recaptcha_score_is_high(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that login proceeds when reCAPTCHA score is high."""
@@ -1552,7 +1552,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_recaptcha_service.create_assessment.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_should_block_login_when_recaptcha_score_is_low(
+    async def test_login_blocks_when_recaptcha_score_is_low(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that login is blocked and redirected when reCAPTCHA score is low."""
@@ -1623,7 +1623,7 @@ class TestKeycloakCallbackRecaptcha:
             assert 'recaptcha_blocked=true' in result.headers['location']
 
     @pytest.mark.asyncio
-    async def test_should_extract_ip_from_x_forwarded_for_header(
+    async def test_login_extracts_ip_from_x_forwarded_for(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that IP is extracted from X-Forwarded-For header when present."""
@@ -1714,7 +1714,7 @@ class TestKeycloakCallbackRecaptcha:
             assert call_args[1]['user_ip'] == '192.168.1.1'
 
     @pytest.mark.asyncio
-    async def test_should_use_client_host_when_x_forwarded_for_missing(
+    async def test_login_uses_client_host_when_x_forwarded_for_missing(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that client.host is used when X-Forwarded-For is missing."""
@@ -1806,7 +1806,7 @@ class TestKeycloakCallbackRecaptcha:
             assert call_args[1]['user_ip'] == '192.168.1.2'
 
     @pytest.mark.asyncio
-    async def test_should_use_unknown_ip_when_client_is_none(
+    async def test_login_uses_unknown_ip_when_client_is_none(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that 'unknown' IP is used when client is None."""
@@ -1897,7 +1897,7 @@ class TestKeycloakCallbackRecaptcha:
             assert call_args[1]['user_ip'] == 'unknown'
 
     @pytest.mark.asyncio
-    async def test_should_include_email_in_assessment_when_available(
+    async def test_login_includes_email_in_assessment(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that email is included in assessment when available."""
@@ -1985,7 +1985,7 @@ class TestKeycloakCallbackRecaptcha:
             assert call_args[1]['email'] == 'user@example.com'
 
     @pytest.mark.asyncio
-    async def test_should_skip_recaptcha_when_site_key_not_configured(
+    async def test_login_skips_recaptcha_when_site_key_not_configured(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that reCAPTCHA is skipped when RECAPTCHA_SITE_KEY is not configured."""
@@ -2064,7 +2064,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_recaptcha_service.create_assessment.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_should_skip_recaptcha_when_token_is_missing(
+    async def test_login_skips_recaptcha_when_token_is_missing(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that reCAPTCHA is skipped when token is missing from state."""
@@ -2137,7 +2137,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_recaptcha_service.create_assessment.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_should_fail_open_when_recaptcha_service_throws_exception(
+    async def test_login_fails_open_when_recaptcha_raises(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that login proceeds (fail open) when reCAPTCHA service throws exception."""
@@ -2227,7 +2227,7 @@ class TestKeycloakCallbackRecaptcha:
             assert len(recaptcha_error_calls) > 0
 
     @pytest.mark.asyncio
-    async def test_should_log_warning_when_recaptcha_blocks_user(
+    async def test_login_logs_warning_when_recaptcha_blocks(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that warning is logged when reCAPTCHA blocks user."""

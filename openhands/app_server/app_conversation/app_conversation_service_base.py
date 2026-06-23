@@ -22,7 +22,7 @@ from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
 )
 from openhands.app_server.app_conversation.skill_loader import (
-    build_org_config,
+    build_org_configs,
     build_sandbox_config,
     load_skills_from_agent_server,
 )
@@ -127,8 +127,10 @@ class AppConversationServiceBase(AppConversationService, ABC):
                 _logger.warning('No agent-server URL available, cannot load skills')
                 return []
 
-            # Build org config (authentication handled by app-server)
-            org_config = await build_org_config(selected_repository, self.user_context)
+            # Build org configs (authentication handled by app-server)
+            org_configs = await build_org_configs(
+                selected_repository, self.user_context
+            )
 
             # Build sandbox config (exposed URLs)
             sandbox_config = build_sandbox_config(sandbox)
@@ -138,7 +140,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
                 agent_server_url=agent_server_url,
                 session_api_key=sandbox.session_api_key,
                 project_dir=project_dir,
-                org_config=org_config,
+                org_configs=org_configs,
                 sandbox_config=sandbox_config,
                 load_public=True,
                 load_user=True,

@@ -3,17 +3,17 @@ import { renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 import { useSuggestedTasks } from "../src/hooks/query/use-suggested-tasks";
-import { useShouldShowUserFeatures } from "../src/hooks/use-should-show-user-features";
+import { useShouldShowGitFeatures } from "../src/hooks/use-should-show-git-features";
 
 // Mock the dependencies
-vi.mock("../src/hooks/use-should-show-user-features");
+vi.mock("../src/hooks/use-should-show-git-features");
 vi.mock("#/api/suggestions-service/suggestions-service.api", () => ({
   SuggestionsService: {
     getSuggestedTasks: vi.fn().mockResolvedValue([]),
   },
 }));
 
-const mockUseShouldShowUserFeatures = vi.mocked(useShouldShowUserFeatures);
+const mockUseShouldShowGitFeatures = vi.mocked(useShouldShowGitFeatures);
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -32,11 +32,11 @@ describe("useSuggestedTasks", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Default to disabled
-    mockUseShouldShowUserFeatures.mockReturnValue(false);
+    mockUseShouldShowGitFeatures.mockReturnValue(false);
   });
 
-  it("should be disabled when useShouldShowUserFeatures returns false", () => {
-    mockUseShouldShowUserFeatures.mockReturnValue(false);
+  it("should be disabled when useShouldShowGitFeatures returns false", () => {
+    mockUseShouldShowGitFeatures.mockReturnValue(false);
 
     const { result } = renderHook(() => useSuggestedTasks(), {
       wrapper: createWrapper(),
@@ -46,8 +46,8 @@ describe("useSuggestedTasks", () => {
     expect(result.current.isFetching).toBe(false);
   });
 
-  it("should be enabled when useShouldShowUserFeatures returns true", () => {
-    mockUseShouldShowUserFeatures.mockReturnValue(true);
+  it("should be enabled when useShouldShowGitFeatures returns true", () => {
+    mockUseShouldShowGitFeatures.mockReturnValue(true);
 
     const { result } = renderHook(() => useSuggestedTasks(), {
       wrapper: createWrapper(),

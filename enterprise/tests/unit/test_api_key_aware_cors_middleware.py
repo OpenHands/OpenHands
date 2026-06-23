@@ -14,16 +14,20 @@ non-allowlisted origin should be accepted with an API key and rejected
 without one.
 """
 
+import logging
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from server.middleware import ApiKeyAwareCORSMiddleware
 
+from openhands.app_server.middleware import LocalhostCORSMiddleware
+
 ALLOWED_ORIGIN = 'https://app.all-hands.dev'
-FOREIGN_ORIGIN = 'http://localhost:3000'
+FOREIGN_ORIGIN = 'https://client.example.com'
 
 
-def _build_client() -> TestClient:
+def _build_client(with_inner_cors: bool = False) -> TestClient:
     app = FastAPI()
 
     @app.get('/api/v1/settings')
@@ -33,6 +37,9 @@ def _build_client() -> TestClient:
     @app.post('/oauth/device/authorize')
     def authorize():
         return {'device_code': 'd', 'user_code': 'u'}
+
+    if with_inner_cors:
+        app.add_middleware(LocalhostCORSMiddleware)
 
     app.add_middleware(
         ApiKeyAwareCORSMiddleware,
@@ -106,6 +113,27 @@ class TestApiKeyAwareCORSMiddleware:
         assert 'access-control-allow-credentials' not in {
             k.lower() for k in response.headers
         }
+
+    def test_bearer_request_does_not_inherit_inner_cors_headers_or_warnings(
+        self, caplog
+    ):
+        client = _build_client(with_inner_cors=True)
+
+        with caplog.at_level(logging.WARNING, logger='openhands.app_server.middleware'):
+            response = client.get(
+                '/api/v1/settings',
+                headers={
+                    'Origin': FOREIGN_ORIGIN,
+                    'Authorization': 'Bearer test-api-key',
+                },
+            )
+
+        assert response.status_code == 200
+        assert response.headers.get('access-control-allow-origin') == '*'
+        assert 'access-control-allow-credentials' not in {
+            k.lower() for k in response.headers
+        }
+        assert 'No CORS origins configured' not in caplog.text
 
     @pytest.mark.parametrize(
         'auth_header',

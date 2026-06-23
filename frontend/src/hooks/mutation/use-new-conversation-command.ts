@@ -10,18 +10,12 @@ import {
   TOAST_OPTIONS,
 } from "#/utils/custom-toast-handlers";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
-import { useConversationLimitStore } from "#/stores/conversation-limit-store";
-import {
-  isConcurrencyLimitError,
-  getConcurrencyLimit,
-} from "#/utils/concurrency-limit-error";
 
 export const useNewConversationCommand = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { data: conversation } = useActiveConversation();
-  const { showLimitModal } = useConversationLimitStore();
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -106,12 +100,6 @@ export const useNewConversationCommand = () => {
     },
     onError: (error) => {
       toast.dismiss("clear-conversation");
-
-      if (isConcurrencyLimitError(error)) {
-        showLimitModal(getConcurrencyLimit(error));
-        return;
-      }
-
       let clearError = t(I18nKey.CONVERSATION$CLEAR_UNKNOWN_ERROR);
       if (error instanceof Error) {
         clearError = error.message;

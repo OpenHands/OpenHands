@@ -31,7 +31,6 @@ from storage.database import a_session_maker
 from storage.redis import get_redis_client_async
 from storage.slack_user import SlackUser
 
-from openhands.app_server.errors import ConcurrencyLimitError
 from openhands.app_server.integrations.provider import ProviderHandler
 from openhands.app_server.integrations.service_types import (
     AuthenticationError,
@@ -49,7 +48,16 @@ from openhands.app_server.utils.logger import openhands_logger as logger
 
 authorize_url_generator = AuthorizeUrlGenerator(
     client_id=SLACK_CLIENT_ID,
-    scopes=['app_mentions:read', 'chat:write'],
+    scopes=[
+        'app_mentions:read',
+        'chat:write',
+        'users:read',
+        'files:read',
+        'channels:history',
+        'groups:history',
+        'mpim:history',
+        'im:history',
+    ],
     user_scopes=['search:read'],
 )
 
@@ -846,21 +854,6 @@ class SlackManager(Manager[SlackViewInterface]):
                 )
 
                 msg_info = get_session_expired_message(user_info.slack_display_name)
-
-            except ConcurrencyLimitError as e:
-                detail = e.detail if isinstance(e.detail, dict) else {}
-                limit = detail.get('limit', '?')
-                logger.warning(
-                    f'[Slack] Concurrency limit reached for user {user_info.slack_display_name}',
-                    extra={'limit': limit, 'current': detail.get('current')},
-                )
-                msg_info = SlackError(
-                    SlackErrorCode.CONCURRENCY_LIMIT,
-                    message_kwargs={
-                        'username': user_info.slack_display_name,
-                        'limit': limit,
-                    },
-                ).get_user_message()
 
             except StartingConvoException as e:
                 msg_info = str(e)

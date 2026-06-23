@@ -73,6 +73,12 @@ BITBUCKET_DATA_CENTER_HOST = os.getenv('BITBUCKET_DATA_CENTER_HOST', '').strip()
 BITBUCKET_DATA_CENTER_BOT_TOKEN = os.getenv(
     'BITBUCKET_DATA_CENTER_BOT_TOKEN', ''
 ).strip()
+# Username (slug) of the bot account whose PAT is set above. Lets us skip
+# webhook events the bot itself authored, so the agent's reply (posted via the
+# bot PAT) can't re-trigger a job. BBDC's stable author id is the slug, not email.
+BITBUCKET_DATA_CENTER_BOT_USERNAME = os.getenv(
+    'BITBUCKET_DATA_CENTER_BOT_USERNAME', ''
+).strip()
 BITBUCKET_DATA_CENTER_TOKEN_URL = (
     f'https://{BITBUCKET_DATA_CENTER_HOST}/rest/oauth2/latest/token'
 )

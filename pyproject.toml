@@ -21,7 +21,7 @@ dynamic = [ "version" ]
 
 # Main dependencies (mirrors [tool.poetry.dependencies] for UV compatibility)
 dependencies = [
-  "aiohttp>=3.13.4",
+  "aiohttp>=3.14.1",
   "anthropic[vertex]",
   "anyio==4.9",
   "asyncpg>=0.30",
@@ -57,9 +57,9 @@ dependencies = [
   "memory-profiler>=0.61",
   "numpy",
   "openai==2.33.0",
-  "openhands-agent-server==1.28.0",
-  "openhands-sdk==1.28.0",
-  "openhands-tools==1.28.0",
+  "openhands-agent-server==1.29.0",
+  "openhands-sdk==1.29.0",
+  "openhands-tools==1.29.0",
   "opentelemetry-api>=1.33.1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
   "orjson>=3.11.6",
@@ -74,14 +74,14 @@ dependencies = [
   "psutil",
   "pybase62>=1",
   "pygithub>=2.5",
-  "pyjwt>=2.12",
+  "pyjwt>=2.13.0",
   "pylatexenc",
   "pypdf>=6.10.2",
   "python-docx",
   "python-dotenv",
   "python-frontmatter>=1.1",
   "python-json-logger>=3.2.1",
-  "python-multipart>=0.0.28",
+  "python-multipart>=0.0.30",
   "python-pptx",
   "python-socketio==5.14",
   "pythonnet; sys_platform=='win32'",
@@ -161,7 +161,7 @@ authlib = ">=1.6.9"                                # CVE-2026-27962 (fixed in 1.
 orjson = ">=3.11.6"                                # Pinned to fix CVE-2025-67221
 litellm = "1.84.1"                                 # Exact pin to the verified 1.84.1 release; bump explicitly when upgrading (rather than a floor) to ensure only the tested version is used
 openai = "2.33.0"                                  # Pin because litellm 1.84.1 requires 2.33.0 and is incompatible with >=1.100.0 (BerriAI/litellm#13711)
-aiohttp = ">=3.13.4"                               # Keep aiohttp on a fixed-or-newer release while allowing litellm's pinned 3.13.4
+aiohttp = ">=3.14.1"                               # CVE-2026-54278 (fixed in 3.14.1); keep aiohttp on a fixed-or-newer release
 google-genai = "*"                                 # To use litellm with Gemini Pro API
 google-api-python-client = "^2.164.0"              # For Google Sheets API
 google-auth-httplib2 = "*"                         # For Google Sheets authentication
@@ -180,11 +180,11 @@ html2text = "*"
 deprecated = "*"
 pexpect = "*"
 jinja2 = "^3.1.6"
-python-multipart = ">=0.0.28"
+python-multipart = ">=0.0.30"
 tenacity = ">=8.5,<10.0"
 zope-interface = "7.2"
 pathspec = ">=0.12.1,<1.1.0"
-pyjwt = "^2.12.0"
+pyjwt = "^2.13.0"
 dirhash = "*"
 tornado = ">=6.5"
 python-dotenv = "*"
@@ -246,9 +246,9 @@ e2b-code-interpreter = { version = "^2.0.0", optional = true }
 pybase62 = "^1.0.0"
 
 # V1 dependencies
-openhands-sdk = "==1.28.0"
-openhands-agent-server = "==1.28.0"
-openhands-tools = "==1.28.0"
+openhands-sdk = "==1.29.0"
+openhands-agent-server = "==1.29.0"
+openhands-tools = "==1.29.0"
 joserfc = ">=1.0.0"
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"

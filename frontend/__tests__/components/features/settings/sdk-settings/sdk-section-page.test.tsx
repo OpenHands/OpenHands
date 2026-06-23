@@ -466,7 +466,7 @@ describe("SdkSectionPage", () => {
 
     await waitFor(() => {
       expect(
-        screen.queryByTestId("sdk-settings-llm.temperature"),
+        screen.queryByTestId("sdk-settings-llm.timeout"),
       ).not.toBeInTheDocument();
     });
   });
@@ -769,6 +769,72 @@ describe("SdkSectionPage", () => {
     // critical field), so this also locks the behavior that trailingActions
     // alone is enough to force the strip to render.
     expect(await screen.findByTestId("trailing-action")).toBeInTheDocument();
+  });
+
+  it("drops duplicate union sections that don't match the source variant", async () => {
+    // SDK agent-settings is a discriminated union: the "llm" key exists under
+    // both the "openhands" and "acp" variants (#14892). A variant-targeted
+    // source must render only its variant's section, not the duplicate.
+    const llmField = (key: string, label: string) => ({
+      key,
+      label,
+      description: null,
+      section: "llm",
+      section_label: "LLM",
+      value_type: "string" as const,
+      default: null,
+      choices: [],
+      depends_on: [],
+      prominence: "critical" as const,
+      secret: false,
+      required: false,
+    });
+    const schema: NonNullable<Settings["agent_settings_schema"]> = {
+      model_name: "AgentSettings",
+      sections: [
+        {
+          key: "llm",
+          label: "LLM",
+          variant: "openhands",
+          fields: [
+            llmField("llm.model", "Model"),
+            llmField("llm.auth_type", "Authentication"),
+          ],
+        },
+        {
+          key: "llm",
+          label: "LLM",
+          variant: "acp",
+          fields: [
+            llmField("llm.model", "Model"),
+            llmField("llm.acp_only", "ACP Only"),
+          ],
+        },
+      ],
+    };
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ agent_settings_schema: schema }),
+    );
+
+    renderSdkSectionPage({
+      settingsSources: [
+        {
+          settingsSource: "agent_settings",
+          sectionKeys: ["llm"],
+          variant: "openhands",
+        },
+      ],
+    });
+
+    expect(
+      await screen.findByTestId("sdk-settings-llm.auth_type"),
+    ).toBeInTheDocument();
+    // openhands fields render exactly once; the acp duplicate is dropped.
+    expect(screen.getAllByTestId("sdk-settings-llm.model")).toHaveLength(1);
+    expect(
+      screen.queryByTestId("sdk-settings-llm.acp_only"),
+    ).not.toBeInTheDocument();
   });
 
   it("allows saving custom payloads when only external state is dirty", async () => {

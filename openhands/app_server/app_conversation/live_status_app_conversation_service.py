@@ -1,18 +1,20 @@
 import asyncio
+import importlib.metadata
+import io
 import json
 import logging
 import os
-import tempfile
 import zipfile
 from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, AsyncGenerator, Sequence, cast
+from typing import Any, AsyncGenerator, BinaryIO, Sequence, cast
 from uuid import UUID, uuid4
 
 import httpx
 from fastapi import Request
+from packaging.version import InvalidVersion, Version
 from pydantic import Field, SecretStr, TypeAdapter
 
 from openhands.agent_server.models import (
@@ -42,6 +44,9 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
     AppConversationServiceInjector,
+    ConversationExportAlreadyRunning,
+    ConversationExportLockUnavailable,
+    ConversationExportTooLarge,
 )
 from openhands.app_server.app_conversation.app_conversation_service_base import (
     AppConversationServiceBase,
@@ -84,7 +89,11 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import SandboxService
-from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
+from openhands.app_server.sandbox.sandbox_spec_service import (
+    SandboxSpecService,
+    get_agent_server_image,
+    is_custom_agent_server_image,
+)
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.settings.llm_profiles import resolve_profile_llm
@@ -99,6 +108,12 @@ from openhands.app_server.utils.llm_metadata import (
     get_llm_metadata,
     should_set_litellm_extra_body,
 )
+from openhands.app_server.utils.redis_lock import (
+    LockError,
+    RedisLockUnavailable,
+    refresh_lock_periodically,
+    try_acquire_redis_lock,
+)
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
@@ -108,7 +123,6 @@ from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ACPAgentSettings
 from openhands.sdk.subagent import get_registered_agent_definitions
 from openhands.sdk.tool.builtins import SwitchLLMTool
-from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.utils.redact import (
     redact_api_key_literals,
     redact_text_secrets,
@@ -126,6 +140,45 @@ from openhands.tools.preset.planning import (
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
+
+_EXPORT_LOCK_KEY_PREFIX = 'app_conversation_export'
+
+
+class _StreamingZipBuffer(io.RawIOBase):
+    """Small non-seekable writer used by zipfile to emit chunks incrementally.
+
+    zipfile.ZipFile only needs write() and tell() from its underlying file
+    object when writing to a non-seekable stream.  Everything else
+    (flush, writable, seekable) is either unused by zipfile or already
+    handled by the io.RawIOBase defaults.
+    """
+
+    def __init__(self):
+        self._chunks: list[bytes] = []
+        self._position = 0
+
+    def write(self, data) -> int:
+        chunk = bytes(data)
+        if chunk:
+            self._chunks.append(chunk)
+            self._position += len(chunk)
+        return len(data)
+
+    def tell(self) -> int:
+        return self._position
+
+    def drain(self) -> list[bytes]:
+        chunks = self._chunks
+        self._chunks = []
+        return chunks
+
+
+def _expected_sdk_version() -> str | None:
+    """App's pinned openhands-sdk version, or None if its metadata is unresolvable."""
+    try:
+        return importlib.metadata.version('openhands-sdk')
+    except importlib.metadata.PackageNotFoundError:
+        return None
 
 
 # Planning agent instruction to prevent "Ready to proceed?" behavior
@@ -167,6 +220,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         default_factory=ConversationSecretEnricher
     )
     app_mode: str | None = None
+    export_max_events: int = 10000
+    export_lock_ttl_seconds: int = 3600
+    export_lock_refresh_interval_seconds: int = 30
+    export_lock_required: bool | None = None
 
     async def _get_sandbox_grouping_strategy(self) -> SandboxGroupingStrategy:
         """Get the sandbox grouping strategy from user settings."""
@@ -252,11 +309,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     async def _start_app_conversation(
         self, request: AppConversationStartRequest
     ) -> AsyncGenerator[AppConversationStartTask, None]:
-        # Check concurrency limit before creating task if we might need a new sandbox
-        # This allows the API to return 429 immediately instead of failing asynchronously
-        if not request.sandbox_id:
-            await self.sandbox_service.check_concurrency_limit()
-
         # Create and yield the start task
         user_id = await self.user_context.get_user_id()
         # Prefer the user's email as the Laminar trace user id so traces are
@@ -296,6 +348,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             sandbox = await self.sandbox_service.get_sandbox(sandbox_id)
             assert sandbox is not None
             agent_server_url = self._get_agent_server_url(sandbox)
+
+            # Custom sandbox images can ship an incompatible openhands-sdk; fail
+            # fast with a clear error instead of an opaque 500 on create.
+            await self._verify_agent_server_version(
+                agent_server_url, sandbox.session_api_key
+            )
 
             # Mirror the user's LLM profiles into the sandbox so the agent's
             # built-in switch_llm tool can resolve them (in SaaS profiles live
@@ -382,7 +440,22 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 timeout=self.sandbox_startup_timeout,
             )
 
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                # A custom image that 500s on create is usually an openhands-sdk
+                # mismatch /server_info couldn't reveal; add an actionable hint.
+                if is_custom_agent_server_image():
+                    expected = _expected_sdk_version()
+                    raise SandboxError(
+                        f'Conversation create failed (HTTP '
+                        f'{exc.response.status_code}) on custom sandbox image '
+                        f'{get_agent_server_image()}. Verify its openhands-sdk '
+                        f'matches this release'
+                        + (f' ({expected})' if expected else '')
+                        + '; rebuild/re-pin the image if not.'
+                    ) from exc
+                raise
             info = ConversationInfo.model_validate(response.json())
             # Determine kind / llm_model from the request we built (its
             # ``agent`` is the source of truth here): the response echoes
@@ -390,7 +463,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             request_agent = start_conversation_request.agent
             tags: dict[str, str] = {}
             if request_agent.agent_kind == 'acp':
-                llm_model = None
+                llm_model = request_agent.acp_model
                 agent_kind = 'acp'
                 # Persist the active ACP provider key so the conversation UI
                 # can resolve a brand label ("Claude Code", "Codex", …) via
@@ -796,6 +869,57 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             timeout=self.sandbox_startup_timeout,
             poll_interval=self.sandbox_startup_poll_frequency,
             httpx_client=self.httpx_client,
+        )
+
+    async def _verify_agent_server_version(
+        self, agent_server_url: str, session_api_key: str | None
+    ) -> None:
+        """Fail fast with a clear error when an admin-pinned custom sandbox image
+        runs a different openhands-sdk minor than this app, instead of the opaque
+        500 the agent-server returns on create. Best-effort: only custom images are
+        checked, and we fail open on anything we can't read."""
+        if os.getenv('OH_SKIP_AGENT_SERVER_VERSION_CHECK', '').strip().lower() in (
+            '1',
+            'true',
+            'yes',
+        ):
+            return
+        # Proxy-default images move with the release; only custom-pinned can drift.
+        if not is_custom_agent_server_image():
+            return
+        expected = _expected_sdk_version()
+        if not expected:
+            return
+        try:
+            headers = {'X-Session-API-Key': session_api_key} if session_api_key else {}
+            resp = await self.httpx_client.get(
+                f'{agent_server_url.rstrip("/")}/server_info',
+                headers=headers,
+                timeout=30.0,
+            )
+            resp.raise_for_status()
+            reported = str(resp.json().get('sdk_version', '')).strip()
+        except Exception:
+            # 404 (image predates /server_info) or transient errors: can't verify,
+            # so don't block — the create POST still surfaces a custom-image hint.
+            _logger.warning(
+                'Could not read /server_info to verify agent-server SDK version',
+                exc_info=True,
+            )
+            return
+        # Endpoint present but metadata missing -> nothing to compare against.
+        if reported in ('', 'unknown'):
+            return
+        try:
+            if Version(reported).release[:2] == Version(expected).release[:2]:
+                return
+        except InvalidVersion:
+            return
+        raise SandboxError(
+            f'Sandbox image {get_agent_server_image()} runs openhands-sdk '
+            f'{reported}, but this release requires {expected}. Rebuild/re-pin the '
+            'custom sandbox image to a matching openhands-sdk, or set '
+            'OH_SKIP_AGENT_SERVER_VERSION_CHECK=1 to bypass.'
         )
 
     async def _seed_sandbox_profiles(
@@ -1669,8 +1793,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         values are never materialised in this process.  In OSS mode (no
         ``web_url``) they remain ``StaticSecret``.  Secrets are passed
         directly as ``secrets=`` to ``create_request()``; no ``AgentContext``
-        relay is needed.  This avoids the deprecated ``acp_env`` channel
-        (software-agent-sdk #3464; OpenHands/agent-canvas#1039).
+        relay is needed (software-agent-sdk #3464;
+        OpenHands/agent-canvas#1039).
 
         Args:
             sandbox: Sandbox information
@@ -2165,6 +2289,137 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         return deleted_info or deleted_tasks
 
+    async def _get_conversation_export_info(
+        self, conversation_id: UUID
+    ) -> AppConversationInfo:
+        conversation_info = (
+            await self.app_conversation_info_service.get_app_conversation_info(
+                conversation_id
+            )
+        )
+        if not conversation_info:
+            raise ValueError(f'Conversation not found: {conversation_id}')
+        return conversation_info
+
+    async def _validate_conversation_export_size(self, conversation_id: UUID):
+        if self.export_max_events <= 0:
+            return
+
+        event_count = await self.event_service.count_events(conversation_id)
+        if event_count > self.export_max_events:
+            raise ConversationExportTooLarge(
+                f'Conversation export contains {event_count} events, '
+                f'exceeding the limit of {self.export_max_events}'
+            )
+
+    def _conversation_export_lock_key(self, conversation_id: UUID) -> str:
+        return f'{_EXPORT_LOCK_KEY_PREFIX}:{conversation_id.hex}'
+
+    def _conversation_export_lock_refresh_interval(self) -> int:
+        ttl_seconds = max(1, self.export_lock_ttl_seconds)
+        configured_interval = max(1, self.export_lock_refresh_interval_seconds)
+        return min(configured_interval, max(1, ttl_seconds // 2))
+
+    def _conversation_export_lock_required(self) -> bool:
+        if self.export_lock_required is not None:
+            return self.export_lock_required
+        return (self.app_mode or '').lower() == 'saas'
+
+    async def _stream_conversation_zip(
+        self, conversation_id: UUID, conversation_info: AppConversationInfo
+    ) -> AsyncGenerator[bytes, None]:
+        zip_buffer = _StreamingZipBuffer()
+        with zipfile.ZipFile(
+            cast(BinaryIO, zip_buffer), 'w', zipfile.ZIP_DEFLATED
+        ) as zipf:
+            zipf.writestr('meta.json', conversation_info.model_dump_json(indent=2))
+            for chunk in zip_buffer.drain():
+                yield chunk
+
+            i = 0
+            async for event in self.event_service.iter_events_for_export(
+                conversation_id
+            ):
+                event_filename = f'event_{i:06d}_{event.id}.json'
+                event_data = event.model_dump(mode='json')
+                event_json = json.dumps(event_data, indent=2)
+                zipf.writestr(event_filename, event_json)
+                for chunk in zip_buffer.drain():
+                    yield chunk
+                i += 1
+
+        for chunk in zip_buffer.drain():
+            yield chunk
+
+    async def open_conversation_export(
+        self, conversation_id: UUID
+    ) -> AsyncGenerator[bytes, None]:
+        """Prepare a locked streaming conversation trajectory export."""
+        conversation_info = await self._get_conversation_export_info(conversation_id)
+        lock_key = self._conversation_export_lock_key(conversation_id)
+        lock_unavailable = False
+        try:
+            export_lock = await try_acquire_redis_lock(
+                lock_key, max(1, self.export_lock_ttl_seconds)
+            )
+        except RedisLockUnavailable as e:
+            if self._conversation_export_lock_required():
+                raise ConversationExportLockUnavailable(
+                    f'Could not acquire export lock for conversation {conversation_id}'
+                ) from e
+            _logger.warning(
+                'conversation_export:lock_unavailable_proceeding_without_lock',
+                extra={'conversation_id': str(conversation_id)},
+            )
+            export_lock = None
+            lock_unavailable = True
+
+        if export_lock is None and not lock_unavailable:
+            raise ConversationExportAlreadyRunning(
+                f'Conversation export already running: {conversation_id}'
+            )
+
+        try:
+            await self._validate_conversation_export_size(conversation_id)
+        except Exception:
+            if export_lock:
+                try:
+                    await export_lock.release()
+                except LockError:
+                    pass
+            raise
+
+        refresh_interval = self._conversation_export_lock_refresh_interval()
+
+        async def stream():
+            # Refresh the lock in a background task so the streaming loop stays
+            # simple and lock maintenance doesn't block chunk generation.
+            refresh_task = (
+                asyncio.create_task(
+                    refresh_lock_periodically(export_lock, refresh_interval)
+                )
+                if export_lock
+                else None
+            )
+            try:
+                async for chunk in self._stream_conversation_zip(
+                    conversation_id, conversation_info
+                ):
+                    yield chunk
+            finally:
+                if refresh_task is not None:
+                    refresh_task.cancel()
+                if export_lock:
+                    try:
+                        await export_lock.release()
+                    except LockError:
+                        _logger.warning(
+                            'conversation_export:lock_release_failed',
+                            extra={'conversation_id': str(conversation_id)},
+                        )
+
+        return stream()
+
     async def export_conversation(self, conversation_id: UUID) -> bytes:
         """Download a conversation trajectory as a zip file.
 
@@ -2173,52 +2428,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         Returns the zip file as bytes.
         """
-        # Get the conversation info to verify it exists and user has access
-        conversation_info = (
-            await self.app_conversation_info_service.get_app_conversation_info(
-                conversation_id
-            )
-        )
-        if not conversation_info:
-            raise ValueError(f'Conversation not found: {conversation_id}')
+        conversation_info = await self._get_conversation_export_info(conversation_id)
+        await self._validate_conversation_export_size(conversation_id)
 
-        # Create a temporary directory to store files
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Get all events for this conversation
-            i = 0
-            async for event in page_iterator(
-                self.event_service.search_events, conversation_id=conversation_id
-            ):
-                event_filename = f'event_{i:06d}_{event.id}.json'
-                event_path = os.path.join(temp_dir, event_filename)
+        chunks = []
+        async for chunk in self._stream_conversation_zip(
+            conversation_id, conversation_info
+        ):
+            chunks.append(chunk)
 
-                with open(event_path, 'w', encoding='utf-8') as f:
-                    # Use model_dump with mode='json' to handle UUID serialization
-                    event_data = event.model_dump(mode='json')
-                    json.dump(event_data, f, indent=2)
-                i += 1
-
-            # Create meta.json with conversation info
-            meta_path = os.path.join(temp_dir, 'meta.json')
-            with open(meta_path, 'w', encoding='utf-8') as f:
-                f.write(conversation_info.model_dump_json(indent=2))
-
-            # Create zip file in memory
-            zip_buffer = tempfile.NamedTemporaryFile()
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                # Add all files from temp directory to zip
-                for root, dirs, files in os.walk(temp_dir):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, temp_dir)
-                        zipf.write(file_path, arcname)
-
-            # Read the zip file content
-            zip_buffer.seek(0)
-            zip_content = zip_buffer.read()
-            zip_buffer.close()
-
-            return zip_content
+        return b''.join(chunks)
 
 
 class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
@@ -2241,6 +2460,25 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
         description=(
             'A security measure - the time after which git tokens may no longer '
             'be retrieved by a sandboxed conversation.'
+        ),
+    )
+    export_max_events: int = Field(
+        default=10000,
+        description='The maximum number of events allowed in a conversation export',
+    )
+    export_lock_ttl_seconds: int = Field(
+        default=3600,
+        description='Redis lock TTL for a single conversation export',
+    )
+    export_lock_refresh_interval_seconds: int = Field(
+        default=30,
+        description='How often to refresh the Redis lock during a conversation export',
+    )
+    export_lock_required: bool | None = Field(
+        default=None,
+        description=(
+            'Whether Redis export locking is required. Defaults to required in '
+            'SAAS mode and best-effort elsewhere.'
         ),
     )
 
@@ -2327,4 +2565,10 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 access_token_hard_timeout=access_token_hard_timeout,
                 conversation_secret_enricher=conversation_secret_enricher,
                 app_mode=app_mode,
+                export_max_events=self.export_max_events,
+                export_lock_ttl_seconds=self.export_lock_ttl_seconds,
+                export_lock_refresh_interval_seconds=(
+                    self.export_lock_refresh_interval_seconds
+                ),
+                export_lock_required=self.export_lock_required,
             )

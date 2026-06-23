@@ -63,6 +63,18 @@ def _webhook(
     return webhook
 
 
+def _scheduled_message(background_tasks, mock_manager):
+    """Return the Message the route scheduled for manager.receive_message.
+
+    The route returns 200 fast and backgrounds the manager, so the dispatch is
+    a scheduled task arg rather than an awaited call.
+    """
+    for call in background_tasks.add_task.call_args_list:
+        if call.args and call.args[0] is mock_manager.receive_message:
+            return call.args[1]
+    raise AssertionError('receive_message was not scheduled as a background task')
+
+
 def test_bitbucket_dc_webhook_events_cover_automation_sources():
     assert {
         'repo:refs_changed',
@@ -133,17 +145,17 @@ async def test_connection_event_uses_connection_repository_when_payload_identity
         }
     ).encode()
 
+    background_tasks = MagicMock()
     response = await bitbucket_dc_connection_events(
         connection_id=123,
         request=_request_with_body(body),
-        background_tasks=MagicMock(),
+        background_tasks=background_tasks,
         x_hub_signature=_signed(body),
         x_event_key='pr:comment:added',
         x_request_id='req-1',
     )
 
-    mock_manager.receive_message.assert_awaited_once()
-    dispatched = mock_manager.receive_message.call_args.args[0]
+    dispatched = _scheduled_message(background_tasks, mock_manager)
     assert dispatched.message['installation_id'] == 'PROJ/myrepo'
     assert response.status_code == 200
 
@@ -194,17 +206,17 @@ async def test_valid_pr_comment_event_dispatches_to_manager_and_returns_200(
 
     body = _pr_comment_body()
 
+    background_tasks = MagicMock()
     response = await bitbucket_dc_connection_events(
         connection_id=123,
         request=_request_with_body(body),
-        background_tasks=MagicMock(),
+        background_tasks=background_tasks,
         x_hub_signature=_signed(body),
         x_event_key='pr:comment:added',
         x_request_id='req-1',
     )
 
-    mock_manager.receive_message.assert_awaited_once()
-    dispatched = mock_manager.receive_message.call_args.args[0]
+    dispatched = _scheduled_message(background_tasks, mock_manager)
     assert dispatched.source.value == 'bitbucket_data_center'
     assert dispatched.message['event_key'] == 'pr:comment:added'
     assert dispatched.message['installation_id'] == 'PROJ/myrepo'
@@ -246,7 +258,8 @@ async def test_valid_event_forwards_to_automations_when_enabled(
         )
 
     assert response.status_code == 200
-    background_tasks.add_task.assert_called_once_with(
+    # Both the automation forward and the manager dispatch are scheduled.
+    background_tasks.add_task.assert_any_call(
         mock_automation_service.forward_event,
         provider=ProviderType.BITBUCKET_DATA_CENTER,
         payload={
@@ -255,7 +268,7 @@ async def test_valid_event_forwards_to_automations_when_enabled(
         },
         installation_id='PROJ/myrepo',
     )
-    mock_manager.receive_message.assert_awaited_once()
+    assert _scheduled_message(background_tasks, mock_manager) is not None
 
 
 @pytest.mark.asyncio
@@ -451,18 +464,18 @@ async def test_connection_event_verifies_with_connection_secret_and_dispatches_i
 
     body = _pr_comment_body()
 
+    background_tasks = MagicMock()
     response = await bitbucket_dc_connection_events(
         connection_id=123,
         request=_request_with_body(body),
-        background_tasks=MagicMock(),
+        background_tasks=background_tasks,
         x_hub_signature=_signed(body),
         x_event_key='pr:comment:added',
         x_request_id='req-1',
     )
 
     mock_store.get_webhook_by_id.assert_awaited_once_with(123)
-    mock_manager.receive_message.assert_awaited_once()
-    dispatched = mock_manager.receive_message.call_args.args[0]
+    dispatched = _scheduled_message(background_tasks, mock_manager)
     assert dispatched.message['connection_id'] == 123
     assert dispatched.message['installer_user_id'] == 'kc-installer'
     assert dispatched.message['installation_id'] == 'PROJ/myrepo'
