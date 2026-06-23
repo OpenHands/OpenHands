@@ -264,7 +264,9 @@ export async function assertPortsFree(portConfigs, host = "127.0.0.1") {
   const busy = results.filter(({ free }) => !free);
   if (busy.length === 0) return;
 
-  const lines = busy.map(({ name, port }) => `   • ${name}: port ${port}`).join("\n");
+  const lines = busy
+    .map(({ name, port }) => `   • ${name}: port ${port}`)
+    .join("\n");
   throw new Error(
     `Cannot start: the following ports are already in use:\n\n${lines}\n\n` +
       `Another agent-canvas instance may already be running.\n` +
@@ -619,8 +621,7 @@ function buildConfigFromPorts(ports, cwd, env) {
   // ~/.openhands/agent-canvas/secret-key.txt. Persisting ensures dev mode
   // and Docker mode share the same encryption key when they mount the same
   // ~/.openhands directory (docker/entrypoint.sh reads/writes the same file).
-  const secretKeyPath =
-    env.OH_SECRET_KEY_PATH || DEFAULT_SECRET_KEY_PATH;
+  const secretKeyPath = env.OH_SECRET_KEY_PATH || DEFAULT_SECRET_KEY_PATH;
   const secretKey =
     env.OH_SECRET_KEY || getOrCreatePersistedApiKey(secretKeyPath, "secret");
   // Use the user-provided LOCAL_BACKEND_API_KEY or fall back to a key
@@ -958,10 +959,6 @@ async function main() {
   }
 
   const frontendCommand = buildNpmScriptCommand("dev:frontend");
-  const runtimeServicesInfo = buildRuntimeServicesInfo({
-    mode: "dev:safe",
-    agentServerPort: config.backendPort,
-  });
   frontend = spawnProcess(frontendCommand.command, frontendCommand.args, {
     cwd: config.cwd,
     env: {
@@ -971,9 +968,6 @@ async function main() {
       VITE_WORKING_DIR: config.workingDir,
       // Pass session API key so frontend can authenticate with agent-server
       VITE_SESSION_API_KEY: config.sessionApiKey,
-      // Inform the frontend (and downstream, the agent's system prompt) about
-      // which services are available in this dev stack.
-      VITE_RUNTIME_SERVICES_INFO: JSON.stringify(runtimeServicesInfo),
     },
   });
 

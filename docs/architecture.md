@@ -28,7 +28,7 @@ Optional runtime services include:
 - An Automation Server for scheduled or event-triggered agent runs.
 - OpenHands Cloud APIs for hosted sandbox and organization workflows.
 
-The development launchers expose runtime service information through `VITE_RUNTIME_SERVICES_INFO`. The frontend forwards that information into new conversations as an agent context suffix so agents can use the correct URLs instead of guessing ports.
+Agent Canvas stack launchers expose runtime service information through the backend `/server_info.runtime_services` field. The frontend forwards that backend-provided information into new conversations as an agent context suffix so agents can use the correct URLs instead of guessing ports.
 
 ## Frontend modules
 
@@ -46,14 +46,14 @@ The most important source areas are:
 
 Agent Canvas supports several modes:
 
-| Mode | Purpose |
-|---|---|
-| `npm run dev:docker` | Starts the UI with an Agent Server in a Docker sandbox. This is the default safer local workflow. |
+| Mode                                 | Purpose                                                                                                                                             |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev:docker`                 | Starts the UI with an Agent Server in a Docker sandbox. This is the default safer local workflow.                                                   |
 | `npm run dev:dangerously-dockerless` | Starts the UI and Agent Server directly on the host. This is useful for servers and trusted environments, but the agent has host filesystem access. |
-| `npm run dev:automation` | Starts the local stack with an automation backend. |
-| `npm run dev:mock` | Runs the frontend against MSW mocks for UI development and tests. |
-| `npm run build` | Builds the standalone application. |
-| `npm run build:lib` | Builds library entrypoints for embedding Agent Canvas components. |
+| `npm run dev:automation`             | Starts the local stack with an automation backend.                                                                                                  |
+| `npm run dev:mock`                   | Runs the frontend against MSW mocks for UI development and tests.                                                                                   |
+| `npm run build`                      | Builds the standalone application.                                                                                                                  |
+| `npm run build:lib`                  | Builds library entrypoints for embedding Agent Canvas components.                                                                                   |
 
 ## Packaging and distribution
 
