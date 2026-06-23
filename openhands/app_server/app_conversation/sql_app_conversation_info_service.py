@@ -73,6 +73,7 @@ class StoredConversationMetadata(Base):
     git_provider: Mapped[str | None] = mapped_column(
         String, nullable=True
     )  # The git provider (GitHub, GitLab, etc.)
+    git_full_clone: Mapped[bool | None] = mapped_column(nullable=True)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     last_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=utc_now
@@ -355,6 +356,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             selected_repository=info.selected_repository,
             selected_branch=info.selected_branch,
             git_provider=info.git_provider.value if info.git_provider else None,
+            git_full_clone=info.git_full_clone,
             title=info.title,
             last_updated_at=info.updated_at,
             created_at=info.created_at,
@@ -556,6 +558,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             git_provider=(
                 ProviderType(stored.git_provider) if stored.git_provider else None
             ),
+            git_full_clone=stored.git_full_clone,
             title=stored.title,
             trigger=ConversationTrigger(stored.trigger) if stored.trigger else None,
             pr_number=stored.pr_number or [],
