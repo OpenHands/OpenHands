@@ -1606,6 +1606,81 @@ class TestRequirePermissionSuperRoleFallback:
             super_role_mock.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_implicit_org_route_super_role_grants_for_non_member(self):
+        """
+        GIVEN: a route without an ``{org_id}`` path parameter, an
+               ``X-Org-Id`` header that targets an org the user is NOT
+               a member of, and a superadmin role on the user record
+        WHEN: ``require_permission(VIEW_LLM_SETTINGS)`` runs
+        THEN: the new ``resolve_target_org_id_for_permission_check``
+              resolver skips the membership rejection and the super
+              role grants access -- user_id is returned
+        """
+        user_id = str(uuid4())
+        target_org_id = uuid4()
+        mock_request = _create_mock_request()
+
+        # The resolver must be invoked because org_id is None on the route.
+        # It returns the target org without performing a membership check.
+        with (
+            patch(
+                'server.auth.org_context.resolve_target_org_id_for_permission_check',
+                AsyncMock(return_value=target_org_id),
+            ) as resolver,
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=None),
+            ),
+            patch(
+                'server.auth.authorization.get_user_super_role',
+                AsyncMock(return_value=_mock_role('admin')),
+            ),
+        ):
+            permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
+            result = await permission_checker(
+                request=mock_request, org_id=None, user_id=user_id
+            )
+
+        assert result == user_id
+        resolver.assert_awaited_once_with(mock_request)
+
+    @pytest.mark.asyncio
+    async def test_implicit_org_route_non_member_without_super_role_returns_403(self):
+        """
+        GIVEN: a route without ``{org_id}``, the X-Org-Id header targets
+               a non-member org, and the user has no super role
+        WHEN: require_permission runs
+        THEN: the resolver returns the target org, the org-role lookup
+              returns None, the super-role lookup returns None, so 403
+              is raised
+        """
+        user_id = str(uuid4())
+        target_org_id = uuid4()
+        mock_request = _create_mock_request()
+
+        with (
+            patch(
+                'server.auth.org_context.resolve_target_org_id_for_permission_check',
+                AsyncMock(return_value=target_org_id),
+            ),
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=None),
+            ),
+            patch(
+                'server.auth.authorization.get_user_super_role',
+                AsyncMock(return_value=None),
+            ),
+        ):
+            permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
+            with pytest.raises(HTTPException) as exc_info:
+                await permission_checker(
+                    request=mock_request, org_id=None, user_id=user_id
+                )
+        assert exc_info.value.status_code == 403
+        assert 'not a member' in exc_info.value.detail.lower()
+
+    @pytest.mark.asyncio
     async def test_log_records_super_role_label(self):
         """
         GIVEN: an insufficient-permission scenario where the user has a

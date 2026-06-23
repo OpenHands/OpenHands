@@ -78,6 +78,29 @@ async def maybe_resolve_effective_org_id(request: Request) -> UUID | None:
     return await user_auth.get_effective_org_id()
 
 
+async def resolve_target_org_id_for_permission_check(
+    request: Request,
+) -> UUID | None:
+    """Resolve the target org id for a permission check **without**
+    requiring the authenticated user to be a member of that org.
+
+    This is the entry point used by ``require_permission`` for routes
+    that do not carry an explicit ``{org_id}`` path parameter. It lets
+    "super" role users (whose role is assigned via ``user.role_id``)
+    act on organizations they have not joined, while still enforcing
+    the API-key/header conflict checks performed by
+    :meth:`SaasUserAuth.get_target_org_id_for_permission_check`.
+
+    The membership check is intentionally skipped here -- callers must
+    follow up with an org/super role lookup, which is exactly what
+    ``require_permission`` already does.
+    """
+    user_auth = await get_user_auth(request)
+    if not isinstance(user_auth, SaasUserAuth):
+        return None
+    return await user_auth.get_target_org_id_for_permission_check()
+
+
 async def reject_x_org_id_path_mismatch(
     request: Request,
     x_org_id: str | None = Header(default=None, alias=X_ORG_ID_HEADER),

@@ -397,16 +397,21 @@ def require_permission(permission: Permission):
                 )
 
         # If the route does not carry an ``{org_id}`` path parameter,
-        # resolve the effective org for the request — which honors any
-        # ``X-Org-Id`` header override (and validates membership /
-        # API-key binding in the process). This keeps endpoints that
-        # implicitly operate on the "current org" consistent with the
-        # rest of the codebase.
+        # resolve the target org for the request -- honoring any
+        # ``X-Org-Id`` header override and the API-key binding, but
+        # *without* requiring the user to already be a member of that
+        # org. Membership is checked below via ``get_user_org_role``;
+        # if the user is not a member but has a super role with the
+        # required permission, they are still granted access. Routes
+        # that *do* carry ``{org_id}`` use the path value directly and
+        # skip this resolver, so their semantics are unchanged.
         if org_id is None:
             # Local import to avoid circular import via saas_user_auth.
-            from server.auth.org_context import maybe_resolve_effective_org_id
+            from server.auth.org_context import (
+                resolve_target_org_id_for_permission_check,
+            )
 
-            org_id = await maybe_resolve_effective_org_id(request)
+            org_id = await resolve_target_org_id_for_permission_check(request)
 
         user_role = await get_user_org_role(user_id, org_id)
 
