@@ -13,8 +13,8 @@ from server.routes.org_models import (
 )
 from storage.org import Org
 
+from openhands.app_server.settings.settings_models import MarketplaceRegistration
 from openhands.sdk.settings import ACPAgentSettings
-from openhands.storage.data_models.settings import MarketplaceRegistration
 
 
 def test_org_update_keeps_sparse_diff_dicts():

@@ -98,8 +98,8 @@ class UserSettings(Base):
     )
 
     def to_settings(self):
-        from openhands.app_server.settings.settings_models import Settings
-        from openhands.storage.marketplace_utils import (
+        from openhands.app_server.settings.settings_models import (
+            Settings,
             validate_and_convert_marketplaces,
         )
 

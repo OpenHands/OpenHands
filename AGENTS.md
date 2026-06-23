@@ -367,7 +367,7 @@ Your specialized knowledge and instructions here...
      - Add i18n translations for the setting name and any tooltips in `frontend/src/i18n/translation.json`
      - Add the translation key to `frontend/src/i18n/declaration.ts`
   2. Add the setting to the backend:
-     - Add the setting to the `Settings` model in `openhands/storage/data_models/settings.py`
+     - Add the setting to the `Settings` model in `openhands/app_server/settings/settings_models.py`
      - Update any relevant backend code to apply the setting (e.g., in session creation)
 
 #### Settings UI Patterns:

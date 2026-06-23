@@ -29,7 +29,7 @@ const MARKETPLACE_PATTERNS = {
 
 /**
  * Validates if a source string is a valid marketplace source format.
- * Must match validation patterns in openhands/storage/data_models/settings.py
+ * Must match validation patterns in openhands/app_server/settings/settings_models.py
  */
 function isValidMarketplaceSource(source: string): boolean {
   const trimmed = source.trim();

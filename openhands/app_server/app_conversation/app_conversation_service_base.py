@@ -42,9 +42,9 @@ from openhands.sdk.security import (
     NeverConfirm,
     SecurityAnalyzerBase,
 )
+from openhands.app_server.settings.settings_models import MarketplaceRegistration
 from openhands.sdk.skills import Skill
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
-from openhands.storage.data_models.settings import MarketplaceRegistration
 
 _logger = logging.getLogger(__name__)
 PRE_COMMIT_HOOK = '.git/hooks/pre-commit'

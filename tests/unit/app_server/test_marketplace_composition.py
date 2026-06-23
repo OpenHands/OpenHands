@@ -550,7 +550,7 @@ class TestMarketplaceCompositionIntegration:
         """Test that path traversal is rejected at model validation level."""
         from pydantic import ValidationError
 
-        from openhands.storage.data_models.settings import MarketplaceRegistration
+        from openhands.app_server.settings.settings_models import MarketplaceRegistration
 
         # Path traversal attempts should be rejected at model validation
         with pytest.raises(ValidationError, match="cannot contain '..'"):

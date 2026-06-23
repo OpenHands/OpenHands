@@ -17,7 +17,7 @@ from openhands.sdk.settings import (
     OpenHandsAgentSettings,
 )
 from openhands.sdk.settings.model import CondenserSettings, VerificationSettings
-from openhands.storage.data_models.settings import MarketplaceRegistration
+from openhands.app_server.settings.settings_models import MarketplaceRegistration
 
 
 def test_settings_handles_sensitive_data():

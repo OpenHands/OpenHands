@@ -70,9 +70,7 @@ def _get_instance_default_marketplaces() -> list[dict]:
     """
     import json
 
-    from pydantic import ValidationError
-
-    from openhands.storage.data_models.settings import MarketplaceRegistration
+    from openhands.app_server.settings.settings_models import MarketplaceRegistration
 
     env_value = os.environ.get('INSTANCE_DEFAULT_MARKETPLACES', '')
     if not env_value:

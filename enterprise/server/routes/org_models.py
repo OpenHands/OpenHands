@@ -17,6 +17,7 @@ from storage.org_member import OrgMember
 from storage.role import Role
 
 from openhands.app_server.settings.settings_models import (
+    MarketplaceRegistration,
     _load_persisted_agent_settings,
     _load_persisted_conversation_settings,
 )
@@ -26,7 +27,6 @@ from openhands.sdk.settings import (
     ConversationSettings,
     OpenHandsAgentSettings,
 )
-from openhands.storage.data_models.settings import MarketplaceRegistration
 
 logger = logging.getLogger(__name__)
 
@@ -591,7 +591,7 @@ class OrgAppSettingsResponse(BaseModel):
         Returns:
             OrgAppSettingsResponse with app settings
         """
-        from openhands.storage.marketplace_utils import (
+        from openhands.app_server.settings.settings_models import (
             validate_and_convert_marketplaces,
         )
 
