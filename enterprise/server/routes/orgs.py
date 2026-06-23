@@ -8,7 +8,6 @@ from server.auth.authorization import (
     require_permission,
 )
 from server.auth.org_context import EFFECTIVE_ORG_ID, REJECT_X_ORG_ID_PATH_MISMATCH
-from server.email_validation import get_admin_user_id
 from server.routes.org_models import (
     CannotModifySelfError,
     GitOrgAlreadyClaimedError,
@@ -152,23 +151,27 @@ async def list_user_orgs(
 @org_router.post('', response_model=OrgResponse, status_code=status.HTTP_201_CREATED)
 async def create_org(
     org_data: OrgCreate,
-    user_id: str = Depends(get_admin_user_id),
+    user_id: str = Depends(require_permission(Permission.CREATE_ORGANIZATION)),
 ) -> OrgResponse:
     """Create a new organization.
 
-    This endpoint allows authenticated users with @openhands.dev email to create
-    a new organization. The user who creates the organization automatically becomes
-    its owner.
+    This endpoint allows authenticated users that hold the
+    ``CREATE_ORGANIZATION`` permission to create a new organization. In
+    practice this permission is only granted via a super role
+    (``superowner`` / ``superadmin`` / ``superempty``); no regular,
+    org-scoped role carries it. The user who creates the organization
+    automatically becomes its owner.
 
     Args:
         org_data: Organization creation data
-        user_id: Authenticated user ID (injected by dependency)
+        user_id: Authenticated user ID (injected by ``require_permission``)
 
     Returns:
         OrgResponse: The created organization details
 
     Raises:
-        HTTPException: 403 if user email domain is not @openhands.dev
+        HTTPException: 401 if the user is not authenticated
+        HTTPException: 403 if the user lacks ``CREATE_ORGANIZATION``
         HTTPException: 409 if organization name already exists
         HTTPException: 500 if creation fails
     """

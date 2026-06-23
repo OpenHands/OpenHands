@@ -61,6 +61,7 @@ class TestPermission:
         assert Permission.VIEW_ORG_SETTINGS.value == 'view_org_settings'
         assert Permission.CHANGE_ORGANIZATION_NAME.value == 'change_organization_name'
         assert Permission.DELETE_ORGANIZATION.value == 'delete_organization'
+        assert Permission.CREATE_ORGANIZATION.value == 'create_organization'
         assert Permission.MANAGE_AUTOMATIONS.value == 'manage_automations'
 
     def test_permission_from_string(self):
@@ -100,6 +101,7 @@ class TestRoleName:
         assert RoleName.OWNER.value == 'owner'
         assert RoleName.ADMIN.value == 'admin'
         assert RoleName.MEMBER.value == 'member'
+        assert RoleName.EMPTY.value == 'empty'
 
     def test_role_name_from_string(self):
         """
@@ -110,6 +112,7 @@ class TestRoleName:
         assert RoleName('owner') == RoleName.OWNER
         assert RoleName('admin') == RoleName.ADMIN
         assert RoleName('member') == RoleName.MEMBER
+        assert RoleName('empty') == RoleName.EMPTY
 
     def test_role_name_invalid_string(self):
         """
@@ -198,6 +201,27 @@ class TestRolePermissions:
         assert Permission.CHANGE_USER_ROLE_OWNER not in member_perms
         assert Permission.CHANGE_ORGANIZATION_NAME not in member_perms
         assert Permission.DELETE_ORGANIZATION not in member_perms
+
+    def test_empty_role_has_no_permissions(self):
+        """
+        GIVEN: ROLE_PERMISSIONS mapping
+        WHEN: Checking empty-role permissions
+        THEN: The empty role carries no org-scoped permissions.
+        """
+        assert ROLE_PERMISSIONS[RoleName.EMPTY] == frozenset()
+
+    def test_create_organization_is_not_org_scoped_for_any_role(self):
+        """
+        GIVEN: ROLE_PERMISSIONS mapping
+        WHEN: Checking CREATE_ORGANIZATION across regular roles
+        THEN: No regular org-scoped role grants CREATE_ORGANIZATION
+              (it is a super-only permission).
+        """
+        for role_name, perms in ROLE_PERMISSIONS.items():
+            assert Permission.CREATE_ORGANIZATION not in perms, (
+                f'{role_name.value} unexpectedly grants CREATE_ORGANIZATION '
+                'at the org-scoped level'
+            )
 
 
 # =============================================================================
@@ -1284,6 +1308,7 @@ class TestSuperRoleName:
         assert super_role_name('owner') == 'superowner'
         assert super_role_name('admin') == 'superadmin'
         assert super_role_name('member') == 'supermember'
+        assert super_role_name('empty') == 'superempty'
 
 
 class TestSuperRolePermissions:
@@ -1334,6 +1359,36 @@ class TestSuperRolePermissions:
         THEN: an empty frozenset is returned
         """
         assert get_super_role_permissions('not_a_role') == frozenset()
+
+    def test_superowner_superadmin_superempty_grant_create_organization(self):
+        """
+        GIVEN: SUPER_ROLE_PERMISSIONS mapping
+        WHEN: looking up CREATE_ORGANIZATION across super roles
+        THEN: superowner, superadmin, and superempty all carry the
+              CREATE_ORGANIZATION permission (and supermember does not).
+        """
+        assert Permission.CREATE_ORGANIZATION in SUPER_ROLE_PERMISSIONS[RoleName.OWNER]
+        assert Permission.CREATE_ORGANIZATION in SUPER_ROLE_PERMISSIONS[RoleName.ADMIN]
+        assert Permission.CREATE_ORGANIZATION in SUPER_ROLE_PERMISSIONS[RoleName.EMPTY]
+        assert (
+            Permission.CREATE_ORGANIZATION
+            not in SUPER_ROLE_PERMISSIONS[RoleName.MEMBER]
+        )
+
+    def test_superempty_only_grants_super_only_permissions(self):
+        """
+        GIVEN: SUPER_ROLE_PERMISSIONS mapping
+        WHEN: looking up the effective permissions for superempty
+        THEN: it matches exactly the super-only extras (no inherited
+              org-scoped permissions, since the empty role has none).
+        """
+        assert (
+            SUPER_ROLE_PERMISSIONS[RoleName.EMPTY]
+            == SUPER_ROLE_ADDITIONAL_PERMISSIONS[RoleName.EMPTY]
+        )
+        assert SUPER_ROLE_PERMISSIONS[RoleName.EMPTY] == frozenset(
+            [Permission.CREATE_ORGANIZATION]
+        )
 
 
 class TestHasPermissionSuper:

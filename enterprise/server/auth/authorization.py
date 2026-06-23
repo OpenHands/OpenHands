@@ -81,6 +81,7 @@ class Permission(str, Enum):
     VIEW_ORG_SETTINGS = 'view_org_settings'
     CHANGE_ORGANIZATION_NAME = 'change_organization_name'
     DELETE_ORGANIZATION = 'delete_organization'
+    CREATE_ORGANIZATION = 'create_organization'
 
     # Temporary permissions until we finish the API updates.
     EDIT_ORG_SETTINGS = 'edit_org_settings'
@@ -114,6 +115,7 @@ class RoleName(str, Enum):
     OWNER = 'owner'
     ADMIN = 'admin'
     MEMBER = 'member'
+    EMPTY = 'empty'
 
 
 def super_role_name(role_name: str) -> str:
@@ -197,6 +199,11 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.MANAGE_AUTOMATIONS,
         ]
     ),
+    # ``empty`` carries no org-scoped permissions; it exists solely as a
+    # vehicle for super-only permissions granted via
+    # ``SUPER_ROLE_ADDITIONAL_PERMISSIONS``. Assigning this role at the
+    # org-member level grants nothing.
+    RoleName.EMPTY: frozenset(),
 }
 
 
@@ -206,9 +213,10 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
 # role cannot. The dict is keyed by the parallel regular role
 # (e.g. ``RoleName.ADMIN`` for ``superadmin``).
 SUPER_ROLE_ADDITIONAL_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
-    RoleName.OWNER: frozenset(),
-    RoleName.ADMIN: frozenset(),
+    RoleName.OWNER: frozenset([Permission.CREATE_ORGANIZATION]),
+    RoleName.ADMIN: frozenset([Permission.CREATE_ORGANIZATION]),
     RoleName.MEMBER: frozenset(),
+    RoleName.EMPTY: frozenset([Permission.CREATE_ORGANIZATION]),
 }
 
 
