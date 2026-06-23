@@ -325,3 +325,18 @@ class TestDefaultLLMModelServiceInjector:
                 assert service._bedrock_client is mock_client
 
         mock_boto3.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_includes_nvidia_nim_models():
+    service = DefaultLLMModelService()
+    result = await service.search_llm_models(provider_eq='nvidia_nim', limit=10000)
+
+    assert any(model.name == 'meta/llama-3.1-8b-instruct' for model in result.items)
+
+
+@pytest.mark.asyncio
+async def test_includes_nvidia_nim_provider():
+    service = DefaultLLMModelService()
+    result = await service.search_providers(limit=10000)
+
+    assert any(provider.name == 'nvidia_nim' for provider in result.items)

@@ -2,9 +2,11 @@
 
 from openhands.app_server.utils import llm as llm_utils
 from openhands.app_server.utils.llm import (
+    NVIDIA_NIM_API_BASE,
     _assign_provider,
     _derive_verified_models,
     get_provider_api_base,
+    get_supported_llm_models,
     is_openhands_model,
 )
 
@@ -165,3 +167,12 @@ class TestGetProviderApiBase:
         # May return None or an API base depending on litellm behavior
         # The function should not raise an exception
         assert result is None or isinstance(result, str)
+
+def test_nvidia_nim_model_returns_nim_api_base():
+    assert get_provider_api_base('nvidia_nim/meta/llama-3.1-8b-instruct') == NVIDIA_NIM_API_BASE
+
+
+def test_get_supported_llm_models_includes_nvidia_nim_models():
+    response = get_supported_llm_models()
+
+    assert 'nvidia_nim/meta/llama-3.1-8b-instruct' in response.models

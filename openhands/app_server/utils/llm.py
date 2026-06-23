@@ -52,6 +52,13 @@ CLARIFAI_MODELS = [
     'clarifai/moonshotai.kimi.Kimi-K2-Instruct',
 ]
 
+NVIDIA_NIM_API_BASE = 'https://integrate.api.nvidia.com/v1'
+
+NVIDIA_NIM_MODELS = [
+    'nvidia_nim/meta/llama-3.1-8b-instruct',
+    'nvidia_nim/meta/llama-3.1-70b-instruct',
+    'nvidia_nim/nvidia/llama-3.1-nemotron-70b-instruct',
+]
 # ---------------------------------------------------------------------------
 # Provider-assignment tables — derived from the SDK.
 #
@@ -150,6 +157,8 @@ def resolve_llm_base_url(
         return base_url
     if not model:
         return None
+    if model.startswith('nvidia_nim/'):
+        return NVIDIA_NIM_API_BASE
     if is_openhands_model(model):
         return managed_proxy_url
     try:
@@ -289,7 +298,10 @@ def get_supported_llm_models(
 
     # Assign canonical provider prefixes to bare LiteLLM names, then dedupe.
     all_models = (
-        openhands_models + CLARIFAI_MODELS + [_assign_provider(m) for m in model_list]
+        openhands_models
+        + CLARIFAI_MODELS
+        + NVIDIA_NIM_MODELS
+        + [_assign_provider(m) for m in model_list]
     )
     unique_models = sorted(set(all_models))
 
