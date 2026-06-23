@@ -21,12 +21,7 @@ def upgrade() -> None:
         'user',
         sa.Column('git_full_clone', sa.Boolean(), nullable=True),
     )
-    op.add_column(
-        'user_settings',
-        sa.Column('git_full_clone', sa.Boolean(), nullable=True),
-    )
 
 
 def downgrade() -> None:
-    op.drop_column('user_settings', 'git_full_clone')
     op.drop_column('user', 'git_full_clone')

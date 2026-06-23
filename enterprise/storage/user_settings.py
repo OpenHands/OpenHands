@@ -54,7 +54,6 @@ class UserSettings(Base):
     email_verified: Mapped[bool | None] = mapped_column(nullable=True)
     git_user_name: Mapped[str | None] = mapped_column(String, nullable=True)
     git_user_email: Mapped[str | None] = mapped_column(String, nullable=True)
-    git_full_clone: Mapped[bool | None] = mapped_column(nullable=True, default=False)
     v1_enabled: Mapped[bool | None] = mapped_column(nullable=True)
     agent_settings: Mapped[dict[str, Any]] = mapped_column(
         JSON, nullable=False, default=dict
@@ -91,5 +90,4 @@ class UserSettings(Base):
         return Settings(
             agent_settings=self.agent_settings or {},
             conversation_settings=self.conversation_settings or {},
-            git_full_clone=bool(self.git_full_clone),
         )
