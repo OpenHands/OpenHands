@@ -24,8 +24,31 @@ class V1GitService {
     conversationUrl: string | null | undefined,
     path: string,
   ): string {
-    const baseUrl = buildHttpBaseUrl(conversationUrl);
-    return `${baseUrl}${path}`;
+    const conversationId = this.extractConversationId(conversationUrl);
+    if (conversationId) {
+      const gitPath = path.replace(/^\/api\/git/, "");
+      return `/api/v1/app-conversations/${conversationId}/git${gitPath}`;
+    }
+
+    return `${buildHttpBaseUrl(conversationUrl)}${path}`;
+  }
+
+  private static extractConversationId(
+    conversationUrl: string | null | undefined,
+  ): string | null {
+    if (!conversationUrl) {
+      return null;
+    }
+
+    try {
+      const pathname = conversationUrl.startsWith("/")
+        ? conversationUrl
+        : new URL(conversationUrl).pathname;
+      const match = pathname.match(/\/api\/conversations\/([^/?#]+)/);
+      return match ? decodeURIComponent(match[1]) : null;
+    } catch {
+      return null;
+    }
   }
 
   /**

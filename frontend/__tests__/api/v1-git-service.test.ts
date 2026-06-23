@@ -10,6 +10,19 @@ describe("V1GitService", () => {
   });
 
   describe("getGitChanges", () => {
+    test("routes git changes through the app-server proxy", async () => {
+      vi.mocked(axios.get).mockResolvedValue({ data: [] });
+
+      await V1GitService.getGitChanges(
+        "https://openhands.example.com:42031/api/conversations/conv-123",
+        "test-api-key",
+        "/workspace/project",
+      );
+
+      const [url] = vi.mocked(axios.get).mock.calls[0];
+      expect(url).toBe("/api/v1/app-conversations/conv-123/git/changes");
+    });
+
     test("throws when response is not an array (dead runtime returns HTML)", async () => {
       const htmlResponse = "<!DOCTYPE html><html>...</html>";
       vi.mocked(axios.get).mockResolvedValue({ data: htmlResponse });
@@ -36,7 +49,7 @@ describe("V1GitService", () => {
       const [url, config] = vi.mocked(axios.get).mock.calls[0];
 
       // URL should NOT contain the path - it should end with /api/git/changes
-      expect(url).toContain("/api/git/changes");
+      expect(url).toContain("/git/changes");
       expect(url).not.toContain("/workspace/project");
       expect(url).not.toContain(encodeURIComponent("/workspace/project"));
 
@@ -100,6 +113,21 @@ describe("V1GitService", () => {
   });
 
   describe("getGitChangeDiff", () => {
+    test("routes git diffs through the app-server proxy", async () => {
+      vi.mocked(axios.get).mockResolvedValue({
+        data: { diff: "diff content" },
+      });
+
+      await V1GitService.getGitChangeDiff(
+        "https://openhands.example.com/runtime/55313/api/conversations/conv-123",
+        "test-api-key",
+        "/workspace/project/file.ts",
+      );
+
+      const [url] = vi.mocked(axios.get).mock.calls[0];
+      expect(url).toBe("/api/v1/app-conversations/conv-123/git/diff");
+    });
+
     test("uses query parameters instead of path segments for the path", async () => {
       vi.mocked(axios.get).mockResolvedValue({
         data: { diff: "--- a/file.ts\n+++ b/file.ts\n..." },
@@ -115,7 +143,7 @@ describe("V1GitService", () => {
       const [url, config] = vi.mocked(axios.get).mock.calls[0];
 
       // URL should NOT contain the path - it should end with /api/git/diff
-      expect(url).toContain("/api/git/diff");
+      expect(url).toContain("/git/diff");
       expect(url).not.toContain("/workspace/project/file.ts");
       expect(url).not.toContain(encodeURIComponent("/workspace/project/file.ts"));
 
