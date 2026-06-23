@@ -56,6 +56,7 @@ authorize_url_generator = AuthorizeUrlGenerator(
         'app_mentions:read',
         'chat:write',
         'users:read',
+        'files:read',
         'channels:history',
         'groups:history',
         'mpim:history',
@@ -71,7 +72,7 @@ jwt_service_dependency = depends_jwt_service()
 
 @slack_router.get('/install')
 async def install(state: str = ''):
-    """Forward into slack OAuth. (Most workflows can skip this and jump directly into slack authentication, so we skip OAuth state generation)"""
+    """Forward into Slack OAuth."""
     url = authorize_url_generator.generate(state=state)
     return RedirectResponse(url)
 
