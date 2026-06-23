@@ -259,7 +259,13 @@ export const organizationService = {
     return data;
   },
 
-  getUsageStats: async ({ orgId, days = 7 }: { orgId: string; days?: number }) => {
+  getUsageStats: async ({
+    orgId,
+    days = 7,
+  }: {
+    orgId: string;
+    days?: number;
+  }) => {
     const { data } = await openHands.get<OrgUsageStats>(
       `/api/organizations/${orgId}/conversations/usage-stats`,
       { params: { days } },

@@ -212,56 +212,6 @@ function DollarIcon() {
   );
 }
 
-function ChartBarIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-    >
-      <line x1="18" y1="20" x2="18" y2="10" />
-      <line x1="12" y1="20" x2="12" y2="4" />
-      <line x1="6" y1="20" x2="6" y2="14" />
-    </svg>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12,6 12,12 16,14" />
-    </svg>
-  );
-}
-
-function TokenIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-    >
-      <path d="M12 2L2 7l10 5 10-5-10-5z" />
-      <path d="M2 17l10 5 10-5" />
-      <path d="M2 12l10 5 10-5" />
-    </svg>
-  );
-}
-
 // Status badge component
 function StatusBadge({ status }: { status: string | null }) {
   const getStatusStyle = () => {
@@ -573,7 +523,14 @@ export function AdminDashboard() {
                     : "text-[#888888] hover:text-white hover:bg-white/5"
                 }`}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M3 3v18h18" />
                   <path d="M18 17V9" />
                   <path d="M13 17V5" />
@@ -592,7 +549,14 @@ export function AdminDashboard() {
                     : "text-[#888888] hover:text-white hover:bg-white/5"
                 }`}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
                 Conversations
@@ -610,12 +574,16 @@ export function AdminDashboard() {
             <div className="p-8 border-b border-white/10">
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <h1 className="text-3xl font-bold text-white tracking-tight">Usage</h1>
+                  <h1 className="text-3xl font-bold text-white tracking-tight">
+                    Usage
+                  </h1>
                   <p className="text-[#888888] text-sm mt-2">
-                    At-a-glance OpenHands usage for {currentOrg?.name || 'your organization'}.
+                    At-a-glance OpenHands usage for{" "}
+                    {currentOrg?.name || "your organization"}.
                   </p>
                   <p className="text-[#888888] text-sm mt-1">
-                    At-a-glance org consumption and activity trends using sample data.
+                    At-a-glance org consumption and activity trends using sample
+                    data.
                   </p>
                 </div>
                 <button
@@ -623,7 +591,14 @@ export function AdminDashboard() {
                   className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/20 text-sm text-[#888888] hover:text-white hover:border-white/40 transition-colors"
                 >
                   Last 7 days
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <path d="M6 9l6 6 6-6" />
                   </svg>
                 </button>
@@ -637,9 +612,18 @@ export function AdminDashboard() {
                 {/* Active Users */}
                 <div className="bg-[#1A1A1A] p-6 rounded-xl border border-white/5">
                   <div className="flex items-center justify-between mb-4">
-                    <span className="text-[#888888] text-xs font-medium uppercase tracking-wide">Active Users</span>
+                    <span className="text-[#888888] text-xs font-medium uppercase tracking-wide">
+                      Active Users
+                    </span>
                     <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                         <circle cx="9" cy="7" r="4" />
                         <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -650,15 +634,26 @@ export function AdminDashboard() {
                   <div className="text-white text-3xl font-bold tracking-tight mb-2">
                     {usageStats?.active_users ?? 0}
                   </div>
-                  <div className="text-[#888888] text-sm">users in last 7 days</div>
+                  <div className="text-[#888888] text-sm">
+                    users in last 7 days
+                  </div>
                 </div>
 
                 {/* Agent Runs */}
                 <div className="bg-[#1A1A1A] p-6 rounded-xl border border-white/5">
                   <div className="flex items-center justify-between mb-4">
-                    <span className="text-[#888888] text-xs font-medium uppercase tracking-wide">Agent Runs</span>
+                    <span className="text-[#888888] text-xs font-medium uppercase tracking-wide">
+                      Agent Runs
+                    </span>
                     <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
                         <polyline points="22,12 18,12 15,21 9,3 6,12 2,12" />
                       </svg>
                     </div>
@@ -669,16 +664,25 @@ export function AdminDashboard() {
                   <div className="text-[#888888] text-sm">
                     {usageStats?.agent_runs && usageStats.agent_runs > 0
                       ? `${Math.round(usageStats.agent_runs / 7)} daily average`
-                      : 'No runs in last 7 days'}
+                      : "No runs in last 7 days"}
                   </div>
                 </div>
 
                 {/* Token Usage */}
                 <div className="bg-[#1A1A1A] p-6 rounded-xl border border-white/5">
                   <div className="flex items-center justify-between mb-4">
-                    <span className="text-[#888888] text-xs font-medium uppercase tracking-wide">Token Usage</span>
+                    <span className="text-[#888888] text-xs font-medium uppercase tracking-wide">
+                      Token Usage
+                    </span>
                     <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
                         <circle cx="12" cy="12" r="10" />
                         <path d="M12 6v6l4 2" />
                       </svg>
@@ -688,7 +692,8 @@ export function AdminDashboard() {
                     {formatTokens(usageStats?.total_tokens ?? 0)}
                   </div>
                   <div className="text-[#888888] text-sm">
-                    ${(usageStats?.estimated_spend ?? 0).toFixed(2)} estimated spend
+                    ${(usageStats?.estimated_spend ?? 0).toFixed(2)} estimated
+                    spend
                   </div>
                 </div>
               </div>
@@ -698,24 +703,52 @@ export function AdminDashboard() {
                 {/* Daily Usage Chart */}
                 <div className="lg:col-span-2 bg-[#1A1A1A] p-6 rounded-xl border border-white/5">
                   <div className="mb-6">
-                    <h2 className="text-white font-medium text-lg">Daily usage</h2>
-                    <p className="text-[#888888] text-sm">Tokens and conversations by day</p>
+                    <h2 className="text-white font-medium text-lg">
+                      Daily usage
+                    </h2>
+                    <p className="text-[#888888] text-sm">
+                      Tokens and conversations by day
+                    </p>
                   </div>
 
                   {/* Simple Bar Chart */}
                   <div className="h-48 flex items-end justify-between gap-4 px-2">
                     {(usageStats?.daily_usage ?? []).map((day) => {
                       // Find max tokens for scaling
-                      const maxTokens = Math.max(...(usageStats?.daily_usage?.map(d => d.tokens) ?? [1]), 1);
-                      const tokenHeight = day.tokens > 0 ? (day.tokens / maxTokens) * 100 : 5;
-                      const convoHeight = day.conversations > 0 ? Math.min((day.conversations / Math.max(...(usageStats?.daily_usage?.map(d => d.conversations) ?? [1]), 1)) * 100, 80) : 5;
+                      const maxTokens = Math.max(
+                        ...(usageStats?.daily_usage?.map((d) => d.tokens) ?? [
+                          1,
+                        ]),
+                        1,
+                      );
+                      const tokenHeight =
+                        day.tokens > 0 ? (day.tokens / maxTokens) * 100 : 5;
+                      const convoHeight =
+                        day.conversations > 0
+                          ? Math.min(
+                              (day.conversations /
+                                Math.max(
+                                  ...(usageStats?.daily_usage?.map(
+                                    (d) => d.conversations,
+                                  ) ?? [1]),
+                                  1,
+                                )) *
+                                100,
+                              80,
+                            )
+                          : 5;
 
                       // Get day name from date
                       const date = new Date(day.date);
-                      const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+                      const dayName = date.toLocaleDateString("en-US", {
+                        weekday: "short",
+                      });
 
                       return (
-                        <div key={day.date} className="flex-1 flex flex-col items-center gap-2">
+                        <div
+                          key={day.date}
+                          className="flex-1 flex flex-col items-center gap-2"
+                        >
                           <div className="w-full flex items-end justify-center gap-1 h-36">
                             <div
                               className="w-4 bg-white rounded-sm transition-all"
@@ -728,7 +761,9 @@ export function AdminDashboard() {
                               title={`${day.conversations} conversations`}
                             />
                           </div>
-                          <span className="text-[#888888] text-xs">{dayName}</span>
+                          <span className="text-[#888888] text-xs">
+                            {dayName}
+                          </span>
                         </div>
                       );
                     })}
@@ -742,7 +777,9 @@ export function AdminDashboard() {
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-sm bg-zinc-600" />
-                      <span className="text-[#888888] text-sm">Conversations</span>
+                      <span className="text-[#888888] text-sm">
+                        Conversations
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -750,18 +787,29 @@ export function AdminDashboard() {
                 {/* Usage by Team (User) */}
                 <div className="bg-[#1A1A1A] p-6 rounded-xl border border-white/5">
                   <div className="mb-6">
-                    <h2 className="text-white font-medium text-lg">Usage by user</h2>
-                    <p className="text-[#888888] text-sm">Share of total runs</p>
+                    <h2 className="text-white font-medium text-lg">
+                      Usage by user
+                    </h2>
+                    <p className="text-[#888888] text-sm">
+                      Share of total runs
+                    </p>
                   </div>
 
                   <div className="space-y-5">
                     {(usageStats?.team_usage ?? []).slice(0, 6).map((user) => (
                       <div key={user.user_id}>
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-white text-sm truncate max-w-[120px]" title={user.user_email || user.user_name || user.user_id}>
-                            {user.user_name || user.user_email || 'Unknown'}
+                          <span
+                            className="text-white text-sm truncate max-w-[120px]"
+                            title={
+                              user.user_email || user.user_name || user.user_id
+                            }
+                          >
+                            {user.user_name || user.user_email || "Unknown"}
                           </span>
-                          <span className="text-[#888888] text-sm">{user.percentage}%</span>
+                          <span className="text-[#888888] text-sm">
+                            {user.percentage}%
+                          </span>
                         </div>
                         <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                           <div
@@ -771,7 +819,8 @@ export function AdminDashboard() {
                         </div>
                       </div>
                     ))}
-                    {(!usageStats?.team_usage || usageStats.team_usage.length === 0) && (
+                    {(!usageStats?.team_usage ||
+                      usageStats.team_usage.length === 0) && (
                       <div className="text-[#888888] text-sm text-center py-4">
                         No usage data available
                       </div>
@@ -785,9 +834,12 @@ export function AdminDashboard() {
           <>
             {/* Conversations Page Header */}
             <div className="p-8 pb-0">
-              <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Conversations</h1>
+              <h1 className="text-3xl font-bold text-white tracking-tight mb-2">
+                Conversations
+              </h1>
               <p className="text-[#888888] text-sm">
-                Org-wide OpenHands activity — active sessions, runtimes, and triage.
+                Org-wide OpenHands activity — active sessions, runtimes, and
+                triage.
               </p>
             </div>
 
@@ -821,354 +873,359 @@ export function AdminDashboard() {
 
             {/* Filter Bar */}
 
-
-        <div className="bg-[#161616] border border-[#262626] rounded-lg p-4 mb-4">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
-              Filters
-            </span>
-            <a
-              href={exportUrl}
-              className="flex items-center gap-2 px-3 py-1.5 bg-[#1E1E1E] border border-[#262626] rounded text-sm text-[#8C8C8C] hover:text-white hover:border-[#404040] transition-colors"
-            >
-              <ExportIcon />
-              Export CSV
-            </a>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            {/* Search */}
-            <div className="relative flex-1 min-w-[200px]">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#8C8C8C]">
-                <SearchIcon />
-              </div>
-              <input
-                type="text"
-                placeholder="Name, creator, email..."
-                value={search}
-                onChange={(e) => updateFilter("search", e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-[#0D0D0D] border border-[#262626] rounded text-white text-sm placeholder-[#6B6B6B] focus:outline-none focus:border-[#404040]"
-              />
-            </div>
-
-            {/* Sort By */}
-            <select
-              value={sortBy}
-              onChange={(e) => updateFilter("sort_by", e.target.value)}
-              className="px-3 py-2 bg-[#0D0D0D] border border-[#262626] rounded text-sm text-white focus:outline-none focus:border-[#404040] appearance-none cursor-pointer"
-            >
-              <option value="updated_at">Last updated</option>
-              <option value="created_at">Created</option>
-              <option value="title">Title</option>
-              <option value="llm_model">Model</option>
-              <option value="accumulated_cost">Cost</option>
-            </select>
-
-            {/* Order */}
-            <select
-              value={sortOrder}
-              onChange={(e) => updateFilter("sort_order", e.target.value)}
-              className="px-3 py-2 bg-[#0D0D0D] border border-[#262626] rounded text-sm text-white focus:outline-none focus:border-[#404040] appearance-none cursor-pointer"
-            >
-              <option value="desc">Descending</option>
-              <option value="asc">Ascending</option>
-            </select>
-
-            {/* Conversation Status */}
-            <select
-              value={executionStatus[0] || ""}
-              onChange={(e) =>
-                updateFilter("execution_status", e.target.value || null)
-              }
-              className="px-3 py-2 bg-[#0D0D0D] border border-[#262626] rounded text-sm text-white focus:outline-none focus:border-[#404040] appearance-none cursor-pointer"
-            >
-              <option value="">Conversation status: All</option>
-              <option value="running">Running</option>
-              <option value="idle">Idle</option>
-              <option value="paused">Paused</option>
-              <option value="finished">Finished</option>
-              <option value="error">Error</option>
-              <option value="stuck">Stuck</option>
-            </select>
-
-            {/* Runtime Status */}
-            <select
-              value={sandboxStatus[0] || ""}
-              onChange={(e) =>
-                updateFilter("sandbox_status", e.target.value || null)
-              }
-              className="px-3 py-2 bg-[#0D0D0D] border border-[#262626] rounded text-sm text-white focus:outline-none focus:border-[#404040] appearance-none cursor-pointer"
-            >
-              <option value="">Runtime status: All</option>
-              <option value="RUNNING">Running</option>
-              <option value="STARTING">Starting</option>
-              <option value="PAUSED">Paused</option>
-              <option value="ERROR">Error</option>
-              <option value="MISSING">Missing</option>
-            </select>
-
-            {/* Time Window */}
-            <select
-              value={timeWindow}
-              onChange={(e) =>
-                updateFilter("time_window", e.target.value || null)
-              }
-              className="px-3 py-2 bg-[#0D0D0D] border border-[#262626] rounded text-sm text-white focus:outline-none focus:border-[#404040] appearance-none cursor-pointer"
-            >
-              <option value="">All time</option>
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
-              <option value="90d">Last 90 days</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="bg-[#161616] border border-[#262626] rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-[#262626]">
-                  <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
-                    Conversation
-                  </th>
-                  <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
-                    Model
-                  </th>
-                  <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
-                    Created by
-                  </th>
-                  <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
-                    Runtime
-                  </th>
-                  <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
-                    Runtime URL / GUID
-                  </th>
-                  <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
-                    Created / Updated
-                  </th>
-                  <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
-                    Tokens / Cost
-                  </th>
-                  <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {conversationsLoading && (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      className="px-4 py-8 text-center text-[#8C8C8C]"
-                    >
-                      Loading...
-                    </td>
-                  </tr>
-                )}
-                {!conversationsLoading &&
-                  conversationsData?.items.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={9}
-                        className="px-4 py-8 text-center text-[#8C8C8C]"
-                      >
-                        No conversations found
-                      </td>
-                    </tr>
-                  )}
-                {!conversationsLoading &&
-                  conversationsData?.items.map((conversation, index) => (
-                    <tr
-                      key={conversation.id}
-                      className={`border-b border-[#262626] hover:bg-[#1E1E1E]/50 transition-colors ${
-                        index % 2 === 0 ? "" : "bg-[#0D0D0D]/30"
-                      }`}
-                    >
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-white text-sm">
-                          {conversation.title || "Untitled"}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="font-mono text-xs text-[#8C8C8C]">
-                          {conversation.llm_model || "N/A"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-sm">
-                          <div className="text-white">
-                            {conversation.user_email?.split("@")[0] ||
-                              "Unknown"}
-                          </div>
-                          <div className="text-[#8C8C8C] text-xs">
-                            {conversation.user_email || ""}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={conversation.execution_status} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <RuntimeBadge status={conversation.sandbox_status} />
-                      </td>
-                      <td className="px-4 py-3">
-                        {conversation.sandbox_id ? (
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs text-[#8C8C8C] truncate max-w-[120px]">
-                              {conversation.sandbox_id.slice(0, 12)}...
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                copyToClipboard(conversation.sandbox_id!)
-                              }
-                              className="text-[#6B6B6B] hover:text-white transition-colors"
-                              title="Copy GUID"
-                            >
-                              <CopyIcon />
-                            </button>
-                            {conversation.runtime_url && (
-                              <a
-                                href={conversation.runtime_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[#6B6B6B] hover:text-white transition-colors"
-                                title="Open in new tab"
-                              >
-                                <ExternalLinkIcon />
-                              </a>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-[#6B6B6B] text-xs">N/A</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-xs">
-                          <div className="text-[#8C8C8C] uppercase mb-0.5">
-                            Created
-                          </div>
-                          <div className="text-white mb-1">
-                            {formatDate(conversation.created_at)}
-                          </div>
-                          <div className="text-[#8C8C8C] uppercase mb-0.5">
-                            Updated
-                          </div>
-                          <div className="text-white">
-                            {formatDate(conversation.updated_at)}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-xs text-right">
-                          <div className="text-white font-mono">
-                            {formatTokens(conversation.total_tokens)}
-                          </div>
-                          <div className="text-white font-medium">
-                            ${conversation.accumulated_cost.toFixed(2)}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleView(conversation.id)}
-                            className="flex items-center gap-1.5 px-2 py-1 text-xs text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors"
-                            title="View conversation"
-                            aria-label="View conversation"
-                          >
-                            <EyeIcon />
-                            View
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleStop(conversation)}
-                            disabled={
-                              !isStoppable(conversation.execution_status) ||
-                              stoppingIds.has(conversation.id)
-                            }
-                            className="flex items-center gap-1.5 px-2 py-1 text-xs text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#8C8C8C] disabled:cursor-not-allowed"
-                            title={
-                              isStoppable(conversation.execution_status)
-                                ? "Stop conversation"
-                                : "Conversation is not running"
-                            }
-                            aria-label="Stop conversation"
-                          >
-                            <StopIcon />
-                            {stoppingIds.has(conversation.id)
-                              ? "Stopping…"
-                              : "Stop"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination Footer */}
-          <div className="flex items-center justify-between px-4 py-3 border-t border-[#262626]">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => handlePageChange(page - 1)}
-                disabled={page <= 1}
-                className={`flex items-center gap-1 px-2 py-1 text-sm rounded transition-colors ${
-                  page <= 1
-                    ? "text-[#6B6B6B] cursor-not-allowed"
-                    : "text-[#8C8C8C] hover:text-white hover:bg-[#262626]"
-                }`}
-              >
-                <ChevronLeftIcon />
-                Previous
-              </button>
-              <button
-                type="button"
-                onClick={() => handlePageChange(page + 1)}
-                disabled={page >= totalPages}
-                className={`flex items-center gap-1 px-2 py-1 text-sm rounded transition-colors ${
-                  page >= totalPages
-                    ? "text-[#6B6B6B] cursor-not-allowed"
-                    : "text-[#8C8C8C] hover:text-white hover:bg-[#262626]"
-                }`}
-              >
-                Next
-                <ChevronRightIcon />
-              </button>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <span className="text-[#8C8C8C] text-sm">Per page</span>
-                <select
-                  value={perPage}
-                  onChange={(e) => {
-                    const newParams = new URLSearchParams(searchParams);
-                    newParams.set("per_page", e.target.value);
-                    newParams.set("page", "1");
-                    setSearchParams(newParams);
-                  }}
-                  className="px-2 py-1 bg-[#0D0D0D] border border-[#262626] rounded text-sm text-white focus:outline-none"
+            <div className="bg-[#161616] border border-[#262626] rounded-lg p-4 mb-4">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
+                  Filters
+                </span>
+                <a
+                  href={exportUrl}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-[#1E1E1E] border border-[#262626] rounded text-sm text-[#8C8C8C] hover:text-white hover:border-[#404040] transition-colors"
                 >
-                  <option value="5">5</option>
-                  <option value="10">10</option>
-                  <option value="20">20</option>
-                  <option value="50">50</option>
+                  <ExportIcon />
+                  Export CSV
+                </a>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                {/* Search */}
+                <div className="relative flex-1 min-w-[200px]">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#8C8C8C]">
+                    <SearchIcon />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Name, creator, email..."
+                    value={search}
+                    onChange={(e) => updateFilter("search", e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 bg-[#0D0D0D] border border-[#262626] rounded text-white text-sm placeholder-[#6B6B6B] focus:outline-none focus:border-[#404040]"
+                  />
+                </div>
+
+                {/* Sort By */}
+                <select
+                  value={sortBy}
+                  onChange={(e) => updateFilter("sort_by", e.target.value)}
+                  className="px-3 py-2 bg-[#0D0D0D] border border-[#262626] rounded text-sm text-white focus:outline-none focus:border-[#404040] appearance-none cursor-pointer"
+                >
+                  <option value="updated_at">Last updated</option>
+                  <option value="created_at">Created</option>
+                  <option value="title">Title</option>
+                  <option value="llm_model">Model</option>
+                  <option value="accumulated_cost">Cost</option>
+                </select>
+
+                {/* Order */}
+                <select
+                  value={sortOrder}
+                  onChange={(e) => updateFilter("sort_order", e.target.value)}
+                  className="px-3 py-2 bg-[#0D0D0D] border border-[#262626] rounded text-sm text-white focus:outline-none focus:border-[#404040] appearance-none cursor-pointer"
+                >
+                  <option value="desc">Descending</option>
+                  <option value="asc">Ascending</option>
+                </select>
+
+                {/* Conversation Status */}
+                <select
+                  value={executionStatus[0] || ""}
+                  onChange={(e) =>
+                    updateFilter("execution_status", e.target.value || null)
+                  }
+                  className="px-3 py-2 bg-[#0D0D0D] border border-[#262626] rounded text-sm text-white focus:outline-none focus:border-[#404040] appearance-none cursor-pointer"
+                >
+                  <option value="">Conversation status: All</option>
+                  <option value="running">Running</option>
+                  <option value="idle">Idle</option>
+                  <option value="paused">Paused</option>
+                  <option value="finished">Finished</option>
+                  <option value="error">Error</option>
+                  <option value="stuck">Stuck</option>
+                </select>
+
+                {/* Runtime Status */}
+                <select
+                  value={sandboxStatus[0] || ""}
+                  onChange={(e) =>
+                    updateFilter("sandbox_status", e.target.value || null)
+                  }
+                  className="px-3 py-2 bg-[#0D0D0D] border border-[#262626] rounded text-sm text-white focus:outline-none focus:border-[#404040] appearance-none cursor-pointer"
+                >
+                  <option value="">Runtime status: All</option>
+                  <option value="RUNNING">Running</option>
+                  <option value="STARTING">Starting</option>
+                  <option value="PAUSED">Paused</option>
+                  <option value="ERROR">Error</option>
+                  <option value="MISSING">Missing</option>
+                </select>
+
+                {/* Time Window */}
+                <select
+                  value={timeWindow}
+                  onChange={(e) =>
+                    updateFilter("time_window", e.target.value || null)
+                  }
+                  className="px-3 py-2 bg-[#0D0D0D] border border-[#262626] rounded text-sm text-white focus:outline-none focus:border-[#404040] appearance-none cursor-pointer"
+                >
+                  <option value="">All time</option>
+                  <option value="7d">Last 7 days</option>
+                  <option value="30d">Last 30 days</option>
+                  <option value="90d">Last 90 days</option>
                 </select>
               </div>
-              <span className="text-[#8C8C8C] text-sm">
-                Page {page} of {totalPages} · {totalItems} conversations
-              </span>
             </div>
-          </div>
-        </div>
+
+            {/* Table */}
+            <div className="bg-[#161616] border border-[#262626] rounded-lg overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-[#262626]">
+                      <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
+                        Conversation
+                      </th>
+                      <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
+                        Model
+                      </th>
+                      <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
+                        Created by
+                      </th>
+                      <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
+                        Runtime
+                      </th>
+                      <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
+                        Runtime URL / GUID
+                      </th>
+                      <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
+                        Created / Updated
+                      </th>
+                      <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
+                        Tokens / Cost
+                      </th>
+                      <th className="px-4 py-3 text-left text-[#8C8C8C] text-xs font-medium uppercase tracking-wide">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {conversationsLoading && (
+                      <tr>
+                        <td
+                          colSpan={9}
+                          className="px-4 py-8 text-center text-[#8C8C8C]"
+                        >
+                          Loading...
+                        </td>
+                      </tr>
+                    )}
+                    {!conversationsLoading &&
+                      conversationsData?.items.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={9}
+                            className="px-4 py-8 text-center text-[#8C8C8C]"
+                          >
+                            No conversations found
+                          </td>
+                        </tr>
+                      )}
+                    {!conversationsLoading &&
+                      conversationsData?.items.map((conversation, index) => (
+                        <tr
+                          key={conversation.id}
+                          className={`border-b border-[#262626] hover:bg-[#1E1E1E]/50 transition-colors ${
+                            index % 2 === 0 ? "" : "bg-[#0D0D0D]/30"
+                          }`}
+                        >
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-white text-sm">
+                              {conversation.title || "Untitled"}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="font-mono text-xs text-[#8C8C8C]">
+                              {conversation.llm_model || "N/A"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-sm">
+                              <div className="text-white">
+                                {conversation.user_email?.split("@")[0] ||
+                                  "Unknown"}
+                              </div>
+                              <div className="text-[#8C8C8C] text-xs">
+                                {conversation.user_email || ""}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <StatusBadge
+                              status={conversation.execution_status}
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <RuntimeBadge
+                              status={conversation.sandbox_status}
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            {conversation.sandbox_id ? (
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs text-[#8C8C8C] truncate max-w-[120px]">
+                                  {conversation.sandbox_id.slice(0, 12)}...
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    copyToClipboard(conversation.sandbox_id!)
+                                  }
+                                  className="text-[#6B6B6B] hover:text-white transition-colors"
+                                  title="Copy GUID"
+                                >
+                                  <CopyIcon />
+                                </button>
+                                {conversation.runtime_url && (
+                                  <a
+                                    href={conversation.runtime_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[#6B6B6B] hover:text-white transition-colors"
+                                    title="Open in new tab"
+                                  >
+                                    <ExternalLinkIcon />
+                                  </a>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-[#6B6B6B] text-xs">
+                                N/A
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-xs">
+                              <div className="text-[#8C8C8C] uppercase mb-0.5">
+                                Created
+                              </div>
+                              <div className="text-white mb-1">
+                                {formatDate(conversation.created_at)}
+                              </div>
+                              <div className="text-[#8C8C8C] uppercase mb-0.5">
+                                Updated
+                              </div>
+                              <div className="text-white">
+                                {formatDate(conversation.updated_at)}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-xs text-right">
+                              <div className="text-white font-mono">
+                                {formatTokens(conversation.total_tokens)}
+                              </div>
+                              <div className="text-white font-medium">
+                                ${conversation.accumulated_cost.toFixed(2)}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleView(conversation.id)}
+                                className="flex items-center gap-1.5 px-2 py-1 text-xs text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors"
+                                title="View conversation"
+                                aria-label="View conversation"
+                              >
+                                <EyeIcon />
+                                View
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleStop(conversation)}
+                                disabled={
+                                  !isStoppable(conversation.execution_status) ||
+                                  stoppingIds.has(conversation.id)
+                                }
+                                className="flex items-center gap-1.5 px-2 py-1 text-xs text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#8C8C8C] disabled:cursor-not-allowed"
+                                title={
+                                  isStoppable(conversation.execution_status)
+                                    ? "Stop conversation"
+                                    : "Conversation is not running"
+                                }
+                                aria-label="Stop conversation"
+                              >
+                                <StopIcon />
+                                {stoppingIds.has(conversation.id)
+                                  ? "Stopping…"
+                                  : "Stop"}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Footer */}
+              <div className="flex items-center justify-between px-4 py-3 border-t border-[#262626]">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handlePageChange(page - 1)}
+                    disabled={page <= 1}
+                    className={`flex items-center gap-1 px-2 py-1 text-sm rounded transition-colors ${
+                      page <= 1
+                        ? "text-[#6B6B6B] cursor-not-allowed"
+                        : "text-[#8C8C8C] hover:text-white hover:bg-[#262626]"
+                    }`}
+                  >
+                    <ChevronLeftIcon />
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePageChange(page + 1)}
+                    disabled={page >= totalPages}
+                    className={`flex items-center gap-1 px-2 py-1 text-sm rounded transition-colors ${
+                      page >= totalPages
+                        ? "text-[#6B6B6B] cursor-not-allowed"
+                        : "text-[#8C8C8C] hover:text-white hover:bg-[#262626]"
+                    }`}
+                  >
+                    Next
+                    <ChevronRightIcon />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[#8C8C8C] text-sm">Per page</span>
+                    <select
+                      value={perPage}
+                      onChange={(e) => {
+                        const newParams = new URLSearchParams(searchParams);
+                        newParams.set("per_page", e.target.value);
+                        newParams.set("page", "1");
+                        setSearchParams(newParams);
+                      }}
+                      className="px-2 py-1 bg-[#0D0D0D] border border-[#262626] rounded text-sm text-white focus:outline-none"
+                    >
+                      <option value="5">5</option>
+                      <option value="10">10</option>
+                      <option value="20">20</option>
+                      <option value="50">50</option>
+                    </select>
+                  </div>
+                  <span className="text-[#8C8C8C] text-sm">
+                    Page {page} of {totalPages} · {totalItems} conversations
+                  </span>
+                </div>
+              </div>
+            </div>
           </>
         )}
       </main>
