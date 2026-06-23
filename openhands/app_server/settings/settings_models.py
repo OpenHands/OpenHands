@@ -175,7 +175,7 @@ class MarketplaceRegistration(BaseModel):
 
 
 def validate_and_convert_marketplaces(
-    raw_marketplaces: list[dict | MarketplaceRegistration] | None,
+    raw_marketplaces: list[dict[str, Any] | MarketplaceRegistration] | None,
     source_name: str = 'marketplaces',
 ) -> list[MarketplaceRegistration]:
     """Validate and convert raw marketplace data to MarketplaceRegistration objects.
