@@ -133,6 +133,22 @@ export const updateConversationSandboxStatusInCache = (
 };
 
 /**
+ * Optimistically updates the conversation's running model in the cache, so the
+ * chat header and switch-profile button reflect an agent-initiated LLM switch
+ * immediately (before the conversation query refetches).
+ */
+export const updateConversationLlmModelInCache = (
+  queryClient: QueryClient,
+  conversationId: string,
+  llm_model: string,
+): void => {
+  queryClient.setQueryData<V1AppConversation | null>(
+    ["user", "conversation", conversationId],
+    (oldData) => (oldData ? { ...oldData, llm_model } : oldData),
+  );
+};
+
+/**
  * Invalidates all queries related to conversation mutations (start/stop)
  */
 export const invalidateConversationQueries = (

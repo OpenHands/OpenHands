@@ -1,18 +1,20 @@
 import asyncio
+import importlib.metadata
+import io
 import json
 import logging
 import os
-import tempfile
 import zipfile
 from collections import defaultdict
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, AsyncGenerator, Sequence, cast
+from typing import Any, AsyncGenerator, BinaryIO, Sequence, cast
 from uuid import UUID, uuid4
 
 import httpx
 from fastapi import Request
+from packaging.version import InvalidVersion, Version
 from pydantic import Field, SecretStr, TypeAdapter
 
 from openhands.agent_server.models import (
@@ -25,6 +27,7 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
     AppConversationInfoService,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
+    ACP_SERVER_TAG_KEY,
     AgentType,
     AppConversation,
     AppConversationInfo,
@@ -41,6 +44,9 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
     AppConversationServiceInjector,
+    ConversationExportAlreadyRunning,
+    ConversationExportLockUnavailable,
+    ConversationExportTooLarge,
 )
 from openhands.app_server.app_conversation.app_conversation_service_base import (
     AppConversationServiceBase,
@@ -48,6 +54,9 @@ from openhands.app_server.app_conversation.app_conversation_service_base import 
 )
 from openhands.app_server.app_conversation.app_conversation_start_task_service import (
     AppConversationStartTaskService,
+)
+from openhands.app_server.app_conversation.conversation_secret_enricher import (
+    ConversationSecretEnricher,
 )
 from openhands.app_server.app_conversation.hook_loader import (
     load_hooks_from_agent_server,
@@ -80,27 +89,40 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import SandboxService
-from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
+from openhands.app_server.sandbox.sandbox_spec_service import (
+    SandboxSpecService,
+    get_agent_server_image,
+    is_custom_agent_server_image,
+)
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
+from openhands.app_server.settings.llm_profiles import resolve_profile_llm
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
 from openhands.app_server.utils.git import ensure_valid_git_branch_name
+from openhands.app_server.utils.import_utils import get_impl
 from openhands.app_server.utils.llm_metadata import (
     get_llm_metadata,
     should_set_litellm_extra_body,
 )
+from openhands.app_server.utils.redis_lock import (
+    LockError,
+    RedisLockUnavailable,
+    refresh_lock_periodically,
+    try_acquire_redis_lock,
+)
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
+from openhands.sdk.llm.llm_profile_store import PROFILE_NAME_REGEX
 from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ACPAgentSettings
 from openhands.sdk.subagent import get_registered_agent_definitions
-from openhands.sdk.utils.paging import page_iterator
+from openhands.sdk.tool.builtins import SwitchLLMTool
 from openhands.sdk.utils.redact import (
     redact_api_key_literals,
     redact_text_secrets,
@@ -118,6 +140,45 @@ from openhands.tools.preset.planning import (
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
+
+_EXPORT_LOCK_KEY_PREFIX = 'app_conversation_export'
+
+
+class _StreamingZipBuffer(io.RawIOBase):
+    """Small non-seekable writer used by zipfile to emit chunks incrementally.
+
+    zipfile.ZipFile only needs write() and tell() from its underlying file
+    object when writing to a non-seekable stream.  Everything else
+    (flush, writable, seekable) is either unused by zipfile or already
+    handled by the io.RawIOBase defaults.
+    """
+
+    def __init__(self):
+        self._chunks: list[bytes] = []
+        self._position = 0
+
+    def write(self, data) -> int:
+        chunk = bytes(data)
+        if chunk:
+            self._chunks.append(chunk)
+            self._position += len(chunk)
+        return len(data)
+
+    def tell(self) -> int:
+        return self._position
+
+    def drain(self) -> list[bytes]:
+        chunks = self._chunks
+        self._chunks = []
+        return chunks
+
+
+def _expected_sdk_version() -> str | None:
+    """App's pinned openhands-sdk version, or None if its metadata is unresolvable."""
+    try:
+        return importlib.metadata.version('openhands-sdk')
+    except importlib.metadata.PackageNotFoundError:
+        return None
 
 
 # Planning agent instruction to prevent "Ready to proceed?" behavior
@@ -155,7 +216,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     web_url: str | None
     openhands_provider_base_url: str | None
     access_token_hard_timeout: timedelta | None
+    conversation_secret_enricher: ConversationSecretEnricher = field(
+        default_factory=ConversationSecretEnricher
+    )
     app_mode: str | None = None
+    export_max_events: int = 10000
+    export_lock_ttl_seconds: int = 3600
+    export_lock_refresh_interval_seconds: int = 30
+    export_lock_required: bool | None = None
     # Public app URL (e.g. https://openhands.example.com) used to build
     # reverse-proxy conversation URLs. Distinct from ``web_url`` which may fall
     # back to an internal ``host.docker.internal`` address.
@@ -251,6 +319,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         # Create and yield the start task
         user_id = await self.user_context.get_user_id()
+        # Prefer the user's email as the Laminar trace user id so traces are
+        # immediately attributable in the Laminar UI instead of showing only
+        # a pseudo-anonymous internal id. Falls back to ``user_id`` when no
+        # email is available (e.g. OSS mode).
+        laminar_user_id = await self.user_context.get_user_email() or user_id
 
         # Validate and inherit from parent conversation if provided
         if request.parent_conversation_id:
@@ -283,6 +356,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             sandbox = await self.sandbox_service.get_sandbox(sandbox_id)
             assert sandbox is not None
             agent_server_url = self._get_agent_server_url(sandbox)
+
+            # Custom sandbox images can ship an incompatible openhands-sdk; fail
+            # fast with a clear error instead of an opaque 500 on create.
+            await self._verify_agent_server_version(
+                agent_server_url, sandbox.session_api_key
+            )
+
+            # Mirror the user's LLM profiles into the sandbox so the agent's
+            # built-in switch_llm tool can resolve them (in SaaS profiles live
+            # on the app-server, not the sandbox filesystem). Before conversation
+            # creation, so the tool is enabled; re-runs on every start/resume.
+            await self._seed_sandbox_profiles(agent_server_url, sandbox.session_api_key)
 
             # Get the working dir
             sandbox_spec = await self.sandbox_spec_service.get_sandbox_spec(
@@ -321,6 +406,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     working_dir,
                     request.agent_type,
                     request.llm_model,
+                    trigger=request.trigger,
                     remote_workspace=remote_workspace,
                     selected_repository=request.selected_repository,
                     plugins=request.plugins,
@@ -337,6 +423,19 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             body_json = start_conversation_request.model_dump(
                 mode='json', context={'expose_secrets': True}
             )
+            # Inject ``user_id`` into the start-conversation body so the
+            # agent-server can call ``Laminar.set_trace_user_id()`` and tag
+            # traces with the authenticated user. The currently pinned
+            # ``openhands-sdk`` release does not yet expose ``user_id`` on
+            # ``StartConversationRequest`` (added in software-agent-sdk#3242),
+            # so passing it to ``create_request(...)`` is silently dropped by
+            # pydantic. The agent-server reads the field directly from the
+            # request body, so injecting it here works regardless of whether
+            # the local SDK model knows about it. Remove this once OpenHands
+            # pins to an SDK release that exposes ``user_id`` on
+            # ``StartConversationRequest``.
+            if laminar_user_id:
+                body_json['user_id'] = laminar_user_id
             headers = (
                 {'X-Session-API-Key': sandbox.session_api_key}
                 if sandbox.session_api_key
@@ -349,7 +448,22 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 timeout=self.sandbox_startup_timeout,
             )
 
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                # A custom image that 500s on create is usually an openhands-sdk
+                # mismatch /server_info couldn't reveal; add an actionable hint.
+                if is_custom_agent_server_image():
+                    expected = _expected_sdk_version()
+                    raise SandboxError(
+                        f'Conversation create failed (HTTP '
+                        f'{exc.response.status_code}) on custom sandbox image '
+                        f'{get_agent_server_image()}. Verify its openhands-sdk '
+                        f'matches this release'
+                        + (f' ({expected})' if expected else '')
+                        + '; rebuild/re-pin the image if not.'
+                    ) from exc
+                raise
             info = ConversationInfo.model_validate(response.json())
             # Determine kind / llm_model from the request we built (its
             # ``agent`` is the source of truth here): the response echoes
@@ -357,14 +471,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             request_agent = start_conversation_request.agent
             tags: dict[str, str] = {}
             if request_agent.agent_kind == 'acp':
-                llm_model = None
+                llm_model = request_agent.acp_model
                 agent_kind = 'acp'
                 # Persist the active ACP provider key so the conversation UI
                 # can resolve a brand label ("Claude Code", "Codex", …) via
                 # the SDK registry without keeping a per-conversation column.
+                # Surfaced to the UI as the projected ``acp_server`` field.
                 acp_user = await self.user_context.get_user_info()
                 if isinstance(acp_user.agent_settings, ACPAgentSettings):
-                    tags['acp_server'] = acp_user.agent_settings.acp_server
+                    tags[ACP_SERVER_TAG_KEY] = acp_user.agent_settings.acp_server
             else:
                 llm_model = request_agent.llm.model
                 agent_kind = 'openhands'
@@ -405,6 +520,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 await self.event_callback_service.save_event_callback(
                     EventCallback(
                         conversation_id=info.id,
+                        event_kind=processor.get_event_kind(),
                         processor=processor,
                     )
                 )
@@ -789,6 +905,134 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             httpx_client=self.httpx_client,
         )
 
+    async def _verify_agent_server_version(
+        self, agent_server_url: str, session_api_key: str | None
+    ) -> None:
+        """Fail fast with a clear error when an admin-pinned custom sandbox image
+        runs a different openhands-sdk minor than this app, instead of the opaque
+        500 the agent-server returns on create. Best-effort: only custom images are
+        checked, and we fail open on anything we can't read."""
+        if os.getenv('OH_SKIP_AGENT_SERVER_VERSION_CHECK', '').strip().lower() in (
+            '1',
+            'true',
+            'yes',
+        ):
+            return
+        # Proxy-default images move with the release; only custom-pinned can drift.
+        if not is_custom_agent_server_image():
+            return
+        expected = _expected_sdk_version()
+        if not expected:
+            return
+        try:
+            headers = {'X-Session-API-Key': session_api_key} if session_api_key else {}
+            resp = await self.httpx_client.get(
+                f'{agent_server_url.rstrip("/")}/server_info',
+                headers=headers,
+                timeout=30.0,
+            )
+            resp.raise_for_status()
+            reported = str(resp.json().get('sdk_version', '')).strip()
+        except Exception:
+            # 404 (image predates /server_info) or transient errors: can't verify,
+            # so don't block — the create POST still surfaces a custom-image hint.
+            _logger.warning(
+                'Could not read /server_info to verify agent-server SDK version',
+                exc_info=True,
+            )
+            return
+        # Endpoint present but metadata missing -> nothing to compare against.
+        if reported in ('', 'unknown'):
+            return
+        try:
+            if Version(reported).release[:2] == Version(expected).release[:2]:
+                return
+        except InvalidVersion:
+            return
+        raise SandboxError(
+            f'Sandbox image {get_agent_server_image()} runs openhands-sdk '
+            f'{reported}, but this release requires {expected}. Rebuild/re-pin the '
+            'custom sandbox image to a matching openhands-sdk, or set '
+            'OH_SKIP_AGENT_SERVER_VERSION_CHECK=1 to bypass.'
+        )
+
+    async def _seed_sandbox_profiles(
+        self, agent_server_url: str, session_api_key: str | None
+    ) -> None:
+        """Mirror the user's saved LLM profiles into the sandbox profile store.
+
+        The agent's built-in ``switch_llm`` tool resolves profiles from the
+        sandbox filesystem; in SaaS they live on the app-server, so without this
+        the tool sees none. Upserts the current profiles (so adds/edits/renames
+        land) and prunes ones deleted on the app-server, keeping the sandbox in
+        sync. Best-effort: failures are logged, never raised, so they can't block
+        the conversation.
+        """
+        # Imported lazily: settings_router transitively imports this service, so
+        # a module-level import would be circular.
+        from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
+
+        headers = {'X-Session-API-Key': session_api_key} if session_api_key else {}
+        base_url = f'{agent_server_url}/api/profiles'
+        try:
+            user = await self.user_context.get_user_info()
+            profiles = user.llm_profiles.profiles
+            settings_llm = getattr(user.agent_settings, 'llm', None)
+            fallback_api_key = getattr(settings_llm, 'api_key', None)
+        except Exception:
+            _logger.exception(
+                'Failed to load profiles for sandbox %s', agent_server_url
+            )
+            return
+
+        # Upsert each profile independently so one failure can't dark the rest.
+        for name, profile_llm in profiles.items():
+            # Org profile names aren't character-restricted, so skip any the
+            # agent-server's store would reject — both to avoid a futile call and
+            # to keep an exotic name (e.g. ``..``) from path-injecting the api-key
+            # payload into a different request URL.
+            if not PROFILE_NAME_REGEX.match(name):
+                continue
+            try:
+                resolved = resolve_profile_llm(
+                    profile_llm,
+                    managed_proxy_url=LITE_LLM_API_URL,
+                    fallback_api_key=fallback_api_key,
+                )
+                response = await self.httpx_client.post(
+                    f'{base_url}/{name}',
+                    json={
+                        'include_secrets': True,
+                        'llm': resolved.model_dump(
+                            mode='json',
+                            exclude_none=True,
+                            context={'expose_secrets': True},
+                        ),
+                    },
+                    headers=headers,
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+            except Exception:
+                _logger.warning(
+                    'Failed to seed LLM profile %r into sandbox', name, exc_info=True
+                )
+
+        # Prune profiles deleted/renamed on the app-server so the agent can't
+        # switch to a stale one. Independent best-effort.
+        try:
+            listed = await self.httpx_client.get(
+                base_url, headers=headers, timeout=30.0
+            )
+            listed.raise_for_status()
+            stored = {p['name'] for p in listed.json().get('profiles', [])}
+            for stale_name in stored - set(profiles):
+                await self.httpx_client.delete(
+                    f'{base_url}/{stale_name}', headers=headers, timeout=30.0
+                )
+        except Exception:
+            _logger.warning('Failed to prune sandbox profiles', exc_info=True)
+
     def _get_agent_server_url(self, sandbox: SandboxInfo) -> str:
         """Get agent server url for running sandbox."""
         exposed_urls = sandbox.exposed_urls
@@ -896,45 +1140,87 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             PROVIDER_TOKEN_TYPE | None,
             await self.user_context.get_provider_tokens(),
         )
-        if not provider_tokens:
-            return secrets
+        if provider_tokens:
+            # Create secrets for each provider token
+            for provider_type, provider_token in provider_tokens.items():
+                if not provider_token.token:
+                    continue
 
-        # Create secrets for each provider token
-        for provider_type, provider_token in provider_tokens.items():
-            if not provider_token.token:
-                continue
+                secret_name = f'{provider_type.name}_TOKEN'
+                description = f'{provider_type.name} authentication token'
 
-            secret_name = f'{provider_type.name}_TOKEN'
-            description = f'{provider_type.name} authentication token'
-
-            if self.web_url:
-                # Create an access token for web-based authentication
-                access_token = self.jwt_service.create_jws_token(
-                    payload={
-                        'user_id': user.id,
-                        'provider_type': provider_type.value,
-                    },
-                    expires_in=self.access_token_hard_timeout,
-                )
-                headers = {'X-Access-Token': access_token}
-
-                secrets[secret_name] = LookupSecret(
-                    url=self.web_url + '/api/v1/webhooks/secrets',
-                    headers=headers,
-                    description=description,
-                )
-            else:
-                # Use static token for environments without web URL access
-                static_token = await self.user_context.get_latest_token(provider_type)
-                if static_token:
-                    secrets[secret_name] = StaticSecret(
-                        value=SecretStr(static_token), description=description
+                if self.web_url:
+                    # Create an access token for web-based authentication
+                    access_token = self.jwt_service.create_jws_token(
+                        payload={
+                            'user_id': user.id,
+                            'provider_type': provider_type.value,
+                        },
+                        expires_in=self.access_token_hard_timeout,
                     )
+                    headers = {'X-Access-Token': access_token}
+
+                    secrets[secret_name] = LookupSecret(
+                        url=self.web_url + '/api/v1/webhooks/secrets',
+                        headers=headers,
+                        description=description,
+                    )
+                else:
+                    # Use static token for environments without web URL access
+                    static_token = await self.user_context.get_latest_token(
+                        provider_type
+                    )
+                    if static_token:
+                        secrets[secret_name] = StaticSecret(
+                            value=SecretStr(static_token), description=description
+                        )
 
         return secrets
 
+    async def _setup_conversation_secrets(
+        self,
+        user: UserInfo,
+        trigger: ConversationTrigger | None,
+        system_message_suffix: str | None,
+    ) -> tuple[dict, str | None]:
+        """Set up custom, git provider, and integration-scoped secrets.
+
+        Args:
+            user: User information containing authentication details
+            trigger: Trigger that started the conversation.
+            system_message_suffix: Current system message suffix.
+
+        Returns:
+            Tuple of secrets and updated system message suffix.
+        """
+        secrets = await self._setup_secrets_for_git_providers(user)
+
+        enrichment = await self.conversation_secret_enricher.enrich(
+            user_context=self.user_context,
+            user=user,
+            trigger=trigger,
+            system_message_suffix=system_message_suffix,
+            web_url=self.web_url,
+            jwt_service=self.jwt_service,
+            access_token_hard_timeout=self.access_token_hard_timeout,
+        )
+        for name, source in enrichment.secrets.items():
+            if name in secrets:
+                _logger.warning(
+                    'Integration-provided secret %r overrides existing secret', name
+                )
+            secrets[name] = source
+
+        return secrets, enrichment.system_message_suffix
+
     def _configure_llm(self, user: UserInfo, llm_model: str | None) -> LLM:
         """Configure LLM settings.
+
+        Starts from the user's saved LLM configuration and overrides only
+        the fields that the server needs to resolve (model name, base URL,
+        and usage ID).  All other user-configured fields (e.g.
+        ``reasoning_effort``, ``extended_thinking_budget``, ``drop_params``)
+        are preserved so that they reach the agent-server unchanged.
 
         Args:
             user: User information containing LLM preferences
@@ -955,11 +1241,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             provider_base_url=self.openhands_provider_base_url,
         )
 
-        return LLM(
-            model=model,
-            base_url=base_url,
-            api_key=user.agent_settings.llm.api_key,
-            usage_id='agent',
+        return user.agent_settings.llm.model_copy(
+            update={
+                'model': model,
+                'base_url': base_url,
+                'api_key': user.agent_settings.llm.api_key,
+                'usage_id': 'agent',
+            }
         )
 
     async def _add_system_mcp_servers(
@@ -1240,6 +1528,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         working_dir: str,
         agent_type: AgentType = AgentType.DEFAULT,
         llm_model: str | None = None,
+        trigger: ConversationTrigger | None = None,
         remote_workspace: AsyncRemoteWorkspace | None = None,
         selected_repository: str | None = None,
         plugins: list[PluginSpec] | None = None,
@@ -1264,6 +1553,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             working_dir: Working directory path
             agent_type: Type of agent (DEFAULT or PLAN)
             llm_model: Optional specific LLM model to use
+            trigger: Optional conversation trigger.
             remote_workspace: Optional remote workspace instance
             selected_repository: Optional repository name
             plugins: Optional list of plugins to load
@@ -1280,6 +1570,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 sandbox=sandbox,
                 conversation_id=conversation_id,
                 initial_message=initial_message,
+                system_message_suffix=system_message_suffix,
+                trigger=trigger,
                 working_dir=working_dir,
                 selected_repository=selected_repository,
                 plugins=plugins,
@@ -1301,7 +1593,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # --- secrets --------------------------------------------------------
         # Start with secrets from git providers and database
-        secrets = await self._setup_secrets_for_git_providers(user)
+        secrets, system_message_suffix = await self._setup_conversation_secrets(
+            user,
+            trigger,
+            system_message_suffix,
+        )
 
         # Merge API-provided secrets (they take precedence over existing ones)
         if api_secrets:
@@ -1377,6 +1673,30 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             }
         )
         agent = configured_agent_settings.create_agent()
+
+        # SaaS profiles live on the user/org record, not the sandbox
+        # filesystem, so we attach the agent's built-in switch_llm tool
+        # ourselves rather than relying on create_agent()'s gating. Enabled
+        # whenever there are at least two valid saved profiles (a switch needs
+        # a target).
+        valid_profile_names = [
+            name
+            for name in user.llm_profiles.profiles
+            if PROFILE_NAME_REGEX.match(name)
+        ]
+        if (
+            len(valid_profile_names) >= 2
+            and SwitchLLMTool.__name__ not in agent.include_default_tools
+        ):
+            agent = agent.model_copy(
+                update={
+                    'include_default_tools': [
+                        *agent.include_default_tools,
+                        SwitchLLMTool.__name__,
+                    ]
+                }
+            )
+
         agent = self._apply_server_agent_overrides(
             agent, agent_type, mcp_config, conversation_id, user.id
         )
@@ -1431,7 +1751,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Pass agent explicitly — it has server-only overrides (system
         # prompts, LLM metadata, skills) applied after create_agent().
-        request = conv_settings.create_request(StartConversationRequest, agent=agent)
+        # ``user_id`` is forwarded so the agent-server can attach it to
+        # observability spans (see software-agent-sdk#3242). We prefer the
+        # user's email so Laminar traces are immediately attributable, and
+        # fall back to the internal user id when no email is available.
+        # The kwarg is dropped silently by pydantic on SDK versions that
+        # don't yet expose the field; the start-conversation POST also
+        # injects it directly into the JSON body as a forward-compatible
+        # fallback.
+        laminar_user_id = await self.user_context.get_user_email() or user.id
+        request = conv_settings.create_request(
+            StartConversationRequest, agent=agent, user_id=laminar_user_id
+        )
 
         # --- skills (require remote workspace) ------------------------------
         if remote_workspace:
@@ -1481,28 +1812,31 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         conversation_id: UUID,
         initial_message: SendMessageRequest | None,
         working_dir: str,
+        system_message_suffix: str | None = None,
+        trigger: ConversationTrigger | None = None,
         selected_repository: str | None = None,
         plugins: list[PluginSpec] | None = None,
         api_secrets: dict[str, SecretStr] | None = None,
     ) -> StartConversationRequest:
         """Build a StartConversationRequest for ACP agent conversations.
 
-        Unlike the LLM path, ACP agents run as separate subprocesses; we pass
-        credentials via environment variables rather than injecting an LLM object.
-
-        User secrets (Secrets panel + git provider tokens) flow through two
-        complementary channels: they're rendered into the ACP prompt as a
-        ``<CUSTOM_SECRETS>`` block via ``AgentContext.secrets`` (so the agent
-        knows the names) and also pre-exported as environment variables on
-        the ACP subprocess via ``acp_env`` (so plain CLI commands like
-        ``gh`` / ``aws`` / ``git`` pick them up from env without the agent
-        having to manually export them).
+        User secrets (Secrets panel + git provider tokens) flow through
+        ``request.secrets`` — the canonical cipher-protected wire channel.
+        In SaaS mode each secret is a ``LookupSecret`` pointing at
+        ``/api/v1/webhooks/custom-secret`` with a per-secret scoped JWT, so
+        values are never materialised in this process.  In OSS mode (no
+        ``web_url``) they remain ``StaticSecret``.  Secrets are passed
+        directly as ``secrets=`` to ``create_request()``; no ``AgentContext``
+        relay is needed.  This avoids the deprecated ``acp_env`` channel
+        (software-agent-sdk #3464; OpenHands/agent-canvas#1039).
 
         Args:
             sandbox: Sandbox information
             conversation_id: Unique conversation identifier
             initial_message: Optional initial message to send
             working_dir: Working directory path
+            system_message_suffix: Optional suffix for system message.
+            trigger: Optional conversation trigger.
             selected_repository: Optional repository name
             plugins: Optional list of plugins to load
             api_secrets: Optional secrets passed directly via the API.
@@ -1513,7 +1847,45 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         workspace = LocalWorkspace(working_dir=project_dir)
 
         # --- secrets --------------------------------------------------------
-        secrets = await self._setup_secrets_for_git_providers(user)
+        # ACP secrets must be StaticSecrets — LookupSecrets with JWT headers
+        # (e.g. X-Access-Token) are redacted by the SDK serializer because
+        # "TOKEN" matches SECRET_KEY_PATTERNS, leaving headers: {} and
+        # causing provider auth to silently fail at subprocess launch.
+        # Use raw custom secrets, static git provider tokens, and static
+        # integration-scoped secrets for ACP conversations.
+        secrets: dict = await self.user_context.get_secrets()
+        provider_tokens = cast(
+            PROVIDER_TOKEN_TYPE | None,
+            await self.user_context.get_provider_tokens(),
+        )
+        if provider_tokens:
+            for provider_type, provider_token in provider_tokens.items():
+                if not provider_token.token:
+                    continue
+                secret_name = f'{provider_type.name}_TOKEN'
+                static_token = await self.user_context.get_latest_token(provider_type)
+                if static_token:
+                    secrets[secret_name] = StaticSecret(
+                        value=SecretStr(static_token),
+                        description=f'{provider_type.name} authentication token',
+                    )
+
+        enrichment = await self.conversation_secret_enricher.enrich(
+            user_context=self.user_context,
+            user=user,
+            trigger=trigger,
+            system_message_suffix=system_message_suffix,
+            web_url=None,
+            jwt_service=self.jwt_service,
+            access_token_hard_timeout=self.access_token_hard_timeout,
+        )
+        for name, source in enrichment.secrets.items():
+            if name in secrets:
+                _logger.warning(
+                    'Integration-provided secret %r overrides existing secret', name
+                )
+            secrets[name] = source
+        system_message_suffix = enrichment.system_message_suffix
 
         if api_secrets:
             from openhands.app_server.constants import (
@@ -1534,20 +1906,23 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         acp_settings = user.agent_settings  # already verified to be ACPAgentSettings
         assert isinstance(acp_settings, ACPAgentSettings)
 
-        # Pass user secrets via AgentContext. The SDK renders them as a
-        # <CUSTOM_SECRETS> block in the ACP prompt (so the agent knows the
-        # names) and ``ACPAgent._start_acp_server`` gap-fills any that
-        # aren't already in ``acp_env`` into the subprocess env at launch
-        # time — preserving the ``acp_env > provider env > secrets``
-        # precedence end-to-end. We pass ``SecretSource`` objects through
-        # verbatim; resolving them here (with ``source.get_value()``) would
-        # eagerly hit the auth service for every ``LookupSecret`` on every
-        # conversation start, from the wrong process.
-        agent_context = AgentContext(secrets=secrets) if secrets else None
-        settings_update = (
-            {'agent_context': agent_context} if agent_context is not None else {}
-        )
-        acp_agent = acp_settings.model_copy(update=settings_update).create_agent()
+        # Isolate the CLI data dir onto the durable /workspace tree so the SDK
+        # self-resumes the provider session (session/load from base_state.json)
+        # across pause/resume — matching the regular-agent lifecycle (#1274).
+        # Strip llm.api_key/base_url to prevent proxy settings from leaking
+        # into the subprocess env (ACP CLIs handle their own LLM calls).
+        settings_update: dict[str, Any] = {
+            'acp_isolate_data_dir': True,
+            'llm': acp_settings.llm.model_copy(
+                update={'api_key': None, 'base_url': None}
+            ),
+        }
+        if system_message_suffix:
+            settings_update['agent_context'] = AgentContext(
+                system_message_suffix=system_message_suffix
+            )
+        acp_settings_for_agent = acp_settings.model_copy(update=settings_update)
+        acp_agent = acp_settings_for_agent.create_agent()
 
         sdk_plugins: list[PluginSource] | None = None
         if plugins:
@@ -1569,7 +1944,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 'plugins': sdk_plugins,
             }
         )
-        return conv_settings.create_request(StartConversationRequest, agent=acp_agent)
+        # ``user_id`` is forwarded for observability; see the LLM path above
+        # for behavior on SDK versions that don't yet expose the field. We
+        # prefer email over the internal id so Laminar traces are immediately
+        # attributable, falling back to ``user.id`` when no email is available.
+        laminar_user_id = await self.user_context.get_user_email() or user.id
+        return conv_settings.create_request(
+            StartConversationRequest,
+            agent=acp_agent,
+            user_id=laminar_user_id,
+            secrets=secrets,
+        )
 
     async def _process_pending_messages(
         self,
@@ -1938,6 +2323,137 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         return deleted_info or deleted_tasks
 
+    async def _get_conversation_export_info(
+        self, conversation_id: UUID
+    ) -> AppConversationInfo:
+        conversation_info = (
+            await self.app_conversation_info_service.get_app_conversation_info(
+                conversation_id
+            )
+        )
+        if not conversation_info:
+            raise ValueError(f'Conversation not found: {conversation_id}')
+        return conversation_info
+
+    async def _validate_conversation_export_size(self, conversation_id: UUID):
+        if self.export_max_events <= 0:
+            return
+
+        event_count = await self.event_service.count_events(conversation_id)
+        if event_count > self.export_max_events:
+            raise ConversationExportTooLarge(
+                f'Conversation export contains {event_count} events, '
+                f'exceeding the limit of {self.export_max_events}'
+            )
+
+    def _conversation_export_lock_key(self, conversation_id: UUID) -> str:
+        return f'{_EXPORT_LOCK_KEY_PREFIX}:{conversation_id.hex}'
+
+    def _conversation_export_lock_refresh_interval(self) -> int:
+        ttl_seconds = max(1, self.export_lock_ttl_seconds)
+        configured_interval = max(1, self.export_lock_refresh_interval_seconds)
+        return min(configured_interval, max(1, ttl_seconds // 2))
+
+    def _conversation_export_lock_required(self) -> bool:
+        if self.export_lock_required is not None:
+            return self.export_lock_required
+        return (self.app_mode or '').lower() == 'saas'
+
+    async def _stream_conversation_zip(
+        self, conversation_id: UUID, conversation_info: AppConversationInfo
+    ) -> AsyncGenerator[bytes, None]:
+        zip_buffer = _StreamingZipBuffer()
+        with zipfile.ZipFile(
+            cast(BinaryIO, zip_buffer), 'w', zipfile.ZIP_DEFLATED
+        ) as zipf:
+            zipf.writestr('meta.json', conversation_info.model_dump_json(indent=2))
+            for chunk in zip_buffer.drain():
+                yield chunk
+
+            i = 0
+            async for event in self.event_service.iter_events_for_export(
+                conversation_id
+            ):
+                event_filename = f'event_{i:06d}_{event.id}.json'
+                event_data = event.model_dump(mode='json')
+                event_json = json.dumps(event_data, indent=2)
+                zipf.writestr(event_filename, event_json)
+                for chunk in zip_buffer.drain():
+                    yield chunk
+                i += 1
+
+        for chunk in zip_buffer.drain():
+            yield chunk
+
+    async def open_conversation_export(
+        self, conversation_id: UUID
+    ) -> AsyncGenerator[bytes, None]:
+        """Prepare a locked streaming conversation trajectory export."""
+        conversation_info = await self._get_conversation_export_info(conversation_id)
+        lock_key = self._conversation_export_lock_key(conversation_id)
+        lock_unavailable = False
+        try:
+            export_lock = await try_acquire_redis_lock(
+                lock_key, max(1, self.export_lock_ttl_seconds)
+            )
+        except RedisLockUnavailable as e:
+            if self._conversation_export_lock_required():
+                raise ConversationExportLockUnavailable(
+                    f'Could not acquire export lock for conversation {conversation_id}'
+                ) from e
+            _logger.warning(
+                'conversation_export:lock_unavailable_proceeding_without_lock',
+                extra={'conversation_id': str(conversation_id)},
+            )
+            export_lock = None
+            lock_unavailable = True
+
+        if export_lock is None and not lock_unavailable:
+            raise ConversationExportAlreadyRunning(
+                f'Conversation export already running: {conversation_id}'
+            )
+
+        try:
+            await self._validate_conversation_export_size(conversation_id)
+        except Exception:
+            if export_lock:
+                try:
+                    await export_lock.release()
+                except LockError:
+                    pass
+            raise
+
+        refresh_interval = self._conversation_export_lock_refresh_interval()
+
+        async def stream():
+            # Refresh the lock in a background task so the streaming loop stays
+            # simple and lock maintenance doesn't block chunk generation.
+            refresh_task = (
+                asyncio.create_task(
+                    refresh_lock_periodically(export_lock, refresh_interval)
+                )
+                if export_lock
+                else None
+            )
+            try:
+                async for chunk in self._stream_conversation_zip(
+                    conversation_id, conversation_info
+                ):
+                    yield chunk
+            finally:
+                if refresh_task is not None:
+                    refresh_task.cancel()
+                if export_lock:
+                    try:
+                        await export_lock.release()
+                    except LockError:
+                        _logger.warning(
+                            'conversation_export:lock_release_failed',
+                            extra={'conversation_id': str(conversation_id)},
+                        )
+
+        return stream()
+
     async def export_conversation(self, conversation_id: UUID) -> bytes:
         """Download a conversation trajectory as a zip file.
 
@@ -1946,52 +2462,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         Returns the zip file as bytes.
         """
-        # Get the conversation info to verify it exists and user has access
-        conversation_info = (
-            await self.app_conversation_info_service.get_app_conversation_info(
-                conversation_id
-            )
-        )
-        if not conversation_info:
-            raise ValueError(f'Conversation not found: {conversation_id}')
+        conversation_info = await self._get_conversation_export_info(conversation_id)
+        await self._validate_conversation_export_size(conversation_id)
 
-        # Create a temporary directory to store files
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Get all events for this conversation
-            i = 0
-            async for event in page_iterator(
-                self.event_service.search_events, conversation_id=conversation_id
-            ):
-                event_filename = f'event_{i:06d}_{event.id}.json'
-                event_path = os.path.join(temp_dir, event_filename)
+        chunks = []
+        async for chunk in self._stream_conversation_zip(
+            conversation_id, conversation_info
+        ):
+            chunks.append(chunk)
 
-                with open(event_path, 'w') as f:
-                    # Use model_dump with mode='json' to handle UUID serialization
-                    event_data = event.model_dump(mode='json')
-                    json.dump(event_data, f, indent=2)
-                i += 1
-
-            # Create meta.json with conversation info
-            meta_path = os.path.join(temp_dir, 'meta.json')
-            with open(meta_path, 'w') as f:
-                f.write(conversation_info.model_dump_json(indent=2))
-
-            # Create zip file in memory
-            zip_buffer = tempfile.NamedTemporaryFile()
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                # Add all files from temp directory to zip
-                for root, dirs, files in os.walk(temp_dir):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, temp_dir)
-                        zipf.write(file_path, arcname)
-
-            # Read the zip file content
-            zip_buffer.seek(0)
-            zip_content = zip_buffer.read()
-            zip_buffer.close()
-
-            return zip_content
+        return b''.join(chunks)
 
 
 class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
@@ -2014,6 +2494,25 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
         description=(
             'A security measure - the time after which git tokens may no longer '
             'be retrieved by a sandboxed conversation.'
+        ),
+    )
+    export_max_events: int = Field(
+        default=10000,
+        description='The maximum number of events allowed in a conversation export',
+    )
+    export_lock_ttl_seconds: int = Field(
+        default=3600,
+        description='Redis lock TTL for a single conversation export',
+    )
+    export_lock_refresh_interval_seconds: int = Field(
+        default=30,
+        description='How often to refresh the Redis lock during a conversation export',
+    )
+    export_lock_required: bool | None = Field(
+        default=None,
+        description=(
+            'Whether Redis export locking is required. Defaults to required in '
+            'SAAS mode and best-effort elsewhere.'
         ),
     )
 
@@ -2064,12 +2563,18 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
 
             # Get app_mode for SaaS mode
             app_mode = None
+            conversation_secret_enricher = ConversationSecretEnricher()
             try:
                 from openhands.app_server.shared import server_config
 
                 app_mode = (
                     server_config.app_mode.value if server_config.app_mode else None
                 )
+                enricher_cls = get_impl(
+                    ConversationSecretEnricher,
+                    server_config.conversation_secret_enricher_class,
+                )
+                conversation_secret_enricher = enricher_cls()
             except (ImportError, AttributeError):
                 # If server_config is not available (e.g., in tests), continue without it
                 pass
@@ -2092,7 +2597,14 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 web_url=web_url,
                 openhands_provider_base_url=config.openhands_provider_base_url,
                 access_token_hard_timeout=access_token_hard_timeout,
+                conversation_secret_enricher=conversation_secret_enricher,
                 app_mode=app_mode,
+                export_max_events=self.export_max_events,
+                export_lock_ttl_seconds=self.export_lock_ttl_seconds,
+                export_lock_refresh_interval_seconds=(
+                    self.export_lock_refresh_interval_seconds
+                ),
+                export_lock_required=self.export_lock_required,
                 public_web_url=config.web_url,
                 enable_runtime_proxy=config.enable_runtime_proxy,
             )

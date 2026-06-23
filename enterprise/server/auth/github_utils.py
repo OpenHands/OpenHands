@@ -29,7 +29,7 @@ async def authenticate_github_user_id(auth_user_id: str) -> GitHubUser | None:
 
         return None
     except:  # noqa: E722
-        logger.warning("GitHub user doens't have valid token")
+        logger.warning("GitHub user doesn't have valid token")
         return None
 
 
@@ -46,5 +46,5 @@ async def authenticate_github_user_token(access_token: str):
 
         return None
     except:  # noqa: E722
-        logger.warning("GitHub user doens't have valid token")
+        logger.warning("GitHub user doesn't have valid token")
         return None

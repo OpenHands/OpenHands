@@ -19,7 +19,7 @@ class SaaSBitBucketService(BitBucketService):
         base_domain: str | None = None,
     ):
         logger.info(
-            f'SaaSBitBucketService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {'set' if external_auth_token else 'None'}, bitbucket_token {'set' if token else 'None'}, external_token_manager {external_token_manager}'
+            f'SaaSBitBucketService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {"set" if external_auth_token else "None"}, bitbucket_token {"set" if token else "None"}, external_token_manager {external_token_manager}'
         )
         super().__init__(
             user_id=user_id,
@@ -50,19 +50,28 @@ class SaaSBitBucketService(BitBucketService):
             offline_token = await self.token_manager.load_offline_token(
                 self.external_auth_id
             )
-            bitbucket_token = SecretStr(
-                await self.token_manager.get_idp_token_from_offline_token(
+            if offline_token:
+                bitbucket_token_str: (
+                    str | None
+                ) = await self.token_manager.get_idp_token_from_offline_token(
                     offline_token, ProviderType.BITBUCKET
                 )
-            )
+                bitbucket_token = (
+                    SecretStr(bitbucket_token_str) if bitbucket_token_str else None
+                )
+            else:
+                bitbucket_token = None
             logger.info(
-                f'Got BitBucket token {bitbucket_token.get_secret_value()} from external auth user ID: {self.external_auth_id}'
+                f'Got BitBucket token {bitbucket_token} from external auth user ID: {self.external_auth_id}'
             )
         elif self.user_id:
-            bitbucket_token = SecretStr(
+            bitbucket_token_str = (
                 await self.token_manager.get_idp_token_from_idp_user_id(
                     self.user_id, ProviderType.BITBUCKET
                 )
+            )
+            bitbucket_token = (
+                SecretStr(bitbucket_token_str) if bitbucket_token_str else None
             )
             logger.debug(
                 f'Got BitBucket token {bitbucket_token} from user ID: {self.user_id}'

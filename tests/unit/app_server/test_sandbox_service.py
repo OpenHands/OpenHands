@@ -19,6 +19,7 @@ from openhands.app_server.sandbox.sandbox_models import (
     ExposedUrl,
     SandboxInfo,
     SandboxPage,
+    SandboxRecord,
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import SandboxService
@@ -31,6 +32,7 @@ class MockSandboxService(SandboxService):
         self.search_sandboxes_mock = AsyncMock()
         self.get_sandbox_mock = AsyncMock()
         self.get_sandbox_by_session_api_key_mock = AsyncMock()
+        self.get_sandbox_record_by_session_api_key_mock = AsyncMock()
         self.start_sandbox_mock = AsyncMock()
         self.resume_sandbox_mock = AsyncMock()
         self.pause_sandbox_mock = AsyncMock()
@@ -48,6 +50,11 @@ class MockSandboxService(SandboxService):
         self, session_api_key: str
     ) -> SandboxInfo | None:
         return await self.get_sandbox_by_session_api_key_mock(session_api_key)
+
+    async def get_sandbox_record_by_session_api_key(
+        self, session_api_key: str
+    ) -> SandboxRecord | None:
+        return await self.get_sandbox_record_by_session_api_key_mock(session_api_key)
 
     async def start_sandbox(
         self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None

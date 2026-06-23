@@ -112,6 +112,9 @@ lines.append(
 lines.append(
     'OPENHANDS_BITBUCKET_DATA_CENTER_SERVICE_CLS=integrations.bitbucket_data_center.bitbucket_dc_service.SaaSBitbucketDCService'
 )
+lines.append(
+    'OPENHANDS_AZURE_DEVOPS_SERVICE_CLS=integrations.azure_devops.azure_devops_service.SaaSAzureDevOpsService'
+)
 lines.append('POSTHOG_CLIENT_KEY=test')
 lines.append('ENABLE_PROACTIVE_CONVERSATION_STARTERS=true')
 lines.append('MAX_CONCURRENT_CONVERSATIONS=10')

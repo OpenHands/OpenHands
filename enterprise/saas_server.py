@@ -13,7 +13,6 @@ if not os.getenv('OPENHANDS_CONFIG_CLS'):
 os.environ['SERVE_FRONTEND'] = 'false'
 
 from fastapi import Request, status  # noqa: E402
-from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from server.auth.auth_error import ExpiredError, NoCredentialsError  # noqa: E402
 from server.auth.constants import (  # noqa: E402
@@ -26,8 +25,12 @@ from server.auth.constants import (  # noqa: E402
 )
 from server.constants import PERMITTED_CORS_ORIGINS  # noqa: E402
 from server.logger import logger  # noqa: E402
-from server.middleware import SetAuthCookieMiddleware  # noqa: E402
+from server.middleware import (  # noqa: E402
+    ApiKeyAwareCORSMiddleware,
+    SetAuthCookieMiddleware,
+)
 from server.rate_limit import setup_rate_limit_handler  # noqa: E402
+from server.routes.analytics_events import analytics_events_router  # noqa: E402
 from server.routes.api_keys import api_router as api_keys_router  # noqa: E402
 from server.routes.auth import api_router, oauth_router  # noqa: E402
 from server.routes.billing import billing_router  # noqa: E402
@@ -43,6 +46,7 @@ from server.routes.org_invitations import (  # noqa: E402
 from server.routes.org_invitations import (  # noqa: E402
     invitation_router,
 )
+from server.routes.org_profiles import router as org_profiles_router  # noqa: E402
 from server.routes.orgs import org_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.service import service_router  # noqa: E402
@@ -130,6 +134,9 @@ base_app.include_router(api_keys_router)  # Add routes for API key management
 base_app.include_router(service_router)  # Add routes for internal service API
 base_app.include_router(org_router)  # Add routes for organization management
 base_app.include_router(
+    org_profiles_router, prefix='/api/organizations'
+)  # Add routes for org LLM profiles
+base_app.include_router(
     verified_models_router
 )  # Add routes for verified models management
 
@@ -164,14 +171,14 @@ if BITBUCKET_DATA_CENTER_HOST:
 
     base_app.include_router(bitbucket_dc_integration_router)
 base_app.include_router(email_router)  # Add routes for email management
+base_app.include_router(
+    analytics_events_router
+)  # Add routes for client-initiated analytics events
 
 
 base_app.add_middleware(
-    CORSMiddleware,
+    ApiKeyAwareCORSMiddleware,
     allow_origins=PERMITTED_CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=['*'],
-    allow_headers=['*'],
 )
 base_app.add_middleware(CacheControlMiddleware)
 base_app.middleware('http')(SetAuthCookieMiddleware())
