@@ -223,13 +223,17 @@ describe("toSdkMcpConfig", () => {
     expect(result?.mcpServers["sse_2"].url).toBe("https://example3.com");
   });
 
-  it("should include api_key as auth field", () => {
+  it("should serialize api_key as an Authorization bearer header", () => {
+    // The SDK only redacts/encrypts ``headers`` (and ``env``), not ``auth`` —
+    // writing the key to ``auth`` would persist it in plaintext.
     const config: MCPConfig = {
       sse_servers: [
         { name: "secure", url: "https://example.com", api_key: "my-secret" },
       ],
       stdio_servers: [],
-      shttp_servers: [],
+      shttp_servers: [
+        { name: "shttp", url: "https://shttp.example", api_key: "shttp-secret" },
+      ],
     };
 
     const result = toSdkMcpConfig(config);
@@ -237,7 +241,52 @@ describe("toSdkMcpConfig", () => {
     expect(result?.mcpServers["secure"]).toEqual({
       url: "https://example.com",
       transport: "sse",
-      auth: "my-secret",
+      headers: { Authorization: "Bearer my-secret" },
+    });
+    expect(result?.mcpServers["shttp"]).toEqual({
+      url: "https://shttp.example",
+      headers: { Authorization: "Bearer shttp-secret" },
+    });
+  });
+
+  it("round-trips persisted Authorization headers back to api_key fields", () => {
+    const persisted = {
+      mcpServers: {
+        shttp: {
+          url: "https://shttp.example",
+          headers: { Authorization: "Bearer shttp-secret" },
+        },
+      },
+    };
+
+    const parsed = parseMcpConfig(persisted);
+
+    expect(parsed.shttp_servers).toEqual([
+      { name: "shttp", url: "https://shttp.example", api_key: "shttp-secret" },
+    ]);
+  });
+
+  it("migrates legacy auth credentials to Authorization headers on re-serialize", () => {
+    const persisted = {
+      mcpServers: {
+        sse: {
+          url: "https://example.com",
+          transport: "sse",
+          auth: "legacy-secret",
+        },
+      },
+    };
+
+    const written = toSdkMcpConfig(parseMcpConfig(persisted));
+
+    expect(written).toEqual({
+      mcpServers: {
+        sse: {
+          url: "https://example.com",
+          transport: "sse",
+          headers: { Authorization: "Bearer legacy-secret" },
+        },
+      },
     });
   });
 

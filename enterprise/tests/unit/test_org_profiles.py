@@ -397,6 +397,172 @@ class TestProfileErrorPaths:
         assert exc.value.status_code == 404
 
 
+async def _set_org_agent_settings(async_session_maker, org_id, agent_settings):
+    async with async_session_maker() as session:
+        result = await session.execute(select(Org).where(Org.id == org_id))
+        org = result.scalars().first()
+        org.agent_settings = agent_settings
+        await session.commit()
+
+
+class TestSaveApiKeyPreservation:
+    """No-new-key saves must not clobber a profile's stored api_key."""
+
+    @pytest.mark.asyncio
+    async def test_snapshot_save_with_preserve_flag_keeps_existing_key(
+        self, async_session_maker, patch_route_db
+    ):
+        """The UI edit-save snapshots org defaults (active key included);
+        the flag keeps the profile's own key while the snapshot's model lands.
+        """
+        org_id = patch_route_db
+        await _set_org_agent_settings(
+            async_session_maker,
+            org_id,
+            {'llm': {'model': 'openai/gpt-4o', 'api_key': 'org-active-key'}},
+        )
+        await save_profile(
+            org_id=org_id,
+            name='work',
+            request=SaveProfileRequest(
+                llm=StrictLLM(
+                    model='anthropic/claude-3-5-sonnet', api_key='profile-key'
+                )
+            ),
+            user_id=str(ADMIN_USER_ID),
+        )
+
+        await save_profile(
+            org_id=org_id,
+            name='work',
+            request=SaveProfileRequest(preserve_existing_api_key=True),
+            user_id=str(ADMIN_USER_ID),
+        )
+
+        org = await _read_org(async_session_maker, org_id)
+        saved = _load_profiles(org).get('work')
+        assert saved.model == 'openai/gpt-4o'
+        assert saved.api_key.get_secret_value() == 'profile-key'
+
+    @pytest.mark.asyncio
+    async def test_snapshot_save_without_flag_keeps_snapshot_key(
+        self, async_session_maker, patch_route_db
+    ):
+        """Counter-test: a plain snapshot save still captures the org key."""
+        org_id = patch_route_db
+        await _set_org_agent_settings(
+            async_session_maker,
+            org_id,
+            {'llm': {'model': 'openai/gpt-4o', 'api_key': 'org-active-key'}},
+        )
+        await save_profile(
+            org_id=org_id,
+            name='work',
+            request=SaveProfileRequest(
+                llm=StrictLLM(
+                    model='anthropic/claude-3-5-sonnet', api_key='profile-key'
+                )
+            ),
+            user_id=str(ADMIN_USER_ID),
+        )
+
+        await save_profile(
+            org_id=org_id,
+            name='work',
+            request=SaveProfileRequest(),
+            user_id=str(ADMIN_USER_ID),
+        )
+
+        org = await _read_org(async_session_maker, org_id)
+        saved = _load_profiles(org).get('work')
+        assert saved.api_key.get_secret_value() == 'org-active-key'
+
+    @pytest.mark.asyncio
+    async def test_snapshot_save_with_preserve_flag_keeps_profile_keyless(
+        self, async_session_maker, patch_route_db
+    ):
+        """A keyless profile must not silently inherit the org's active key."""
+        org_id = patch_route_db
+        await _set_org_agent_settings(
+            async_session_maker,
+            org_id,
+            {'llm': {'model': 'openai/gpt-4o', 'api_key': 'org-active-key'}},
+        )
+        await save_profile(
+            org_id=org_id,
+            name='keyless',
+            request=SaveProfileRequest(llm=StrictLLM(model='openai/gpt-4o')),
+            user_id=str(ADMIN_USER_ID),
+        )
+
+        await save_profile(
+            org_id=org_id,
+            name='keyless',
+            request=SaveProfileRequest(preserve_existing_api_key=True),
+            user_id=str(ADMIN_USER_ID),
+        )
+
+        org = await _read_org(async_session_maker, org_id)
+        assert _load_profiles(org).get('keyless').api_key is None
+
+    @pytest.mark.asyncio
+    async def test_explicit_llm_without_key_preserves_stored_key(
+        self, async_session_maker, patch_route_db
+    ):
+        """GET→edit→POST round-trips null the key; the update must keep the
+        stored one (parity with the personal profiles route)."""
+        org_id = patch_route_db
+        await save_profile(
+            org_id=org_id,
+            name='work',
+            request=SaveProfileRequest(
+                llm=StrictLLM(model='openai/gpt-4o', api_key='stored-key')
+            ),
+            user_id=str(ADMIN_USER_ID),
+        )
+
+        await save_profile(
+            org_id=org_id,
+            name='work',
+            request=SaveProfileRequest(
+                llm=StrictLLM(model='anthropic/claude-3-5-sonnet')
+            ),
+            user_id=str(ADMIN_USER_ID),
+        )
+
+        org = await _read_org(async_session_maker, org_id)
+        saved = _load_profiles(org).get('work')
+        assert saved.model == 'anthropic/claude-3-5-sonnet'
+        assert saved.api_key.get_secret_value() == 'stored-key'
+
+    @pytest.mark.asyncio
+    async def test_explicit_llm_with_new_key_replaces_stored_key(
+        self, async_session_maker, patch_route_db
+    ):
+        """Counter-test: an intentionally supplied key still wins."""
+        org_id = patch_route_db
+        await save_profile(
+            org_id=org_id,
+            name='work',
+            request=SaveProfileRequest(
+                llm=StrictLLM(model='openai/gpt-4o', api_key='old-key')
+            ),
+            user_id=str(ADMIN_USER_ID),
+        )
+
+        await save_profile(
+            org_id=org_id,
+            name='work',
+            request=SaveProfileRequest(
+                llm=StrictLLM(model='openai/gpt-4o', api_key='new-key')
+            ),
+            user_id=str(ADMIN_USER_ID),
+        )
+
+        org = await _read_org(async_session_maker, org_id)
+        assert _load_profiles(org).get('work').api_key.get_secret_value() == 'new-key'
+
+
 class TestActivateTransactionAtomicity:
     """Activate must commit the org marker and the member diff together."""
 

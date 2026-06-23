@@ -1157,6 +1157,89 @@ class TestConstants:
         assert ALLOW_CORS_ORIGINS_VARIABLE == 'OH_ALLOW_CORS_ORIGINS_0'
 
 
+class TestRemoteSandboxRunningCleanup:
+    """Test runtime-backed cleanup helpers for remote sandboxes."""
+
+    def _mock_list_response(self, service, session_ids: list[str]):
+        """Configure the httpx mock to return the given session_ids from /list."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {
+            'runtimes': [{'session_id': sid} for sid in session_ids]
+        }
+        service.httpx_client.request = AsyncMock(return_value=mock_response)
+
+    def _mock_db_sandboxes(self, service, sandboxes: list):
+        """Configure the DB mock to return the given StoredRemoteSandbox rows."""
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = sandboxes
+        service.db_session.execute = AsyncMock(return_value=mock_result)
+
+    @pytest.mark.asyncio
+    async def test_get_user_running_sandboxes_cross_references_list_with_db(
+        self, remote_sandbox_service
+    ):
+        """_get_user_running_sandboxes uses /list to filter DB records to running ones."""
+        sb1 = create_stored_sandbox(sandbox_id='running-1')
+        sb2 = create_stored_sandbox(sandbox_id='running-2')
+        self._mock_list_response(remote_sandbox_service, ['running-1', 'running-2'])
+        self._mock_db_sandboxes(remote_sandbox_service, [sb1, sb2])
+
+        result = await remote_sandbox_service._get_user_running_sandboxes()
+
+        assert len(result) == 2
+
+    @pytest.mark.asyncio
+    async def test_get_user_running_sandboxes_empty_when_none_running(
+        self, remote_sandbox_service
+    ):
+        """Returns empty list when /list reports no running sessions for this user."""
+        self._mock_list_response(remote_sandbox_service, [])
+        self._mock_db_sandboxes(remote_sandbox_service, [])
+
+        result = await remote_sandbox_service._get_user_running_sandboxes()
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_pause_old_sandboxes_pauses_oldest_when_over_limit(
+        self, remote_sandbox_service
+    ):
+        """pause_old_sandboxes pauses the oldest sandboxes to reach max_num_sandboxes."""
+        from datetime import timezone
+
+        old = create_stored_sandbox(
+            'old-sb', created_at=datetime(2024, 1, 1, tzinfo=timezone.utc)
+        )
+        new = create_stored_sandbox(
+            'new-sb', created_at=datetime(2024, 6, 1, tzinfo=timezone.utc)
+        )
+        remote_sandbox_service._get_user_running_sandboxes = AsyncMock(
+            return_value=[old, new]
+        )
+        remote_sandbox_service.pause_sandbox = AsyncMock(return_value=True)
+
+        paused = await remote_sandbox_service.pause_old_sandboxes(max_num_sandboxes=1)
+
+        assert paused == ['old-sb']
+        remote_sandbox_service.pause_sandbox.assert_called_once_with('old-sb')
+
+    @pytest.mark.asyncio
+    async def test_pause_old_sandboxes_noop_when_within_limit(
+        self, remote_sandbox_service
+    ):
+        """pause_old_sandboxes does nothing when running count is within the limit."""
+        remote_sandbox_service._get_user_running_sandboxes = AsyncMock(
+            return_value=[create_stored_sandbox('sb-1')]
+        )
+        remote_sandbox_service.pause_sandbox = AsyncMock(return_value=True)
+
+        paused = await remote_sandbox_service.pause_old_sandboxes(max_num_sandboxes=3)
+
+        assert paused == []
+        remote_sandbox_service.pause_sandbox.assert_not_called()
+
+
 def _async_cm_factory(value):
     """Return a callable that yields ``value`` as an async context manager.
 
@@ -1529,3 +1612,159 @@ class TestPollAgentServersSessionScoping:
             'expected refresh_conversation to open a write session'
         )
         assert tracker.open == 0
+
+
+class TestBatchGetSandboxes:
+    """Test cases for batch_get_sandboxes method."""
+
+    @pytest.mark.asyncio
+    async def test_batch_get_sandboxes_success(self, remote_sandbox_service):
+        """Test successful batch retrieval of sandboxes."""
+        # Setup
+        sandbox_ids = ['sandbox-1', 'sandbox-2']
+        stored_sandbox_1 = create_stored_sandbox(sandbox_id='sandbox-1')
+        stored_sandbox_2 = create_stored_sandbox(sandbox_id='sandbox-2')
+        runtime_1 = create_runtime_data(session_id='sandbox-1', status='running')
+
+        # Mock DB query result
+        mock_result = MagicMock()
+        mock_result.__iter__ = MagicMock(
+            return_value=iter([(stored_sandbox_1,), (stored_sandbox_2,)])
+        )
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+
+        # Mock successful runtime batch response
+        remote_sandbox_service._get_runtimes_batch = AsyncMock(
+            return_value={'sandbox-1': runtime_1}
+        )
+
+        # Execute
+        results = await remote_sandbox_service.batch_get_sandboxes(sandbox_ids)
+
+        # Verify
+        assert len(results) == 2
+        assert results[0] is not None
+        assert results[0].id == 'sandbox-1'
+        assert results[0].status == SandboxStatus.RUNNING
+        assert results[1] is not None
+        assert results[1].id == 'sandbox-2'
+        # sandbox-2 has no runtime, so it's marked as MISSING
+        assert results[1].status == SandboxStatus.MISSING
+
+    @pytest.mark.asyncio
+    async def test_batch_get_sandboxes_empty_ids(self, remote_sandbox_service):
+        """Test batch retrieval with empty sandbox IDs list."""
+        # Execute
+        results = await remote_sandbox_service.batch_get_sandboxes([])
+
+        # Verify
+        assert results == []
+
+    @pytest.mark.asyncio
+    async def test_batch_get_sandboxes_graceful_fallback_on_timeout(
+        self, remote_sandbox_service
+    ):
+        """Test that batch_get_sandboxes gracefully handles runtime API timeout.
+
+        This is the key regression test: when the runtime API times out,
+        batch_get_sandboxes should not raise but should return sandboxes
+        with MISSING status (matching the behavior of get_sandbox).
+        """
+        # Setup
+        sandbox_ids = ['sandbox-1', 'sandbox-2']
+        stored_sandbox_1 = create_stored_sandbox(sandbox_id='sandbox-1')
+        stored_sandbox_2 = create_stored_sandbox(sandbox_id='sandbox-2')
+
+        # Mock DB query result
+        mock_result = MagicMock()
+        mock_result.__iter__ = MagicMock(
+            return_value=iter([(stored_sandbox_1,), (stored_sandbox_2,)])
+        )
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+
+        # Mock runtime API timeout
+        remote_sandbox_service._get_runtimes_batch = AsyncMock(
+            side_effect=httpx.TimeoutException('Request timeout')
+        )
+
+        # Execute - should NOT raise, should gracefully fall back
+        results = await remote_sandbox_service.batch_get_sandboxes(sandbox_ids)
+
+        # Verify - all sandboxes should be returned with MISSING status
+        assert len(results) == 2
+        assert results[0] is not None
+        assert results[0].id == 'sandbox-1'
+        assert results[0].status == SandboxStatus.MISSING
+        assert results[1] is not None
+        assert results[1].id == 'sandbox-2'
+        assert results[1].status == SandboxStatus.MISSING
+
+    @pytest.mark.asyncio
+    async def test_batch_get_sandboxes_graceful_fallback_on_http_error(
+        self, remote_sandbox_service
+    ):
+        """Test that batch_get_sandboxes gracefully handles runtime API HTTP error.
+
+        When the runtime API returns an error (e.g., 500 Internal Server Error),
+        batch_get_sandboxes should not raise but should return sandboxes
+        with MISSING status.
+        """
+        # Setup
+        sandbox_ids = ['sandbox-1']
+        stored_sandbox_1 = create_stored_sandbox(sandbox_id='sandbox-1')
+
+        # Mock DB query result
+        mock_result = MagicMock()
+        mock_result.__iter__ = MagicMock(return_value=iter([(stored_sandbox_1,)]))
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+
+        # Mock runtime API HTTP error
+        remote_sandbox_service._get_runtimes_batch = AsyncMock(
+            side_effect=httpx.HTTPError('Internal server error')
+        )
+
+        # Execute - should NOT raise, should gracefully fall back
+        results = await remote_sandbox_service.batch_get_sandboxes(sandbox_ids)
+
+        # Verify - sandbox should be returned with MISSING status
+        assert len(results) == 1
+        assert results[0] is not None
+        assert results[0].id == 'sandbox-1'
+        assert results[0].status == SandboxStatus.MISSING
+
+    @pytest.mark.asyncio
+    async def test_batch_get_sandboxes_graceful_fallback_on_raise_for_status(
+        self, remote_sandbox_service
+    ):
+        """Test graceful fallback when raise_for_status() fails in _get_runtimes_batch.
+
+        The _get_runtimes_batch method calls response.raise_for_status().
+        When this raises an httpx.HTTPStatusError, batch_get_sandboxes should
+        catch it and fall back gracefully.
+        """
+        # Setup
+        sandbox_ids = ['sandbox-1']
+        stored_sandbox_1 = create_stored_sandbox(sandbox_id='sandbox-1')
+
+        # Mock DB query result
+        mock_result = MagicMock()
+        mock_result.__iter__ = MagicMock(return_value=iter([(stored_sandbox_1,)]))
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+
+        # Mock HTTP status error from raise_for_status()
+        remote_sandbox_service._get_runtimes_batch = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                message='500 Internal Server Error',
+                request=MagicMock(),
+                response=MagicMock(status_code=500),
+            )
+        )
+
+        # Execute - should NOT raise, should gracefully fall back
+        results = await remote_sandbox_service.batch_get_sandboxes(sandbox_ids)
+
+        # Verify - sandbox should be returned with MISSING status
+        assert len(results) == 1
+        assert results[0] is not None
+        assert results[0].id == 'sandbox-1'
+        assert results[0].status == SandboxStatus.MISSING

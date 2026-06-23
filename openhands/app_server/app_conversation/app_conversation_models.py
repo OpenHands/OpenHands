@@ -1,9 +1,10 @@
+import re
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, computed_field, field_serializer
 
 from openhands.agent_server.models import (
     ImageContent,
@@ -26,6 +27,12 @@ from openhands.sdk.plugin import PluginSource
 
 __all__ = ['SandboxGroupingStrategy']
 
+# Canonical conversation-tag key under which the active ACP provider key
+# ('claude-code', 'codex', 'gemini-cli') is stored. Synced with agent-canvas.
+# Constrained to ^[a-z0-9]+$ by the SDK validator — no underscores allowed.
+# The typed ``AppConversationInfo.acp_server`` field is a projection of this tag.
+ACP_SERVER_TAG_KEY = 'acpserver'
+
 
 class ConversationTrigger(Enum):
     RESOLVER = 'resolver'
@@ -39,6 +46,16 @@ class ConversationTrigger(Enum):
     LINEAR = 'linear'
     BITBUCKET = 'bitbucket'
     AUTOMATION = 'automation'
+
+
+def _redact_url_credentials(url: str) -> str:
+    """Redact embedded credentials from a URL (https://user:token@host → https://****@host).
+
+    # TODO: replace with `from openhands.sdk.utils.redact import redact_url_credentials`
+    # once the SDK pin is bumped to include OpenHands/software-agent-sdk#2154.
+    """
+    m = re.match(r'^(https?://)([^@/]+)@(.+)$', url)
+    return f'{m.group(1)}****@{m.group(3)}' if m else url
 
 
 class AgentType(Enum):
@@ -59,6 +76,11 @@ class PluginSpec(PluginSource):
         default=None,
         description='User-provided values for plugin input parameters',
     )
+
+    @field_serializer('source')
+    @classmethod
+    def _serialize_source(cls, source: str) -> str:
+        return _redact_url_credentials(source)
 
     @property
     def display_name(self) -> str:
@@ -116,6 +138,22 @@ class AppConversationInfo(BaseModel):
 
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def acp_server(self) -> str | None:
+        """Active ACP provider key ('claude-code', 'codex', 'gemini-cli'), else None.
+
+        A typed projection of the ``acpserver`` tag (same as agent-canvas) so
+        the conversation UI can resolve a provider brand label without a dedicated
+        column. Riding the tag keeps a single source of truth that
+        round-trips through the DB ``tags`` column for free. Gated on
+        ``agent_kind`` so a stray tag never reports a provider for an OpenHands
+        conversation.
+        """
+        if self.agent_kind != 'acp':
+            return None
+        return self.tags.get(ACP_SERVER_TAG_KEY)
 
 
 class AppConversationSortOrder(Enum):

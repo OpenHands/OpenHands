@@ -74,7 +74,7 @@ jobs:
         steps:
             - name: Run issue duplicate check
               id: duplicate_check
-              uses: OpenHands/extensions/plugins/issue-duplicate-checker@fb020c71eb8e7cd2678f0251ab24327d3738da7d
+              uses: OpenHands/extensions/plugins/issue-duplicate-checker@v0.4.1
               with:
                   mode: issue-check
                   repository: ${{ github.repository }}
@@ -166,12 +166,13 @@ jobs:
             - name: Summarize skipped good first issue check
               if: steps.precheck.outputs.should_run != 'true'
               env:
+                  ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
                   SKIP_REASON: ${{ steps.precheck.outputs.skip_reason }}
               run: |
                   {
                     echo "## Good first issue check"
                     echo
-                    echo "- Issue: #${{ github.event.issue.number || inputs.issue_number }}"
+                    echo "- Issue: #$ISSUE_NUMBER"
                     echo "- Skipped: $SKIP_REASON"
                   } >> "$GITHUB_STEP_SUMMARY"
 
@@ -306,8 +307,10 @@ jobs:
 
             - name: Summarize good first issue label action
               if: steps.precheck.outputs.should_run == 'true'
+              env:
+                  SHOULD_APPLY_LABEL: ${{ steps.parsed_result.outputs.should_apply_label }}
               run: |
-                  if [ "${{ steps.parsed_result.outputs.should_apply_label }}" = "true" ]; then
+                  if [ "$SHOULD_APPLY_LABEL" = "true" ]; then
                     echo "- Applied label: good first issue" >> "$GITHUB_STEP_SUMMARY"
                   else
                     echo "- Label not applied" >> "$GITHUB_STEP_SUMMARY"
@@ -324,7 +327,7 @@ jobs:
             cancel-in-progress: false
         steps:
             - name: Auto-close aged duplicate candidates
-              uses: OpenHands/extensions/plugins/issue-duplicate-checker@fb020c71eb8e7cd2678f0251ab24327d3738da7d
+              uses: OpenHands/extensions/plugins/issue-duplicate-checker@v0.4.1
               with:
                   mode: auto-close
                   repository: ${{ github.repository }}

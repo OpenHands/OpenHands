@@ -31,12 +31,15 @@ from openhands.app_server.utils.jsonpatch_compat import (
     deep_merge_with_wholesale_keys,
 )
 from openhands.app_server.utils.llm import is_openhands_model
+from openhands.sdk.llm.utils.openhands_provider import (
+    canonicalize_openhands_llm_payload,
+)
 
-# Agent-settings keys that are private to each org member and must never
-# be written to org-level defaults or broadcast across the org. Today this
-# covers ``mcp_config`` (per-user MCP server set) and ``acp_env`` (per-user
-# ACP environment variables) — both are dict-of-items collections that
-# represent one member's personal configuration, not org-wide defaults.
+# Agent-settings keys private to each org member: never written to
+# org-level defaults nor broadcast across the org. Covers ``mcp_config``
+# (per-user MCP server set, a dict-of-items collection). ACP provider
+# creds are not here — they ride the per-user Secrets panel
+# (``request.secrets`` -> ``state.secret_registry``), not agent_settings.
 MEMBER_PRIVATE_AGENT_KEYS: frozenset[str] = WHOLESALE_REPLACEMENT_KEYS
 
 
@@ -171,10 +174,9 @@ class SaasSettingsStore(SettingsStore):
             },
         }
         # Drop member-private keys from the org dump before merging so
-        # legacy values written by older code paths (when mcp_config /
-        # acp_env were broadcast at the org level) can no longer leak
-        # one member's private config to another. Each member's own
-        # ``agent_settings_diff`` still supplies their personal values.
+        # legacy org-level values (older code paths broadcast mcp_config)
+        # can no longer leak one member's private config to another. Each
+        # member's own ``agent_settings_diff`` still supplies their values.
         org_agent_settings_dump = org_agent_settings.model_dump(mode='json')
         for private_key in MEMBER_PRIVATE_AGENT_KEYS:
             org_agent_settings_dump.pop(private_key, None)
@@ -194,6 +196,13 @@ class SaasSettingsStore(SettingsStore):
                 f'No effective LLM API key found for user {self.user_id} '
                 f'in org {org_id} (org key and member key are both unset)'
             )
+        # Canonicalize legacy managed OpenHands LLM payloads before Settings
+        # validation so current settings and seeded profiles use the public
+        # openhands/ prefix.
+        llm_dict = merged_agent_settings.get('llm')
+        if isinstance(llm_dict, dict):
+            merged_agent_settings['llm'] = canonicalize_openhands_llm_payload(llm_dict)
+
         kwargs['agent_settings'] = merged_agent_settings
         org_conversation = OrgStore.get_conversation_settings_from_org(org)
         member_conversation_diff = dict(org_member.conversation_settings_diff)
@@ -214,7 +223,16 @@ class SaasSettingsStore(SettingsStore):
         # the org has none — handles older personal accounts whose profiles
         # never moved to the org column.
         if org.llm_profiles:
-            kwargs['llm_profiles'] = org.llm_profiles
+            profiles_data = dict(org.llm_profiles)
+            raw_profiles = profiles_data.get('profiles')
+            if isinstance(raw_profiles, dict):
+                profiles_data['profiles'] = {
+                    name: canonicalize_openhands_llm_payload(prof)
+                    if isinstance(prof, dict)
+                    else prof
+                    for name, prof in raw_profiles.items()
+                }
+            kwargs['llm_profiles'] = profiles_data
         # When no profiles exist yet, seed a Default profile from the legacy
         # LLM config so users (and orgs) upgrading from pre-llm_profiles
         # settings keep their previous LLM as the active profile instead of
@@ -357,11 +375,11 @@ class SaasSettingsStore(SettingsStore):
 
             effective_agent_settings_diff = self._get_persisted_agent_settings(item)
 
-            # Keep mcp_config / acp_env scoped to the acting member only.
+            # Keep mcp_config scoped to the acting member only.
             # ``shared_agent_settings_diff`` is the slice safe for org-wide
             # state; ``private_agent_settings_diff`` is applied below to the
             # acting member's row only so other members don't inherit one
-            # user's MCP servers (or ACP env vars).
+            # user's MCP servers.
             shared_agent_settings_diff, private_agent_settings_diff = (
                 _split_member_private_keys(effective_agent_settings_diff)
             )
@@ -432,9 +450,9 @@ class SaasSettingsStore(SettingsStore):
                 ),
             )
 
-            # Member-private keys (mcp_config, acp_env) live only on the
-            # acting member's row. Use the wholesale-replacement semantics
-            # so deletes stick (APP-1862).
+            # Member-private keys (mcp_config) live only on the acting
+            # member's row. Use the wholesale-replacement semantics so
+            # deletes stick (APP-1862).
             if private_agent_settings_diff:
                 org_member.agent_settings_diff = deep_merge_with_wholesale_keys(
                     dict(org_member.agent_settings_diff),
@@ -493,23 +511,17 @@ class SaasSettingsStore(SettingsStore):
             org_id,
             openhands_type=openhands_type,
         ):
-            if openhands_type:
-                generated_key = await LiteLlmManager.generate_key(
-                    self.user_id,
-                    org_id,
-                    None,
-                    {'type': 'openhands'},
-                )
-            else:
-                # Must delete any existing key with the same alias first
-                key_alias = get_openhands_cloud_key_alias(self.user_id, org_id)
-                await LiteLlmManager.delete_key_by_alias(key_alias=key_alias)
-                generated_key = await LiteLlmManager.generate_key(
-                    self.user_id,
-                    org_id,
-                    key_alias,
-                    None,
-                )
+            # Both branches mint one managed key per (user, org) under the same
+            # deterministic alias, deleting any prior key first — so switching
+            # the default to/from an openhands/* model never orphans a key.
+            key_alias = get_openhands_cloud_key_alias(self.user_id, org_id)
+            await LiteLlmManager.delete_key_by_alias(key_alias=key_alias)
+            generated_key = await LiteLlmManager.generate_key(
+                self.user_id,
+                org_id,
+                key_alias,
+                {'type': 'openhands'} if openhands_type else None,
+            )
 
             item.agent_settings.llm.api_key = SecretStr(generated_key)
             logger.info(

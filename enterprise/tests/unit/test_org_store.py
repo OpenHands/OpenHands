@@ -663,7 +663,13 @@ async def test_delete_org_cascade_success(async_session_maker, mock_litellm_api)
         session.add(expected_org)
         await session.commit()
 
-    with patch('storage.org_store.a_session_maker', async_session_maker):
+    with (
+        patch('storage.org_store.a_session_maker', async_session_maker),
+        patch(
+            'storage.org_store.OrgStore._delete_litellm_user_best_effort',
+            new=AsyncMock(),
+        ) as mock_delete_litellm_user,
+    ):
         # Act
         result = await OrgStore.delete_org_cascade(org_id)
 
@@ -673,6 +679,38 @@ async def test_delete_org_cascade_success(async_session_maker, mock_litellm_api)
     assert result.name == 'Test Organization'
     assert result.contact_name == 'John Doe'
     assert result.contact_email == 'john@example.com'
+    mock_delete_litellm_user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_litellm_user_best_effort_calls_litellm():
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+
+    with patch(
+        'storage.org_store.LiteLlmManager.delete_user', new=AsyncMock()
+    ) as mock_delete_user:
+        await OrgStore._delete_litellm_user_best_effort(user_id, org_id)
+
+    mock_delete_user.assert_called_once_with(user_id)
+
+
+@pytest.mark.asyncio
+async def test_delete_litellm_user_best_effort_swallows_litellm_failure():
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+
+    with (
+        patch(
+            'storage.org_store.LiteLlmManager.delete_user',
+            new=AsyncMock(side_effect=Exception('LiteLLM API unavailable')),
+        ) as mock_delete_user,
+        patch('storage.org_store.logger.warning') as mock_warning,
+    ):
+        await OrgStore._delete_litellm_user_best_effort(user_id, org_id)
+
+    mock_delete_user.assert_called_once_with(user_id)
+    mock_warning.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -1089,7 +1127,13 @@ async def test_delete_org_cascade_sole_org_requester_is_deleted(
         await session.commit()
 
     # Act
-    with patch('storage.org_store.a_session_maker', async_session_maker):
+    with (
+        patch('storage.org_store.a_session_maker', async_session_maker),
+        patch(
+            'storage.org_store.OrgStore._delete_litellm_user_best_effort',
+            new=AsyncMock(),
+        ) as mock_delete_litellm_user,
+    ):
         result = await OrgStore.delete_org_cascade(
             org_id, requester_user_id=str(user_id)
         )
@@ -1097,6 +1141,7 @@ async def test_delete_org_cascade_sole_org_requester_is_deleted(
     # Assert: the deleted org is returned, and the user/org/member rows are gone.
     assert result is not None
     assert result.id == org_id
+    mock_delete_litellm_user.assert_called_once_with(str(user_id), org_id)
 
     async with async_session_maker() as session:
         assert await session.get(Org, org_id) is None

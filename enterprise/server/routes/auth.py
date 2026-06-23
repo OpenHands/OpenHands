@@ -582,6 +582,21 @@ async def keycloak_callback(
             else:
                 redirect_url = f'{redirect_url}?invitation_error=true'
 
+    # Accept pending invitations addressed to the user's email. Runs before
+    # the default-org bootstrap so an invitation's role (e.g. admin) wins
+    # over the bootstrap's auto-add member role for the same org.
+    try:
+        accepted_invitations = (
+            await OrgInvitationService.accept_pending_invitations_for_user(user)
+        )
+        if accepted_invitations:
+            user = await UserStore.get_user_by_id(user_id) or user
+    except Exception as e:
+        logger.exception(
+            'Unexpected error accepting pending invitations at login',
+            extra={'user_id': user_id, 'error': str(e)},
+        )
+
     try:
         user = await DefaultOrgBootstrapService.apply_for_user(
             user,

@@ -4,6 +4,7 @@ import asyncio
 import importlib
 import logging
 import pkgutil
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -14,10 +15,12 @@ from pydantic import SecretStr
 from openhands import tools  # type: ignore[attr-defined]
 from openhands.agent_server.models import ConversationInfo, Success
 from openhands.analytics import get_analytics_service, resolve_analytics_context
+from openhands.app_server import shared
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
+    ACP_SERVER_TAG_KEY,
     AppConversationInfo,
     ConversationTrigger,
 )
@@ -52,6 +55,8 @@ from openhands.app_server.user_auth.user_auth import (
 )
 from openhands.sdk import ConversationExecutionStatus, Event
 from openhands.sdk.event import ConversationStateUpdateEvent, ObservationEvent
+from openhands.sdk.settings import ACPAgentSettings
+from openhands.sdk.settings.acp_providers import detect_acp_provider_by_command
 from openhands.sdk.tool.builtins import SwitchLLMObservation
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
@@ -296,6 +301,35 @@ async def valid_conversation(
     return app_conversation_info
 
 
+async def _resolve_acp_server_key(agent: Any, user_id: str | None) -> str | None:
+    """Resolve the ACP provider key for a conversation whose tag is not yet set.
+
+    Prefer the conversation's own launch command (``ACPAgent.acp_command``): it
+    is authoritative for the agent that is actually running and matched against
+    the SDK registry by ``detect_acp_provider_by_command``. Only fall back to the
+    user's saved settings when the command is unknown (a custom server) or absent
+    (older agent payloads) — the global setting can have drifted to a different
+    provider since this conversation was created, so it must not win over the
+    conversation's own command.
+    """
+    command = getattr(agent, 'acp_command', None)
+    if command:
+        provider = detect_acp_provider_by_command(command)
+        if provider is not None:
+            return provider.key
+    try:
+        settings_store = await shared.SettingsStoreImpl.get_instance(user_id)
+        settings = await settings_store.load() if settings_store else None
+        agent_settings = getattr(settings, 'agent_settings', None)
+        if isinstance(agent_settings, ACPAgentSettings):
+            return agent_settings.acp_server
+    except Exception:
+        _logger.warning(
+            'Failed to resolve ACP server key for user %s', user_id, exc_info=True
+        )
+    return None
+
+
 @router.post('/conversations')
 async def on_conversation_update(
     conversation_info: ConversationInfo,
@@ -332,16 +366,27 @@ async def on_conversation_update(
         sandbox_id=sandbox_record.id,
     )
 
-    # Trust the discriminated-union payload over any stored ``agent_kind``
-    # on ``existing``: a webhook is always authoritative for the agent
-    # currently running, and a drifted row (e.g. mid-migration data) must
-    # not lock us into the wrong branch. Branch on the ``agent_kind``
-    # discriminator (an ``AgentBase`` property) so we don't import a
-    # concrete SDK subclass just to do a kind check.
     agent = conversation_info.agent
     if agent.agent_kind == 'acp':
         agent_kind = 'acp'
-        llm_model = None
+        # Prefer the model the ACP server is actually running
+        # (``current_model_id`` is reconciled from the live session response, so
+        # it survives a provider-side remap, e.g. gemini flash). Fall back to the
+        # requested ``acp_model``, then to the last-persisted value so a payload
+        # that hasn't reported a live model yet doesn't wipe a user-set model.
+        llm_model = (
+            conversation_info.current_model_id
+            or getattr(agent, 'acp_model', None)
+            or existing.llm_model
+        )
+        # Re-derive provider key if not in tags (race with creation, or a
+        # conversation created directly on the agent-server).
+        if ACP_SERVER_TAG_KEY not in merged_tags:
+            acp_server_key = await _resolve_acp_server_key(
+                agent, sandbox_record.created_by_user_id
+            )
+            if acp_server_key:
+                merged_tags[ACP_SERVER_TAG_KEY] = acp_server_key
     else:
         # ``AgentBase.llm: LLM`` is non-optional on both arms of the union.
         agent_kind = 'openhands'

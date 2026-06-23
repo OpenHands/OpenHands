@@ -2,6 +2,7 @@ import json
 import os
 import re
 import secrets
+import time
 import uuid
 from typing import cast
 from urllib.parse import urlencode, urlparse
@@ -11,17 +12,25 @@ import httpx
 from fastapi import (
     APIRouter,
     BackgroundTasks,
+    Depends,
     HTTPException,
     Request,
+    Response,
     status,
 )
 from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.security import APIKeyHeader
 from integrations.jira_dc.jira_dc_manager import JiraDcManager
 from integrations.jira_dc.jira_dc_service_account import (
     get_jira_dc_managed_service_account,
     get_jira_dc_service_account_config_error,
 )
+from integrations.jira_dc.jira_dc_user_token import (
+    JiraDcUserTokenError,
+    get_user_jira_dc_token,
+)
 from integrations.models import Message, SourceType
+from jwt import InvalidTokenError
 from pydantic import BaseModel, Field, field_validator
 from server.auth.constants import (
     AUTOMATION_EVENT_FORWARDING_ENABLED,
@@ -36,6 +45,8 @@ from server.constants import WEB_HOST
 from server.services.automation_event_service import AutomationEventService
 from storage.redis import get_redis_client
 
+from openhands.app_server.config import depends_jwt_service
+from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.user_auth.user_auth import get_user_auth
 from openhands.app_server.utils.logger import openhands_logger as logger
 
@@ -184,6 +195,7 @@ jira_dc_integration_router = APIRouter(prefix='/integration/jira-dc')
 token_manager = TokenManager()
 jira_dc_manager = JiraDcManager(token_manager)
 automation_event_service = AutomationEventService(token_manager)
+jwt_dependency = depends_jwt_service()
 redis_client = get_redis_client()
 
 
@@ -191,11 +203,95 @@ def _jira_dc_events_url(workspace_id: int) -> str:
     return f'https://{WEB_HOST}/integration/jira-dc/connections/{workspace_id}/events'
 
 
+def _configured_jira_dc_workspace_name() -> str | None:
+    if not JIRA_DC_ENABLE_OAUTH:
+        # Legacy email-match mode is not pinned to the KOTS-configured OAuth host.
+        return None
+    return urlparse(JIRA_DC_BASE_URL).hostname
+
+
+def _workspace_matches_configured_jira_dc_host(workspace_name: str) -> bool:
+    configured_workspace = _configured_jira_dc_workspace_name()
+    if not configured_workspace:
+        return True
+    return workspace_name.lower() == configured_workspace.lower()
+
+
+@jira_dc_integration_router.get('/secrets/token')
+async def get_jira_dc_secret_token(
+    access_token: str | None = Depends(
+        APIKeyHeader(name='X-Access-Token', auto_error=False)
+    ),
+    jwt_service: JwtService = jwt_dependency,
+) -> Response:
+    """Resolve the linked user's Jira DC OAuth token for sandbox LookupSecret."""
+    try:
+        if not access_token:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+        payload = jwt_service.verify_jws_token(access_token)
+        if (
+            payload.get('integration') != 'jira_dc'
+            or payload.get('secret_name') != 'JIRA_DC_TOKEN'
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+        user_id = payload.get('user_id')
+        workspace_id = payload.get('workspace_id')
+        if not user_id or not workspace_id:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+        try:
+            workspace_id_int = int(workspace_id)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+        workspace = await jira_dc_manager.integration_store.get_workspace_by_id(
+            workspace_id_int
+        )
+        if (
+            not workspace
+            or workspace.status != 'active'
+            or not _workspace_matches_configured_jira_dc_host(workspace.name)
+        ):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+        jira_dc_user = await jira_dc_manager.integration_store.get_active_user_by_keycloak_id_and_workspace(
+            user_id,
+            workspace.id,
+        )
+        if not jira_dc_user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+        user_token = await get_user_jira_dc_token(
+            keycloak_user_id=user_id,
+            workspace_id=workspace.id,
+            token_manager=token_manager,
+            store=jira_dc_manager.integration_store,
+        )
+        return Response(
+            content=user_token.access_token.get_secret_value(),
+            media_type='text/plain',
+        )
+    except HTTPException:
+        raise
+    except (InvalidTokenError, ValueError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    except JiraDcUserTokenError:
+        logger.warning('[Jira DC] Linked Jira DC token is unavailable', exc_info=True)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    except Exception:
+        logger.warning(
+            '[Jira DC] Failed to resolve Jira DC secret token', exc_info=True
+        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+
 async def _handle_workspace_link_creation(
     user_id: str,
     jira_dc_user_id: str,
     target_workspace: str,
     require_active_workspace: bool = True,
+    replace_stale_active_link: bool = False,
 ):
     """Handle the creation or reactivation of a workspace link for a user."""
     # Verify workspace exists and is active
@@ -212,6 +308,11 @@ async def _handle_workspace_link_creation(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f'Workspace "{target_workspace}" is not active',
+        )
+
+    if replace_stale_active_link:
+        await jira_dc_manager.integration_store.deactivate_user_links_except_workspace(
+            user_id, workspace.id
         )
 
     # Check if user currently has an active workspace link
@@ -820,6 +921,17 @@ async def jira_dc_callback(request: Request, code: str, state: str):
 
     token_data = response.json()
     access_token = token_data['access_token']
+    refresh_token: str | None = token_data.get('refresh_token') or None
+    now = int(time.time())
+    expires_in = int(token_data.get('expires_in') or 0)
+    refresh_expires_in = int(
+        token_data.get('refresh_token_expires_in')
+        or token_data.get('refresh_expires_in')
+        or 0
+    )
+    access_token_expires_at = (now + expires_in) if expires_in else 0
+    refresh_token_expires_at = (now + refresh_expires_in) if refresh_expires_in else 0
+
     headers = {'Authorization': f'Bearer {access_token}'}
     target_workspace = integration_session.get('target_workspace')
 
@@ -867,7 +979,10 @@ async def jira_dc_callback(request: Request, code: str, state: str):
             # Create a workspace link for the user (admin automatically gets linked)
             if integration_session['is_active']:
                 await _handle_workspace_link_creation(
-                    user_id, jira_dc_user_id, target_workspace
+                    user_id,
+                    jira_dc_user_id,
+                    target_workspace,
+                    replace_stale_active_link=True,
                 )
             else:
                 await _handle_workspace_link_creation(
@@ -875,6 +990,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
                     jira_dc_user_id,
                     target_workspace,
                     require_active_workspace=False,
+                    replace_stale_active_link=True,
                 )
         else:
             # Workspace exists - validate user can update it
@@ -902,7 +1018,10 @@ async def jira_dc_callback(request: Request, code: str, state: str):
 
             if integration_session['is_active']:
                 await _handle_workspace_link_creation(
-                    user_id, jira_dc_user_id, target_workspace
+                    user_id,
+                    jira_dc_user_id,
+                    target_workspace,
+                    replace_stale_active_link=True,
                 )
             else:
                 await _handle_workspace_link_creation(
@@ -910,6 +1029,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
                     jira_dc_user_id,
                     target_workspace,
                     require_active_workspace=False,
+                    replace_stale_active_link=True,
                 )
 
         webhook_enrolled = await _maybe_register_webhook(
@@ -924,6 +1044,17 @@ async def jira_dc_callback(request: Request, code: str, state: str):
                 status='inactive',
             )
 
+        await jira_dc_manager.integration_store.update_user_oauth_tokens(
+            keycloak_user_id=user_id,
+            workspace_id=workspace.id,
+            encrypted_access_token=token_manager.encrypt_text(access_token),
+            encrypted_refresh_token=(
+                token_manager.encrypt_text(refresh_token) if refresh_token else None
+            ),
+            access_token_expires_at=access_token_expires_at,
+            refresh_token_expires_at=refresh_token_expires_at,
+        )
+
         redirect_url = '/settings/integrations'
         if integration_session.get('admin_api_key') and not webhook_enrolled:
             redirect_url += '?jira_dc_webhook=install_failed'
@@ -936,8 +1067,27 @@ async def jira_dc_callback(request: Request, code: str, state: str):
         )
     elif integration_session.get('operation_type') == 'workspace_link':
         await _handle_workspace_link_creation(
-            user_id, jira_dc_user_id, target_workspace
+            user_id,
+            jira_dc_user_id,
+            target_workspace,
+            replace_stale_active_link=True,
         )
+
+        workspace = await jira_dc_manager.integration_store.get_workspace_by_name(
+            target_workspace
+        )
+        if workspace:
+            await jira_dc_manager.integration_store.update_user_oauth_tokens(
+                keycloak_user_id=user_id,
+                workspace_id=workspace.id,
+                encrypted_access_token=token_manager.encrypt_text(access_token),
+                encrypted_refresh_token=(
+                    token_manager.encrypt_text(refresh_token) if refresh_token else None
+                ),
+                access_token_expires_at=access_token_expires_at,
+                refresh_token_expires_at=refresh_token_expires_at,
+            )
+
         return RedirectResponse(
             url='/settings/integrations', status_code=status.HTTP_302_FOUND
         )
@@ -977,6 +1127,11 @@ async def get_current_workspace_link(request: Request):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail='Workspace not found for the user',
+            )
+        if not _workspace_matches_configured_jira_dc_host(workspace.name):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail='User is not registered for the configured Jira DC integration',
             )
 
         return JiraDcUserResponse(

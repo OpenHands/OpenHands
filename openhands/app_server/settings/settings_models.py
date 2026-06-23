@@ -34,6 +34,7 @@ from openhands.sdk.settings import (
     AgentSettingsConfig,
     ConversationSettings,
     OpenHandsAgentSettings,
+    apply_agent_settings_diff,
     default_agent_settings,
     validate_agent_settings,
 )
@@ -64,22 +65,12 @@ def _load_persisted_agent_settings(
 ) -> OpenHandsAgentSettings | ACPAgentSettings:
     """Load persisted agent settings via the SDK loader.
 
-    Routes the raw payload through :func:`validate_agent_settings` so any
-    schema migrations registered with the SDK are applied before validation
-    against the discriminated :data:`AgentSettingsConfig` union.
-
-    The legacy ``agent_kind: 'llm'`` tag (pre-rename, field-compatible with
-    ``openhands``) is normalized to ``'openhands'`` first. The SDK migration
-    only rewrites it while advancing ``schema_version``, so an ``'llm'`` payload
-    already at the current version would otherwise validate as the deprecated
-    ``LLMAgentSettings``. Doing it here keeps every read on the canonical
-    ``{openhands, acp}`` variants, without the cross-variant coercion that 500'd
-    ACP settings (``agent_kind: 'acp'`` is left untouched).
+    Routes the raw payload through :func:`validate_agent_settings`, which
+    applies registered schema migrations, canonicalizes the legacy
+    ``agent_kind: 'llm'`` tag to ``'openhands'``, and validates against the
+    discriminated :data:`AgentSettingsConfig` union.
     """
-    payload = data or {}
-    if isinstance(payload, dict) and payload.get('agent_kind') == 'llm':
-        payload = {**payload, 'agent_kind': 'openhands'}
-    return validate_agent_settings(payload)
+    return validate_agent_settings(data or {})
 
 
 def _load_persisted_conversation_settings(data: Any) -> ConversationSettings:
@@ -216,33 +207,25 @@ class Settings(BaseModel):
                     _coerce_value(value) if not isinstance(value, dict) else value
                 )
 
+            # ``mcp_config`` replaces wholesale rather than deep-merging, so
+            # hold it back from the variant-aware merge and apply it after.
             replace_mcp_config = 'mcp_config' in agent_update
             mcp_config = coerced.pop('mcp_config', None) if replace_mcp_config else None
 
-            new_kind = coerced.get('agent_kind')
-            current_kind = self.agent_settings.agent_kind
-
-            if new_kind and new_kind != current_kind:
-                # ``agent_settings`` is a discriminated union over
-                # ``OpenHandsAgentSettings | ACPAgentSettings``. Deep-merging
-                # the incoming kind's fields onto the outgoing kind's dump
-                # produces a mongrel (``llm`` plus ``acp_command``) that
-                # fails validation. Start from a fresh base for the new
-                # kind. Cross-kind config preservation tracked in
-                # OpenHands/OpenHands#14370.
-                base: dict[str, Any] = {'agent_kind': new_kind}
-            else:
-                base = self.agent_settings.model_dump(
+            # The SDK owns the discriminated-union merge: replace on
+            # ``agent_kind`` change, deep-merge within a variant. Cross-kind
+            # config preservation tracked in OpenHands/OpenHands#14370.
+            new_settings = apply_agent_settings_diff(self.agent_settings, coerced)
+            if replace_mcp_config:
+                dumped = new_settings.model_dump(
                     mode='json', context={'expose_secrets': True}
                 )
-
-            merged = deep_merge(base, coerced)
-            if replace_mcp_config:
-                merged['mcp_config'] = mcp_config
+                dumped['mcp_config'] = mcp_config
+                new_settings = validate_agent_settings(dumped)
 
             # Use object.__setattr__ to avoid validate_assignment
             # side-effects on other fields.
-            object.__setattr__(self, 'agent_settings', validate_agent_settings(merged))
+            object.__setattr__(self, 'agent_settings', new_settings)
 
         conv_update = payload.get('conversation_settings_diff')
         if isinstance(conv_update, dict):

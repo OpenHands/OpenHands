@@ -147,3 +147,32 @@ async def test_update_user_integration_status_targets_workspace_link():
     assert 'jira_dc_users.jira_dc_workspace_id' in str(executed_statement)
     session.commit.assert_awaited_once()
     session.refresh.assert_awaited_once_with(user)
+
+
+@pytest.mark.asyncio
+async def test_deactivate_user_links_except_workspace_targets_stale_active_links():
+    store = JiraDcIntegrationStore()
+
+    result = Mock()
+    result.rowcount = 2
+    session = Mock()
+    session.execute = AsyncMock(return_value=result)
+    session.commit = AsyncMock()
+
+    @asynccontextmanager
+    async def mock_session_maker():
+        yield session
+
+    with patch('storage.jira_dc_integration_store.a_session_maker', mock_session_maker):
+        deactivated_count = await store.deactivate_user_links_except_workspace(
+            'user-1', 42
+        )
+
+    assert deactivated_count == 2
+    session.execute.assert_called_once()
+    executed_statement = session.execute.call_args.args[0]
+    statement_text = str(executed_statement)
+    assert 'jira_dc_users.keycloak_user_id' in statement_text
+    assert 'jira_dc_users.jira_dc_workspace_id !=' in statement_text
+    assert 'jira_dc_users.status' in statement_text
+    session.commit.assert_awaited_once()

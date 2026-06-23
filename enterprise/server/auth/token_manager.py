@@ -279,9 +279,22 @@ class TokenManager:
     ) -> str:
         # Get user info to determine user_id and idp
         user_info = await self.get_user_info(access_token=access_token)
-        user_id = user_info.sub
-        username = user_info.preferred_username
-        logger.info(f'Getting token for user {username} and IDP {idp}')
+        return await self.get_idp_token_by_user_id(user_info.sub, idp)
+
+    async def get_idp_token_by_user_id(
+        self,
+        user_id: str,
+        idp: ProviderType,
+    ) -> str:
+        """Load (and refresh if needed) a provider IDP token using only the user_id.
+
+        This path is independent of the user's Keycloak *offline session*: the
+        encrypted provider tokens are read from the ``auth_tokens`` table and
+        refreshed via the provider's own OAuth endpoint (see
+        ``_check_expiration_and_refresh``). No Keycloak round-trip is required,
+        so it keeps working after the offline session is revoked or expires.
+        """
+        logger.info(f'Getting token for user {user_id} and IDP {idp}')
         token_store = await AuthTokenStore.get_instance(
             keycloak_user_id=user_id, idp=idp
         )
@@ -291,9 +304,9 @@ class TokenManager:
                 self._check_expiration_and_refresh
             )
             if not token_info:
-                logger.info(f'No tokens for user: {username}, identity provider: {idp}')
+                logger.info(f'No tokens for user: {user_id}, identity provider: {idp}')
                 raise ValueError(
-                    f'No tokens for user: {username}, identity provider: {idp}'
+                    f'No tokens for user: {user_id}, identity provider: {idp}'
                 )
             access_token = self.decrypt_text(str(token_info['access_token']))
             logger.info(f'Got {idp} token: {access_token[0:5]}')
@@ -301,12 +314,12 @@ class TokenManager:
         except httpx.HTTPStatusError as e:
             # Log the full response details including the body
             logger.error(
-                f'Failed to get tokens for user {username}, identity provider {idp} from URL {e.response.url}. '
+                f'Failed to get tokens for user {user_id}, identity provider {idp} from URL {e.response.url}. '
                 f'Status code: {e.response.status_code}, '
                 f'Response body: {e.response.text}'
             )
             raise ValueError(
-                f'Failed to get token for user: {username}, identity provider: {idp}. '
+                f'Failed to get token for user: {user_id}, identity provider: {idp}. '
                 f'Status code: {e.response.status_code}, '
                 f'Response body: {e.response.text}'
             ) from e

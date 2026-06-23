@@ -564,7 +564,26 @@ export const ORG_HANDLERS = [
 
       ORGS_AND_MEMBERS[orgId] = [...members, ...newMembers];
 
-      return HttpResponse.json(newMembers, { status: 201 });
+      return HttpResponse.json(
+        {
+          successful: emails.map((email, index) => ({
+            id: index + 1,
+            email,
+            role: "member",
+            status: "pending",
+            created_at: "2026-01-01T00:00:00Z",
+            expires_at: "2026-01-08T00:00:00Z",
+            invite_url: `https://app.example.com/api/organizations/members/invite/accept?token=inv-token-${index + 1}`,
+          })),
+          failed: [],
+          email_delivery_configured: true,
+        },
+        { status: 201 },
+      );
     },
+  ),
+
+  http.get("/api/organizations/:orgId/members/invite", () =>
+    HttpResponse.json({ items: [], email_delivery_configured: true }),
   ),
 ];

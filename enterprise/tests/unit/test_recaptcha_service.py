@@ -35,7 +35,7 @@ def recaptcha_service(mock_gcp_client):
 class TestRecaptchaServiceHashAccountId:
     """Tests for RecaptchaService.hash_account_id()."""
 
-    def test_should_hash_email_with_hmac_sha256(self, recaptcha_service):
+    def test_hash_account_id_uses_hmac_sha256(self, recaptcha_service):
         """Test that hash_account_id produces correct HMAC-SHA256 hash."""
         # Arrange
         email = 'user@example.com'
@@ -56,7 +56,7 @@ class TestRecaptchaServiceHashAccountId:
         assert result == expected_hash
         assert len(result) == 64  # SHA256 produces 64 hex characters
 
-    def test_should_normalize_email_to_lowercase(self, recaptcha_service):
+    def test_hash_account_id_normalizes_to_lowercase(self, recaptcha_service):
         """Test that hash_account_id normalizes email to lowercase."""
         # Arrange
         email1 = 'User@Example.com'
@@ -69,9 +69,7 @@ class TestRecaptchaServiceHashAccountId:
         # Assert
         assert hash1 == hash2
 
-    def test_should_produce_different_hashes_for_different_emails(
-        self, recaptcha_service
-    ):
+    def test_hash_account_id_produces_unique_hashes_per_email(self, recaptcha_service):
         """Test that different emails produce different hashes."""
         # Arrange
         email1 = 'user1@example.com'
@@ -88,7 +86,7 @@ class TestRecaptchaServiceHashAccountId:
 class TestRecaptchaServiceCreateAssessment:
     """Tests for RecaptchaService.create_assessment()."""
 
-    def test_should_create_assessment_and_allow_when_score_is_high(
+    def test_create_assessment_allows_when_score_is_high(
         self, recaptcha_service, mock_gcp_client
     ):
         """Test that assessment allows request when score is above threshold."""
@@ -118,7 +116,7 @@ class TestRecaptchaServiceCreateAssessment:
         assert result.action_valid is True
         mock_gcp_client.create_assessment.assert_called_once()
 
-    def test_should_block_when_score_is_below_threshold(
+    def test_create_assessment_blocks_when_score_is_below_threshold(
         self, recaptcha_service, mock_gcp_client
     ):
         """Test that assessment blocks request when score is below threshold."""
@@ -143,7 +141,7 @@ class TestRecaptchaServiceCreateAssessment:
         assert result.allowed is False
         assert result.score == 0.2
 
-    def test_should_block_when_token_is_invalid(
+    def test_create_assessment_blocks_when_token_is_invalid(
         self, recaptcha_service, mock_gcp_client
     ):
         """Test that assessment blocks request when token is invalid."""
@@ -168,7 +166,7 @@ class TestRecaptchaServiceCreateAssessment:
         assert result.allowed is False
         assert result.valid is False
 
-    def test_should_block_when_action_does_not_match(
+    def test_create_assessment_blocks_when_action_does_not_match(
         self, recaptcha_service, mock_gcp_client
     ):
         """Test that assessment blocks request when action doesn't match."""
@@ -193,7 +191,7 @@ class TestRecaptchaServiceCreateAssessment:
         assert result.allowed is False
         assert result.action_valid is False
 
-    def test_should_include_email_in_user_info_when_provided(
+    def test_create_assessment_includes_email_in_user_info(
         self, recaptcha_service, mock_gcp_client
     ):
         """Test that email is included in user_info when provided."""
@@ -223,7 +221,7 @@ class TestRecaptchaServiceCreateAssessment:
         assert len(assessment.event.user_info.user_ids) == 1
         assert assessment.event.user_info.user_ids[0].email == 'user@example.com'
 
-    def test_should_not_include_user_info_when_email_is_none(
+    def test_create_assessment_omits_user_info_when_email_is_none(
         self, recaptcha_service, mock_gcp_client
     ):
         """Test that user_info is not included when email is None."""
@@ -255,7 +253,7 @@ class TestRecaptchaServiceCreateAssessment:
             # If user_info exists, verify account_id is empty (not set)
             assert not assessment.event.user_info.account_id
 
-    def test_should_log_assessment_details_including_name(
+    def test_create_assessment_logs_assessment_details(
         self, recaptcha_service, mock_gcp_client
     ):
         """Test that assessment details including assessment name are logged."""
@@ -290,7 +288,7 @@ class TestRecaptchaServiceCreateAssessment:
             assert call_kwargs[1]['extra']['action_valid'] is True
             assert call_kwargs[1]['extra']['user_ip'] == '192.168.1.1'
 
-    def test_should_log_user_id_and_email_when_provided(
+    def test_create_assessment_logs_user_id_and_email(
         self, recaptcha_service, mock_gcp_client
     ):
         """Test that user_id and email are included in log when provided."""
@@ -320,7 +318,7 @@ class TestRecaptchaServiceCreateAssessment:
             assert call_kwargs[1]['extra']['user_id'] == 'keycloak-user-123'
             assert call_kwargs[1]['extra']['email'] == 'test@example.com'
 
-    def test_should_log_none_for_user_id_and_email_when_not_provided(
+    def test_create_assessment_logs_none_when_user_info_absent(
         self, recaptcha_service, mock_gcp_client
     ):
         """Test that user_id and email are logged as None when not provided."""
@@ -348,7 +346,7 @@ class TestRecaptchaServiceCreateAssessment:
             assert call_kwargs[1]['extra']['user_id'] is None
             assert call_kwargs[1]['extra']['email'] is None
 
-    def test_should_raise_exception_when_gcp_client_fails(
+    def test_create_assessment_raises_when_gcp_client_fails(
         self, recaptcha_service, mock_gcp_client
     ):
         """Test that exceptions from GCP client are propagated."""

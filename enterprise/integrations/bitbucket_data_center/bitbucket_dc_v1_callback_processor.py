@@ -88,15 +88,13 @@ class BitbucketDCV1CallbackProcessor(EventCallbackProcessor):
             )
 
     async def _post_summary_to_bitbucket_dc(self, summary: str) -> None:
-        from integrations.bitbucket_data_center.bitbucket_dc_service import (
-            SaaSBitbucketDCService,
+        from integrations.bitbucket_data_center.bitbucket_dc_service_account import (
+            bitbucket_dc_posting_service,
         )
 
-        keycloak_user_id = self.bitbucket_dc_view_data.get('keycloak_user_id')
-        if not keycloak_user_id:
-            raise RuntimeError('Missing keycloak user ID for Bitbucket DC')
-
-        bitbucket_service = SaaSBitbucketDCService(external_auth_id=keycloak_user_id)
+        # Always post as the bot account -- a user-authored reply containing
+        # "@openhands" would re-fire the webhook (duplicate run).
+        bitbucket_service = bitbucket_dc_posting_service()
         await bitbucket_service.reply_to_pr_comment(
             owner=self.bitbucket_dc_view_data['project_key'],
             repo_slug=self.bitbucket_dc_view_data['repo_slug'],

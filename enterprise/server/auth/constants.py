@@ -35,6 +35,7 @@ ENABLE_ENTERPRISE_SSO = os.getenv('ENABLE_ENTERPRISE_SSO', '').strip()
 ENABLE_JIRA = os.environ.get('ENABLE_JIRA', 'false') == 'true'
 ENABLE_JIRA_DC = os.environ.get('ENABLE_JIRA_DC', 'false') == 'true'
 ENABLE_LINEAR = os.environ.get('ENABLE_LINEAR', 'false') == 'true'
+ENABLE_AUTOMATIONS = os.environ.get('ENABLE_AUTOMATIONS', 'true') == 'true'
 JIRA_CLIENT_ID = os.getenv('JIRA_CLIENT_ID', '').strip()
 JIRA_CLIENT_SECRET = os.getenv('JIRA_CLIENT_SECRET', '').strip()
 LINEAR_CLIENT_ID = os.getenv('LINEAR_CLIENT_ID', '').strip()
@@ -71,6 +72,12 @@ BITBUCKET_DATA_CENTER_HOST = os.getenv('BITBUCKET_DATA_CENTER_HOST', '').strip()
 # own token.
 BITBUCKET_DATA_CENTER_BOT_TOKEN = os.getenv(
     'BITBUCKET_DATA_CENTER_BOT_TOKEN', ''
+).strip()
+# Username (slug) of the bot account whose PAT is set above. Lets us skip
+# webhook events the bot itself authored, so the agent's reply (posted via the
+# bot PAT) can't re-trigger a job. BBDC's stable author id is the slug, not email.
+BITBUCKET_DATA_CENTER_BOT_USERNAME = os.getenv(
+    'BITBUCKET_DATA_CENTER_BOT_USERNAME', ''
 ).strip()
 BITBUCKET_DATA_CENTER_TOKEN_URL = (
     f'https://{BITBUCKET_DATA_CENTER_HOST}/rest/oauth2/latest/token'
