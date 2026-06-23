@@ -9,6 +9,7 @@ permission wiring itself is exercised separately by asserting on
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -133,6 +134,14 @@ class TestProvisionUserHandler:
 
         org = MagicMock() if org_exists else None
 
+        # Rollback collaborators. We construct these as standalone
+        # ``AsyncMock``s so tests can assert on call counts and
+        # arguments without having to dig back into the patch object.
+        delete_org_cascade_mock = AsyncMock(return_value=org)
+        remove_member_mock = AsyncMock(return_value=True)
+        set_flags_mock = AsyncMock()
+        add_user_to_org_mock = AsyncMock()
+
         patches = [
             patch(
                 'server.routes.user_provisioning.TokenManager',
@@ -150,7 +159,7 @@ class TestProvisionUserHandler:
             ),
             patch(
                 'server.routes.user_provisioning._set_user_provisioned_flags',
-                new_callable=AsyncMock,
+                set_flags_mock,
             ),
             patch(
                 'server.routes.user_provisioning.OrgService.create_litellm_integration',
@@ -164,33 +173,56 @@ class TestProvisionUserHandler:
             ),
             patch(
                 'server.routes.user_provisioning.OrgMemberStore.add_user_to_org',
-                new_callable=AsyncMock,
+                add_user_to_org_mock,
             ),
             patch(
                 'server.routes.user_provisioning.ApiKeyStore.get_instance',
                 return_value=api_key_store_mock,
             ),
+            # Rollback path: ``_rollback_partial_provision`` calls
+            # ``OrgMemberStore.remove_user_from_org`` first, then
+            # ``OrgStore.delete_org_cascade`` on the personal org,
+            # then ``TokenManager.delete_keycloak_user``. Patch the
+            # first two here so the tests can assert on the rollback
+            # order without hitting a real DB.
+            patch(
+                'server.routes.user_provisioning.OrgMemberStore.remove_user_from_org',
+                remove_member_mock,
+            ),
+            patch(
+                'server.routes.user_provisioning.OrgStore.delete_org_cascade',
+                delete_org_cascade_mock,
+            ),
         ]
         return patches, {
             'token_manager': token_manager_mock,
             'api_key_store': api_key_store_mock,
+            'set_flags': set_flags_mock,
+            'add_user_to_org': add_user_to_org_mock,
+            'remove_member': remove_member_mock,
+            'delete_org_cascade': delete_org_cascade_mock,
         }
+
+    @staticmethod
+    def _enter_all(patches):
+        """Enter every patch in ``patches`` via an ``ExitStack``.
+
+        Returning the stack lets the caller use ``with stack:`` to
+        guarantee tear-down. This avoids the brittle
+        ``with (patches[0], patches[1], ...)`` pattern that has to be
+        edited every time the patch list grows.
+        """
+        stack = contextlib.ExitStack()
+        for p in patches:
+            stack.enter_context(p)
+        return stack
 
     @pytest.mark.asyncio
     async def test_happy_path_with_supplied_password(
         self, caller_user_id, target_org_id, new_user_id
     ):
         patches, handles = self._patch_dependencies(new_user_id, target_org_id)
-        with (
-            patches[0],
-            patches[1],
-            patches[2],
-            patches[3],
-            patches[4],
-            patches[5],
-            patches[6],
-            patches[7],
-        ):
+        with self._enter_all(patches):
             resp = await provision_user(
                 body=ProvisionUserRequest(
                     email='Alice@Example.com',
@@ -216,22 +248,17 @@ class TestProvisionUserHandler:
         kwargs = handles['api_key_store'].create_api_key.await_args.kwargs
         assert kwargs['org_id'] == target_org_id
         assert kwargs['user_id'] == new_user_id
+        # On the happy path no rollback should run.
+        handles['delete_org_cascade'].assert_not_awaited()
+        handles['remove_member'].assert_not_awaited()
+        handles['token_manager'].delete_keycloak_user.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_generates_password_when_not_supplied(
         self, caller_user_id, target_org_id, new_user_id
     ):
         patches, handles = self._patch_dependencies(new_user_id, target_org_id)
-        with (
-            patches[0],
-            patches[1],
-            patches[2],
-            patches[3],
-            patches[4],
-            patches[5],
-            patches[6],
-            patches[7],
-        ):
+        with self._enter_all(patches):
             resp = await provision_user(
                 body=ProvisionUserRequest(email='bob@example.com'),
                 caller_user_id=caller_user_id,
@@ -251,16 +278,7 @@ class TestProvisionUserHandler:
         patches, handles = self._patch_dependencies(
             new_user_id, target_org_id, org_exists=False
         )
-        with (
-            patches[0],
-            patches[1],
-            patches[2],
-            patches[3],
-            patches[4],
-            patches[5],
-            patches[6],
-            patches[7],
-        ):
+        with self._enter_all(patches):
             with pytest.raises(HTTPException) as exc_info:
                 await provision_user(
                     body=ProvisionUserRequest(email='bob@example.com'),
@@ -280,16 +298,7 @@ class TestProvisionUserHandler:
             target_org_id,
             keycloak_raises=KeycloakError('user already exists'),
         )
-        with (
-            patches[0],
-            patches[1],
-            patches[2],
-            patches[3],
-            patches[4],
-            patches[5],
-            patches[6],
-            patches[7],
-        ):
+        with self._enter_all(patches):
             with pytest.raises(HTTPException) as exc_info:
                 await provision_user(
                     body=ProvisionUserRequest(email='dup@example.com'),
@@ -297,29 +306,32 @@ class TestProvisionUserHandler:
                     target_org_id=target_org_id,
                 )
         assert exc_info.value.status_code == 409
-        # Cleanup should not run if Keycloak creation itself failed.
+        # Cleanup should not run if Keycloak creation itself failed —
+        # there is nothing to roll back.
         handles['token_manager'].delete_keycloak_user.assert_not_awaited()
+        handles['delete_org_cascade'].assert_not_awaited()
+        handles['remove_member'].assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_cleanup_on_post_keycloak_failure(
+    async def test_rollback_before_user_created_only_cleans_keycloak(
         self, caller_user_id, target_org_id, new_user_id
     ):
+        """Failure before ``UserStore.create_user`` only undoes Keycloak.
+
+        The offline-token step runs *before* ``UserStore.create_user``,
+        so when it blows up there are no OpenHands DB rows to
+        compensate. The rollback must touch only the Keycloak user
+        — exercising ``delete_org_cascade`` on a never-created
+        personal org would log a misleading "not found".
+        """
         patches, handles = self._patch_dependencies(new_user_id, target_org_id)
-        # Make the offline-token step blow up after Keycloak succeeded.
+        # Make the offline-token step blow up after Keycloak succeeded
+        # but before any OpenHands DB row was created.
         handles['token_manager'].request_offline_token.side_effect = RuntimeError(
             'boom'
         )
 
-        with (
-            patches[0],
-            patches[1],
-            patches[2],
-            patches[3],
-            patches[4],
-            patches[5],
-            patches[6],
-            patches[7],
-        ):
+        with self._enter_all(patches):
             with pytest.raises(HTTPException) as exc_info:
                 await provision_user(
                     body=ProvisionUserRequest(email='bob@example.com'),
@@ -327,8 +339,205 @@ class TestProvisionUserHandler:
                     target_org_id=target_org_id,
                 )
         assert exc_info.value.status_code == 500
-        # The Keycloak user that was just created must be cleaned up
-        # so we don't orphan identities.
+        # Only the Keycloak user gets removed; no DB rollback.
+        handles['token_manager'].delete_keycloak_user.assert_awaited_once_with(
+            new_user_id
+        )
+        handles['delete_org_cascade'].assert_not_awaited()
+        handles['remove_member'].assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_rollback_when_set_flags_fails(
+        self, caller_user_id, target_org_id, new_user_id
+    ):
+        """``_set_user_provisioned_flags`` failure cascades the personal org.
+
+        ``UserStore.create_user`` succeeded, so the User + personal Org
+        + owner OrgMember + default settings now exist. The rollback
+        must wipe them via ``delete_org_cascade`` and then delete the
+        Keycloak user. No target-org membership was added yet, so
+        ``remove_user_from_org`` must not run.
+        """
+        patches, handles = self._patch_dependencies(new_user_id, target_org_id)
+        handles['set_flags'].side_effect = RuntimeError('flag update exploded')
+
+        with self._enter_all(patches):
+            with pytest.raises(HTTPException) as exc_info:
+                await provision_user(
+                    body=ProvisionUserRequest(email='bob@example.com'),
+                    caller_user_id=caller_user_id,
+                    target_org_id=target_org_id,
+                )
+
+        assert exc_info.value.status_code == 500
+        handles['remove_member'].assert_not_awaited()
+        handles['delete_org_cascade'].assert_awaited_once_with(
+            uuid.UUID(new_user_id), requester_user_id=new_user_id
+        )
+        handles['token_manager'].delete_keycloak_user.assert_awaited_once_with(
+            new_user_id
+        )
+
+    @pytest.mark.asyncio
+    async def test_rollback_when_litellm_integration_fails(
+        self, caller_user_id, target_org_id, new_user_id
+    ):
+        """Failure in ``create_litellm_integration`` cascades personal org.
+
+        We have a User + personal org but no target-org membership
+        yet, so the rollback should skip ``remove_user_from_org`` and
+        only cascade the personal org before deleting Keycloak.
+        """
+        patches, handles = self._patch_dependencies(new_user_id, target_org_id)
+
+        with self._enter_all(patches):
+            with patch(
+                'server.routes.user_provisioning.OrgService.create_litellm_integration',
+                new_callable=AsyncMock,
+                side_effect=RuntimeError('litellm down'),
+            ):
+                with pytest.raises(HTTPException) as exc_info:
+                    await provision_user(
+                        body=ProvisionUserRequest(email='bob@example.com'),
+                        caller_user_id=caller_user_id,
+                        target_org_id=target_org_id,
+                    )
+
+        assert exc_info.value.status_code == 500
+        handles['remove_member'].assert_not_awaited()
+        handles['delete_org_cascade'].assert_awaited_once_with(
+            uuid.UUID(new_user_id), requester_user_id=new_user_id
+        )
+        handles['token_manager'].delete_keycloak_user.assert_awaited_once_with(
+            new_user_id
+        )
+
+    @pytest.mark.asyncio
+    async def test_rollback_when_add_user_to_org_fails(
+        self, caller_user_id, target_org_id, new_user_id
+    ):
+        """``add_user_to_org`` failure: same shape as litellm failure.
+
+        ``add_user_to_org`` is the call that sets
+        ``target_membership_added`` after returning. If it raises
+        instead, the membership row was never inserted, so the
+        rollback must NOT call ``remove_user_from_org`` — that would
+        try to remove a row that does not exist.
+        """
+        patches, handles = self._patch_dependencies(new_user_id, target_org_id)
+        handles['add_user_to_org'].side_effect = RuntimeError('insert exploded')
+
+        with self._enter_all(patches):
+            with pytest.raises(HTTPException) as exc_info:
+                await provision_user(
+                    body=ProvisionUserRequest(email='bob@example.com'),
+                    caller_user_id=caller_user_id,
+                    target_org_id=target_org_id,
+                )
+
+        assert exc_info.value.status_code == 500
+        handles['remove_member'].assert_not_awaited()
+        handles['delete_org_cascade'].assert_awaited_once_with(
+            uuid.UUID(new_user_id), requester_user_id=new_user_id
+        )
+        handles['token_manager'].delete_keycloak_user.assert_awaited_once_with(
+            new_user_id
+        )
+
+    @pytest.mark.asyncio
+    async def test_rollback_when_api_key_creation_fails(
+        self, caller_user_id, target_org_id, new_user_id
+    ):
+        """API-key failure exercises the *full* rollback path.
+
+        By the time ``create_api_key`` runs, the target-org membership
+        has already been inserted, so the rollback must:
+
+        1. Remove the target-org ``OrgMember`` row, *before* calling
+           ``delete_org_cascade`` — otherwise the cascade would only
+           reassign ``current_org_id`` and leave the User row behind.
+        2. Cascade-delete the personal org (User + personal Org +
+           settings + personal-org LiteLLM team).
+        3. Delete the Keycloak user.
+
+        We also assert step ordering by inspecting ``mock_calls`` on
+        a shared parent mock.
+        """
+        patches, handles = self._patch_dependencies(new_user_id, target_org_id)
+        handles['api_key_store'].create_api_key.side_effect = RuntimeError(
+            'api key insert exploded'
+        )
+
+        # Shared parent mock to assert call ordering across the three
+        # rollback collaborators.
+        order_tracker = MagicMock()
+        order_tracker.attach_mock(handles['remove_member'], 'remove_member')
+        order_tracker.attach_mock(handles['delete_org_cascade'], 'delete_org_cascade')
+        order_tracker.attach_mock(
+            handles['token_manager'].delete_keycloak_user,
+            'delete_keycloak_user',
+        )
+
+        with self._enter_all(patches):
+            with pytest.raises(HTTPException) as exc_info:
+                await provision_user(
+                    body=ProvisionUserRequest(email='bob@example.com'),
+                    caller_user_id=caller_user_id,
+                    target_org_id=target_org_id,
+                )
+
+        assert exc_info.value.status_code == 500
+        handles['remove_member'].assert_awaited_once_with(
+            target_org_id, uuid.UUID(new_user_id)
+        )
+        handles['delete_org_cascade'].assert_awaited_once_with(
+            uuid.UUID(new_user_id), requester_user_id=new_user_id
+        )
+        handles['token_manager'].delete_keycloak_user.assert_awaited_once_with(
+            new_user_id
+        )
+        # Ordering: target-membership ➜ personal-org cascade ➜ Keycloak.
+        call_names = [c[0] for c in order_tracker.mock_calls]
+        assert call_names == [
+            'remove_member',
+            'delete_org_cascade',
+            'delete_keycloak_user',
+        ]
+
+    @pytest.mark.asyncio
+    async def test_rollback_swallows_secondary_failures(
+        self, caller_user_id, target_org_id, new_user_id
+    ):
+        """Each cleanup step is wrapped so secondary errors do not mask the original.
+
+        If ``remove_user_from_org`` *and* ``delete_org_cascade`` both
+        raise during rollback, the route must still surface the
+        original ``HTTPException(500)`` from the provisioning
+        failure, and the remaining cleanup steps must keep running.
+        """
+        patches, handles = self._patch_dependencies(new_user_id, target_org_id)
+        handles['api_key_store'].create_api_key.side_effect = RuntimeError(
+            'api key insert exploded'
+        )
+        handles['remove_member'].side_effect = RuntimeError(
+            'rollback step 1 also failed'
+        )
+        handles['delete_org_cascade'].side_effect = RuntimeError(
+            'rollback step 2 also failed'
+        )
+
+        with self._enter_all(patches):
+            with pytest.raises(HTTPException) as exc_info:
+                await provision_user(
+                    body=ProvisionUserRequest(email='bob@example.com'),
+                    caller_user_id=caller_user_id,
+                    target_org_id=target_org_id,
+                )
+
+        assert exc_info.value.status_code == 500
+        # Despite earlier rollback failures, the Keycloak deletion
+        # must still be attempted so the upstream identity does not
+        # outlive the failed provisioning attempt.
         handles['token_manager'].delete_keycloak_user.assert_awaited_once_with(
             new_user_id
         )
@@ -342,28 +551,13 @@ class TestProvisionUserHandler:
         # constraint. The route must skip the explicit add.
         personal_org_id = uuid.UUID(new_user_id)
         patches, handles = self._patch_dependencies(new_user_id, personal_org_id)
-        with (
-            patches[0],
-            patches[1],
-            patches[2],
-            patches[3],
-            patches[4],
-            patches[5],
-            patches[6],
-            patches[7],
-        ):
-            # Wrap the OrgMemberStore.add_user_to_org mock so we can
-            # assert it was *not* called.
-            with patch(
-                'server.routes.user_provisioning.OrgMemberStore.add_user_to_org',
-                new_callable=AsyncMock,
-            ) as add_member_mock:
-                await provision_user(
-                    body=ProvisionUserRequest(email='solo@example.com'),
-                    caller_user_id=caller_user_id,
-                    target_org_id=personal_org_id,
-                )
-                add_member_mock.assert_not_awaited()
+        with self._enter_all(patches):
+            await provision_user(
+                body=ProvisionUserRequest(email='solo@example.com'),
+                caller_user_id=caller_user_id,
+                target_org_id=personal_org_id,
+            )
+            handles['add_user_to_org'].assert_not_awaited()
 
     def test_default_role_is_member(self):
         # Document the policy: provisioned users are not auto-promoted.
