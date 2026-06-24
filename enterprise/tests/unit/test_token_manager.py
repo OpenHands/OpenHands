@@ -439,3 +439,82 @@ class TestDeleteKeycloakUser:
 
             # Assert
             assert result is False
+
+
+class TestCreateKeycloakUser:
+    """Test cases for the create_keycloak_user helper.
+
+    The helper sets the password inline in the UserRepresentation's
+    ``credentials`` array, so creation and password setup happen in a
+    single atomic Keycloak call: a password-policy violation rejects the
+    whole request, and there is no orphan window to clean up.
+    """
+
+    @pytest.mark.asyncio
+    async def test_create_keycloak_user_success(self, token_manager):
+        """Happy path: user is created with inline password credentials."""
+        # Arrange
+        email = 'new.user@example.com'
+        password = 'GeneratedPassword-1234'
+        new_user_id = 'kc-user-id-success'
+
+        with patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin:
+            mock_admin = MagicMock()
+            mock_admin.a_create_user = AsyncMock(return_value=new_user_id)
+            mock_admin.a_set_user_password = AsyncMock(return_value=None)
+            mock_get_admin.return_value = mock_admin
+
+            # Act
+            result = await token_manager.create_keycloak_user(
+                email=email, password=password
+            )
+
+            # Assert
+            assert result == new_user_id
+            mock_admin.a_create_user.assert_awaited_once()
+            # The password must be supplied inline via the
+            # ``credentials`` array — not via a separate
+            # ``a_set_user_password`` follow-up call, which would
+            # re-introduce the orphan-on-failure window.
+            payload = mock_admin.a_create_user.await_args.args[0]
+            assert payload['email'] == email
+            assert payload['username'] == email
+            assert payload['enabled'] is True
+            assert payload['emailVerified'] is True
+            assert payload['credentials'] == [
+                {'type': 'password', 'value': password, 'temporary': False}
+            ]
+            mock_admin.a_set_user_password.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_create_keycloak_user_atomic_password_failure_propagates(
+        self, token_manager
+    ):
+        """Realm password-policy failure rejects the whole create call.
+
+        Because the password lives inside the same POST as the user
+        record, Keycloak refuses to create the user at all when the
+        password is rejected. The exception must propagate so the route
+        can surface a clean 409/500 — and no cleanup is required
+        because nothing was ever created.
+        """
+        # Arrange
+        email = 'policy.fail@example.com'
+        password = 'WeakishButPassesLocalCheck-1'
+
+        with patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin:
+            mock_admin = MagicMock()
+            mock_admin.a_create_user = AsyncMock(
+                side_effect=KeycloakError('Password policy not met')
+            )
+            mock_admin.delete_user = MagicMock()
+            mock_get_admin.return_value = mock_admin
+
+            # Act / Assert
+            with pytest.raises(KeycloakError):
+                await token_manager.create_keycloak_user(email=email, password=password)
+
+            # No standalone password call, and no cleanup necessary —
+            # the atomic create failed, so nothing was persisted.
+            mock_admin.a_set_user_password.assert_not_called()
+            mock_admin.delete_user.assert_not_called()

@@ -812,6 +812,98 @@ class TokenManager:
             logger.exception(f'Unexpected error deleting Keycloak user {user_id}: {e}')
             return False
 
+    @retry(
+        stop=stop_after_attempt(2),
+        retry=retry_if_exception_type(KeycloakConnectionError),
+        before_sleep=_before_sleep_callback,
+    )
+    async def create_keycloak_user(
+        self,
+        email: str,
+        password: str,
+        email_verified: bool = True,
+    ) -> str:
+        """Create a new Keycloak user in the configured realm.
+
+        Used by the provisioning endpoint to seed accounts on behalf of an
+        org admin. The password is set as a non-temporary credential so the
+        provisioned user can authenticate directly with the returned
+        credentials without going through Keycloak's "update password"
+        flow.
+
+        Args:
+            email: Email address. Used as both ``email`` and ``username``.
+            password: Initial password to set on the account.
+            email_verified: Persisted to Keycloak's ``emailVerified`` flag.
+
+        Returns:
+            The Keycloak user ID (``sub``) of the newly created user.
+
+        Raises:
+            KeycloakError: If creation fails (e.g. user already exists).
+        """
+        keycloak_admin = get_keycloak_admin(self.external)
+        # Include the password inline in the UserRepresentation's
+        # ``credentials`` array so creation and password setup are a
+        # single atomic Keycloak call. If the password violates the
+        # realm's password policy, Keycloak rejects the whole request
+        # and no user row is created — there is no orphan window
+        # between an existing user and a failed password setup.
+        # See https://www.keycloak.org/docs-api/26.0.0/rest-api/index.html#UserRepresentation
+        payload: dict = {
+            'email': email,
+            'username': email,
+            'enabled': True,
+            'emailVerified': email_verified,
+            'credentials': [
+                {
+                    'type': 'password',
+                    'value': password,
+                    'temporary': False,
+                }
+            ],
+        }
+        user_id = await keycloak_admin.a_create_user(payload, exist_ok=False)
+        logger.info(
+            'Created Keycloak user',
+            extra={'user_id': user_id, 'email': email},
+        )
+        return user_id
+
+    async def request_offline_token(self, username: str, password: str) -> str:
+        """Exchange password credentials for an offline refresh token.
+
+        Uses the Resource Owner Password Credentials (ROPC) grant with the
+        ``offline_access`` scope. The returned ``refresh_token`` is an
+        offline token: it persists across browser sessions and is what
+        ``store_offline_token`` expects.
+
+        Args:
+            username: Keycloak username (typically the email).
+            password: The user's password.
+
+        Returns:
+            The offline refresh token.
+
+        Raises:
+            KeycloakError: If the token endpoint rejects the credentials
+                or the realm does not have ROPC enabled.
+            ValueError: If the response is missing ``refresh_token``.
+        """
+        token_response = await get_keycloak_openid(self.external).a_token(
+            username=username,
+            password=password,
+            grant_type='password',
+            scope='openid offline_access',
+        )
+        refresh_token = token_response.get('refresh_token')
+        if not refresh_token:
+            raise ValueError(
+                'Keycloak token response did not include a refresh_token; '
+                'offline_access scope may not be granted'
+            )
+        return refresh_token
+
     async def get_user_info_from_user_id(self, user_id: str) -> dict | None:
         keycloak_admin = get_keycloak_admin(self.external)
         user = await keycloak_admin.a_get_user(user_id)
