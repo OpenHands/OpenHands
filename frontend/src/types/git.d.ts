@@ -66,6 +66,15 @@ interface GitRepository {
   main_branch?: string;
 }
 
+/**
+ * Specification for a dependency repository to clone alongside the main repo.
+ */
+interface DependencyRepo {
+  name: string;
+  repo: string;
+  ref?: string | null;
+}
+
 interface GitHubCommit {
   html_url: string;
   sha: string;

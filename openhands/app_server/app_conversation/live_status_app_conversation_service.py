@@ -512,6 +512,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 selected_repository=request.selected_repository,
                 selected_branch=request.selected_branch,
                 git_provider=request.git_provider,
+                dependency_repos=request.dependency_repos,
                 trigger=request.trigger,
                 pr_number=request.pr_number,
                 parent_conversation_id=request.parent_conversation_id,
@@ -1060,6 +1061,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             request.selected_branch = parent_info.selected_branch
         if not request.git_provider:
             request.git_provider = parent_info.git_provider
+        if not request.dependency_repos:
+            request.dependency_repos = parent_info.dependency_repos
 
         # Inherit LLM model from parent if not provided
         if not request.llm_model and parent_info.llm_model:

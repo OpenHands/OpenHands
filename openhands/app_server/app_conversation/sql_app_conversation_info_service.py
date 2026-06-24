@@ -47,6 +47,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfoPage,
     AppConversationSortOrder,
     ConversationTrigger,
+    DependencyRepo,
 )
 from openhands.app_server.integrations.provider import ProviderType
 from openhands.app_server.services.injector import InjectorState
@@ -114,6 +115,11 @@ class StoredConversationMetadata(Base):
     # Tags for conversation metadata (e.g., automation context, skills used)
     tags: Mapped[dict[str, str] | None] = mapped_column(
         create_json_type_decorator(dict[str, str]), nullable=True
+    )
+
+    # JSON list of dependency repo specs (stored as raw dicts)
+    dependency_repos: Mapped[list[dict] | None] = mapped_column(
+        create_json_type_decorator(list[dict]), nullable=True
     )
 
 
@@ -355,6 +361,11 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             selected_repository=info.selected_repository,
             selected_branch=info.selected_branch,
             git_provider=info.git_provider.value if info.git_provider else None,
+            dependency_repos=(
+                [d.model_dump() for d in info.dependency_repos]
+                if info.dependency_repos
+                else None
+            ),
             title=info.title,
             last_updated_at=info.updated_at,
             created_at=info.created_at,
@@ -547,6 +558,13 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         created_at = self._fix_timezone(stored.created_at)
         updated_at = self._fix_timezone(stored.last_updated_at)
 
+        # Reconstruct dependency repos from stored JSON dicts
+        dependency_repos = None
+        if stored.dependency_repos:
+            dependency_repos = [
+                DependencyRepo(**d) for d in stored.dependency_repos
+            ]
+
         return AppConversationInfo(
             id=UUID(stored.conversation_id),
             created_by_user_id=None,  # User ID is now stored in ConversationMetadataSaas
@@ -556,6 +574,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             git_provider=(
                 ProviderType(stored.git_provider) if stored.git_provider else None
             ),
+            dependency_repos=dependency_repos,
             title=stored.title,
             trigger=ConversationTrigger(stored.trigger) if stored.trigger else None,
             pr_number=stored.pr_number or [],
