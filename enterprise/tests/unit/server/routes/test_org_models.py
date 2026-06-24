@@ -15,8 +15,6 @@
 from unittest.mock import MagicMock, PropertyMock
 from uuid import uuid4
 
-import pytest
-
 from server.auth.authorization import RoleName
 from server.routes.org_models import MeResponse
 from storage.org_member import OrgMember

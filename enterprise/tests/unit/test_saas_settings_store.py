@@ -1,5 +1,5 @@
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 from pydantic import SecretStr
@@ -1135,10 +1135,9 @@ async def test_llm_profiles_are_encrypted_at_rest(
     a JSON dict — profile api_keys would otherwise leak in DB dumps,
     replicas, and backups. Mirrors the encryption invariant org and
     org_member already enforce on _llm_api_key."""
+    from openhands.sdk.llm import LLM
     from sqlalchemy import select, text
     from storage.user import User
-
-    from openhands.sdk.llm import LLM
 
     fixture = org_with_multiple_members_fixture
     admin_user_id = fixture['admin_user_id']
@@ -1289,7 +1288,6 @@ class TestGetEffectiveLlmApiKey:
     def test_returns_member_key_when_has_custom_is_true(self):
         """When has_custom_llm_api_key is True, returns member's LLM API key."""
         from pydantic import SecretStr
-
         from storage.saas_settings_store import SaasSettingsStore
 
         org = MagicMock()
@@ -1303,7 +1301,9 @@ class TestGetEffectiveLlmApiKey:
 
         assert result == SecretStr('member-api-key')
 
-    def test_returns_org_key_and_does_not_access_member_key_when_has_custom_is_false(self):
+    def test_returns_org_key_and_does_not_access_member_key_when_has_custom_is_false(
+        self,
+    ):
         """When has_custom_llm_api_key is False, returns org key without accessing member key.
 
         This is a regression test for GitHub #14898. Previously, the code would fall back
@@ -1311,7 +1311,6 @@ class TestGetEffectiveLlmApiKey:
         caused decryption errors when the member had no custom key set (empty/null stored value).
         """
         from pydantic import SecretStr
-
         from storage.saas_settings_store import SaasSettingsStore
 
         org = MagicMock()
@@ -1342,7 +1341,9 @@ class TestGetEffectiveLlmApiKey:
 
         member = MagicMock()
         member.has_custom_llm_api_key = False
-        type(member).llm_api_key = PropertyMock(side_effect=AssertionError('should not be accessed'))
+        type(member).llm_api_key = PropertyMock(
+            side_effect=AssertionError('should not be accessed')
+        )
 
         result = SaasSettingsStore._get_effective_llm_api_key(org, member)
 
