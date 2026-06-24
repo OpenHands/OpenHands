@@ -9,7 +9,12 @@ Precedence (highest first):
 
 2. ``X-Org-Id`` header — explicit, per-request override sent by the
    client. Validated against the authenticated user's org memberships;
-   rejected with 403 if the user is not a member of that org.
+   rejected with 403 if the user is not a member of that org **and**
+   has no "super" role assigned. Super-role users may target orgs they
+   have not joined so that this resolver stays consistent with
+   ``require_permission``'s super-role fallback; the route's
+   ``require_permission`` dependency remains the authoritative check
+   for the specific permission needed.
 
 3. ``user.current_org_id`` — the user's currently selected org (as
    mutated by ``POST /api/organizations/{org_id}/switch``). Default
@@ -39,9 +44,10 @@ async def resolve_effective_org_id(request: Request) -> UUID:
 
     Raises:
         HTTPException 400: ``X-Org-Id`` header is present but is not a UUID.
-        HTTPException 403: User is not a member of the requested org, or
-            the request authenticates with an org-bound API key whose
-            org does not match the ``X-Org-Id`` header.
+        HTTPException 403: User is not a member of the requested org and
+            has no super role assigned, or the request authenticates
+            with an org-bound API key whose org does not match the
+            ``X-Org-Id`` header.
         HTTPException 404: No effective org could be determined (e.g.
             user has no current org and did not supply the header).
     """

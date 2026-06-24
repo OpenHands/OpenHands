@@ -17,6 +17,7 @@ from server.auth.auth_error import (
 from server.auth.authorization import (
     get_role_permissions,
     get_user_org_role,
+    get_user_super_role,
 )
 from server.auth.constants import AZURE_DEVOPS_ORGANIZATION, BITBUCKET_DATA_CENTER_HOST
 from server.auth.cookie_chunking import read_chunked_cookie
@@ -176,18 +177,31 @@ class SaasUserAuth(UserAuth):
 
         1. ``effective_org_id_override`` (trusted server-side resolver
            context; always membership-checked by
-           :meth:`_resolve_and_verify_override_org`).
+           :meth:`_resolve_and_verify_override_org`). The membership
+           check is intentional defense-in-depth for resolver code that
+           sets the override; it is not relaxed for super-role users.
         2. ``api_key_org_id`` if the request authenticated with an
            org-bound API key. An ``X-Org-Id`` header that disagrees with
            the API key org raises 403.
         3. ``X-Org-Id`` header. Validated as a UUID; the API-key/header
            conflict above takes precedence. When ``verify_membership``
-           is ``True`` the user must be a member of the requested org
+           is ``True`` the user must be a member of the requested org,
+           **or** have a "super" role assigned via ``user.role_id``
            (403 otherwise). When ``False`` the org id is returned
            verbatim -- the caller is responsible for the access check
            (used by ``require_permission`` to allow "super" roles to
            target non-member orgs).
         4. ``user.current_org_id`` as a default.
+
+        Note on the super-role bypass in case 3: routes that declare
+        both ``Depends(require_permission(...))`` and ``EFFECTIVE_ORG_ID``
+        would otherwise be inconsistent for non-member super users --
+        ``require_permission`` would grant access via the super-role
+        fallback but ``EFFECTIVE_ORG_ID`` would 403 the same request at
+        the membership check here. This resolver only relaxes the
+        coarse "must be a member" gate when a super role is present;
+        the route's ``require_permission`` dependency is still the
+        authoritative check for the specific permission needed.
 
         Raises:
             HTTPException: 400 for a malformed ``X-Org-Id`` header,
@@ -254,6 +268,25 @@ class SaasUserAuth(UserAuth):
                 ) from exc
             member = await OrgMemberStore.get_org_member(requested, user_uuid)
             if member is None:
+                # Super-role bypass: a user with a cross-org "super"
+                # role (``user.role_id``) is allowed to target an org
+                # they have not joined. The route's
+                # ``require_permission`` dependency still gates the
+                # specific permission against this org id, so this only
+                # relaxes the coarse membership gate -- it does not
+                # grant access by itself.
+                super_role = await get_user_super_role(self.user_id)
+                if super_role is not None:
+                    logger.debug(
+                        'x_org_id_super_role_bypass',
+                        extra={
+                            'user_id': self.user_id,
+                            'x_org_id': str(requested),
+                            'super_role': super_role.name,
+                        },
+                    )
+                    return requested
+
                 logger.warning(
                     'x_org_id_not_a_member',
                     extra={
