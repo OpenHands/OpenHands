@@ -1840,6 +1840,11 @@ async def export_org_conversations_csv(
             'total_tokens,cache_read_tokens,cache_write_tokens'
         ]
 
+        # Warn if export was truncated
+        warning = None
+        if result.total_items > 10000:
+            warning = f'Warning: Export truncated to 10000 of {result.total_items} records. Use filters to narrow export.'
+
         for item in result.items:
             # Escape fields for CSV
             def escape(val):
@@ -1849,6 +1854,10 @@ async def export_org_conversations_csv(
                 if ',' in s or '"' in s or '\n' in s:
                     return f'"{s.replace('"', '""')}"'
                 return s
+
+            if warning:
+                csv_lines.append(f'# {warning}')
+                warning = None  # Only add warning once
 
             csv_lines.append(
                 ','.join(
@@ -1883,9 +1892,9 @@ async def export_org_conversations_csv(
                 yield line + '\n'
 
         # Generate filename with timestamp
-        from datetime import datetime
+        from datetime import datetime, timezone
 
-        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
         filename = f'conversations_export_{timestamp}.csv'
 
         return StreamingResponse(

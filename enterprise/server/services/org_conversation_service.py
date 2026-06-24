@@ -133,12 +133,17 @@ class OrgConversationService:
             cutoff_date = datetime.now(UTC) - timedelta(days=days)
             query = query.where(StoredConversationMetadata.created_at >= cutoff_date)
 
-        # Build count query for total items
+        # Build count query for total items (before sandbox_status filter is applied)
         count_query = select(func.count()).select_from(query.subquery())
 
         # Get total count
         count_result = await self.db_session.execute(count_query)
         total_items = count_result.scalar() or 0
+
+        # Note: sandbox_status filter is applied post-query (line ~181) because it
+        # requires data from the sandbox service. This means total_items reflects
+        # the unfiltered count. If filtering by sandbox_status results in fewer
+        # items than expected per page, pagination may show empty pages.
 
         # Apply sorting
         sort_column = VALID_SORT_FIELDS.get(
@@ -162,7 +167,7 @@ class OrgConversationService:
             metadata.sandbox_id for metadata, _, _ in rows if metadata.sandbox_id
         ]
 
-        # Batch fetch sandbox info for live status (only if filtering by sandbox_status)
+        # Batch fetch sandbox info for live status (always fetches to get current sandbox state)
         sandbox_info_map: dict[str, SandboxInfo | None] = {}
         if sandbox_ids and self.sandbox_service:
             try:
@@ -482,38 +487,46 @@ class OrgConversationService:
         result = await self.db_session.execute(totals_query)
         total_cost, total_prompt_tokens, total_completion_tokens = result.one()
 
-        # 4. Daily usage breakdown
+        # 4. Daily usage breakdown (single query instead of N queries)
+        from sqlalchemy import Date, cast
+
+        daily_query = (
+            select(
+                cast(StoredConversationMetadata.created_at, Date).label('day'),
+                func.count(StoredConversationMetadata.conversation_id),
+                func.coalesce(
+                    func.sum(
+                        StoredConversationMetadata.prompt_tokens
+                        + StoredConversationMetadata.completion_tokens
+                    ),
+                    0,
+                ),
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationMetadata.created_at >= cutoff)
+            .group_by(cast(StoredConversationMetadata.created_at, Date))
+            .order_by(cast(StoredConversationMetadata.created_at, Date).asc())
+        )
+        result = await self.db_session.execute(daily_query)
+        daily_rows = result.all()
+
+        # Build a map of date -> (conv_count, token_count)
+        daily_map = {row[0]: (row[1], row[2]) for row in daily_rows}
+
+        # Generate entries for all days in range (including days with no data)
         daily_usage = []
-        for i in range(days):
+        for i in range(days - 1, -1, -1):
             day_start = (now - timedelta(days=i)).replace(
                 hour=0, minute=0, second=0, microsecond=0
             )
-            day_end = day_start + timedelta(days=1)
-
-            daily_query = (
-                select(
-                    func.count(StoredConversationMetadata.conversation_id),
-                    func.coalesce(
-                        func.sum(
-                            StoredConversationMetadata.prompt_tokens
-                            + StoredConversationMetadata.completion_tokens
-                        ),
-                        0,
-                    ),
-                )
-                .select_from(StoredConversationMetadata)
-                .join(
-                    StoredConversationMetadataSaas,
-                    StoredConversationMetadata.conversation_id
-                    == StoredConversationMetadataSaas.conversation_id,
-                )
-                .where(*base_filter)
-                .where(StoredConversationMetadata.created_at >= day_start)
-                .where(StoredConversationMetadata.created_at < day_end)
-            )
-            result = await self.db_session.execute(daily_query)
-            conv_count, token_count = result.one()
-
+            day_date = day_start.date() if hasattr(day_start, 'date') else day_start
+            conv_count, token_count = daily_map.get(day_date, (0, 0))
             daily_usage.append(
                 DailyUsageData(
                     date=day_start.strftime('%Y-%m-%d'),
@@ -521,9 +534,6 @@ class OrgConversationService:
                     conversations=int(conv_count or 0),
                 )
             )
-
-        # Reverse to get oldest day first
-        daily_usage.reverse()
 
         # 5. Team usage (by user)
         team_query = (
@@ -758,6 +768,9 @@ class OrgConversationService:
                 metadata.execution_status = 'deleting'
                 await self.db_session.commit()
 
+                # Actually terminate the sandbox
+                await self.sandbox_service.delete_sandbox(metadata.sandbox_id)
+
                 logger.info(
                     'Stopping sandbox for org conversation',
                     extra={
@@ -813,8 +826,13 @@ class OrgConversationServiceInjector(Injector[OrgConversationService]):
                 async for sandbox_service in sandbox_injector.inject(state, request):
                     service.set_sandbox_service(sandbox_service)
                     break  # Only yield once with sandbox service
-            except (AssertionError, AttributeError):
-                # Sandbox service not configured, continue without it
-                pass
+            except (AssertionError, AttributeError) as e:
+                # Sandbox service not configured - log at warning level since
+                # this is a SaaS-specific feature that requires it
+                logger.warning(
+                    'Sandbox service not available for OrgConversationService; '
+                    'live sandbox status will not be available',
+                    extra={'error': str(e)},
+                )
 
             yield service

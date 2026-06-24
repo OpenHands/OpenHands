@@ -323,6 +323,13 @@ const copyToClipboard = (text: string) => {
   navigator.clipboard.writeText(text);
 };
 
+// Get number of days from time window string
+const getDaysFromTimeWindow = (timeWindow: string): number => {
+  if (timeWindow === "90d") return 90;
+  if (timeWindow === "30d") return 30;
+  return 7;
+};
+
 export function AdminDashboard() {
   const { data: orgData } = useOrganizations();
   const [activeTab, setActiveTab] = useState<"conversations" | "usage">(
@@ -636,9 +643,13 @@ export function AdminDashboard() {
                     {usageStats?.agent_runs ?? 0}
                   </div>
                   <div className="text-[#888888] text-sm">
-                    {usageStats?.agent_runs && usageStats.agent_runs > 0
-                      ? `${Math.round(usageStats.agent_runs / 7)} daily average`
-                      : "No runs in last 7 days"}
+                    {(() => {
+                      const days = getDaysFromTimeWindow(timeWindow);
+                      if (usageStats?.agent_runs && usageStats.agent_runs > 0) {
+                        return `${Math.round(usageStats.agent_runs / days)} daily average`;
+                      }
+                      return `No runs in ${days} days`;
+                    })()}
                   </div>
                 </div>
 
