@@ -382,14 +382,14 @@ class OrgConversationService:
                 result = await self.db_session.execute(sandbox_ids_query)
                 sandbox_ids = [row[0] for row in result.all()]
 
-                # Check each sandbox's status
-                for sandbox_id in sandbox_ids:
-                    try:
-                        sandbox = await self.sandbox_service.get_sandbox(sandbox_id)
+                # Batch fetch all sandbox statuses in one call
+                if sandbox_ids:
+                    sandbox_results = (
+                        await self.sandbox_service.batch_get_sandboxes(sandbox_ids)
+                    )
+                    for sandbox in sandbox_results:
                         if sandbox and sandbox.status.value == 'RUNNING':
                             running_runtimes += 1
-                    except Exception:
-                        pass
             except Exception as e:
                 logger.warning(
                     'Failed to get running runtimes count',
