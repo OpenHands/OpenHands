@@ -237,6 +237,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     export_lock_refresh_interval_seconds: int = 30
     export_lock_required: bool | None = None
 
+    def _maybe_append_shallow_clone_context(
+        self,
+        user: UserInfo,
+        selected_repository: str | None,
+        system_message_suffix: str | None,
+    ) -> str | None:
+        if selected_repository and not bool(getattr(user, 'git_full_clone', False)):
+            return append_system_context(
+                system_message_suffix, GIT_SHALLOW_CLONE_CONTEXT
+            )
+        return system_message_suffix
+
     async def _get_sandbox_grouping_strategy(self) -> SandboxGroupingStrategy:
         """Get the sandbox grouping strategy from user settings."""
         user_info = await self.user_context.get_user_info()
@@ -1596,10 +1608,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     )
                 secrets[name] = StaticSecret(value=value)
 
-        if selected_repository and not bool(getattr(user, 'git_full_clone', False)):
-            system_message_suffix = append_system_context(
-                system_message_suffix, GIT_SHALLOW_CLONE_CONTEXT
-            )
+        system_message_suffix = self._maybe_append_shallow_clone_context(
+            user, selected_repository, system_message_suffix
+        )
 
         # --- LLM + MCP -----------------------------------------------------
         llm, mcp_config = await self._configure_llm_and_mcp(
@@ -1885,10 +1896,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     )
                 secrets[name] = StaticSecret(value=value)
 
-        if selected_repository and not bool(getattr(user, 'git_full_clone', False)):
-            system_message_suffix = append_system_context(
-                system_message_suffix, GIT_SHALLOW_CLONE_CONTEXT
-            )
+        system_message_suffix = self._maybe_append_shallow_clone_context(
+            user, selected_repository, system_message_suffix
+        )
 
         # --- build the ACP agent ------------------------------------------
         acp_settings = user.agent_settings  # already verified to be ACPAgentSettings

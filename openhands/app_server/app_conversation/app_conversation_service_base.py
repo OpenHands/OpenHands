@@ -405,6 +405,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
         # Checkout the appropriate branch
         if request.selected_branch:
+            # Needed for full clones; harmless no-op after shallow clones with --branch.
             checkout_command = f'git checkout {shlex.quote(request.selected_branch)}'
         else:
             # Generate a random branch name to avoid conflicts
