@@ -196,7 +196,13 @@ def settings_store(async_session_maker):
                     await session.merge(existing)
                 else:
                     item_dict['keycloak_user_id'] = store.user_id
-                    settings = UserSettings(**item_dict)
+                    settings = UserSettings(
+                        **{
+                            key: value
+                            for key, value in item_dict.items()
+                            if key in UserSettings.__table__.columns
+                        }
+                    )
                     session.add(settings)
                 await session.commit()
 

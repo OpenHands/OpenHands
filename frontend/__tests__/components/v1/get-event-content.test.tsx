@@ -58,6 +58,51 @@ const terminalObservationEvent: ObservationEvent = {
   },
 };
 
+const taskActionEvent: ActionEvent = {
+  id: "action-task-1",
+  timestamp: new Date().toISOString(),
+  source: "agent",
+  thought: [{ type: "text", text: "I'll ask a sub-agent to count files." }],
+  thinking_blocks: [],
+  action: {
+    kind: "TaskAction",
+    description: "count repository files",
+    prompt: "Count how many files are in the repo using git ls-files | wc -l.",
+    subagent_type: "bash-runner",
+    resume: null,
+  },
+  tool_name: "task",
+  tool_call_id: "tool-task-1",
+  tool_call: {
+    id: "tool-task-1",
+    type: "function",
+    function: {
+      name: "task",
+      arguments: '{"prompt":"Count files","subagent_type":"bash-runner"}',
+    },
+  },
+  llm_response_id: "response-task-1",
+  security_risk: SecurityRisk.LOW,
+  summary: "Ask sub-agent to count repository files",
+};
+
+const taskObservationEvent: ObservationEvent = {
+  id: "obs-task-1",
+  timestamp: new Date().toISOString(),
+  source: "environment",
+  tool_name: "task",
+  tool_call_id: "tool-task-1",
+  action_id: "action-task-1",
+  observation: {
+    kind: "TaskObservation",
+    content: [{ type: "text", text: "tracked_count=1606" }],
+    is_error: false,
+    task_id: "task_00000002",
+    subagent: "bash-runner",
+    status: "completed",
+  },
+};
+
 describe("getEventContent", () => {
   it("uses the action summary as the full action title", () => {
     const { title } = getEventContent(terminalActionEvent);
@@ -144,5 +189,86 @@ describe("getEventContent", () => {
 
     expect(screen.getByText("Check repository status")).toBeInTheDocument();
     expect(screen.queryByText("$ git status")).not.toBeInTheDocument();
+  });
+
+  it("renders the sub-agent task card with subagent, task id, query and result", () => {
+    const { details } = getEventContent(taskObservationEvent, taskActionEvent);
+
+    render(<div>{details}</div>);
+
+    // Labels render as raw i18n keys because i18n is not loaded in tests
+    expect(
+      screen.getByText("SUBAGENT_OBSERVATION$SUBAGENT:"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("bash-runner")).toBeInTheDocument();
+    expect(
+      screen.getByText("SUBAGENT_OBSERVATION$TASK_ID:"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("task_00000002")).toBeInTheDocument();
+    expect(screen.getByText("SUBAGENT_OBSERVATION$QUERY")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Count how many files are in the repo using git ls-files | wc -l.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("SUBAGENT_OBSERVATION$RESULT")).toBeInTheDocument();
+    expect(screen.getByText("tracked_count=1606")).toBeInTheDocument();
+  });
+
+  it("falls back to the task title key when the action summary is missing", () => {
+    const actionWithoutSummary = { ...taskActionEvent, summary: undefined };
+    const { title } = getEventContent(
+      taskObservationEvent,
+      actionWithoutSummary,
+    );
+
+    render(<span>{title}</span>);
+
+    expect(screen.getByText("OBSERVATION_MESSAGE$TASK")).toBeInTheDocument();
+  });
+
+  it("shows the subagent and query in the in-progress task action card", () => {
+    const { details } = getEventContent(taskActionEvent);
+
+    expect(details).toContain("**Subagent:** `bash-runner`");
+    expect(details).toContain(
+      "Count how many files are in the repo using git ls-files | wc -l.",
+    );
+  });
+
+  it("renders image content in the sub-agent result instead of dropping it", () => {
+    const observationWithImage: ObservationEvent = {
+      ...taskObservationEvent,
+      observation: {
+        kind: "TaskObservation",
+        content: [
+          { type: "text", text: "Here is a screenshot:" },
+          { type: "image", image_urls: ["data:image/png;base64,abc123"] },
+        ],
+        is_error: false,
+        task_id: "task_00000002",
+        subagent: "bash-runner",
+        status: "completed",
+      },
+    };
+
+    const { details } = getEventContent(observationWithImage, taskActionEvent);
+
+    const { container } = render(<div>{details}</div>);
+
+    expect(screen.getByText("Here is a screenshot:")).toBeInTheDocument();
+    const image = container.querySelector("img");
+    expect(image).toHaveAttribute("src", "data:image/png;base64,abc123");
+  });
+
+  it("omits the query section when the task observation has no paired action", () => {
+    const { details } = getEventContent(taskObservationEvent);
+
+    render(<div>{details}</div>);
+
+    expect(screen.getByText("tracked_count=1606")).toBeInTheDocument();
+    expect(
+      screen.queryByText("SUBAGENT_OBSERVATION$QUERY"),
+    ).not.toBeInTheDocument();
   });
 });
