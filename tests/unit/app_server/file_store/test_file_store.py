@@ -323,6 +323,22 @@ class TestInMemoryFileStore(TestCase, _StorageTest):
     def setUp(self):
         self.store = InMemoryFileStore()
 
+    def test_list_does_not_include_prefix_siblings(self):
+        self.store.write('foo/bar.txt', 'Hello, world!')
+        self.store.write('foobar.txt', 'Hello, world!')
+
+        self.assertEqual(self.store.list('foo'), ['foo/bar.txt'])
+
+    def test_delete_does_not_remove_prefix_siblings(self):
+        self.store.write('foo/bar.txt', 'Hello, world!')
+        self.store.write('foobar.txt', 'Hello, world!')
+
+        self.store.delete('foo')
+
+        self.assertEqual(self.store.read('foobar.txt'), 'Hello, world!')
+        with self.assertRaises(FileNotFoundError):
+            self.store.read('foo/bar.txt')
+
 
 @patch(
     'openhands.app_server.file_store.google_cloud.storage.Client',

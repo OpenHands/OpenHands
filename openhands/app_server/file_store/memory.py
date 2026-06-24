@@ -20,18 +20,19 @@ class InMemoryFileStore(FileStore):
         return self.files[path]
 
     def list(self, path: str) -> list[str]:
+        prefix = _directory_prefix(path)
         files = []
         for file in self.files:
-            if not file.startswith(path):
+            if prefix and not file.startswith(prefix):
                 continue
-            suffix = file.removeprefix(path)
+            suffix = file.removeprefix(prefix)
+            if not suffix:
+                continue
             parts = suffix.split('/')
-            if parts[0] == '':
-                parts.pop(0)
             if len(parts) == 1:
                 files.append(file)
             else:
-                dir_path = os.path.join(path, parts[0])
+                dir_path = os.path.join(prefix, parts[0])
                 if not dir_path.endswith('/'):
                     dir_path += '/'
                 if dir_path not in files:
@@ -40,9 +41,22 @@ class InMemoryFileStore(FileStore):
 
     def delete(self, path: str) -> None:
         try:
-            keys_to_delete = [key for key in self.files.keys() if key.startswith(path)]
+            path = path.rstrip('/')
+            prefix = _directory_prefix(path)
+            keys_to_delete = [
+                key
+                for key in self.files.keys()
+                if not path or key == path or key.startswith(prefix)
+            ]
             for key in keys_to_delete:
                 del self.files[key]
             logger.debug(f'Cleared in-memory file store: {path}')
         except Exception as e:
             logger.error(f'Error clearing in-memory file store: {str(e)}')
+
+
+def _directory_prefix(path: str) -> str:
+    path = path.rstrip('/')
+    if not path:
+        return ''
+    return f'{path}/'
