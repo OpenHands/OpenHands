@@ -12,6 +12,7 @@ This module tests the RemoteSandboxService implementation, focusing on:
 """
 
 import asyncio
+import json
 from contextlib import ExitStack, asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
@@ -642,6 +643,51 @@ class TestSandboxLifecycle:
         )
 
     @pytest.mark.asyncio
+    async def test_delete_sandbox_archives_before_stop_before_delete(
+        self, remote_sandbox_service
+    ):
+        """Live runtime + archiving enabled: archive, then /stop, then delete."""
+        stored_sandbox = create_stored_sandbox()
+        runtime_data = create_runtime_data()
+
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(return_value=runtime_data)
+
+        order: list[str] = []
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.raise_for_status.return_value = None
+
+        async def record_request(*args, **kwargs):
+            order.append('stop')
+            return mock_response
+
+        async def record_archive(*args, **kwargs):
+            order.append('archive')
+            return True
+
+        async def record_delete(obj):
+            order.append('delete')
+
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            side_effect=record_request
+        )
+        remote_sandbox_service.db_session.delete = AsyncMock(side_effect=record_delete)
+
+        with patch(
+            'openhands.app_server.sandbox.remote_sandbox_service.workspace_archive'
+        ) as mock_wa:
+            mock_wa.archive_enabled.return_value = True
+            mock_wa.archive_workspace = AsyncMock(side_effect=record_archive)
+            result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+
+        assert result is True
+        assert order == ['archive', 'stop', 'delete']
+
+    @pytest.mark.asyncio
     async def test_delete_sandbox_runtime_not_found_ignored(
         self, remote_sandbox_service
     ):
@@ -666,6 +712,54 @@ class TestSandboxLifecycle:
 
         # Verify
         assert result is True  # 404 should be ignored for delete operations
+
+    @pytest.mark.asyncio
+    async def test_delete_sandbox_runtime_gone_deletes_record(
+        self, remote_sandbox_service
+    ):
+        """_get_runtime 404 (runtime already gone) still deletes the DB row."""
+        stored_sandbox = create_stored_sandbox()
+
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        not_found = httpx.HTTPStatusError(
+            'Not Found',
+            request=httpx.Request('GET', 'https://api.example.com/sessions/x'),
+            response=httpx.Response(404),
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(side_effect=not_found)
+        remote_sandbox_service.db_session.delete = AsyncMock()
+
+        result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+
+        assert result is True
+        remote_sandbox_service.db_session.delete.assert_called_once_with(stored_sandbox)
+        # Nothing to stop when the runtime is already gone.
+        remote_sandbox_service.httpx_client.request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_sandbox_runtime_transient_error_keeps_record(
+        self, remote_sandbox_service
+    ):
+        """A transient (5xx) _get_runtime error leaves the row for a retry."""
+        stored_sandbox = create_stored_sandbox()
+
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        server_error = httpx.HTTPStatusError(
+            'Server Error',
+            request=httpx.Request('GET', 'https://api.example.com/sessions/x'),
+            response=httpx.Response(503),
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(side_effect=server_error)
+        remote_sandbox_service.db_session.delete = AsyncMock()
+
+        result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+
+        assert result is False
+        remote_sandbox_service.db_session.delete.assert_not_called()
 
 
 class TestSandboxSearch:
@@ -1874,9 +1968,12 @@ class TestArchiveWorkspaceHelper:
         resp = MagicMock()
         resp.status_code = 200
         resp.content = b'patch-bytes'
+        resp.headers = {'X-Archive-Base-Commit': 'abc123'}
         client = AsyncMock()
         client.get = AsyncMock(return_value=resp)
         store = MagicMock()
+        writes: dict[str, bytes] = {}
+        store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
 
         with patch.object(
             workspace_archive, '_get_archive_file_store', return_value=store
@@ -1889,14 +1986,47 @@ class TestArchiveWorkspaceHelper:
             )
 
         assert ok is True
-        # session key forwarded; path + format passed.
+        # session key forwarded; default path is the git repo, format passed.
         _, kwargs = client.get.call_args
         assert kwargs['headers']['X-Session-API-Key'] == 'test-session-key'
-        assert kwargs['params'] == {'path': '/workspace', 'format': 'git-delta'}
+        assert kwargs['params'] == {
+            'path': '/workspace/project',
+            'format': 'git-delta',
+        }
         # archive + manifest written.
-        written_paths = [c.args[0] for c in store.write.call_args_list]
-        assert any(p.endswith('.patch') for p in written_paths)
-        assert any(p.endswith('.manifest.json') for p in written_paths)
+        assert any(p.endswith('.patch') for p in writes)
+        manifest_path = next(p for p in writes if p.endswith('.manifest.json'))
+        manifest = json.loads(writes[manifest_path])
+        assert manifest['base_commit'] == 'abc123'
+        assert manifest['conversation_id'] == 'conv-1'
+        assert manifest['source_path'] == '/workspace/project'
+
+    @pytest.mark.asyncio
+    async def test_archive_missing_base_commit_header_defaults_empty(self, monkeypatch):
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b'patch-bytes'
+        resp.headers = {}
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=resp)
+        store = MagicMock()
+        writes: dict[str, bytes] = {}
+        store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
+
+        with patch.object(
+            workspace_archive, '_get_archive_file_store', return_value=store
+        ):
+            ok = await workspace_archive.archive_workspace(
+                client, create_runtime_data(), 'sandbox-1'
+            )
+
+        assert ok is True
+        manifest_path = next(p for p in writes if p.endswith('.manifest.json'))
+        assert json.loads(writes[manifest_path])['base_commit'] == ''
 
     @pytest.mark.asyncio
     async def test_archive_non_200_not_required_allows_delete(self, monkeypatch):

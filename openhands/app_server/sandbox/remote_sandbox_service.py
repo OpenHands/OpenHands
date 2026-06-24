@@ -579,6 +579,10 @@ class RemoteSandboxService(SandboxService):
         and ``/stop`` complete, so a failed archive leaves the sandbox intact
         for a retry rather than silently losing the workspace.
 
+        If the runtime is already gone (paused/reaped/double-delete, a 404 from
+        the runtime API), there is nothing to archive or stop, so the record is
+        deleted directly to avoid orphaning the row and its session_api_key_hash.
+
         Security: Deleting the stored_sandbox record also removes the
         session_api_key_hash, invalidating any leaked session keys.
         """
@@ -586,7 +590,19 @@ class RemoteSandboxService(SandboxService):
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
             if not stored_sandbox:
                 return False
-            runtime_data = await self._get_runtime(sandbox_id)
+            try:
+                runtime_data = await self._get_runtime(sandbox_id)
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code != 404:
+                    raise
+                # Runtime already gone: nothing to archive or stop. Delete the
+                # record (clears session_api_key_hash) so it is not orphaned.
+                _logger.info(
+                    f'Runtime for sandbox {sandbox_id} already gone (404); '
+                    'deleting record'
+                )
+                await self.db_session.delete(stored_sandbox)
+                return True
 
             if workspace_archive.archive_enabled():
                 archived = await workspace_archive.archive_workspace(

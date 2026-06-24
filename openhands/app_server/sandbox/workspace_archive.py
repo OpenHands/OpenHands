@@ -18,7 +18,6 @@ import asyncio
 import json
 import logging
 import os
-from datetime import timezone
 from typing import Any
 
 from openhands.agent_server.utils import utc_now
@@ -52,7 +51,8 @@ def _archive_format() -> str:
 
 
 def _archive_path() -> str:
-    return os.getenv('RUNTIME_FILE_ARCHIVE_PATH', '/workspace')
+    # The git repo lives at /workspace/project; /workspace itself is not a repo.
+    return os.getenv('RUNTIME_FILE_ARCHIVE_PATH', '/workspace/project')
 
 
 def _archive_timeout() -> float:
@@ -112,20 +112,21 @@ async def archive_workspace(
             )
             return not archive_required()
         data = response.content
+        base_commit = response.headers.get('X-Archive-Base-Commit', '')
     except Exception as e:
         _logger.warning('Workspace archive fetch failed for %s: %s', sandbox_id, e)
         return not archive_required()
 
     try:
         store = _get_archive_file_store()
-        created_at = utc_now().astimezone(timezone.utc)
-        ts = created_at.strftime('%Y%m%dT%H%M%SZ')
+        ts = utc_now().strftime('%Y%m%dT%H%M%SZ')
         base_path = f'{_archive_prefix()}/{sandbox_id}/{ts}'
         await asyncio.to_thread(store.write, f'{base_path}.{suffix}', data)
         manifest = json.dumps(
             {
                 'sandbox_id': sandbox_id,
                 'conversation_id': conversation_id,
+                'base_commit': base_commit,
                 'format': fmt,
                 'source_path': _archive_path(),
                 'byte_count': len(data),
