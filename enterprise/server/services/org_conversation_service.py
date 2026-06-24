@@ -384,8 +384,8 @@ class OrgConversationService:
 
                 # Batch fetch all sandbox statuses in one call
                 if sandbox_ids:
-                    sandbox_results = (
-                        await self.sandbox_service.batch_get_sandboxes(sandbox_ids)
+                    sandbox_results = await self.sandbox_service.batch_get_sandboxes(
+                        sandbox_ids
                     )
                     for sandbox in sandbox_results:
                         if sandbox and sandbox.status.value == 'RUNNING':

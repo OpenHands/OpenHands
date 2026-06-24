@@ -434,6 +434,13 @@ export function AdminDashboard() {
     },
   });
 
+  // TODO(documentation): The View button is temporarily hidden pending a deeper
+  // review of the UX and data-access implications of letting org admins open
+  // arbitrary member conversations.  Specifically:
+  //   - Whether the admin should see the full conversation or a redacted view.
+  //   - Whether the admin's browsing creates a session in the target sandbox.
+  //   - Whether we need additional audit-logging for admin access.
+  // See APP-670 comment thread for context.
   const handleView = (conversationId: string) => {
     navigate(`/conversations/${conversationId}`);
   };
@@ -501,70 +508,44 @@ export function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0B0B0B] text-white flex">
-      {/* Left Sidebar */}
-      <aside className="w-[260px] shrink-0 border-r border-white/10 flex flex-col">
-        {/* Sidebar Header */}
-        <div className="p-6 border-b border-white/10">
-          <h1 className="text-white font-bold text-lg">Admin dashboard</h1>
-          <p className="text-[#888888] text-sm mt-1">Organization controls</p>
+    <div className="min-h-screen bg-[#0B0B0B] text-white flex flex-col">
+      {/* Top Header with Tabs */}
+      <header className="border-b border-white/10 px-6 py-4">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-white font-bold text-lg">Admin dashboard</h1>
+            <p className="text-[#888888] text-sm mt-1">
+              {currentOrg?.name || "your organization"}
+            </p>
+          </div>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-4">
-          <ul className="space-y-1">
-            <li>
-              <button
-                type="button"
-                onClick={() => setActiveTab("usage")}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === "usage"
-                    ? "bg-white/10 border border-white/20 text-white"
-                    : "text-[#888888] hover:text-white hover:bg-white/5"
-                }`}
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M3 3v18h18" />
-                  <path d="M18 17V9" />
-                  <path d="M13 17V5" />
-                  <path d="M8 17v-3" />
-                </svg>
-                Usage
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                onClick={() => setActiveTab("conversations")}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === "conversations"
-                    ? "bg-white/10 border border-white/20 text-white"
-                    : "text-[#888888] hover:text-white hover:bg-white/5"
-                }`}
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-                Conversations
-              </button>
-            </li>
-          </ul>
-        </nav>
-      </aside>
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-white/10 -mb-4">
+          <button
+            type="button"
+            onClick={() => setActiveTab("usage")}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+              activeTab === "usage"
+                ? "border-white text-white"
+                : "border-transparent text-[#888888] hover:text-white"
+            }`}
+          >
+            Usage
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("conversations")}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+              activeTab === "conversations"
+                ? "border-white text-white"
+                : "border-transparent text-[#888888] hover:text-white"
+            }`}
+          >
+            Conversations
+          </button>
+        </div>
+      </header>
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
@@ -574,16 +555,9 @@ export function AdminDashboard() {
             <div className="p-8 border-b border-white/10">
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <h1 className="text-3xl font-bold text-white tracking-tight">
-                    Usage
-                  </h1>
-                  <p className="text-[#888888] text-sm mt-2">
+                  <p className="text-[#888888] text-sm">
                     At-a-glance OpenHands usage for{" "}
                     {currentOrg?.name || "your organization"}.
-                  </p>
-                  <p className="text-[#888888] text-sm mt-1">
-                    At-a-glance org consumption and activity trends using sample
-                    data.
                   </p>
                 </div>
                 <button
@@ -832,17 +806,6 @@ export function AdminDashboard() {
           </>
         ) : (
           <>
-            {/* Conversations Page Header */}
-            <div className="p-8 pb-0">
-              <h1 className="text-3xl font-bold text-white tracking-tight mb-2">
-                Conversations
-              </h1>
-              <p className="text-[#888888] text-sm">
-                Org-wide OpenHands activity — active sessions, runtimes, and
-                triage.
-              </p>
-            </div>
-
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 px-8 pt-6">
               <KPICard
@@ -1132,16 +1095,20 @@ export function AdminDashboard() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex flex-col gap-1">
-                              <button
-                                type="button"
-                                onClick={() => handleView(conversation.id)}
-                                className="flex items-center gap-1.5 px-2 py-1 text-xs text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors"
-                                title="View conversation"
-                                aria-label="View conversation"
-                              >
-                                <EyeIcon />
-                                View
-                              </button>
+                              {/* TODO: Hidden until permissions/API design are reviewed.
+                                   See handleView comment above. */}
+                              {false && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleView(conversation.id)}
+                                  className="flex items-center gap-1.5 px-2 py-1 text-xs text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors"
+                                  title="View conversation"
+                                  aria-label="View conversation"
+                                >
+                                  <EyeIcon />
+                                  View
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => handleStop(conversation)}

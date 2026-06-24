@@ -298,19 +298,24 @@ async def test_create_user_reuses_existing_org(async_session_maker):
 
     async with async_session_maker() as session:
         db_user = (
-            await session.execute(select(User).filter(User.id == user_uuid))
-        ).scalars().first()
+            (await session.execute(select(User).filter(User.id == user_uuid)))
+            .scalars()
+            .first()
+        )
         org_member = (
-            await session.execute(
-                select(OrgMember).filter(
-                    OrgMember.org_id == user_uuid, OrgMember.user_id == user_uuid
+            (
+                await session.execute(
+                    select(OrgMember).filter(
+                        OrgMember.org_id == user_uuid, OrgMember.user_id == user_uuid
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
 
     assert db_user is not None
     assert org_member is not None
-
 
 
 # --- Tests for get_user_by_id ---
