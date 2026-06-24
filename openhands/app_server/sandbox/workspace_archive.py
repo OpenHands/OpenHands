@@ -26,7 +26,7 @@ from openhands.app_server.file_store.google_cloud import GoogleCloudFileStore
 
 _logger = logging.getLogger(__name__)
 
-_ARCHIVE_SUFFIX = {'git-delta': 'patch', 'zip': 'zip', 'tar.gz': 'tar.gz'}
+_ARCHIVE_SUFFIX = {'git-delta': 'patch'}
 
 
 def archive_enabled() -> bool:
@@ -94,7 +94,7 @@ async def archive_workspace(
         return not archive_required()
 
     fmt = _archive_format()
-    suffix = _ARCHIVE_SUFFIX.get(fmt, 'tar.gz')
+    suffix = _ARCHIVE_SUFFIX.get(fmt, 'patch')
     headers = {'X-Session-API-Key': session_api_key} if session_api_key else {}
 
     try:
@@ -125,7 +125,9 @@ async def archive_workspace(
         manifest = json.dumps(
             {
                 'sandbox_id': sandbox_id,
-                'conversation_id': conversation_id,
+                # For cloud conversations the sandbox id is the
+                # conversation_id.hex; use it as the archive's conversation key.
+                'conversation_id': conversation_id or sandbox_id,
                 'base_commit': base_commit,
                 'format': fmt,
                 'source_path': _archive_path(),

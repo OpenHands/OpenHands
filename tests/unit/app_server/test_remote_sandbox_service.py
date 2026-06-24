@@ -2026,7 +2026,11 @@ class TestArchiveWorkspaceHelper:
 
         assert ok is True
         manifest_path = next(p for p in writes if p.endswith('.manifest.json'))
-        assert json.loads(writes[manifest_path])['base_commit'] == ''
+        manifest = json.loads(writes[manifest_path])
+        assert manifest['base_commit'] == ''
+        # Prod case: delete_sandbox passes no conversation_id, so the manifest
+        # falls back to the sandbox id (which is the conversation_id.hex).
+        assert manifest['conversation_id'] == 'sandbox-1'
 
     @pytest.mark.asyncio
     async def test_archive_non_200_not_required_allows_delete(self, monkeypatch):
