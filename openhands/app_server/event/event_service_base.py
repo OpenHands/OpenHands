@@ -28,6 +28,15 @@ def _event_load_concurrency() -> int:
         return 10
 
 
+def _event_page_offset(page_id: str | None) -> int:
+    if not page_id:
+        return 0
+    try:
+        return max(0, int(page_id))
+    except ValueError:
+        return 0
+
+
 @dataclass
 class EventServiceBase(EventService, ABC):
     """Event Service for getting events - the only check on permissions for events is
@@ -131,10 +140,9 @@ class EventServiceBase(EventService, ABC):
             )
 
         # Apply pagination to items (not paths)
-        start_offset = 0
+        start_offset = _event_page_offset(page_id)
         next_page_id = None
-        if page_id:
-            start_offset = int(page_id)
+        if start_offset:
             items = items[start_offset:]
         if len(items) > limit:
             next_page_id = str(start_offset + limit)

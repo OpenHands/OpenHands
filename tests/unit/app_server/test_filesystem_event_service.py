@@ -294,6 +294,25 @@ class TestFilesystemEventServiceSearchEvents:
         assert len(collected_ids) == 5
 
     @pytest.mark.asyncio
+    async def test_search_events_invalid_page_id_starts_at_first_page(
+        self, service: FilesystemEventService
+    ):
+        """Test that invalid page tokens do not crash event search."""
+        conversation_id = uuid4()
+
+        for _ in range(3):
+            await service.save_event(conversation_id, create_token_event())
+
+        result = await service.search_events(
+            conversation_id,
+            page_id='not-an-offset',
+            limit=2,
+        )
+
+        assert len(result.items) == 2
+        assert result.next_page_id == '2'
+
+    @pytest.mark.asyncio
     async def test_search_events_filter_by_timestamp_gte(
         self, service: FilesystemEventService
     ):
