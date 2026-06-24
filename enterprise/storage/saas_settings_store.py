@@ -218,6 +218,14 @@ class SaasSettingsStore(SettingsStore):
         # Apply default if registered_marketplaces is None in the database
         if kwargs.get('registered_marketplaces') is None:
             kwargs.pop('registered_marketplaces', None)
+
+        # Load personal registered_marketplaces from user_settings table
+        user_settings = await self._get_user_settings_by_keycloak_id_async(
+            self.user_id
+        )
+        if user_settings and user_settings.registered_marketplaces:
+            kwargs['registered_marketplaces'] = user_settings.registered_marketplaces
+
         # Profiles in SaaS live on the org (managed via
         # /api/organizations/{org_id}/profiles). Surface them through
         # Settings.llm_profiles so the chat-layer endpoints
@@ -416,10 +424,24 @@ class SaasSettingsStore(SettingsStore):
             kwargs.pop('agent_settings', None)
             kwargs.pop('conversation_settings', None)
 
+            # Get or create user_settings for this user
+            user_settings_result = await session.execute(
+                select(UserSettings).filter(
+                    UserSettings.keycloak_user_id == self.user_id
+                )
+            )
+            user_settings = user_settings_result.scalars().first()
+            if not user_settings:
+                user_settings = UserSettings(keycloak_user_id=self.user_id)
+                session.add(user_settings)
+
             for key, value in kwargs.items():
                 if hasattr(user, key):
                     setattr(user, key, value)
-                if hasattr(org, key) and key not in {
+                if key == 'registered_marketplaces':
+                    # Save personal marketplace settings to user_settings table
+                    user_settings.registered_marketplaces = value
+                elif hasattr(org, key) and key not in {
                     'llm_api_key',
                     'agent_settings',
                     'conversation_settings',

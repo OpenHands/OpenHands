@@ -160,7 +160,7 @@ function SkillsSettingsScreen() {
   const [isSavingOrg, setIsSavingOrg] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
 
-  // Marketplace skills mutation
+  // Marketplace skills mutation for validation
   const marketplaceSkillsMutation = useMarketplaceSkills();
 
   // Skills filters
@@ -293,43 +293,50 @@ function SkillsSettingsScreen() {
             allRegisteredMarketplaces,
           );
 
-          // Log errors if any
+          // Show errors if any
           if (preview.errors && preview.errors.length > 0) {
-            console.error("Marketplace skills errors:", preview.errors);
             preview.errors.forEach((error) => {
               displayErrorToast(`Marketplace error: ${error}`);
             });
           }
 
           if (preview.skills.length > 0) {
-            const marketplaceSkills: SkillWithState[] = preview.skills.map(
-              (skill) => {
+            // Deduplicate skills by name before adding - prevents duplicates on refresh
+            const seenSkillNames = new Set<string>();
+            const marketplaceSkills: SkillWithState[] = [];
+
+            for (const skill of preview.skills) {
+              if (!seenSkillNames.has(skill.name)) {
+                seenSkillNames.add(skill.name);
+
                 // Determine scope based on which marketplace this came from
                 const marketplace = allRegisteredMarketplaces.find(
                   (mp) => skill.source === `marketplace:${mp.name}`,
                 );
-                const isOrg = (
-                  orgAppSettings?.registered_marketplaces || []
-                ).some((mp) => mp.name === marketplace?.name);
+                // Use SOURCE-based matching instead of NAME-based to correctly determine scope
+                const isOrg = marketplace
+                  ? (orgAppSettings?.registered_marketplaces || []).some(
+                      (mp) => mp.source === marketplace.source,
+                    )
+                  : false;
 
-                return {
+                marketplaceSkills.push({
                   ...skill,
                   id: skill.name,
                   repository: marketplace?.source || skill.source,
                   scope: isOrg ? "org" : "personal",
                   isEnabled: !disabledSet.has(skill.name),
                   isAutoLoad: marketplace?.auto_load === "all",
-                };
-              },
-            );
+                });
+              }
+            }
 
-            // Merge global/user skills with marketplace skills
+            // Merge global/user skills with marketplace skills (both already deduplicated)
             setSkillsState([...mappedSkills, ...marketplaceSkills]);
           } else {
             setSkillsState(mappedSkills);
           }
         } catch (error) {
-          console.error("Failed to fetch marketplace skills:", error);
           // Fall back to just global/user skills
           setSkillsState(mappedSkills);
         }
@@ -488,11 +495,6 @@ function SkillsSettingsScreen() {
       auto_load: data.auto_load,
     };
 
-    const isNewMarketplace =
-      data.scope === "org"
-        ? !orgMarketplaces.some((mp) => mp.source === data.source)
-        : !personalMarketplaces.some((mp) => mp.source === data.source);
-
     if (data.scope === "org") {
       // Save to org settings
       setIsSavingOrg(true);
@@ -508,6 +510,21 @@ function SkillsSettingsScreen() {
       }
 
       try {
+        // Validate marketplace by fetching skills first
+        const preview = await marketplaceSkillsMutation.mutateAsync([
+          newMarketplace,
+        ]);
+
+        // Check for errors - don't save if validation fails
+        if (preview.errors && preview.errors.length > 0) {
+          displayErrorToast(
+            `Failed to validate marketplace: ${preview.errors.join(", ")}`,
+          );
+          setIsSavingOrg(false);
+          return;
+        }
+
+        // Only save to BE if validation passes
         await organizationService.saveOrganizationAppSettings({
           registered_marketplaces: updated,
           last_known_updated_at: lastKnownUpdatedAt,
@@ -518,48 +535,8 @@ function SkillsSettingsScreen() {
           queryKey: ORGANIZATION_APP_SETTINGS_KEY,
         });
 
-        // Fetch marketplace skills and update the skills table
-        if (isNewMarketplace) {
-          try {
-            const preview = await marketplaceSkillsMutation.mutateAsync([
-              newMarketplace,
-            ]);
-
-            // Show errors if any
-            if (preview.errors && preview.errors.length > 0) {
-              console.error("Marketplace skills errors:", preview.errors);
-              preview.errors.forEach((error) => {
-                displayErrorToast(`Failed to load skills: ${error}`);
-              });
-            }
-
-            if (preview.skills.length > 0) {
-              const newSkills: SkillWithState[] = preview.skills.map(
-                (skill) => ({
-                  ...skill,
-                  id: skill.name,
-                  repository: data.source,
-                  scope: "org",
-                  isEnabled: true,
-                  isAutoLoad: data.auto_load === "all",
-                }),
-              );
-              setSkillsState((prev) => [...prev, ...newSkills]);
-            }
-          } catch (previewError) {
-            // Marketplace was saved but skills preview failed
-            console.error(
-              "Failed to fetch marketplace skills preview:",
-              previewError,
-            );
-            const errorMsg = retrieveAxiosErrorMessage(
-              previewError as AxiosError,
-            );
-            displayErrorToast(
-              `Marketplace saved but failed to load skills: ${errorMsg || "Unknown error"}`,
-            );
-          }
-        }
+        // Skills will be loaded by the useEffect on next render
+        // This prevents duplicate skills when page is refreshed
 
         setIsModalOpen(false);
       } catch (error) {
@@ -592,6 +569,21 @@ function SkillsSettingsScreen() {
       }
 
       try {
+        // Validate marketplace by fetching skills first
+        const preview = await marketplaceSkillsMutation.mutateAsync([
+          newMarketplace,
+        ]);
+
+        // Check for errors - don't save if validation fails
+        if (preview.errors && preview.errors.length > 0) {
+          displayErrorToast(
+            `Failed to validate marketplace: ${preview.errors.join(", ")}`,
+          );
+          setIsSavingPersonal(false);
+          return;
+        }
+
+        // Only save to BE if validation passes
         await SettingsService.saveSettings({
           registered_marketplaces: updated,
         });
@@ -599,48 +591,8 @@ function SkillsSettingsScreen() {
         setPersonalMarketplaces(updated);
         queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
 
-        // Fetch marketplace skills and update the skills table
-        if (isNewMarketplace) {
-          try {
-            const preview = await marketplaceSkillsMutation.mutateAsync([
-              newMarketplace,
-            ]);
-
-            // Show errors if any
-            if (preview.errors && preview.errors.length > 0) {
-              console.error("Marketplace skills errors:", preview.errors);
-              preview.errors.forEach((error) => {
-                displayErrorToast(`Failed to load skills: ${error}`);
-              });
-            }
-
-            if (preview.skills.length > 0) {
-              const newSkills: SkillWithState[] = preview.skills.map(
-                (skill) => ({
-                  ...skill,
-                  id: skill.name,
-                  repository: data.source,
-                  scope: "personal",
-                  isEnabled: true,
-                  isAutoLoad: data.auto_load === "all",
-                }),
-              );
-              setSkillsState((prev) => [...prev, ...newSkills]);
-            }
-          } catch (previewError) {
-            // Marketplace was saved but skills preview failed
-            console.error(
-              "Failed to fetch marketplace skills preview:",
-              previewError,
-            );
-            const errorMsg = retrieveAxiosErrorMessage(
-              previewError as AxiosError,
-            );
-            displayErrorToast(
-              `Marketplace saved but failed to load skills: ${errorMsg || "Unknown error"}`,
-            );
-          }
-        }
+        // Skills will be loaded by the useEffect on next render
+        // This prevents duplicate skills when page is refreshed
 
         setIsModalOpen(false);
       } catch (error) {
@@ -670,6 +622,23 @@ function SkillsSettingsScreen() {
         });
         displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
         setOrgMarketplaces(updated);
+
+        // Update allMarketplaces immediately to remove the deleted org marketplace
+        setAllMarketplaces((prev) =>
+          prev.filter((mp) => mp.source !== marketplaceToDelete.source),
+        );
+
+        // Remove skills associated with this org marketplace
+        setSkillsState((prev) =>
+          prev.filter(
+            (skill) =>
+              !(
+                skill.repository === marketplaceToDelete.source &&
+                skill.scope === "org"
+              ),
+          ),
+        );
+
         queryClient.invalidateQueries({
           queryKey: ORGANIZATION_APP_SETTINGS_KEY,
         });
@@ -701,6 +670,23 @@ function SkillsSettingsScreen() {
         });
         displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
         setPersonalMarketplaces(updated);
+
+        // Update allMarketplaces immediately to remove the deleted personal marketplace
+        setAllMarketplaces((prev) =>
+          prev.filter((mp) => mp.source !== marketplaceToDelete.source),
+        );
+
+        // Remove skills associated with this personal marketplace
+        setSkillsState((prev) =>
+          prev.filter(
+            (skill) =>
+              !(
+                skill.repository === marketplaceToDelete.source &&
+                skill.scope === "personal"
+              ),
+          ),
+        );
+
         queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
         setIsDeleteModalOpen(false);
         setMarketplaceToDelete(null);
