@@ -28,11 +28,11 @@ def get_storage_provider() -> StorageProvider:
     Returns:
         StorageProvider: The configured storage provider (AWS, GCP, or FILESYSTEM)
     """
-    provider = os.environ.get('SHARED_EVENT_STORAGE_PROVIDER', '').lower()
+    provider = os.environ.get('SHARED_EVENT_STORAGE_PROVIDER', '').strip().lower()
 
     # If not explicitly set, fall back to FILE_STORE
     if not provider:
-        provider = os.environ.get('FILE_STORE', '').lower()
+        provider = os.environ.get('FILE_STORE', '').strip().lower()
 
     if provider in ('aws', 's3'):
         return StorageProvider.AWS

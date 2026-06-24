@@ -76,3 +76,13 @@ class TestGetStorageProvider:
 
         monkeypatch.setenv('SHARED_EVENT_STORAGE_PROVIDER', 'GCP')
         assert get_storage_provider() == StorageProvider.GCP
+
+    def test_strips_shared_event_storage_provider(self, monkeypatch):
+        monkeypatch.setenv('SHARED_EVENT_STORAGE_PROVIDER', ' aws ')
+        monkeypatch.delenv('FILE_STORE', raising=False)
+        assert get_storage_provider() == StorageProvider.AWS
+
+    def test_strips_file_store_fallback(self, monkeypatch):
+        monkeypatch.delenv('SHARED_EVENT_STORAGE_PROVIDER', raising=False)
+        monkeypatch.setenv('FILE_STORE', ' google_cloud ')
+        assert get_storage_provider() == StorageProvider.GCP
