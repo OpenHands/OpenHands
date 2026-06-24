@@ -257,6 +257,9 @@ class AppConversationServiceBase(AppConversationService, ABC):
         yield task
         await self.clone_or_init_git_repo(task, workspace, sandbox)
 
+        # Clone dependency repos alongside the main repo
+        await self._clone_dependency_repos(task.request, workspace, sandbox)
+
         # Compute the project root — the cloned repo directory when a repo is
         # selected, or the sandbox working_dir otherwise.  This must be used
         # for all .openhands/ features (setup.sh, pre-commit.sh, skills).
@@ -349,8 +352,6 @@ class AppConversationServiceBase(AppConversationService, ABC):
                     _logger.warning(f'Git init failed: {result.stderr}')
             else:
                 _logger.info('Not initializing a new git repository.')
-            # Still clone dependency repos even without a main repo
-            await self._clone_dependency_repos(request, workspace, sandbox)
             return
 
         user_info = await self.user_context.get_user_info()
@@ -419,9 +420,6 @@ class AppConversationServiceBase(AppConversationService, ABC):
         result = await workspace.execute_command(checkout_command, git_dir)
         if result.exit_code:
             _logger.warning(f'Git checkout failed: {result.stderr}')
-
-        # Clone dependency repos alongside the main repo
-        await self._clone_dependency_repos(request, workspace, sandbox)
 
     async def _get_azure_devops_bearer_token_for_git(
         self,
