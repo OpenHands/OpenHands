@@ -910,12 +910,12 @@ async def test_configure_git_user_settings_both_name_and_email(mock_workspace):
 
     # Check git config user.name call
     mock_workspace.execute_command.assert_any_call(
-        'git config --global user.name "Test User"', '/workspace/project'
+        "git config --global user.name 'Test User'", '/workspace/project'
     )
 
     # Check git config user.email call
     mock_workspace.execute_command.assert_any_call(
-        'git config --global user.email "test@example.com"', '/workspace/project'
+        'git config --global user.email test@example.com', '/workspace/project'
     )
 
 
@@ -930,7 +930,7 @@ async def test_configure_git_user_settings_only_name(mock_workspace):
     # Verify only user.name was configured
     assert mock_workspace.execute_command.call_count == 1
     mock_workspace.execute_command.assert_called_once_with(
-        'git config --global user.name "Test User"', '/workspace/project'
+        "git config --global user.name 'Test User'", '/workspace/project'
     )
 
 
@@ -945,7 +945,7 @@ async def test_configure_git_user_settings_only_email(mock_workspace):
     # Verify only user.email was configured
     assert mock_workspace.execute_command.call_count == 1
     mock_workspace.execute_command.assert_called_once_with(
-        'git config --global user.email "test@example.com"', '/workspace/project'
+        'git config --global user.email test@example.com', '/workspace/project'
     )
 
 
@@ -1047,7 +1047,28 @@ async def test_configure_git_user_settings_special_characters_in_name(mock_works
 
     # Verify the name is passed with special characters
     mock_workspace.execute_command.assert_any_call(
-        'git config --global user.name "Test O\'Brien"', '/workspace/project'
+        "git config --global user.name 'Test O'\"'\"'Brien'", '/workspace/project'
+    )
+
+
+@pytest.mark.asyncio
+async def test_configure_git_user_settings_shell_quotes_user_values(mock_workspace):
+    """Git user settings must not allow shell command injection."""
+    user_info = MockUserInfo(
+        git_user_name='"; touch /tmp/pwned #',
+        git_user_email='evil@example.com"; touch /tmp/email-pwned #',
+    )
+    service, _ = _create_service_with_mock_user_context(user_info)
+
+    await service._configure_git_user_settings(mock_workspace)
+
+    mock_workspace.execute_command.assert_any_call(
+        "git config --global user.name '\"; touch /tmp/pwned #'",
+        '/workspace/project',
+    )
+    mock_workspace.execute_command.assert_any_call(
+        "git config --global user.email 'evil@example.com\"; touch /tmp/email-pwned #'",
+        '/workspace/project',
     )
 
 
