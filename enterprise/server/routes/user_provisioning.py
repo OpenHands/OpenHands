@@ -248,9 +248,9 @@ async def provision_user(
 ) -> ProvisionUserResponse:
     """Create a new user and add them to the caller's selected org.
 
-    The target org is taken from the ``X-Org-Id`` header (resolved by
-    ``EFFECTIVE_ORG_ID``). The caller must hold the ``PROVISION_USER``
-    permission in that org (owner or admin).
+    The target org is the API key org if an API key is used, otherwise it is
+    taken from the ``X-Org-Id`` header (resolved by ``EFFECTIVE_ORG_ID``).
+    The caller must hold the ``PROVISION_USER`` permission in that org (owner or admin).
 
     Returns the email, password (generated if not supplied) and the
     new user's API key bound to the target org.
