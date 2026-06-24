@@ -561,9 +561,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         # Reconstruct dependency repos from stored JSON dicts
         dependency_repos = None
         if stored.dependency_repos:
-            dependency_repos = [
-                DependencyRepo(**d) for d in stored.dependency_repos
-            ]
+            dependency_repos = [DependencyRepo(**d) for d in stored.dependency_repos]
 
         return AppConversationInfo(
             id=UUID(stored.conversation_id),

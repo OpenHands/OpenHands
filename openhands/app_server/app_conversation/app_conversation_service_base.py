@@ -564,8 +564,7 @@ printf 'password=%s\\n' "$token"
                 )
                 if result.exit_code:
                     _logger.warning(
-                        f'Failed to clone dependency repo "{dep.repo}": '
-                        f'{result.stderr}'
+                        f'Failed to clone dependency repo "{dep.repo}": {result.stderr}'
                     )
                     continue
 
