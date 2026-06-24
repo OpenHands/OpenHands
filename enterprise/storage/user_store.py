@@ -1059,7 +1059,6 @@ class UserStore:
             email_verified=user.email_verified,
             git_user_name=user.git_user_name,
             git_user_email=user.git_user_email,
-            git_full_clone=user.git_full_clone,
             remote_runtime_resource_factor=org.remote_runtime_resource_factor,
             billing_margin=org.billing_margin,
             enable_proactive_conversation_starters=org.enable_proactive_conversation_starters,
