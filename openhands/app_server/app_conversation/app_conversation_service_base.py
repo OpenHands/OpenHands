@@ -351,6 +351,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
                 _logger.info('Not initializing a new git repository.')
             return
 
+        user_info = await self.user_context.get_user_info()
         remote_repo_url: str = await self.user_context.get_authenticated_git_url(
             request.selected_repository
         )
@@ -366,17 +367,29 @@ class AppConversationServiceBase(AppConversationService, ABC):
             remote_repo_url,
         )
 
+        if request.selected_branch:
+            ensure_valid_git_branch_name(request.selected_branch)
+
+        full_clone = bool(getattr(user_info, 'git_full_clone', False))
+        clone_flags = ''
+        if not full_clone:
+            clone_flags = ' --depth 1'
+            if request.selected_branch:
+                clone_flags += f' --branch {shlex.quote(request.selected_branch)}'
+
         # Clone the repo - this is the slow part!
         if azure_devops_bearer_token:
             auth_header = shlex.quote(
                 f'Authorization: Bearer {azure_devops_bearer_token}'
             )
             clone_command = (
-                f'git -c http.extraheader={auth_header} clone '
+                f'git -c http.extraheader={auth_header} clone{clone_flags} '
                 f'{quoted_remote_repo_url} {quoted_dir_name}'
             )
         else:
-            clone_command = f'git clone {quoted_remote_repo_url} {quoted_dir_name}'
+            clone_command = (
+                f'git clone{clone_flags} {quoted_remote_repo_url} {quoted_dir_name}'
+            )
         result = await workspace.execute_command(
             clone_command, workspace.working_dir, 120
         )
@@ -392,7 +405,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
         # Checkout the appropriate branch
         if request.selected_branch:
-            ensure_valid_git_branch_name(request.selected_branch)
+            # Needed for full clones; harmless no-op after shallow clones with --branch.
             checkout_command = f'git checkout {shlex.quote(request.selected_branch)}'
         else:
             # Generate a random branch name to avoid conflicts
