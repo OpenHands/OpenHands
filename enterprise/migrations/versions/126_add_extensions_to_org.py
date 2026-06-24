@@ -4,8 +4,8 @@ This column stores marketplace registrations for organization-level
 plugin resolution. Composable with instance defaults and user marketplaces.
 Also adds updated_at for optimistic locking.
 
-Revision ID: 125
-Revises: 124
+Revision ID: 126
+Revises: 125
 Create Date: 2026-06-18 16:34:00.000
 
 """
@@ -16,8 +16,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '125'
-down_revision: Union[str, None] = '124'
+revision: str = '126'
+down_revision: Union[str, None] = '125'
 branch_labels: Union[str, None] = None
 depends_on: Union[str, None] = None
 
