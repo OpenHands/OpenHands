@@ -28,6 +28,8 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 import { I18nKey } from "#/i18n/declaration";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import EditIcon from "#/icons/u-edit.svg?react";
+import DeleteIcon from "#/icons/u-delete.svg?react";
 
 function WhiteToggle({
   isToggled,
@@ -128,6 +130,9 @@ function SkillsSettingsScreen() {
   const [orgMarketplaces, setOrgMarketplaces] = React.useState<
     MarketplaceRegistration[]
   >([]);
+  // Marketplace changes tracking (auto_load toggles in table)
+  const [hasMarketplaceChanges, setHasMarketplaceChanges] =
+    React.useState(false);
 
   // Track last_known_updated_at for optimistic locking
   const [lastKnownUpdatedAt, setLastKnownUpdatedAt] = React.useState<
@@ -330,24 +335,6 @@ function SkillsSettingsScreen() {
     setHasSkillChanges(true);
   };
 
-  const handleToggleAutoLoad = (skillId: string) => {
-    const skill = skillsState.find((s) => s.id === skillId);
-    if (!skill) return;
-
-    // Permission check: Instance disabled, Org requires admin/owner, Personal requires active user
-    const canToggle =
-      skill.scope !== "instance" && (skill.scope !== "org" || isAdminOrOwner);
-
-    if (!canToggle) return;
-
-    setSkillsState((prev) =>
-      prev.map((s) =>
-        s.id === skillId ? { ...s, isAutoLoad: !s.isAutoLoad } : s,
-      ),
-    );
-    setHasSkillChanges(true);
-  };
-
   // Save skill changes (disabled_skills)
   const handleSaveSkillChanges = async () => {
     const disabledSkills = skillsState
@@ -365,6 +352,38 @@ function SkillsSettingsScreen() {
       displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
     } finally {
       setIsSavingPersonal(false);
+    }
+  };
+
+  // Save marketplace changes (auto_load toggles)
+  const handleSaveMarketplaceChanges = async () => {
+    setIsSavingPersonal(true);
+    setIsSavingOrg(true);
+
+    try {
+      // Save personal marketplaces
+      await SettingsService.saveSettings({
+        registered_marketplaces: personalMarketplaces,
+      });
+
+      // Save org marketplaces
+      await organizationService.saveOrganizationAppSettings({
+        registered_marketplaces: orgMarketplaces,
+        last_known_updated_at: lastKnownUpdatedAt,
+      });
+
+      displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
+      setHasMarketplaceChanges(false);
+      queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
+      queryClient.invalidateQueries({
+        queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+      });
+    } catch (error) {
+      const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
+      displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
+    } finally {
+      setIsSavingPersonal(false);
+      setIsSavingOrg(false);
     }
   };
 
@@ -556,14 +575,68 @@ function SkillsSettingsScreen() {
     return "";
   };
 
-  // Check if skill toggles should be disabled
-  const isSkillToggleDisabled = (
-    skill: SkillWithState,
-    toggleType: "enabled" | "autoLoad",
-  ) => {
-    if (toggleType === "autoLoad" && skill.scope === "instance") {
-      return true; // Always disabled for instance auto_load
+  // Get title for auto_load toggle
+  const getAutoLoadToggleTitle = (scope: "instance" | "org" | "personal") => {
+    if (scope === "instance") {
+      return t(I18nKey.SETTINGS$MARKETPLACE_INSTANCE_READONLY);
     }
+    if (scope === "org" && !isAdminOrOwner) {
+      return t(I18nKey.SETTINGS$MARKETPLACE_ORG_REQUIRES_ADMIN);
+    }
+    return undefined;
+  };
+
+  // Handle marketplace auto_load toggle (persists via Save Changes button)
+  const handleToggleMarketplaceAutoLoad = (source: string) => {
+    // Determine scope and update appropriate list
+    const isOrg = orgMarketplaces.some((mp) => mp.source === source);
+    const isPersonal = personalMarketplaces.some((mp) => mp.source === source);
+
+    // Create new state for comparison
+    let newOrgMarketplaces = orgMarketplaces;
+    let newPersonalMarketplaces = personalMarketplaces;
+
+    if (isOrg) {
+      newOrgMarketplaces = orgMarketplaces.map((mp) =>
+        mp.source === source
+          ? { ...mp, auto_load: mp.auto_load === "all" ? undefined : "all" }
+          : mp,
+      );
+      setOrgMarketplaces(newOrgMarketplaces);
+    } else if (isPersonal) {
+      newPersonalMarketplaces = personalMarketplaces.map((mp) =>
+        mp.source === source
+          ? { ...mp, auto_load: mp.auto_load === "all" ? undefined : "all" }
+          : mp,
+      );
+      setPersonalMarketplaces(newPersonalMarketplaces);
+    }
+
+    // Check if all marketplace values match their original state
+    let hasChanges = false;
+    for (const mp of allMarketplaces) {
+      if (mp.scope === "personal") {
+        const current = newPersonalMarketplaces.find(
+          (p) => p.source === mp.source,
+        );
+        if (current && current.auto_load !== mp.auto_load) {
+          hasChanges = true;
+          break;
+        }
+      } else if (mp.scope === "org") {
+        const current = newOrgMarketplaces.find((p) => p.source === mp.source);
+        if (current && current.auto_load !== mp.auto_load) {
+          hasChanges = true;
+          break;
+        }
+      }
+      // instance scope doesn't change
+    }
+    setHasMarketplaceChanges(hasChanges);
+  };
+
+  // Check if skill toggles should be disabled
+  const isSkillToggleDisabled = (skill: SkillWithState) => {
     if (skill.scope === "org") {
       return !isAdminOrOwner;
     }
@@ -577,10 +650,10 @@ function SkillsSettingsScreen() {
       <div className="flex flex-col h-full">
         <div className="mb-8">
           <Typography.H2 className="mb-2">
-            {t(I18nKey.SETTINGS$ORG_SKILLS_TITLE)}
+            {t(I18nKey.SETTINGS$MARKETPLACES)}
           </Typography.H2>
           <Typography.Paragraph className="text-sm text-[#8c8c8c]">
-            {t(I18nKey.SETTINGS$ORG_SKILLS_DESCRIPTION)}
+            {t(I18nKey.SETTINGS$MARKETPLACES_DESCRIPTION)}
           </Typography.Paragraph>
         </div>
         <div className="flex items-center justify-center h-64">
@@ -594,10 +667,10 @@ function SkillsSettingsScreen() {
     <div className="flex flex-col h-full">
       <div className="mb-8">
         <Typography.H2 className="mb-2">
-          {t(I18nKey.SETTINGS$ORG_SKILLS_TITLE)}
+          {t(I18nKey.SETTINGS$MARKETPLACES)}
         </Typography.H2>
         <Typography.Paragraph className="text-sm text-[#8c8c8c]">
-          {t(I18nKey.SETTINGS$ORG_SKILLS_DESCRIPTION)}
+          {t(I18nKey.SETTINGS$MARKETPLACES_DESCRIPTION)}
         </Typography.Paragraph>
       </div>
 
@@ -606,7 +679,7 @@ function SkillsSettingsScreen() {
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between">
             <Typography.H2 className="mb-2">
-              {t(I18nKey.SETTINGS$CONNECT_REPOSITORIES)}
+              {t(I18nKey.SETTINGS$CONNECT_MARKETPLACES)}
             </Typography.H2>
             <BrandButton
               testId="add-marketplace-button"
@@ -618,16 +691,25 @@ function SkillsSettingsScreen() {
             </BrandButton>
           </div>
           <Typography.Paragraph className="text-sm text-[#8c8c8c]">
-            {t(I18nKey.SETTINGS$CONNECT_REPOSITORIES_DESCRIPTION)}
+            {t(I18nKey.SETTINGS$CONNECT_MARKETPLACES_DESCRIPTION)}
           </Typography.Paragraph>
         </div>
 
         <div className="border border-tertiary rounded-md overflow-hidden">
           <table className="w-full">
             <thead className="bg-base-secondary">
-              <tr className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-start">
+              <tr className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-4 items-center">
+                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
+                  {t(I18nKey.SETTINGS$MARKETPLACE_NAME)}
+                </th>
                 <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
                   {t(I18nKey.SETTINGS$MARKETPLACE_SOURCE)}
+                </th>
+                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
+                  {t(I18nKey.SETTINGS$MARKETPLACE_REF)}
+                </th>
+                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
+                  {t(I18nKey.SETTINGS$MARKETPLACE_REPO_PATH)}
                 </th>
                 <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
                   {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_LABEL)}
@@ -644,10 +726,19 @@ function SkillsSettingsScreen() {
               {allMarketplaces.map((mp) => (
                 <tr
                   key={mp.source}
-                  className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center border-t border-tertiary"
+                  className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-4 items-center border-t border-tertiary"
                 >
                   <td className="p-3 text-sm text-content-2 truncate min-w-0">
+                    {mp.name}
+                  </td>
+                  <td className="p-3 text-sm text-tertiary-alt truncate">
                     {mp.source}
+                  </td>
+                  <td className="p-3 text-sm text-tertiary-alt truncate">
+                    {mp.ref || "-"}
+                  </td>
+                  <td className="p-3 text-sm text-tertiary-alt truncate">
+                    {mp.repo_path || "-"}
                   </td>
                   <td className="p-3">
                     <ScopeBadge scope={mp.scope} />
@@ -655,68 +746,48 @@ function SkillsSettingsScreen() {
                   <td className="p-3">
                     <WhiteToggle
                       isToggled={mp.auto_load === "all"}
-                      disabled={mp.scope === "instance"} // Always disabled for instance
+                      disabled={
+                        mp.scope === "instance" ||
+                        (mp.scope === "org" && !isAdminOrOwner)
+                      }
                       onClick={
-                        mp.scope !== "instance"
-                          ? () => {
-                              // Toggle auto_load for non-instance
-                              const current = orgMarketplaces.find(
-                                (m) => m.source === mp.source,
-                              )
-                                ? "org"
-                                : "personal";
-                              const currentList =
-                                current === "org"
-                                  ? orgMarketplaces
-                                  : personalMarketplaces;
-                              const mpData = currentList.find(
-                                (m) => m.source === mp.source,
-                              );
-                              if (mpData) {
-                                openEditModal({
-                                  ...mpData,
-                                  scope: current as "org" | "personal",
-                                });
-                              }
-                            }
+                        mp.scope !== "instance" &&
+                        (mp.scope === "personal" || isAdminOrOwner)
+                          ? () => handleToggleMarketplaceAutoLoad(mp.source)
                           : undefined
                       }
-                      title={
-                        mp.scope === "instance"
-                          ? t(I18nKey.SETTINGS$MARKETPLACE_INSTANCE_READONLY)
-                          : undefined
-                      }
+                      title={getAutoLoadToggleTitle(mp.scope)}
                       aria-label={`Toggle auto-load for ${mp.source}`}
                     />
                   </td>
-                  <td className="p-3 flex gap-2">
+                  <td className="p-3 flex gap-2 justify-center">
                     <button
                       type="button"
                       onClick={() => openEditModal(mp)}
                       disabled={!canEditMarketplace(mp)}
-                      title={getDisabledTooltip(mp)}
+                      title={getDisabledTooltip(mp) || t(I18nKey.BUTTON$EDIT)}
                       className={cn(
-                        "px-3 py-1 text-xs rounded-sm font-medium",
+                        "p-1.5 rounded-sm",
                         canEditMarketplace(mp)
-                          ? "bg-white text-[#0D0F11] hover:opacity-80"
-                          : "bg-base-secondary text-tertiary-alt cursor-not-allowed opacity-50",
+                          ? "text-content-2 hover:bg-white/20"
+                          : "text-tertiary-alt cursor-not-allowed opacity-50",
                       )}
                     >
-                      {t(I18nKey.BUTTON$EDIT)}
+                      <EditIcon width={16} height={16} />
                     </button>
                     <button
                       type="button"
                       onClick={() => openDeleteModal(mp)}
                       disabled={!canEditMarketplace(mp)}
-                      title={getDisabledTooltip(mp)}
+                      title={getDisabledTooltip(mp) || t(I18nKey.BUTTON$DELETE)}
                       className={cn(
-                        "px-3 py-1 text-xs rounded-sm font-medium",
+                        "p-1.5 rounded-sm",
                         canEditMarketplace(mp)
-                          ? "bg-red-900/30 text-red-400 hover:bg-red-900/50"
-                          : "bg-base-secondary text-tertiary-alt cursor-not-allowed opacity-50",
+                          ? "text-red-400 hover:bg-red-900/20"
+                          : "text-tertiary-alt cursor-not-allowed opacity-50",
                       )}
                     >
-                      {t(I18nKey.BUTTON$DELETE)}
+                      <DeleteIcon width={16} height={16} />
                     </button>
                   </td>
                 </tr>
@@ -724,7 +795,7 @@ function SkillsSettingsScreen() {
               {allMarketplaces.length === 0 && (
                 <tr className="border-t border-tertiary">
                   <td
-                    colSpan={4}
+                    colSpan={7}
                     className="p-3 text-sm text-center text-tertiary-alt"
                   >
                     {t(I18nKey.SETTINGS$MARKETPLACE_ADD_FIRST)}
@@ -742,10 +813,10 @@ function SkillsSettingsScreen() {
       <section className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <Typography.H2 className="mb-2">
-            {t(I18nKey.SETTINGS$SKILLS_PERMISSIONS)}
+            {t(I18nKey.SETTINGS$SKILLS)}
           </Typography.H2>
           <Typography.Paragraph className="text-sm text-[#8c8c8c]">
-            {t(I18nKey.SETTINGS$SKILLS_PERMISSIONS_DESCRIPTION)}
+            {t(I18nKey.SETTINGS$SKILLS_DESCRIPTION)}
           </Typography.Paragraph>
         </div>
 
@@ -792,7 +863,7 @@ function SkillsSettingsScreen() {
         <div className="border border-tertiary rounded-md overflow-hidden">
           <table className="w-full">
             <thead className="bg-base-secondary">
-              <tr className="grid grid-cols-[1fr_1fr_1fr_auto_1fr_1fr_1fr] gap-4 items-start">
+              <tr className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr] gap-4 items-start">
                 <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
                   {t(I18nKey.SETTINGS$NAME)}
                 </th>
@@ -808,16 +879,13 @@ function SkillsSettingsScreen() {
                 <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
                   {t(I18nKey.SETTINGS$ENABLED)}
                 </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                  {t(I18nKey.SETTINGS$AUTO_LOAD)}
-                </th>
               </tr>
             </thead>
             <tbody>
               {filteredSkills.map((skill) => (
                 <tr
                   key={skill.id}
-                  className="grid grid-cols-[1fr_1fr_1fr_auto_1fr_1fr_1fr] gap-4 items-center border-t border-tertiary"
+                  className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr] gap-4 items-center border-t border-tertiary"
                 >
                   <td className="p-3 text-sm text-content-2 truncate min-w-0">
                     {skill.name}
@@ -836,30 +904,14 @@ function SkillsSettingsScreen() {
                   <td className="p-3">
                     <WhiteToggle
                       isToggled={skill.isEnabled}
-                      disabled={isSkillToggleDisabled(skill, "enabled")}
+                      disabled={isSkillToggleDisabled(skill)}
                       onClick={() => handleToggleEnabled(skill.id)}
                       title={
-                        isSkillToggleDisabled(skill, "enabled") &&
-                        skill.scope === "org"
+                        isSkillToggleDisabled(skill) && skill.scope === "org"
                           ? t(I18nKey.SETTINGS$MARKETPLACE_ORG_REQUIRES_ADMIN)
                           : undefined
                       }
                       aria-label={`Toggle enabled for ${skill.name}`}
-                    />
-                  </td>
-                  <td className="p-3">
-                    <WhiteToggle
-                      isToggled={skill.isAutoLoad}
-                      disabled={isSkillToggleDisabled(skill, "autoLoad")}
-                      onClick={() => handleToggleAutoLoad(skill.id)}
-                      title={
-                        (skill.scope === "instance" &&
-                          t(I18nKey.SETTINGS$MARKETPLACE_INSTANCE_READONLY)) ||
-                        (isSkillToggleDisabled(skill, "autoLoad") &&
-                          t(I18nKey.SETTINGS$MARKETPLACE_ORG_REQUIRES_ADMIN)) ||
-                        undefined
-                      }
-                      aria-label={`Toggle auto-load for ${skill.name}`}
                     />
                   </td>
                 </tr>
@@ -867,7 +919,7 @@ function SkillsSettingsScreen() {
               {filteredSkills.length === 0 && (
                 <tr className="border-t border-tertiary">
                   <td
-                    colSpan={7}
+                    colSpan={5}
                     className="p-3 text-sm text-center text-[rgb(140,140,140)]"
                   >
                     {t(I18nKey.SETTINGS$NO_SKILLS_MATCH_FILTERS)}
@@ -879,20 +931,27 @@ function SkillsSettingsScreen() {
         </div>
       </section>
 
-      {hasSkillChanges && (
-        <div className="flex gap-6 p-6 justify-end border-t border-tertiary/50 mt-4">
-          <BrandButton
-            testId="skills-save-button"
-            variant="primary"
-            type="button"
-            isDisabled={isSavingPersonal}
-            onClick={handleSaveSkillChanges}
-          >
-            {!isSavingPersonal && t(I18nKey.SETTINGS$SAVE_CHANGES)}
-            {isSavingPersonal && t(I18nKey.SETTINGS$SAVING)}
-          </BrandButton>
-        </div>
-      )}
+      <div className="flex gap-6 p-6 justify-end border-t border-tertiary/50 mt-4">
+        <BrandButton
+          testId="skills-save-button"
+          variant="primary"
+          type="button"
+          isDisabled={
+            isSavingPersonal ||
+            isSavingOrg ||
+            (!hasSkillChanges && !hasMarketplaceChanges)
+          }
+          onClick={async () => {
+            if (hasSkillChanges) await handleSaveSkillChanges();
+            if (hasMarketplaceChanges) await handleSaveMarketplaceChanges();
+          }}
+        >
+          {(isSavingPersonal || isSavingOrg) && t(I18nKey.SETTINGS$SAVING)}
+          {!isSavingPersonal &&
+            !isSavingOrg &&
+            t(I18nKey.SETTINGS$SAVE_CHANGES)}
+        </BrandButton>
+      </div>
 
       {/* Marketplace Modal */}
       <MarketplaceModal
