@@ -30,6 +30,16 @@ from openhands.app_server.user.user_context import UserContext
 from openhands.sdk.skills import KeywordTrigger, Skill, TaskTrigger
 
 
+def _make_user_context_mock(
+    *,
+    get_user_info_return: object = None,
+):
+    """Create a mock UserContext with async get_user_info."""
+    mock_ctx = MagicMock(spec=UserContext)
+    mock_ctx.get_user_info = AsyncMock(return_value=get_user_info_return)
+    return mock_ctx
+
+
 def _make_service_mock(
     *,
     user_context: UserContext,
@@ -111,7 +121,7 @@ class TestGetConversationSkills:
         )
 
         # Mock services
-        mock_user_context = MagicMock(spec=UserContext)
+        mock_user_context = _make_user_context_mock()
         mock_app_conversation_service = _make_service_mock(
             user_context=mock_user_context,
             conversation_return=mock_conversation,
@@ -132,6 +142,7 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
+            user_context=mock_user_context,
         )
 
         # Assert
@@ -171,7 +182,7 @@ class TestGetConversationSkills:
         # Arrange
         conversation_id = uuid4()
 
-        mock_user_context = MagicMock(spec=UserContext)
+        mock_user_context = _make_user_context_mock()
         mock_app_conversation_service = _make_service_mock(
             user_context=mock_user_context,
             conversation_return=None,
@@ -186,6 +197,7 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
+            user_context=mock_user_context,
         )
 
         # Assert
@@ -215,7 +227,7 @@ class TestGetConversationSkills:
             sandbox_status=SandboxStatus.RUNNING,
         )
 
-        mock_user_context = MagicMock(spec=UserContext)
+        mock_user_context = _make_user_context_mock()
         mock_app_conversation_service = _make_service_mock(
             user_context=mock_user_context,
             conversation_return=mock_conversation,
@@ -232,6 +244,7 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
+            user_context=mock_user_context,
         )
 
         # Assert
@@ -263,7 +276,7 @@ class TestGetConversationSkills:
             session_api_key='test-api-key',
         )
 
-        mock_user_context = MagicMock(spec=UserContext)
+        mock_user_context = _make_user_context_mock()
         mock_app_conversation_service = _make_service_mock(
             user_context=mock_user_context,
             conversation_return=mock_conversation,
@@ -280,6 +293,7 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
+            user_context=mock_user_context,
         )
 
         # Assert
@@ -330,7 +344,7 @@ class TestGetConversationSkills:
             trigger=TaskTrigger(triggers=['task', 'execute']),
         )
 
-        mock_user_context = MagicMock(spec=UserContext)
+        mock_user_context = _make_user_context_mock()
         mock_app_conversation_service = _make_service_mock(
             user_context=mock_user_context,
             conversation_return=mock_conversation,
@@ -351,6 +365,7 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
+            user_context=mock_user_context,
         )
 
         # Assert
@@ -397,7 +412,7 @@ class TestGetConversationSkills:
             id=str(uuid4()), command=None, working_dir='/workspace'
         )
 
-        mock_user_context = MagicMock(spec=UserContext)
+        mock_user_context = _make_user_context_mock()
         mock_app_conversation_service = _make_service_mock(
             user_context=mock_user_context,
             conversation_return=mock_conversation,
@@ -418,6 +433,7 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
+            user_context=mock_user_context,
         )
 
         # Assert
@@ -462,7 +478,7 @@ class TestGetConversationSkills:
             id=str(uuid4()), command=None, working_dir='/workspace'
         )
 
-        mock_user_context = MagicMock(spec=UserContext)
+        mock_user_context = _make_user_context_mock()
         mock_app_conversation_service = _make_service_mock(
             user_context=mock_user_context,
             conversation_return=mock_conversation,
@@ -483,6 +499,7 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
+            user_context=mock_user_context,
         )
 
         # Assert
@@ -528,7 +545,7 @@ class TestGetConversationSkills:
             id=str(uuid4()), command=None, working_dir='/workspace'
         )
 
-        mock_user_context = MagicMock(spec=UserContext)
+        mock_user_context = _make_user_context_mock()
         mock_app_conversation_service = _make_service_mock(
             user_context=mock_user_context,
             conversation_return=mock_conversation,
@@ -552,6 +569,7 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
+            user_context=mock_user_context,
         )
 
         # Assert
