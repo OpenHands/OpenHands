@@ -131,6 +131,16 @@ USER_PROVISIONING_ENABLED = os.getenv('USER_PROVISIONING_ENABLED', 'false').lowe
     '1',
 )
 
+# Controls whether any authenticated user is allowed to create an organization
+# via POST /api/organizations (env: OPEN_ORG_CREATION_ENABLED). When disabled
+# (the default), org creation remains restricted to @openhands.dev admin users.
+# Accepts both ``'true'`` and ``'1'`` because older Helm chart versions emit
+# the latter and would otherwise silently keep the feature disabled.
+OPEN_ORG_CREATION_ENABLED = os.getenv('OPEN_ORG_CREATION_ENABLED', 'false').lower() in (
+    'true',
+    '1',
+)
+
 
 def build_litellm_proxy_model_path(model_name: str) -> str:
     """Build the LiteLLM proxy model path based on model name.
