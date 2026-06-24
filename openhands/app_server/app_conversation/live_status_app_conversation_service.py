@@ -195,6 +195,18 @@ After you finalize the plan in PLAN.md:
 Your role ends when the plan is finalized. Implementation is handled by the code agent.
 </IMPORTANT_PLANNING_BOUNDARIES>"""
 
+GIT_SHALLOW_CLONE_CONTEXT = """<GIT_WORKSPACE_CONTEXT>
+The selected repository was cloned as a shallow clone. Git history may be incomplete. Before using operations that depend on full history, tags, merge bases, historical blame, or arbitrary commit checkout, run `git rev-parse --is-shallow-repository`. If full history is needed, run `git fetch --unshallow` or `git fetch --deepen=<n>`.
+</GIT_WORKSPACE_CONTEXT>"""
+
+
+def append_system_context(existing: str | None, block: str) -> str:
+    if not existing:
+        return block
+    if block in existing:
+        return existing
+    return f'{existing.rstrip()}\n\n{block}'
+
 
 @dataclass
 class LiveStatusAppConversationService(AppConversationServiceBase):
@@ -224,6 +236,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     export_lock_ttl_seconds: int = 3600
     export_lock_refresh_interval_seconds: int = 30
     export_lock_required: bool | None = None
+
+    def _maybe_append_shallow_clone_context(
+        self,
+        user: UserInfo,
+        selected_repository: str | None,
+        system_message_suffix: str | None,
+    ) -> str | None:
+        if selected_repository and not bool(getattr(user, 'git_full_clone', False)):
+            return append_system_context(
+                system_message_suffix, GIT_SHALLOW_CLONE_CONTEXT
+            )
+        return system_message_suffix
 
     async def _get_sandbox_grouping_strategy(self) -> SandboxGroupingStrategy:
         """Get the sandbox grouping strategy from user settings."""
@@ -1584,6 +1608,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     )
                 secrets[name] = StaticSecret(value=value)
 
+        system_message_suffix = self._maybe_append_shallow_clone_context(
+            user, selected_repository, system_message_suffix
+        )
+
         # --- LLM + MCP -----------------------------------------------------
         llm, mcp_config = await self._configure_llm_and_mcp(
             user, llm_model, conversation_id
@@ -1867,6 +1895,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                         'API-provided secret %r overrides existing secret', name
                     )
                 secrets[name] = StaticSecret(value=value)
+
+        system_message_suffix = self._maybe_append_shallow_clone_context(
+            user, selected_repository, system_message_suffix
+        )
 
         # --- build the ACP agent ------------------------------------------
         acp_settings = user.agent_settings  # already verified to be ACPAgentSettings

@@ -535,6 +535,7 @@ def test_openhands_model_display_does_not_reverse_map():
     assert api_data['llm']['model'] == settings.agent_settings.llm.model
 
 
+<<<<<<< HEAD
 # --- Tests for MarketplaceRegistration ---
 
 
@@ -936,3 +937,14 @@ class TestSettingsDuplicateMarketplaceNames:
         """Test that Settings allows None registered_marketplaces (uses default)."""
         settings = Settings()
         assert settings.registered_marketplaces == []
+
+
+def test_git_full_clone_defaults_to_false_and_updates():
+    settings = Settings()
+
+    assert settings.git_full_clone is False
+
+    settings.update({'git_full_clone': True})
+
+    assert settings.git_full_clone is True
+    assert settings.model_dump(mode='json')['git_full_clone'] is True
