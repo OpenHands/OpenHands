@@ -169,9 +169,21 @@ class DefaultLLMModelService(LLMModelService):
             try:
                 async with httpx.AsyncClient() as client:
                     resp = await client.get(ollama_url, timeout=3)
-                    ollama_models_list = resp.json()['models']
-                extra_models.extend('ollama/' + m['name'] for m in ollama_models_list)
-            except httpx.HTTPError as e:
+                    resp.raise_for_status()
+                    payload = resp.json()
+                    if not isinstance(payload, dict):
+                        raise ValueError('Ollama tags response must be a JSON object')
+                    ollama_models_list = payload.get('models', [])
+                    if not isinstance(ollama_models_list, list):
+                        raise ValueError('Ollama tags response models must be a list')
+                extra_models.extend(
+                    'ollama/' + model['name']
+                    for model in ollama_models_list
+                    if isinstance(model, dict)
+                    and isinstance(model.get('name'), str)
+                    and model['name']
+                )
+            except (httpx.HTTPError, KeyError, TypeError, ValueError) as e:
                 _logger.error(f'Error getting OLLAMA models: {e}')
 
         self._cached_response = get_supported_llm_models(

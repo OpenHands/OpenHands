@@ -162,6 +162,26 @@ class TestDefaultLLMModelServiceSearchModels:
         assert len(result.items) > 0
 
     @pytest.mark.asyncio
+    async def test_ollama_malformed_response_handled_gracefully(self):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {'models': {'llama3': {}}}
+
+        mock_client = AsyncMock()
+        mock_client.get.return_value = mock_response
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch('httpx.AsyncClient', return_value=mock_client):
+            service = DefaultLLMModelService(
+                ollama_base_url='http://localhost:11434',
+            )
+            result = await service.search_llm_models()
+
+        mock_response.raise_for_status.assert_called_once()
+        assert isinstance(result, LLMModelPage)
+        assert len(result.items) > 0
+
+    @pytest.mark.asyncio
     async def test_response_is_cached(self):
         service = DefaultLLMModelService()
 
