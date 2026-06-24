@@ -1312,6 +1312,7 @@ async def get_conversation_skills(
     ),
     sandbox_service: SandboxService = sandbox_service_dependency,
     sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+    user_context: UserContext = user_context_dependency,
 ) -> JSONResponse:
     """Get all skills associated with the conversation.
 
@@ -1360,6 +1361,12 @@ async def get_conversation_skills(
             f'Loaded {len(all_skills)} skills for conversation {conversation_id}: '
             f'{[s.name for s in all_skills]}'
         )
+
+        # Filter out disabled skills (mirroring _load_skills_and_update_agent)
+        user_info = await user_context.get_user_info()
+        if user_info and user_info.disabled_skills:
+            disabled_set = set(user_info.disabled_skills)
+            all_skills = [s for s in all_skills if s.name not in disabled_set]
 
         # Transform skills to response format
         skills_response = []
