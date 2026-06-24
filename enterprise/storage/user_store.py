@@ -15,7 +15,7 @@ from server.constants import (
     get_default_llm_model,
 )
 from server.logger import logger
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import selectinload
 from storage.database import a_session_maker
 from storage.encrypt_utils import (
@@ -70,6 +70,25 @@ class UserStore:
         on the old values.
         """
         async with a_session_maker() as session:
+            # First-user → superowner: if the caller did not specify a
+            # super ``role_id`` and there are no existing users in the
+            # database, designate this user as a ``superowner`` (a super
+            # role attached via ``user.role_id``, granting super-role
+            # permissions across every organization). See
+            # ``server.auth.authorization`` for the super-role semantics.
+            if role_id is None:
+                existing_user_count = await session.scalar(
+                    select(func.count()).select_from(User)
+                )
+                if existing_user_count == 0:
+                    superowner_role = await RoleStore.get_role_by_name('owner', session)
+                    if superowner_role is not None:
+                        role_id = superowner_role.id
+                        logger.info(
+                            'user_store:create_user:first_user_designated_superowner',
+                            extra={'user_id': user_id},
+                        )
+
             # create personal org
             org = Org(
                 id=uuid.UUID(user_id),
