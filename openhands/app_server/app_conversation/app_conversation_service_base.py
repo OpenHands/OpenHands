@@ -531,19 +531,18 @@ printf 'password=%s\\n' "$token"
         Failures for individual dependency repos are logged but do not
         prevent the conversation from starting.
         """
-        if not request.dependency_repos:
+        dep_repos = request.dependency_repos
+        if not dep_repos or not isinstance(dep_repos, list):
             return
 
         _logger.info(
-            f'Cloning {len(request.dependency_repos)} dependency repo(s): '
-            f'{[d.repo for d in request.dependency_repos]}'
+            f'Cloning {len(dep_repos)} dependency repo(s): '
+            f'{[d.repo for d in dep_repos]}'
         )
 
-        for dep in request.dependency_repos:
+        for dep in dep_repos:
             try:
-                remote_url = await self.user_context.get_authenticated_git_url(
-                    dep.repo
-                )
+                remote_url = await self.user_context.get_authenticated_git_url(dep.repo)
                 if not remote_url:
                     _logger.warning(
                         f'Could not get authenticated URL for dependency '
