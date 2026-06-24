@@ -15,6 +15,7 @@ import {
 } from "#/hooks/query/query-keys";
 import { useSkills } from "#/hooks/query/use-skills";
 import { useMe } from "#/hooks/query/use-me";
+import { useMarketplaceSkills } from "#/hooks/mutation/use-get-marketplace-skills";
 import {
   MarketplaceRegistration,
   MarketplaceWithScope,
@@ -28,6 +29,7 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 import { I18nKey } from "#/i18n/declaration";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import SkillsService from "#/api/skills-service";
 import EditIcon from "#/icons/u-edit.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
 
@@ -158,6 +160,9 @@ function SkillsSettingsScreen() {
   const [isSavingOrg, setIsSavingOrg] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
 
+  // Marketplace skills mutation
+  const marketplaceSkillsMutation = useMarketplaceSkills();
+
   // Skills filters
   const [searchQuery, setSearchQuery] = React.useState("");
   const [selectedType, setSelectedType] = React.useState<string | null>(null);
@@ -189,22 +194,24 @@ function SkillsSettingsScreen() {
           .map((mp) => [mp.source, mp]),
       );
 
-      // Build all marketplaces for display
-      const all: MarketplaceWithScope[] = [];
-      // Instance marketplaces (read-only)
+      // Build all marketplaces for display (deduplicated by source)
+      // Use Map to ensure no duplicates - later scopes override earlier ones
+      const allBySource = new Map<string, MarketplaceWithScope>();
+      // Instance marketplaces (read-only, lowest priority)
       for (const mp of settings.inherited_marketplaces || []) {
         if (mp.scope === "instance") {
-          all.push(mp as MarketplaceWithScope);
+          allBySource.set(mp.source, { ...mp, scope: "instance" });
         }
       }
-      // Org marketplaces
+      // Org marketplaces (override instance)
       for (const mp of orgAppSettings?.registered_marketplaces || []) {
-        all.push({ ...mp, scope: "org" });
+        allBySource.set(mp.source, { ...mp, scope: "org" });
       }
-      // Personal marketplaces
+      // Personal marketplaces (override org and instance)
       for (const mp of settings.registered_marketplaces || []) {
-        all.push({ ...mp, scope: "personal" });
+        allBySource.set(mp.source, { ...mp, scope: "personal" });
       }
+      const all = Array.from(allBySource.values());
       setAllMarketplaces(all);
       setPersonalMarketplaces(settings.registered_marketplaces || []);
       setOrgMarketplaces(orgAppSettings?.registered_marketplaces || []);
@@ -269,7 +276,66 @@ function SkillsSettingsScreen() {
         };
       });
 
-      setSkillsState(mappedSkills);
+      // Fetch marketplace skills and merge with global/user skills
+      const fetchMarketplaceSkills = async () => {
+        const allRegisteredMarketplaces = [
+          ...(settings.registered_marketplaces || []),
+          ...(orgAppSettings?.registered_marketplaces || []),
+        ];
+
+        if (allRegisteredMarketplaces.length === 0) {
+          setSkillsState(mappedSkills);
+          return;
+        }
+
+        try {
+          const preview = await SkillsService.getMarketplaceSkills(
+            allRegisteredMarketplaces,
+          );
+
+          // Log errors if any
+          if (preview.errors && preview.errors.length > 0) {
+            console.error("Marketplace skills errors:", preview.errors);
+            preview.errors.forEach((error) => {
+              displayErrorToast(`Marketplace error: ${error}`);
+            });
+          }
+
+          if (preview.skills.length > 0) {
+            const marketplaceSkills: SkillWithState[] = preview.skills.map(
+              (skill) => {
+                // Determine scope based on which marketplace this came from
+                const marketplace = allRegisteredMarketplaces.find(
+                  (mp) => skill.source === `marketplace:${mp.name}`,
+                );
+                const isOrg = (
+                  orgAppSettings?.registered_marketplaces || []
+                ).some((mp) => mp.name === marketplace?.name);
+
+                return {
+                  ...skill,
+                  id: skill.name,
+                  repository: marketplace?.source || skill.source,
+                  scope: isOrg ? "org" : "personal",
+                  isEnabled: !disabledSet.has(skill.name),
+                  isAutoLoad: marketplace?.auto_load === "all",
+                };
+              },
+            );
+
+            // Merge global/user skills with marketplace skills
+            setSkillsState([...mappedSkills, ...marketplaceSkills]);
+          } else {
+            setSkillsState(mappedSkills);
+          }
+        } catch (error) {
+          console.error("Failed to fetch marketplace skills:", error);
+          // Fall back to just global/user skills
+          setSkillsState(mappedSkills);
+        }
+      };
+
+      fetchMarketplaceSkills();
     }
   }, [settings, skills, orgAppSettings]);
 
@@ -422,6 +488,11 @@ function SkillsSettingsScreen() {
       auto_load: data.auto_load,
     };
 
+    const isNewMarketplace =
+      data.scope === "org"
+        ? !orgMarketplaces.some((mp) => mp.source === data.source)
+        : !personalMarketplaces.some((mp) => mp.source === data.source);
+
     if (data.scope === "org") {
       // Save to org settings
       setIsSavingOrg(true);
@@ -446,6 +517,50 @@ function SkillsSettingsScreen() {
         queryClient.invalidateQueries({
           queryKey: ORGANIZATION_APP_SETTINGS_KEY,
         });
+
+        // Fetch marketplace skills and update the skills table
+        if (isNewMarketplace) {
+          try {
+            const preview = await marketplaceSkillsMutation.mutateAsync([
+              newMarketplace,
+            ]);
+
+            // Show errors if any
+            if (preview.errors && preview.errors.length > 0) {
+              console.error("Marketplace skills errors:", preview.errors);
+              preview.errors.forEach((error) => {
+                displayErrorToast(`Failed to load skills: ${error}`);
+              });
+            }
+
+            if (preview.skills.length > 0) {
+              const newSkills: SkillWithState[] = preview.skills.map(
+                (skill) => ({
+                  ...skill,
+                  id: skill.name,
+                  repository: data.source,
+                  scope: "org",
+                  isEnabled: true,
+                  isAutoLoad: data.auto_load === "all",
+                }),
+              );
+              setSkillsState((prev) => [...prev, ...newSkills]);
+            }
+          } catch (previewError) {
+            // Marketplace was saved but skills preview failed
+            console.error(
+              "Failed to fetch marketplace skills preview:",
+              previewError,
+            );
+            const errorMsg = retrieveAxiosErrorMessage(
+              previewError as AxiosError,
+            );
+            displayErrorToast(
+              `Marketplace saved but failed to load skills: ${errorMsg || "Unknown error"}`,
+            );
+          }
+        }
+
         setIsModalOpen(false);
       } catch (error) {
         if ((error as AxiosError).response?.status === 409) {
@@ -483,6 +598,50 @@ function SkillsSettingsScreen() {
         displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
         setPersonalMarketplaces(updated);
         queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
+
+        // Fetch marketplace skills and update the skills table
+        if (isNewMarketplace) {
+          try {
+            const preview = await marketplaceSkillsMutation.mutateAsync([
+              newMarketplace,
+            ]);
+
+            // Show errors if any
+            if (preview.errors && preview.errors.length > 0) {
+              console.error("Marketplace skills errors:", preview.errors);
+              preview.errors.forEach((error) => {
+                displayErrorToast(`Failed to load skills: ${error}`);
+              });
+            }
+
+            if (preview.skills.length > 0) {
+              const newSkills: SkillWithState[] = preview.skills.map(
+                (skill) => ({
+                  ...skill,
+                  id: skill.name,
+                  repository: data.source,
+                  scope: "personal",
+                  isEnabled: true,
+                  isAutoLoad: data.auto_load === "all",
+                }),
+              );
+              setSkillsState((prev) => [...prev, ...newSkills]);
+            }
+          } catch (previewError) {
+            // Marketplace was saved but skills preview failed
+            console.error(
+              "Failed to fetch marketplace skills preview:",
+              previewError,
+            );
+            const errorMsg = retrieveAxiosErrorMessage(
+              previewError as AxiosError,
+            );
+            displayErrorToast(
+              `Marketplace saved but failed to load skills: ${errorMsg || "Unknown error"}`,
+            );
+          }
+        }
+
         setIsModalOpen(false);
       } catch (error) {
         const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);

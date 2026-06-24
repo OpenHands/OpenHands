@@ -1,19 +1,32 @@
+from __future__ import annotations
+
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Annotated
 
 import yaml
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 import openhands
+from openhands.app_server.config import depends_user_context
+from openhands.app_server.integrations.provider import ProviderHandler
+from openhands.app_server.settings.settings_models import MarketplaceRegistration
+from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 router = APIRouter(prefix='/skills', tags=['Skills'], dependencies=get_dependencies())
+user_context_dependency = depends_user_context()
 
 # skills/ is at the repo root, two levels above the openhands package __file__
 GLOBAL_SKILLS_DIR = Path(openhands.__file__).parent.parent / 'skills'
 USER_SKILLS_DIR = Path.home() / '.openhands' / 'microagents'
+
+# Temporary directory for cloning marketplace repos
+TEMP_CLONE_DIR = Path(tempfile.gettempdir()) / 'openhands_marketplace_clone'
 
 
 class SkillInfo(BaseModel):
@@ -30,6 +43,14 @@ class SkillPage(BaseModel):
 
     items: list[SkillInfo]
     next_page_id: str | None = None
+
+
+class MarketplaceSkillsPreviewResponse(BaseModel):
+    """Response for marketplace skills preview endpoint."""
+
+    skills: list[SkillInfo]
+    marketplace_skills: dict[str, list[str]]  # marketplace_name -> skill names
+    errors: list[str]
 
 
 def _parse_skill_frontmatter(file_path: Path) -> dict | None:
@@ -153,3 +174,286 @@ async def search_skills(
     )
 
     return SkillPage(items=page, next_page_id=next_page_id)
+
+
+def _parse_marketplace_source(source: str) -> tuple[str, str]:
+    """Parse marketplace source into provider and repo path.
+
+    Args:
+        source: Marketplace source (e.g., 'github:owner/repo', 'gitlab:owner/repo',
+                'https://github.com/owner/repo.git')
+
+    Returns:
+        Tuple of (provider, repo_path) where provider is 'github', 'gitlab', etc.
+    """
+    # Handle github:owner/repo format
+    if source.startswith('github:'):
+        return ('github', source[7:].lstrip('/'))
+    if source.startswith('gitlab:'):
+        return ('gitlab', source[7:].lstrip('/'))
+    if source.startswith('bitbucket:'):
+        return ('bitbucket', source[10:].lstrip('/'))
+    if source.startswith('azure-devops:'):
+        return ('azure-devops', source[13:].lstrip('/'))
+
+    # Handle URL format
+    lower = source.lower()
+    if 'github.com' in lower:
+        path = source.split('github.com', 1)[1].lstrip('/').rstrip('/')
+        # Remove .git suffix if present (use removesuffix to avoid character-by-character stripping)
+        if path.endswith('.git'):
+            path = path[:-4]
+        return ('github', path)
+    if 'gitlab.com' in lower or 'gitlab' in lower:
+        path = (
+            source.split(('gitlab.com' if 'gitlab.com' in lower else 'gitlab'), 1)[1]
+            .lstrip('/')
+            .rstrip('/')
+        )
+        if path.endswith('.git'):
+            path = path[:-4]
+        return ('gitlab', path)
+    if 'bitbucket.org' in lower:
+        path = source.split('bitbucket.org', 1)[1].lstrip('/').rstrip('/')
+        if path.endswith('.git'):
+            path = path[:-4]
+        return ('bitbucket', path)
+
+    # Default to github
+    path = source.rstrip('/')
+    if path.endswith('.git'):
+        path = path[:-4]
+    return ('github', path)
+
+
+async def _clone_marketplace_repo(
+    marketplace: MarketplaceRegistration,
+    user_context: UserContext,
+) -> tuple[Path | None, str]:
+    """Clone a marketplace repository to a temporary directory.
+
+    Args:
+        marketplace: MarketplaceRegistration with source, ref, and repo_path
+        user_context: UserContext for accessing provider tokens
+
+    Returns:
+        Tuple of (cloned_path or None, error_message or '')
+    """
+    import shlex
+    from types import MappingProxyType
+    from typing import cast
+
+    from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE
+    from openhands.app_server.integrations.service_types import ProviderType
+
+    provider, repo_path = _parse_marketplace_source(marketplace.source)
+
+    # Validate repo path format
+    if not repo_path or '/' not in repo_path:
+        return None, f'Invalid repository path: {repo_path}'
+
+    # Map provider string to ProviderType enum
+    provider_type_map = {
+        'github': ProviderType.GITHUB,
+        'gitlab': ProviderType.GITLAB,
+        'bitbucket': ProviderType.BITBUCKET,
+        'azure-devops': ProviderType.AZURE_DEVOPS,
+    }
+    provider_type_map.get(provider, ProviderType.GITHUB)
+
+    # Build fallback URLs for public repositories
+    provider_domain_map = {
+        'github': 'github.com',
+        'gitlab': 'gitlab.com',
+        'bitbucket': 'bitbucket.org',
+    }
+    fallback_url = (
+        f'https://{provider_domain_map.get(provider, "github.com")}/{repo_path}.git'
+    )
+
+    # Get authenticated URL from provider handler
+    authenticated_url = None
+    try:
+        provider_tokens = await user_context.get_provider_tokens()
+        if not provider_tokens:
+            logger.info(
+                f'No provider tokens available for {provider}, will try unauthenticated clone'
+            )
+        else:
+            # Cast to expected type - user_context may return dict[str, str] in some contexts
+            typed_provider_tokens = cast(PROVIDER_TOKEN_TYPE, provider_tokens)
+            client = ProviderHandler(
+                provider_tokens=MappingProxyType(typed_provider_tokens),
+                external_auth_id=await user_context.get_user_id(),
+            )
+            authenticated_url = await client.get_authenticated_git_url(repo_path)
+    except Exception as e:
+        logger.warning(
+            f'Failed to get authenticated URL for {repo_path}: {e}, will try unauthenticated clone'
+        )
+
+    # Use authenticated URL if available, otherwise fallback to public URL
+    clone_url = authenticated_url or fallback_url
+
+    # Create temporary directory for this clone
+    import uuid
+
+    clone_id = uuid.uuid4().hex[:8]
+    clone_dir = TEMP_CLONE_DIR / f'{marketplace.name}_{clone_id}'
+
+    try:
+        # Ensure parent directory exists
+        TEMP_CLONE_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Build git clone command
+        clone_cmd = f'git clone {shlex.quote(clone_url)} {shlex.quote(str(clone_dir))}'
+
+        # Run git clone
+        result = subprocess.run(
+            clone_cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+        if result.returncode != 0:
+            return None, f'Git clone failed: {result.stderr}'
+
+        # Checkout ref if specified
+        if marketplace.ref:
+            checkout_cmd = f'git -C {shlex.quote(str(clone_dir))} checkout {shlex.quote(marketplace.ref)}'
+            checkout_result = subprocess.run(
+                checkout_cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            if checkout_result.returncode != 0:
+                return None, f'Git checkout failed: {checkout_result.stderr}'
+
+        # Navigate to repo_path if specified
+        if marketplace.repo_path:
+            skills_path = clone_dir / marketplace.repo_path
+            if not skills_path.exists():
+                return None, f'Repo path not found: {marketplace.repo_path}'
+            return skills_path, ''
+
+        return clone_dir, ''
+
+    except subprocess.TimeoutExpired:
+        return None, 'Git clone timed out'
+    except Exception as e:
+        return None, f'Clone failed: {str(e)}'
+
+
+def _cleanup_clone_dir(clone_dir: Path) -> None:
+    """Clean up a cloned repository directory."""
+    try:
+        if clone_dir.exists():
+            shutil.rmtree(clone_dir)
+    except Exception:
+        pass  # Best effort cleanup
+
+
+@router.post(
+    '/marketplace-skills',
+    response_model=MarketplaceSkillsPreviewResponse,
+)
+async def get_marketplace_skills(
+    marketplaces: list[MarketplaceRegistration],
+    user_context: UserContext = user_context_dependency,
+) -> MarketplaceSkillsPreviewResponse:
+    """Get skills from marketplace repositories.
+
+    This endpoint fetches and returns skill metadata from marketplace repos
+    without requiring an active sandbox session. Useful for previewing what
+    skills a marketplace provides before or after adding it.
+
+    Args:
+        marketplaces: List of marketplace registrations to fetch skills from.
+
+    Returns:
+        MarketplaceSkillsPreviewResponse with skill metadata and any errors.
+    """
+    all_skills: list[SkillInfo] = []
+    marketplace_skills: dict[str, list[str]] = {}
+    errors: list[str] = []
+
+    # Track cloned directories for cleanup
+    cloned_dirs: list[Path] = []
+
+    try:
+        for marketplace in marketplaces:
+            # Clone the marketplace repo
+            clone_path, error = await _clone_marketplace_repo(marketplace, user_context)
+
+            if error:
+                errors.append(f'{marketplace.name}: {error}')
+                continue
+
+            if clone_path is None:
+                errors.append(f'{marketplace.name}: Failed to clone repository')
+                continue
+
+            cloned_dirs.append(clone_path)
+
+            # Look for skills in the cloned directory
+            # Common patterns: skills/, .skills/, plugins/*/skills/
+            skills_dirs = []
+
+            # Direct skills/ directory
+            if (clone_path / 'skills').is_dir():
+                skills_dirs.append(clone_path / 'skills')
+
+            # .skills/ directory
+            if (clone_path / '.skills').is_dir():
+                skills_dirs.append(clone_path / '.skills')
+
+            # plugins/*/skills/ pattern for monorepo setups
+            plugins_dir = clone_path / 'plugins'
+            if plugins_dir.is_dir():
+                for plugin_dir in plugins_dir.iterdir():
+                    if plugin_dir.is_dir():
+                        plugin_skills = plugin_dir / 'skills'
+                        if plugin_skills.is_dir():
+                            skills_dirs.append(plugin_skills)
+
+            skill_names: list[str] = []
+            for skills_dir in skills_dirs:
+                try:
+                    skills = _load_skills_from_dir(skills_dir, marketplace.source)
+                    for skill in skills:
+                        # Add marketplace name to source for marketplace skills
+                        skill_with_source = SkillInfo(
+                            name=skill.name,
+                            type=skill.type,
+                            source=f'marketplace:{marketplace.name}',
+                            triggers=skill.triggers,
+                        )
+                        all_skills.append(skill_with_source)
+                        skill_names.append(skill.name)
+                except Exception as e:
+                    logger.warning(f'Failed to load skills from {skills_dir}: {e}')
+
+            marketplace_skills[marketplace.name] = skill_names
+
+    except Exception as e:
+        logger.exception(f'Unexpected error in marketplace-skills endpoint: {e}')
+        errors.append(f'Internal error: {str(e)}')
+        # Clean up before raising
+        for clone_dir in cloned_dirs:
+            _cleanup_clone_dir(clone_dir)
+        # Raise HTTP 500 for critical errors
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Clean up cloned directories
+        for clone_dir in cloned_dirs:
+            _cleanup_clone_dir(clone_dir)
+
+    return MarketplaceSkillsPreviewResponse(
+        skills=all_skills,
+        marketplace_skills=marketplace_skills,
+        errors=errors,
+    )
