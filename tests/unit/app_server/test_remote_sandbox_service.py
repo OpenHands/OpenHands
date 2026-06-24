@@ -1768,3 +1768,182 @@ class TestBatchGetSandboxes:
         assert results[0] is not None
         assert results[0].id == 'sandbox-1'
         assert results[0].status == SandboxStatus.MISSING
+
+
+class TestDeleteSandboxArchive:
+    """Archive-before-delete behavior of delete_sandbox (APP-2403)."""
+
+    def _ok_archive_response(self):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b'archive-bytes'
+        return resp
+
+    @pytest.mark.asyncio
+    async def test_delete_without_archive_when_disabled(self, remote_sandbox_service):
+        """With archiving disabled, delete stops the runtime and removes the row."""
+        stored = create_stored_sandbox()
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(return_value=stored)
+        remote_sandbox_service._get_runtime = AsyncMock(
+            return_value=create_runtime_data()
+        )
+        stop_response = MagicMock()
+        stop_response.status_code = 200
+        remote_sandbox_service.httpx_client.request.return_value = stop_response
+        remote_sandbox_service.db_session.delete = AsyncMock()
+
+        with patch(
+            'openhands.app_server.sandbox.workspace_archive.archive_enabled',
+            return_value=False,
+        ):
+            result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+
+        assert result is True
+        remote_sandbox_service.db_session.delete.assert_awaited_once_with(stored)
+
+    @pytest.mark.asyncio
+    async def test_delete_archives_before_stop_and_delete(self, remote_sandbox_service):
+        """With archiving enabled, the workspace is archived, then /stop, then row delete."""
+        stored = create_stored_sandbox()
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(return_value=stored)
+        remote_sandbox_service._get_runtime = AsyncMock(
+            return_value=create_runtime_data()
+        )
+        stop_response = MagicMock()
+        stop_response.status_code = 200
+        remote_sandbox_service.httpx_client.request.return_value = stop_response
+        remote_sandbox_service.db_session.delete = AsyncMock()
+
+        with (
+            patch(
+                'openhands.app_server.sandbox.workspace_archive.archive_enabled',
+                return_value=True,
+            ),
+            patch(
+                'openhands.app_server.sandbox.workspace_archive.archive_workspace',
+                new=AsyncMock(return_value=True),
+            ) as mock_archive,
+        ):
+            result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+
+        assert result is True
+        mock_archive.assert_awaited_once()
+        # runtime data was passed to the archiver
+        assert mock_archive.await_args.args[2] == 'test-sandbox-123'
+        remote_sandbox_service.httpx_client.request.assert_called_once()
+        remote_sandbox_service.db_session.delete.assert_awaited_once_with(stored)
+
+    @pytest.mark.asyncio
+    async def test_delete_blocked_when_archive_fails(self, remote_sandbox_service):
+        """A failed (required) archive must not stop the runtime or delete the row."""
+        stored = create_stored_sandbox()
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(return_value=stored)
+        remote_sandbox_service._get_runtime = AsyncMock(
+            return_value=create_runtime_data()
+        )
+        remote_sandbox_service.db_session.delete = AsyncMock()
+
+        with (
+            patch(
+                'openhands.app_server.sandbox.workspace_archive.archive_enabled',
+                return_value=True,
+            ),
+            patch(
+                'openhands.app_server.sandbox.workspace_archive.archive_workspace',
+                new=AsyncMock(return_value=False),
+            ),
+        ):
+            result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+
+        assert result is False
+        # Neither /stop nor the row deletion happened.
+        remote_sandbox_service.httpx_client.request.assert_not_called()
+        remote_sandbox_service.db_session.delete.assert_not_called()
+
+
+class TestArchiveWorkspaceHelper:
+    """Unit tests for the workspace_archive helper."""
+
+    @pytest.mark.asyncio
+    async def test_archive_uploads_archive_and_manifest(self, monkeypatch):
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'git-delta')
+
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b'patch-bytes'
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=resp)
+        store = MagicMock()
+
+        with patch.object(
+            workspace_archive, '_get_archive_file_store', return_value=store
+        ):
+            ok = await workspace_archive.archive_workspace(
+                client,
+                create_runtime_data(),
+                'sandbox-1',
+                conversation_id='conv-1',
+            )
+
+        assert ok is True
+        # session key forwarded; path + format passed.
+        _, kwargs = client.get.call_args
+        assert kwargs['headers']['X-Session-API-Key'] == 'test-session-key'
+        assert kwargs['params'] == {'path': '/workspace', 'format': 'git-delta'}
+        # archive + manifest written.
+        written_paths = [c.args[0] for c in store.write.call_args_list]
+        assert any(p.endswith('.patch') for p in written_paths)
+        assert any(p.endswith('.manifest.json') for p in written_paths)
+
+    @pytest.mark.asyncio
+    async def test_archive_non_200_not_required_allows_delete(self, monkeypatch):
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.delenv('RUNTIME_FILE_ARCHIVE_REQUIRED', raising=False)
+
+        resp = MagicMock()
+        resp.status_code = 500
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=resp)
+
+        ok = await workspace_archive.archive_workspace(
+            client, create_runtime_data(), 'sandbox-1'
+        )
+        # Not required -> best-effort -> deletion may proceed.
+        assert ok is True
+
+    @pytest.mark.asyncio
+    async def test_archive_non_200_required_blocks_delete(self, monkeypatch):
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
+
+        resp = MagicMock()
+        resp.status_code = 500
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=resp)
+
+        ok = await workspace_archive.archive_workspace(
+            client, create_runtime_data(), 'sandbox-1'
+        )
+        # Required -> a failure blocks deletion.
+        assert ok is False
+
+    @pytest.mark.asyncio
+    async def test_archive_no_url_skips(self, monkeypatch):
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.delenv('RUNTIME_FILE_ARCHIVE_REQUIRED', raising=False)
+        client = AsyncMock()
+
+        ok = await workspace_archive.archive_workspace(
+            client, create_runtime_data(url=''), 'sandbox-1'
+        )
+        assert ok is True
+        client.get.assert_not_called()

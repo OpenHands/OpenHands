@@ -25,6 +25,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
 from openhands.app_server.errors import SandboxError
+from openhands.app_server.sandbox import workspace_archive
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     VSCODE,
@@ -572,6 +573,12 @@ class RemoteSandboxService(SandboxService):
     async def delete_sandbox(self, sandbox_id: str) -> bool:
         """Delete a sandbox by stopping its runtime.
 
+        When workspace archiving is enabled (APP-2403), the workspace is first
+        archived to object storage via the in-pod agent-server while the
+        runtime is still up. The local record is deleted only after archiving
+        and ``/stop`` complete, so a failed archive leaves the sandbox intact
+        for a retry rather than silently losing the workspace.
+
         Security: Deleting the stored_sandbox record also removes the
         session_api_key_hash, invalidating any leaked session keys.
         """
@@ -579,10 +586,21 @@ class RemoteSandboxService(SandboxService):
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
             if not stored_sandbox:
                 return False
-            # Deleting the record also removes the session_api_key_hash,
-            # which invalidates any leaked session keys.
-            await self.db_session.delete(stored_sandbox)
             runtime_data = await self._get_runtime(sandbox_id)
+
+            if workspace_archive.archive_enabled():
+                archived = await workspace_archive.archive_workspace(
+                    self.httpx_client,
+                    runtime_data,
+                    sandbox_id,
+                )
+                if not archived:
+                    _logger.warning(
+                        f'Workspace archive required but failed for {sandbox_id}; '
+                        'leaving sandbox intact for retry'
+                    )
+                    return False
+
             response = await self._send_runtime_api_request(
                 'POST',
                 '/stop',
@@ -590,6 +608,10 @@ class RemoteSandboxService(SandboxService):
             )
             if response.status_code != 404:
                 response.raise_for_status()
+            # Deleting the record also removes the session_api_key_hash,
+            # which invalidates any leaked session keys. Done last so an
+            # archive/stop failure does not orphan the workspace.
+            await self.db_session.delete(stored_sandbox)
             return True
         except httpx.HTTPError as e:
             _logger.error(f'Error deleting sandbox {sandbox_id}: {e}')
