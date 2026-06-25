@@ -210,6 +210,7 @@ class TestLiveStatusAppConversationService:
             search_api_key=None,
             mcp_config=None,
             disabled_skills=[],
+            git_full_clone=False,
         )
 
         # Mock sandbox
@@ -1065,6 +1066,61 @@ class TestLiveStatusAppConversationService:
         self.service._configure_llm_and_mcp.assert_called_once_with(
             self.mock_user, 'gpt-4', test_conversation_id
         )
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_appends_shallow_clone_context(self, _mock_tools):
+        self.mock_user.git_full_clone = False
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix='Existing integration instructions.',
+            git_provider=ProviderType.GITHUB,
+            working_dir='/test/dir',
+            selected_repository='test/repo',
+        )
+
+        suffix = result.agent.agent_context.system_message_suffix
+        assert 'Existing integration instructions.' in suffix
+        assert '<GIT_WORKSPACE_CONTEXT>' in suffix
+        assert 'git fetch --unshallow' in suffix
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_omits_shallow_clone_context_for_full_clone(
+        self, _mock_tools
+    ):
+        self.mock_user.git_full_clone = True
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix='Existing integration instructions.',
+            git_provider=ProviderType.GITHUB,
+            working_dir='/test/dir',
+            selected_repository='test/repo',
+        )
+
+        suffix = result.agent.agent_context.system_message_suffix
+        assert 'Existing integration instructions.' in suffix
+        assert '<GIT_WORKSPACE_CONTEXT>' not in suffix
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_registered_agent_definitions'

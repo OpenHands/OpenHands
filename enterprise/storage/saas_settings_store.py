@@ -127,7 +127,10 @@ class SaasSettingsStore(SettingsStore):
     ) -> SecretStr | None:
         if org_member.has_custom_llm_api_key:
             return org_member.llm_api_key
-        return org.llm_api_key or org_member.llm_api_key
+        # When has_custom_llm_api_key is False, only return org-level key
+        # Don't fall back to org_member.llm_api_key as it may not be set
+        # and accessing it would trigger decryption of an empty/null value
+        return org.llm_api_key
 
     @staticmethod
     def _get_persisted_agent_settings(item: Settings) -> dict[str, Any]:
