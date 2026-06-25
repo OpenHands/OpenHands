@@ -699,6 +699,7 @@ class OrgConversationPage(BaseModel):
     page: int = 1  # Current page number
     per_page: int = 100  # Items per page
     total_pages: int = 0  # Total number of pages
+    pagination_accurate: bool = True  # False when sandbox_status filter is active
 
 
 class OrgConversationStats(BaseModel):

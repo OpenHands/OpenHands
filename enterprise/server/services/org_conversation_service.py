@@ -60,6 +60,77 @@ class OrgConversationService:
         """Set the sandbox service for live status fetching."""
         self.sandbox_service = sandbox_service
 
+    def _build_conversation_response(
+        self,
+        metadata: StoredConversationMetadata,
+        saas_metadata: StoredConversationMetadataSaas,
+        user: User | None,
+        sandbox_info: SandboxInfo | None,
+    ) -> OrgConversationResponse:
+        """Build an OrgConversationResponse from a row and sandbox info."""
+        resolved_sandbox_status = (
+            sandbox_info.status.value if sandbox_info else None
+        )
+
+        # Construct runtime URL from exposed URLs
+        runtime_url = None
+        if sandbox_info and sandbox_info.exposed_urls:
+            agent_server_url = next(
+                (
+                    exposed_url.url
+                    for exposed_url in sandbox_info.exposed_urls
+                    if exposed_url.name == AGENT_SERVER
+                ),
+                None,
+            )
+            if agent_server_url:
+                runtime_url = (
+                    f'{agent_server_url}/api/conversations/{metadata.conversation_id}'
+                )
+
+        # Build metrics
+        token_usage = TokenUsage(
+            prompt_tokens=metadata.prompt_tokens or 0,
+            completion_tokens=metadata.completion_tokens or 0,
+            cache_read_tokens=metadata.cache_read_tokens or 0,
+            cache_write_tokens=metadata.cache_write_tokens or 0,
+            context_window=metadata.context_window or 0,
+            per_turn_token=metadata.per_turn_token or 0,
+        )
+        metrics = MetricsSnapshot(
+            accumulated_cost=metadata.accumulated_cost or 0.0,
+            max_budget_per_task=metadata.max_budget_per_task,
+            accumulated_token_usage=token_usage,
+        )
+
+        return OrgConversationResponse(
+            id=metadata.conversation_id,
+            title=metadata.title,
+            llm_model=metadata.llm_model,
+            agent_kind=metadata.agent_kind or 'openhands',
+            user_id=str(saas_metadata.user_id),
+            user_email=user.email if user else None,
+            created_at=metadata.created_at,
+            updated_at=metadata.last_updated_at,
+            sandbox_id=metadata.sandbox_id,
+            sandbox_status=resolved_sandbox_status,
+            runtime_url=runtime_url,
+            execution_status=metadata.execution_status,
+            selected_repository=metadata.selected_repository,
+            selected_branch=metadata.selected_branch,
+            trigger=metadata.trigger,
+            tags=metadata.tags or {},
+            accumulated_cost=metrics.accumulated_cost,
+            prompt_tokens=metrics.accumulated_token_usage.prompt_tokens,  # type: ignore[union-attr]
+            completion_tokens=metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
+            total_tokens=(
+                metrics.accumulated_token_usage.prompt_tokens  # type: ignore[union-attr]
+                + metrics.accumulated_token_usage.completion_tokens  # type: ignore[union-attr]
+            ),
+            cache_read_tokens=metrics.accumulated_token_usage.cache_read_tokens,  # type: ignore[union-attr]
+            cache_write_tokens=metrics.accumulated_token_usage.cache_write_tokens,  # type: ignore[union-attr]
+        )
+
     async def list_org_conversations(
         self,
         org_id: UUID,
@@ -140,10 +211,10 @@ class OrgConversationService:
         count_result = await self.db_session.execute(count_query)
         total_items = count_result.scalar() or 0
 
-        # Note: sandbox_status filter is applied post-query (line ~181) because it
-        # requires data from the sandbox service. This means total_items reflects
-        # the unfiltered count. If filtering by sandbox_status results in fewer
-        # items than expected per page, pagination may show empty pages.
+        # Track whether pagination count is accurate. sandbox_status filter is
+        # applied post-query (requires sandbox service), so total_items may be
+        # inflated and pages may be shorter/empty when that filter is active.
+        pagination_accurate = not bool(sandbox_status)
 
         # Apply sorting
         sort_column = VALID_SORT_FIELDS.get(
@@ -195,70 +266,12 @@ class OrgConversationService:
         # Build response items
         items: list[OrgConversationResponse] = []
         for metadata, saas_metadata, user in rows:
-            # Get sandbox info for this conversation
             sandbox_info = sandbox_info_map.get(metadata.sandbox_id)
-            resolved_sandbox_status = (
-                sandbox_info.status.value if sandbox_info else None
-            )
-
-            # Construct runtime URL from exposed URLs
-            runtime_url = None
-            if sandbox_info and sandbox_info.exposed_urls:
-                agent_server_url = next(
-                    (
-                        exposed_url.url
-                        for exposed_url in sandbox_info.exposed_urls
-                        if exposed_url.name == AGENT_SERVER
-                    ),
-                    None,
+            items.append(
+                self._build_conversation_response(
+                    metadata, saas_metadata, user, sandbox_info
                 )
-                if agent_server_url:
-                    runtime_url = f'{agent_server_url}/api/conversations/{metadata.conversation_id}'
-
-            # Build metrics
-            token_usage = TokenUsage(
-                prompt_tokens=metadata.prompt_tokens or 0,
-                completion_tokens=metadata.completion_tokens or 0,
-                cache_read_tokens=metadata.cache_read_tokens or 0,
-                cache_write_tokens=metadata.cache_write_tokens or 0,
-                context_window=metadata.context_window or 0,
-                per_turn_token=metadata.per_turn_token or 0,
             )
-            metrics = MetricsSnapshot(
-                accumulated_cost=metadata.accumulated_cost or 0.0,
-                max_budget_per_task=metadata.max_budget_per_task,
-                accumulated_token_usage=token_usage,
-            )
-
-            # Build response
-            item = OrgConversationResponse(
-                id=metadata.conversation_id,
-                title=metadata.title,
-                llm_model=metadata.llm_model,
-                agent_kind=metadata.agent_kind or 'openhands',
-                user_id=str(saas_metadata.user_id),
-                user_email=user.email if user else None,
-                created_at=metadata.created_at,
-                updated_at=metadata.last_updated_at,
-                sandbox_id=metadata.sandbox_id,
-                sandbox_status=resolved_sandbox_status,
-                runtime_url=runtime_url,
-                execution_status=metadata.execution_status,
-                selected_repository=metadata.selected_repository,
-                selected_branch=metadata.selected_branch,
-                trigger=metadata.trigger,
-                tags=metadata.tags or {},
-                accumulated_cost=metrics.accumulated_cost,
-                prompt_tokens=metrics.accumulated_token_usage.prompt_tokens,  # type: ignore[union-attr]
-                completion_tokens=metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
-                total_tokens=(
-                    metrics.accumulated_token_usage.prompt_tokens  # type: ignore[union-attr]
-                    + metrics.accumulated_token_usage.completion_tokens  # type: ignore[union-attr]
-                ),
-                cache_read_tokens=metrics.accumulated_token_usage.cache_read_tokens,  # type: ignore[union-attr]
-                cache_write_tokens=metrics.accumulated_token_usage.cache_write_tokens,  # type: ignore[union-attr]
-            )
-            items.append(item)
 
         # Calculate total pages
         total_pages = math.ceil(total_items / per_page) if total_items > 0 else 0
@@ -280,6 +293,7 @@ class OrgConversationService:
             page=page,
             per_page=per_page,
             total_pages=total_pages,
+            pagination_accurate=pagination_accurate,
         )
 
     async def get_stats(
@@ -647,65 +661,8 @@ class OrgConversationService:
                     extra={'conversation_id': conversation_id, 'error': str(e)},
                 )
 
-        sandbox_status = sandbox_info.status.value if sandbox_info else None
-
-        # Construct runtime URL
-        runtime_url = None
-        if sandbox_info and sandbox_info.exposed_urls:
-            agent_server_url = next(
-                (
-                    exposed_url.url
-                    for exposed_url in sandbox_info.exposed_urls
-                    if exposed_url.name == AGENT_SERVER
-                ),
-                None,
-            )
-            if agent_server_url:
-                runtime_url = (
-                    f'{agent_server_url}/api/conversations/{metadata.conversation_id}'
-                )
-
-        # Build metrics
-        token_usage = TokenUsage(
-            prompt_tokens=metadata.prompt_tokens or 0,
-            completion_tokens=metadata.completion_tokens or 0,
-            cache_read_tokens=metadata.cache_read_tokens or 0,
-            cache_write_tokens=metadata.cache_write_tokens or 0,
-            context_window=metadata.context_window or 0,
-            per_turn_token=metadata.per_turn_token or 0,
-        )
-        metrics = MetricsSnapshot(
-            accumulated_cost=metadata.accumulated_cost or 0.0,
-            max_budget_per_task=metadata.max_budget_per_task,
-            accumulated_token_usage=token_usage,
-        )
-
-        return OrgConversationResponse(
-            id=metadata.conversation_id,
-            title=metadata.title,
-            llm_model=metadata.llm_model,
-            agent_kind=metadata.agent_kind or 'openhands',
-            user_id=str(saas_metadata.user_id),
-            user_email=user.email if user else None,
-            created_at=metadata.created_at,
-            updated_at=metadata.last_updated_at,
-            sandbox_id=metadata.sandbox_id,
-            sandbox_status=sandbox_status,
-            runtime_url=runtime_url,
-            execution_status=metadata.execution_status,
-            selected_repository=metadata.selected_repository,
-            selected_branch=metadata.selected_branch,
-            trigger=metadata.trigger,
-            tags=metadata.tags or {},
-            accumulated_cost=metrics.accumulated_cost,
-            prompt_tokens=metrics.accumulated_token_usage.prompt_tokens,  # type: ignore[union-attr]
-            completion_tokens=metrics.accumulated_token_usage.completion_tokens,  # type: ignore[union-attr]
-            total_tokens=(
-                metrics.accumulated_token_usage.prompt_tokens  # type: ignore[union-attr]
-                + metrics.accumulated_token_usage.completion_tokens  # type: ignore[union-attr]
-            ),
-            cache_read_tokens=metrics.accumulated_token_usage.cache_read_tokens,  # type: ignore[union-attr]
-            cache_write_tokens=metrics.accumulated_token_usage.cache_write_tokens,  # type: ignore[union-attr]
+        return self._build_conversation_response(
+            metadata, saas_metadata, user, sandbox_info
         )
 
     async def stop_conversation(
