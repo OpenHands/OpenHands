@@ -145,6 +145,10 @@ class AuthUserContext(UserContext):
     async def get_user_git_info(self) -> UserGitInfo | None:
         return await self.user_auth.get_user_git_info()
 
+    async def get_default_sandbox_spec_id(self) -> str | None:
+        user_info = await self.get_user_info()
+        return user_info.default_sandbox_spec_id
+
 
 USER_ID_ATTR = 'user_id'
 
