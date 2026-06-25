@@ -205,7 +205,7 @@ async def test_get_org_app_settings_with_target_org_id(
         result.enable_proactive_conversation_starters
         == mock_org.enable_proactive_conversation_starters
     )
-    mock_store.get_org_by_id.assert_called_once_with(str(target_org_id))
+    mock_store.get_org_by_id.assert_called_once_with(target_org_id)
     mock_store.get_current_org_by_user_id.assert_not_called()
 
 
@@ -262,7 +262,7 @@ async def test_update_org_app_settings_with_target_org_id(
     # Assert
     assert isinstance(result, OrgAppSettingsResponse)
     assert result.enable_proactive_conversation_starters is False
-    mock_store.get_org_by_id.assert_called_once_with(str(target_org_id))
+    mock_store.get_org_by_id.assert_called_once_with(target_org_id)
     mock_store.update_org_app_settings.assert_called_once()
     mock_store.get_current_org_by_user_id.assert_not_called()
 
@@ -319,6 +319,6 @@ async def test_target_org_id_takes_precedence_over_effective_org(
     # Assert
     assert isinstance(result, OrgAppSettingsResponse)
     assert result.max_budget_per_task == 100.0  # Different org's value
-    mock_store.get_org_by_id.assert_called_once_with(str(target_org_id))
+    mock_store.get_org_by_id.assert_called_once_with(target_org_id)
     # Should NOT call get_current_org_by_user_id when target_org_id is provided
     mock_store.get_current_org_by_user_id.assert_not_called()
