@@ -58,7 +58,7 @@ class OrgAppSettingsService:
 
         # If a specific org is targeted, use it directly
         if target_org_id is not None:
-            org = await self.store.get_org_by_id(str(target_org_id))
+            org = await self.store.get_org_by_id(target_org_id)
             if not org:
                 raise OrgNotFoundError(str(target_org_id))
             return user_id, org

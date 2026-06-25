@@ -535,7 +535,6 @@ def test_openhands_model_display_does_not_reverse_map():
     assert api_data['llm']['model'] == settings.agent_settings.llm.model
 
 
-<<<<<<< HEAD
 # --- Tests for MarketplaceRegistration ---
 
 
