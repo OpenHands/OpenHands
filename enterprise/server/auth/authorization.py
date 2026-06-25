@@ -92,6 +92,9 @@ class Permission(str, Enum):
     # Manage Automations
     MANAGE_AUTOMATIONS = 'manage_automations'
 
+    # User provisioning (create new Keycloak/OpenHands users directly in an org)
+    PROVISION_USER = 'provision_user'
+
 
 class RoleName(str, Enum):
     """Role names used in the system.
@@ -157,6 +160,8 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.MANAGE_ORG_CLAIMS,
             # Manage Automations
             Permission.MANAGE_AUTOMATIONS,
+            # User provisioning
+            Permission.PROVISION_USER,
         ]
     ),
     RoleName.ADMIN: frozenset(
@@ -182,6 +187,8 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.MANAGE_ORG_CLAIMS,
             # Manage Automations
             Permission.MANAGE_AUTOMATIONS,
+            # User provisioning
+            Permission.PROVISION_USER,
         ]
     ),
     RoleName.MEMBER: frozenset(

@@ -1,5 +1,5 @@
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 from pydantic import SecretStr
@@ -1281,3 +1281,71 @@ async def test_store_replaces_mcp_config_on_delete(
     )
     assert set(admin_servers.keys()) == {'server1', 'server2'}
     assert 'mcp_config' not in members[member1_user_id].agent_settings_diff
+
+
+class TestGetEffectiveLlmApiKey:
+    """Regression tests for SaasSettingsStore._get_effective_llm_api_key() - GitHub #14898."""
+
+    def test_returns_member_key_when_has_custom_is_true(self):
+        """When has_custom_llm_api_key is True, returns member's LLM API key."""
+        from pydantic import SecretStr
+        from storage.saas_settings_store import SaasSettingsStore
+
+        org = MagicMock()
+        org.llm_api_key = SecretStr('org-api-key')
+
+        member = MagicMock()
+        member.has_custom_llm_api_key = True
+        member.llm_api_key = SecretStr('member-api-key')
+
+        result = SaasSettingsStore._get_effective_llm_api_key(org, member)
+
+        assert result == SecretStr('member-api-key')
+
+    def test_returns_org_key_and_does_not_access_member_key_when_has_custom_is_false(
+        self,
+    ):
+        """When has_custom_llm_api_key is False, returns org key without accessing member key.
+
+        This is a regression test for GitHub #14898. Previously, the code would fall back
+        to org_member.llm_api_key even when has_custom_llm_api_key was False, which
+        caused decryption errors when the member had no custom key set (empty/null stored value).
+        """
+        from pydantic import SecretStr
+        from storage.saas_settings_store import SaasSettingsStore
+
+        org = MagicMock()
+        org.llm_api_key = SecretStr('org-api-key')
+
+        member = MagicMock()
+        member.has_custom_llm_api_key = False
+
+        # Set llm_api_key to raise an error if accessed - this verifies we don't access it
+        def raise_on_access():
+            raise AssertionError(
+                'member.llm_api_key should not be accessed when has_custom_llm_api_key is False'
+            )
+
+        type(member).llm_api_key = PropertyMock(side_effect=raise_on_access)
+
+        result = SaasSettingsStore._get_effective_llm_api_key(org, member)
+
+        # Must return org key when has_custom_llm_api_key is False
+        assert result == SecretStr('org-api-key')
+
+    def test_returns_org_key_when_member_has_custom_false_and_org_has_no_key(self):
+        """When has_custom_llm_api_key is False but org has no key, returns None."""
+        from storage.saas_settings_store import SaasSettingsStore
+
+        org = MagicMock()
+        org.llm_api_key = None
+
+        member = MagicMock()
+        member.has_custom_llm_api_key = False
+        type(member).llm_api_key = PropertyMock(
+            side_effect=AssertionError('should not be accessed')
+        )
+
+        result = SaasSettingsStore._get_effective_llm_api_key(org, member)
+
+        assert result is None

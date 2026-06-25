@@ -529,12 +529,17 @@ class MeResponse(BaseModel):
         email: str,
     ) -> 'MeResponse':
         """Create a MeResponse from an OrgMember, Role, and user email."""
+        # Only access member.llm_api_key when has_custom_llm_api_key is True
+        # to avoid decryption errors when the key is not set
+        llm_api_key = (
+            cls._mask_key(member.llm_api_key) if member.has_custom_llm_api_key else ''
+        )
         return cls(
             org_id=str(member.org_id),
             user_id=str(member.user_id),
             email=email,
             role=role.name,
-            llm_api_key=cls._mask_key(member.llm_api_key),
+            llm_api_key=llm_api_key,
             llm_api_key_for_byor=cls._mask_key(member.llm_api_key_for_byor) or None,
             agent_settings_diff=dict(member.agent_settings_diff or {}),
             conversation_settings_diff=dict(member.conversation_settings_diff or {}),

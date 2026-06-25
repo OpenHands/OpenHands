@@ -39,12 +39,12 @@ export const pauseV1ConversationSandbox = async (conversationId: string) => {
 };
 
 /**
- * Pause a V1 conversation by fetching the conversation data and pausing it
+ * Interrupt a V1 conversation by fetching the conversation data and interrupting it
  */
-export const pauseV1Conversation = async (conversationId: string) => {
+export const interruptV1Conversation = async (conversationId: string) => {
   const { conversationUrl, sessionApiKey } =
     await fetchV1ConversationData(conversationId);
-  return V1ConversationService.pauseConversation(
+  return V1ConversationService.interruptConversation(
     conversationId,
     conversationUrl,
     sessionApiKey,
