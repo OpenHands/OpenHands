@@ -298,17 +298,41 @@ class TestCleanupOldSandboxes:
         assert mock_sandbox_service.pause_sandbox_mock.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_cleanup_invalid_max_num_sandboxes(self, mock_sandbox_service):
-        """Test cleanup raises ValueError for invalid max_num_sandboxes."""
-        # Test zero
-        with pytest.raises(
-            ValueError, match='max_num_sandboxes must be greater than 0'
-        ):
-            await mock_sandbox_service.pause_old_sandboxes(max_num_sandboxes=0)
+    async def test_cleanup_accepts_zero_max_num_sandboxes(self, mock_sandbox_service):
+        """Zero is valid: keep no other sandboxes, pause all running ones.
 
-        # Test negative
+        This is the value passed when ``max_num_sandboxes=1`` is configured
+        (callers invoke ``pause_old_sandboxes(max_num_sandboxes - 1)``), which is
+        the officially recommended setting for Docker host network mode. It must
+        not raise.
+        """
+        # Two running sandboxes; with a keep-count of 0 both should be paused.
+        now = datetime.now(timezone.utc)
+        sandboxes = [
+            create_sandbox_info(
+                'sandbox-1', SandboxStatus.RUNNING, now - timedelta(hours=2)
+            ),
+            create_sandbox_info(
+                'sandbox-2', SandboxStatus.RUNNING, now - timedelta(hours=1)
+            ),
+        ]
+        mock_sandbox_service.search_sandboxes_mock.return_value = SandboxPage(
+            items=sandboxes, next_page_id=None
+        )
+        mock_sandbox_service.pause_sandbox_mock.return_value = True
+
+        result = await mock_sandbox_service.pause_old_sandboxes(max_num_sandboxes=0)
+
+        assert set(result) == {'sandbox-1', 'sandbox-2'}
+        assert mock_sandbox_service.pause_sandbox_mock.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_cleanup_rejects_negative_max_num_sandboxes(
+        self, mock_sandbox_service
+    ):
+        """Negative values are invalid and must raise."""
         with pytest.raises(
-            ValueError, match='max_num_sandboxes must be greater than 0'
+            ValueError, match='max_num_sandboxes must be greater than or equal to 0'
         ):
             await mock_sandbox_service.pause_old_sandboxes(max_num_sandboxes=-1)
 

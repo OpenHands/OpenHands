@@ -598,6 +598,7 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
     container_name_prefix: str = 'oh-agent-server-'
     max_num_sandboxes: int = Field(
         default=5,
+        ge=1,
         description='Maximum number of sandboxes allowed to run simultaneously',
     )
     mounts: list[VolumeMount] = Field(default_factory=list)

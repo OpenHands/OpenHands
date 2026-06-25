@@ -601,8 +601,8 @@ class RemoteSandboxService(SandboxService):
         Uses _get_user_running_sandboxes (runtime /list + DB cross-reference) so
         only sandboxes that are actually running are considered.
         """
-        if max_num_sandboxes <= 0:
-            raise ValueError('max_num_sandboxes must be greater than 0')
+        if max_num_sandboxes < 0:
+            raise ValueError('max_num_sandboxes must be greater than or equal to 0')
 
         running = await self._get_user_running_sandboxes()
 
@@ -901,6 +901,7 @@ class RemoteSandboxServiceInjector(SandboxServiceInjector):
     )
     max_num_sandboxes: int = Field(
         default=10,
+        ge=1,
         description='Maximum number of sandboxes allowed to run simultaneously',
     )
 
