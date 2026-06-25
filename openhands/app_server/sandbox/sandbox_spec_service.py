@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from abc import ABC, abstractmethod
 
@@ -59,6 +60,42 @@ class SandboxSpecServiceInjector(
     DiscriminatedUnionMixin, Injector[SandboxSpecService], ABC
 ):
     pass
+
+
+async def resolve_sandbox_spec(
+    sandbox_spec_id: str | None,
+    user_default_spec_id: str | None,
+    sandbox_spec_service: SandboxSpecService,
+    logger: logging.Logger,
+) -> SandboxSpecInfo:
+    """Return the SandboxSpecInfo to use for a new sandbox.
+
+    Resolution order:
+    1. ``sandbox_spec_id`` (caller-explicit) — not found is a hard error.
+    2. ``user_default_spec_id`` (user preference) — if missing, log a warning
+       and fall back to the system default.
+    3. System default (first spec returned by the service).
+    """
+    from_user_default = sandbox_spec_id is None and user_default_spec_id is not None
+    effective_id = (
+        sandbox_spec_id if sandbox_spec_id is not None else user_default_spec_id
+    )
+
+    if effective_id is None:
+        return await sandbox_spec_service.get_default_sandbox_spec()
+
+    spec = await sandbox_spec_service.get_sandbox_spec(effective_id)
+    if spec is not None:
+        return spec
+
+    if from_user_default:
+        logger.warning(
+            'User default sandbox spec %r not found; falling back to system default.',
+            effective_id,
+        )
+        return await sandbox_spec_service.get_default_sandbox_spec()
+
+    raise ValueError(f'Sandbox Spec {effective_id!r} not found')
 
 
 def get_agent_server_image() -> str:
