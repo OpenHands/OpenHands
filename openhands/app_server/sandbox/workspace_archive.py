@@ -23,6 +23,10 @@ from typing import Any
 from openhands.agent_server.utils import utc_now
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.file_store.google_cloud import GoogleCloudFileStore
+from openhands.app_server.settings.settings_models import (
+    SandboxGroupingStrategy,
+    grouped_workspace_dir,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -50,9 +54,28 @@ def _archive_format() -> str:
     return os.getenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'git-delta')
 
 
-def _archive_path() -> str:
+def _archive_base_path() -> str:
     # The git repo lives at /workspace/project; /workspace itself is not a repo.
+    # Under sandbox grouping the repo is relocated to {base}/{conversation_id.hex}
+    # (see grouped_workspace_dir); _archive_path() applies that relocation.
     return os.getenv('RUNTIME_FILE_ARCHIVE_PATH', '/workspace/project')
+
+
+def _archive_path(
+    grouping_strategy: SandboxGroupingStrategy,
+    conversation_id_hex: str,
+) -> str:
+    """Path of the workspace git repo to archive.
+
+    Mirrors the relocation applied at conversation start in
+    live_status_app_conversation_service (working_dir → grouped_workspace_dir):
+    NO_GROUPING keeps the bare base dir, any grouping nests it under the
+    conversation id. Hardcoding the base would 404 for every grouped
+    conversation, whose repo is not at the base path.
+    """
+    return grouped_workspace_dir(
+        _archive_base_path(), grouping_strategy, conversation_id_hex
+    )
 
 
 def _archive_timeout() -> float:
@@ -69,13 +92,16 @@ async def archive_workspace(
     runtime: dict[str, Any],
     sandbox_id: str,
     conversation_id: str | None = None,
+    grouping_strategy: SandboxGroupingStrategy = SandboxGroupingStrategy.NO_GROUPING,
 ) -> bool:
     """Archive the sandbox's workspace; return whether deletion may proceed.
 
-    Returns True when the workspace was archived, or when archiving failed but
-    is not required (best-effort). Returns False only when archiving is
-    required and could not be completed, so the caller can leave the sandbox
-    intact and retry the delete later. Never raises.
+    Returns True when the workspace was archived, when there is nothing to
+    archive (the agent-server reports the path is missing or not a git repo —
+    a permanent 4xx), or when archiving failed but is not required
+    (best-effort). Returns False only when archiving is required and hit a
+    genuinely transient failure (5xx / network), so the caller can leave the
+    sandbox intact and retry the delete later. Never raises.
     """
     agent_server_url = runtime.get('url')
     session_api_key = runtime.get('session_api_key')
@@ -96,24 +122,37 @@ async def archive_workspace(
     fmt = _archive_format()
     suffix = _ARCHIVE_SUFFIX.get(fmt, 'patch')
     headers = {'X-Session-API-Key': session_api_key} if session_api_key else {}
+    # Conversation id keys the archive and locates the (possibly grouped) repo.
+    # For cloud conversations the sandbox id is the conversation_id.hex.
+    conversation_key = conversation_id or sandbox_id
+    archive_path = _archive_path(grouping_strategy, conversation_key)
 
     try:
         response = await httpx_client.get(
             f'{agent_server_url}/api/file/archive',
-            params={'path': _archive_path(), 'format': fmt},
+            params={'path': archive_path, 'format': fmt},
             headers=headers,
             timeout=_archive_timeout(),
         )
         if response.status_code != 200:
+            # The agent-server (software-agent-sdk GET /api/file/archive) returns
+            # 4xx when the path is missing/not a directory/not a git repo and 5xx
+            # for genuine failures. A 4xx is permanent for this workspace — there
+            # is nothing to capture (e.g. nothing was ever cloned), so treat it as
+            # satisfied and let the delete proceed even when archiving is required.
+            # Only a 5xx is transient and worth blocking a required delete to retry.
+            permanent = 400 <= response.status_code < 500
             _logger.warning(
-                'Workspace archive for %s: agent-server returned %s; skipping',
+                'Workspace archive for %s: agent-server returned %s; %s',
                 sandbox_id,
                 response.status_code,
+                'nothing to archive' if permanent else 'transient failure',
             )
-            return not archive_required()
+            return permanent or not archive_required()
         data = response.content
         base_commit = response.headers.get('X-Archive-Base-Commit', '')
     except Exception as e:
+        # Network/timeout error: genuinely transient.
         _logger.warning('Workspace archive fetch failed for %s: %s', sandbox_id, e)
         return not archive_required()
 
@@ -125,12 +164,10 @@ async def archive_workspace(
         manifest = json.dumps(
             {
                 'sandbox_id': sandbox_id,
-                # For cloud conversations the sandbox id is the
-                # conversation_id.hex; use it as the archive's conversation key.
-                'conversation_id': conversation_id or sandbox_id,
+                'conversation_id': conversation_key,
                 'base_commit': base_commit,
                 'format': fmt,
-                'source_path': _archive_path(),
+                'source_path': archive_path,
                 'byte_count': len(data),
                 'created_at': ts,
             },

@@ -46,6 +46,7 @@ from openhands.app_server.sandbox.sandbox_service import (
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
 from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.settings.settings_models import SandboxGroupingStrategy
 from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.sql_utils import Base, UtcDateTime
@@ -575,25 +576,37 @@ class RemoteSandboxService(SandboxService):
 
         When workspace archiving is enabled (APP-2403), the workspace is first
         archived to object storage via the in-pod agent-server while the
-        runtime is still up. The local record is deleted only after archiving
-        and ``/stop`` complete, so a failed archive leaves the sandbox intact
-        for a retry rather than silently losing the workspace.
+        runtime is still up, then ``/stop`` is called and the local record is
+        deleted. Archiving is tiered (see ``workspace_archive``):
+
+        - By default (``RUNTIME_FILE_ARCHIVE_REQUIRED`` unset) archiving is
+          best-effort: a failure is logged and deletion proceeds, so a transient
+          failure loses the workspace rather than blocking cleanup.
+        - Only when ``RUNTIME_FILE_ARCHIVE_REQUIRED`` is set does a genuinely
+          transient archive failure block deletion, leaving the sandbox intact
+          for a retry. "Nothing to archive" (no git repo at the path) is not a
+          failure and never blocks the delete.
 
         If the runtime is already gone (paused/reaped/double-delete, a 404 from
         the runtime API), there is nothing to archive or stop, so the record is
         deleted directly to avoid orphaning the row and its session_api_key_hash.
 
-        Security: the session_api_key_hash is cleared up front so leaked keys
-        are invalidated even if the archive or stop step below fails and the row
-        is kept for retry.
+        Security: the session_api_key_hash is cleared and committed up front so
+        leaked keys are invalidated durably even if the archive or stop step
+        below fails and the row is kept for retry (an uncommitted in-memory
+        clear could otherwise be rolled back by the request's session).
         """
         try:
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
             if not stored_sandbox:
                 return False
-            # Security: invalidate leaked session keys regardless of whether the
-            # archive/stop below succeeds (mirrors pause_sandbox).
+            # Security: invalidate leaked session keys eagerly and durably
+            # (mirrors pause_sandbox). Commit now so every return-False/error
+            # path below leaves the key dead in the DB — the row delete and its
+            # commit happen later and may not run on a failed delete.
             stored_sandbox.session_api_key_hash = None
+            self.db_session.add(stored_sandbox)
+            await self.db_session.commit()
             try:
                 runtime_data = await self._get_runtime(sandbox_id)
             except httpx.HTTPStatusError as e:
@@ -609,10 +622,15 @@ class RemoteSandboxService(SandboxService):
                 return True
 
             if workspace_archive.archive_enabled():
+                # Resolve the grouping strategy so the archive targets the right
+                # (possibly relocated) workspace repo. The sandbox id is the
+                # conversation_id.hex for cloud conversations.
+                grouping_strategy = await self._get_archive_grouping_strategy()
                 archived = await workspace_archive.archive_workspace(
                     self.httpx_client,
                     runtime_data,
                     sandbox_id,
+                    grouping_strategy=grouping_strategy,
                 )
                 if not archived:
                     _logger.warning(
@@ -629,12 +647,28 @@ class RemoteSandboxService(SandboxService):
             if response.status_code != 404:
                 response.raise_for_status()
             # Row deleted last so an archive/stop failure leaves it intact for
-            # retry; the session key was already invalidated above.
+            # retry; the session key was already invalidated and committed above.
             await self.db_session.delete(stored_sandbox)
             return True
         except httpx.HTTPError as e:
             _logger.error(f'Error deleting sandbox {sandbox_id}: {e}')
             return False
+
+    async def _get_archive_grouping_strategy(self) -> SandboxGroupingStrategy:
+        """Best-effort sandbox grouping strategy for archive path resolution.
+
+        Falls back to NO_GROUPING (the bare base path) if user info is
+        unavailable, so a lookup failure never blocks deletion.
+        """
+        try:
+            user_info = await self.user_context.get_user_info()
+            return user_info.sandbox_grouping_strategy
+        except Exception:
+            _logger.warning(
+                'Could not resolve grouping strategy for archive; assuming NO_GROUPING',
+                exc_info=True,
+            )
+            return SandboxGroupingStrategy.NO_GROUPING
 
     async def pause_old_sandboxes(self, max_num_sandboxes: int) -> list[str]:
         """Pause the oldest running sandboxes until at most max_num_sandboxes remain.

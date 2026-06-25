@@ -634,7 +634,9 @@ class TestSandboxLifecycle:
         # Verify
         assert result is True
         remote_sandbox_service.db_session.delete.assert_called_once_with(stored_sandbox)
-        remote_sandbox_service.db_session.commit.assert_not_called()
+        # The only commit inside delete_sandbox is the eager session-key
+        # invalidation; the row deletion is committed by the caller.
+        remote_sandbox_service.db_session.commit.assert_awaited_once()
         remote_sandbox_service.httpx_client.request.assert_called_once_with(
             'POST',
             'https://api.example.com/stop',
@@ -765,8 +767,9 @@ class TestSandboxLifecycle:
     async def test_delete_sandbox_transient_error_invalidates_session_key(
         self, remote_sandbox_service
     ):
-        """A transient runtime error keeps the row for retry but still clears the
-        session key hash, so a leaked key cannot outlive the delete (security)."""
+        """A transient runtime error keeps the row for retry but still clears AND
+        commits the session key hash, so a leaked key cannot outlive the delete
+        even if the request's session later rolls back (security, BUG 1)."""
         stored_sandbox = create_stored_sandbox(session_api_key_hash='leaked-hash')
 
         remote_sandbox_service._get_stored_sandbox = AsyncMock(
@@ -780,11 +783,19 @@ class TestSandboxLifecycle:
             )
         )
         remote_sandbox_service.db_session.delete = AsyncMock()
+        remote_sandbox_service.db_session.add = MagicMock()
+        remote_sandbox_service.db_session.commit = AsyncMock()
 
         result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
 
         assert result is False
         remote_sandbox_service.db_session.delete.assert_not_called()
+        assert stored_sandbox.session_api_key_hash is None
+        # The invalidation was persisted up front (committed before the
+        # failure-prone runtime call), so it survives a later rollback.
+        remote_sandbox_service.db_session.add.assert_called_once_with(stored_sandbox)
+        remote_sandbox_service.db_session.commit.assert_awaited_once()
+        # The commit happened while the hash was already cleared.
         assert stored_sandbox.session_api_key_hash is None
 
 
@@ -1980,6 +1991,44 @@ class TestDeleteSandboxArchive:
         remote_sandbox_service.httpx_client.request.assert_not_called()
         remote_sandbox_service.db_session.delete.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_delete_proceeds_when_nothing_to_archive(
+        self, remote_sandbox_service, monkeypatch
+    ):
+        """No git repo to capture (agent-server 400) must NOT orphan the sandbox
+        even when archiving is required: archive is satisfied, /stop and the row
+        delete proceed so the runtime is freed and the user can't get stuck (BUG 2)."""
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_ENABLED', 'true')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+
+        stored = create_stored_sandbox()
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(return_value=stored)
+        remote_sandbox_service._get_runtime = AsyncMock(
+            return_value=create_runtime_data()
+        )
+        remote_sandbox_service.db_session.delete = AsyncMock()
+        remote_sandbox_service.db_session.add = MagicMock()
+        remote_sandbox_service.db_session.commit = AsyncMock()
+        remote_sandbox_service._get_archive_grouping_strategy = AsyncMock(
+            return_value=None
+        )
+
+        # Archive endpoint reports no git repo (permanent 400); /stop returns 200.
+        archive_resp = MagicMock()
+        archive_resp.status_code = 400
+        remote_sandbox_service.httpx_client.get = AsyncMock(return_value=archive_resp)
+        stop_resp = MagicMock()
+        stop_resp.status_code = 200
+        remote_sandbox_service.httpx_client.request = AsyncMock(return_value=stop_resp)
+
+        result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+
+        assert result is True
+        # Runtime was stopped and the row removed (not orphaned forever).
+        remote_sandbox_service.httpx_client.request.assert_called_once()
+        remote_sandbox_service.db_session.delete.assert_awaited_once_with(stored)
+
 
 class TestArchiveWorkspaceHelper:
     """Unit tests for the workspace_archive helper."""
@@ -2107,3 +2156,218 @@ class TestArchiveWorkspaceHelper:
         )
         assert ok is True
         client.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_archive_400_no_repo_required_allows_delete(self, monkeypatch):
+        """No git repo to capture is a permanent 400 from the agent-server, not a
+        failure: even when archiving is required, the delete may proceed (BUG 2)."""
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
+
+        resp = MagicMock()
+        resp.status_code = 400  # "Not a git repository" from GET /api/file/archive
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=resp)
+
+        ok = await workspace_archive.archive_workspace(
+            client, create_runtime_data(), 'sandbox-1'
+        )
+        # Permanent 4xx -> nothing to lose -> deletion proceeds despite REQUIRED.
+        assert ok is True
+
+    @pytest.mark.asyncio
+    async def test_archive_404_required_allows_delete(self, monkeypatch):
+        """A 404 (directory not found) is also permanent and never blocks."""
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
+
+        resp = MagicMock()
+        resp.status_code = 404
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=resp)
+
+        ok = await workspace_archive.archive_workspace(
+            client, create_runtime_data(), 'sandbox-1'
+        )
+        assert ok is True
+
+    @pytest.mark.asyncio
+    async def test_archive_500_required_blocks_delete(self, monkeypatch):
+        """A 5xx is a genuine transient failure: required archiving blocks the
+        delete so it can be retried (BUG 2 — only 5xx/network block)."""
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
+
+        resp = MagicMock()
+        resp.status_code = 500
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=resp)
+
+        ok = await workspace_archive.archive_workspace(
+            client, create_runtime_data(), 'sandbox-1'
+        )
+        assert ok is False
+
+    @pytest.mark.asyncio
+    async def test_archive_grouped_path_includes_conversation_id(self, monkeypatch):
+        """Under sandbox grouping the archived repo path is relocated to
+        {base}/{conversation_id.hex}; the default path is unchanged (BUG 4)."""
+        from openhands.app_server.sandbox import workspace_archive
+        from openhands.app_server.settings.settings_models import (
+            SandboxGroupingStrategy,
+        )
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b'patch-bytes'
+        resp.headers = {}
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=resp)
+        store = MagicMock()
+        writes: dict[str, bytes] = {}
+        store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
+
+        with patch.object(
+            workspace_archive, '_get_archive_file_store', return_value=store
+        ):
+            ok = await workspace_archive.archive_workspace(
+                client,
+                create_runtime_data(),
+                'sandbox-1',
+                conversation_id='deadbeef',
+                grouping_strategy=SandboxGroupingStrategy.GROUP_BY_NEWEST,
+            )
+
+        assert ok is True
+        _, kwargs = client.get.call_args
+        # Grouped: repo nested under the conversation id, not the bare base.
+        assert kwargs['params']['path'] == '/workspace/project/deadbeef'
+        manifest_path = next(p for p in writes if p.endswith('.manifest.json'))
+        manifest = json.loads(writes[manifest_path])
+        assert manifest['source_path'] == '/workspace/project/deadbeef'
+        assert manifest['conversation_id'] == 'deadbeef'
+
+    @pytest.mark.asyncio
+    async def test_archive_no_grouping_path_is_default(self, monkeypatch):
+        """NO_GROUPING (the default) keeps the bare base repo path (BUG 4)."""
+        from openhands.app_server.sandbox import workspace_archive
+        from openhands.app_server.settings.settings_models import (
+            SandboxGroupingStrategy,
+        )
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b'patch-bytes'
+        resp.headers = {}
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=resp)
+        store = MagicMock()
+
+        with patch.object(
+            workspace_archive, '_get_archive_file_store', return_value=store
+        ):
+            ok = await workspace_archive.archive_workspace(
+                client,
+                create_runtime_data(),
+                'sandbox-1',
+                conversation_id='deadbeef',
+                grouping_strategy=SandboxGroupingStrategy.NO_GROUPING,
+            )
+
+        assert ok is True
+        _, kwargs = client.get.call_args
+        assert kwargs['params']['path'] == '/workspace/project'
+
+
+class TestDeleteSandboxInvalidationPersistence:
+    """BUG 1: the session-key invalidation must be durably committed up front, so
+    it survives even if the request's session is later rolled back on a failed
+    delete. Backed by a real SQLite session rather than a mock so we can prove
+    the cleared hash is actually persisted (re-queryable after a rollback)."""
+
+    @pytest.fixture
+    async def async_engine(self):
+        from sqlalchemy.ext.asyncio import create_async_engine
+        from sqlalchemy.pool import StaticPool
+
+        from openhands.app_server.utils.sql_utils import Base
+
+        engine = create_async_engine(
+            'sqlite+aiosqlite:///:memory:',
+            poolclass=StaticPool,
+            connect_args={'check_same_thread': False},
+            echo=False,
+        )
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        yield engine
+        await engine.dispose()
+
+    @pytest.fixture
+    async def real_session(self, async_engine):
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        maker = async_sessionmaker(
+            async_engine, class_=AsyncSession, expire_on_commit=False
+        )
+        async with maker() as session:
+            yield session
+
+    @pytest.fixture
+    def service_with_real_db(
+        self, mock_sandbox_spec_service, mock_user_context, real_session
+    ):
+        return RemoteSandboxService(
+            sandbox_spec_service=mock_sandbox_spec_service,
+            api_url='https://api.example.com',
+            api_key='test-api-key',
+            web_url='https://web.example.com',
+            resource_factor=1,
+            runtime_class='gvisor',
+            start_sandbox_timeout=120,
+            max_num_sandboxes=10,
+            user_context=mock_user_context,
+            httpx_client=AsyncMock(spec=httpx.AsyncClient),
+            db_session=real_session,
+        )
+
+    @pytest.mark.asyncio
+    async def test_invalidation_survives_rollback_on_transient_error(
+        self, service_with_real_db, real_session
+    ):
+        # Seed a row with a (leaked) session key hash.
+        row = create_stored_sandbox(session_api_key_hash='leaked-hash')
+        real_session.add(row)
+        await real_session.commit()
+
+        # Transient (non-404) runtime error -> delete_sandbox returns False
+        # without deleting the row.
+        service_with_real_db._get_runtime = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                'Server Error',
+                request=httpx.Request('GET', 'https://api.example.com/sessions/x'),
+                response=httpx.Response(503),
+            )
+        )
+
+        result = await service_with_real_db.delete_sandbox('test-sandbox-123')
+        assert result is False
+
+        # Simulate the DELETE route's session rolling back the failed delete.
+        await real_session.rollback()
+        real_session.expire_all()
+
+        # The invalidation was committed up front, so the leaked key stays dead.
+        refreshed = await service_with_real_db._get_stored_sandbox('test-sandbox-123')
+        assert refreshed is not None
+        assert refreshed.session_api_key_hash is None
