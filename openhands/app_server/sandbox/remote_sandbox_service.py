@@ -583,13 +583,17 @@ class RemoteSandboxService(SandboxService):
         the runtime API), there is nothing to archive or stop, so the record is
         deleted directly to avoid orphaning the row and its session_api_key_hash.
 
-        Security: Deleting the stored_sandbox record also removes the
-        session_api_key_hash, invalidating any leaked session keys.
+        Security: the session_api_key_hash is cleared up front so leaked keys
+        are invalidated even if the archive or stop step below fails and the row
+        is kept for retry.
         """
         try:
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
             if not stored_sandbox:
                 return False
+            # Security: invalidate leaked session keys regardless of whether the
+            # archive/stop below succeeds (mirrors pause_sandbox).
+            stored_sandbox.session_api_key_hash = None
             try:
                 runtime_data = await self._get_runtime(sandbox_id)
             except httpx.HTTPStatusError as e:
@@ -624,9 +628,8 @@ class RemoteSandboxService(SandboxService):
             )
             if response.status_code != 404:
                 response.raise_for_status()
-            # Deleting the record also removes the session_api_key_hash,
-            # which invalidates any leaked session keys. Done last so an
-            # archive/stop failure does not orphan the workspace.
+            # Row deleted last so an archive/stop failure leaves it intact for
+            # retry; the session key was already invalidated above.
             await self.db_session.delete(stored_sandbox)
             return True
         except httpx.HTTPError as e:

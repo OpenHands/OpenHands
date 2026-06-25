@@ -761,6 +761,32 @@ class TestSandboxLifecycle:
         assert result is False
         remote_sandbox_service.db_session.delete.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_delete_sandbox_transient_error_invalidates_session_key(
+        self, remote_sandbox_service
+    ):
+        """A transient runtime error keeps the row for retry but still clears the
+        session key hash, so a leaked key cannot outlive the delete (security)."""
+        stored_sandbox = create_stored_sandbox(session_api_key_hash='leaked-hash')
+
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                'Server Error',
+                request=httpx.Request('GET', 'https://api.example.com/sessions/x'),
+                response=httpx.Response(503),
+            )
+        )
+        remote_sandbox_service.db_session.delete = AsyncMock()
+
+        result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+
+        assert result is False
+        remote_sandbox_service.db_session.delete.assert_not_called()
+        assert stored_sandbox.session_api_key_hash is None
+
 
 class TestSandboxSearch:
     """Test cases for sandbox search and retrieval."""

@@ -26,16 +26,16 @@ from openhands.app_server.file_store.google_cloud import GoogleCloudFileStore
 
 _logger = logging.getLogger(__name__)
 
-_ARCHIVE_SUFFIX = {'git-delta': 'patch'}
+_ARCHIVE_SUFFIX = {'git-delta': 'patch', 'tar.gz': 'tar.gz', 'zip': 'zip'}
 
 
 def archive_enabled() -> bool:
-    return os.getenv('RUNTIME_FILE_ARCHIVE_ENABLED', 'false').lower() == 'true'
+    return os.getenv('RUNTIME_FILE_ARCHIVE_ENABLED', 'false').lower() in ('true', '1')
 
 
 def archive_required() -> bool:
     """When true, an archive failure blocks deletion so it can be retried."""
-    return os.getenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'false').lower() == 'true'
+    return os.getenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'false').lower() in ('true', '1')
 
 
 def _archive_bucket() -> str:
