@@ -13,7 +13,7 @@ from typing import Annotated, Any, AsyncGenerator, Literal
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,6 +43,9 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
+    ConversationExportAlreadyRunning,
+    ConversationExportLockUnavailable,
+    ConversationExportTooLarge,
 )
 from openhands.app_server.app_conversation.app_conversation_service_base import (
     AppConversationServiceBase,
@@ -1563,8 +1566,9 @@ async def export_conversation(
         A zip file containing the conversation trajectory
     """
     try:
-        # Get the zip file content
-        zip_content = await app_conversation_service.export_conversation(
+        # Prepare the zip stream before sending headers so lock and validation
+        # errors can still be returned as HTTP status codes.
+        zip_stream = await app_conversation_service.open_conversation_export(
             conversation_id
         )
 
@@ -1591,9 +1595,8 @@ async def export_conversation(
         except Exception:
             logger.exception('analytics:trajectory_downloaded:failed')
 
-        # Return as a downloadable zip file
-        return Response(
-            content=zip_content,
+        return StreamingResponse(
+            zip_stream,
             media_type='application/zip',
             headers={
                 'Content-Disposition': f'attachment; filename="conversation_{conversation_id}.zip"'
@@ -1601,6 +1604,12 @@ async def export_conversation(
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ConversationExportAlreadyRunning as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ConversationExportLockUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except ConversationExportTooLarge as e:
+        raise HTTPException(status_code=413, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f'Failed to download trajectory: {str(e)}'

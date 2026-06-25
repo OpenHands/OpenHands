@@ -113,14 +113,24 @@ _jinja_env = Environment(loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DI
 def get_oh_labels(web_host: str) -> tuple[str, str]:
     """Get the OpenHands labels based on the web host.
 
+    An explicit ``OH_RESOLVER_LABEL`` environment variable takes precedence and
+    lets each deployment declare its own trigger macro (issue label + mention)
+    without a code change. When it is unset, the macro is inferred from
+    ``web_host`` for backward compatibility.
+
     Args:
         web_host: The web host string to check
 
     Returns:
         A tuple of (oh_label, inline_oh_label) where:
-        - oh_label is 'openhands-exp' for staging/local hosts, 'openhands' otherwise
-        - inline_oh_label is '@openhands-exp' for staging/local hosts, '@openhands' otherwise
+        - oh_label is OH_RESOLVER_LABEL when set; otherwise 'openhands-exp' for
+          staging/local hosts and 'openhands' for everything else
+        - inline_oh_label is oh_label prefixed with '@'
     """
+    override = os.getenv('OH_RESOLVER_LABEL', '').strip()
+    if override:
+        return override, f'@{override}'
+
     web_host = web_host.strip()
     is_staging_or_local = 'staging' in web_host or 'local' in web_host
     oh_label = 'openhands-exp' if is_staging_or_local else 'openhands'

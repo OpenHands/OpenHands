@@ -96,6 +96,9 @@ export type SettingsSectionSchema = {
   key: string;
   label: string;
   fields: SettingsFieldSchema[];
+  // SDK agent-settings is a discriminated union; non-shared sections are
+  // tagged with their variant ("openhands"/"acp"). null/absent = shared.
+  variant?: string | null;
 };
 
 export type SettingsSchema = {
@@ -140,6 +143,7 @@ export type Settings = {
   email_verified?: boolean;
   git_user_name?: string;
   git_user_email?: string;
+  git_full_clone?: boolean;
   v1_enabled?: boolean;
   agent_settings_schema?: SettingsSchema | null;
   agent_settings?: Record<string, SettingsValue> | null;

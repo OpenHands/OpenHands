@@ -96,6 +96,11 @@ export interface SettingsSourceConfig {
   sectionKeys: string[];
   /** Field keys to skip (rendered elsewhere by the caller). */
   excludeKeys?: Set<string>;
+  // The agent variant this page targets. SDK agent-settings is a
+  // discriminated union, so a key like "llm" exists under both the
+  // "openhands" and "acp" variants. When set, only sections matching this
+  // variant (plus shared, untagged ones) render — dropping the duplicate.
+  variant?: string;
 }
 
 export interface SdkSectionHeaderProps {
@@ -227,6 +232,7 @@ export function SdkSectionPage({
           source: s.settingsSource,
           sectionKeys: s.sectionKeys,
           excludeKeys: s.excludeKeys ? Array.from(s.excludeKeys).sort() : null,
+          variant: s.variant ?? null,
         })),
       ),
     [settingsSources],
@@ -239,11 +245,13 @@ export function SdkSectionPage({
       source: SettingsValueSource;
       sectionKeys: string[];
       excludeKeys: string[] | null;
+      variant: string | null;
     }>;
     return parsed.map((p) => ({
       settingsSource: p.source,
       sectionKeys: p.sectionKeys,
       excludeKeys: p.excludeKeys ? new Set(p.excludeKeys) : undefined,
+      variant: p.variant ?? undefined,
     }));
   }, [sourcesSignature]);
 
@@ -273,7 +281,16 @@ export function SdkSectionPage({
         const sectionSet = new Set(src.sectionKeys);
         const filteredSchema: SettingsSchema = {
           ...schema,
-          sections: schema.sections.filter((s) => sectionSet.has(s.key)),
+          // Keep sections matching the requested keys; when the source
+          // targets a variant, drop sections tagged with a different one
+          // (shared/untagged sections always render).
+          sections: schema.sections.filter(
+            (s) =>
+              sectionSet.has(s.key) &&
+              (src.variant == null ||
+                s.variant == null ||
+                s.variant === src.variant),
+          ),
         };
         return { ...src, filteredSchema };
       }),
@@ -543,7 +560,7 @@ export function SdkSectionPage({
           );
           return visibleSections.map((section) => (
             <section
-              key={`${src.settingsSource}:${section.key}`}
+              key={`${src.settingsSource}:${section.key}:${section.variant ?? ""}`}
               className="flex flex-col gap-4"
             >
               <div className="grid gap-4 xl:grid-cols-2">

@@ -11,7 +11,7 @@ import httpx
 import pytest
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.testclient import TestClient
-from server.email_validation import get_admin_user_id
+from server.email_validation import get_admin_user_id, get_org_creator_user_id
 from server.routes.org_models import (
     CannotModifySelfError,
     InsufficientPermissionError,
@@ -64,8 +64,12 @@ def mock_app():
     def mock_get_user_id():
         return TEST_USER_ID
 
+    def mock_get_org_creator_user_id():
+        return TEST_USER_ID
+
     app.dependency_overrides[get_admin_user_id] = mock_get_admin_user_id
     app.dependency_overrides[get_user_id] = mock_get_user_id
+    app.dependency_overrides[get_org_creator_user_id] = mock_get_org_creator_user_id
 
     return app
 
@@ -324,7 +328,7 @@ async def test_create_org_unauthorized():
     async def mock_unauthenticated():
         raise HTTPException(status_code=401, detail='User not authenticated')
 
-    app.dependency_overrides[get_admin_user_id] = mock_unauthenticated
+    app.dependency_overrides[get_org_creator_user_id] = mock_unauthenticated
 
     request_data = {
         'name': 'Test Organization',
@@ -358,7 +362,7 @@ async def test_create_org_forbidden_non_openhands_email():
             status_code=403, detail='Access restricted to @openhands.dev users'
         )
 
-    app.dependency_overrides[get_admin_user_id] = mock_forbidden
+    app.dependency_overrides[get_org_creator_user_id] = mock_forbidden
 
     request_data = {
         'name': 'Test Organization',

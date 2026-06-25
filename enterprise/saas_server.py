@@ -23,7 +23,10 @@ from server.auth.constants import (  # noqa: E402
     GITHUB_APP_CLIENT_ID,
     GITLAB_APP_CLIENT_ID,
 )
-from server.constants import PERMITTED_CORS_ORIGINS  # noqa: E402
+from server.constants import (  # noqa: E402
+    PERMITTED_CORS_ORIGINS,
+    USER_PROVISIONING_ENABLED,
+)
 from server.logger import logger  # noqa: E402
 from server.middleware import (  # noqa: E402
     ApiKeyAwareCORSMiddleware,
@@ -51,6 +54,9 @@ from server.routes.orgs import org_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.service import service_router  # noqa: E402
 from server.routes.user_app_settings import user_app_settings_router  # noqa: E402
+from server.routes.user_provisioning import (  # noqa: E402
+    user_provisioning_router,
+)
 from server.routes.users_v1 import (  # noqa: E402
     override_users_me_endpoint,
 )
@@ -133,6 +139,13 @@ if BITBUCKET_APP_CLIENT_ID:
 base_app.include_router(api_keys_router)  # Add routes for API key management
 base_app.include_router(service_router)  # Add routes for internal service API
 base_app.include_router(org_router)  # Add routes for organization management
+if USER_PROVISIONING_ENABLED:
+    # Privileged admin route — registered only when the
+    # USER_PROVISIONING_ENABLED env var (driven by Helm value
+    # ``userProvisioning.enabled``) is truthy. Off by default in
+    # staging and production; enabled per-environment via Helm.
+    base_app.include_router(user_provisioning_router)
+    logger.info('user_provisioning_router:enabled')
 base_app.include_router(
     org_profiles_router, prefix='/api/organizations'
 )  # Add routes for org LLM profiles
