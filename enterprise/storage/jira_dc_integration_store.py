@@ -5,6 +5,7 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from storage.database import a_session_maker
 from storage.jira_dc_conversation import JiraDcConversation
 from storage.jira_dc_user import JiraDcUser
@@ -181,6 +182,47 @@ class JiraDcIntegrationStore:
                 )
             )
             return result.scalar_one_or_none()
+
+    async def get_or_create_active_email_link(
+        self, keycloak_user_id: str, jira_dc_workspace_id: int
+    ) -> Optional[JiraDcUser]:
+        """Return the user's active link for this workspace, creating one if absent.
+
+        Used by email-match mode to auto-enroll a matched user; the row mirrors a
+        manually-linked email row ('unavailable' Jira id, no OAuth tokens). Safe
+        under concurrent first webhooks: a losing insert trips the partial unique
+        index, and we re-read the winner.
+        """
+        existing = await self.get_active_user_by_keycloak_id_and_workspace(
+            keycloak_user_id, jira_dc_workspace_id
+        )
+        if existing:
+            return existing
+
+        user = JiraDcUser(
+            keycloak_user_id=keycloak_user_id,
+            jira_dc_user_id='unavailable',
+            jira_dc_workspace_id=jira_dc_workspace_id,
+            status='active',
+        )
+        async with a_session_maker() as session:
+            session.add(user)
+            try:
+                await session.commit()
+                await session.refresh(user)
+                logger.info(
+                    f'[Jira DC] Auto-enrolled email-match user for workspace '
+                    f'{jira_dc_workspace_id}'
+                )
+                return user
+            except IntegrityError:
+                await session.rollback()
+
+        # A concurrent insert (or a stale active link elsewhere) won the unique
+        # index; return whatever active row now exists for this workspace.
+        return await self.get_active_user_by_keycloak_id_and_workspace(
+            keycloak_user_id, jira_dc_workspace_id
+        )
 
     async def update_user_integration_status(
         self, keycloak_user_id: str, jira_dc_workspace_id: int, status: str

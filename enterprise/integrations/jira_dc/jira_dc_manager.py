@@ -21,7 +21,6 @@ from integrations.models import JobContext, Message
 from integrations.utils import (
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
-    filter_potential_repos_by_user_msg,
     get_account_not_linked_message,
     get_jira_dc_relink_message,
     get_session_expired_message,
@@ -39,7 +38,6 @@ from storage.jira_dc_workspace import JiraDcWorkspace
 
 from openhands.app_server.integrations.provider import ProviderHandler
 from openhands.app_server.integrations.service_types import Comment, Repository
-from openhands.app_server.shared import server_config
 from openhands.app_server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
@@ -140,6 +138,15 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             jira_dc_user = await self.integration_store.get_active_user_by_keycloak_id_and_workspace(
                 keycloak_user_id, workspace_id
             )
+            # Email mode is itself the admin's opt-in: a user whose Jira email
+            # matches an OpenHands account is auto-enrolled, no manual link step.
+            # Never in OAuth mode, which requires a verified per-user token.
+            if not jira_dc_user and not JIRA_DC_ENABLE_OAUTH:
+                jira_dc_user = (
+                    await self.integration_store.get_or_create_active_email_link(
+                        keycloak_user_id, workspace_id
+                    )
+                )
         else:
             jira_dc_user = await self.integration_store.get_active_user(
                 jira_dc_user_id, workspace_id
@@ -156,22 +163,36 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         )
         return jira_dc_user, saas_user_auth
 
-    async def _get_repositories(self, user_auth: UserAuth) -> list[Repository]:
-        """Get repositories that the user has access to."""
+    async def _create_provider_handler(
+        self, user_auth: UserAuth
+    ) -> ProviderHandler | None:
+        """Build a ProviderHandler for the user, or None if no provider is linked."""
         provider_tokens = await user_auth.get_provider_tokens()
         if provider_tokens is None:
-            return []
+            return None
         access_token = await user_auth.get_access_token()
         user_id = await user_auth.get_user_id()
-        client = ProviderHandler(
+        return ProviderHandler(
             provider_tokens=provider_tokens,
             external_auth_token=access_token,
             external_auth_id=user_id,
         )
-        repos: list[Repository] = await client.get_repositories(
-            'pushed', server_config.app_mode, None, None, None, None
-        )
-        return repos
+
+    async def _verify_mentioned_repos(
+        self, provider_handler: ProviderHandler, mentioned_repos: list[str]
+    ) -> list[Repository]:
+        """Resolve each mentioned repo with a targeted lookup.
+
+        Avoids enumerating the user's full repo list, which is capped and misses
+        repos on large Bitbucket DC instances (40k+ repos).
+        """
+        verified: list[Repository] = []
+        for repo_name in mentioned_repos:
+            try:
+                verified.append(await provider_handler.verify_repo_provider(repo_name))
+            except Exception as e:
+                logger.debug(f'[Jira DC] Repo verification failed for {repo_name}: {e}')
+        return verified
 
     async def validate_request(
         self, request: Request
@@ -441,36 +462,33 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             return True
 
         try:
-            # Get user repositories
-            user_repos: list[Repository] = await self._get_repositories(
-                jira_dc_view.saas_user_auth
-            )
-
             target_str = f'{jira_dc_view.job_context.issue_description}\n{jira_dc_view.job_context.user_msg}'
             mentioned_repos = infer_repo_from_message(target_str)
 
-            # Try to infer repository from issue description
-            match, repos = filter_potential_repos_by_user_msg(target_str, user_repos)
+            # Verify each mentioned repo directly rather than enumerating the
+            # user's full repo list (which is capped and misses repos on large
+            # Bitbucket DC instances).
+            provider_handler = await self._create_provider_handler(
+                jira_dc_view.saas_user_auth
+            )
+            verified_repos = (
+                await self._verify_mentioned_repos(provider_handler, mentioned_repos)
+                if provider_handler
+                else []
+            )
 
-            if match:
-                # Found exact repository match
-                jira_dc_view.selected_repo = repos[0].full_name
-                logger.info(f'[Jira DC] Inferred repository: {repos[0].full_name}')
-                return True
-            else:
-                # No clear match - send repository selection comment
-                matched_repos = [
-                    repo
-                    for repo in user_repos
-                    if any(
-                        mentioned_repo.lower() in repo.full_name.lower()
-                        for mentioned_repo in mentioned_repos
-                    )
-                ]
-                await self._send_repo_selection_comment(
-                    jira_dc_view, mentioned_repos, matched_repos
+            if len(verified_repos) == 1:
+                jira_dc_view.selected_repo = verified_repos[0].full_name
+                logger.info(
+                    f'[Jira DC] Inferred repository: {verified_repos[0].full_name}'
                 )
-                return False
+                return True
+
+            # Zero or multiple matches -- ask the user to disambiguate.
+            await self._send_repo_selection_comment(
+                jira_dc_view, mentioned_repos, verified_repos
+            )
+            return False
 
         except Exception as e:
             logger.error(f'[Jira DC] Error in is_job_requested: {str(e)}')
