@@ -7,11 +7,19 @@ import { I18nKey } from "#/i18n/declaration";
 import { Typography } from "#/ui/typography";
 import { cn } from "#/utils/utils";
 
+export interface OrganizationOption {
+  id: string;
+  name: string;
+  role: "admin" | "owner";
+  isPersonal?: boolean;
+}
+
 interface MarketplaceModalProps {
   isOpen: boolean;
   mode: "add" | "edit";
   scope?: "org" | "personal"; // Only for add mode
   marketplace?: MarketplaceRegistration | null;
+  organizations?: OrganizationOption[]; // Available orgs where user is admin/owner
   onClose: () => void;
   onSave: (data: {
     name: string;
@@ -20,11 +28,11 @@ interface MarketplaceModalProps {
     repo_path?: string;
     auto_load?: "all";
     scope: "org" | "personal";
+    orgId?: string; // Target org ID for org-scoped marketplaces
   }) => void;
   onDelete?: () => void;
   isSaving?: boolean;
   isDeleting?: boolean;
-  isAdminOrOwner?: boolean; // For org scope availability
 }
 
 export function MarketplaceModal({
@@ -32,12 +40,12 @@ export function MarketplaceModal({
   mode,
   scope: initialScope,
   marketplace,
+  organizations = [],
   onClose,
   onSave,
   onDelete,
   isSaving = false,
   isDeleting = false,
-  isAdminOrOwner = false,
 }: MarketplaceModalProps) {
   const { t } = useTranslation();
   const [name, setName] = React.useState(marketplace?.name || "");
@@ -47,11 +55,19 @@ export function MarketplaceModal({
   const [autoLoad, setAutoLoad] = React.useState(
     marketplace?.auto_load === "all",
   );
-  const [scope, setScope] = React.useState<"org" | "personal">(
-    initialScope || "personal",
+  // Scope selection: "personal" or "org:{orgId}"
+  const [scopeSelection, setScopeSelection] = React.useState<string>(
+    initialScope === "org" ? "org" : "personal",
   );
+  const [selectedOrgId, setSelectedOrgId] = React.useState<string | null>(null);
   const [nameError, setNameError] = React.useState<string | null>(null);
   const [sourceError, setSourceError] = React.useState<string | null>(null);
+
+  // Get personal org and non-personal orgs
+  const personalOrg = organizations.find((org) => org.isPersonal);
+  const adminOrgs = organizations.filter(
+    (org) => !org.isPersonal && (org.role === "admin" || org.role === "owner"),
+  );
 
   // Reset form when modal opens/closes or marketplace changes
   React.useEffect(() => {
@@ -61,11 +77,12 @@ export function MarketplaceModal({
       setRef(marketplace?.ref || "");
       setRepoPath(marketplace?.repo_path || "");
       setAutoLoad(marketplace?.auto_load === "all");
-      setScope(initialScope || "personal");
+      setScopeSelection(initialScope === "org" ? "org" : "personal");
+      setSelectedOrgId(personalOrg?.id || null);
       setNameError(null);
       setSourceError(null);
     }
-  }, [isOpen, marketplace, initialScope]);
+  }, [isOpen, marketplace, initialScope, personalOrg]);
 
   const handleSave = () => {
     // Validate name on click
@@ -82,6 +99,19 @@ export function MarketplaceModal({
       return;
     }
     setNameError(null);
+
+    const isPersonal = scopeSelection === "personal";
+    const scope = isPersonal ? "personal" : "org";
+    // Extract orgId from scopeSelection if it's "org:{id}" format
+    let orgId: string | undefined;
+    if (!isPersonal) {
+      if (scopeSelection.startsWith("org:")) {
+        orgId = scopeSelection.slice(4);
+      } else {
+        orgId = selectedOrgId || undefined;
+      }
+    }
+
     onSave({
       name: name.trim(),
       source: source.trim(),
@@ -89,12 +119,12 @@ export function MarketplaceModal({
       repo_path: repoPath.trim() || undefined,
       auto_load: autoLoad ? "all" : undefined,
       scope,
+      orgId,
     });
   };
 
   if (!isOpen) return null;
 
-  const canAddOrg = isAdminOrOwner;
   const isEdit = mode === "edit";
 
   const footer = (
@@ -152,22 +182,25 @@ export function MarketplaceModal({
               {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_LABEL)}
             </label>
             <select
-              value={scope}
-              onChange={(e) => setScope(e.target.value as "org" | "personal")}
-              disabled={scope === "org" && !canAddOrg}
-              className="bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 text-sm disabled:opacity-50"
-              title={
-                !canAddOrg
-                  ? t(I18nKey.SETTINGS$MARKETPLACE_ORG_REQUIRE_ADMIN)
-                  : undefined
-              }
+              value={scopeSelection}
+              onChange={(e) => {
+                const { value } = e.target;
+                setScopeSelection(value);
+                // Set selectedOrgId when selecting org scope
+                if (value.startsWith("org:")) {
+                  setSelectedOrgId(value.slice(4));
+                }
+              }}
+              className="bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 text-sm"
             >
               <option value="personal">
                 {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_PERSONAL)}
               </option>
-              <option value="org" disabled={!canAddOrg}>
-                {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_ORG)}
-              </option>
+              {adminOrgs.map((org) => (
+                <option key={org.id} value={`org:${org.id}`}>
+                  {org.name}
+                </option>
+              ))}
             </select>
           </div>
         )}

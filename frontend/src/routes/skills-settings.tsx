@@ -5,7 +5,10 @@ import { AxiosError } from "axios";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { Typography } from "#/ui/typography";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
-import { MarketplaceModal } from "#/components/features/settings/marketplace-modal";
+import {
+  MarketplaceModal,
+  OrganizationOption,
+} from "#/components/features/settings/marketplace-modal";
 import { DeleteConfirmationModal } from "#/components/features/settings/delete-confirmation-modal";
 import { Toggle } from "#/components/shared/toggle/toggle";
 import { useSettings } from "#/hooks/query/use-settings";
@@ -18,6 +21,7 @@ import { useMe } from "#/hooks/query/use-me";
 import { useMarketplaceSkills } from "#/hooks/mutation/use-get-marketplace-skills";
 import { useSaveOrgAppSettings } from "#/hooks/mutation/use-save-org-app-settings";
 import { useOrganizationAppSettings } from "#/hooks/query/use-organization-app-settings";
+import { useOrganizations } from "#/hooks/query/use-organizations";
 import {
   MarketplaceRegistration,
   MarketplaceWithScope,
@@ -73,9 +77,42 @@ function SkillsSettingsScreen() {
   // Fetch org app settings with updated_at for optimistic locking using the hook
   const { data: orgAppSettings } = useOrganizationAppSettings(selectedOrgId);
 
+  // Fetch all organizations user is a member of
+  const { data: orgsData } = useOrganizations();
+
   // Determine user role and permissions
   const userRole = user?.role ?? "member";
   const isAdminOrOwner = userRole === "admin" || userRole === "owner";
+
+  // Build list of organizations where user is admin or owner (for marketplace scope selection)
+  // This includes the personal workspace and all team orgs where user has admin/owner role
+  const availableOrganizations: OrganizationOption[] = React.useMemo(() => {
+    if (!orgsData?.organizations) return [];
+
+    const orgs: OrganizationOption[] = [];
+
+    for (const org of orgsData.organizations) {
+      // Add personal org
+      if (org.is_personal) {
+        orgs.push({
+          id: org.id,
+          name: org.name,
+          role: "owner", // Personal org user is always owner
+          isPersonal: true,
+        });
+      } else if (isAdminOrOwner) {
+        // Add team orgs where user is admin/owner (checked via selected org's membership)
+        orgs.push({
+          id: org.id,
+          name: org.name,
+          role: userRole as "admin" | "owner",
+          isPersonal: false,
+        });
+      }
+    }
+
+    return orgs;
+  }, [orgsData, isAdminOrOwner, userRole]);
 
   // Skills state with marketplace information
   const [skillsState, setSkillsState] = React.useState<SkillWithState[]>([]);
@@ -453,6 +490,7 @@ function SkillsSettingsScreen() {
     repo_path?: string;
     auto_load?: "all";
     scope: "org" | "personal";
+    orgId?: string;
   }) => {
     const newMarketplace: MarketplaceRegistration = {
       name: data.name,
@@ -463,17 +501,25 @@ function SkillsSettingsScreen() {
     };
 
     if (data.scope === "org") {
-      // Save to org settings
-      setIsSavingOrg(true);
-      const existingIndex = orgMarketplaces.findIndex(
+      // Save to org settings - use the orgId from the modal selection
+      const targetOrgId = data.orgId || selectedOrgId;
+      if (!targetOrgId) {
+        displayErrorToast("No organization selected");
+        return;
+      }
+
+      // Get org-specific marketplaces for the target org
+      // Note: We need to track marketplaces per-org, not just for selectedOrgId
+      const existingOrgMarketplaces = orgMarketplaces;
+      const existingIndex = existingOrgMarketplaces.findIndex(
         (mp) => mp.source === data.source,
       );
       let updated: MarketplaceRegistration[];
       if (existingIndex >= 0) {
-        updated = [...orgMarketplaces];
+        updated = [...existingOrgMarketplaces];
         updated[existingIndex] = newMarketplace;
       } else {
-        updated = [...orgMarketplaces, newMarketplace];
+        updated = [...existingOrgMarketplaces, newMarketplace];
       }
 
       try {
@@ -493,7 +539,7 @@ function SkillsSettingsScreen() {
 
         // Only save to BE if validation passes
         await saveOrgAppSettingsMutation.mutateAsync({
-          orgId: selectedOrgId!,
+          orgId: targetOrgId,
           settings: {
             registered_marketplaces: updated,
             last_known_updated_at: lastKnownUpdatedAt,
@@ -1096,10 +1142,10 @@ function SkillsSettingsScreen() {
               }
             : null
         }
+        organizations={availableOrganizations}
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveMarketplace}
         isSaving={isSavingOrg || isSavingPersonal}
-        isAdminOrOwner={isAdminOrOwner}
       />
 
       {/* Delete Confirmation Modal */}
