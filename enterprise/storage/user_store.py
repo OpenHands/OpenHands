@@ -70,22 +70,22 @@ class UserStore:
         on the old values.
         """
         async with a_session_maker() as session:
-            # First-user → superowner: if the caller did not specify a
+            # First-user → superadmin: if the caller did not specify a
             # super ``role_id`` and there are no existing users in the
-            # database, designate this user as a ``superowner`` (a super
-            # role attached via ``user.role_id``, granting super-role
-            # permissions across every organization). See
-            # ``server.auth.authorization`` for the super-role semantics.
+            # database, designate this user as a ``superadmin`` (the
+            # ``admin`` role attached via ``user.role_id``). Super-role
+            # permissions are explicit in ``server.auth.authorization``
+            # and do not inherit org-scoped admin permissions.
             if role_id is None:
                 existing_user_count = await session.scalar(
                     select(func.count()).select_from(User)
                 )
                 if existing_user_count == 0:
-                    superowner_role = await RoleStore.get_role_by_name('owner', session)
-                    if superowner_role is not None:
-                        role_id = superowner_role.id
+                    superadmin_role = await RoleStore.get_role_by_name('admin', session)
+                    if superadmin_role is not None:
+                        role_id = superadmin_role.id
                         logger.info(
-                            'user_store:create_user:first_user_designated_superowner',
+                            'user_store:create_user:first_user_designated_superadmin',
                             extra={'user_id': user_id},
                         )
 

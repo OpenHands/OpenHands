@@ -133,23 +133,26 @@ async def test_create_user_with_llm_profiles_does_not_crash_and_preserves_secret
     assert user.llm_profiles['profiles']['work']['api_key'] == 'work-secret-key'
 
 
-# --- Tests for first-user → superowner designation ---
+# --- Tests for first-user → superadmin designation ---
 
 
-async def _seed_owner_role(async_session_maker) -> int:
-    """Seed the ``owner`` role required by ``UserStore.create_user``.
+async def _seed_admin_role(async_session_maker) -> int:
+    """Seed roles required by ``UserStore.create_user``.
 
-    Returns the seeded role id so tests can assert the new user's
-    ``role_id`` matches it.
+    ``owner`` is required for the user's personal-org membership, while
+    ``admin`` is the first user's explicit superadmin role. Returns the
+    seeded admin role id so tests can assert the new user's ``role_id``
+    matches it.
     """
     from storage.role import Role
 
     async with async_session_maker() as session:
-        role = Role(name='owner', rank=0)
-        session.add(role)
+        owner_role = Role(name='owner', rank=0)
+        admin_role = Role(name='admin', rank=1)
+        session.add_all([owner_role, admin_role])
         await session.commit()
-        await session.refresh(role)
-        return role.id
+        await session.refresh(admin_role)
+        return admin_role.id
 
 
 def _mock_create_default_settings_returning_default():
@@ -157,7 +160,7 @@ def _mock_create_default_settings_returning_default():
 
     ``UserStore.create_user`` only needs a non-None Settings to proceed
     past the LiteLLM provisioning step; the contents are irrelevant for
-    the superowner-designation behavior being tested here.
+    the superadmin-designation behavior being tested here.
     """
     return patch(
         'storage.user_store.UserStore.create_default_settings',
@@ -167,15 +170,14 @@ def _mock_create_default_settings_returning_default():
 
 
 @pytest.mark.asyncio
-async def test_create_user_first_user_is_designated_superowner(async_session_maker):
-    """The very first user created must receive the ``owner`` super role.
+async def test_create_user_first_user_is_designated_superadmin(async_session_maker):
+    """The very first user created must receive the ``admin`` super role.
 
     The super role is attached via ``user.role_id`` (not the
-    ``org_member.role_id`` org-scoped role) and grants
-    ``CREATE_ORGANIZATION`` and the parallel owner permissions across
-    every organization — see ``server.auth.authorization``.
+    ``org_member.role_id`` org-scoped role) and grants only the explicit
+    instance-level permissions defined in ``server.auth.authorization``.
     """
-    owner_role_id = await _seed_owner_role(async_session_maker)
+    admin_role_id = await _seed_admin_role(async_session_maker)
 
     user_id = str(uuid.uuid4())
     user_info = {'email': 'first@example.com', 'preferred_username': 'first'}
@@ -188,18 +190,18 @@ async def test_create_user_first_user_is_designated_superowner(async_session_mak
         user = await UserStore.create_user(user_id, user_info)
 
     assert user is not None
-    assert user.role_id == owner_role_id
+    assert user.role_id == admin_role_id
 
 
 @pytest.mark.asyncio
-async def test_create_user_subsequent_users_are_not_superowners(async_session_maker):
+async def test_create_user_subsequent_users_are_not_superadmins(async_session_maker):
     """Only the first user gets the super role; later users do not.
 
     Without this guard the super-role hand-out would be unbounded and
     every newly onboarded user would silently gain workspace-wide
     privileges.
     """
-    await _seed_owner_role(async_session_maker)
+    await _seed_admin_role(async_session_maker)
 
     first_user_id = str(uuid.uuid4())
     second_user_id = str(uuid.uuid4())
@@ -232,9 +234,9 @@ async def test_create_user_explicit_role_id_is_respected_for_first_user(
     onboarding path (``role_id is None``) and preserves the existing
     contract for callers that pass an explicit super role.
     """
-    owner_role_id = await _seed_owner_role(async_session_maker)
+    admin_role_id = await _seed_admin_role(async_session_maker)
 
-    # Seed a second distinct role so we can pass a non-owner role_id and
+    # Seed a second distinct role so we can pass a non-admin role_id and
     # prove the override is honored verbatim.
     from storage.role import Role
 
@@ -258,7 +260,7 @@ async def test_create_user_explicit_role_id_is_respected_for_first_user(
 
     assert user is not None
     assert user.role_id == other_role_id
-    assert user.role_id != owner_role_id
+    assert user.role_id != admin_role_id
 
 
 # --- Tests for create_default_settings ---

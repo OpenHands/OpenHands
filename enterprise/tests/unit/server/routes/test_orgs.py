@@ -72,7 +72,7 @@ def mock_app():
 
 @pytest.fixture
 def grant_create_organization():
-    """Make ``CREATE_ORGANIZATION`` succeed by faking a ``superowner`` role.
+    """Make ``CREATE_ORGANIZATION`` succeed by faking a ``superadmin`` role.
 
     The create-org route is gated by
     ``require_permission(Permission.CREATE_ORGANIZATION)``, which is only
@@ -80,12 +80,12 @@ def grant_create_organization():
     org-scoped role first via ``get_user_org_role`` -- without a patch
     that call hits ``OrgMemberStore`` against a bare in-memory SQLite DB
     that has no ``org_member`` table. This fixture short-circuits the
-    org-role lookup to ``None`` and stacks a ``superowner`` patch over
+    org-role lookup to ``None`` and stacks a ``superadmin`` patch over
     the conftest-level ``get_user_super_role -> None`` default so the
     success path of the create-org route works without per-test plumbing.
     """
-    superowner = MagicMock()
-    superowner.name = 'owner'
+    superadmin = MagicMock()
+    superadmin.name = 'admin'
     with (
         patch(
             'server.auth.authorization.get_user_org_role',
@@ -93,7 +93,7 @@ def grant_create_organization():
         ),
         patch(
             'server.auth.authorization.get_user_super_role',
-            AsyncMock(return_value=superowner),
+            AsyncMock(return_value=superadmin),
         ),
     ):
         yield
@@ -377,7 +377,7 @@ async def test_create_org_forbidden_lacks_create_organization():
     """
     GIVEN: An authenticated user who holds neither an org-scoped role
            with ``CREATE_ORGANIZATION`` (none do) nor a super role that
-           grants it (only ``superowner`` / ``superadmin`` / ``superempty`` do)
+           grants it (only explicit instance-level super roles do)
     WHEN: POST /api/organizations is called
     THEN: 403 Forbidden is returned. ``require_permission`` raises with
           the "not a member of this organization" detail when the
@@ -424,8 +424,8 @@ async def test_create_org_forbidden_for_supermember():
     GIVEN: An authenticated user whose super role is ``supermember``
            (which does NOT grant ``CREATE_ORGANIZATION``)
     WHEN: POST /api/organizations is called
-    THEN: 403 Forbidden is returned -- only ``superowner`` /
-          ``superadmin`` / ``superempty`` may create organizations.
+    THEN: 403 Forbidden is returned -- only explicit instance-level
+          super roles may create organizations.
           ``require_permission`` raises with the "not a member of this
           organization" detail because the user has no org membership
           either.
@@ -464,12 +464,12 @@ async def test_create_org_forbidden_for_supermember():
     assert 'not a member' in response.json()['detail'].lower()
 
 
-@pytest.mark.parametrize('super_role_name', ['owner', 'admin', 'empty'])
+@pytest.mark.parametrize('super_role_name', ['owner', 'admin'])
 @pytest.mark.asyncio
 async def test_create_org_allowed_for_super_roles(super_role_name):
     """
-    GIVEN: An authenticated user whose super role is one of ``superowner``,
-           ``superadmin``, or ``superempty``
+    GIVEN: An authenticated user whose super role is one of ``superowner``
+           or ``superadmin``
     WHEN: POST /api/organizations is called
     THEN: The request is authorized and 201 Created is returned.
     """

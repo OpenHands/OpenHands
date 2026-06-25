@@ -99,26 +99,23 @@ class Permission(str, Enum):
 class RoleName(str, Enum):
     """Role names used in the system.
 
-    The same role names (``owner``, ``admin``, ``member``) can be
+    The same role rows (``owner``, ``admin``, ``member``) can be
     assigned in two distinct places:
 
     * **Org-scoped role** -- stored on ``org_member.role_id``. Applies
       only to the user's membership in that organization. Permissions
       are looked up via :data:`ROLE_PERMISSIONS`.
-    * **Super role** -- stored on ``user.role_id``. Applies to the user
-      across **every** organization. Conceptually these are referred to
-      as ``superowner`` / ``superadmin`` / ``supermember`` (the name
-      simply prepends ``"super"`` to the parallel role name). Super
-      roles reuse the existing role rows in the database and look up
-      permissions via :data:`SUPER_ROLE_PERMISSIONS`, which contains the
-      parallel role's permissions plus any super-only extras from
-      :data:`SUPER_ROLE_ADDITIONAL_PERMISSIONS`.
+    * **Super role** -- stored on ``user.role_id``. Applies at the
+      instance level across organizations. Conceptually these are
+      referred to as ``superowner`` / ``superadmin`` / ``supermember``
+      (the name simply prepends ``"super"`` to the role name). Super
+      permissions are defined explicitly in :data:`SUPER_ROLE_PERMISSIONS`;
+      they do not inherit org-scoped role permissions.
     """
 
     OWNER = 'owner'
     ADMIN = 'admin'
     MEMBER = 'member'
-    EMPTY = 'empty'
 
 
 def super_role_name(role_name: str) -> str:
@@ -206,33 +203,22 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.MANAGE_AUTOMATIONS,
         ]
     ),
-    # ``empty`` carries no org-scoped permissions; it exists solely as a
-    # vehicle for super-only permissions granted via
-    # ``SUPER_ROLE_ADDITIONAL_PERMISSIONS``. Assigning this role at the
-    # org-member level grants nothing.
-    RoleName.EMPTY: frozenset(),
 }
 
 
-# Extra permissions granted *only* to a super role on top of the
-# permissions it inherits from its parallel regular role. Add entries
-# here when a super role needs to do something its parallel regular
-# role cannot. The dict is keyed by the parallel regular role
-# (e.g. ``RoleName.ADMIN`` for ``superadmin``).
-SUPER_ROLE_ADDITIONAL_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
+# Instance-level permissions for super roles. These are intentionally
+# explicit and do not inherit the parallel org-scoped role permissions.
+# This keeps instance administration separate from organization-scoped
+# product/configuration administration.
+SUPER_ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
+    # Bootstrap/break-glass superowner and regular superadmin currently
+    # only grant instance-level organization creation. Additional
+    # instance-admin capabilities (for example, cross-org member management)
+    # should be added here explicitly as the corresponding routes are wired
+    # to permission checks.
     RoleName.OWNER: frozenset([Permission.CREATE_ORGANIZATION]),
     RoleName.ADMIN: frozenset([Permission.CREATE_ORGANIZATION]),
     RoleName.MEMBER: frozenset(),
-    RoleName.EMPTY: frozenset([Permission.CREATE_ORGANIZATION]),
-}
-
-
-# Effective permissions for super roles: parallel role perms + super-only extras.
-# ``superadmin`` is simply the ``admin`` role row attached to ``user.role_id``,
-# so this mapping is keyed by the same regular ``RoleName`` values.
-SUPER_ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
-    role: ROLE_PERMISSIONS[role] | SUPER_ROLE_ADDITIONAL_PERMISSIONS[role]
-    for role in ROLE_PERMISSIONS
 }
 
 
@@ -306,8 +292,8 @@ def get_super_role_permissions(role_name: str) -> frozenset[Permission]:
 
     A super role is the same role row (``owner`` / ``admin`` / ``member``)
     referenced via ``user.role_id`` rather than ``org_member.role_id``;
-    its effective permissions are the parallel role's permissions plus
-    any extras declared in :data:`SUPER_ROLE_ADDITIONAL_PERMISSIONS`.
+    its effective permissions are defined explicitly and do not inherit
+    org-scoped permissions.
 
     Args:
         role_name: Name of the role (e.g. ``'admin'`` for ``superadmin``)
@@ -333,8 +319,8 @@ def has_permission(
         permission: Permission to check
         is_super: If ``True`` the role was looked up from ``user.role_id``
             and should be treated as a "super" role -- i.e. permissions
-            are read from :data:`SUPER_ROLE_PERMISSIONS` instead of
-            :data:`ROLE_PERMISSIONS`.
+            are read from the explicit :data:`SUPER_ROLE_PERMISSIONS` mapping
+            instead of :data:`ROLE_PERMISSIONS`.
 
     Returns:
         True if the role has the permission
