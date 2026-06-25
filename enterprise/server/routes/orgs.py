@@ -1537,10 +1537,13 @@ async def list_org_conversations(
         ),
     ] = None,
     sandbox_status: Annotated[
-        list[str] | None,
+        str | None,
         Query(
             title='Filter by sandbox status',
-            description='Comma-separated list: STARTING, RUNNING, PAUSED, ERROR, MISSING',
+            description='Filter by sandbox status: STARTING, RUNNING, PAUSED, ERROR, MISSING. '
+            'Note: when filtering by sandbox_status, total_items reflects the unfiltered '
+            'count since the filter is applied post-query. This may result in pagination '
+            'showing fewer items per page than expected.',
         ),
     ] = None,
     time_window: Annotated[
@@ -1621,13 +1624,15 @@ async def list_org_conversations(
     )
 
     try:
+        # Convert single string to list for service compatibility
+        sandbox_status_list = [sandbox_status] if sandbox_status else None
         result = await service.list_org_conversations(
             org_id=org_id,
             search=search,
             sort_by=sort_by,
             sort_order=sort_order,
             execution_status=execution_status,
-            sandbox_status=sandbox_status,
+            sandbox_status=sandbox_status_list,
             time_window=time_window,
             page=page,
             per_page=per_page,
@@ -1792,7 +1797,7 @@ async def export_org_conversations_csv(
         Query(title='Filter by execution status'),
     ] = None,
     sandbox_status: Annotated[
-        list[str] | None,
+        str | None,
         Query(title='Filter by sandbox status'),
     ] = None,
     time_window: Annotated[
@@ -1825,82 +1830,90 @@ async def export_org_conversations_csv(
             sort_by=sort_by,
             sort_order=sort_order,
             execution_status=execution_status,
-            sandbox_status=sandbox_status,
+            sandbox_status=[sandbox_status] if sandbox_status else None,
             time_window=time_window,
             page=1,
             per_page=10000,  # Export up to 10k records
             include_sub_conversations=include_sub_conversations,
         )
 
-        # Generate CSV content
-        csv_lines = [
-            'id,title,llm_model,agent_kind,user_id,user_email,created_at,updated_at,'
-            'sandbox_id,sandbox_status,runtime_url,execution_status,selected_repository,'
-            'selected_branch,trigger,accumulated_cost,prompt_tokens,completion_tokens,'
-            'total_tokens,cache_read_tokens,cache_write_tokens'
-        ]
-
-        # Warn if export was truncated
-        warning = None
-        if result.total_items > 10000:
-            warning = f'Warning: Export truncated to 10000 of {result.total_items} records. Use filters to narrow export.'
-
-        for item in result.items:
-            # Escape fields for CSV
-            def escape(val):
-                if val is None:
-                    return ''
-                s = str(val)
-                if ',' in s or '"' in s or '\n' in s:
-                    return f'"{s.replace('"', '""')}"'
-                return s
-
-            if warning:
-                csv_lines.append(f'# {warning}')
-                warning = None  # Only add warning once
-
-            csv_lines.append(
-                ','.join(
-                    [
-                        escape(item.id),
-                        escape(item.title),
-                        escape(item.llm_model),
-                        escape(item.agent_kind),
-                        escape(item.user_id),
-                        escape(item.user_email),
-                        escape(item.created_at),
-                        escape(item.updated_at),
-                        escape(item.sandbox_id),
-                        escape(item.sandbox_status),
-                        escape(item.runtime_url),
-                        escape(item.execution_status),
-                        escape(item.selected_repository),
-                        escape(item.selected_branch),
-                        escape(item.trigger),
-                        str(item.accumulated_cost),
-                        str(item.prompt_tokens),
-                        str(item.completion_tokens),
-                        str(item.total_tokens),
-                        str(item.cache_read_tokens),
-                        str(item.cache_write_tokens),
-                    ]
-                )
-            )
-
-        async def generate():
-            for line in csv_lines:
-                yield line + '\n'
-
-        # Generate filename with timestamp
+        # Build response headers
         from datetime import datetime, timezone
 
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
         filename = f'conversations_export_{timestamp}.csv'
+        headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
+        if result.total_items > 10000:
+            headers['X-Export-Truncated'] = 'true'
+
+        async def generate():
+            import csv
+            import io
+
+            output = io.StringIO()
+            writer = csv.writer(output)
+
+            # Write header row
+            writer.writerow(
+                [
+                    'id',
+                    'title',
+                    'llm_model',
+                    'agent_kind',
+                    'user_id',
+                    'user_email',
+                    'created_at',
+                    'updated_at',
+                    'sandbox_id',
+                    'sandbox_status',
+                    'runtime_url',
+                    'execution_status',
+                    'selected_repository',
+                    'selected_branch',
+                    'trigger',
+                    'accumulated_cost',
+                    'prompt_tokens',
+                    'completion_tokens',
+                    'total_tokens',
+                    'cache_read_tokens',
+                    'cache_write_tokens',
+                ]
+            )
+
+            # Write data rows
+            for item in result.items:
+                writer.writerow(
+                    [
+                        item.id,
+                        item.title,
+                        item.llm_model,
+                        item.agent_kind,
+                        item.user_id,
+                        item.user_email,
+                        item.created_at,
+                        item.updated_at,
+                        item.sandbox_id,
+                        item.sandbox_status,
+                        item.runtime_url,
+                        item.execution_status,
+                        item.selected_repository,
+                        item.selected_branch,
+                        item.trigger,
+                        item.accumulated_cost,
+                        item.prompt_tokens,
+                        item.completion_tokens,
+                        item.total_tokens,
+                        item.cache_read_tokens,
+                        item.cache_write_tokens,
+                    ]
+                )
+
+            yield output.getvalue()
 
         return StreamingResponse(
             generate(),
             media_type='text/csv',
-            headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+            headers=headers,
         )
 
     except Exception as e:

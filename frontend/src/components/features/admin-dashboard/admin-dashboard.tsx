@@ -1,7 +1,7 @@
 /* eslint-disable i18next/no-literal-string */
 import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import toast from "react-hot-toast";
 import { useOrganizations } from "#/hooks/query/use-organizations";
 import { organizationService } from "#/api/organization-service/organization-service.api";
@@ -81,22 +81,6 @@ function ExternalLinkIcon() {
       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
       <polyline points="15,3 21,3 21,9" />
       <line x1="10" y1="14" x2="21" y2="3" />
-    </svg>
-  );
-}
-
-function EyeIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-    >
-      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-      <circle cx="12" cy="12" r="3" />
     </svg>
   );
 }
@@ -349,8 +333,8 @@ export function AdminDashboard() {
   const search = searchParams.get("search") || "";
   const sortBy = searchParams.get("sort_by") || "updated_at";
   const sortOrder = searchParams.get("sort_order") || "desc";
-  const executionStatus = searchParams.getAll("execution_status");
-  const sandboxStatus = searchParams.getAll("sandbox_status");
+  const executionStatus = searchParams.get("execution_status") || "";
+  const sandboxStatus = searchParams.get("sandbox_status") || "";
   const timeWindow = searchParams.get("time_window") || "";
 
   // Fetch stats
@@ -398,7 +382,6 @@ export function AdminDashboard() {
     },
   );
 
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [stoppingIds, setStoppingIds] = useState<Set<string>>(new Set());
 
@@ -440,17 +423,6 @@ export function AdminDashboard() {
       });
     },
   });
-
-  // TODO(documentation): The View button is temporarily hidden pending a deeper
-  // review of the UX and data-access implications of letting org admins open
-  // arbitrary member conversations.  Specifically:
-  //   - Whether the admin should see the full conversation or a redacted view.
-  //   - Whether the admin's browsing creates a session in the target sandbox.
-  //   - Whether we need additional audit-logging for admin access.
-  // See APP-670 comment thread for context.
-  const handleView = (conversationId: string) => {
-    navigate(`/conversations/${conversationId}`);
-  };
 
   const handleStop = (conversation: { id: string; title: string | null }) => {
     const label = conversation.title?.trim() || "this conversation";
@@ -901,7 +873,7 @@ export function AdminDashboard() {
 
                 {/* Conversation Status */}
                 <select
-                  value={executionStatus[0] || ""}
+                  value={executionStatus}
                   onChange={(e) =>
                     updateFilter("execution_status", e.target.value || null)
                   }
@@ -918,7 +890,7 @@ export function AdminDashboard() {
 
                 {/* Runtime Status */}
                 <select
-                  value={sandboxStatus[0] || ""}
+                  value={sandboxStatus}
                   onChange={(e) =>
                     updateFilter("sandbox_status", e.target.value || null)
                   }
@@ -1106,20 +1078,6 @@ export function AdminDashboard() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex flex-col gap-1">
-                              {/* TODO: Hidden until permissions/API design are reviewed.
-                                   See handleView comment above. */}
-                              {false && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleView(conversation.id)}
-                                  className="flex items-center gap-1.5 px-2 py-1 text-xs text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors"
-                                  title="View conversation"
-                                  aria-label="View conversation"
-                                >
-                                  <EyeIcon />
-                                  View
-                                </button>
-                              )}
                               <button
                                 type="button"
                                 onClick={() => handleStop(conversation)}

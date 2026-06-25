@@ -1,5 +1,5 @@
 import React from "react";
-import { useLocation } from "react-router";
+import { Link, useLocation } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useConfig } from "#/hooks/query/use-config";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
@@ -34,11 +34,11 @@ export function AdminDashboardButton() {
     return null;
   }
 
-  const isActive = location.pathname.startsWith("/admin");
+  const isActive = location.pathname.startsWith("/settings/admin-dashboard");
 
   return (
-    <a
-      href="/admin/dashboard"
+    <Link
+      to="/settings/admin-dashboard"
       className={cn(
         "flex items-center justify-center w-[34px] h-[34px] rounded-lg transition-colors",
         isActive
@@ -63,6 +63,6 @@ export function AdminDashboardButton() {
         <rect x="14" y="14" width="7" height="7" />
         <rect x="3" y="14" width="7" height="7" />
       </svg>
-    </a>
+    </Link>
   );
 }
