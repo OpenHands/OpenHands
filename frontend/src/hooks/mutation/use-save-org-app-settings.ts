@@ -3,18 +3,23 @@ import {
   organizationService,
   OrganizationAppSettingsUpdate,
 } from "#/api/organization-service/organization-service.api";
-import { ORGANIZATION_APP_SETTINGS_KEY } from "#/hooks/query/query-keys";
+import { ORGANIZATION_SETTINGS_KEY } from "#/hooks/query/query-keys";
 
 export const useSaveOrgAppSettings = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (settings: OrganizationAppSettingsUpdate) =>
-      organizationService.saveOrganizationAppSettings(settings),
+    mutationFn: async ({
+      orgId,
+      settings,
+    }: {
+      orgId: string;
+      settings: OrganizationAppSettingsUpdate;
+    }) => organizationService.saveOrganizationAppSettings({ orgId, settings }),
     onSuccess: () => {
-      // Invalidate org app settings cache
+      // Invalidate org app settings cache for the specific org
       queryClient.invalidateQueries({
-        queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+        queryKey: ORGANIZATION_SETTINGS_KEY,
       });
     },
     meta: {

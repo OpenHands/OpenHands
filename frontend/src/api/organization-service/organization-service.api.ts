@@ -266,19 +266,33 @@ export const organizationService = {
     await openHands.delete(`/api/organizations/${orgId}/git-claims/${claimId}`);
   },
 
-  getOrganizationAppSettings: async () => {
+  getOrganizationAppSettings: async ({ orgId }: { orgId: string }) => {
     const { data } = await openHands.get<OrganizationAppSettingsResponse>(
-      "/api/organizations/app",
+      `/api/organizations/${orgId}/app`,
+      {
+        headers: {
+          "X-Org-Id": orgId,
+        },
+      },
     );
     return data;
   },
 
-  saveOrganizationAppSettings: async (
-    settings: OrganizationAppSettingsUpdate,
-  ) => {
+  saveOrganizationAppSettings: async ({
+    orgId,
+    settings,
+  }: {
+    orgId: string;
+    settings: OrganizationAppSettingsUpdate;
+  }) => {
     const { data } = await openHands.post<OrganizationAppSettingsResponse>(
-      "/api/organizations/app",
+      `/api/organizations/${orgId}/app`,
       settings,
+      {
+        headers: {
+          "X-Org-Id": orgId,
+        },
+      },
     );
     return data;
   },

@@ -28,6 +28,7 @@ from openhands.app_server.settings.llm_profiles import (
 )
 from openhands.app_server.settings.settings_models import (
     GETSettingsModel,
+    MarketplaceRegistration,
     Settings,
     validate_and_convert_marketplaces,
 )
@@ -479,6 +480,12 @@ async def load_settings_schema() -> dict[str, Any]:
 async def load_conversation_settings_schema() -> dict[str, Any]:
     """Load the schema for conversations"""
     return ConversationSettings.export_schema().model_dump(mode='json')
+
+
+@router.get('/marketplace-schema')
+async def load_marketplace_schema() -> dict[str, Any]:
+    """Load the JSON Schema for MarketplaceRegistration"""
+    return MarketplaceRegistration.model_json_schema()
 
 
 async def invalidate_legacy_secrets_store(

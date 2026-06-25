@@ -22576,21 +22576,21 @@
     "ca": "Habilitats"
   },
   "SETTINGS$SKILLS_DESCRIPTION": {
-    "en": "Enable or disable default skills. Disabled skills will not be loaded into agent context.",
-    "ja": "デフォルトスキル（マイクロエージェント）を有効または無効にします。無効なスキルはエージェントコンテキストに読み込まれません。",
-    "zh-CN": "启用或禁用默认技能（微代理）。禁用的技能不会加载到代理上下文中。",
-    "zh-TW": "啟用或停用預設技能（微代理）。停用的技能不會載入到代理上下文中。",
-    "ko-KR": "기본 스킬(마이크로에이전트)을 활성화하거나 비활성화합니다. 비활성화된 스킬은 에이전트 컨텍스트에 로드되지 않습니다.",
-    "no": "Aktiver eller deaktiver standardferdigheter (mikroagenter). Deaktiverte ferdigheter lastes ikke inn i agentkonteksten.",
-    "ar": "تفعيل أو تعطيل المهارات الافتراضية (الوكلاء الصغار). لن يتم تحميل المهارات المعطلة في سياق الوكيل.",
-    "de": "Standard-Fähigkeiten (Mikroagenten) aktivieren oder deaktivieren. Deaktivierte Fähigkeiten werden nicht in den Agentenkontext geladen.",
-    "fr": "Activer ou désactiver les compétences par défaut (micro-agents). Les compétences désactivées ne seront pas chargées dans le contexte de l'agent.",
-    "it": "Abilita o disabilita le competenze predefinite (micro-agenti). Le competenze disabilitate non verranno caricate nel contesto dell'agente.",
-    "pt": "Ativar ou desativar habilidades padrão (micro-agentes). Habilidades desativadas não serão carregadas no contexto do agente.",
-    "es": "Habilitar o deshabilitar habilidades predeterminadas (micro-agentes). Las habilidades deshabilitadas no se cargarán en el contexto del agente.",
-    "tr": "Varsayılan yetenekleri (mikro ajanlar) etkinleştirin veya devre dışı bırakın. Devre dışı bırakılan yetenekler ajan bağlamına yüklenmez.",
-    "uk": "Увімкніть або вимкніть навички за замовчуванням (мікроагенти). Вимкнені навички не завантажуватимуться в контекст агента.",
-    "ca": "Activeu o desactiveu les habilitats predeterminades. Les habilitats desactivades no es carregaran al context de l'agent."
+    "en": "Organization-wide skills can be visible to everyone and turned on for all users. Skills enabled for all conversations cannot be disabled by individual members",
+    "ja": "組織全体のスキルは全員に可視化し、すべてのユーザーに対して有効にできます。すべての会話に対して有効化されたスキルは、個々のメンバーが無効にすることはできません",
+    "zh-CN": "组织范围的技能可以对所有人可见并为所有用户开启。为所有对话启用的技能无法被个人成员禁用",
+    "zh-TW": "組織範圍內的技能可以對所有人可見並為所有用戶開啟。為所有對話啟用的技能無法被個人成員停用",
+    "ko-KR": "조직 전체의 스킬은 모든 사용자에게 표시되고 모든 사용자에 대해 켤 수 있습니다. 모든 대화에 대해 활성화된 스킬은 개별 구성원이 비활성화할 수 없습니다",
+    "no": "Ferdigheter på tvers av organisasjonen kan være synlige for alle og slås på for alle brukere. Ferdigheter som er aktivert for alle samtaler, kan ikke deaktiveres av individuelle medlemmer",
+    "ar": "يمكن أن تكون مهارات المؤسسة مرئية للجميع ومفعّلة لجميع المستخدمين. لا يمكن تعطيل المهارات المفعّلة لجميع المحادثات من قبل الأعضاء الفرديين",
+    "de": "Organisationsweite Skills können für alle sichtbar sein und für alle Benutzer aktiviert werden. Skills, die für alle Unterhaltungen aktiviert sind, können von einzelnen Mitgliedern nicht deaktiviert werden",
+    "fr": "Les compétences à l'échelle de l'organisation peuvent être visibles par tous et activées pour tous les utilisateurs. Les compétences activées pour toutes les conversations ne peuvent pas être désactivées par les membres individuels",
+    "it": "Le competenze a livello di organizzazione possono essere visibili a tutti e attivate per tutti gli utenti. Le competenze abilitate per tutte le conversazioni non possono essere disabilitate dai singoli membri",
+    "pt": "As habilidades em toda a organização podem ser visíveis para todos e ativadas para todos os usuários. Habilidades habilitadas para todas as conversas não podem ser desabilitadas por membros individuais",
+    "es": "Las habilidades de toda la organización pueden ser visibles para todos y activadas para todos los usuarios. Las habilidades habilitadas para todas las conversaciones no pueden ser deshabilitadas por miembros individuales",
+    "ca": "Les habilitats a nivell d'organització poden ser visibles per a tothom i activades per a tots els usuaris. Les habilitats habilitades per a totes les converses no poden ser deshabilitades per membres individuals",
+    "tr": "Kuruluş genelinde beceriler herkes tarafından görülebilir ve tüm kullanıcılar için açılabilir. Tüm konuşmalar için etkinleştirilen beceriler, bireysel üyeler tarafından devre dışı bırakılamaz",
+    "uk": "Навички в масштабі організації можуть бути видимими для всіх і увімкнені для всіх користувачів. Навички, увімкнені для всіх розмов, не можуть бути вимкнені окремими учасниками"
   },
   "SETTINGS$SKILLS_NO_SKILLS": {
     "en": "No skills found.",
@@ -27352,23 +27352,6 @@
     "tr": "Beceriler",
     "uk": "Навички"
   },
-  "SETTINGS$SKILLS_DESCRIPTION": {
-    "en": "Organization-wide skills can be visible to everyone and turned on for all users. Skills enabled for all conversations cannot be disabled by individual members",
-    "ja": "組織全体のスキルは全員に可視化し、すべてのユーザーに対して有効にできます。すべての会話に対して有効化されたスキルは、個々のメンバーが無効にすることはできません",
-    "zh-CN": "组织范围的技能可以对所有人可见并为所有用户开启。为所有对话启用的技能无法被个人成员禁用",
-    "zh-TW": "組織範圍內的技能可以對所有人可見並為所有用戶開啟。為所有對話啟用的技能無法被個人成員停用",
-    "ko-KR": "조직 전체의 스킬은 모든 사용자에게 표시되고 모든 사용자에 대해 켤 수 있습니다. 모든 대화에 대해 활성화된 스킬은 개별 구성원이 비활성화할 수 없습니다",
-    "no": "Ferdigheter på tvers av organisasjonen kan være synlige for alle og slås på for alle brukere. Ferdigheter som er aktivert for alle samtaler, kan ikke deaktiveres av individuelle medlemmer",
-    "ar": "يمكن أن تكون مهارات المؤسسة مرئية للجميع ومفعّلة لجميع المستخدمين. لا يمكن تعطيل المهارات المفعّلة لجميع المحادثات من قبل الأعضاء الفرديين",
-    "de": "Organisationsweite Skills können für alle sichtbar sein und für alle Benutzer aktiviert werden. Skills, die für alle Unterhaltungen aktiviert sind, können von einzelnen Mitgliedern nicht deaktiviert werden",
-    "fr": "Les compétences à l'échelle de l'organisation peuvent être visibles par tous et activées pour tous les utilisateurs. Les compétences activées pour toutes les conversations ne peuvent pas être désactivées par les membres individuels",
-    "it": "Le competenze a livello di organizzazione possono essere visibili a tutti e attivate per tutti gli utenti. Le competenze abilitate per tutte le conversazioni non possono essere disabilitate dai singoli membri",
-    "pt": "As habilidades em toda a organização podem ser visíveis para todos e ativadas para todos os usuários. Habilidades habilitadas para todas as conversas não podem ser desabilitadas por membros individuais",
-    "es": "Las habilidades de toda la organización pueden ser visibles para todos y activadas para todos los usuarios. Las habilidades habilitadas para todas las conversaciones no pueden ser deshabilitadas por miembros individuales",
-    "ca": "Les habilitats a nivell d'organització poden ser visibles per a tothom i activades per a tots els usuaris. Les habilitats habilitades per a totes les converses no poden ser deshabilitades per membres individuals",
-    "tr": "Kuruluş genelinde beceriler herkes tarafından görülebilir ve tüm kullanıcılar için açılabilir. Tüm konuşmalar için etkinleştirilen beceriler, bireysel üyeler tarafından devre dışı bırakılamaz",
-    "uk": "Навички в масштабі організації можуть бути видимими для всіх і увімкнені для всіх користувачів. Навички, увімкнені для всіх розмов, не можуть бути вимкнені окремими учасниками"
-  },
   "SETTINGS$MARKETPLACE_SOURCE_PLACEHOLDER": {
     "en": "https://github.com/username/skills-repo",
     "ja": "https://github.com/username/skills-repo",
@@ -27827,5 +27810,22 @@
     "de": "Bearbeiten",
     "uk": "Редагувати",
     "ca": "Edita"
+  },
+  "SETTINGS$MARKETPLACE_SOURCE_REQUIRED": {
+    "en": "Source is required",
+    "ja": "ソースは必須です",
+    "zh-CN": "源是必填项",
+    "zh-TW": "來源是必填項",
+    "ko-KR": "소스가 필수입니다",
+    "no": "Kilde er påkrevd",
+    "ar": "المصدر مطلوب",
+    "de": "Quelle ist erforderlich",
+    "fr": "La source est requise",
+    "it": "La fonte è obbligatoria",
+    "pt": "A fonte é obrigatória",
+    "es": "La fuente es obligatoria",
+    "ca": "L'origen és obligatori",
+    "tr": "Kaynak gereklidir",
+    "uk": "Джерело є обов'язковим"
   }
 }

@@ -49,6 +49,7 @@ from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
 
 # Test user ID constant (must be a valid UUID string)
 TEST_USER_ID = str(uuid.uuid4())
+TEST_ORG_ID = str(uuid.uuid4())
 
 
 @pytest.fixture
@@ -3326,7 +3327,7 @@ async def test_get_org_app_settings_success(
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get('/api/organizations/app')
+        response = client.get(f'/api/organizations/{TEST_ORG_ID}/app')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -3364,7 +3365,7 @@ async def test_get_org_app_settings_with_null_values(
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get('/api/organizations/app')
+        response = client.get(f'/api/organizations/{TEST_ORG_ID}/app')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -3397,7 +3398,7 @@ async def test_get_org_app_settings_not_found(
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get('/api/organizations/app')
+        response = client.get(f'/api/organizations/{TEST_ORG_ID}/app')
 
         # Assert
         assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -3419,7 +3420,7 @@ async def test_get_org_app_settings_user_not_member(mock_app_with_get_user_id):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get('/api/organizations/app')
+        response = client.get(f'/api/organizations/{TEST_ORG_ID}/app')
 
         # Assert
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -3455,7 +3456,7 @@ async def test_update_org_app_settings_success(
 
         # Act
         response = client.post(
-            '/api/organizations/app',
+            f'/api/organizations/{TEST_ORG_ID}/app',
             json={
                 'enable_proactive_conversation_starters': False,
                 'max_budget_per_task': 25.0,
@@ -3499,7 +3500,7 @@ async def test_update_org_app_settings_partial_update(
 
         # Act - only updating one field
         response = client.post(
-            '/api/organizations/app',
+            f'/api/organizations/{TEST_ORG_ID}/app',
             json={'enable_proactive_conversation_starters': False},
         )
 
@@ -3541,7 +3542,7 @@ async def test_update_org_app_settings_set_null(
 
         # Act - explicitly setting max_budget_per_task to null
         response = client.post(
-            '/api/organizations/app',
+            f'/api/organizations/{TEST_ORG_ID}/app',
             json={'max_budget_per_task': None},
         )
 
@@ -3569,7 +3570,7 @@ async def test_update_org_app_settings_invalid_max_budget(
 
         # Act - negative value
         response = client.post(
-            '/api/organizations/app',
+            f'/api/organizations/{TEST_ORG_ID}/app',
             json={'max_budget_per_task': -5.0},
         )
 
@@ -3595,7 +3596,7 @@ async def test_update_org_app_settings_zero_max_budget(
 
         # Act - zero value
         response = client.post(
-            '/api/organizations/app',
+            f'/api/organizations/{TEST_ORG_ID}/app',
             json={'max_budget_per_task': 0},
         )
 
@@ -3627,7 +3628,7 @@ async def test_update_org_app_settings_not_found(
 
         # Act
         response = client.post(
-            '/api/organizations/app',
+            f'/api/organizations/{TEST_ORG_ID}/app',
             json={'enable_proactive_conversation_starters': False},
         )
 
@@ -3660,7 +3661,7 @@ async def test_update_org_app_settings_database_error(
 
         # Act
         response = client.post(
-            '/api/organizations/app',
+            f'/api/organizations/{TEST_ORG_ID}/app',
             json={'enable_proactive_conversation_starters': False},
         )
 
@@ -3685,7 +3686,7 @@ async def test_update_org_app_settings_user_not_member(mock_app_with_get_user_id
 
         # Act
         response = client.post(
-            '/api/organizations/app',
+            f'/api/organizations/{TEST_ORG_ID}/app',
             json={'enable_proactive_conversation_starters': False},
         )
 

@@ -1,12 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { pauseV1Conversation } from "./conversation-mutation-utils";
+import { interruptV1Conversation } from "./conversation-mutation-utils";
 
 export const useV1PauseConversation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (variables: { conversationId: string }) =>
-      pauseV1Conversation(variables.conversationId),
+      interruptV1Conversation(variables.conversationId),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ["user", "conversations"] });
       const previousConversations = queryClient.getQueryData([

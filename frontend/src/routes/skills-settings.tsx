@@ -1,21 +1,23 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { Typography } from "#/ui/typography";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { MarketplaceModal } from "#/components/features/settings/marketplace-modal";
 import { DeleteConfirmationModal } from "#/components/features/settings/delete-confirmation-modal";
-import { cn } from "#/utils/utils";
+import { Toggle } from "#/components/shared/toggle/toggle";
 import { useSettings } from "#/hooks/query/use-settings";
 import {
   SETTINGS_QUERY_KEYS,
-  ORGANIZATION_APP_SETTINGS_KEY,
+  ORGANIZATION_SETTINGS_KEY,
 } from "#/hooks/query/query-keys";
 import { useSkills } from "#/hooks/query/use-skills";
 import { useMe } from "#/hooks/query/use-me";
 import { useMarketplaceSkills } from "#/hooks/mutation/use-get-marketplace-skills";
+import { useSaveOrgAppSettings } from "#/hooks/mutation/use-save-org-app-settings";
+import { useOrganizationAppSettings } from "#/hooks/query/use-organization-app-settings";
 import {
   MarketplaceRegistration,
   MarketplaceWithScope,
@@ -27,52 +29,12 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { I18nKey } from "#/i18n/declaration";
-import { organizationService } from "#/api/organization-service/organization-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import SkillsService from "#/api/skills-service";
 import EditIcon from "#/icons/u-edit.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
-
-function WhiteToggle({
-  isToggled,
-  onClick,
-  "aria-label": ariaLabel,
-  disabled,
-  title,
-}: {
-  isToggled: boolean;
-  onClick?: () => void;
-  "aria-label"?: string;
-  disabled?: boolean;
-  title?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={disabled ? undefined : onClick}
-      className={cn("cursor-pointer", disabled && "cursor-not-allowed")}
-      aria-label={ariaLabel}
-      disabled={disabled}
-      title={title}
-    >
-      <div
-        className={cn(
-          "w-12 h-6 rounded-xl flex items-center p-1.5 transition-all duration-200",
-          isToggled && "justify-end bg-white",
-          !isToggled && "justify-start bg-base-secondary",
-          disabled && "opacity-50",
-        )}
-      >
-        <div
-          className={cn(
-            "w-3 h-3 rounded-xl transition-all duration-200",
-            isToggled ? "bg-[#0D0F11]" : "bg-tertiary-light",
-          )}
-        />
-      </div>
-    </button>
-  );
-}
+import { getSelectedOrganizationIdFromStore } from "#/stores/selected-organization-store";
+import { cn } from "#/utils/utils";
 
 function ScopeBadge({ scope }: { scope: "instance" | "org" | "personal" }) {
   const { t } = useTranslation();
@@ -100,17 +62,16 @@ function SkillsSettingsScreen() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
+  // Get the selected org ID from the store
+  const selectedOrgId = getSelectedOrganizationIdFromStore();
+
   // User data for permission checks
   const { data: user } = useMe();
   const { data: settings, isLoading: settingsLoading } = useSettings();
   const { data: skills, isLoading: skillsLoading } = useSkills();
 
-  // Fetch org app settings with updated_at for optimistic locking
-  const { data: orgAppSettings } = useQuery({
-    queryKey: ORGANIZATION_APP_SETTINGS_KEY,
-    queryFn: () => organizationService.getOrganizationAppSettings(),
-    retry: false,
-  });
+  // Fetch org app settings with updated_at for optimistic locking using the hook
+  const { data: orgAppSettings } = useOrganizationAppSettings(selectedOrgId);
 
   // Determine user role and permissions
   const userRole = user?.role ?? "member";
@@ -162,6 +123,9 @@ function SkillsSettingsScreen() {
 
   // Marketplace skills mutation for validation
   const marketplaceSkillsMutation = useMarketplaceSkills();
+
+  // Save org app settings mutation
+  const saveOrgAppSettingsMutation = useSaveOrgAppSettings();
 
   // Skills filters
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -440,16 +404,19 @@ function SkillsSettingsScreen() {
       });
 
       // Save org marketplaces
-      await organizationService.saveOrganizationAppSettings({
-        registered_marketplaces: orgMarketplaces,
-        last_known_updated_at: lastKnownUpdatedAt,
+      await saveOrgAppSettingsMutation.mutateAsync({
+        orgId: selectedOrgId!,
+        settings: {
+          registered_marketplaces: orgMarketplaces,
+          last_known_updated_at: lastKnownUpdatedAt,
+        },
       });
 
       displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
       setHasMarketplaceChanges(false);
       queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
       queryClient.invalidateQueries({
-        queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+        queryKey: ORGANIZATION_SETTINGS_KEY,
       });
     } catch (error) {
       const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
@@ -525,14 +492,17 @@ function SkillsSettingsScreen() {
         }
 
         // Only save to BE if validation passes
-        await organizationService.saveOrganizationAppSettings({
-          registered_marketplaces: updated,
-          last_known_updated_at: lastKnownUpdatedAt,
+        await saveOrgAppSettingsMutation.mutateAsync({
+          orgId: selectedOrgId!,
+          settings: {
+            registered_marketplaces: updated,
+            last_known_updated_at: lastKnownUpdatedAt,
+          },
         });
         displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
         setOrgMarketplaces(updated);
         queryClient.invalidateQueries({
-          queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+          queryKey: ORGANIZATION_SETTINGS_KEY,
         });
 
         // Skills will be loaded by the useEffect on next render
@@ -545,7 +515,7 @@ function SkillsSettingsScreen() {
             "Your settings are outdated. Please refresh and try again.",
           );
           queryClient.invalidateQueries({
-            queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+            queryKey: ORGANIZATION_SETTINGS_KEY,
           });
         } else {
           const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
@@ -616,9 +586,12 @@ function SkillsSettingsScreen() {
       );
 
       try {
-        await organizationService.saveOrganizationAppSettings({
-          registered_marketplaces: updated,
-          last_known_updated_at: lastKnownUpdatedAt,
+        await saveOrgAppSettingsMutation.mutateAsync({
+          orgId: selectedOrgId!,
+          settings: {
+            registered_marketplaces: updated,
+            last_known_updated_at: lastKnownUpdatedAt,
+          },
         });
         displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
         setOrgMarketplaces(updated);
@@ -640,7 +613,7 @@ function SkillsSettingsScreen() {
         );
 
         queryClient.invalidateQueries({
-          queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+          queryKey: ORGANIZATION_SETTINGS_KEY,
         });
         setIsDeleteModalOpen(false);
         setMarketplaceToDelete(null);
@@ -650,7 +623,7 @@ function SkillsSettingsScreen() {
             "Your settings are outdated. Please refresh and try again.",
           );
           queryClient.invalidateQueries({
-            queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+            queryKey: ORGANIZATION_SETTINGS_KEY,
           });
         } else {
           const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
@@ -898,8 +871,8 @@ function SkillsSettingsScreen() {
                     <ScopeBadge scope={mp.scope} />
                   </td>
                   <td className="p-3">
-                    <WhiteToggle
-                      isToggled={mp.auto_load === "all"}
+                    <Toggle
+                      checked={mp.auto_load === "all"}
                       disabled={
                         mp.scope === "instance" ||
                         (mp.scope === "org" && !isAdminOrOwner)
@@ -1056,8 +1029,8 @@ function SkillsSettingsScreen() {
                     <ScopeBadge scope={skill.scope} />
                   </td>
                   <td className="p-3">
-                    <WhiteToggle
-                      isToggled={skill.isEnabled}
+                    <Toggle
+                      checked={skill.isEnabled}
                       disabled={isSkillToggleDisabled(skill)}
                       onClick={() => handleToggleEnabled(skill.id)}
                       title={
