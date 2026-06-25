@@ -395,8 +395,10 @@ class DockerSandboxService(SandboxService):
         # Enforce sandbox limits by cleaning up old sandboxes
         await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
 
+        from_user_default = sandbox_spec_id is None
         if sandbox_spec_id is None:
             sandbox_spec_id = self.default_sandbox_spec_id
+        from_user_default = from_user_default and sandbox_spec_id is not None
         if sandbox_spec_id is None:
             sandbox_spec = await self.sandbox_spec_service.get_default_sandbox_spec()
         else:
@@ -404,8 +406,18 @@ class DockerSandboxService(SandboxService):
                 sandbox_spec_id
             )
             if sandbox_spec_maybe is None:
-                raise ValueError('Sandbox Spec not found')
-            sandbox_spec = sandbox_spec_maybe
+                if from_user_default:
+                    _logger.warning(
+                        'User default sandbox spec %r not found; falling back to system default.',
+                        sandbox_spec_id,
+                    )
+                    sandbox_spec = (
+                        await self.sandbox_spec_service.get_default_sandbox_spec()
+                    )
+                else:
+                    raise ValueError(f'Sandbox Spec {sandbox_spec_id!r} not found')
+            else:
+                sandbox_spec = sandbox_spec_maybe
 
         # Generate a sandbox id if none was provided
         if sandbox_id is None:

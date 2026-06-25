@@ -325,9 +325,9 @@ function AppSettingsScreen() {
               label: spec.id,
             }))}
             selectedKey={
-              (selectedSandboxSpecId !== undefined
+              selectedSandboxSpecId !== undefined
                 ? selectedSandboxSpecId
-                : settings.default_sandbox_spec_id) ?? undefined
+                : settings.default_sandbox_spec_id
             }
             isClearable
             isLoading={sandboxSpecsLoading}
