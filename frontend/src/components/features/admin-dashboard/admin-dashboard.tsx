@@ -3,6 +3,7 @@ import React, { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import toast from "react-hot-toast";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { useOrganizations } from "#/hooks/query/use-organizations";
 import { useOrgConversationStats } from "#/hooks/query/use-org-conversation-stats";
 import { useOrgConversations } from "#/hooks/query/use-org-conversations";
 import { useOrgUsageStats } from "#/hooks/query/use-org-usage-stats";
@@ -319,6 +320,7 @@ const getDaysFromTimeWindow = (timeWindow: string): number => {
 
 export function AdminDashboard() {
   const { organizationId } = useSelectedOrganizationId();
+  const { data: orgData } = useOrganizations();
   const [activeTab, setActiveTab] = useState<"conversations" | "usage">(
     "conversations",
   );
@@ -328,6 +330,9 @@ export function AdminDashboard() {
   // deriving from the org list — avoids mismatches when the user belongs
   // to multiple orgs and has different roles in each.
   const orgId = organizationId ?? undefined;
+  const currentOrg = orgData?.organizations?.find(
+    (org) => org.id === organizationId,
+  );
 
   // Filter state from URL params
   const page = parseInt(searchParams.get("page") || "1", 10);
