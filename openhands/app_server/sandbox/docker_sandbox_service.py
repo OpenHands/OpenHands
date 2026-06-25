@@ -103,6 +103,7 @@ class DockerSandboxService(SandboxService):
     startup_grace_seconds: int = STARTUP_GRACE_SECONDS
     use_host_network: bool = False
     kvm_enabled: bool = False
+    default_sandbox_spec_id: str | None = None
 
     def _find_unused_port(self) -> int:
         """Find an unused port on the host machine."""
@@ -394,6 +395,8 @@ class DockerSandboxService(SandboxService):
         # Enforce sandbox limits by cleaning up old sandboxes
         await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
 
+        if sandbox_spec_id is None:
+            sandbox_spec_id = self.default_sandbox_spec_id
         if sandbox_spec_id is None:
             sandbox_spec = await self.sandbox_spec_service.get_default_sandbox_spec()
         else:

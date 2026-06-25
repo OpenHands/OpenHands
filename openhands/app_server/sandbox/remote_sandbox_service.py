@@ -426,6 +426,8 @@ class RemoteSandboxService(SandboxService):
 
             # Get sandbox spec
             if sandbox_spec_id is None:
+                sandbox_spec_id = await self.user_context.get_default_sandbox_spec_id()
+            if sandbox_spec_id is None:
                 sandbox_spec = (
                     await self.sandbox_spec_service.get_default_sandbox_spec()
                 )

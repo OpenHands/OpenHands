@@ -83,6 +83,7 @@ class ProcessSandboxService(SandboxService):
     agent_server_module: str
     health_check_path: str
     httpx_client: httpx.AsyncClient
+    default_sandbox_spec_id: str | None = None
 
     def __post_init__(self):
         """Initialize the service after dataclass creation."""
@@ -306,6 +307,8 @@ class ProcessSandboxService(SandboxService):
         """Start a new sandbox."""
         # Get sandbox spec
         if sandbox_spec_id is None:
+            sandbox_spec_id = self.default_sandbox_spec_id
+        if sandbox_spec_id is None:
             sandbox_spec = await self.sandbox_spec_service.get_default_sandbox_spec()
         else:
             sandbox_spec_maybe = await self.sandbox_spec_service.get_sandbox_spec(
@@ -462,6 +465,7 @@ class ProcessSandboxServiceInjector(SandboxServiceInjector):
             get_user_context(state, request) as user_context,
         ):
             user_id = await user_context.get_user_id()
+            default_sandbox_spec_id = await user_context.get_default_sandbox_spec_id()
             yield ProcessSandboxService(
                 user_id=user_id,
                 sandbox_spec_service=sandbox_spec_service,
@@ -471,4 +475,5 @@ class ProcessSandboxServiceInjector(SandboxServiceInjector):
                 agent_server_module=self.agent_server_module,
                 health_check_path=self.health_check_path,
                 httpx_client=httpx_client,
+                default_sandbox_spec_id=default_sandbox_spec_id,
             )
