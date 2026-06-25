@@ -223,9 +223,7 @@ class SaasSettingsStore(SettingsStore):
             kwargs.pop('registered_marketplaces', None)
 
         # Load personal registered_marketplaces from user_settings table
-        user_settings = await self._get_user_settings_by_keycloak_id_async(
-            self.user_id
-        )
+        user_settings = await self._get_user_settings_by_keycloak_id_async(self.user_id)
         if user_settings and user_settings.registered_marketplaces:
             kwargs['registered_marketplaces'] = user_settings.registered_marketplaces
 

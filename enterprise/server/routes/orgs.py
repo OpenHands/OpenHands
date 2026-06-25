@@ -394,20 +394,21 @@ async def update_legacy_org_defaults_settings(
 
 
 @org_router.get(
-    '/app',
+    '/{org_id}/app',
     response_model=OrgAppSettingsResponse,
     dependencies=[Depends(require_permission(Permission.MANAGE_APPLICATION_SETTINGS))],
 )
 async def get_org_app_settings(
+    org_id: UUID,
     service: OrgAppSettingsService = org_app_settings_service_dependency,
 ) -> OrgAppSettingsResponse:
-    """Get organization app settings for the user's current organization.
+    """Get organization app settings for a specific organization.
 
-    This endpoint retrieves application settings for the authenticated user's
-    current organization. Access requires the MANAGE_APPLICATION_SETTINGS permission,
-    which is granted to all organization members (member, admin, and owner roles).
+    This endpoint retrieves application settings for the specified organization.
+    Access requires the MANAGE_APPLICATION_SETTINGS permission.
 
     Args:
+        org_id: The target organization UUID
         service: OrgAppSettingsService (injected by dependency)
 
     Returns:
@@ -416,19 +417,19 @@ async def get_org_app_settings(
     Raises:
         HTTPException: 401 if user is not authenticated
         HTTPException: 403 if user lacks MANAGE_APPLICATION_SETTINGS permission
-        HTTPException: 404 if current organization not found
+        HTTPException: 404 if organization not found
     """
     try:
-        return await service.get_org_app_settings()
+        return await service.get_org_app_settings(target_org_id=org_id)
     except OrgNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail='Current organization not found',
+            detail='Organization not found',
         )
     except Exception as e:
         logger.exception(
             'Unexpected error retrieving organization app settings',
-            extra={'error': str(e)},
+            extra={'error': str(e), 'org_id': str(org_id)},
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -437,24 +438,25 @@ async def get_org_app_settings(
 
 
 @org_router.post(
-    '/app',
+    '/{org_id}/app',
     response_model=OrgAppSettingsResponse,
     dependencies=[Depends(require_permission(Permission.MANAGE_APPLICATION_SETTINGS))],
 )
 async def update_org_app_settings(
+    org_id: UUID,
     update_data: OrgAppSettingsUpdate,
     service: OrgAppSettingsService = org_app_settings_service_dependency,
 ) -> OrgAppSettingsResponse:
-    """Update organization app settings for the user's current organization.
+    """Update organization app settings for a specific organization.
 
-    This endpoint updates application settings for the authenticated user's
-    current organization. Access requires the MANAGE_APPLICATION_SETTINGS permission,
-    which is granted to all organization members (member, admin, and owner roles).
+    This endpoint updates application settings for the specified organization.
+    Access requires the MANAGE_APPLICATION_SETTINGS permission.
 
     Implements optimistic locking: if last_known_updated_at is provided and doesn't
     match the current version, returns 409 Conflict.
 
     Args:
+        org_id: The target organization UUID
         update_data: App settings update data
         service: OrgAppSettingsService (injected by dependency)
 
@@ -464,13 +466,13 @@ async def update_org_app_settings(
     Raises:
         HTTPException: 401 if user is not authenticated
         HTTPException: 403 if user lacks MANAGE_APPLICATION_SETTINGS permission
-        HTTPException: 404 if current organization not found
+        HTTPException: 404 if organization not found
         HTTPException: 409 if concurrent modification conflict detected
         HTTPException: 422 if validation errors occur (handled by FastAPI)
         HTTPException: 500 if update fails
     """
     try:
-        return await service.update_org_app_settings(update_data)
+        return await service.update_org_app_settings(update_data, target_org_id=org_id)
     except OrgConcurrentModificationError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

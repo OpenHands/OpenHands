@@ -51,6 +51,7 @@ export function MarketplaceModal({
     initialScope || "personal",
   );
   const [nameError, setNameError] = React.useState<string | null>(null);
+  const [sourceError, setSourceError] = React.useState<string | null>(null);
 
   // Reset form when modal opens/closes or marketplace changes
   React.useEffect(() => {
@@ -62,6 +63,7 @@ export function MarketplaceModal({
       setAutoLoad(marketplace?.auto_load === "all");
       setScope(initialScope || "personal");
       setNameError(null);
+      setSourceError(null);
     }
   }, [isOpen, marketplace, initialScope]);
 
@@ -76,6 +78,7 @@ export function MarketplaceModal({
       return;
     }
     if (!source.trim()) {
+      setSourceError(t(I18nKey.SETTINGS$MARKETPLACE_SOURCE_REQUIRED));
       return;
     }
     setNameError(null);
@@ -202,13 +205,24 @@ export function MarketplaceModal({
           <input
             type="text"
             value={source}
-            onChange={(e) => setSource(e.target.value)}
+            onChange={(e) => {
+              setSource(e.target.value);
+              setSourceError(null);
+            }}
             placeholder="github:owner/repo"
             disabled={isEdit}
             readOnly={isEdit}
-            className="bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt disabled:opacity-50 disabled:cursor-not-allowed"
+            className={cn(
+              "bg-tertiary border h-10 w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt disabled:opacity-50 disabled:cursor-not-allowed",
+              sourceError && "border-red-500",
+            )}
           />
-          {isEdit && (
+          {sourceError && (
+            <Typography.Paragraph className="text-xs text-red-400">
+              {sourceError}
+            </Typography.Paragraph>
+          )}
+          {!sourceError && isEdit && (
             <Typography.Paragraph className="text-xs text-tertiary-alt">
               {t(I18nKey.SETTINGS$MARKETPLACE_SOURCE_READONLY)}
             </Typography.Paragraph>
