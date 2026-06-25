@@ -446,7 +446,7 @@ class TestSandboxLifecycle:
         remote_sandbox_service.pause_old_sandboxes = AsyncMock(return_value=[])
 
         # Execute & Verify
-        with pytest.raises(ValueError, match='Sandbox Spec not found'):
+        with pytest.raises(ValueError, match=r"Sandbox Spec '.*' not found"):
             await remote_sandbox_service.start_sandbox('non-existent-spec')
 
     @pytest.mark.asyncio
