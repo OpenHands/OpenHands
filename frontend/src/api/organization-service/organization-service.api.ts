@@ -291,8 +291,8 @@ export const organizationService = {
     search?: string;
     sortBy?: string;
     sortOrder?: string;
-    executionStatus?: string[];
-    sandboxStatus?: string[];
+    executionStatus?: string;
+    sandboxStatus?: string;
     timeWindow?: string;
     includeSubConversations?: boolean;
   }) => {
@@ -302,12 +302,8 @@ export const organizationService = {
     params.set("sort_by", sortBy);
     params.set("sort_order", sortOrder);
     if (search) params.set("search", search);
-    if (executionStatus?.length) {
-      executionStatus.forEach((s) => params.append("execution_status", s));
-    }
-    if (sandboxStatus?.length) {
-      sandboxStatus.forEach((s) => params.append("sandbox_status", s));
-    }
+    if (executionStatus) params.set("execution_status", executionStatus);
+    if (sandboxStatus) params.set("sandbox_status", sandboxStatus);
     if (timeWindow) params.set("time_window", timeWindow);
     if (includeSubConversations)
       params.set("include_sub_conversations", "true");
@@ -360,20 +356,16 @@ export const organizationService = {
     search?: string;
     sortBy?: string;
     sortOrder?: string;
-    executionStatus?: string[];
-    sandboxStatus?: string[];
+    executionStatus?: string;
+    sandboxStatus?: string;
     timeWindow?: string;
   }) => {
     const params = new URLSearchParams();
     params.set("sort_by", sortBy);
     params.set("sort_order", sortOrder);
     if (search) params.set("search", search);
-    if (executionStatus?.length) {
-      executionStatus.forEach((s) => params.append("execution_status", s));
-    }
-    if (sandboxStatus?.length) {
-      sandboxStatus.forEach((s) => params.append("sandbox_status", s));
-    }
+    if (executionStatus) params.set("execution_status", executionStatus);
+    if (sandboxStatus) params.set("sandbox_status", sandboxStatus);
     if (timeWindow) params.set("time_window", timeWindow);
     return `/api/organizations/${orgId}/conversations/export?${params.toString()}`;
   },

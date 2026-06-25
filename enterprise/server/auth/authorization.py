@@ -163,6 +163,8 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.MANAGE_ORG_CLAIMS,
             # Manage Automations
             Permission.MANAGE_AUTOMATIONS,
+            # User provisioning
+            Permission.PROVISION_USER,
             # Organization Conversations (Admin/Owner only)
             Permission.VIEW_ORG_CONVERSATIONS,
         ]
