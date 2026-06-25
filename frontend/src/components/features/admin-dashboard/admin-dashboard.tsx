@@ -1,9 +1,12 @@
 /* eslint-disable i18next/no-literal-string */
 import React, { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import toast from "react-hot-toast";
-import { useOrganizations } from "#/hooks/query/use-organizations";
+import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { useOrgConversationStats } from "#/hooks/query/use-org-conversation-stats";
+import { useOrgConversations } from "#/hooks/query/use-org-conversations";
+import { useOrgUsageStats } from "#/hooks/query/use-org-usage-stats";
+import { useStopConversation } from "#/hooks/mutation/use-stop-conversation";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 
 // Conversation statuses from which the user can no longer stop a running
@@ -315,17 +318,16 @@ const getDaysFromTimeWindow = (timeWindow: string): number => {
 };
 
 export function AdminDashboard() {
-  const { data: orgData } = useOrganizations();
+  const { organizationId } = useSelectedOrganizationId();
   const [activeTab, setActiveTab] = useState<"conversations" | "usage">(
     "conversations",
   );
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Use current org from organizations list (first team org)
-  const currentOrg = orgData?.organizations?.find(
-    (org: { is_personal?: boolean }) => !org.is_personal,
-  );
-  const orgId = currentOrg?.id;
+  // Use the currently selected org (from the org switcher) rather than
+  // deriving from the org list — avoids mismatches when the user belongs
+  // to multiple orgs and has different roles in each.
+  const orgId = organizationId ?? undefined;
 
   // Filter state from URL params
   const page = parseInt(searchParams.get("page") || "1", 10);
@@ -338,91 +340,28 @@ export function AdminDashboard() {
   const timeWindow = searchParams.get("time_window") || "";
 
   // Fetch stats
-  const { data: stats } = useQuery({
-    queryKey: ["org-conversation-stats", orgId],
-    queryFn: () => organizationService.getConversationStats({ orgId: orgId! }),
-    enabled: !!orgId,
-  });
+  const { data: stats } = useOrgConversationStats();
 
   // Fetch usage stats for Usage tab
-  const { data: usageStats } = useQuery({
-    queryKey: ["org-usage-stats", orgId],
-    queryFn: () => organizationService.getUsageStats({ orgId: orgId! }),
-    enabled: !!orgId && activeTab === "usage",
+  const { data: usageStats } = useOrgUsageStats({
+    days: getDaysFromTimeWindow(timeWindow),
   });
 
   // Fetch conversations
-  const { data: conversationsData, isLoading: conversationsLoading } = useQuery(
-    {
-      queryKey: [
-        "org-conversations",
-        orgId,
-        page,
-        perPage,
-        search,
-        sortBy,
-        sortOrder,
-        executionStatus,
-        sandboxStatus,
-        timeWindow,
-      ],
-      queryFn: () =>
-        organizationService.getConversations({
-          orgId: orgId!,
-          page,
-          perPage,
-          search: search || undefined,
-          sortBy,
-          sortOrder,
-          executionStatus: executionStatus.length ? executionStatus : undefined,
-          sandboxStatus: sandboxStatus.length ? sandboxStatus : undefined,
-          timeWindow: timeWindow || undefined,
-        }),
-      enabled: !!orgId,
-    },
-  );
+  const { data: conversationsData, isLoading: conversationsLoading } =
+    useOrgConversations({
+      page,
+      perPage,
+      search,
+      sortBy,
+      sortOrder,
+      executionStatus,
+      sandboxStatus,
+      timeWindow,
+    });
 
-  const queryClient = useQueryClient();
   const [stoppingIds, setStoppingIds] = useState<Set<string>>(new Set());
-
-  const stopConversation = useMutation({
-    mutationFn: ({ conversationId }: { conversationId: string }) =>
-      organizationService.stopConversation({
-        orgId: orgId!,
-        conversationId,
-      }),
-    onMutate: ({ conversationId }) => {
-      setStoppingIds((prev) => {
-        const next = new Set(prev);
-        next.add(conversationId);
-        return next;
-      });
-      const toastId = toast.loading("Stopping conversation…");
-      return { toastId, conversationId };
-    },
-    onError: (_err, _vars, context) => {
-      if (context?.toastId) toast.dismiss(context.toastId);
-      toast.error("Failed to stop conversation");
-    },
-    onSettled: (_data, _err, { conversationId }, context) => {
-      setStoppingIds((prev) => {
-        if (!prev.has(conversationId)) return prev;
-        const next = new Set(prev);
-        next.delete(conversationId);
-        return next;
-      });
-      if (context?.toastId) toast.dismiss(context.toastId);
-    },
-    onSuccess: () => {
-      toast.success("Conversation stopped");
-      queryClient.invalidateQueries({
-        queryKey: ["org-conversations", orgId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["org-conversation-stats", orgId],
-      });
-    },
-  });
+  const stopConversation = useStopConversation();
 
   const handleStop = (conversation: { id: string; title: string | null }) => {
     const label = conversation.title?.trim() || "this conversation";
@@ -431,7 +370,26 @@ export function AdminDashboard() {
       `Stop "${label}"? This will cancel any in-progress agent run.`,
     );
     if (!confirmed) return;
-    stopConversation.mutate({ conversationId: conversation.id });
+    setStoppingIds((prev) => {
+      const next = new Set(prev);
+      next.add(conversation.id);
+      return next;
+    });
+    const toastId = toast.loading("Stopping conversation…");
+    stopConversation.mutate(
+      { conversationId: conversation.id },
+      {
+        onSettled: () => {
+          setStoppingIds((prev) => {
+            if (!prev.has(conversation.id)) return prev;
+            const next = new Set(prev);
+            next.delete(conversation.id);
+            return next;
+          });
+          toast.dismiss(toastId);
+        },
+      },
+    );
   };
 
   const updateFilter = (key: string, value: string | string[] | null) => {

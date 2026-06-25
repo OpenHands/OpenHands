@@ -765,11 +765,18 @@ class OrgConversationService:
                     }
 
                 # Update execution status to indicate stopping
+                previous_status = metadata.execution_status
                 metadata.execution_status = 'deleting'
                 await self.db_session.commit()
 
                 # Actually terminate the sandbox
-                await self.sandbox_service.delete_sandbox(metadata.sandbox_id)
+                try:
+                    await self.sandbox_service.delete_sandbox(metadata.sandbox_id)
+                except Exception:
+                    # Rollback the status change so the row isn't left as 'deleting'
+                    metadata.execution_status = previous_status
+                    await self.db_session.commit()
+                    raise
 
                 logger.info(
                     'Stopping sandbox for org conversation',
