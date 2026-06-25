@@ -3314,7 +3314,7 @@ requires-dist = [
     { name = "anthropic", extras = ["vertex"] },
     { name = "anyio", specifier = "==4.9" },
     { name = "asyncpg", specifier = ">=0.30" },
-    { name = "authlib", specifier = ">=1.6.12" },
+    { name = "authlib", specifier = ">=1.6.12,!=1.7.0" },
     { name = "bashlex", specifier = ">=0.18" },
     { name = "binaryornot", specifier = ">=0.5.0,<1" },
     { name = "boto3" },
