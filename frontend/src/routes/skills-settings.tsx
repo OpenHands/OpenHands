@@ -57,7 +57,7 @@ function WhiteToggle({
     >
       <div
         className={cn(
-          "w-12 h-6 rounded-xl flex items-center p-1.5",
+          "w-12 h-6 rounded-xl flex items-center p-1.5 transition-all duration-200",
           isToggled && "justify-end bg-white",
           !isToggled && "justify-start bg-base-secondary",
           disabled && "opacity-50",
@@ -65,7 +65,7 @@ function WhiteToggle({
       >
         <div
           className={cn(
-            "w-3 h-3 rounded-xl",
+            "w-3 h-3 rounded-xl transition-all duration-200",
             isToggled ? "bg-[#0D0F11]" : "bg-tertiary-light",
           )}
         />
@@ -756,6 +756,15 @@ function SkillsSettingsScreen() {
       );
       setPersonalMarketplaces(newPersonalMarketplaces);
     }
+
+    // Also update allMarketplaces so the UI reflects the change
+    setAllMarketplaces((prev) =>
+      prev.map((mp) =>
+        mp.source === source
+          ? { ...mp, auto_load: mp.auto_load === "all" ? undefined : "all" }
+          : mp,
+      ),
+    );
 
     // Check if all marketplace values match their original state
     let hasChanges = false;
