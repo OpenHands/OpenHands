@@ -174,4 +174,5 @@ export type Settings = {
   inherited_marketplaces?: MarketplaceWithScope[];
   /** For optimistic locking - timestamp of last modification */
   updated_at?: string;
+  default_sandbox_spec_id?: string | null;
 };

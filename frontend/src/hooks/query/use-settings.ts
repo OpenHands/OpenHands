@@ -106,6 +106,7 @@ const normalizeSettingsResponse = (settings: Partial<Settings>): Settings => {
     sandbox_grouping_strategy:
       settings.sandbox_grouping_strategy ??
       DEFAULT_SETTINGS.sandbox_grouping_strategy,
+    default_sandbox_spec_id: settings.default_sandbox_spec_id ?? null,
   };
 };
 
