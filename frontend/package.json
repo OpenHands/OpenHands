@@ -130,6 +130,7 @@
   },
   "overrides": {
     "dompurify": "3.4.11",
-    "qs": "6.15.2"
+    "qs": "6.15.2",
+    "@opentelemetry/core": "2.8.0"
   }
 }
