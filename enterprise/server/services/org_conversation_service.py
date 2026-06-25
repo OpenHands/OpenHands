@@ -68,9 +68,7 @@ class OrgConversationService:
         sandbox_info: SandboxInfo | None,
     ) -> OrgConversationResponse:
         """Build an OrgConversationResponse from a row and sandbox info."""
-        resolved_sandbox_status = (
-            sandbox_info.status.value if sandbox_info else None
-        )
+        resolved_sandbox_status = sandbox_info.status.value if sandbox_info else None
 
         # Construct runtime URL from exposed URLs
         runtime_url = None
