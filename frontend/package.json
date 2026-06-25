@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.12.0",
+    "npm": ">=11.17.0"
   },
   "dependencies": {
     "@heroui/react": "2.8.8",
@@ -119,7 +120,7 @@
     "vite-tsconfig-paths": "^6.1.0",
     "vitest": "^4.1.0"
   },
-  "packageManager": "npm@10.5.0",
+  "packageManager": "npm@11.17.0",
   "volta": {
     "node": "22.12.0"
   },

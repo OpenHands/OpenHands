@@ -80,10 +80,10 @@ check-python:
 
 check-npm:
 	@echo "$(YELLOW)Checking npm installation...$(RESET)"
-	@if command -v npm > /dev/null; then \
-		echo "$(BLUE)npm $(shell npm --version) is already installed.$(RESET)"; \
+	@if command -v corepack > /dev/null; then \
+		echo "$(BLUE)corepack is installed; frontend npm is managed by packageManager.$(RESET)"; \
 	else \
-		echo "$(RED)npm is not installed. Please install Node.js to continue.$(RESET)"; \
+		echo "$(RED)corepack is not installed. Please install Node.js 22.x or later to continue.$(RESET)"; \
 		exit 1; \
 	fi
 
@@ -190,7 +190,7 @@ install-frontend-dependencies: check-npm check-nodejs
 	@echo "$(YELLOW)Detect Node.js version...$(RESET)"
 	@cd frontend && node ./scripts/detect-node-version.js
 	echo "$(BLUE)Installing frontend dependencies with npm...$(RESET)"
-	@cd frontend && npm install
+	@cd frontend && corepack npm install
 	@echo "$(GREEN)Frontend dependencies installed successfully.$(RESET)"
 
 install-pre-commit-hooks: check-python check-poetry install-python-dependencies
@@ -205,7 +205,7 @@ lint-backend: install-pre-commit-hooks
 
 lint-frontend: install-frontend-dependencies
 	@echo "$(YELLOW)Running linters for frontend...$(RESET)"
-	@cd frontend && npm run lint
+	@cd frontend && corepack npm run lint
 
 lint:
 	@$(MAKE) -s lint-frontend
@@ -247,14 +247,14 @@ kind:
 
 test-frontend:
 	@echo "$(YELLOW)Running tests for frontend...$(RESET)"
-	@cd frontend && npm run test
+	@cd frontend && corepack npm run test
 
 test:
 	@$(MAKE) -s test-frontend
 
 build-frontend:
 	@echo "$(YELLOW)Building frontend...$(RESET)"
-	@cd frontend && npm run prepare && npm run build
+	@cd frontend && corepack npm run prepare && corepack npm run build
 
 # Start backend
 start-backend:
@@ -271,7 +271,7 @@ start-frontend:
 	else \
 		SCRIPT=dev; \
 	fi; \
-	VITE_BACKEND_HOST=$(BACKEND_HOST_PORT) VITE_FRONTEND_PORT=$(FRONTEND_PORT) npm run $$SCRIPT -- --port $(FRONTEND_PORT) --host $(BACKEND_HOST)
+	VITE_BACKEND_HOST=$(BACKEND_HOST_PORT) VITE_FRONTEND_PORT=$(FRONTEND_PORT) corepack npm run $$SCRIPT -- --port $(FRONTEND_PORT) --host $(BACKEND_HOST)
 
 # Common setup for running the app (non-callable)
 _run_setup:

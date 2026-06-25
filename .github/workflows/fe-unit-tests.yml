@@ -37,10 +37,10 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         working-directory: ./frontend
-        run: npm ci
+        run: corepack npm ci
       - name: Run TypeScript compilation
         working-directory: ./frontend
-        run: npm run build
+        run: corepack npm run build
       - name: Run tests and collect coverage
         working-directory: ./frontend
-        run: npm run test:coverage
+        run: corepack npm run test:coverage

@@ -21,7 +21,7 @@ This is the frontend of the OpenHands project. It is a React application that pr
 ### Prerequisites
 
 - Node.js 22.12.x or later
-- `npm`, `bun`, or any other package manager that supports the `package.json` file
+- Corepack, using the `npm` version pinned by `packageManager` in `package.json`
 
 ### Installation
 
@@ -33,7 +33,7 @@ git clone https://github.com/OpenHands/OpenHands.git
 cd OpenHands/frontend
 
 # Install the dependencies
-npm install
+corepack npm install
 ```
 
 ### Running the Application in Development Mode
@@ -41,7 +41,7 @@ npm install
 We use `msw` to mock the backend API. To start the application with the mocked backend, run the following command:
 
 ```sh
-npm run dev
+corepack npm run dev
 ```
 
 This will start the application in development mode. Open [http://localhost:3001](http://localhost:3001) to view it in the browser.
@@ -69,12 +69,12 @@ make start-backend
 
 # Serve the frontend
 make start-frontend or
-cd frontend && npm start -- --port 3001
+cd frontend && corepack npm start -- --port 3001
 ```
 
 Start frontend with Mock Service Worker (MSW), see testing for more info.
 ```sh
-npm run dev:mock or npm run dev:mock:saas
+corepack npm run dev:mock or corepack npm run dev:mock:saas
 ```
 
 ### Environment Variables
@@ -151,12 +151,12 @@ We use the following testing tools:
 
 To run all tests:
 ```sh
-npm run test
+corepack npm run test
 ```
 
 To run tests with coverage:
 ```sh
-npm run test:coverage
+corepack npm run test:coverage
 ```
 
 ### Testing Best Practices

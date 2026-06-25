@@ -29,17 +29,17 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         working-directory: ./frontend
-        run: npm ci
+        run: corepack npm ci
       - name: Generate i18n and route types
         run: |
           cd frontend
-          npm run make-i18n
-          npx react-router typegen || true
+          corepack npm run make-i18n
+          corepack npx react-router typegen || true
 
       - name: Fix frontend lint issues
         run: |
           cd frontend
-          npm run lint:fix
+          corepack npm run lint:fix
 
       # Commit and push changes if any
       - name: Check for changes
