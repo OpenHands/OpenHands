@@ -1333,8 +1333,14 @@ class TestGetEffectiveLlmApiKey:
         # Must return org key when has_custom_llm_api_key is False
         assert result == SecretStr('org-api-key')
 
-    def test_returns_org_key_when_member_has_custom_false_and_org_has_no_key(self):
-        """When has_custom_llm_api_key is False but org has no key, returns None."""
+    def test_falls_back_to_managed_member_key_when_org_key_unset(self):
+        """has_custom False + no org key: fall back to the managed key on the member row.
+
+        Managed/proxy keys are persisted on org_member.llm_api_key with
+        has_custom_llm_api_key=False. #14898 dropped this fallback entirely, which
+        left managed-key users with no key (and wiped it on settings save).
+        """
+        from pydantic import SecretStr
         from storage.saas_settings_store import SaasSettingsStore
 
         org = MagicMock()
@@ -1342,8 +1348,25 @@ class TestGetEffectiveLlmApiKey:
 
         member = MagicMock()
         member.has_custom_llm_api_key = False
+        member._llm_api_key = 'encrypted-managed-key'  # truthy => set
+        type(member).llm_api_key = PropertyMock(return_value=SecretStr('managed-key'))
+
+        result = SaasSettingsStore._get_effective_llm_api_key(org, member)
+
+        assert result == SecretStr('managed-key')
+
+    def test_returns_none_without_decrypting_when_member_key_unset(self):
+        """has_custom False, no org key, empty member key: None, never decrypt (#14898)."""
+        from storage.saas_settings_store import SaasSettingsStore
+
+        org = MagicMock()
+        org.llm_api_key = None
+
+        member = MagicMock()
+        member.has_custom_llm_api_key = False
+        member._llm_api_key = ''  # falsy => not set; must NOT decrypt
         type(member).llm_api_key = PropertyMock(
-            side_effect=AssertionError('should not be accessed')
+            side_effect=AssertionError('should not decrypt an unset member key')
         )
 
         result = SaasSettingsStore._get_effective_llm_api_key(org, member)
