@@ -23,6 +23,7 @@ AZURE_DEVOPS_CLIENT_ID = os.getenv('AZURE_DEVOPS_CLIENT_ID', '').strip()
 AZURE_DEVOPS_CLIENT_SECRET = os.getenv('AZURE_DEVOPS_CLIENT_SECRET', '').strip()
 AZURE_DEVOPS_TENANT_ID = os.getenv('AZURE_DEVOPS_TENANT_ID', '').strip()
 AZURE_DEVOPS_ORGANIZATION = os.getenv('AZURE_DEVOPS_ORGANIZATION', '').strip()
+AZURE_DEVOPS_WEBHOOK_SECRET = os.getenv('AZURE_DEVOPS_WEBHOOK_SECRET', '').strip()
 AZURE_DEVOPS_SCOPE = os.getenv(
     'AZURE_DEVOPS_SCOPE', 'https://app.vssps.visualstudio.com/.default'
 ).strip()

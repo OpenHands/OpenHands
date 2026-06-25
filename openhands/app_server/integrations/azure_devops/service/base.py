@@ -65,3 +65,8 @@ class AzureDevOpsMixinBase(BaseGitService, HTTPClient):
             URL-encoded string with spaces and special characters properly encoded
         """
         return quote(component, safe='')
+
+    def _project_base_url(self, org: str, project: str) -> str:
+        org_enc = self._encode_url_component(org)
+        project_enc = self._encode_url_component(project)
+        return f'https://dev.azure.com/{org_enc}/{project_enc}'

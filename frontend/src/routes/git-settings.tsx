@@ -12,6 +12,7 @@ import { BitbucketTokenInput } from "#/components/features/settings/git-settings
 import { BitbucketDCTokenInput } from "#/components/features/settings/git-settings/bitbucket-dc-token-help-input";
 import { BitbucketDCWebhookManager } from "#/components/features/settings/git-settings/bitbucket-dc-webhook-manager";
 import { AzureDevOpsTokenInput } from "#/components/features/settings/git-settings/azure-devops-token-input";
+import { AzureDevOpsWebhookManager } from "#/components/features/settings/git-settings/azure-devops-webhook-manager";
 import { ForgejoTokenInput } from "#/components/features/settings/git-settings/forgejo-token-input";
 import { ConfigureGitHubRepositoriesAnchor } from "#/components/features/settings/git-settings/configure-github-repositories-anchor";
 import { ConfigureAzureDevOpsAnchor } from "#/components/features/settings/git-settings/configure-azure-devops-anchor";
@@ -330,7 +331,11 @@ function GitSettingsScreen() {
                       : t(I18nKey.AZURE_DEVOPS$NOT_CONNECTED)}
                   </Typography.Text>
                 </div>
-                <ConfigureAzureDevOpsAnchor />
+                {isAzureDevOpsTokenSet ? (
+                  <AzureDevOpsWebhookManager />
+                ) : (
+                  <ConfigureAzureDevOpsAnchor />
+                )}
               </div>
               <div className="w-1/2 border-b border-gray-200" />
             </>

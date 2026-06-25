@@ -1,5 +1,8 @@
 import { openHands } from "../open-hands-axios";
 import {
+  AzureDevOpsResourceIdentifier,
+  AzureDevOpsResourcesResponse,
+  AzureDevOpsWebhookInstallationResult,
   BitbucketDCResourcesResponse,
   BitbucketDCWebhookEnrollmentResult,
   BitbucketDCWebhookIdUpdateResult,
@@ -121,6 +124,46 @@ export const integrationService = {
   }): Promise<BitbucketDCWebhookInstallationResult> => {
     const { data } = await openHands.post<BitbucketDCWebhookInstallationResult>(
       "/integration/bitbucket-dc/uninstall-webhook",
+      { resource },
+    );
+    return data;
+  },
+
+  /**
+   * Get all Azure DevOps repositories visible to the user with resolver hook status.
+   */
+  getAzureDevOpsResources: async (): Promise<AzureDevOpsResourcesResponse> => {
+    const { data } = await openHands.get<AzureDevOpsResourcesResponse>(
+      "/integration/azure-devops/resources",
+    );
+    return data;
+  },
+
+  /**
+   * Install or reinstall the Azure DevOps resolver Service Hooks.
+   */
+  reinstallAzureDevOpsWebhook: async ({
+    resource,
+  }: {
+    resource: AzureDevOpsResourceIdentifier;
+  }): Promise<AzureDevOpsWebhookInstallationResult> => {
+    const { data } = await openHands.post<AzureDevOpsWebhookInstallationResult>(
+      "/integration/azure-devops/reinstall-webhook",
+      { resource },
+    );
+    return data;
+  },
+
+  /**
+   * Delete the Azure DevOps resolver Service Hooks for a repository.
+   */
+  uninstallAzureDevOpsWebhook: async ({
+    resource,
+  }: {
+    resource: AzureDevOpsResourceIdentifier;
+  }): Promise<AzureDevOpsWebhookInstallationResult> => {
+    const { data } = await openHands.post<AzureDevOpsWebhookInstallationResult>(
+      "/integration/azure-devops/uninstall-webhook",
       { resource },
     );
     return data;

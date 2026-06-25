@@ -93,3 +93,39 @@ export interface BitbucketDCWebhookInstallationResult {
   connection_id: number | null;
   webhook_url: string | null;
 }
+
+export interface AzureDevOpsResource {
+  organization: string;
+  project_id: string;
+  project_name: string;
+  full_name: string;
+  type: "project";
+  webhook_installed: boolean;
+  pr_webhook_installed: boolean;
+  work_item_webhook_installed: boolean;
+  pr_subscription_id: string | null;
+  work_item_subscription_id: string | null;
+  webhook_url: string;
+  webhook_secret_set: boolean;
+}
+
+export interface AzureDevOpsResourcesResponse {
+  resources: AzureDevOpsResource[];
+}
+
+export interface AzureDevOpsResourceIdentifier {
+  organization: string;
+  project_id: string;
+  project_name: string;
+}
+
+export interface AzureDevOpsWebhookInstallationResult {
+  organization: string;
+  project_id: string;
+  project_name: string;
+  success: boolean;
+  error: string | null;
+  pr_subscription_id: string | null;
+  work_item_subscription_id: string | null;
+  webhook_url: string;
+}
