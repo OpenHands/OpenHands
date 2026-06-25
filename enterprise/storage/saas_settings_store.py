@@ -218,6 +218,9 @@ class SaasSettingsStore(SettingsStore):
         # Apply default if sandbox_grouping_strategy is None in the database
         if kwargs.get('sandbox_grouping_strategy') is None:
             kwargs.pop('sandbox_grouping_strategy', None)
+        # Apply default if git_full_clone is None in the database (pre-existing rows)
+        if kwargs.get('git_full_clone') is None:
+            kwargs.pop('git_full_clone', None)
         # Profiles in SaaS live on the org (managed via
         # /api/organizations/{org_id}/profiles). Surface them through
         # Settings.llm_profiles so the chat-layer endpoints
