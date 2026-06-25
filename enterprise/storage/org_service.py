@@ -53,7 +53,9 @@ class OrgService:
             raise OrgNameExistsError(name)
 
     @staticmethod
-    async def create_litellm_integration(org_id: UUID, user_id: str) -> Settings:
+    async def create_litellm_integration(
+        org_id: UUID, user_id: str, add_user_to_litellm_team: bool = True
+    ) -> Settings:
         """
         Create LiteLLM team integration for the organization.
 
@@ -69,7 +71,10 @@ class OrgService:
         """
         try:
             settings = await UserStore.create_default_settings(
-                org_id=str(org_id), user_id=user_id, create_user=False
+                org_id=str(org_id),
+                user_id=user_id,
+                create_user=False,
+                add_user_to_litellm_team=add_user_to_litellm_team,
             )
 
             if not settings:
@@ -190,9 +195,10 @@ class OrgService:
         contact_name: str,
         contact_email: str,
         user_id: str,
+        add_creator_as_owner: bool = True,
     ) -> Org:
         """
-        Create a new organization with the specified user as owner.
+        Create a new organization, optionally with the specified user as owner.
 
         This method orchestrates the complete organization creation workflow:
         1. Validates that the organization name doesn't already exist
@@ -200,7 +206,7 @@ class OrgService:
         3. Creates LiteLLM team integration
         4. Creates the organization entity
         5. Applies LiteLLM settings
-        6. Creates owner membership
+        6. Creates owner membership when requested
         7. Persists everything in a transaction
 
         If database persistence fails, LiteLLM resources are cleaned up (compensation).
@@ -209,7 +215,8 @@ class OrgService:
             name: Organization name (must be unique)
             contact_name: Contact person name
             contact_email: Contact email address
-            user_id: ID of the user who will be the owner
+            user_id: ID of the user initiating creation
+            add_creator_as_owner: Whether to add the creator as org owner
 
         Returns:
             Org: The created organization object
@@ -231,7 +238,9 @@ class OrgService:
         org_id = uuid4()
 
         # Step 3: Create LiteLLM integration (external state created)
-        settings = await OrgService.create_litellm_integration(org_id, user_id)
+        settings = await OrgService.create_litellm_integration(
+            org_id, user_id, add_user_to_litellm_team=add_creator_as_owner
+        )
 
         # Steps 4-7: Create entities and persist with compensation
         # If any of these fail, we need to clean up LiteLLM resources
@@ -247,14 +256,16 @@ class OrgService:
             # Step 5: Apply LiteLLM settings
             OrgService.apply_litellm_settings_to_org(org, settings)
 
-            # Step 6: Get owner role and create member entity
-            owner_role = await OrgService.get_owner_role()
-            org_member = OrgService.create_org_member_entity(
-                org_id=org_id,
-                user_id=user_id,
-                role_id=owner_role.id,
-                settings=settings,
-            )
+            org_member = None
+            if add_creator_as_owner:
+                # Step 6: Get owner role and create member entity
+                owner_role = await OrgService.get_owner_role()
+                org_member = OrgService.create_org_member_entity(
+                    org_id=org_id,
+                    user_id=user_id,
+                    role_id=owner_role.id,
+                    settings=settings,
+                )
 
             # Step 7: Persist in transaction (critical section)
             persisted_org = await OrgService._persist_with_compensation(
@@ -267,7 +278,7 @@ class OrgService:
                     'org_id': str(persisted_org.id),
                     'org_name': persisted_org.name,
                     'user_id': user_id,
-                    'role': 'owner',
+                    'role': 'owner' if add_creator_as_owner else None,
                 },
             )
 
@@ -293,7 +304,7 @@ class OrgService:
     @staticmethod
     async def _persist_with_compensation(
         org: Org,
-        org_member: OrgMember,
+        org_member: OrgMember | None,
         org_id: UUID,
         user_id: str,
     ) -> Org:
@@ -304,7 +315,7 @@ class OrgService:
 
         Args:
             org: Organization entity to persist
-            org_member: Organization member entity to persist
+            org_member: Optional organization member entity to persist
             org_id: Organization ID (for cleanup)
             user_id: User ID (for cleanup)
 

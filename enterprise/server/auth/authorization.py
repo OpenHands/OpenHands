@@ -211,13 +211,17 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
 # This keeps instance administration separate from organization-scoped
 # product/configuration administration.
 SUPER_ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
-    # Bootstrap/break-glass superowner and regular superadmin currently
-    # only grant instance-level organization creation. Additional
-    # instance-admin capabilities (for example, cross-org member management)
+    # Bootstrap/break-glass superowner and regular superadmin can create
+    # organizations and provision users into a selected organization without
+    # becoming org members themselves. Additional instance-admin capabilities
     # should be added here explicitly as the corresponding routes are wired
     # to permission checks.
-    RoleName.OWNER: frozenset([Permission.CREATE_ORGANIZATION]),
-    RoleName.ADMIN: frozenset([Permission.CREATE_ORGANIZATION]),
+    RoleName.OWNER: frozenset(
+        [Permission.CREATE_ORGANIZATION, Permission.PROVISION_USER]
+    ),
+    RoleName.ADMIN: frozenset(
+        [Permission.CREATE_ORGANIZATION, Permission.PROVISION_USER]
+    ),
     RoleName.MEMBER: frozenset(),
 }
 

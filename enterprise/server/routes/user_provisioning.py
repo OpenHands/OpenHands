@@ -4,8 +4,9 @@ Admin endpoint for provisioning new users directly into an organization.
 This is a privileged operation: it bypasses the normal sign-up flow
 (email verification, TOS acceptance, OAuth IDP round-trip) and creates a
 ready-to-use account on behalf of an org admin. Access is gated by the
-``PROVISION_USER`` permission, which is granted only to ``owner`` and
-``admin`` roles (see ``server.auth.authorization``).
+``PROVISION_USER`` permission, which is granted to org-scoped ``owner``
+and ``admin`` roles and explicit instance-level super roles (see
+``server.auth.authorization``).
 
 Flow (POST ``/api/organizations/provision-user``):
 
@@ -250,7 +251,9 @@ async def provision_user(
 
     The target org is the API key org if an API key is used, otherwise it is
     taken from the ``X-Org-Id`` header (resolved by ``EFFECTIVE_ORG_ID``).
-    The caller must hold the ``PROVISION_USER`` permission in that org (owner or admin).
+    The caller must hold the ``PROVISION_USER`` permission for that org.
+    Org-scoped owners/admins have it, and super roles may grant it explicitly
+    without org membership.
 
     Returns the email, password (generated if not supplied) and the
     new user's API key bound to the target org.

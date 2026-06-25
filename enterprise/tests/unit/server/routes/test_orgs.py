@@ -155,7 +155,7 @@ async def test_create_org_success(mock_app, grant_create_organization):
         patch(
             'server.routes.orgs.OrgService.create_org_with_owner',
             AsyncMock(return_value=mock_org),
-        ),
+        ) as create_org_mock,
         patch(
             'server.routes.orgs.OrgService.get_org_credits',
             AsyncMock(return_value=100.0),
@@ -168,6 +168,13 @@ async def test_create_org_success(mock_app, grant_create_organization):
 
         # Assert
         assert response.status_code == status.HTTP_201_CREATED
+        create_org_mock.assert_awaited_once_with(
+            name='Test Organization',
+            contact_name='John Doe',
+            contact_email='john@example.com',
+            user_id=TEST_USER_ID,
+            add_creator_as_owner=False,
+        )
         response_data = response.json()
         assert response_data['name'] == 'Test Organization'
         assert response_data['contact_name'] == 'John Doe'

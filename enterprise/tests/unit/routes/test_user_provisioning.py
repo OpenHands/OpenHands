@@ -48,7 +48,7 @@ class TestGeneratePassword:
 
 
 class TestProvisionUserPermissionWiring:
-    """The new permission must be present and assigned only to OWNER/ADMIN."""
+    """The provision permission is available to org admins and super roles."""
 
     def test_permission_enum_includes_provision_user(self):
         assert Permission.PROVISION_USER.value == 'provision_user'
@@ -61,6 +61,16 @@ class TestProvisionUserPermissionWiring:
 
     def test_member_does_not_have_permission(self):
         assert Permission.PROVISION_USER not in ROLE_PERMISSIONS[RoleName.MEMBER]
+
+    def test_superadmin_has_permission(self):
+        from server.auth.authorization import SUPER_ROLE_PERMISSIONS
+
+        assert Permission.PROVISION_USER in SUPER_ROLE_PERMISSIONS[RoleName.ADMIN]
+
+    def test_supermember_does_not_have_permission(self):
+        from server.auth.authorization import SUPER_ROLE_PERMISSIONS
+
+        assert Permission.PROVISION_USER not in SUPER_ROLE_PERMISSIONS[RoleName.MEMBER]
 
 
 class TestProvisionUserRequestValidation:

@@ -322,7 +322,9 @@ async def test_create_default_settings_v1_enabled_true_when_default_is_true(
     # Track the settings passed to LiteLlmManager.create_entries
     captured_settings = None
 
-    async def capture_create_entries(_org_id, _user_id, settings, _create_user):
+    async def capture_create_entries(
+        _org_id, _user_id, settings, _create_user, *, add_user_to_team=True
+    ):
         nonlocal captured_settings
         captured_settings = settings
         return settings
@@ -355,7 +357,9 @@ async def test_create_default_settings_v1_enabled_false_when_default_is_false(
     # Track the settings passed to LiteLlmManager.create_entries
     captured_settings = None
 
-    async def capture_create_entries(_org_id, _user_id, settings, _create_user):
+    async def capture_create_entries(
+        _org_id, _user_id, settings, _create_user, *, add_user_to_team=True
+    ):
         nonlocal captured_settings
         captured_settings = settings
         return settings

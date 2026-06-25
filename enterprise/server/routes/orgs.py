@@ -159,8 +159,8 @@ async def create_org(
     ``CREATE_ORGANIZATION`` permission to create a new organization. In
     practice this permission is only granted via a super role
     (``superowner`` / ``superadmin``); no regular,
-    org-scoped role carries it. The user who creates the organization
-    automatically becomes its owner.
+    org-scoped role carries it. The creator is not automatically added
+    as a member; a superadmin can provision the initial org users separately.
 
     Args:
         org_data: Organization creation data
@@ -190,6 +190,7 @@ async def create_org(
             contact_name=org_data.contact_name,
             contact_email=org_data.contact_email,
             user_id=user_id,
+            add_creator_as_owner=False,
         )
 
         # Retrieve credits from LiteLLM

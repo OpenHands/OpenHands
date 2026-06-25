@@ -1309,10 +1309,10 @@ class TestSuperRolePermissions:
         THEN: super roles do not inherit org-scoped permissions implicitly.
         """
         assert SUPER_ROLE_PERMISSIONS[RoleName.OWNER] == frozenset(
-            [Permission.CREATE_ORGANIZATION]
+            [Permission.CREATE_ORGANIZATION, Permission.PROVISION_USER]
         )
         assert SUPER_ROLE_PERMISSIONS[RoleName.ADMIN] == frozenset(
-            [Permission.CREATE_ORGANIZATION]
+            [Permission.CREATE_ORGANIZATION, Permission.PROVISION_USER]
         )
         assert SUPER_ROLE_PERMISSIONS[RoleName.MEMBER] == frozenset()
 
@@ -1331,7 +1331,9 @@ class TestSuperRolePermissions:
         THEN: it returns only explicit instance-level permissions.
         """
         perms = get_super_role_permissions('owner')
-        assert perms == frozenset([Permission.CREATE_ORGANIZATION])
+        assert perms == frozenset(
+            [Permission.CREATE_ORGANIZATION, Permission.PROVISION_USER]
+        )
         assert Permission.DELETE_ORGANIZATION not in perms
         assert Permission.CHANGE_ORGANIZATION_NAME not in perms
 
@@ -1348,7 +1350,7 @@ class TestSuperRolePermissions:
         GIVEN: SUPER_ROLE_PERMISSIONS mapping
         WHEN: looking up CREATE_ORGANIZATION across super roles
         THEN: superowner and superadmin carry CREATE_ORGANIZATION
-              permission, and supermember does not.
+              and PROVISION_USER permissions, and supermember does not.
         """
         assert Permission.CREATE_ORGANIZATION in SUPER_ROLE_PERMISSIONS[RoleName.OWNER]
         assert Permission.CREATE_ORGANIZATION in SUPER_ROLE_PERMISSIONS[RoleName.ADMIN]
@@ -1356,6 +1358,9 @@ class TestSuperRolePermissions:
             Permission.CREATE_ORGANIZATION
             not in SUPER_ROLE_PERMISSIONS[RoleName.MEMBER]
         )
+        assert Permission.PROVISION_USER in SUPER_ROLE_PERMISSIONS[RoleName.OWNER]
+        assert Permission.PROVISION_USER in SUPER_ROLE_PERMISSIONS[RoleName.ADMIN]
+        assert Permission.PROVISION_USER not in SUPER_ROLE_PERMISSIONS[RoleName.MEMBER]
 
 
 class TestHasPermissionSuper:
@@ -1516,7 +1521,7 @@ class TestRequirePermissionSuperRoleFallback:
         """
         GIVEN: a user with no org membership who has a superadmin role
                on the user record
-        WHEN: require_permission(CREATE_ORGANIZATION) runs
+        WHEN: require_permission(PROVISION_USER) runs
         THEN: the explicit super-role permission grants access.
         """
         user_id = str(uuid4())
@@ -1533,7 +1538,7 @@ class TestRequirePermissionSuperRoleFallback:
                 AsyncMock(return_value=_mock_role('admin')),
             ),
         ):
-            permission_checker = require_permission(Permission.CREATE_ORGANIZATION)
+            permission_checker = require_permission(Permission.PROVISION_USER)
             result = await permission_checker(
                 request=mock_request, org_id=org_id, user_id=user_id
             )
@@ -1637,7 +1642,7 @@ class TestRequirePermissionSuperRoleFallback:
         GIVEN: a route without an ``{org_id}`` path parameter, an
                ``X-Org-Id`` header that targets an org the user is NOT
                a member of, and a superadmin role on the user record
-        WHEN: ``require_permission(CREATE_ORGANIZATION)`` runs
+        WHEN: ``require_permission(PROVISION_USER)`` runs
         THEN: the resolver skips the membership rejection and the
               explicit super-role permission grants access.
         """
@@ -1661,7 +1666,7 @@ class TestRequirePermissionSuperRoleFallback:
                 AsyncMock(return_value=_mock_role('admin')),
             ),
         ):
-            permission_checker = require_permission(Permission.CREATE_ORGANIZATION)
+            permission_checker = require_permission(Permission.PROVISION_USER)
             result = await permission_checker(
                 request=mock_request, org_id=None, user_id=user_id
             )
