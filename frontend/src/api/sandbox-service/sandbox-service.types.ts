@@ -22,3 +22,16 @@ export interface V1SandboxInfo {
   exposed_urls: V1ExposedUrl[] | null;
   created_at: string;
 }
+
+export interface V1SandboxSpecInfo {
+  id: string;
+  command: string[] | null;
+  created_at: string;
+  initial_env: Record<string, string>;
+  working_dir: string;
+}
+
+export interface V1SandboxSpecPage {
+  items: V1SandboxSpecInfo[];
+  next_page_id: string | null;
+}

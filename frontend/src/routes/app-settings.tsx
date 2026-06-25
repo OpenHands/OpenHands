@@ -25,6 +25,7 @@ import {
   SandboxGroupingStrategyOptions,
 } from "#/types/settings";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
+import { useSandboxSpecs } from "#/hooks/query/use-sandbox-specs";
 
 export const clientLoader = createPermissionGuard(
   "manage_application_settings",
@@ -37,6 +38,8 @@ function AppSettingsScreen() {
   const { mutate: saveSettings, isPending } = useSaveSettings();
   const { data: settings, isLoading } = useSettings();
   const { data: config } = useConfig();
+  const { data: sandboxSpecsPage, isLoading: sandboxSpecsLoading } =
+    useSandboxSpecs();
 
   const [languageInputHasChanged, setLanguageInputHasChanged] =
     React.useState(false);
@@ -60,6 +63,11 @@ function AppSettingsScreen() {
   ] = React.useState(false);
   const [selectedSandboxGroupingStrategy, setSelectedSandboxGroupingStrategy] =
     React.useState<SandboxGroupingStrategy | null>(null);
+  const [sandboxSpecIdHasChanged, setSandboxSpecIdHasChanged] =
+    React.useState(false);
+  const [selectedSandboxSpecId, setSelectedSandboxSpecId] = React.useState<
+    string | null | undefined
+  >(undefined);
   const [maxBudgetPerTaskHasChanged, setMaxBudgetPerTaskHasChanged] =
     React.useState(false);
   const [gitUserNameHasChanged, setGitUserNameHasChanged] =
@@ -91,6 +99,11 @@ function AppSettingsScreen() {
       settings?.sandbox_grouping_strategy ||
       DEFAULT_SETTINGS.sandbox_grouping_strategy;
 
+    const defaultSandboxSpecId =
+      selectedSandboxSpecId !== undefined
+        ? selectedSandboxSpecId
+        : (settings?.default_sandbox_spec_id ?? null);
+
     const maxBudgetPerTaskValue = formData
       .get("max-budget-per-task-input")
       ?.toString();
@@ -111,6 +124,7 @@ function AppSettingsScreen() {
         enable_proactive_conversation_starters: enableProactiveConversations,
         enable_solvability_analysis: enableSolvabilityAnalysis,
         sandbox_grouping_strategy: sandboxGroupingStrategy,
+        default_sandbox_spec_id: defaultSandboxSpecId,
         max_budget_per_task: maxBudgetPerTask,
         git_user_name: gitUserName,
         git_user_email: gitUserEmail,
@@ -131,6 +145,8 @@ function AppSettingsScreen() {
           setProactiveConversationsSwitchHasChanged(false);
           setSandboxGroupingStrategyHasChanged(false);
           setSelectedSandboxGroupingStrategy(null);
+          setSandboxSpecIdHasChanged(false);
+          setSelectedSandboxSpecId(undefined);
           setMaxBudgetPerTaskHasChanged(false);
           setGitUserNameHasChanged(false);
           setGitUserEmailHasChanged(false);
@@ -187,6 +203,13 @@ function AppSettingsScreen() {
     setSandboxGroupingStrategyHasChanged(newStrategy !== currentStrategy);
   };
 
+  const handleSandboxSpecIdChange = (key: React.Key | null) => {
+    const newSpecId = key?.toString() ?? null;
+    setSelectedSandboxSpecId(newSpecId);
+    const currentSpecId = settings?.default_sandbox_spec_id ?? null;
+    setSandboxSpecIdHasChanged(newSpecId !== currentSpecId);
+  };
+
   const checkIfMaxBudgetPerTaskHasChanged = (value: string) => {
     const newValue = parseMaxBudgetPerTask(value);
     const currentValue = settings?.max_budget_per_task;
@@ -210,6 +233,7 @@ function AppSettingsScreen() {
     !proactiveConversationsSwitchHasChanged &&
     !solvabilityAnalysisSwitchHasChanged &&
     !sandboxGroupingStrategyHasChanged &&
+    !sandboxSpecIdHasChanged &&
     !maxBudgetPerTaskHasChanged &&
     !gitUserNameHasChanged &&
     !gitUserEmailHasChanged;
@@ -288,6 +312,26 @@ function AppSettingsScreen() {
             }
             isClearable={false}
             onSelectionChange={handleSandboxGroupingStrategyChange}
+            wrapperClassName="w-full max-w-[680px]"
+          />
+
+          <SettingsDropdownInput
+            testId="default-sandbox-spec-input"
+            name="default-sandbox-spec-input"
+            label={t(I18nKey.SETTINGS$DEFAULT_SANDBOX_SPEC)}
+            placeholder={t(I18nKey.SETTINGS$DEFAULT_SANDBOX_SPEC_PLACEHOLDER)}
+            items={(sandboxSpecsPage?.items ?? []).map((spec) => ({
+              key: spec.id,
+              label: spec.id,
+            }))}
+            selectedKey={
+              (selectedSandboxSpecId !== undefined
+                ? selectedSandboxSpecId
+                : settings.default_sandbox_spec_id) ?? undefined
+            }
+            isClearable
+            isLoading={sandboxSpecsLoading}
+            onSelectionChange={handleSandboxSpecIdChange}
             wrapperClassName="w-full max-w-[680px]"
           />
 
