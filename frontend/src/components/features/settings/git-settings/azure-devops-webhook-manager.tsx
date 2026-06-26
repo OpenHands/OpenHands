@@ -115,38 +115,62 @@ export function AzureDevOpsWebhookManager({
         {t(I18nKey.AZURE_DEVOPS$WEBHOOK_MANAGER_DESCRIPTION)}
       </Typography.Text>
 
-      <div className="flex items-center gap-3">
-        <Typography.Text className="text-sm text-white">
-          {status.organization}
-        </Typography.Text>
-        <StatusBadge status={status} />
-      </div>
-
-      <div className="flex gap-2">
-        <BrandButton
-          type="button"
-          variant="primary"
-          onClick={handleReinstall}
-          isDisabled={installDisabled}
-          className="cursor-pointer"
-          testId="azure-devops-install-webhook"
-        >
-          {installLabel}
-        </BrandButton>
-        {status.webhook_installed && (
-          <BrandButton
-            type="button"
-            variant="secondary"
-            onClick={handleUninstall}
-            isDisabled={anyMutationPending}
-            className="cursor-pointer"
-            testId="azure-devops-uninstall-webhook"
-          >
-            {isUninstalling
-              ? t(I18nKey.AZURE_DEVOPS$WEBHOOK_UNINSTALLING)
-              : t(I18nKey.AZURE_DEVOPS$WEBHOOK_UNINSTALL)}
-          </BrandButton>
-        )}
+      <div className="border border-neutral-700 rounded-lg overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-neutral-800">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                {t(I18nKey.AZURE_DEVOPS$WEBHOOK_COLUMN_ORGANIZATION)}
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                {t(I18nKey.AZURE_DEVOPS$WEBHOOK_COLUMN_STATUS)}
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                {t(I18nKey.AZURE_DEVOPS$WEBHOOK_COLUMN_ACTION)}
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-700">
+            <tr className="hover:bg-neutral-800/50 transition-colors align-top">
+              <td className="px-4 py-3">
+                <Typography.Text className="text-sm font-medium text-white">
+                  {status.organization}
+                </Typography.Text>
+              </td>
+              <td className="px-4 py-3">
+                <StatusBadge status={status} />
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex gap-2">
+                  <BrandButton
+                    type="button"
+                    variant="primary"
+                    onClick={handleReinstall}
+                    isDisabled={installDisabled}
+                    className="cursor-pointer"
+                    testId="azure-devops-install-webhook"
+                  >
+                    {installLabel}
+                  </BrandButton>
+                  {status.webhook_installed && (
+                    <BrandButton
+                      type="button"
+                      variant="secondary"
+                      onClick={handleUninstall}
+                      isDisabled={anyMutationPending}
+                      className="cursor-pointer"
+                      testId="azure-devops-uninstall-webhook"
+                    >
+                      {isUninstalling
+                        ? t(I18nKey.AZURE_DEVOPS$WEBHOOK_UNINSTALLING)
+                        : t(I18nKey.AZURE_DEVOPS$WEBHOOK_UNINSTALL)}
+                    </BrandButton>
+                  )}
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   );
