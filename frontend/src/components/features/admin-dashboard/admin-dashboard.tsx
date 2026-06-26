@@ -8,6 +8,7 @@ import { useOrgConversationStats } from "#/hooks/query/use-org-conversation-stat
 import { useOrgConversations } from "#/hooks/query/use-org-conversations";
 import { useOrgUsageStats } from "#/hooks/query/use-org-usage-stats";
 import { useStopConversation } from "#/hooks/mutation/use-stop-conversation";
+import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 
 // Conversation statuses from which the user can no longer stop a running
@@ -366,15 +367,20 @@ export function AdminDashboard() {
     });
 
   const [stoppingIds, setStoppingIds] = useState<Set<string>>(new Set());
+  const [pendingStop, setPendingStop] = useState<{
+    id: string;
+    title: string | null;
+  } | null>(null);
   const stopConversation = useStopConversation();
 
   const handleStop = (conversation: { id: string; title: string | null }) => {
-    const label = conversation.title?.trim() || "this conversation";
-    // eslint-disable-next-line no-alert
-    const confirmed = window.confirm(
-      `Stop "${label}"? This will cancel any in-progress agent run.`,
-    );
-    if (!confirmed) return;
+    setPendingStop(conversation);
+  };
+
+  const confirmStop = () => {
+    if (!pendingStop) return;
+    const conversation = pendingStop;
+    setPendingStop(null);
     setStoppingIds((prev) => {
       const next = new Set(prev);
       next.add(conversation.id);
@@ -395,6 +401,10 @@ export function AdminDashboard() {
         },
       },
     );
+  };
+
+  const cancelStop = () => {
+    setPendingStop(null);
   };
 
   const updateFilter = (key: string, value: string | string[] | null) => {
@@ -419,6 +429,10 @@ export function AdminDashboard() {
 
   const totalPages = conversationsData?.total_pages || 1;
   const totalItems = conversationsData?.total_items || 0;
+  const pendingStopLabel = pendingStop?.title?.trim();
+  const stopConfirmationText = pendingStopLabel
+    ? `Stop "${pendingStopLabel}"? This will cancel any in-progress agent run.`
+    : "Stop this conversation? This will cancel any in-progress agent run.";
 
   const exportUrl = useMemo(() => {
     if (!orgId) return "#";
@@ -1128,6 +1142,14 @@ export function AdminDashboard() {
           </>
         )}
       </main>
+
+      {pendingStop && (
+        <ConfirmationModal
+          text={stopConfirmationText}
+          onConfirm={confirmStop}
+          onCancel={cancelStop}
+        />
+      )}
     </div>
   );
 }

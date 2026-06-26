@@ -1,3 +1,6 @@
+import csv
+import io
+from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
@@ -49,6 +52,7 @@ from server.services.org_app_settings_service import (
     OrgAppSettingsServiceInjector,
 )
 from server.services.org_conversation_service import (
+    OrgConversationFilterError,
     OrgConversationService,
     OrgConversationServiceInjector,
 )
@@ -1651,6 +1655,20 @@ async def list_org_conversations(
 
         return result
 
+    except OrgConversationFilterError as e:
+        logger.warning(
+            'Invalid organization conversation filter',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'error': e.message,
+                'error_code': e.error_code,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=e.message,
+        )
     except Exception as e:
         logger.exception(
             'Unexpected error listing organization conversations',
@@ -1838,8 +1856,6 @@ async def export_org_conversations_csv(
         )
 
         # Build response headers
-        from datetime import datetime, timezone
-
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
         filename = f'conversations_export_{timestamp}.csv'
         headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
@@ -1847,9 +1863,6 @@ async def export_org_conversations_csv(
             headers['X-Export-Truncated'] = 'true'
 
         async def generate():
-            import csv
-            import io
-
             output = io.StringIO()
             writer = csv.writer(output)
 
@@ -1916,6 +1929,20 @@ async def export_org_conversations_csv(
             headers=headers,
         )
 
+    except OrgConversationFilterError as e:
+        logger.warning(
+            'Invalid organization conversation filter for export',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'error': e.message,
+                'error_code': e.error_code,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=e.message,
+        )
     except Exception as e:
         logger.exception(
             'Unexpected error exporting organization conversations',
@@ -2034,8 +2061,15 @@ async def stop_org_conversation(
             )
 
         if result.get('error'):
+            error_code = result.get('error_code')
+            if error_code == 'sandbox_shared':
+                status_code = status.HTTP_409_CONFLICT
+            elif error_code in {'sandbox_unavailable', 'sandbox_stop_failed'}:
+                status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            else:
+                status_code = status.HTTP_503_SERVICE_UNAVAILABLE
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
+                status_code=status_code,
                 detail=result['error'],
             )
 

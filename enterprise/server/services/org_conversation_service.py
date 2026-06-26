@@ -48,6 +48,15 @@ TIME_WINDOW_OPTIONS = {
     '90d': 90,
 }
 
+MAX_SANDBOX_STATUS_FILTER_ROWS = 5000
+
+
+class OrgConversationFilterError(ValueError):
+    def __init__(self, message: str, error_code: str) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+        self.message = message
+
 
 @dataclass
 class OrgConversationService:
@@ -227,8 +236,16 @@ class OrgConversationService:
         sandbox_info_map: dict[str, SandboxInfo | None] = {}
 
         if sandbox_status:
-            result = await self.db_session.execute(query)
+            limited_query = query.limit(MAX_SANDBOX_STATUS_FILTER_ROWS + 1)
+            result = await self.db_session.execute(limited_query)
             rows = result.all()
+
+            if len(rows) > MAX_SANDBOX_STATUS_FILTER_ROWS:
+                raise OrgConversationFilterError(
+                    'Sandbox status filter is too broad; refine filters or remove '
+                    'the sandbox_status filter.',
+                    error_code='sandbox_status_too_broad',
+                )
 
             sandbox_ids = [
                 metadata.sandbox_id for metadata, _, _ in rows if metadata.sandbox_id
@@ -751,6 +768,7 @@ class OrgConversationService:
                     return {
                         'success': False,
                         'error': 'Sandbox is shared by multiple conversations',
+                        'error_code': 'sandbox_shared',
                         'conversation_id': conversation_id,
                         'sandbox_id': metadata.sandbox_id,
                     }
@@ -771,6 +789,7 @@ class OrgConversationService:
                         return {
                             'success': False,
                             'error': 'Failed to stop sandbox',
+                            'error_code': 'sandbox_stop_failed',
                             'conversation_id': conversation_id,
                             'sandbox_id': metadata.sandbox_id,
                         }
@@ -806,13 +825,15 @@ class OrgConversationService:
                 )
                 return {
                     'success': False,
-                    'error': f'Failed to stop sandbox: {str(e)}',
+                    'error': 'Failed to stop sandbox',
+                    'error_code': 'sandbox_stop_failed',
                     'conversation_id': conversation_id,
                 }
         else:
             return {
                 'success': False,
                 'error': 'Sandbox service not available',
+                'error_code': 'sandbox_unavailable',
                 'conversation_id': conversation_id,
             }
 
