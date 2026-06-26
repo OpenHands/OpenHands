@@ -133,9 +133,13 @@ def _matches_work_item_comment_subscription(
     )
 
 
+# Webhook secret for local dev only; real installs set AZURE_DEVOPS_WEBHOOK_SECRET.
+_LOCAL_DEPLOYMENT_WEBHOOK_SECRET = 'localdeploymentwebhooktesttoken'
+
+
 def _ensure_azure_devops_webhook_secret() -> str:
     secret = (
-        'localdeploymentwebhooktesttoken'
+        _LOCAL_DEPLOYMENT_WEBHOOK_SECRET
         if IS_LOCAL_DEPLOYMENT
         else AZURE_DEVOPS_WEBHOOK_SECRET
     )
@@ -160,7 +164,7 @@ async def verify_azure_devops_signature(
     authorization: str | None,
 ) -> None:
     expected_secret = (
-        'localdeploymentwebhooktesttoken'
+        _LOCAL_DEPLOYMENT_WEBHOOK_SECRET
         if IS_LOCAL_DEPLOYMENT
         else AZURE_DEVOPS_WEBHOOK_SECRET
     )
@@ -372,10 +376,11 @@ async def azure_devops_events(
         )
 
         payload_data = await request.json()
+        # Dedup on the stable event id; notificationId changes on ADO retries,
+        # so including it would let a retried delivery start a duplicate job.
         dedup_key = payload_data.get('id')
-        notification_id = payload_data.get('notificationId')
         if dedup_key:
-            dedup_key = f'azure_devops_msg:{dedup_key}:{notification_id or ""}'
+            dedup_key = f'azure_devops_msg:{dedup_key}'
         else:
             dedup_json = json.dumps(payload_data, sort_keys=True)
             dedup_hash = hashlib.sha256(dedup_json.encode()).hexdigest()
