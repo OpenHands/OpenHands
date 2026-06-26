@@ -348,4 +348,4 @@ omit = [ "enterprise/tests/*", "**/test_*" ]
 
 [tool.uv]
 exclude-newer = "7 days"
-exclude-newer-package = { openhands-aci = false, openhands-agent-server = false, openhands-sdk = false, openhands-tools = false }
+exclude-newer-package = { openhands-agent-server = false, openhands-sdk = false, openhands-tools = false }

@@ -10,4 +10,3 @@ exclude-newer-span = "P7D"
 openhands-agent-server = false
 openhands-tools = false
 openhands-sdk = false
-openhands-aci = false
