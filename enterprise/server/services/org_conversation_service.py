@@ -762,7 +762,18 @@ class OrgConversationService:
 
                 # Actually terminate the sandbox
                 try:
-                    await self.sandbox_service.delete_sandbox(metadata.sandbox_id)
+                    deleted = await self.sandbox_service.delete_sandbox(
+                        metadata.sandbox_id
+                    )
+                    if not deleted:
+                        metadata.execution_status = previous_status
+                        await self.db_session.commit()
+                        return {
+                            'success': False,
+                            'error': 'Failed to stop sandbox',
+                            'conversation_id': conversation_id,
+                            'sandbox_id': metadata.sandbox_id,
+                        }
                 except Exception:
                     # Rollback the status change so the row isn't left as 'deleting'
                     metadata.execution_status = previous_status
@@ -822,6 +833,8 @@ class OrgConversationServiceInjector(Injector[OrgConversationService]):
             try:
                 async with get_sandbox_service(state, request) as sandbox_service:
                     service.set_sandbox_service(sandbox_service)
+                    yield service
+                    return
             except AssertionError as e:
                 # Sandbox service not configured - log at warning level since
                 # this is a SaaS-specific feature that requires it
