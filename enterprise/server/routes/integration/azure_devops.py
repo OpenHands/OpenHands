@@ -137,12 +137,16 @@ def _matches_work_item_comment_subscription(
 _LOCAL_DEPLOYMENT_WEBHOOK_SECRET = 'localdeploymentwebhooktesttoken'
 
 
-def _ensure_azure_devops_webhook_secret() -> str:
-    secret = (
+def _get_webhook_secret() -> str | None:
+    return (
         _LOCAL_DEPLOYMENT_WEBHOOK_SECRET
         if IS_LOCAL_DEPLOYMENT
         else AZURE_DEVOPS_WEBHOOK_SECRET
     )
+
+
+def _ensure_azure_devops_webhook_secret() -> str:
+    secret = _get_webhook_secret()
     if not secret:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -163,11 +167,7 @@ async def verify_azure_devops_signature(
     header_webhook_secret: str | None,
     authorization: str | None,
 ) -> None:
-    expected_secret = (
-        _LOCAL_DEPLOYMENT_WEBHOOK_SECRET
-        if IS_LOCAL_DEPLOYMENT
-        else AZURE_DEVOPS_WEBHOOK_SECRET
-    )
+    expected_secret = _get_webhook_secret()
     provided_secret = header_webhook_secret or _basic_auth_secret(authorization)
     if not expected_secret:
         raise HTTPException(

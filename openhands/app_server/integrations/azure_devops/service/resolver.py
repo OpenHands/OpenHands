@@ -74,7 +74,8 @@ class AzureDevOpsResolverMixin(AzureDevOpsMixinBase):
             comments = await self.get_pr_comments(  # type: ignore[attr-defined]
                 repository, issue_number, max_comments
             )
-            if comments:
+            # Empty list is a valid result (PR with no comments), not a miss.
+            if comments is not None:
                 return comments
         except Exception as pr_error:
             logger.debug(f'Failed to get PR comments: {pr_error}, trying work item')

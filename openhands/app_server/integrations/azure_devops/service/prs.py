@@ -40,13 +40,10 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         """
         org, project, repo = self._parse_repository(repository)
 
-        # URL-encode components to handle spaces and special characters
         repo_enc = self._encode_url_component(repo)
 
         url = f'{self._project_base_url(org, project)}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads?api-version=7.1'
 
-        # Create thread payload with a comment
-        # Reference: https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-threads/create
         payload = {
             'comments': [
                 {
@@ -90,7 +87,6 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         """
         org, project, repo = self._parse_repository(repository)
 
-        # URL-encode components to handle spaces and special characters
         repo_enc = self._encode_url_component(repo)
 
         url = f'{self._project_base_url(org, project)}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads/{thread_id}/comments?api-version=7.1'
@@ -127,7 +123,6 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         """
         org, project, repo = self._parse_repository(repository)
 
-        # URL-encode components to handle spaces and special characters
         repo_enc = self._encode_url_component(repo)
 
         url = f'{self._project_base_url(org, project)}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads?api-version=7.1'
@@ -231,7 +226,6 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         project = parts[1]
         repo = parts[2]
 
-        # URL-encode components to handle spaces and special characters
         org_enc = self._encode_url_component(org)
         project_enc = self._encode_url_component(project)
         repo_enc = self._encode_url_component(repo)
@@ -270,7 +264,6 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         """
         org, project, repo = self._parse_repository(repository)
 
-        # URL-encode components to handle spaces and special characters
         repo_enc = self._encode_url_component(repo)
 
         url = f'{self._project_base_url(org, project)}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}?api-version=7.1'
