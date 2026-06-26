@@ -179,3 +179,104 @@ class TestEnableAutomationsInConfig:
             os.environ.pop('ENABLE_AUTOMATIONS', None)
             importlib.reload(constants_module)
             assert constants_module.ENABLE_AUTOMATIONS is True
+
+
+class TestUserProvisioningEnabled:
+    """Tests for the USER_PROVISIONING_ENABLED feature switch.
+
+    The switch is driven by the ``USER_PROVISIONING_ENABLED`` env var
+    (populated from the ``userProvisioning.enabled`` Helm value). It
+    must accept both ``'true'`` and ``'1'`` because older Helm chart
+    versions emit the latter form — accepting only one variant would
+    silently disable the feature in those deployments. See AGENTS.md
+    "Environment Variable Enable Toggles".
+    """
+
+    @pytest.mark.parametrize(
+        'env_value,expected',
+        [
+            # Truthy variants accepted by the toggle convention.
+            ('true', True),
+            ('True', True),
+            ('TRUE', True),
+            ('1', True),
+            # Falsy / unset / unknown values all disable the feature.
+            ('false', False),
+            ('False', False),
+            ('0', False),
+            ('', False),
+            ('yes', False),  # Not part of the documented accepted set.
+            ('on', False),
+        ],
+    )
+    def test_user_provisioning_enabled_truthy_parsing(
+        self, env_value: str, expected: bool
+    ) -> None:
+        with patch.dict('os.environ', {'USER_PROVISIONING_ENABLED': env_value}):
+            import importlib
+
+            import server.constants as constants_module
+
+            importlib.reload(constants_module)
+            assert constants_module.USER_PROVISIONING_ENABLED is expected
+
+    def test_user_provisioning_enabled_default_is_false(self) -> None:
+        """When the env var is unset, the feature must default to off."""
+        with patch.dict('os.environ', {}, clear=True):
+            import importlib
+            import os
+
+            os.environ.pop('USER_PROVISIONING_ENABLED', None)
+            import server.constants as constants_module
+
+            importlib.reload(constants_module)
+            assert constants_module.USER_PROVISIONING_ENABLED is False
+
+
+class TestOpenOrgCreationEnabled:
+    """Tests for the OPEN_ORG_CREATION_ENABLED feature switch.
+
+    Must accept both ``'true'`` and ``'1'`` per the documented enable-toggle
+    convention so that older Helm chart versions emitting ``'1'`` keep the
+    feature working. See AGENTS.md "Environment Variable Enable Toggles".
+    """
+
+    @pytest.mark.parametrize(
+        'env_value,expected',
+        [
+            # Truthy variants accepted by the toggle convention.
+            ('true', True),
+            ('True', True),
+            ('TRUE', True),
+            ('1', True),
+            # Falsy / unset / unknown values all disable the feature.
+            ('false', False),
+            ('False', False),
+            ('0', False),
+            ('', False),
+            ('yes', False),  # Not part of the documented accepted set.
+            ('on', False),
+        ],
+    )
+    def test_open_org_creation_enabled_truthy_parsing(
+        self, env_value: str, expected: bool
+    ) -> None:
+        with patch.dict('os.environ', {'OPEN_ORG_CREATION_ENABLED': env_value}):
+            import importlib
+
+            import server.constants as constants_module
+
+            importlib.reload(constants_module)
+            assert constants_module.OPEN_ORG_CREATION_ENABLED is expected
+
+    def test_open_org_creation_enabled_default_is_false(self) -> None:
+        """When the env var is unset, the feature must default to off."""
+        with patch.dict('os.environ', {}, clear=True):
+            import importlib
+            import os
+
+            os.environ.pop('OPEN_ORG_CREATION_ENABLED', None)
+            import server.constants as constants_module
+
+            importlib.reload(constants_module)
+            assert constants_module.OPEN_ORG_CREATION_ENABLED is False

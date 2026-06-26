@@ -21,11 +21,11 @@ from integrations.models import JobContext, Message
 from integrations.utils import (
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
-    filter_potential_repos_by_user_msg,
     get_account_not_linked_message,
     get_jira_dc_relink_message,
     get_session_expired_message,
     get_user_not_found_message,
+    has_exact_mention,
     infer_repo_from_message,
     markdown_to_jira_markup,
 )
@@ -39,7 +39,6 @@ from storage.jira_dc_workspace import JiraDcWorkspace
 
 from openhands.app_server.integrations.provider import ProviderHandler
 from openhands.app_server.integrations.service_types import Comment, Repository
-from openhands.app_server.shared import server_config
 from openhands.app_server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
@@ -107,6 +106,22 @@ def _extract_workspace_hosts(payload: Dict) -> set[str]:
     }
 
 
+def _comment_addresses_openhands(comment: str, bot_mentions: set[str] | None) -> bool:
+    # Literal @openhands always triggers (works even when the bot username can't
+    # be resolved). Jira's mention picker serializes a real mention as wiki
+    # markup [~name]/[~key], so match those too once resolved.
+    if not comment:
+        return False
+    # Boundary-aware + case-insensitive: matches @OpenHands but not an email like
+    # someone@openhands.dev (incl. the service account's own address).
+    if has_exact_mention(comment, '@openhands'):
+        return True
+    if bot_mentions:
+        lowered = comment.lower()
+        return any(token in lowered for token in bot_mentions)
+    return False
+
+
 class JiraDcManager(Manager[JiraDcViewInterface]):
     def __init__(self, token_manager: TokenManager):
         self.token_manager = token_manager
@@ -114,6 +129,9 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         self.jinja_env = Environment(
             loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'jira_dc')
         )
+        # Bot mention tokens ([~name]/[~key]/...) per workspace.id, resolved
+        # lazily from /myself for matching picker mentions.
+        self._svc_mentions_cache: dict[int, set[str]] = {}
 
     async def authenticate_user(
         self, user_email: str, jira_dc_user_id: str, workspace_id: int
@@ -140,6 +158,15 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             jira_dc_user = await self.integration_store.get_active_user_by_keycloak_id_and_workspace(
                 keycloak_user_id, workspace_id
             )
+            # Email mode is itself the admin's opt-in: a user whose Jira email
+            # matches an OpenHands account is auto-enrolled, no manual link step.
+            # Never in OAuth mode, which requires a verified per-user token.
+            if not jira_dc_user and not JIRA_DC_ENABLE_OAUTH:
+                jira_dc_user = (
+                    await self.integration_store.get_or_create_active_email_link(
+                        keycloak_user_id, workspace_id
+                    )
+                )
         else:
             jira_dc_user = await self.integration_store.get_active_user(
                 jira_dc_user_id, workspace_id
@@ -156,22 +183,43 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         )
         return jira_dc_user, saas_user_auth
 
-    async def _get_repositories(self, user_auth: UserAuth) -> list[Repository]:
-        """Get repositories that the user has access to."""
+    async def _create_provider_handler(
+        self, user_auth: UserAuth
+    ) -> ProviderHandler | None:
+        """Build a ProviderHandler for the user, or None if no provider is linked."""
         provider_tokens = await user_auth.get_provider_tokens()
         if provider_tokens is None:
-            return []
+            return None
         access_token = await user_auth.get_access_token()
         user_id = await user_auth.get_user_id()
-        client = ProviderHandler(
+        return ProviderHandler(
             provider_tokens=provider_tokens,
             external_auth_token=access_token,
             external_auth_id=user_id,
         )
-        repos: list[Repository] = await client.get_repositories(
-            'pushed', server_config.app_mode, None, None, None, None
-        )
-        return repos
+
+    async def _verify_mentioned_repos(
+        self, provider_handler: ProviderHandler, mentioned_repos: list[str]
+    ) -> list[Repository]:
+        """Resolve each mentioned repo with a targeted lookup.
+
+        Avoids enumerating the user's full repo list, which is capped and misses
+        repos on large Bitbucket DC instances (40k+ repos).
+        """
+        # Dedupe by canonical full_name: two forms of one repo (case/URL variants,
+        # a rename) resolve to the same repo and must count once -- otherwise
+        # is_job_requested sees >1 and asks the user to disambiguate a single repo.
+        verified: dict[str, Repository] = {}
+        for repo_name in mentioned_repos:
+            try:
+                repo = await provider_handler.verify_repo_provider(
+                    repo_name, is_optional=True
+                )
+            except Exception as e:
+                logger.debug(f'[Jira DC] Repo verification failed for {repo_name}: {e}')
+                continue
+            verified.setdefault(repo.full_name.lower(), repo)
+        return list(verified.values())
 
     async def validate_request(
         self, request: Request
@@ -244,7 +292,9 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
 
         return False, None, None, None
 
-    def parse_webhook(self, payload: Dict) -> JobContext | None:
+    def parse_webhook(
+        self, payload: Dict, bot_mentions: set[str] | None = None
+    ) -> JobContext | None:
         event_type = payload.get('webhookEvent')
 
         if event_type == 'comment_created':
@@ -252,7 +302,7 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             comment = comment_data.get('body', '')
             comment_id = comment_data.get('id')
 
-            if '@openhands' not in comment:
+            if not _comment_addresses_openhands(comment, bot_mentions):
                 return None
 
             issue_data = payload.get('issue', {})
@@ -324,7 +374,8 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
     async def receive_message(self, message: Message):
         """Process incoming Jira DC webhook message."""
         payload = message.message.get('payload', {})
-        job_context = self.parse_webhook(payload)
+        bot_mentions = await self._resolve_service_account_mentions(payload)
+        job_context = self.parse_webhook(payload, bot_mentions)
 
         if not job_context:
             logger.info('[Jira DC] Webhook does not match trigger conditions')
@@ -441,36 +492,33 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             return True
 
         try:
-            # Get user repositories
-            user_repos: list[Repository] = await self._get_repositories(
-                jira_dc_view.saas_user_auth
-            )
-
             target_str = f'{jira_dc_view.job_context.issue_description}\n{jira_dc_view.job_context.user_msg}'
             mentioned_repos = infer_repo_from_message(target_str)
 
-            # Try to infer repository from issue description
-            match, repos = filter_potential_repos_by_user_msg(target_str, user_repos)
+            # Verify each mentioned repo directly rather than enumerating the
+            # user's full repo list (which is capped and misses repos on large
+            # Bitbucket DC instances).
+            provider_handler = await self._create_provider_handler(
+                jira_dc_view.saas_user_auth
+            )
+            verified_repos = (
+                await self._verify_mentioned_repos(provider_handler, mentioned_repos)
+                if provider_handler
+                else []
+            )
 
-            if match:
-                # Found exact repository match
-                jira_dc_view.selected_repo = repos[0].full_name
-                logger.info(f'[Jira DC] Inferred repository: {repos[0].full_name}')
-                return True
-            else:
-                # No clear match - send repository selection comment
-                matched_repos = [
-                    repo
-                    for repo in user_repos
-                    if any(
-                        mentioned_repo.lower() in repo.full_name.lower()
-                        for mentioned_repo in mentioned_repos
-                    )
-                ]
-                await self._send_repo_selection_comment(
-                    jira_dc_view, mentioned_repos, matched_repos
+            if len(verified_repos) == 1:
+                jira_dc_view.selected_repo = verified_repos[0].full_name
+                logger.info(
+                    f'[Jira DC] Inferred repository: {verified_repos[0].full_name}'
                 )
-                return False
+                return True
+
+            # Zero or multiple matches -- ask the user to disambiguate.
+            await self._send_repo_selection_comment(
+                jira_dc_view, mentioned_repos, verified_repos
+            )
+            return False
 
         except Exception as e:
             logger.error(f'[Jira DC] Error in is_job_requested: {str(e)}')
@@ -533,6 +581,65 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             )
         except Exception as e:
             logger.error(f'[Jira] Failed to send response message: {str(e)}')
+
+    async def _resolve_service_account_mentions(self, payload: Dict) -> set[str] | None:
+        """Best-effort bot mention tokens ([~name]/[~key]) for a picker mention.
+
+        Gated so only wiki-markup mentions pay a lookup; literal @openhands and
+        non-comment payloads short-circuit. Cached per workspace; failures are not
+        cached, so a later comment re-attempts resolution (this event is dropped,
+        not retried).
+        """
+        comment = (payload.get('comment') or {}).get('body', '') or ''
+        if has_exact_mention(comment, '@openhands') or '[~' not in comment:
+            return None
+        try:
+            base_api_url = (
+                (payload.get('issue') or {}).get('self', '').split('/rest/')[0]
+            )
+            workspace_name = urlparse(base_api_url).hostname
+            if not workspace_name:
+                return None
+            workspace = await self.integration_store.get_workspace_by_name(
+                workspace_name
+            )
+            if not workspace:
+                return None
+            if workspace.id in self._svc_mentions_cache:
+                return self._svc_mentions_cache[workspace.id]
+            service_account = resolve_jira_dc_service_account(
+                workspace, self.token_manager
+            )
+            name, key = await self._fetch_service_account_identity(
+                base_api_url, service_account.api_key
+            )
+            mentions = {
+                token.lower()
+                for token in (
+                    f'[~{name}]' if name else None,
+                    f'[~{key}]' if key else None,
+                    f'[~accountid:{key}]' if key else None,
+                )
+                if token
+            }
+            if mentions:
+                self._svc_mentions_cache[workspace.id] = mentions
+            return mentions or None
+        except Exception as e:
+            logger.warning(f'[Jira DC] Could not resolve bot mentions: {str(e)}')
+            return None
+
+    async def _fetch_service_account_identity(
+        self, base_api_url: str, svc_acc_api_key: str
+    ) -> tuple[str | None, str | None]:
+        """Return the service account's Jira (name, key) from /myself."""
+        url = f'{base_api_url}/rest/api/2/myself'
+        headers = {'Authorization': f'Bearer {svc_acc_api_key}'}
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            return data.get('name'), data.get('key')
 
     async def get_issue_details(
         self, job_context: JobContext, svc_acc_api_key: str

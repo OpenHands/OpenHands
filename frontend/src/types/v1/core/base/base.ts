@@ -7,6 +7,7 @@ type EventType =
   | "FileEditor"
   | "StrReplaceEditor"
   | "TaskTracker"
+  | "Task"
   | "PlanningFileEditor";
 
 type ActionOnlyType =

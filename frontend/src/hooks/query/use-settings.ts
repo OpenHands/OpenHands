@@ -92,6 +92,7 @@ const normalizeSettingsResponse = (settings: Partial<Settings>): Settings => {
     email: settings.email || "",
     git_user_name: settings.git_user_name || DEFAULT_SETTINGS.git_user_name,
     git_user_email: settings.git_user_email || DEFAULT_SETTINGS.git_user_email,
+    git_full_clone: settings.git_full_clone ?? DEFAULT_SETTINGS.git_full_clone,
     is_new_user: false,
     disabled_skills:
       settings.disabled_skills ?? DEFAULT_SETTINGS.disabled_skills,
@@ -105,6 +106,7 @@ const normalizeSettingsResponse = (settings: Partial<Settings>): Settings => {
     sandbox_grouping_strategy:
       settings.sandbox_grouping_strategy ??
       DEFAULT_SETTINGS.sandbox_grouping_strategy,
+    default_sandbox_spec_id: settings.default_sandbox_spec_id ?? null,
   };
 };
 

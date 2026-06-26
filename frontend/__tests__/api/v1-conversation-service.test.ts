@@ -114,4 +114,35 @@ describe("V1ConversationService", () => {
       expect(headers).toHaveProperty("Content-Type", "multipart/form-data");
     });
   });
+
+  describe("interruptConversation", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      (axios.post as Mock).mockResolvedValue({ data: { success: true } });
+    });
+
+    afterEach(() => {
+      vi.resetAllMocks();
+    });
+
+    it("calls the runtime interrupt endpoint with session headers", async () => {
+      const conversationId = "conv-123";
+      const conversationUrl =
+        "http://localhost:54928/api/conversations/conv-123";
+      const sessionApiKey = "test-api-key";
+
+      const result = await V1ConversationService.interruptConversation(
+        conversationId,
+        conversationUrl,
+        sessionApiKey,
+      );
+
+      expect(result).toEqual({ success: true });
+      expect(axios.post).toHaveBeenCalledWith(
+        "http://localhost:54928/api/conversations/conv-123/interrupt",
+        {},
+        { headers: { "X-Session-API-Key": sessionApiKey } },
+      );
+    });
+  });
 });
