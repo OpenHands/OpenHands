@@ -186,27 +186,40 @@ class JiraDcIntegrationStore:
     async def get_or_create_active_email_link(
         self, keycloak_user_id: str, jira_dc_workspace_id: int
     ) -> Optional[JiraDcUser]:
-        """Return the user's active link for this workspace, creating one if absent.
+        """Return the user's active link for this workspace, reactivating a prior
+        inactive link or creating one if none exists.
 
-        Used by email-match mode to auto-enroll a matched user; the row mirrors a
-        manually-linked email row ('unavailable' Jira id, no OAuth tokens). Safe
-        under concurrent first webhooks: a losing insert trips the partial unique
-        index, and we re-read the winner.
+        Used by email-match mode to auto-enroll a matched user; a new row mirrors a
+        manually-linked email row ('unavailable' Jira id, no OAuth tokens). Reuses
+        the existing (user, workspace) row so callers that treat the pair as unique
+        (status-agnostic scalar_one_or_none) stay valid. Safe under concurrent first
+        webhooks: a losing write trips the partial unique index and we re-read the
+        winner.
         """
-        existing = await self.get_active_user_by_keycloak_id_and_workspace(
-            keycloak_user_id, jira_dc_workspace_id
-        )
-        if existing:
-            return existing
-
-        user = JiraDcUser(
-            keycloak_user_id=keycloak_user_id,
-            jira_dc_user_id='unavailable',
-            jira_dc_workspace_id=jira_dc_workspace_id,
-            status='active',
-        )
         async with a_session_maker() as session:
-            session.add(user)
+            # Match ANY status so a prior inactive link is reactivated in place,
+            # not duplicated.
+            result = await session.execute(
+                select(JiraDcUser).where(
+                    JiraDcUser.keycloak_user_id == keycloak_user_id,
+                    JiraDcUser.jira_dc_workspace_id == jira_dc_workspace_id,
+                )
+            )
+            user = result.scalar_one_or_none()
+            if user is not None and user.status == 'active':
+                return user
+
+            if user is None:
+                user = JiraDcUser(
+                    keycloak_user_id=keycloak_user_id,
+                    jira_dc_user_id='unavailable',
+                    jira_dc_workspace_id=jira_dc_workspace_id,
+                    status='active',
+                )
+                session.add(user)
+            else:
+                user.status = 'active'
+
             try:
                 await session.commit()
                 await session.refresh(user)
@@ -218,8 +231,8 @@ class JiraDcIntegrationStore:
             except IntegrityError:
                 await session.rollback()
 
-        # A concurrent insert (or a stale active link elsewhere) won the unique
-        # index; return whatever active row now exists for this workspace.
+        # A concurrent insert, or an active link in another workspace (the
+        # one-active-link index), won; return whatever active row now exists.
         return await self.get_active_user_by_keycloak_id_and_workspace(
             keycloak_user_id, jira_dc_workspace_id
         )
