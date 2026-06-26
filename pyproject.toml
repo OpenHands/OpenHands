@@ -347,3 +347,7 @@ lint.flake8-quotes.inline-quotes = "single"
 concurrency = [ "gevent" ]
 relative_files = true
 omit = [ "enterprise/tests/*", "**/test_*" ]
+
+[tool.uv]
+exclude-newer = "7 days"
+exclude-newer-package = { openhands-agent-server = false, openhands-sdk = false, openhands-tools = false }

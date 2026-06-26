@@ -127,10 +127,13 @@ class SaasSettingsStore(SettingsStore):
     ) -> SecretStr | None:
         if org_member.has_custom_llm_api_key:
             return org_member.llm_api_key
-        # When has_custom_llm_api_key is False, only return org-level key
-        # Don't fall back to org_member.llm_api_key as it may not be set
-        # and accessing it would trigger decryption of an empty/null value
-        return org.llm_api_key
+        if org.llm_api_key:
+            return org.llm_api_key
+        # Managed keys are stored on the member row (has_custom=False); fall back to
+        # it, but only decrypt when actually set to avoid the empty-value error (#14898).
+        if org_member._llm_api_key:
+            return org_member.llm_api_key
+        return None
 
     @staticmethod
     def _get_persisted_agent_settings(item: Settings) -> dict[str, Any]:
