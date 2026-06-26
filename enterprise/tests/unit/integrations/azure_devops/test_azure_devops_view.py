@@ -327,6 +327,44 @@ async def test_work_item_load_resolver_context_uses_work_item_not_pr(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_pr_comment_load_resolver_context_uses_pr_not_work_item(monkeypatch):
+    # A brand-new PR whose only comment is the @openhands mention returns an empty
+    # list from get_pr_comments. The loader must NOT fall back to work-item
+    # discussion in that case; it must stay on the PR code path.
+    fake_service = MagicMock()
+    fake_service.get_pr_comments = AsyncMock(return_value=[])  # empty — new PR
+    fake_service.get_issue_or_pr_title_and_body = AsyncMock(
+        return_value=('PR title', 'PR body')
+    )
+    fake_service.get_work_item_comments = AsyncMock(
+        return_value=[MagicMock(author='wi-user', body='work item comment')]
+    )
+    fake_service.get_issue_or_pr_comments = AsyncMock(
+        return_value=[MagicMock(author='pr-user', body='pr comment')]
+    )
+    monkeypatch.setattr(
+        'integrations.azure_devops.azure_devops_view.AzureDevOpsServiceImpl',
+        lambda external_auth_id: fake_service,
+    )
+
+    view = await AzureDevOpsFactory.create_azure_devops_view_from_payload(
+        _make_pr_message(),
+        keycloak_user_id='kc-alice',
+    )
+    assert isinstance(view, AzureDevOpsPRComment)
+
+    await view._load_resolver_context()
+
+    assert view.title == 'PR title'
+    assert view.description == 'PR body'
+    assert view.previous_comments == []  # empty list, not work-item fallback
+    fake_service.get_pr_comments.assert_awaited_once()
+    fake_service.get_issue_or_pr_title_and_body.assert_awaited_once()
+    fake_service.get_work_item_comments.assert_not_called()
+    fake_service.get_issue_or_pr_comments.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_factory_returns_none_when_org_empty(monkeypatch):
     # No resolvable org -> skip rather than build a malformed '/project/repo'.
     monkeypatch.setattr(

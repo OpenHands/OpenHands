@@ -270,6 +270,25 @@ class AzureDevOpsPRComment(AzureDevOpsItem):
     def _get_branch_name(self) -> str | None:
         return self.branch_name
 
+    async def _load_resolver_context(self) -> None:
+        # Call PR-specific methods directly so a brand-new PR with no prior
+        # comments (empty list) never falls back to unrelated work-item discussion.
+        azure_service = AzureDevOpsServiceImpl(
+            external_auth_id=self.user_info.keycloak_user_id
+        )
+        self.previous_comments = await azure_service.get_pr_comments(
+            self.full_repo_name,
+            self.issue_number,
+            max_comments=100,
+        )
+        (
+            self.title,
+            self.description,
+        ) = await azure_service.get_issue_or_pr_title_and_body(
+            self.full_repo_name,
+            self.issue_number,
+        )
+
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         await self._load_resolver_context()
 
