@@ -115,10 +115,9 @@ class V1GitService {
       !!conversationId;
 
     if (useGateway) {
-      const { data } = await openHands.get<GitChangeDiff>(
-        `/api/v1/git/diff`,
-        { params: { conversation_id: conversationId, path } },
-      );
+      const { data } = await openHands.get<GitChangeDiff>(`/api/v1/git/diff`, {
+        params: { conversation_id: conversationId, path },
+      });
       return data;
     }
 
