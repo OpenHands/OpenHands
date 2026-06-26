@@ -106,7 +106,7 @@ def _extract_work_item_comment(payload: dict[str, Any]) -> str:
 
     detailed = (payload.get('detailedMessage') or {}).get('text') or ''
     # detailedMessage is "<actor> commented\n<body>"; drop the first line.
-    return detailed.split('\n', 1)[-1].strip() if '\n' in detailed else detailed
+    return detailed.split('\n', 1)[-1].strip() if '\n' in detailed else ''
 
 
 def _select_project_repo(
