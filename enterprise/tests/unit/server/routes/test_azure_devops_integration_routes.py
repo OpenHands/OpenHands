@@ -1,5 +1,5 @@
 import base64
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -80,6 +80,71 @@ async def test_get_azure_devops_resources_reports_installed_status(monkeypatch):
     assert (
         status.webhook_url == 'https://app.example.com/integration/azure-devops/events'
     )
+
+
+def test_matchers_require_absent_project_id():
+    url = 'https://app.example.com/integration/azure-devops/events'
+    org_wide = {
+        'eventType': azure_devops.AZURE_DEVOPS_PR_COMMENT_EVENT,
+        'publisherInputs': {},
+        'consumerInputs': {'url': url},
+    }
+    project_scoped = {
+        'eventType': azure_devops.AZURE_DEVOPS_PR_COMMENT_EVENT,
+        'publisherInputs': {'projectId': 'proj-guid'},
+        'consumerInputs': {'url': url},
+    }
+
+    assert (
+        azure_devops._matches_pr_comment_subscription(org_wide, webhook_url=url) is True
+    )
+    assert (
+        azure_devops._matches_pr_comment_subscription(project_scoped, webhook_url=url)
+        is False
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_azure_devops_resources_ignores_project_scoped_hooks(monkeypatch):
+    monkeypatch.setattr(azure_devops, 'HOST_URL', 'https://app.example.com')
+    monkeypatch.setattr(azure_devops, 'AZURE_DEVOPS_WEBHOOK_SECRET', 'secret')
+
+    url = 'https://app.example.com/integration/azure-devops/events'
+
+    class FakeAzureDevOpsService:
+        organization = 'alonaking'
+
+        async def list_service_hook_subscriptions(self):
+            # Same event types + url, but project-scoped (projectId set) -> must
+            # NOT be reported as the org-wide install.
+            return [
+                {
+                    'id': 'pr-project-scoped',
+                    'eventType': azure_devops.AZURE_DEVOPS_PR_COMMENT_EVENT,
+                    'publisherInputs': {'projectId': 'proj-guid'},
+                    'consumerInputs': {'url': url},
+                },
+                {
+                    'id': 'wi-project-scoped',
+                    'eventType': azure_devops.AZURE_DEVOPS_WORK_ITEM_COMMENT_EVENT,
+                    'publisherInputs': {'projectId': 'proj-guid'},
+                    'consumerInputs': {'url': url},
+                },
+            ]
+
+    monkeypatch.setattr(
+        azure_devops,
+        'SaaSAzureDevOpsService',
+        lambda external_auth_id: FakeAzureDevOpsService(),
+    )
+
+    status = await azure_devops.get_azure_devops_resources(user_id='user-id')
+
+    assert status.webhook_installed is False
+    assert status.pr_webhook_installed is False
+    assert status.work_item_webhook_installed is False
+    assert status.pr_subscription_id is None
+    assert status.work_item_subscription_id is None
 
 
 @pytest.mark.asyncio
@@ -167,3 +232,65 @@ async def test_reinstall_azure_devops_webhook_requires_configured_secret(monkeyp
         await azure_devops.reinstall_azure_devops_webhook(user_id='user-id')
 
     assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_events_route_schedules_receive_message_in_background(monkeypatch):
+    monkeypatch.setattr(azure_devops, 'IS_LOCAL_DEPLOYMENT', False)
+    monkeypatch.setattr(azure_devops, 'AZURE_DEVOPS_WEBHOOK_SECRET', 'secret')
+
+    fake_redis = MagicMock()
+    fake_redis.set = AsyncMock(return_value=True)
+    monkeypatch.setattr(azure_devops, 'get_redis_client_async', lambda: fake_redis)
+
+    fake_manager = MagicMock()
+    fake_manager.receive_message = AsyncMock()
+    monkeypatch.setattr(azure_devops, 'get_azure_devops_manager', lambda: fake_manager)
+
+    class _FakeRequest:
+        async def json(self):
+            return {'id': 'evt-1', 'eventType': 'workitem.commented'}
+
+    background_tasks = MagicMock()
+
+    response = await azure_devops.azure_devops_events(
+        request=_FakeRequest(),
+        background_tasks=background_tasks,
+        x_openhands_webhook_secret='secret',
+        authorization=None,
+    )
+
+    assert response.status_code == 200
+    # receive_message is queued, not awaited inline (avoids Service Hooks timeout).
+    background_tasks.add_task.assert_called_once_with(fake_manager.receive_message, ANY)
+    fake_manager.receive_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_events_route_skips_duplicate_without_scheduling(monkeypatch):
+    monkeypatch.setattr(azure_devops, 'IS_LOCAL_DEPLOYMENT', False)
+    monkeypatch.setattr(azure_devops, 'AZURE_DEVOPS_WEBHOOK_SECRET', 'secret')
+
+    fake_redis = MagicMock()
+    fake_redis.set = AsyncMock(return_value=False)  # already seen -> duplicate
+    monkeypatch.setattr(azure_devops, 'get_redis_client_async', lambda: fake_redis)
+
+    fake_manager = MagicMock()
+    fake_manager.receive_message = AsyncMock()
+    monkeypatch.setattr(azure_devops, 'get_azure_devops_manager', lambda: fake_manager)
+
+    class _FakeRequest:
+        async def json(self):
+            return {'id': 'evt-1', 'eventType': 'workitem.commented'}
+
+    background_tasks = MagicMock()
+
+    response = await azure_devops.azure_devops_events(
+        request=_FakeRequest(),
+        background_tasks=background_tasks,
+        x_openhands_webhook_secret='secret',
+        authorization=None,
+    )
+
+    assert response.status_code == 200
+    background_tasks.add_task.assert_not_called()

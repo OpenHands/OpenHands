@@ -6,6 +6,7 @@ from integrations.azure_devops.azure_devops_view import (
     AzureDevOpsFactory,
     AzureDevOpsPRComment,
     AzureDevOpsWorkItemComment,
+    _select_project_repo,
     actor_email,
     mark_openhands_comment,
 )
@@ -152,7 +153,61 @@ async def test_factory_creates_pr_comment_view():
 
 @pytest.mark.asyncio
 async def test_factory_work_item_view_derives_real_repo(monkeypatch):
-    # System.TeamProject ('Project') matches no repo name -> use the first repo.
+    # System.TeamProject ('Project') matches a repo name -> use the matched repo.
+    fake_service = MagicMock()
+    fake_service.get_project_repositories = AsyncMock(
+        return_value=[
+            {'id': 'repo-9', 'name': 'service-api', 'project': {'id': 'proj-9'}},
+            {'id': 'repo-1', 'name': 'Project', 'project': {'id': 'proj-9'}},
+        ]
+    )
+    monkeypatch.setattr(
+        'integrations.azure_devops.azure_devops_view.AzureDevOpsServiceImpl',
+        lambda external_auth_id: fake_service,
+    )
+
+    view = await AzureDevOpsFactory.create_azure_devops_view_from_payload(
+        _make_work_item_message(),
+        keycloak_user_id='kc-alice',
+    )
+
+    assert isinstance(view, AzureDevOpsWorkItemComment)
+    assert view.full_repo_name == 'alonaking/Project/Project'
+    assert view.repository_id == 'repo-1'
+    assert view.project_id == 'proj-9'
+    assert view.issue_number == 42
+    assert view.comment_body == '@openhands please fix work item'
+    assert view.user_info.user_id == 'ado-revised-user-id'
+    assert view.user_info.username == 'Alice Revised'
+
+
+@pytest.mark.asyncio
+async def test_factory_work_item_view_uses_sole_repo(monkeypatch):
+    # No name match but exactly one repo -> use it.
+    fake_service = MagicMock()
+    fake_service.get_project_repositories = AsyncMock(
+        return_value=[
+            {'id': 'repo-9', 'name': 'service-api', 'project': {'id': 'proj-9'}}
+        ]
+    )
+    monkeypatch.setattr(
+        'integrations.azure_devops.azure_devops_view.AzureDevOpsServiceImpl',
+        lambda external_auth_id: fake_service,
+    )
+
+    view = await AzureDevOpsFactory.create_azure_devops_view_from_payload(
+        _make_work_item_message(),
+        keycloak_user_id='kc-alice',
+    )
+
+    assert isinstance(view, AzureDevOpsWorkItemComment)
+    assert view.full_repo_name == 'alonaking/Project/service-api'
+    assert view.repository_id == 'repo-9'
+
+
+@pytest.mark.asyncio
+async def test_factory_work_item_view_returns_none_when_ambiguous(monkeypatch):
+    # Multiple repos, none matching the project name -> fail closed (skip).
     fake_service = MagicMock()
     fake_service.get_project_repositories = AsyncMock(
         return_value=[
@@ -170,14 +225,7 @@ async def test_factory_work_item_view_derives_real_repo(monkeypatch):
         keycloak_user_id='kc-alice',
     )
 
-    assert isinstance(view, AzureDevOpsWorkItemComment)
-    assert view.full_repo_name == 'alonaking/Project/service-api'
-    assert view.repository_id == 'repo-9'
-    assert view.project_id == 'proj-9'
-    assert view.issue_number == 42
-    assert view.comment_body == '@openhands please fix work item'
-    assert view.user_info.user_id == 'ado-revised-user-id'
-    assert view.user_info.username == 'Alice Revised'
+    assert view is None
 
 
 @pytest.mark.asyncio
@@ -195,6 +243,20 @@ async def test_factory_work_item_view_returns_none_when_no_repos(monkeypatch):
     )
 
     assert view is None
+
+
+def test_select_project_repo_resolution():
+    name_match = {'id': 'r1', 'name': 'Project'}
+    other = {'id': 'r2', 'name': 'docs'}
+
+    # Name match wins even among several repos.
+    assert _select_project_repo([other, name_match], 'project') is name_match
+    # Sole repo is used when nothing matches by name.
+    assert _select_project_repo([other], 'Project') is other
+    # Multiple repos with no name match -> None (ambiguous).
+    assert _select_project_repo([other, {'id': 'r3', 'name': 'api'}], 'Project') is None
+    # No repos -> None.
+    assert _select_project_repo([], 'Project') is None
 
 
 @pytest.mark.asyncio

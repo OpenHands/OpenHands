@@ -112,13 +112,17 @@ def _extract_work_item_comment(payload: dict[str, Any]) -> str:
 def _select_project_repo(
     repos: list[dict[str, Any]], project_name: str
 ) -> dict[str, Any] | None:
-    """Pick a project's default repo (name matches project), else the first."""
+    """Resolve a project's repo deterministically: name match, else the sole
+    repo. Returns None when ambiguous (multiple repos, no name match) so we
+    fail closed rather than guess."""
     if not repos:
         return None
     for repo in repos:
         if (repo.get('name') or '').lower() == project_name.lower():
             return repo
-    return repos[0]
+    if len(repos) == 1:
+        return repos[0]
+    return None
 
 
 def _actor_username(actor: dict[str, Any]) -> str:
@@ -428,8 +432,8 @@ class AzureDevOpsFactory:
             repo = _select_project_repo(repos, project_name)
             if repo is None:
                 logger.warning(
-                    f'[Azure DevOps] Project {org}/{project_name} has no '
-                    'repositories; skipping work item event.'
+                    f'[Azure DevOps] Could not unambiguously resolve a repository '
+                    f'for work item in project {org}/{project_name}; skipping.'
                 )
                 return None
             repo_name = repo.get('name') or ''

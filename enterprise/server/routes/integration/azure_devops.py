@@ -6,7 +6,15 @@ import json
 import secrets
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    status,
+)
 from fastapi.responses import JSONResponse
 from integrations.azure_devops.azure_devops_service import SaaSAzureDevOpsService
 from integrations.models import Message, SourceType
@@ -88,15 +96,23 @@ def _subscription_event_type(subscription: dict[str, Any]) -> str:
     return str(subscription.get('eventType') or '')
 
 
+def _subscription_is_project_scoped(subscription: dict[str, Any]) -> bool:
+    # A projectId in publisherInputs means the hook is scoped to one project,
+    # not the org-wide resolver install.
+    return bool((subscription.get('publisherInputs') or {}).get('projectId'))
+
+
 def _matches_pr_comment_subscription(
     subscription: dict[str, Any],
     *,
     webhook_url: str,
 ) -> bool:
-    # Org-wide hooks have no projectId, so match on event + consumer url only.
+    # Org-wide hook = event + consumer url + no projectId (project-scoped hooks
+    # at the same url must not be mistaken for the org-wide install).
     return (
         _subscription_event_type(subscription) == AZURE_DEVOPS_PR_COMMENT_EVENT
         and _subscription_consumer_url(subscription) == webhook_url
+        and not _subscription_is_project_scoped(subscription)
     )
 
 
@@ -108,6 +124,7 @@ def _matches_work_item_comment_subscription(
     return (
         _subscription_event_type(subscription) == AZURE_DEVOPS_WORK_ITEM_COMMENT_EVENT
         and _subscription_consumer_url(subscription) == webhook_url
+        and not _subscription_is_project_scoped(subscription)
     )
 
 
@@ -330,6 +347,7 @@ async def uninstall_azure_devops_webhook(
 @azure_devops_integration_router.post('/azure-devops/events')
 async def azure_devops_events(
     request: Request,
+    background_tasks: BackgroundTasks,
     x_openhands_webhook_secret: str | None = Header(None),
     authorization: str | None = Header(None),
 ):
@@ -365,7 +383,10 @@ async def azure_devops_events(
                 'event_key': payload_data.get('eventType'),
             },
         )
-        await get_azure_devops_manager().receive_message(message)
+        # Process in the background so we return 200 fast; conversation/sandbox
+        # startup can exceed Service Hooks' delivery timeout -> retries. Mirrors
+        # the Jira DC / Bitbucket DC routes. Signature is verified above.
+        background_tasks.add_task(get_azure_devops_manager().receive_message, message)
 
         return JSONResponse(
             status_code=200,
