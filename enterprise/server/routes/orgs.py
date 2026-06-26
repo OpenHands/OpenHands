@@ -467,6 +467,16 @@ async def update_org_app_settings(
     """
     try:
         return await service.update_org_app_settings(update_data)
+    except OrgConcurrentModificationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                'message': str(e),
+                'org_id': e.org_id,
+                'expected_version': e.expected_version.isoformat(),
+                'actual_version': e.actual_version.isoformat(),
+            },
+        )
     except OrgNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

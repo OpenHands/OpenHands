@@ -30,6 +30,7 @@ import {
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { I18nKey } from "#/i18n/declaration";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import { organizationService } from "#/api/organization-service/organization-service.api";
 import SkillsService from "#/api/skills-service";
 import EditIcon from "#/icons/u-edit.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
@@ -501,8 +502,48 @@ function SkillsSettingsScreen() {
         queryKey: ORGANIZATION_APP_SETTINGS_KEY,
       });
     } catch (error) {
-      const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
-      displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
+      if ((error as AxiosError).response?.status === 409) {
+        // Concurrent modification detected - fetch latest settings and retry once
+        queryClient.invalidateQueries({
+          queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+        });
+        const latestSettings = await queryClient.ensureQueryData({
+          queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+          queryFn: () => organizationService.getOrganizationAppSettings(),
+        });
+
+        if (latestSettings?.updated_at) {
+          setLastKnownUpdatedAt(latestSettings.updated_at);
+        }
+
+        // Recalculate orgToSave for retry
+        const orgToSaveRetry = allMarketplaces
+          .filter((mp) => mp.scope === "org")
+          .map(({ name, source, ref, repo_path, auto_load }) => ({
+            name,
+            source,
+            ref,
+            repo_path,
+            auto_load,
+          }));
+
+        // Retry the save with fresh timestamp
+        try {
+          await saveOrgAppSettingsMutation.mutateAsync({
+            registered_marketplaces: orgToSaveRetry,
+            last_known_updated_at: latestSettings?.updated_at || null,
+          });
+          displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
+          originalMarketplacesRef.current = allMarketplaces;
+          queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
+        } catch (retryError) {
+          const errorMessage = retrieveAxiosErrorMessage(retryError as AxiosError);
+          displayErrorToast(errorMessage || "Failed to save settings. Please refresh and try again.");
+        }
+      } else {
+        const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
+        displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
+      }
     } finally {
       setIsSavingPersonal(false);
       setIsSavingOrg(false);
@@ -605,12 +646,31 @@ function SkillsSettingsScreen() {
         setIsModalOpen(false);
       } catch (error) {
         if ((error as AxiosError).response?.status === 409) {
-          displayErrorToast(
-            "Your settings are outdated. Please refresh and try again.",
-          );
+          // Concurrent modification detected - fetch latest settings and retry once
           queryClient.invalidateQueries({
             queryKey: ORGANIZATION_APP_SETTINGS_KEY,
           });
+          const latestSettings = await queryClient.ensureQueryData({
+            queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+            queryFn: () => organizationService.getOrganizationAppSettings(),
+          });
+
+          if (latestSettings?.updated_at) {
+            setLastKnownUpdatedAt(latestSettings.updated_at);
+          }
+
+          // Retry the save with fresh timestamp
+          try {
+            await saveOrgAppSettingsMutation.mutateAsync({
+              registered_marketplaces: updated,
+              last_known_updated_at: latestSettings?.updated_at || null,
+            });
+            displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
+            setIsModalOpen(false);
+          } catch (retryError) {
+            const errorMessage = retrieveAxiosErrorMessage(retryError as AxiosError);
+            displayErrorToast(errorMessage || "Failed to save settings. Please refresh and try again.");
+          }
         } else {
           const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
           displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
@@ -730,19 +790,42 @@ function SkillsSettingsScreen() {
       } catch (error) {
         // Revert on error
         if ((error as AxiosError).response?.status === 409) {
-          displayErrorToast(
-            "Your settings are outdated. Please refresh and try again.",
-          );
+          // Concurrent modification detected - fetch latest settings and retry once
           queryClient.invalidateQueries({
             queryKey: ORGANIZATION_APP_SETTINGS_KEY,
           });
+          const latestSettings = await queryClient.ensureQueryData({
+            queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+            queryFn: () => organizationService.getOrganizationAppSettings(),
+          });
+
+          if (latestSettings?.updated_at) {
+            setLastKnownUpdatedAt(latestSettings.updated_at);
+          }
+
+          // Retry the delete with fresh timestamp
+          try {
+            await saveOrgAppSettingsMutation.mutateAsync({
+              registered_marketplaces: updated,
+              last_known_updated_at: latestSettings?.updated_at || null,
+            });
+            displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
+            setIsDeleteModalOpen(false);
+            setMarketplaceToDelete(null);
+          } catch (retryError) {
+            const errorMessage = retrieveAxiosErrorMessage(retryError as AxiosError);
+            displayErrorToast(errorMessage || "Failed to delete marketplace. Please refresh and try again.");
+            // Reload data to revert optimistic update
+            queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
+            setIsDeleting(false);
+          }
         } else {
           const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
           displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
+          // Reload data to revert optimistic update
+          queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
+          setIsDeleting(false);
         }
-        // Reload data to revert optimistic update
-        queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
-        setIsDeleting(false);
       }
     } else if (marketplaceToDelete.scope === "personal") {
       // Delete from personal settings
