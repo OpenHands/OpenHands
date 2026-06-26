@@ -25,6 +25,7 @@ from integrations.utils import (
     get_jira_dc_relink_message,
     get_session_expired_message,
     get_user_not_found_message,
+    has_exact_mention,
     infer_repo_from_message,
     markdown_to_jira_markup,
 )
@@ -111,7 +112,9 @@ def _comment_addresses_openhands(comment: str, bot_mentions: set[str] | None) ->
     # markup [~name]/[~key], so match those too once resolved.
     if not comment:
         return False
-    if '@openhands' in comment:
+    # Boundary-aware + case-insensitive: matches @OpenHands but not an email like
+    # someone@openhands.dev (incl. the service account's own address).
+    if has_exact_mention(comment, '@openhands'):
         return True
     if bot_mentions:
         lowered = comment.lower()
@@ -203,13 +206,20 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         Avoids enumerating the user's full repo list, which is capped and misses
         repos on large Bitbucket DC instances (40k+ repos).
         """
-        verified: list[Repository] = []
+        # Dedupe by canonical full_name: two forms of one repo (case/URL variants,
+        # a rename) resolve to the same repo and must count once -- otherwise
+        # is_job_requested sees >1 and asks the user to disambiguate a single repo.
+        verified: dict[str, Repository] = {}
         for repo_name in mentioned_repos:
             try:
-                verified.append(await provider_handler.verify_repo_provider(repo_name))
+                repo = await provider_handler.verify_repo_provider(
+                    repo_name, is_optional=True
+                )
             except Exception as e:
                 logger.debug(f'[Jira DC] Repo verification failed for {repo_name}: {e}')
-        return verified
+                continue
+            verified.setdefault(repo.full_name.lower(), repo)
+        return list(verified.values())
 
     async def validate_request(
         self, request: Request
@@ -577,10 +587,11 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
 
         Gated so only wiki-markup mentions pay a lookup; literal @openhands and
         non-comment payloads short-circuit. Cached per workspace; failures are not
-        cached, so a transient /myself error self-heals on the next webhook.
+        cached, so a later comment re-attempts resolution (this event is dropped,
+        not retried).
         """
         comment = (payload.get('comment') or {}).get('body', '') or ''
-        if '@openhands' in comment or '[~' not in comment:
+        if has_exact_mention(comment, '@openhands') or '[~' not in comment:
             return None
         try:
             base_api_url = (

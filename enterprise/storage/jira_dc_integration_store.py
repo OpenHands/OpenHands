@@ -233,9 +233,19 @@ class JiraDcIntegrationStore:
 
         # A concurrent insert, or an active link in another workspace (the
         # one-active-link index), won; return whatever active row now exists.
-        return await self.get_active_user_by_keycloak_id_and_workspace(
+        active = await self.get_active_user_by_keycloak_id_and_workspace(
             keycloak_user_id, jira_dc_workspace_id
         )
+        if active is None:
+            # Most likely cause for an empty re-read: the user already holds an
+            # active link in a different workspace (one-active-link constraint), so
+            # auto-enroll here is rejected and they'll see "account not linked".
+            logger.warning(
+                f'[Jira DC] Could not auto-enroll {keycloak_user_id} in workspace '
+                f'{jira_dc_workspace_id}; they likely have an active link in another '
+                f'workspace (one-active-link constraint)'
+            )
+        return active
 
     async def update_user_integration_status(
         self, keycloak_user_id: str, jira_dc_workspace_id: int, status: str

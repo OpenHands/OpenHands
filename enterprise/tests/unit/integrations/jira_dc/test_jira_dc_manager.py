@@ -214,7 +214,9 @@ class TestGetRepositories:
         )
 
         assert verified == [repo]
-        handler.verify_repo_provider.assert_awaited_once_with('company/repo')
+        handler.verify_repo_provider.assert_awaited_once_with(
+            'company/repo', is_optional=True
+        )
 
     @pytest.mark.asyncio
     async def test_verify_mentioned_repos_skips_inaccessible(self, jira_dc_manager):
@@ -225,6 +227,28 @@ class TestGetRepositories:
         verified = await jira_dc_manager._verify_mentioned_repos(handler, ['x/y'])
 
         assert verified == []
+
+    @pytest.mark.asyncio
+    async def test_verify_mentioned_repos_dedupes_same_repo(self, jira_dc_manager):
+        """Two forms of one repo (case/URL variants, a rename) resolve to the same
+        canonical full_name and must collapse to a single entry -- otherwise the
+        len()==1 auto-select in is_job_requested fails and asks the user to pick
+        between a repo and itself."""
+        canonical = Repository(
+            id='1',
+            full_name='PF/WebApp',
+            stargazers_count=0,
+            git_provider=ProviderType.GITHUB,
+            is_public=True,
+        )
+        handler = MagicMock()
+        handler.verify_repo_provider = AsyncMock(return_value=canonical)
+
+        verified = await jira_dc_manager._verify_mentioned_repos(
+            handler, ['PF/WebApp', 'pf/webapp']
+        )
+
+        assert verified == [canonical]  # one unique repo, not two
 
 
 class TestValidateRequest:
@@ -678,6 +702,19 @@ class TestParseWebhook:
         payload = _jdc_comment_payload('cc [~openhands] please')
         assert jira_dc_manager.parse_webhook(payload, bot_mentions=None) is None
 
+    def test_parse_webhook_literal_mention_case_insensitive(self, jira_dc_manager):
+        """@OpenHands (any case) triggers like @openhands."""
+        payload = _jdc_comment_payload('Hey @OpenHands take a look')
+        assert jira_dc_manager.parse_webhook(payload, bot_mentions=None) is not None
+
+    def test_parse_webhook_email_substring_does_not_trigger(self, jira_dc_manager):
+        """An email merely containing '@openhands' (e.g. the service account's own
+        address) must NOT be treated as a mention."""
+        payload = _jdc_comment_payload(
+            'Reassigned from alona+jdcbot@openhands.dev for review'
+        )
+        assert jira_dc_manager.parse_webhook(payload, bot_mentions=None) is None
+
     def test_parse_webhook_issue_update_with_openhands_label(
         self, jira_dc_manager, sample_issue_update_webhook_payload
     ):
@@ -1118,7 +1155,9 @@ class TestIsJobRequested:
 
         assert result is True
         assert mock_view.selected_repo == 'pf/deep-repo'
-        handler.verify_repo_provider.assert_awaited_once_with('pf/deep-repo')
+        handler.verify_repo_provider.assert_awaited_once_with(
+            'pf/deep-repo', is_optional=True
+        )
 
     @pytest.mark.asyncio
     async def test_is_job_requested_exception(self, jira_dc_manager, sample_user_auth):
