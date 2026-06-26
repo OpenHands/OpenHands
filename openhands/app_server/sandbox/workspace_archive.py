@@ -195,6 +195,7 @@ async def archive_workspace(
             {
                 'sandbox_id': sandbox_id,
                 'conversation_id': conversation_key,
+                'phase': 'final',
                 'base_commit': base_commit,
                 'format': fmt,
                 'source_path': archive_path,
@@ -215,3 +216,142 @@ async def archive_workspace(
     except Exception as e:
         _logger.exception('Workspace archive upload failed for %s: %s', sandbox_id, e)
         return not archive_required()
+
+
+def initial_archive_enabled() -> bool:
+    """Whether to capture the workspace's INITIAL state (before the first step).
+
+    Independent of ``RUNTIME_FILE_ARCHIVE_ENABLED`` (the delete/pause capture of
+    the *final* state) so the pre-agent snapshot can be toggled on its own. Off
+    by default — like every other capture knob, nothing happens until enabled.
+    """
+    return os.getenv(
+        'RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', 'false'
+    ).lower() in ('true', '1')
+
+
+def _initial_archive_format() -> str:
+    """Format for the initial snapshot. Defaults to a self-contained tar.gz.
+
+    At conversation start the working tree has no changes yet, so a ``git-delta``
+    would be empty; a full ``tar.gz`` is the only format that captures anything
+    and, unlike a delta keyed to ``base_commit``, it survives the upstream repo
+    or branch later disappearing (the fragile re-clone path we want to avoid).
+    """
+    return os.getenv('RUNTIME_FILE_ARCHIVE_INITIAL_FORMAT', 'tar.gz')
+
+
+async def archive_initial_workspace(
+    httpx_client: Any,
+    *,
+    agent_server_url: str | None,
+    session_api_key: str | None,
+    project_dir: str,
+    sandbox_id: str,
+    conversation_id: str | None = None,
+    base_commit: str = '',
+) -> bool:
+    """Snapshot the workspace BEFORE the agent's first step; return success.
+
+    Captures the repo exactly as cloned (option A — the pre- vs post-setup choice
+    is the open design question tracked in All-Hands-AI/infra#1444) as a
+    self-contained ``tar.gz`` plus a ``phase=initial`` manifest, so evals have the
+    true starting state even if the source repo later disappears.
+
+    This is strictly best-effort: it never raises and never blocks conversation
+    startup. A failure (feature off, misconfig, agent-server hiccup) just means no
+    initial snapshot for this run, logged and swallowed. Returns True only when an
+    archive was actually written.
+    """
+    if not initial_archive_enabled():
+        return False
+    if not agent_server_url:
+        _logger.warning(
+            'Initial workspace archive skipped for %s: no agent-server URL',
+            sandbox_id,
+        )
+        return False
+    if not _archive_bucket():
+        _logger.error(
+            'Initial workspace archive enabled for %s but '
+            'RUNTIME_FILE_ARCHIVE_BUCKET is not set; skipping initial snapshot',
+            sandbox_id,
+        )
+        return False
+
+    fmt = _initial_archive_format()
+    if fmt not in _ARCHIVE_SUFFIX:
+        _logger.error(
+            'Initial workspace archive for %s: unsupported '
+            'RUNTIME_FILE_ARCHIVE_INITIAL_FORMAT %r (valid: %s); skipping',
+            sandbox_id,
+            fmt,
+            sorted(_ARCHIVE_SUFFIX),
+        )
+        return False
+    suffix = _ARCHIVE_SUFFIX[fmt]
+    headers = {'X-Session-API-Key': session_api_key} if session_api_key else {}
+
+    try:
+        response = await httpx_client.get(
+            f'{agent_server_url}/api/file/archive',
+            params={'path': project_dir, 'format': fmt},
+            headers=headers,
+            timeout=_archive_timeout(),
+        )
+        if response.status_code != 200:
+            _logger.warning(
+                'Initial workspace archive for %s: agent-server returned %s; '
+                'no initial snapshot',
+                sandbox_id,
+                response.status_code,
+            )
+            return False
+        data = response.content
+        # tar.gz carries no base-commit header (git-delta sets it); fall back to
+        # the caller-provided HEAD sha so the initial snapshot still records the
+        # commit it came from.
+        captured_base = (
+            response.headers.get('X-Archive-Base-Commit', '') or base_commit
+        )
+    except Exception as e:
+        _logger.warning(
+            'Initial workspace archive fetch failed for %s: %s', sandbox_id, e
+        )
+        return False
+
+    try:
+        store = _get_archive_file_store()
+        ts = utc_now().strftime('%Y%m%dT%H%M%SZ')
+        conversation_key = conversation_id or sandbox_id
+        # Nest under /initial/ so it never collides with the final capture, which
+        # writes to {prefix}/{sandbox_id}/{ts}.
+        base_path = f'{_archive_prefix()}/{sandbox_id}/initial/{ts}'
+        await asyncio.to_thread(store.write, f'{base_path}.{suffix}', data)
+        manifest = json.dumps(
+            {
+                'sandbox_id': sandbox_id,
+                'conversation_id': conversation_key,
+                'phase': 'initial',
+                'base_commit': captured_base,
+                'format': fmt,
+                'source_path': project_dir,
+                'byte_count': len(data),
+                'created_at': ts,
+            },
+            sort_keys=True,
+        ).encode('utf-8')
+        await asyncio.to_thread(store.write, f'{base_path}.manifest.json', manifest)
+        _logger.info(
+            'Archived INITIAL workspace for %s (%d bytes) to %s.%s',
+            sandbox_id,
+            len(data),
+            base_path,
+            suffix,
+        )
+        return True
+    except Exception as e:
+        _logger.exception(
+            'Initial workspace archive upload failed for %s: %s', sandbox_id, e
+        )
+        return False

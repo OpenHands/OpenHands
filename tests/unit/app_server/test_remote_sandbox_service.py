@@ -2365,6 +2365,123 @@ class TestArchiveWorkspaceHelper:
         assert kwargs['params']['path'] == '/workspace/project'
 
 
+class TestArchiveInitialWorkspaceHelper:
+    """Unit tests for the initial-state (pre-agent) workspace snapshot."""
+
+    @pytest.mark.asyncio
+    async def test_initial_archive_uploads_tar_gz_and_manifest(self, monkeypatch):
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', 'true')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b'tar-bytes'
+        resp.headers = {}
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=resp)
+        store = MagicMock()
+        writes: dict[str, bytes] = {}
+        store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
+
+        with patch.object(
+            workspace_archive, '_get_archive_file_store', return_value=store
+        ):
+            ok = await workspace_archive.archive_initial_workspace(
+                client,
+                agent_server_url='https://sandbox.example.com',
+                session_api_key='sk',
+                project_dir='/workspace/project/repo',
+                sandbox_id='sandbox-1',
+                conversation_id='conv-1',
+                base_commit='deadbeef',
+            )
+
+        assert ok is True
+        # tar.gz requested at the (already-resolved) project dir; key forwarded.
+        _, kwargs = client.get.call_args
+        assert kwargs['headers']['X-Session-API-Key'] == 'sk'
+        assert kwargs['params'] == {
+            'path': '/workspace/project/repo',
+            'format': 'tar.gz',
+        }
+        # Archive nests under /initial/ so it can never collide with the final
+        # capture (which writes to {prefix}/{sandbox_id}/{ts}).
+        archive_path = next(p for p in writes if p.endswith('.tar.gz'))
+        assert '/sandbox-1/initial/' in archive_path
+        manifest_path = next(p for p in writes if p.endswith('.manifest.json'))
+        manifest = json.loads(writes[manifest_path])
+        assert manifest['phase'] == 'initial'
+        assert manifest['base_commit'] == 'deadbeef'
+        assert manifest['conversation_id'] == 'conv-1'
+        assert manifest['format'] == 'tar.gz'
+        assert manifest['source_path'] == '/workspace/project/repo'
+
+    @pytest.mark.asyncio
+    async def test_initial_archive_disabled_is_noop(self, monkeypatch):
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.delenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', raising=False)
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+
+        client = AsyncMock()
+        client.get = AsyncMock()
+
+        ok = await workspace_archive.archive_initial_workspace(
+            client,
+            agent_server_url='https://sandbox.example.com',
+            session_api_key='sk',
+            project_dir='/workspace/project/repo',
+            sandbox_id='sandbox-1',
+        )
+        # Off by default: no request, no upload.
+        assert ok is False
+        client.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_initial_archive_non_200_returns_false(self, monkeypatch):
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', 'true')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+
+        resp = MagicMock()
+        resp.status_code = 500
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=resp)
+
+        ok = await workspace_archive.archive_initial_workspace(
+            client,
+            agent_server_url='https://sandbox.example.com',
+            session_api_key='sk',
+            project_dir='/workspace/project/repo',
+            sandbox_id='sandbox-1',
+        )
+        # Best-effort: a failed capture is swallowed (never blocks startup).
+        assert ok is False
+
+    @pytest.mark.asyncio
+    async def test_initial_archive_no_bucket_returns_false(self, monkeypatch):
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', 'true')
+        monkeypatch.delenv('RUNTIME_FILE_ARCHIVE_BUCKET', raising=False)
+
+        client = AsyncMock()
+        client.get = AsyncMock()
+
+        ok = await workspace_archive.archive_initial_workspace(
+            client,
+            agent_server_url='https://sandbox.example.com',
+            session_api_key='sk',
+            project_dir='/workspace/project/repo',
+            sandbox_id='sandbox-1',
+        )
+        assert ok is False
+        client.get.assert_not_called()
+
+
 class TestDeleteSandboxInvalidationPersistence:
     """BUG 1: the session-key invalidation must be durably committed up front, so
     it survives even if the request's session is later rolled back on a failed
