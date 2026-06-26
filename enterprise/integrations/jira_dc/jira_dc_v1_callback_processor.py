@@ -212,7 +212,9 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
             raise Exception(f'Failed to send message to agent server: {error_detail}')
 
         except httpx.TimeoutException:
-            error_detail = f'Request timeout after 30 seconds to {url}'
+            error_detail = (
+                f'Request timeout after {JIRA_DC_HTTP_TIMEOUT:g} seconds to {url}'
+            )
             _logger.exception(
                 '[Jira DC] Timeout error: %s. Request payload: %s',
                 error_detail,
