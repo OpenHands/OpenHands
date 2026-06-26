@@ -259,7 +259,7 @@ class TestOrgAppSettingsUpdateMarketplaceValidation:
                 MarketplaceRegistration(
                     name='marketplace-1',
                     source='github:owner/repo1',
-                    auto_load='all',
+                    auto_load=True,
                 ),
                 MarketplaceRegistration(
                     name='marketplace-2',
@@ -278,11 +278,11 @@ class TestOrgAppSettingsUpdateMarketplaceValidation:
                     source='github:owner/repo',
                     ref='v1.0.0',
                     repo_path='marketplaces/plugins',
-                    auto_load='all',
+                    auto_load=True,
                 ),
             ]
         )
         assert update.registered_marketplaces[0].name == 'full-featured'
         assert update.registered_marketplaces[0].ref == 'v1.0.0'
         assert update.registered_marketplaces[0].repo_path == 'marketplaces/plugins'
-        assert update.registered_marketplaces[0].auto_load == 'all'
+        assert update.registered_marketplaces[0].auto_load == True

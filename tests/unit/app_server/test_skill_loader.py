@@ -891,7 +891,7 @@ class TestLoadSkillsWithMarketplaces:
             MarketplaceRegistration(
                 name='public',
                 source='github:OpenHands/skills',
-                auto_load='all',
+                auto_load=True,
             ),
             MarketplaceRegistration(
                 name='team',
@@ -921,7 +921,7 @@ class TestLoadSkillsWithMarketplaces:
         mp1 = payload['registered_marketplaces'][0]
         assert mp1['name'] == 'public'
         assert mp1['source'] == 'github:OpenHands/skills'
-        assert mp1['auto_load'] == 'all'
+        assert mp1['auto_load']
         # None values are stripped by model_dump()
         assert 'ref' not in mp1
         assert 'repo_path' not in mp1

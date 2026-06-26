@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import re
 from enum import Enum
-from typing import Annotated, Any, Literal, Sequence
+from typing import Annotated, Any, Sequence
 
 from fastmcp.mcp_config import MCPConfig
 from fastmcp.mcp_config import MCPConfig as SDKMCPConfig
@@ -68,7 +68,7 @@ class MarketplaceRegistration(BaseModel):
         >>> MarketplaceRegistration(
         ...     name="public",
         ...     source="github:OpenHands/skills",
-        ...     auto_load="all"
+        ...     auto_load=True
         ... )
 
         >>> # Register marketplace without auto-loading
@@ -82,7 +82,7 @@ class MarketplaceRegistration(BaseModel):
         ...     name="team",
         ...     source="github:acme/monorepo",
         ...     repo_path="marketplaces/internal",
-        ...     auto_load="all"
+        ...     auto_load=True
         ... )
     """
 
@@ -102,11 +102,11 @@ class MarketplaceRegistration(BaseModel):
             'Only relevant for git sources, not local paths.'
         ),
     )
-    auto_load: Literal['all'] | None = Field(
+    auto_load: bool | None = Field(
         default=None,
         description=(
             'Auto-load behavior for this marketplace. '
-            "'all' = load all plugins at conversation start. "
+            'True = load all plugins at conversation start. '
             'None = registered for resolution but not auto-loaded.'
         ),
     )
@@ -332,7 +332,7 @@ class Settings(BaseModel):
         default_factory=list,
         description=(
             'List of marketplace registrations for plugin resolution. '
-            "Marketplaces with auto_load='all' will have their plugins loaded "
+            'Marketplaces with auto_load=True will have their plugins loaded '
             'automatically at conversation start. '
             'See MarketplaceRegistration for details.'
         ),

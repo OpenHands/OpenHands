@@ -158,8 +158,8 @@ function SkillsSettingsScreen() {
       // Only editable scopes (personal/org) can have changes
       if (mp.scope === "instance") return false;
       const orig = originalBySource.get(mp.source);
-      // Normalize null/undefined to null for comparison
-      const hasChange = (mp.auto_load ?? null) !== (orig?.auto_load ?? null);
+      // Normalize to boolean for comparison (handles null/undefined/true/false)
+      const hasChange = Boolean(mp.auto_load) !== Boolean(orig?.auto_load);
       if (hasChange) {
         console.log("[DEBUG] hasMarketplaceChanges: found change", {
           source: mp.source,

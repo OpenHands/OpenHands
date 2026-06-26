@@ -120,7 +120,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
             project_dir: Project root directory (resolved via get_project_dir).
             agent_server_url: Agent-server URL (required)
             registered_marketplaces: Optional list of MarketplaceRegistration objects
-                from user settings. Marketplaces with auto_load='all' will have
+                from user settings. Marketplaces with auto_load=True will have
                 their plugins loaded automatically.
 
         Returns:

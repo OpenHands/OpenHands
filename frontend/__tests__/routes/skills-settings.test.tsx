@@ -93,41 +93,42 @@ afterEach(() => {
 });
 
 describe("hasMarketplaceChanges - auto_load toggle bug fix", () => {
-  it("should normalize null and undefined as equivalent in comparison", () => {
-    // This test documents the bug fix:
-    // Before: undefined !== null returned true (bug)
-    // After: (undefined ?? null) === (null ?? null) returns false
-    const normalizeValue = (val: "all" | null | undefined) => val ?? null;
+  it("should normalize null, undefined, and false to false for comparison", () => {
+    // The fix uses Boolean() to normalize all values to true/false
+    const normalizeValue = (val: boolean | null | undefined) => Boolean(val);
 
-    // Original value from backend (undefined after model_dump strips null)
-    const original = normalizeValue(undefined);
-    // After toggle off (now using null)
-    const toggledOff = normalizeValue(null);
+    // Original value from backend (null/undefined)
+    expect(normalizeValue(undefined)).toBe(false);
+    expect(normalizeValue(null)).toBe(false);
+    // After toggle off
+    expect(normalizeValue(false)).toBe(false);
     // After toggle on
-    const toggledOn = normalizeValue("all");
+    expect(normalizeValue(true)).toBe(true);
 
-    expect(original).toBeNull();
-    expect(toggledOff).toBeNull();
-    expect(toggledOn).toBe("all");
-    expect(original).toBe(toggledOff); // These should be equal now
+    // null, undefined, false all normalize to false (no change)
+    expect(normalizeValue(null)).toBe(normalizeValue(false));
+    expect(normalizeValue(undefined)).toBe(normalizeValue(null));
   });
 
   it("should not detect change when toggling auto_load back to original state", () => {
-    // Simulates the comparison logic in hasMarketplaceChanges
-    const normalizeAutoLoad = (val: "all" | null | undefined) => val ?? null;
+    // Simulates the Boolean comparison logic in hasMarketplaceChanges
+    const normalizeAutoLoad = (val: boolean | null | undefined) => Boolean(val);
 
-    const currentValue = normalizeAutoLoad(undefined);
+    // After save, original is null/false → normalized to false
+    // After second toggle, value is true → normalized to true
+    // Then toggle back to false → normalized to false
+    const currentValue = normalizeAutoLoad(false);
     const originalValue = normalizeAutoLoad(null);
 
-    // Both should normalize to null, so no change detected
+    // Both normalize to false, so no change detected
     const hasChange = currentValue !== originalValue;
     expect(hasChange).toBe(false);
   });
 
   it("should detect change when auto_load is different from original", () => {
-    const normalizeAutoLoad = (val: "all" | null | undefined) => val ?? null;
+    const normalizeAutoLoad = (val: boolean | null | undefined) => Boolean(val);
 
-    const currentValue = normalizeAutoLoad("all");
+    const currentValue = normalizeAutoLoad(true);
     const originalValue = normalizeAutoLoad(null);
 
     const hasChange = currentValue !== originalValue;

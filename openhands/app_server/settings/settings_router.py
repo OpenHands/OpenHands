@@ -91,11 +91,11 @@ def _get_instance_default_marketplaces() -> list[dict[str, Any]]:
                 if isinstance(parsed, list):
                     for mp in parsed:
                         parsed_marketplaces.append(
-                            {**mp, 'auto_load': mp.get('auto_load', 'all')}
+                            {**mp, 'auto_load': mp.get('auto_load', True)}
                         )
                 elif isinstance(parsed, dict):
                     parsed_marketplaces.append(
-                        {**parsed, 'auto_load': parsed.get('auto_load', 'all')}
+                        {**parsed, 'auto_load': parsed.get('auto_load', True)}
                     )
                 continue
             except json.JSONDecodeError:
@@ -106,14 +106,14 @@ def _get_instance_default_marketplaces() -> list[dict[str, Any]]:
         parts = definition.split('#')
         source = parts[0]
 
-        marketplace = {'source': source}
+        marketplace: dict[str, Any] = {'source': source}
         if len(parts) > 1 and parts[1]:
             marketplace['name'] = parts[1]
         if len(parts) > 2 and parts[2]:
             marketplace['ref'] = parts[2]
         if len(parts) > 3 and parts[3]:
             marketplace['repo_path'] = parts[3]
-        marketplace['auto_load'] = 'all'
+        marketplace['auto_load'] = True
 
         parsed_marketplaces.append(marketplace)
 

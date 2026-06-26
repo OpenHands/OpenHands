@@ -32,7 +32,7 @@ class TestGetInstanceDefaultMarketplaces:
         result = _get_instance_default_marketplaces()
         assert len(result) == 1
         assert result[0]['source'] == 'github:OpenHands/skills'
-        assert result[0]['auto_load'] == 'all'
+        assert result[0]['auto_load']
 
     def test_marketplace_with_name(self, monkeypatch):
         """Test parsing marketplace with custom name using # separator."""
@@ -106,7 +106,7 @@ class TestMergeMarketplaces:
     def test_only_instance_defaults(self):
         """Test composition with only instance defaults."""
         instance = [
-            {'source': 'github:OpenHands/skills', 'auto_load': 'all'},
+            {'source': 'github:OpenHands/skills', 'auto_load': True},
             {'source': 'github:myorg/plugins', 'name': 'my-plugins'},
         ]
         inherited, personal = _merge_marketplaces(instance, [], [])
@@ -116,7 +116,7 @@ class TestMergeMarketplaces:
 
     def test_instance_and_org(self):
         """Test composition with instance and org marketplaces."""
-        instance = [{'source': 'github:OpenHands/skills', 'auto_load': 'all'}]
+        instance = [{'source': 'github:OpenHands/skills', 'auto_load': True}]
         org = [{'source': 'github:myorg/plugins', 'name': 'my-plugins'}]
         inherited, personal = _merge_marketplaces(instance, org, [])
         assert len(inherited) == 2
@@ -129,7 +129,7 @@ class TestMergeMarketplaces:
     def test_org_overrides_instance(self):
         """Test that org settings override instance settings for same source."""
         instance = [
-            {'source': 'github:OpenHands/skills', 'ref': 'main', 'auto_load': 'all'}
+            {'source': 'github:OpenHands/skills', 'ref': 'main', 'auto_load': True}
         ]
         org = [{'source': 'github:OpenHands/skills', 'ref': 'v2', 'auto_load': None}]
         inherited, personal = _merge_marketplaces(instance, org, [])
@@ -140,9 +140,9 @@ class TestMergeMarketplaces:
 
     def test_user_adds_new_marketplace(self):
         """Test that user can add new marketplace."""
-        instance = [{'source': 'github:OpenHands/skills', 'auto_load': 'all'}]
+        instance = [{'source': 'github:OpenHands/skills', 'auto_load': True}]
         user = [
-            {'source': 'github:myorg/plugins', 'name': 'my-plugins', 'auto_load': 'all'}
+            {'source': 'github:myorg/plugins', 'name': 'my-plugins', 'auto_load': True}
         ]
         inherited, personal = _merge_marketplaces(instance, [], user)
         assert len(inherited) == 1
@@ -158,7 +158,7 @@ class TestMergeMarketplaces:
         or override instance marketplace settings.
         """
         instance = [
-            {'source': 'github:OpenHands/skills', 'ref': 'main', 'auto_load': 'all'}
+            {'source': 'github:OpenHands/skills', 'ref': 'main', 'auto_load': True}
         ]
         user = [{'source': 'github:OpenHands/skills', 'ref': 'v2', 'auto_load': None}]
         inherited, personal = _merge_marketplaces(instance, [], user)
@@ -167,7 +167,7 @@ class TestMergeMarketplaces:
         assert inherited[0]['source'] == 'github:OpenHands/skills'
         assert inherited[0]['scope'] == 'instance'
         assert inherited[0]['ref'] == 'main'
-        assert inherited[0]['auto_load'] == 'all'
+        assert inherited[0]['auto_load']
         # User's attempt is ignored - not added to personal
         assert len(personal) == 0
 
@@ -177,7 +177,7 @@ class TestMergeMarketplaces:
         Users can only add NEW personal marketplaces. They cannot modify
         or override org marketplace settings.
         """
-        org = [{'source': 'github:myorg/plugins', 'ref': 'main', 'auto_load': 'all'}]
+        org = [{'source': 'github:myorg/plugins', 'ref': 'main', 'auto_load': True}]
         user = [{'source': 'github:myorg/plugins', 'ref': 'v2', 'auto_load': None}]
         inherited, personal = _merge_marketplaces([], org, user)
         # Org marketplace remains unchanged
@@ -185,7 +185,7 @@ class TestMergeMarketplaces:
         assert inherited[0]['source'] == 'github:myorg/plugins'
         assert inherited[0]['scope'] == 'org'
         assert inherited[0]['ref'] == 'main'
-        assert inherited[0]['auto_load'] == 'all'
+        assert inherited[0]['auto_load']
         # User's attempt is ignored - not added to personal
         assert len(personal) == 0
 
@@ -196,7 +196,7 @@ class TestMergeMarketplaces:
         Users cannot override instance or org marketplace settings.
         """
         instance = [
-            {'source': 'github:OpenHands/skills', 'auto_load': 'all'},
+            {'source': 'github:OpenHands/skills', 'auto_load': True},
             {'source': 'github:instance/only', 'name': 'instance-only'},
         ]
         org = [
@@ -246,7 +246,7 @@ class TestMergeMarketplaces:
         User's attempt to override org marketplace is ignored.
         """
         instance = [
-            {'source': 'github:OpenHands/skills', 'ref': 'main', 'auto_load': 'all'}
+            {'source': 'github:OpenHands/skills', 'ref': 'main', 'auto_load': True}
         ]
         org = [{'source': 'github:OpenHands/skills', 'ref': 'org-branch'}]
         user = [{'source': 'github:OpenHands/skills', 'ref': 'user-branch'}]
@@ -263,14 +263,14 @@ class TestMergeMarketplaces:
 
     def test_marketplace_with_empty_source_ignored(self):
         """Test that marketplaces with empty source are ignored."""
-        instance = [{'source': '', 'auto_load': 'all'}]
+        instance = [{'source': '', 'auto_load': True}]
         inherited, personal = _merge_marketplaces(instance, [], [])
         assert inherited == []
         assert personal == []
 
     def test_marketplace_with_none_source_ignored(self):
         """Test that marketplaces with None source are ignored."""
-        instance = [{'source': None, 'auto_load': 'all'}]
+        instance = [{'source': None, 'auto_load': True}]
         inherited, personal = _merge_marketplaces(instance, [], [])
         assert inherited == []
         assert personal == []
@@ -286,7 +286,7 @@ class TestMergeMarketplaces:
                 'source': 'github:OpenHands/skills',
                 'name': 'original-name',
                 'ref': 'main',
-                'auto_load': 'all',
+                'auto_load': True,
             }
         ]
         # User tries to change auto_load
@@ -297,7 +297,7 @@ class TestMergeMarketplaces:
         assert len(inherited) == 1
         assert inherited[0]['name'] == 'original-name'
         assert inherited[0]['ref'] == 'main'
-        assert inherited[0]['auto_load'] == 'all'  # Not modified by user
+        assert inherited[0]['auto_load']  # Not modified by user
         assert inherited[0]['scope'] == 'instance'
 
         # User's attempt is ignored
@@ -330,7 +330,7 @@ class TestMergeMarketplaces:
                 'source': 'github:OpenHands/skills',
                 'name': 'instance-name',
                 'ref': 'main',
-                'auto_load': 'all',
+                'auto_load': True,
             }
         ]
         org = [{'source': 'github:OpenHands/skills', 'name': 'org-name'}]
@@ -340,7 +340,7 @@ class TestMergeMarketplaces:
         # Org changes name, but ref and auto_load come from instance
         assert inherited[0]['name'] == 'org-name'
         assert inherited[0]['ref'] == 'main'
-        assert inherited[0]['auto_load'] == 'all'
+        assert inherited[0]['auto_load']
         assert inherited[0]['scope'] == 'org'
 
 
@@ -358,7 +358,7 @@ class TestGetInstanceDefaultMarketplacesJSONFormat:
         result = _get_instance_default_marketplaces()
         assert len(result) == 1
         assert result[0]['source'] == 'github:my/repo'
-        assert result[0]['auto_load'] == 'all'
+        assert result[0]['auto_load']
 
     def test_single_marketplace_https_url(self, monkeypatch):
         """Test parsing HTTPS git URL format."""
@@ -368,7 +368,7 @@ class TestGetInstanceDefaultMarketplacesJSONFormat:
         result = _get_instance_default_marketplaces()
         assert len(result) == 1
         assert result[0]['source'] == 'https://github.com/my/repo'
-        assert result[0]['auto_load'] == 'all'
+        assert result[0]['auto_load']
 
     def test_single_marketplace_ssh_url(self, monkeypatch):
         """Test parsing SSH git URL format."""
@@ -376,7 +376,7 @@ class TestGetInstanceDefaultMarketplacesJSONFormat:
         result = _get_instance_default_marketplaces()
         assert len(result) == 1
         assert result[0]['source'] == 'git@github.com:my/repo'
-        assert result[0]['auto_load'] == 'all'
+        assert result[0]['auto_load']
 
     def test_single_marketplace_local_path(self, monkeypatch):
         """Test parsing local path format."""
@@ -384,7 +384,7 @@ class TestGetInstanceDefaultMarketplacesJSONFormat:
         result = _get_instance_default_marketplaces()
         assert len(result) == 1
         assert result[0]['source'] == 'local/plugins'
-        assert result[0]['auto_load'] == 'all'
+        assert result[0]['auto_load']
 
     def test_multiple_comma_separated_marketplaces(self, monkeypatch):
         """Test parsing multiple comma-separated marketplaces."""
@@ -434,7 +434,7 @@ class TestMarketplaceCompositionIntegration:
             {
                 'source': 'github:openhands/default-plugins',
                 'name': 'default',
-                'auto_load': 'all',
+                'auto_load': True,
             }
         ]
 
@@ -447,7 +447,7 @@ class TestMarketplaceCompositionIntegration:
             {
                 'source': 'github:acme/company-plugins',
                 'name': 'acme-plugins',
-                'auto_load': 'all',
+                'auto_load': True,
             },
         ]
 
@@ -470,7 +470,7 @@ class TestMarketplaceCompositionIntegration:
 
         # acme-plugins should be org scope
         assert inherited_by_source['github:acme/company-plugins']['scope'] == 'org'
-        assert inherited_by_source['github:acme/company-plugins']['auto_load'] == 'all'
+        assert inherited_by_source['github:acme/company-plugins']['auto_load']
 
     def test_user_adds_to_org_marketplaces(self):
         """Test user can add personal marketplace alongside org marketplaces."""
@@ -478,7 +478,7 @@ class TestMarketplaceCompositionIntegration:
             {
                 'source': 'github:acme/company-plugins',
                 'name': 'acme-plugins',
-                'auto_load': 'all',
+                'auto_load': True,
             },
         ]
 
@@ -486,7 +486,7 @@ class TestMarketplaceCompositionIntegration:
             {
                 'source': 'github:user/personal-plugins',
                 'name': 'personal',
-                'auto_load': 'all',
+                'auto_load': True,
             }
         ]
 
@@ -510,7 +510,7 @@ class TestMarketplaceCompositionIntegration:
         org = [
             {
                 'source': 'github:acme/company-plugins',
-                'auto_load': 'all',
+                'auto_load': True,
             },
         ]
 
@@ -526,7 +526,7 @@ class TestMarketplaceCompositionIntegration:
         # Org marketplace remains unchanged - user override is blocked
         assert len(inherited) == 1
         assert inherited[0]['scope'] == 'org'
-        assert inherited[0]['auto_load'] == 'all'  # Still 'all' from org
+        assert inherited[0]['auto_load']  # Still True from org
 
         # User's attempt is ignored - not added to personal
         assert len(personal) == 0
@@ -559,7 +559,7 @@ class TestMarketplaceCompositionIntegration:
             MarketplaceRegistration(
                 name='test',
                 source='../escape',
-                auto_load='all',
+                auto_load=True,
             )
 
         with pytest.raises(ValidationError, match="cannot contain '..'"):

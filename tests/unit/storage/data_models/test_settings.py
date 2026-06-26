@@ -554,13 +554,13 @@ class TestMarketplaceRegistration:
         assert reg.auto_load is None
 
     def test_registration_with_auto_load(self):
-        """Test registration with auto_load='all'."""
+        """Test registration with auto_load=True."""
         reg = MarketplaceRegistration(
             name='public',
             source='github:OpenHands/skills',
-            auto_load='all',
+            auto_load=True,
         )
-        assert reg.auto_load == 'all'
+        assert reg.auto_load
 
     def test_registration_with_ref(self):
         """Test registration with specific ref."""
@@ -605,7 +605,7 @@ class TestMarketplaceRegistration:
             source='github:owner/repo',
             ref='main',
             repo_path='plugins',
-            auto_load='all',
+            auto_load=True,
         )
         data = reg.model_dump()
         assert data == {
@@ -613,7 +613,7 @@ class TestMarketplaceRegistration:
             'source': 'github:owner/repo',
             'ref': 'main',
             'repo_path': 'plugins',
-            'auto_load': 'all',
+            'auto_load': True,
         }
 
     # --- Name validation tests ---
@@ -700,7 +700,7 @@ class TestSettingsRegisteredMarketplaces:
             MarketplaceRegistration(
                 name='public',
                 source='github:OpenHands/skills',
-                auto_load='all',
+                auto_load=True,
             ),
             MarketplaceRegistration(
                 name='team',
@@ -711,7 +711,7 @@ class TestSettingsRegisteredMarketplaces:
 
         assert len(settings.registered_marketplaces) == 2
         assert settings.registered_marketplaces[0].name == 'public'
-        assert settings.registered_marketplaces[0].auto_load == 'all'
+        assert settings.registered_marketplaces[0].auto_load
         assert settings.registered_marketplaces[1].name == 'team'
         assert settings.registered_marketplaces[1].auto_load is None
 
@@ -721,7 +721,7 @@ class TestSettingsRegisteredMarketplaces:
             MarketplaceRegistration(
                 name='test',
                 source='github:owner/repo',
-                auto_load='all',
+                auto_load=True,
             ),
         ]
         settings = Settings(registered_marketplaces=marketplaces)
@@ -730,7 +730,7 @@ class TestSettingsRegisteredMarketplaces:
         assert 'registered_marketplaces' in data
         assert len(data['registered_marketplaces']) == 1
         assert data['registered_marketplaces'][0]['name'] == 'test'
-        assert data['registered_marketplaces'][0]['auto_load'] == 'all'
+        assert data['registered_marketplaces'][0]['auto_load']
 
     def test_settings_from_dict_with_registered_marketplaces(self):
         """Test creating Settings from dict with registered_marketplaces."""
@@ -740,7 +740,7 @@ class TestSettingsRegisteredMarketplaces:
                     'name': 'custom',
                     'source': 'github:custom/repo',
                     'ref': 'v1.0.0',
-                    'auto_load': 'all',
+                    'auto_load': True,
                 }
             ]
         }
@@ -775,7 +775,7 @@ class TestSettingsRegisteredMarketplaces:
                     source='github:owner/repo',
                     ref='v1.0.0',
                     repo_path='marketplaces/internal',
-                    auto_load='all',
+                    auto_load=True,
                 ),
                 MarketplaceRegistration(
                     name='minimal',
@@ -784,7 +784,7 @@ class TestSettingsRegisteredMarketplaces:
                 MarketplaceRegistration(
                     name='auto-load-only',
                     source='github:owner/auto',
-                    auto_load='all',
+                    auto_load=True,
                 ),
             ]
         )
@@ -795,7 +795,7 @@ class TestSettingsRegisteredMarketplaces:
         assert full.name == 'full-featured'
         assert full.ref == 'v1.0.0'
         assert full.repo_path == 'marketplaces/internal'
-        assert full.auto_load == 'all'
+        assert full.auto_load
 
         # Verify minimal marketplace has None for optional fields
         minimal = settings.registered_marketplaces[1]
@@ -811,7 +811,7 @@ class TestSettingsRegisteredMarketplaces:
                     name='test',
                     source='github:owner/repo',
                     ref='main',
-                    auto_load='all',
+                    auto_load=True,
                 ),
             ]
         )
@@ -826,7 +826,7 @@ class TestSettingsRegisteredMarketplaces:
         assert len(restored.registered_marketplaces) == 1
         assert restored.registered_marketplaces[0].name == 'test'
         assert restored.registered_marketplaces[0].ref == 'main'
-        assert restored.registered_marketplaces[0].auto_load == 'all'
+        assert restored.registered_marketplaces[0].auto_load
 
 
 class TestMarketplaceRegistrationValidationEdgeCases:
