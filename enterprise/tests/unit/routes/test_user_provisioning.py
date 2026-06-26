@@ -67,6 +67,11 @@ class TestProvisionUserPermissionWiring:
 
         assert Permission.PROVISION_USER in SUPER_ROLE_PERMISSIONS[RoleName.ADMIN]
 
+    def test_superowner_does_not_have_permission_yet(self):
+        from server.auth.authorization import SUPER_ROLE_PERMISSIONS
+
+        assert Permission.PROVISION_USER not in SUPER_ROLE_PERMISSIONS[RoleName.OWNER]
+
     def test_supermember_does_not_have_permission(self):
         from server.auth.authorization import SUPER_ROLE_PERMISSIONS
 
@@ -85,6 +90,18 @@ class TestProvisionUserRequestValidation:
     def test_optional_password(self):
         req = ProvisionUserRequest(email='a@b.com')
         assert req.password is None
+
+    def test_default_role_is_member(self):
+        req = ProvisionUserRequest(email='a@b.com')
+        assert req.role == 'member'
+
+    def test_admin_role_is_allowed(self):
+        req = ProvisionUserRequest(email='a@b.com', role='admin')
+        assert req.role == 'admin'
+
+    def test_owner_role_is_rejected(self):
+        with pytest.raises(ValueError):
+            ProvisionUserRequest(email='a@b.com', role='owner')  # type: ignore[arg-type]
 
 
 class TestProvisionUserHandler:
@@ -136,6 +153,7 @@ class TestProvisionUserHandler:
 
         role_mock = MagicMock()
         role_mock.id = 42
+        role_store_mock = AsyncMock(return_value=role_mock)
 
         api_key_store_mock = MagicMock()
         api_key_store_mock.create_api_key = AsyncMock(
@@ -178,8 +196,7 @@ class TestProvisionUserHandler:
             ),
             patch(
                 'server.routes.user_provisioning.RoleStore.get_role_by_name',
-                new_callable=AsyncMock,
-                return_value=role_mock,
+                role_store_mock,
             ),
             patch(
                 'server.routes.user_provisioning.OrgMemberStore.add_user_to_org',
@@ -209,6 +226,7 @@ class TestProvisionUserHandler:
             'api_key_store': api_key_store_mock,
             'set_flags': set_flags_mock,
             'add_user_to_org': add_user_to_org_mock,
+            'role_store': role_store_mock,
             'remove_member': remove_member_mock,
             'delete_org_cascade': delete_org_cascade_mock,
         }
@@ -247,12 +265,18 @@ class TestProvisionUserHandler:
         assert resp.api_key == 'sk-oh-generated-api-key'
         assert resp.user_id == new_user_id
         assert resp.org_id == str(target_org_id)
+        assert resp.role == 'member'
 
         # Offline token must have been stored against the newly created
         # Keycloak user id, not against the caller.
         handles['token_manager'].store_offline_token.assert_awaited_once_with(
             user_id=new_user_id, offline_token='offline-refresh-token'
         )
+        handles['role_store'].assert_awaited_once_with('member')
+        handles['add_user_to_org'].assert_awaited_once()
+        add_kwargs = handles['add_user_to_org'].await_args.kwargs
+        assert add_kwargs['role_id'] == 42
+
         # API key must be bound to the target org, not the personal one.
         handles['api_key_store'].create_api_key.assert_awaited_once()
         kwargs = handles['api_key_store'].create_api_key.await_args.kwargs
@@ -262,6 +286,28 @@ class TestProvisionUserHandler:
         handles['delete_org_cascade'].assert_not_awaited()
         handles['remove_member'].assert_not_awaited()
         handles['token_manager'].delete_keycloak_user.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_can_provision_admin_role(
+        self, caller_user_id, target_org_id, new_user_id
+    ):
+        patches, handles = self._patch_dependencies(new_user_id, target_org_id)
+        with self._enter_all(patches):
+            resp = await provision_user(
+                body=ProvisionUserRequest(
+                    email='admin@example.com',
+                    password='SuperSecret-1234',
+                    role='admin',
+                ),
+                caller_user_id=caller_user_id,
+                target_org_id=target_org_id,
+            )
+
+        assert resp.role == 'admin'
+        handles['role_store'].assert_awaited_once_with('admin')
+        handles['add_user_to_org'].assert_awaited_once()
+        add_kwargs = handles['add_user_to_org'].await_args.kwargs
+        assert add_kwargs['role_id'] == 42
 
     @pytest.mark.asyncio
     async def test_generates_password_when_not_supplied(

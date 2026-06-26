@@ -157,8 +157,8 @@ async def create_org(
 
     This endpoint allows authenticated users that hold the
     ``CREATE_ORGANIZATION`` permission to create a new organization. In
-    practice this permission is only granted via a super role
-    (``superowner`` / ``superadmin``); no regular,
+    practice this permission is only granted via the ``superadmin``
+    role; no regular,
     org-scoped role carries it. The creator is not automatically added
     as a member; a superadmin can provision the initial org users separately.
 

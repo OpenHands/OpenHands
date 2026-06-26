@@ -471,12 +471,10 @@ async def test_create_org_forbidden_for_supermember():
     assert 'not a member' in response.json()['detail'].lower()
 
 
-@pytest.mark.parametrize('super_role_name', ['owner', 'admin'])
 @pytest.mark.asyncio
-async def test_create_org_allowed_for_super_roles(super_role_name):
+async def test_create_org_allowed_for_superadmin():
     """
-    GIVEN: An authenticated user whose super role is one of ``superowner``
-           or ``superadmin``
+    GIVEN: An authenticated user whose super role is ``superadmin``
     WHEN: POST /api/organizations is called
     THEN: The request is authorized and 201 Created is returned.
     """
@@ -489,7 +487,7 @@ async def test_create_org_allowed_for_super_roles(super_role_name):
     app.dependency_overrides[get_user_id] = mock_get_user_id
 
     super_role = MagicMock()
-    super_role.name = super_role_name
+    super_role.name = 'admin'
 
     org_id = uuid.uuid4()
     mock_org = Org(
@@ -528,6 +526,46 @@ async def test_create_org_allowed_for_super_roles(super_role_name):
         response = client.post('/api/organizations', json=request_data)
 
     assert response.status_code == status.HTTP_201_CREATED
+
+
+@pytest.mark.asyncio
+async def test_create_org_forbidden_for_superowner():
+    """
+    GIVEN: An authenticated user whose user.role_id points to owner
+    WHEN: POST /api/organizations is called
+    THEN: The request is forbidden because superowner is not functional yet.
+    """
+    app = FastAPI()
+    app.include_router(org_router)
+
+    def mock_get_user_id():
+        return TEST_USER_ID
+
+    app.dependency_overrides[get_user_id] = mock_get_user_id
+
+    super_role = MagicMock()
+    super_role.name = 'owner'
+
+    request_data = {
+        'name': 'Test Organization',
+        'contact_name': 'John Doe',
+        'contact_email': 'john@example.com',
+    }
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            'server.auth.authorization.get_user_super_role',
+            AsyncMock(return_value=super_role),
+        ),
+    ):
+        client = TestClient(app)
+        response = client.post('/api/organizations', json=request_data)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.asyncio

@@ -106,11 +106,11 @@ class RoleName(str, Enum):
       only to the user's membership in that organization. Permissions
       are looked up via :data:`ROLE_PERMISSIONS`.
     * **Super role** -- stored on ``user.role_id``. Applies at the
-      instance level across organizations. Conceptually these are
-      referred to as ``superowner`` / ``superadmin`` / ``supermember``
-      (the name simply prepends ``"super"`` to the role name). Super
-      permissions are defined explicitly in :data:`SUPER_ROLE_PERMISSIONS`;
-      they do not inherit org-scoped role permissions.
+      instance level across organizations. The only functional super
+      role currently defined is ``superadmin`` (``role_id`` pointing to
+      the ``admin`` role row). Super permissions are defined explicitly
+      in :data:`SUPER_ROLE_PERMISSIONS`; they do not inherit
+      org-scoped role permissions.
     """
 
     OWNER = 'owner'
@@ -211,14 +211,12 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
 # This keeps instance administration separate from organization-scoped
 # product/configuration administration.
 SUPER_ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
-    # Bootstrap/break-glass superowner and regular superadmin can create
-    # organizations and provision users into a selected organization without
-    # becoming org members themselves. Additional instance-admin capabilities
-    # should be added here explicitly as the corresponding routes are wired
-    # to permission checks.
-    RoleName.OWNER: frozenset(
-        [Permission.CREATE_ORGANIZATION, Permission.PROVISION_USER]
-    ),
+    # Only superadmin is functional for now. It can create organizations
+    # and provision users into a selected organization without becoming
+    # an org member itself. Additional instance-admin capabilities should
+    # be added here explicitly as the corresponding routes are wired to
+    # permission checks.
+    RoleName.OWNER: frozenset(),
     RoleName.ADMIN: frozenset(
         [Permission.CREATE_ORGANIZATION, Permission.PROVISION_USER]
     ),

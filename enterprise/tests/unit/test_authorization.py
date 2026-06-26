@@ -1308,9 +1308,7 @@ class TestSuperRolePermissions:
         WHEN: comparing it to the org-scoped role mappings
         THEN: super roles do not inherit org-scoped permissions implicitly.
         """
-        assert SUPER_ROLE_PERMISSIONS[RoleName.OWNER] == frozenset(
-            [Permission.CREATE_ORGANIZATION, Permission.PROVISION_USER]
-        )
+        assert SUPER_ROLE_PERMISSIONS[RoleName.OWNER] == frozenset()
         assert SUPER_ROLE_PERMISSIONS[RoleName.ADMIN] == frozenset(
             [Permission.CREATE_ORGANIZATION, Permission.PROVISION_USER]
         )
@@ -1324,18 +1322,14 @@ class TestSuperRolePermissions:
         """
         assert set(SUPER_ROLE_PERMISSIONS.keys()) == set(ROLE_PERMISSIONS.keys())
 
-    def test_get_super_role_permissions_owner_is_instance_scoped(self):
+    def test_get_super_role_permissions_owner_is_not_functional_yet(self):
         """
         GIVEN: role name 'owner'
         WHEN: get_super_role_permissions is called
-        THEN: it returns only explicit instance-level permissions.
+        THEN: no instance-level permissions are currently assigned.
         """
         perms = get_super_role_permissions('owner')
-        assert perms == frozenset(
-            [Permission.CREATE_ORGANIZATION, Permission.PROVISION_USER]
-        )
-        assert Permission.DELETE_ORGANIZATION not in perms
-        assert Permission.CHANGE_ORGANIZATION_NAME not in perms
+        assert perms == frozenset()
 
     def test_get_super_role_permissions_invalid_role(self):
         """
@@ -1345,20 +1339,21 @@ class TestSuperRolePermissions:
         """
         assert get_super_role_permissions('not_a_role') == frozenset()
 
-    def test_superowner_and_superadmin_grant_create_organization(self):
+    def test_only_superadmin_grants_instance_org_management(self):
         """
         GIVEN: SUPER_ROLE_PERMISSIONS mapping
-        WHEN: looking up CREATE_ORGANIZATION across super roles
-        THEN: superowner and superadmin carry CREATE_ORGANIZATION
-              and PROVISION_USER permissions, and supermember does not.
+        WHEN: looking up instance-level org management permissions
+        THEN: only superadmin carries CREATE_ORGANIZATION and PROVISION_USER.
         """
-        assert Permission.CREATE_ORGANIZATION in SUPER_ROLE_PERMISSIONS[RoleName.OWNER]
+        assert (
+            Permission.CREATE_ORGANIZATION not in SUPER_ROLE_PERMISSIONS[RoleName.OWNER]
+        )
         assert Permission.CREATE_ORGANIZATION in SUPER_ROLE_PERMISSIONS[RoleName.ADMIN]
         assert (
             Permission.CREATE_ORGANIZATION
             not in SUPER_ROLE_PERMISSIONS[RoleName.MEMBER]
         )
-        assert Permission.PROVISION_USER in SUPER_ROLE_PERMISSIONS[RoleName.OWNER]
+        assert Permission.PROVISION_USER not in SUPER_ROLE_PERMISSIONS[RoleName.OWNER]
         assert Permission.PROVISION_USER in SUPER_ROLE_PERMISSIONS[RoleName.ADMIN]
         assert Permission.PROVISION_USER not in SUPER_ROLE_PERMISSIONS[RoleName.MEMBER]
 
@@ -1489,7 +1484,7 @@ class TestRequirePermissionSuperRoleFallback:
     @pytest.mark.asyncio
     async def test_super_role_does_not_grant_unlisted_permission(self):
         """
-        GIVEN: a member in the org and a superowner at the user level
+        GIVEN: a member in the org and a non-functional superowner at the user level
         WHEN: require_permission(DELETE_ORGANIZATION) runs
         THEN: the super role does not help because DELETE_ORGANIZATION
               is not in the explicit super-role permission set.
