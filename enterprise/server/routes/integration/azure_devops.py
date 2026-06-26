@@ -102,6 +102,11 @@ def _subscription_is_project_scoped(subscription: dict[str, Any]) -> bool:
     return bool((subscription.get('publisherInputs') or {}).get('projectId'))
 
 
+def _subscription_is_enabled(subscription: dict[str, Any] | None) -> bool:
+    # A Service Hook can exist but be disabled/suspended and not deliver events.
+    return bool(subscription) and subscription.get('status') == 'enabled'
+
+
 def _matches_pr_comment_subscription(
     subscription: dict[str, Any],
     *,
@@ -182,9 +187,9 @@ async def get_azure_devops_resources(
         webhook_url = azure_devops_webhook_url()
 
         subscriptions = await service.list_service_hook_subscriptions()
-        pr_subscription_id = next(
+        pr_subscription = next(
             (
-                _subscription_id(subscription)
+                subscription
                 for subscription in subscriptions
                 if _matches_pr_comment_subscription(
                     subscription, webhook_url=webhook_url
@@ -192,9 +197,9 @@ async def get_azure_devops_resources(
             ),
             None,
         )
-        work_item_subscription_id = next(
+        work_item_subscription = next(
             (
-                _subscription_id(subscription)
+                subscription
                 for subscription in subscriptions
                 if _matches_work_item_comment_subscription(
                     subscription, webhook_url=webhook_url
@@ -203,13 +208,22 @@ async def get_azure_devops_resources(
             None,
         )
 
+        # Only report installed when the hooks are enabled (a disabled/suspended
+        # hook exists but won't deliver resolver events).
+        pr_enabled = _subscription_is_enabled(pr_subscription)
+        work_item_enabled = _subscription_is_enabled(work_item_subscription)
+
         return AzureDevOpsWebhookStatus(
             organization=service.organization,
-            webhook_installed=bool(pr_subscription_id and work_item_subscription_id),
-            pr_webhook_installed=bool(pr_subscription_id),
-            work_item_webhook_installed=bool(work_item_subscription_id),
-            pr_subscription_id=pr_subscription_id,
-            work_item_subscription_id=work_item_subscription_id,
+            webhook_installed=pr_enabled and work_item_enabled,
+            pr_webhook_installed=pr_enabled,
+            work_item_webhook_installed=work_item_enabled,
+            pr_subscription_id=_subscription_id(pr_subscription)
+            if pr_subscription
+            else None,
+            work_item_subscription_id=_subscription_id(work_item_subscription)
+            if work_item_subscription
+            else None,
             webhook_url=webhook_url,
             webhook_secret_set=bool(IS_LOCAL_DEPLOYMENT or AZURE_DEVOPS_WEBHOOK_SECRET),
         )

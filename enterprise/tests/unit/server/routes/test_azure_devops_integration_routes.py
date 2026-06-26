@@ -52,6 +52,7 @@ async def test_get_azure_devops_resources_reports_installed_status(monkeypatch):
                     'consumerInputs': {
                         'url': 'https://app.example.com/integration/azure-devops/events',
                     },
+                    'status': 'enabled',
                 },
                 {
                     'id': 'work-item-subscription-id',
@@ -60,6 +61,7 @@ async def test_get_azure_devops_resources_reports_installed_status(monkeypatch):
                     'consumerInputs': {
                         'url': 'https://app.example.com/integration/azure-devops/events',
                     },
+                    'status': 'enabled',
                 },
             ]
 
@@ -80,6 +82,50 @@ async def test_get_azure_devops_resources_reports_installed_status(monkeypatch):
     assert (
         status.webhook_url == 'https://app.example.com/integration/azure-devops/events'
     )
+
+
+@pytest.mark.asyncio
+async def test_get_azure_devops_resources_reports_disabled_hook_as_not_installed(
+    monkeypatch,
+):
+    monkeypatch.setattr(azure_devops, 'HOST_URL', 'https://app.example.com')
+    monkeypatch.setattr(azure_devops, 'AZURE_DEVOPS_WEBHOOK_SECRET', 'secret')
+    url = 'https://app.example.com/integration/azure-devops/events'
+
+    class FakeAzureDevOpsService:
+        organization = 'alonaking'
+
+        async def list_service_hook_subscriptions(self):
+            return [
+                {
+                    'id': 'pr-subscription-id',
+                    'eventType': azure_devops.AZURE_DEVOPS_PR_COMMENT_EVENT,
+                    'publisherInputs': {},
+                    'consumerInputs': {'url': url},
+                    'status': 'enabled',
+                },
+                {
+                    'id': 'work-item-subscription-id',
+                    'eventType': azure_devops.AZURE_DEVOPS_WORK_ITEM_COMMENT_EVENT,
+                    'publisherInputs': {},
+                    'consumerInputs': {'url': url},
+                    'status': 'disabledByUser',
+                },
+            ]
+
+    monkeypatch.setattr(
+        azure_devops,
+        'SaaSAzureDevOpsService',
+        lambda external_auth_id: FakeAzureDevOpsService(),
+    )
+
+    status = await azure_devops.get_azure_devops_resources(user_id='user-id')
+
+    # Disabled work-item hook -> org not fully installed, but id still surfaced.
+    assert status.webhook_installed is False
+    assert status.pr_webhook_installed is True
+    assert status.work_item_webhook_installed is False
+    assert status.work_item_subscription_id == 'work-item-subscription-id'
 
 
 def test_matchers_require_absent_project_id():
