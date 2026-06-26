@@ -105,6 +105,20 @@ def _extract_workspace_hosts(payload: Dict) -> set[str]:
     }
 
 
+def _comment_addresses_openhands(comment: str, bot_mentions: set[str] | None) -> bool:
+    # Literal @openhands always triggers (works even when the bot username can't
+    # be resolved). Jira's mention picker serializes a real mention as wiki
+    # markup [~name]/[~key], so match those too once resolved.
+    if not comment:
+        return False
+    if '@openhands' in comment:
+        return True
+    if bot_mentions:
+        lowered = comment.lower()
+        return any(token in lowered for token in bot_mentions)
+    return False
+
+
 class JiraDcManager(Manager[JiraDcViewInterface]):
     def __init__(self, token_manager: TokenManager):
         self.token_manager = token_manager
@@ -112,6 +126,9 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         self.jinja_env = Environment(
             loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'jira_dc')
         )
+        # Bot mention tokens ([~name]/[~key]/...) per workspace.id, resolved
+        # lazily from /myself for matching picker mentions.
+        self._svc_mentions_cache: dict[int, set[str]] = {}
 
     async def authenticate_user(
         self, user_email: str, jira_dc_user_id: str, workspace_id: int
@@ -265,7 +282,9 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
 
         return False, None, None, None
 
-    def parse_webhook(self, payload: Dict) -> JobContext | None:
+    def parse_webhook(
+        self, payload: Dict, bot_mentions: set[str] | None = None
+    ) -> JobContext | None:
         event_type = payload.get('webhookEvent')
 
         if event_type == 'comment_created':
@@ -273,7 +292,7 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             comment = comment_data.get('body', '')
             comment_id = comment_data.get('id')
 
-            if '@openhands' not in comment:
+            if not _comment_addresses_openhands(comment, bot_mentions):
                 return None
 
             issue_data = payload.get('issue', {})
@@ -345,7 +364,8 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
     async def receive_message(self, message: Message):
         """Process incoming Jira DC webhook message."""
         payload = message.message.get('payload', {})
-        job_context = self.parse_webhook(payload)
+        bot_mentions = await self._resolve_service_account_mentions(payload)
+        job_context = self.parse_webhook(payload, bot_mentions)
 
         if not job_context:
             logger.info('[Jira DC] Webhook does not match trigger conditions')
@@ -551,6 +571,64 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             )
         except Exception as e:
             logger.error(f'[Jira] Failed to send response message: {str(e)}')
+
+    async def _resolve_service_account_mentions(self, payload: Dict) -> set[str] | None:
+        """Best-effort bot mention tokens ([~name]/[~key]) for a picker mention.
+
+        Gated so only wiki-markup mentions pay a lookup; literal @openhands and
+        non-comment payloads short-circuit. Cached per workspace; failures are not
+        cached, so a transient /myself error self-heals on the next webhook.
+        """
+        comment = (payload.get('comment') or {}).get('body', '') or ''
+        if '@openhands' in comment or '[~' not in comment:
+            return None
+        try:
+            base_api_url = (
+                (payload.get('issue') or {}).get('self', '').split('/rest/')[0]
+            )
+            workspace_name = urlparse(base_api_url).hostname
+            if not workspace_name:
+                return None
+            workspace = await self.integration_store.get_workspace_by_name(
+                workspace_name
+            )
+            if not workspace:
+                return None
+            if workspace.id in self._svc_mentions_cache:
+                return self._svc_mentions_cache[workspace.id]
+            service_account = resolve_jira_dc_service_account(
+                workspace, self.token_manager
+            )
+            name, key = await self._fetch_service_account_identity(
+                base_api_url, service_account.api_key
+            )
+            mentions = {
+                token.lower()
+                for token in (
+                    f'[~{name}]' if name else None,
+                    f'[~{key}]' if key else None,
+                    f'[~accountid:{key}]' if key else None,
+                )
+                if token
+            }
+            if mentions:
+                self._svc_mentions_cache[workspace.id] = mentions
+            return mentions or None
+        except Exception as e:
+            logger.warning(f'[Jira DC] Could not resolve bot mentions: {str(e)}')
+            return None
+
+    async def _fetch_service_account_identity(
+        self, base_api_url: str, svc_acc_api_key: str
+    ) -> tuple[str | None, str | None]:
+        """Return the service account's Jira (name, key) from /myself."""
+        url = f'{base_api_url}/rest/api/2/myself'
+        headers = {'Authorization': f'Bearer {svc_acc_api_key}'}
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            return data.get('name'), data.get('key')
 
     async def get_issue_details(
         self, job_context: JobContext, svc_acc_api_key: str

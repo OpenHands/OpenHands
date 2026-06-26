@@ -496,6 +496,114 @@ class TestValidateRequest:
         assert payload is None
 
 
+def _jdc_comment_payload(body: str) -> dict:
+    return {
+        'webhookEvent': 'comment_created',
+        'comment': {
+            'id': '999',
+            'body': body,
+            'author': {
+                'emailAddress': 'user@company.com',
+                'displayName': 'Test User',
+                'key': 'JIRAUSER10000',
+            },
+        },
+        'issue': {
+            'id': '12345',
+            'key': 'PROJ-123',
+            'self': 'https://jira.company.com/rest/api/2/issue/12345',
+        },
+    }
+
+
+class TestResolveServiceAccountMentions:
+    """Lazy, cached bot-username resolution for picker mentions (FDE-84)."""
+
+    @pytest.mark.asyncio
+    async def test_skips_ordinary_comment(self, jira_dc_manager):
+        jira_dc_manager.integration_store.get_workspace_by_name = AsyncMock()
+        result = await jira_dc_manager._resolve_service_account_mentions(
+            _jdc_comment_payload('just a regular comment')
+        )
+        assert result is None
+        jira_dc_manager.integration_store.get_workspace_by_name.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_skips_literal_mention(self, jira_dc_manager):
+        """Literal @openhands never pays a /myself lookup."""
+        jira_dc_manager.integration_store.get_workspace_by_name = AsyncMock()
+        result = await jira_dc_manager._resolve_service_account_mentions(
+            _jdc_comment_payload('hey @openhands and [~openhands]')
+        )
+        assert result is None
+        jira_dc_manager.integration_store.get_workspace_by_name.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_resolves_name_and_key_then_caches(self, jira_dc_manager):
+        workspace = MagicMock()
+        workspace.id = 1
+        jira_dc_manager.integration_store.get_workspace_by_name = AsyncMock(
+            return_value=workspace
+        )
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {'name': 'openhands', 'key': 'JIRAUSER1'}
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(return_value=mock_response)
+
+        payload = _jdc_comment_payload('cc [~openhands]')
+        with (
+            patch(
+                'integrations.jira_dc.jira_dc_manager.resolve_jira_dc_service_account',
+                return_value=MagicMock(api_key='pat'),
+            ),
+            patch('httpx.AsyncClient', return_value=mock_client),
+        ):
+            first = await jira_dc_manager._resolve_service_account_mentions(payload)
+            second = await jira_dc_manager._resolve_service_account_mentions(payload)
+
+        assert '[~openhands]' in first
+        assert '[~jirauser1]' in first
+        assert '[~accountid:jirauser1]' in first
+        assert jira_dc_manager._svc_mentions_cache[1] == first
+        # Second call served from cache -> only one /myself fetch.
+        mock_client.get.assert_awaited_once()
+        assert second == first
+
+    @pytest.mark.asyncio
+    async def test_myself_failure_not_cached(self, jira_dc_manager):
+        workspace = MagicMock()
+        workspace.id = 1
+        jira_dc_manager.integration_store.get_workspace_by_name = AsyncMock(
+            return_value=workspace
+        )
+        with (
+            patch(
+                'integrations.jira_dc.jira_dc_manager.resolve_jira_dc_service_account',
+                return_value=MagicMock(api_key='pat'),
+            ),
+            patch('httpx.AsyncClient', side_effect=Exception('myself down')),
+        ):
+            result = await jira_dc_manager._resolve_service_account_mentions(
+                _jdc_comment_payload('cc [~openhands]')
+            )
+        assert result is None
+        assert 1 not in jira_dc_manager._svc_mentions_cache
+
+    @pytest.mark.asyncio
+    async def test_missing_workspace(self, jira_dc_manager):
+        jira_dc_manager.integration_store.get_workspace_by_name = AsyncMock(
+            return_value=None
+        )
+        result = await jira_dc_manager._resolve_service_account_mentions(
+            _jdc_comment_payload('cc [~openhands]')
+        )
+        assert result is None
+
+
 class TestParseWebhook:
     """Test webhook parsing functionality."""
 
@@ -535,6 +643,40 @@ class TestParseWebhook:
 
         job_context = jira_dc_manager.parse_webhook(payload)
         assert job_context is None
+
+    def test_parse_webhook_literal_mention_without_username(self, jira_dc_manager):
+        """Literal @openhands triggers even when the bot username is unresolved."""
+        payload = _jdc_comment_payload('Please fix this @openhands')
+        assert jira_dc_manager.parse_webhook(payload, bot_mentions=None) is not None
+
+    def test_parse_webhook_wiki_mention_triggers(self, jira_dc_manager):
+        """A picker mention [~name] triggers once the bot mentions are known."""
+        payload = _jdc_comment_payload('cc [~openhands] please review')
+        result = jira_dc_manager.parse_webhook(payload, bot_mentions={'[~openhands]'})
+        assert result is not None
+
+    def test_parse_webhook_wiki_mention_case_insensitive(self, jira_dc_manager):
+        payload = _jdc_comment_payload('cc [~OpenHands]')
+        result = jira_dc_manager.parse_webhook(payload, bot_mentions={'[~openhands]'})
+        assert result is not None
+
+    def test_parse_webhook_wiki_mention_by_key(self, jira_dc_manager):
+        """The bot's Jira key form ([~JIRAUSER...]) also triggers."""
+        payload = _jdc_comment_payload('cc [~jirauser173929] please')
+        result = jira_dc_manager.parse_webhook(
+            payload, bot_mentions={'[~jirauser173929]'}
+        )
+        assert result is not None
+
+    def test_parse_webhook_wiki_mention_other_user_no_trigger(self, jira_dc_manager):
+        payload = _jdc_comment_payload('cc [~someoneelse] review')
+        result = jira_dc_manager.parse_webhook(payload, bot_mentions={'[~openhands]'})
+        assert result is None
+
+    def test_parse_webhook_wiki_mention_dropped_when_unresolved(self, jira_dc_manager):
+        """Picker mention with no resolved username falls back to literal-only."""
+        payload = _jdc_comment_payload('cc [~openhands] please')
+        assert jira_dc_manager.parse_webhook(payload, bot_mentions=None) is None
 
     def test_parse_webhook_issue_update_with_openhands_label(
         self, jira_dc_manager, sample_issue_update_webhook_payload
