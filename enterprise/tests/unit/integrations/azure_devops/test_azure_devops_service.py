@@ -188,6 +188,62 @@ async def test_create_pr_comment_service_hook_posts_expected_payload():
 
 
 @pytest.mark.asyncio
+async def test_has_contribute_access_posts_repo_token_and_returns_evaluation():
+    service = SaaSAzureDevOpsService(token=SecretStr('token'), base_domain='alonaking')
+    service._make_request = AsyncMock(  # type: ignore[method-assign]
+        return_value=({'evaluations': [{'value': True}]}, {})
+    )
+
+    result = await service.has_contribute_access('proj-1', 'repo-1')
+
+    assert result is True
+    kwargs = service._make_request.await_args.kwargs
+    assert kwargs['url'] == (
+        'https://dev.azure.com/alonaking/_apis/security/permissionevaluationbatch'
+        '?api-version=7.1-preview.1'
+    )
+    assert kwargs['method'] == RequestMethod.POST
+    evaluation = kwargs['params']['evaluations'][0]
+    assert evaluation['token'] == 'repoV2/proj-1/repo-1'
+    assert evaluation['permissions'] == 4
+
+
+@pytest.mark.asyncio
+async def test_has_contribute_access_fails_closed_on_missing_ids():
+    service = SaaSAzureDevOpsService(token=SecretStr('token'), base_domain='alonaking')
+    service._make_request = AsyncMock()  # type: ignore[method-assign]
+
+    assert await service.has_contribute_access('', 'repo-1') is False
+    service._make_request.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_has_contribute_access_fails_closed_on_error():
+    service = SaaSAzureDevOpsService(token=SecretStr('token'), base_domain='alonaking')
+    service._make_request = AsyncMock(side_effect=RuntimeError('boom'))  # type: ignore[method-assign]
+
+    assert await service.has_contribute_access('proj-1', 'repo-1') is False
+
+
+@pytest.mark.asyncio
+async def test_get_project_repositories_returns_value_list():
+    service = SaaSAzureDevOpsService(token=SecretStr('token'), base_domain='alonaking')
+    service._make_request = AsyncMock(  # type: ignore[method-assign]
+        return_value=({'value': [{'id': 'repo-1', 'name': 'svc'}]}, {})
+    )
+
+    repos = await service.get_project_repositories('My Project')
+
+    assert repos == [{'id': 'repo-1', 'name': 'svc'}]
+    call = service._make_request.await_args
+    url = call.kwargs.get('url') or call.args[0]
+    assert url == (
+        'https://dev.azure.com/alonaking/My%20Project/_apis/git/repositories'
+        '?api-version=7.1'
+    )
+
+
+@pytest.mark.asyncio
 async def test_create_work_item_comment_service_hook_posts_expected_payload():
     service = SaaSAzureDevOpsService(token=SecretStr('token'), base_domain='alonaking')
     service._make_request = AsyncMock(  # type: ignore[method-assign]

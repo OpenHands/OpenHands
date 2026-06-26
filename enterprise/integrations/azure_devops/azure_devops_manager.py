@@ -98,6 +98,21 @@ class AzureDevOpsManager(Manager[AzureDevOpsViewType]):
             message,
             keycloak_user_id=keycloak_user_id,
         )
+        if azure_view is None:
+            logger.info('[Azure DevOps] No repository resolved for event; ignoring.')
+            return
+
+        # Gate on write access, mirroring the GitHub/GitLab/Bitbucket resolvers.
+        azure_service = AzureDevOpsServiceImpl(external_auth_id=keycloak_user_id)
+        if not await azure_service.has_contribute_access(
+            azure_view.project_id, azure_view.repository_id
+        ):
+            logger.info(
+                f'[Azure DevOps] {actor.get("displayName") or actor.get("uniqueName") or "unknown"} '
+                f'lacks write access to {azure_view.full_repo_name}; ignoring event.'
+            )
+            return
+
         logger.info(
             f'[Azure DevOps] Creating job for {azure_view.user_info.username} '
             f'in {azure_view.full_repo_name}#{azure_view.issue_number}'

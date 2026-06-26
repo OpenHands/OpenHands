@@ -55,8 +55,9 @@ def _make_pr_message(body: str = '@openhands please fix this') -> Message:
                         'pullRequestId': 7,
                         'sourceRefName': 'refs/heads/feature/x',
                         'repository': {
+                            'id': 'repo-1',
                             'name': 'Repo',
-                            'project': {'name': 'Project'},
+                            'project': {'id': 'proj-1', 'name': 'Project'},
                             'remoteUrl': 'https://dev.azure.com/alonaking/Project/_git/Repo',
                         },
                     },
@@ -145,21 +146,55 @@ async def test_factory_creates_pr_comment_view():
     assert view.branch_name == 'feature/x'
     assert view.user_info.user_id == 'ado-user-id'
     assert view.user_info.keycloak_user_id == 'kc-alice'
+    assert view.project_id == 'proj-1'
+    assert view.repository_id == 'repo-1'
 
 
 @pytest.mark.asyncio
-async def test_factory_creates_work_item_comment_view():
+async def test_factory_work_item_view_derives_real_repo(monkeypatch):
+    # System.TeamProject ('Project') matches no repo name -> use the first repo.
+    fake_service = MagicMock()
+    fake_service.get_project_repositories = AsyncMock(
+        return_value=[
+            {'id': 'repo-9', 'name': 'service-api', 'project': {'id': 'proj-9'}},
+            {'id': 'repo-2', 'name': 'docs', 'project': {'id': 'proj-9'}},
+        ]
+    )
+    monkeypatch.setattr(
+        'integrations.azure_devops.azure_devops_view.AzureDevOpsServiceImpl',
+        lambda external_auth_id: fake_service,
+    )
+
     view = await AzureDevOpsFactory.create_azure_devops_view_from_payload(
         _make_work_item_message(),
         keycloak_user_id='kc-alice',
     )
 
     assert isinstance(view, AzureDevOpsWorkItemComment)
-    assert view.full_repo_name == 'alonaking/Project/Project'
+    assert view.full_repo_name == 'alonaking/Project/service-api'
+    assert view.repository_id == 'repo-9'
+    assert view.project_id == 'proj-9'
     assert view.issue_number == 42
     assert view.comment_body == '@openhands please fix work item'
     assert view.user_info.user_id == 'ado-revised-user-id'
     assert view.user_info.username == 'Alice Revised'
+
+
+@pytest.mark.asyncio
+async def test_factory_work_item_view_returns_none_when_no_repos(monkeypatch):
+    fake_service = MagicMock()
+    fake_service.get_project_repositories = AsyncMock(return_value=[])
+    monkeypatch.setattr(
+        'integrations.azure_devops.azure_devops_view.AzureDevOpsServiceImpl',
+        lambda external_auth_id: fake_service,
+    )
+
+    view = await AzureDevOpsFactory.create_azure_devops_view_from_payload(
+        _make_work_item_message(),
+        keycloak_user_id='kc-alice',
+    )
+
+    assert view is None
 
 
 @pytest.mark.asyncio

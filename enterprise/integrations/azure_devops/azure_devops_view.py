@@ -108,6 +108,18 @@ def _extract_work_item_comment(payload: dict[str, Any]) -> str:
     return match.group(1).strip() if match else detailed
 
 
+def _select_project_repo(
+    repos: list[dict[str, Any]], project_name: str
+) -> dict[str, Any] | None:
+    """Pick a project's default repo (name matches project), else the first."""
+    if not repos:
+        return None
+    for repo in repos:
+        if (repo.get('name') or '').lower() == project_name.lower():
+            return repo
+    return repos[0]
+
+
 def _actor_username(actor: dict[str, Any]) -> str:
     return (
         actor.get('displayName')
@@ -141,6 +153,8 @@ class AzureDevOpsItem(ResolverViewInterface):
     description: str
     previous_comments: list[Comment]
     project_name: str
+    project_id: str
+    repository_id: str
 
     def _get_branch_name(self) -> str | None:
         return getattr(self, 'branch_name', None)
@@ -348,7 +362,7 @@ class AzureDevOpsFactory:
     async def create_azure_devops_view_from_payload(
         message: Message,
         keycloak_user_id: str,
-    ) -> AzureDevOpsViewType:
+    ) -> AzureDevOpsViewType | None:
         payload = message.message.get('payload') or {}
         resource = payload.get('resource') or {}
         actor = AzureDevOpsFactory.extract_actor(message)
@@ -359,7 +373,10 @@ class AzureDevOpsFactory:
         if AzureDevOpsFactory.is_pr_comment(message):
             pull_request = resource.get('pullRequest') or {}
             repository = pull_request.get('repository') or {}
-            project_name = (repository.get('project') or {}).get('name') or ''
+            project = repository.get('project') or {}
+            project_name = project.get('name') or ''
+            project_id = str(project.get('id') or '')
+            repository_id = str(repository.get('id') or '')
             repo_name = repository.get('name') or ''
             pr_number = int(pull_request.get('pullRequestId') or 0)
             comment = resource.get('comment') or {}
@@ -387,6 +404,8 @@ class AzureDevOpsFactory:
                 description='',
                 previous_comments=[],
                 project_name=project_name,
+                project_id=project_id,
+                repository_id=repository_id,
                 comment_id=comment.get('id'),
                 comment_body=comment.get('content') or '',
                 thread_id=int(thread_match.group(1)) if thread_match else None,
@@ -397,7 +416,22 @@ class AzureDevOpsFactory:
             fields = resource.get('fields') or {}
             project_name = fields.get('System.TeamProject') or ''
             work_item_id = int(resource.get('id') or 0)
-            full_repo_name = f'{org}/{project_name}/{project_name}'
+
+            # Work items aren't tied to a repo; resolve a real one for the project
+            # instead of fabricating a project-named repo that may not exist.
+            azure_service = AzureDevOpsServiceImpl(external_auth_id=keycloak_user_id)
+            repos = await azure_service.get_project_repositories(project_name)
+            repo = _select_project_repo(repos, project_name)
+            if repo is None:
+                logger.warning(
+                    f'[Azure DevOps] Project {org}/{project_name} has no '
+                    'repositories; skipping work item event.'
+                )
+                return None
+            repo_name = repo.get('name') or ''
+            repository_id = str(repo.get('id') or '')
+            project_id = str((repo.get('project') or {}).get('id') or '')
+            full_repo_name = f'{org}/{project_name}/{repo_name}'
             user_info = UserData(
                 user_id=actor_id,
                 username=username,
@@ -417,6 +451,8 @@ class AzureDevOpsFactory:
                 description='',
                 previous_comments=[],
                 project_name=project_name,
+                project_id=project_id,
+                repository_id=repository_id,
                 comment_body=_extract_work_item_comment(payload),
             )
 
