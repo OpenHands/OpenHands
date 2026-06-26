@@ -99,9 +99,9 @@ class TestProvisionUserRequestValidation:
         req = ProvisionUserRequest(email='a@b.com', role='admin')
         assert req.role == 'admin'
 
-    def test_owner_role_is_rejected(self):
-        with pytest.raises(ValueError):
-            ProvisionUserRequest(email='a@b.com', role='owner')  # type: ignore[arg-type]
+    def test_owner_role_is_allowed(self):
+        req = ProvisionUserRequest(email='a@b.com', role='owner')
+        assert req.role == 'owner'
 
 
 class TestProvisionUserHandler:
@@ -305,6 +305,28 @@ class TestProvisionUserHandler:
 
         assert resp.role == 'admin'
         handles['role_store'].assert_awaited_once_with('admin')
+        handles['add_user_to_org'].assert_awaited_once()
+        add_kwargs = handles['add_user_to_org'].await_args.kwargs
+        assert add_kwargs['role_id'] == 42
+
+    @pytest.mark.asyncio
+    async def test_can_provision_owner_role(
+        self, caller_user_id, target_org_id, new_user_id
+    ):
+        patches, handles = self._patch_dependencies(new_user_id, target_org_id)
+        with self._enter_all(patches):
+            resp = await provision_user(
+                body=ProvisionUserRequest(
+                    email='owner@example.com',
+                    password='SuperSecret-1234',
+                    role='owner',
+                ),
+                caller_user_id=caller_user_id,
+                target_org_id=target_org_id,
+            )
+
+        assert resp.role == 'owner'
+        handles['role_store'].assert_awaited_once_with('owner')
         handles['add_user_to_org'].assert_awaited_once()
         add_kwargs = handles['add_user_to_org'].await_args.kwargs
         assert add_kwargs['role_id'] == 42

@@ -22,7 +22,7 @@ Flow (POST ``/api/organizations/provision-user``):
    shape), but with ``email_verified=True``, ``accepted_tos=now()``, and
    ``user_consents_to_analytics=True`` — no UI round-trips required.
 5. Set up a LiteLLM integration for the user in the target org and add
-   them with the requested role (``member`` by default, or ``admin``).
+   them with the requested role (``member`` by default, ``admin``, or ``owner``).
 6. Mint an API key bound to the target org and return it to the caller.
 
 The caller receives the email, password (generated if not supplied) and
@@ -106,9 +106,8 @@ from openhands.app_server.utils.logger import openhands_logger as logger
 user_provisioning_router = APIRouter(prefix='/api/organizations', tags=['Orgs'])
 
 # Roles that can be assigned directly during provisioning. Provisioning
-# supports creating regular members and org admins; owners still require
-# the dedicated member role-management flow.
-ProvisionedRoleName = Literal['member', 'admin']
+# supports creating regular members, org admins, and org owners.
+ProvisionedRoleName = Literal['member', 'admin', 'owner']
 DEFAULT_PROVISIONED_ROLE: ProvisionedRoleName = 'member'
 
 # Length of generated passwords. 24 characters from a 70-symbol alphabet
@@ -192,8 +191,7 @@ class ProvisionUserRequest(BaseModel):
         default=DEFAULT_PROVISIONED_ROLE,
         description=(
             'Role to assign in the target organization. Provisioning supports '
-            'member and admin; owners must be assigned through the existing '
-            'member role-management flow.'
+            'member, admin, and owner.'
         ),
     )
 
