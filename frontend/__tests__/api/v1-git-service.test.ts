@@ -4,6 +4,17 @@ import V1GitService from "../../src/api/git-service/v1-git-service.api";
 
 vi.mock("axios");
 
+// Must mock open-hands-axios before importing V1GitService, since it
+// calls openHands.interceptors at module evaluation time.  Because
+// axios is mocked above, axios.create() returns undefined without
+// this guard.
+vi.mock("../../src/api/open-hands-axios", () => ({
+  openHands: {
+    get: vi.fn(),
+    interceptors: { response: { use: vi.fn() } },
+  },
+}));
+
 describe("V1GitService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
