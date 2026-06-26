@@ -30,7 +30,7 @@ const mockResponse = {
     {
       name: "test-marketplace",
       source: "github:owner/repo",
-      auto_load: "all" as const,
+      auto_load: true,
     },
   ],
   updated_at: "2024-01-01T00:00:00Z",

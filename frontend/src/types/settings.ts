@@ -120,7 +120,7 @@ export type MarketplaceRegistration = {
   source: string;
   ref?: string;
   repo_path?: string;
-  auto_load?: "all";
+  auto_load?: boolean;
 };
 
 export type MarketplaceWithScope = MarketplaceRegistration & {

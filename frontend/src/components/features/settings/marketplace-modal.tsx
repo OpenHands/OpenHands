@@ -26,7 +26,7 @@ interface MarketplaceModalProps {
     source: string;
     ref?: string;
     repo_path?: string;
-    auto_load?: "all";
+    auto_load?: boolean;
     scope: "org" | "personal";
     orgId?: string; // Target org ID for org-scoped marketplaces
   }) => void;
@@ -52,9 +52,7 @@ export function MarketplaceModal({
   const [source, setSource] = React.useState(marketplace?.source || "");
   const [ref, setRef] = React.useState(marketplace?.ref || "");
   const [repoPath, setRepoPath] = React.useState(marketplace?.repo_path || "");
-  const [autoLoad, setAutoLoad] = React.useState(
-    marketplace?.auto_load === "all",
-  );
+  const [autoLoad, setAutoLoad] = React.useState(!!marketplace?.auto_load);
   // Scope selection: "personal" or "org:{orgId}"
   const [scopeSelection, setScopeSelection] = React.useState<string>(
     initialScope === "org" ? "org" : "personal",
@@ -76,7 +74,7 @@ export function MarketplaceModal({
       setSource(marketplace?.source || "");
       setRef(marketplace?.ref || "");
       setRepoPath(marketplace?.repo_path || "");
-      setAutoLoad(marketplace?.auto_load === "all");
+      setAutoLoad(!!marketplace?.auto_load);
       setScopeSelection(initialScope === "org" ? "org" : "personal");
       setSelectedOrgId(personalOrg?.id || null);
       setNameError(null);
@@ -117,7 +115,7 @@ export function MarketplaceModal({
       source: source.trim(),
       ref: ref.trim() || undefined,
       repo_path: repoPath.trim() || undefined,
-      auto_load: autoLoad ? "all" : undefined,
+      auto_load: autoLoad || undefined,
       scope,
       orgId,
     });
