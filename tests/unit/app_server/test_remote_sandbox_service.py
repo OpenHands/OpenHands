@@ -2215,6 +2215,82 @@ class TestArchiveWorkspaceHelper:
         assert ok is False
 
     @pytest.mark.asyncio
+    async def test_archive_422_required_blocks_delete(self, monkeypatch):
+        """A 422 (malformed request, e.g. an unsupported format reaching the
+        producer) is NOT "nothing to archive" — under REQUIRED it must block the
+        delete instead of being misread as permanent (infra#1444 M1)."""
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
+
+        resp = MagicMock()
+        resp.status_code = 422
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=resp)
+
+        ok = await workspace_archive.archive_workspace(
+            client, create_runtime_data(), 'sandbox-1'
+        )
+        assert ok is False
+
+    @pytest.mark.asyncio
+    async def test_archive_unsupported_format_blocks_required_and_skips_request(
+        self, monkeypatch
+    ):
+        """An unsupported RUNTIME_FILE_ARCHIVE_FORMAT (e.g. the removed 'zip')
+        is a config error caught up front: no request is issued, and under
+        REQUIRED the delete is blocked rather than silently proceeding
+        (infra#1444 M1)."""
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'zip')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
+
+        client = AsyncMock()
+
+        ok = await workspace_archive.archive_workspace(
+            client, create_runtime_data(), 'sandbox-1'
+        )
+        assert ok is False
+        client.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_archive_unsupported_format_not_required_proceeds(self, monkeypatch):
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'zip')
+        monkeypatch.delenv('RUNTIME_FILE_ARCHIVE_REQUIRED', raising=False)
+
+        client = AsyncMock()
+
+        ok = await workspace_archive.archive_workspace(
+            client, create_runtime_data(), 'sandbox-1'
+        )
+        assert ok is True
+        client.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_archive_no_bucket_required_proceeds(self, monkeypatch):
+        """RUNTIME_FILE_ARCHIVE_BUCKET unset is a config error no retry can fix;
+        it must NOT wedge every delete under REQUIRED — proceed loudly instead
+        (infra#1444 L8)."""
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.delenv('RUNTIME_FILE_ARCHIVE_BUCKET', raising=False)
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
+
+        client = AsyncMock()
+
+        ok = await workspace_archive.archive_workspace(
+            client, create_runtime_data(), 'sandbox-1'
+        )
+        assert ok is True
+        client.get.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_archive_grouped_path_includes_conversation_id(self, monkeypatch):
         """Under sandbox grouping the archived repo path is relocated to
         {base}/{conversation_id.hex}; the default path is unchanged (BUG 4)."""

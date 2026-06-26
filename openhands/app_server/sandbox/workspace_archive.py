@@ -30,7 +30,11 @@ from openhands.app_server.settings.settings_models import (
 
 _logger = logging.getLogger(__name__)
 
-_ARCHIVE_SUFFIX = {'git-delta': 'patch', 'tar.gz': 'tar.gz', 'zip': 'zip'}
+# Only the formats the SDK GET /api/file/archive producer accepts
+# (ArchiveFormat = git-delta | tar.gz). Anything else (e.g. the long-removed
+# 'zip') is rejected by the producer with a 422, so it must not be advertised
+# here — see _supported_format() which validates before issuing the request.
+_ARCHIVE_SUFFIX = {'git-delta': 'patch', 'tar.gz': 'tar.gz'}
 
 
 def archive_enabled() -> bool:
@@ -55,9 +59,11 @@ def _archive_format() -> str:
 
 
 def _archive_base_path() -> str:
-    # The git repo lives at /workspace/project; /workspace itself is not a repo.
-    # Under sandbox grouping the repo is relocated to {base}/{conversation_id.hex}
-    # (see grouped_workspace_dir); _archive_path() applies that relocation.
+    # The workspace base. A repo-backed conversation clones the repo into a
+    # {base}/{repo_name} subdirectory, so this base is usually not itself a git
+    # repo — the agent-server archive endpoint auto-descends to the actual repo
+    # beneath the given path (software-agent-sdk _resolve_git_repo_root), so we
+    # only need to point it at the (possibly grouped) workspace base here.
     return os.getenv('RUNTIME_FILE_ARCHIVE_PATH', '/workspace/project')
 
 
@@ -65,13 +71,14 @@ def _archive_path(
     grouping_strategy: SandboxGroupingStrategy,
     conversation_id_hex: str,
 ) -> str:
-    """Path of the workspace git repo to archive.
+    """Path of the workspace to archive (the agent-server resolves the repo).
 
     Mirrors the relocation applied at conversation start in
     live_status_app_conversation_service (working_dir → grouped_workspace_dir):
     NO_GROUPING keeps the bare base dir, any grouping nests it under the
-    conversation id. Hardcoding the base would 404 for every grouped
-    conversation, whose repo is not at the base path.
+    conversation id. The agent-server then descends from this base to the
+    cloned repo ({base}/[{hex}/]{repo_name}); hardcoding the base without the
+    grouping nesting would point at the wrong conversation's directory.
     """
     return grouped_workspace_dir(
         _archive_base_path(), grouping_strategy, conversation_id_hex
@@ -98,10 +105,17 @@ async def archive_workspace(
 
     Returns True when the workspace was archived, when there is nothing to
     archive (the agent-server reports the path is missing or not a git repo —
-    a permanent 4xx), or when archiving failed but is not required
-    (best-effort). Returns False only when archiving is required and hit a
-    genuinely transient failure (5xx / network), so the caller can leave the
-    sandbox intact and retry the delete later. Never raises.
+    a 400/404), or when archiving failed but is not required (best-effort).
+    Returns False only when archiving is required and hit a genuinely transient
+    failure (5xx / network / a non-"nothing-to-capture" 4xx such as 401/422),
+    so the caller can leave the sandbox intact for a later retry (an explicit
+    re-delete, or the runtime-api primary path at the eventual idle reap).
+    Never raises.
+
+    A pure configuration error (unsupported RUNTIME_FILE_ARCHIVE_FORMAT, or
+    RUNTIME_FILE_ARCHIVE_BUCKET unset) cannot be fixed by retrying, so it is
+    logged loudly and the delete is allowed to proceed rather than wedging every
+    delete forever when archiving is required.
     """
     agent_server_url = runtime.get('url')
     session_api_key = runtime.get('session_api_key')
@@ -112,15 +126,30 @@ async def archive_workspace(
         )
         return not archive_required()
     if not _archive_bucket():
-        _logger.warning(
+        # Misconfiguration, not a transient failure: no amount of retrying makes
+        # a missing bucket appear. Proceed (with a loud error) so a
+        # REQUIRED-without-bucket setup does not block every sandbox delete.
+        _logger.error(
             'Workspace archive enabled for %s but RUNTIME_FILE_ARCHIVE_BUCKET '
-            'is not set; skipping',
+            'is not set; proceeding with delete (fix the config to capture)',
             sandbox_id,
         )
-        return not archive_required()
+        return True
 
     fmt = _archive_format()
-    suffix = _ARCHIVE_SUFFIX.get(fmt, 'patch')
+    if fmt not in _ARCHIVE_SUFFIX:
+        # The SDK producer would 422 this; treat it as a hard config error
+        # (mirrors runtime-api._validate_archive_format) rather than letting the
+        # 4xx be misread as "nothing to archive" and silently deleting.
+        _logger.error(
+            'Workspace archive for %s: unsupported RUNTIME_FILE_ARCHIVE_FORMAT '
+            '%r (valid: %s); skipping archive',
+            sandbox_id,
+            fmt,
+            sorted(_ARCHIVE_SUFFIX),
+        )
+        return not archive_required()
+    suffix = _ARCHIVE_SUFFIX[fmt]
     headers = {'X-Session-API-Key': session_api_key} if session_api_key else {}
     # Conversation id keys the archive and locates the (possibly grouped) repo.
     # For cloud conversations the sandbox id is the conversation_id.hex.
@@ -136,17 +165,18 @@ async def archive_workspace(
         )
         if response.status_code != 200:
             # The agent-server (software-agent-sdk GET /api/file/archive) returns
-            # 4xx when the path is missing/not a directory/not a git repo and 5xx
-            # for genuine failures. A 4xx is permanent for this workspace — there
-            # is nothing to capture (e.g. nothing was ever cloned), so treat it as
-            # satisfied and let the delete proceed even when archiving is required.
-            # Only a 5xx is transient and worth blocking a required delete to retry.
-            permanent = 400 <= response.status_code < 500
+            # 400 (not a directory / not a git repo / bad base_ref) or 404 (path
+            # missing) when there is genuinely nothing to capture — those are
+            # permanent for this workspace, so let the delete proceed even under
+            # REQUIRED. Every OTHER status (401 auth, 422 bad format, 429, any
+            # 5xx, etc.) is a real failure that retrying could fix, so it must
+            # block a REQUIRED delete instead of being misread as "no data".
+            permanent = response.status_code in (400, 404)
             _logger.warning(
                 'Workspace archive for %s: agent-server returned %s; %s',
                 sandbox_id,
                 response.status_code,
-                'nothing to archive' if permanent else 'transient failure',
+                'nothing to archive' if permanent else 'retryable failure',
             )
             return permanent or not archive_required()
         data = response.content
