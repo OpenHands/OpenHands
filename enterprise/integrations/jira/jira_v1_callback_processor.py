@@ -5,6 +5,7 @@ from uuid import UUID
 import httpx
 from integrations.utils import format_jira_comment_body, get_summary_instruction
 from pydantic import Field
+from server.auth.constants import JIRA_HTTP_TIMEOUT
 
 from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
@@ -173,7 +174,7 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
                 url,
                 json=payload,
                 headers=headers,
-                timeout=30.0,
+                timeout=JIRA_HTTP_TIMEOUT,
             )
             response.raise_for_status()
 
@@ -232,7 +233,9 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
         message = f'OpenHands resolved this issue:\n\n{summary}'
         comment_body = format_jira_comment_body(message)
 
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=JIRA_HTTP_TIMEOUT
+        ) as client:
             response = await client.post(
                 comment_url,
                 auth=(self.svc_acc_email, self.decrypted_api_key),

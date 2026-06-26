@@ -39,6 +39,8 @@ ENABLE_LINEAR = os.environ.get('ENABLE_LINEAR', 'false') == 'true'
 ENABLE_AUTOMATIONS = os.environ.get('ENABLE_AUTOMATIONS', 'true') == 'true'
 JIRA_CLIENT_ID = os.getenv('JIRA_CLIENT_ID', '').strip()
 JIRA_CLIENT_SECRET = os.getenv('JIRA_CLIENT_SECRET', '').strip()
+# Timeout (s) for server-side calls to Jira Cloud; configurable, mirrors Jira DC.
+JIRA_HTTP_TIMEOUT = float(os.getenv('JIRA_HTTP_TIMEOUT', '30'))
 LINEAR_CLIENT_ID = os.getenv('LINEAR_CLIENT_ID', '').strip()
 LINEAR_CLIENT_SECRET = os.getenv('LINEAR_CLIENT_SECRET', '').strip()
 JIRA_DC_CLIENT_ID = os.getenv('JIRA_DC_CLIENT_ID', '').strip()
