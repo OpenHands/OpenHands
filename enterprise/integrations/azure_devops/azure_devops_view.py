@@ -291,6 +291,21 @@ class AzureDevOpsPRComment(AzureDevOpsItem):
 class AzureDevOpsWorkItemComment(AzureDevOpsItem):
     comment_body: str
 
+    async def _load_resolver_context(self) -> None:
+        # Load work-item context directly; never probe PRs (a PR can share the id).
+        azure_service = AzureDevOpsServiceImpl(
+            external_auth_id=self.user_info.keycloak_user_id
+        )
+        self.previous_comments = await azure_service.get_work_item_comments(
+            self.full_repo_name,
+            self.issue_number,
+            max_comments=100,
+        )
+        (
+            self.title,
+            self.description,
+        ) = await azure_service.get_work_item_title_and_body(self.issue_number)
+
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         await self._load_resolver_context()
 

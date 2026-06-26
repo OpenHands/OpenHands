@@ -285,6 +285,47 @@ async def test_pr_comment_instructions_include_actionable_comment(jinja_env):
     assert 'older comment' in conversation_instructions
 
 
+@pytest.mark.asyncio
+async def test_work_item_load_resolver_context_uses_work_item_not_pr(monkeypatch):
+    # Work item #42 can collide with PR #42; ensure WI context is loaded, not PR.
+    fake_service = MagicMock()
+    fake_service.get_project_repositories = AsyncMock(
+        return_value=[{'id': 'repo-1', 'name': 'Project', 'project': {'id': 'proj-9'}}]
+    )
+    fake_service.get_work_item_comments = AsyncMock(
+        return_value=[MagicMock(author='wi-user', body='work item comment')]
+    )
+    fake_service.get_work_item_title_and_body = AsyncMock(
+        return_value=('Work item title', 'Work item body')
+    )
+    fake_service.get_issue_or_pr_comments = AsyncMock(
+        return_value=[MagicMock(author='pr-user', body='pr comment')]
+    )
+    fake_service.get_issue_or_pr_title_and_body = AsyncMock(
+        return_value=('PR title', 'PR body')
+    )
+    monkeypatch.setattr(
+        'integrations.azure_devops.azure_devops_view.AzureDevOpsServiceImpl',
+        lambda external_auth_id: fake_service,
+    )
+
+    view = await AzureDevOpsFactory.create_azure_devops_view_from_payload(
+        _make_work_item_message(),
+        keycloak_user_id='kc-alice',
+    )
+    assert isinstance(view, AzureDevOpsWorkItemComment)
+
+    await view._load_resolver_context()
+
+    assert view.title == 'Work item title'
+    assert view.description == 'Work item body'
+    assert view.previous_comments[0].body == 'work item comment'
+    fake_service.get_work_item_title_and_body.assert_awaited_once_with(42)
+    fake_service.get_work_item_comments.assert_awaited_once()
+    fake_service.get_issue_or_pr_comments.assert_not_called()
+    fake_service.get_issue_or_pr_title_and_body.assert_not_called()
+
+
 def test_actor_email_extracts_email_from_unique_name_or_display_name():
     assert actor_email({'uniqueName': 'alice@example.com'}) == 'alice@example.com'
     assert (

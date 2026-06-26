@@ -56,6 +56,19 @@ class AzureDevOpsWorkItemsMixin(AzureDevOpsMixinBase):
         logger.info(f'Added comment to work item {work_item_id} in project {project}')
         return response
 
+    async def get_work_item_title_and_body(self, work_item_id: int) -> tuple[str, str]:
+        """Get a work item's title and description as plain text.
+
+        Work item IDs are unique per org, so this queries at the org level.
+        """
+        url = (
+            f'{self.base_url}/_apis/wit/workitems/{work_item_id}'
+            '?fields=System.Title,System.Description&api-version=7.1'
+        )
+        response, _ = await self._make_request(url)
+        fields = response.get('fields') or {}
+        return fields.get('System.Title') or '', fields.get('System.Description') or ''
+
     async def get_work_item_comments(
         self, repository: str, work_item_id: int, max_comments: int = 100
     ) -> list[Comment]:
