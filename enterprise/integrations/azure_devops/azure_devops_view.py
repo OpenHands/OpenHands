@@ -24,6 +24,12 @@ from openhands.app_server.config import get_app_conversation_service
 from openhands.app_server.integrations.azure_devops.azure_devops_service import (
     AzureDevOpsServiceImpl,
 )
+from openhands.app_server.integrations.azure_devops.service.webhooks import (
+    AZURE_DEVOPS_PR_COMMENT_EVENT as PR_COMMENT_EVENT,
+)
+from openhands.app_server.integrations.azure_devops.service.webhooks import (
+    AZURE_DEVOPS_WORK_ITEM_COMMENT_EVENT as WORK_ITEM_COMMENT_EVENT,
+)
 from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
 from openhands.app_server.integrations.service_types import Comment
 from openhands.app_server.services.injector import InjectorState
@@ -34,9 +40,6 @@ from openhands.sdk import TextContent
 
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
 OPENHANDS_COMMENT_MARKER = '<!-- openhands-azure-devops-resolver -->'
-
-PR_COMMENT_EVENT = 'ms.vss-code.git-pullrequest-comment-event'
-WORK_ITEM_COMMENT_EVENT = 'workitem.commented'
 
 
 def mark_openhands_comment(comment: str) -> str:
