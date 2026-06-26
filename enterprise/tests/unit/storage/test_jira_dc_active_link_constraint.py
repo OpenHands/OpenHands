@@ -176,3 +176,85 @@ async def test_deactivate_user_links_except_workspace_targets_stale_active_links
     assert 'jira_dc_users.jira_dc_workspace_id !=' in statement_text
     assert 'jira_dc_users.status' in statement_text
     session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_active_email_link_returns_existing_without_insert():
+    store = JiraDcIntegrationStore()
+    existing = Mock(spec=JiraDcUser)
+    store.get_active_user_by_keycloak_id_and_workspace = AsyncMock(
+        return_value=existing
+    )
+
+    session = Mock()
+    session.add = Mock()
+
+    @asynccontextmanager
+    async def mock_session_maker():
+        yield session
+
+    with patch('storage.jira_dc_integration_store.a_session_maker', mock_session_maker):
+        result = await store.get_or_create_active_email_link('kc-1', 1)
+
+    assert result is existing
+    session.add.assert_not_called()  # no insert when a link already exists
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_active_email_link_inserts_email_mode_row():
+    store = JiraDcIntegrationStore()
+    store.get_active_user_by_keycloak_id_and_workspace = AsyncMock(return_value=None)
+
+    session = Mock()
+    session.add = Mock()
+    session.commit = AsyncMock()
+    session.refresh = AsyncMock()
+
+    @asynccontextmanager
+    async def mock_session_maker():
+        yield session
+
+    with patch('storage.jira_dc_integration_store.a_session_maker', mock_session_maker):
+        result = await store.get_or_create_active_email_link('kc-1', 7)
+
+    session.add.assert_called_once()
+    added = session.add.call_args.args[0]
+    assert isinstance(added, JiraDcUser)
+    assert added.keycloak_user_id == 'kc-1'
+    assert added.jira_dc_workspace_id == 7
+    assert added.jira_dc_user_id == 'unavailable'  # email-mode sentinel
+    assert added.status == 'active'
+    session.commit.assert_awaited_once()
+    session.refresh.assert_awaited_once_with(added)
+    assert result is added
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_active_email_link_handles_concurrent_insert_race():
+    """A concurrent first webhook wins the insert; ours trips the unique index ->
+    IntegrityError -> rollback -> re-read returns the winning row."""
+    store = JiraDcIntegrationStore()
+    winner = Mock(spec=JiraDcUser)
+    # initial check -> None; re-read after IntegrityError -> the row the racer inserted
+    store.get_active_user_by_keycloak_id_and_workspace = AsyncMock(
+        side_effect=[None, winner]
+    )
+
+    session = Mock()
+    session.add = Mock()
+    session.commit = AsyncMock(
+        side_effect=IntegrityError('insert', {}, Exception('unique violation'))
+    )
+    session.rollback = AsyncMock()
+
+    @asynccontextmanager
+    async def mock_session_maker():
+        yield session
+
+    with patch('storage.jira_dc_integration_store.a_session_maker', mock_session_maker):
+        result = await store.get_or_create_active_email_link('kc-1', 1)
+
+    session.commit.assert_awaited_once()
+    session.rollback.assert_awaited_once()  # failed insert rolled back, not cached
+    assert result is winner
+    assert store.get_active_user_by_keycloak_id_and_workspace.await_count == 2
