@@ -10,6 +10,15 @@ resolution-markers = [
     "python_full_version < '3.13' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
+[options]
+exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
+exclude-newer-span = "P7D"
+
+[options.exclude-newer-package]
+openhands-agent-server = false
+openhands-tools = false
+openhands-sdk = false
+
 [[package]]
 name = "agent-client-protocol"
 version = "0.10.1"

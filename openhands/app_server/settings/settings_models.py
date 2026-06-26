@@ -138,6 +138,7 @@ class Settings(BaseModel):
     sandbox_grouping_strategy: SandboxGroupingStrategy = (
         SandboxGroupingStrategy.NO_GROUPING
     )
+    default_sandbox_spec_id: str | None = None
     llm_profiles: LLMProfiles = Field(
         default_factory=LLMProfiles,
         description=(

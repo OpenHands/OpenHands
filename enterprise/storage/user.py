@@ -40,6 +40,7 @@ class User(Base):
     git_user_email: Mapped[str | None] = mapped_column(String, nullable=True)
     git_full_clone: Mapped[bool | None] = mapped_column(nullable=True, default=False)
     sandbox_grouping_strategy: Mapped[str | None] = mapped_column(String, nullable=True)
+    default_sandbox_spec_id: Mapped[str | None] = mapped_column(String, nullable=True)
     disabled_skills: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     llm_profiles: Mapped[dict[str, Any] | None] = mapped_column(
         EncryptedJSON, nullable=True

@@ -79,27 +79,44 @@ async def get_user_jira_dc_token(
         )
 
     refresh_token = token_manager.decrypt_text(enc_refresh)
-    async with httpx.AsyncClient(verify=httpx_verify_option(), timeout=30.0) as client:
-        response = await client.post(
+    try:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=30.0
+        ) as client:
+            response = await client.post(
+                JIRA_DC_TOKEN_URL,
+                data={
+                    'grant_type': 'refresh_token',
+                    'client_id': JIRA_DC_CLIENT_ID,
+                    'client_secret': JIRA_DC_CLIENT_SECRET,
+                    'refresh_token': refresh_token,
+                },
+            )
+    except httpx.RequestError as e:
+        # Unreachable token endpoint -- usually wrong scheme (http vs https) or
+        # blocked egress; surface that instead of a bare connection error.
+        logger.warning(
+            '[Jira DC] Token refresh could not reach %s: %s',
             JIRA_DC_TOKEN_URL,
-            data={
-                'grant_type': 'refresh_token',
-                'client_id': JIRA_DC_CLIENT_ID,
-                'client_secret': JIRA_DC_CLIENT_SECRET,
-                'refresh_token': refresh_token,
-            },
+            type(e).__name__,
         )
-        if response.status_code != 200:
-            logger.warning(
-                '[Jira DC] Token refresh failed: %s %s',
-                response.status_code,
-                response.text[:200],
-            )
-            raise JiraDcUserTokenError(
-                'Jira DC token refresh failed. '
-                'Please re-link via OpenHands Settings → Integrations.'
-            )
-        data = response.json()
+        raise JiraDcUserTokenError(
+            f'Could not reach the Jira Data Center token endpoint '
+            f'({JIRA_DC_TOKEN_URL}): {type(e).__name__}. Check that the Jira Base '
+            f'URL uses https and that OpenHands can reach the Jira server.'
+        ) from e
+
+    if response.status_code != 200:
+        logger.warning(
+            '[Jira DC] Token refresh failed: %s %s',
+            response.status_code,
+            response.text[:200],
+        )
+        raise JiraDcUserTokenError(
+            'Jira DC token refresh failed. '
+            'Please re-link via OpenHands Settings → Integrations.'
+        )
+    data = response.json()
 
     new_access = data.get('access_token')
     if not new_access:
