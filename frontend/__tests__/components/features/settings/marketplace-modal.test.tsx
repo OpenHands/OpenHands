@@ -132,28 +132,21 @@ describe("MarketplaceModal", () => {
     });
   });
 
-  it("renders scope selector in add mode with organizations", () => {
+  it("renders scope selector in add mode", () => {
     render(
       <MarketplaceModal
         {...baseProps}
-        organizations={[
-          { id: "org-1", name: "Acme Corp", role: "admin" },
-          { id: "org-2", name: "Beta Inc", role: "owner" },
-        ]}
       />,
     );
 
     expect(screen.getByText("SETTINGS$MARKETPLACE_SCOPE_LABEL")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /personal/i })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Acme Corp" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Beta Inc" })).toBeInTheDocument();
   });
 
-  it("calls onSave with orgId when selecting org scope", async () => {
+  it("calls onSave with personal scope by default", async () => {
     render(
       <MarketplaceModal
         {...baseProps}
-        organizations={[{ id: "org-123", name: "Acme Corp", role: "admin" }]}
       />,
     );
     const user = userEvent.setup();
@@ -162,23 +155,12 @@ describe("MarketplaceModal", () => {
     await user.type(screen.getByPlaceholderText("e.g., my-skills"), "my-marketplace");
     await user.type(screen.getByPlaceholderText("github:owner/repo"), "github:owner/repo");
 
-    // Select org scope - get the combobox (scope selector is the first select)
-    const scopeSelect = screen.getAllByRole("combobox")[0];
-    await user.selectOptions(scopeSelect, "org:org-123");
-
-    // Verify the select shows the right value
-    expect(scopeSelect).toHaveValue("org:org-123");
-
     await user.click(screen.getByTestId("marketplace-save-button"));
 
     expect(onSave).toHaveBeenCalledWith({
       name: "my-marketplace",
       source: "github:owner/repo",
-      ref: undefined,
-      repo_path: undefined,
-      auto_load: undefined,
-      scope: "org",
-      orgId: "org-123",
+      scope: "personal",
     });
   });
 

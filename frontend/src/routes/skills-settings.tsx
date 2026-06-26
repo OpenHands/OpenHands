@@ -11,7 +11,7 @@ import { Toggle } from "#/components/shared/toggle/toggle";
 import { useSettings } from "#/hooks/query/use-settings";
 import {
   SETTINGS_QUERY_KEYS,
-  ORGANIZATION_APP_SETTINGS_KEY,
+  ORGANIZATION_APP_SETTINGS_KEYS,
 } from "#/hooks/query/query-keys";
 import { useSkills } from "#/hooks/query/use-skills";
 import { useMe } from "#/hooks/query/use-me";
@@ -499,16 +499,16 @@ function SkillsSettingsScreen() {
       originalMarketplacesRef.current = allMarketplaces;
       queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
       queryClient.invalidateQueries({
-        queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+        queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
       });
     } catch (error) {
       if ((error as AxiosError).response?.status === 409) {
         // Concurrent modification detected - fetch latest settings and retry once
         queryClient.invalidateQueries({
-          queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+          queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
         });
         const latestSettings = await queryClient.ensureQueryData({
-          queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+          queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
           queryFn: () => organizationService.getOrganizationAppSettings(),
         });
 
@@ -537,8 +537,13 @@ function SkillsSettingsScreen() {
           originalMarketplacesRef.current = allMarketplaces;
           queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
         } catch (retryError) {
-          const errorMessage = retrieveAxiosErrorMessage(retryError as AxiosError);
-          displayErrorToast(errorMessage || "Failed to save settings. Please refresh and try again.");
+          const errorMessage = retrieveAxiosErrorMessage(
+            retryError as AxiosError,
+          );
+          displayErrorToast(
+            errorMessage ||
+              "Failed to save settings. Please refresh and try again.",
+          );
         }
       } else {
         const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
@@ -637,7 +642,7 @@ function SkillsSettingsScreen() {
         });
         displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
         queryClient.invalidateQueries({
-          queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+          queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
         });
 
         // Skills will be loaded by the useEffect on next render
@@ -648,10 +653,10 @@ function SkillsSettingsScreen() {
         if ((error as AxiosError).response?.status === 409) {
           // Concurrent modification detected - fetch latest settings and retry once
           queryClient.invalidateQueries({
-            queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+            queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
           });
           const latestSettings = await queryClient.ensureQueryData({
-            queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+            queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
             queryFn: () => organizationService.getOrganizationAppSettings(),
           });
 
@@ -668,8 +673,13 @@ function SkillsSettingsScreen() {
             displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
             setIsModalOpen(false);
           } catch (retryError) {
-            const errorMessage = retrieveAxiosErrorMessage(retryError as AxiosError);
-            displayErrorToast(errorMessage || "Failed to save settings. Please refresh and try again.");
+            const errorMessage = retrieveAxiosErrorMessage(
+              retryError as AxiosError,
+            );
+            displayErrorToast(
+              errorMessage ||
+                "Failed to save settings. Please refresh and try again.",
+            );
           }
         } else {
           const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
@@ -783,7 +793,7 @@ function SkillsSettingsScreen() {
         displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
 
         queryClient.invalidateQueries({
-          queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+          queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
         });
         setIsDeleteModalOpen(false);
         setMarketplaceToDelete(null);
@@ -792,10 +802,10 @@ function SkillsSettingsScreen() {
         if ((error as AxiosError).response?.status === 409) {
           // Concurrent modification detected - fetch latest settings and retry once
           queryClient.invalidateQueries({
-            queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+            queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
           });
           const latestSettings = await queryClient.ensureQueryData({
-            queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+            queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
             queryFn: () => organizationService.getOrganizationAppSettings(),
           });
 
@@ -813,10 +823,17 @@ function SkillsSettingsScreen() {
             setIsDeleteModalOpen(false);
             setMarketplaceToDelete(null);
           } catch (retryError) {
-            const errorMessage = retrieveAxiosErrorMessage(retryError as AxiosError);
-            displayErrorToast(errorMessage || "Failed to delete marketplace. Please refresh and try again.");
+            const errorMessage = retrieveAxiosErrorMessage(
+              retryError as AxiosError,
+            );
+            displayErrorToast(
+              errorMessage ||
+                "Failed to delete marketplace. Please refresh and try again.",
+            );
             // Reload data to revert optimistic update
-            queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
+            queryClient.invalidateQueries({
+              queryKey: SETTINGS_QUERY_KEYS.all,
+            });
             setIsDeleting(false);
           }
         } else {

@@ -11,6 +11,12 @@ vi.mock("#/api/organization-service/organization-service.api", () => ({
   },
 }));
 
+vi.mock("#/context/use-selected-organization", () => ({
+  useSelectedOrganizationId: vi.fn(),
+}));
+
+import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+
 const createWrapper = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -42,8 +48,10 @@ describe("useOrganizationAppSettings", () => {
   });
 
   it("does not fetch when orgId is null", async () => {
+    vi.mocked(useSelectedOrganizationId).mockReturnValue({ organizationId: null, setOrganizationId: vi.fn() });
+
     const { result } = renderHook(
-      () => useOrganizationAppSettings(null),
+      () => useOrganizationAppSettings(),
       { wrapper: createWrapper() },
     );
 
@@ -53,8 +61,10 @@ describe("useOrganizationAppSettings", () => {
   });
 
   it("does not fetch when orgId is undefined", async () => {
+    vi.mocked(useSelectedOrganizationId).mockReturnValue({ organizationId: null, setOrganizationId: vi.fn() });
+
     const { result } = renderHook(
-      () => useOrganizationAppSettings(undefined as unknown as string | null),
+      () => useOrganizationAppSettings(),
       { wrapper: createWrapper() },
     );
 
@@ -63,12 +73,13 @@ describe("useOrganizationAppSettings", () => {
   });
 
   it("fetches org app settings when orgId is provided", async () => {
+    vi.mocked(useSelectedOrganizationId).mockReturnValue({ organizationId: "org-123", setOrganizationId: vi.fn() });
     vi.mocked(organizationService.getOrganizationAppSettings).mockResolvedValue(
       mockResponse,
     );
 
     const { result } = renderHook(
-      () => useOrganizationAppSettings("org-123"),
+      () => useOrganizationAppSettings(),
       { wrapper: createWrapper() },
     );
 
@@ -76,47 +87,58 @@ describe("useOrganizationAppSettings", () => {
 
     expect(
       organizationService.getOrganizationAppSettings,
-    ).toHaveBeenCalledWith({ orgId: "org-123" });
+    ).toHaveBeenCalled();
     expect(result.current.data).toEqual(mockResponse);
+    expect(result.current.data?.registered_marketplaces).toHaveLength(1);
   });
 
-  it("fetches with different orgId when orgId changes", async () => {
-    vi.mocked(organizationService.getOrganizationAppSettings).mockResolvedValue(
-      mockResponse,
+  it("uses different query keys for different orgs", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    vi.mocked(useSelectedOrganizationId).mockReturnValue({ organizationId: "org-123", setOrganizationId: vi.fn() });
+    vi.mocked(organizationService.getOrganizationAppSettings).mockResolvedValue({
+      ...mockResponse,
+      registered_marketplaces: [{ name: "marketplace-123", source: "github:org/123", auto_load: true }],
+    });
+
+    const wrapper1 = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
 
-    // First render with null
-    const { result: result1 } = renderHook(
-      () => useOrganizationAppSettings(null),
-      { wrapper: createWrapper() },
+    const { result: result1, rerender } = renderHook(
+      () => useOrganizationAppSettings(),
+      { wrapper: wrapper1 },
     );
 
-    expect(result1.current.isLoading).toBeFalsy();
-    expect(
-      organizationService.getOrganizationAppSettings,
-    ).not.toHaveBeenCalled();
+    await waitFor(() => expect(result1.current.isLoading).toBe(false));
+    expect(result1.current.data?.registered_marketplaces?.[0]?.name).toBe("marketplace-123");
 
-    // Second render with orgId
-    const { result: result2 } = renderHook(
-      () => useOrganizationAppSettings("org-456"),
-      { wrapper: createWrapper() },
-    );
+    // Change org - should create new query with different key
+    vi.mocked(useSelectedOrganizationId).mockReturnValue({ organizationId: "org-456", setOrganizationId: vi.fn() });
+    vi.mocked(organizationService.getOrganizationAppSettings).mockResolvedValue({
+      ...mockResponse,
+      registered_marketplaces: [{ name: "marketplace-456", source: "github:org/456", auto_load: true }],
+    });
+    rerender();
 
-    await waitFor(() => expect(result2.current.isLoading).toBeFalsy());
-
-    expect(
-      organizationService.getOrganizationAppSettings,
-    ).toHaveBeenCalledWith({ orgId: "org-456" });
+    await waitFor(() => expect(result1.current.isLoading).toBe(false));
+    expect(result1.current.data?.registered_marketplaces?.[0]?.name).toBe("marketplace-456");
   });
 
   it("handles fetch error", async () => {
+    vi.mocked(useSelectedOrganizationId).mockReturnValue({ organizationId: "org-123", setOrganizationId: vi.fn() });
     const error = new Error("Failed to fetch");
     vi.mocked(organizationService.getOrganizationAppSettings).mockRejectedValue(
       error,
     );
 
     const { result } = renderHook(
-      () => useOrganizationAppSettings("org-123"),
+      () => useOrganizationAppSettings(),
       { wrapper: createWrapper() },
     );
 
