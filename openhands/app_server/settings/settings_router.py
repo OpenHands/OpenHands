@@ -482,12 +482,6 @@ async def load_conversation_settings_schema() -> dict[str, Any]:
     return ConversationSettings.export_schema().model_dump(mode='json')
 
 
-@router.get('/marketplace-schema')
-async def load_marketplace_schema() -> dict[str, Any]:
-    """Load the JSON Schema for MarketplaceRegistration"""
-    return MarketplaceRegistration.model_json_schema()
-
-
 async def invalidate_legacy_secrets_store(
     settings: Settings, settings_store: SettingsStore, secrets_store: SecretsStore
 ) -> Secrets | None:

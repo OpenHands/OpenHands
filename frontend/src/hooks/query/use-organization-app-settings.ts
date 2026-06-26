@@ -1,11 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { organizationService } from "#/api/organization-service/organization-service.api";
-import { ORGANIZATION_SETTINGS_KEY } from "#/hooks/query/query-keys";
+import { ORGANIZATION_APP_SETTINGS_KEY } from "#/hooks/query/query-keys";
 
-export const useOrganizationAppSettings = (orgId: string | null) =>
+export const useOrganizationAppSettings = () =>
   useQuery({
-    queryKey: [...ORGANIZATION_SETTINGS_KEY, orgId],
-    queryFn: () =>
-      organizationService.getOrganizationAppSettings({ orgId: orgId! }),
-    enabled: !!orgId,
+    queryKey: ORGANIZATION_APP_SETTINGS_KEY,
+    queryFn: () => organizationService.getOrganizationAppSettings(),
   });

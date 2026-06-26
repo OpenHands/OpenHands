@@ -5,23 +5,19 @@ import { AxiosError } from "axios";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { Typography } from "#/ui/typography";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
-import {
-  MarketplaceModal,
-  OrganizationOption,
-} from "#/components/features/settings/marketplace-modal";
+import { MarketplaceModal } from "#/components/features/settings/marketplace-modal";
 import { DeleteConfirmationModal } from "#/components/features/settings/delete-confirmation-modal";
 import { Toggle } from "#/components/shared/toggle/toggle";
 import { useSettings } from "#/hooks/query/use-settings";
 import {
   SETTINGS_QUERY_KEYS,
-  ORGANIZATION_SETTINGS_KEY,
+  ORGANIZATION_APP_SETTINGS_KEY,
 } from "#/hooks/query/query-keys";
 import { useSkills } from "#/hooks/query/use-skills";
 import { useMe } from "#/hooks/query/use-me";
 import { useMarketplaceSkills } from "#/hooks/mutation/use-get-marketplace-skills";
 import { useSaveOrgAppSettings } from "#/hooks/mutation/use-save-org-app-settings";
 import { useOrganizationAppSettings } from "#/hooks/query/use-organization-app-settings";
-import { useOrganizations } from "#/hooks/query/use-organizations";
 import {
   MarketplaceRegistration,
   MarketplaceWithScope,
@@ -75,44 +71,11 @@ function SkillsSettingsScreen() {
   const { data: skills, isLoading: skillsLoading } = useSkills();
 
   // Fetch org app settings with updated_at for optimistic locking using the hook
-  const { data: orgAppSettings } = useOrganizationAppSettings(selectedOrgId);
-
-  // Fetch all organizations user is a member of
-  const { data: orgsData } = useOrganizations();
+  const { data: orgAppSettings } = useOrganizationAppSettings();
 
   // Determine user role and permissions
   const userRole = user?.role ?? "member";
   const isAdminOrOwner = userRole === "admin" || userRole === "owner";
-
-  // Build list of organizations where user is admin or owner (for marketplace scope selection)
-  // This includes the personal workspace and all team orgs where user has admin/owner role
-  const availableOrganizations: OrganizationOption[] = React.useMemo(() => {
-    if (!orgsData?.organizations) return [];
-
-    const orgs: OrganizationOption[] = [];
-
-    for (const org of orgsData.organizations) {
-      // Add personal org
-      if (org.is_personal) {
-        orgs.push({
-          id: org.id,
-          name: org.name,
-          role: "owner", // Personal org user is always owner
-          isPersonal: true,
-        });
-      } else if (isAdminOrOwner) {
-        // Add team orgs where user is admin/owner (checked via selected org's membership)
-        orgs.push({
-          id: org.id,
-          name: org.name,
-          role: userRole as "admin" | "owner",
-          isPersonal: false,
-        });
-      }
-    }
-
-    return orgs;
-  }, [orgsData, isAdminOrOwner, userRole]);
 
   // Skills state with marketplace information
   const [skillsState, setSkillsState] = React.useState<SkillWithState[]>([]);
@@ -522,11 +485,8 @@ function SkillsSettingsScreen() {
 
       // Save org marketplaces
       await saveOrgAppSettingsMutation.mutateAsync({
-        orgId: selectedOrgId!,
-        settings: {
-          registered_marketplaces: orgToSave,
-          last_known_updated_at: lastKnownUpdatedAt,
-        },
+        registered_marketplaces: orgToSave,
+        last_known_updated_at: lastKnownUpdatedAt,
       });
 
       displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
@@ -538,7 +498,7 @@ function SkillsSettingsScreen() {
       originalMarketplacesRef.current = allMarketplaces;
       queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
       queryClient.invalidateQueries({
-        queryKey: ORGANIZATION_SETTINGS_KEY,
+        queryKey: ORGANIZATION_APP_SETTINGS_KEY,
       });
     } catch (error) {
       const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
@@ -575,7 +535,6 @@ function SkillsSettingsScreen() {
     repo_path?: string;
     auto_load?: boolean;
     scope: "org" | "personal";
-    orgId?: string;
   }) => {
     const newMarketplace: MarketplaceRegistration = {
       name: data.name,
@@ -586,14 +545,13 @@ function SkillsSettingsScreen() {
     };
 
     if (data.scope === "org") {
-      // Save to org settings - use the orgId from the modal selection
-      const targetOrgId = data.orgId || selectedOrgId;
-      if (!targetOrgId) {
+      // Save to org settings using the active selectedOrgId
+      if (!selectedOrgId) {
         displayErrorToast("No organization selected");
         return;
       }
 
-      // Get org-specific marketplaces for the target org
+      // Get org-specific marketplaces
       const existingOrgMarketplaces = allMarketplaces.filter(
         (mp) => mp.scope === "org",
       );
@@ -633,15 +591,12 @@ function SkillsSettingsScreen() {
 
         // Only save to BE if validation passes
         await saveOrgAppSettingsMutation.mutateAsync({
-          orgId: targetOrgId,
-          settings: {
-            registered_marketplaces: updated,
-            last_known_updated_at: lastKnownUpdatedAt,
-          },
+          registered_marketplaces: updated,
+          last_known_updated_at: lastKnownUpdatedAt,
         });
         displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
         queryClient.invalidateQueries({
-          queryKey: ORGANIZATION_SETTINGS_KEY,
+          queryKey: ORGANIZATION_APP_SETTINGS_KEY,
         });
 
         // Skills will be loaded by the useEffect on next render
@@ -654,7 +609,7 @@ function SkillsSettingsScreen() {
             "Your settings are outdated. Please refresh and try again.",
           );
           queryClient.invalidateQueries({
-            queryKey: ORGANIZATION_SETTINGS_KEY,
+            queryKey: ORGANIZATION_APP_SETTINGS_KEY,
           });
         } else {
           const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
@@ -762,16 +717,13 @@ function SkillsSettingsScreen() {
 
       try {
         await saveOrgAppSettingsMutation.mutateAsync({
-          orgId: selectedOrgId!,
-          settings: {
-            registered_marketplaces: updated,
-            last_known_updated_at: lastKnownUpdatedAt,
-          },
+          registered_marketplaces: updated,
+          last_known_updated_at: lastKnownUpdatedAt,
         });
         displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
 
         queryClient.invalidateQueries({
-          queryKey: ORGANIZATION_SETTINGS_KEY,
+          queryKey: ORGANIZATION_APP_SETTINGS_KEY,
         });
         setIsDeleteModalOpen(false);
         setMarketplaceToDelete(null);
@@ -782,7 +734,7 @@ function SkillsSettingsScreen() {
             "Your settings are outdated. Please refresh and try again.",
           );
           queryClient.invalidateQueries({
-            queryKey: ORGANIZATION_SETTINGS_KEY,
+            queryKey: ORGANIZATION_APP_SETTINGS_KEY,
           });
         } else {
           const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
@@ -1215,10 +1167,10 @@ function SkillsSettingsScreen() {
               }
             : null
         }
-        organizations={availableOrganizations}
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveMarketplace}
         isSaving={isSavingOrg || isSavingPersonal}
+        isAdminOrOwner={isAdminOrOwner}
       />
 
       {/* Delete Confirmation Modal */}
