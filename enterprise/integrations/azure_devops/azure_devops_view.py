@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
+from integrations.azure_devops.azure_devops_service import SaaSAzureDevOpsService
 from integrations.models import Message
 from integrations.resolver_context import ResolverUserContext
 from integrations.resolver_org_router import resolve_org_for_repo
@@ -419,7 +420,10 @@ class AzureDevOpsFactory:
 
             # Work items aren't tied to a repo; resolve a real one for the project
             # instead of fabricating a project-named repo that may not exist.
-            azure_service = AzureDevOpsServiceImpl(external_auth_id=keycloak_user_id)
+            azure_service = cast(
+                SaaSAzureDevOpsService,
+                AzureDevOpsServiceImpl(external_auth_id=keycloak_user_id),
+            )
             repos = await azure_service.get_project_repositories(project_name)
             repo = _select_project_repo(repos, project_name)
             if repo is None:

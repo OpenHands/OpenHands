@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from types import MappingProxyType
+from typing import cast
 
+from integrations.azure_devops.azure_devops_service import SaaSAzureDevOpsService
 from integrations.azure_devops.azure_devops_view import (
     AzureDevOpsFactory,
     AzureDevOpsPRComment,
@@ -103,7 +105,11 @@ class AzureDevOpsManager(Manager[AzureDevOpsViewType]):
             return
 
         # Gate on write access, mirroring the GitHub/GitLab/Bitbucket resolvers.
-        azure_service = AzureDevOpsServiceImpl(external_auth_id=keycloak_user_id)
+        # The lazy proxy is typed as the base; the enterprise impl adds the method.
+        azure_service = cast(
+            SaaSAzureDevOpsService,
+            AzureDevOpsServiceImpl(external_auth_id=keycloak_user_id),
+        )
         if not await azure_service.has_contribute_access(
             azure_view.project_id, azure_view.repository_id
         ):
