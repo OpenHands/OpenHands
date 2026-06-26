@@ -47,6 +47,8 @@ JIRA_DC_BASE_URL = os.getenv('JIRA_DC_BASE_URL', '').strip()
 JIRA_DC_ENABLE_OAUTH = os.getenv('JIRA_DC_ENABLE_OAUTH', '1') in ('1', 'true')
 JIRA_DC_SERVICE_ACCOUNT_EMAIL = os.getenv('JIRA_DC_SERVICE_ACCOUNT_EMAIL', '').strip()
 JIRA_DC_SERVICE_ACCOUNT_PAT = os.getenv('JIRA_DC_SERVICE_ACCOUNT_PAT', '').strip()
+# Timeout (s) for server-side calls to Jira DC; configurable for slow on-prem.
+JIRA_DC_HTTP_TIMEOUT = float(os.getenv('JIRA_DC_HTTP_TIMEOUT', '30'))
 AUTH_URL = os.getenv('AUTH_URL', '').rstrip('/')
 ROLE_CHECK_ENABLED = os.getenv('ROLE_CHECK_ENABLED', 'false').lower() in (
     '1',

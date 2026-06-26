@@ -30,7 +30,7 @@ from integrations.utils import (
     markdown_to_jira_markup,
 )
 from jinja2 import Environment, FileSystemLoader
-from server.auth.constants import JIRA_DC_ENABLE_OAUTH
+from server.auth.constants import JIRA_DC_ENABLE_OAUTH, JIRA_DC_HTTP_TIMEOUT
 from server.auth.saas_user_auth import get_user_auth_from_keycloak_id
 from server.auth.token_manager import TokenManager
 from storage.jira_dc_integration_store import JiraDcIntegrationStore
@@ -635,7 +635,9 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         """Return the service account's Jira (name, key) from /myself."""
         url = f'{base_api_url}/rest/api/2/myself'
         headers = {'Authorization': f'Bearer {svc_acc_api_key}'}
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=JIRA_DC_HTTP_TIMEOUT
+        ) as client:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
@@ -647,7 +649,9 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         """Get issue details from Jira DC API."""
         url = f'{job_context.base_api_url}/rest/api/2/issue/{job_context.issue_key}'
         headers = {'Authorization': f'Bearer {svc_acc_api_key}'}
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=JIRA_DC_HTTP_TIMEOUT
+        ) as client:
             response = await client.get(url, headers=headers)
             if response.status_code == 401:
                 logger.error(
@@ -712,7 +716,9 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             'maxResults': max_comments,
         }
         try:
-            async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+            async with httpx.AsyncClient(
+                verify=httpx_verify_option(), timeout=JIRA_DC_HTTP_TIMEOUT
+            ) as client:
                 response = await client.get(url, headers=headers, params=params)
                 response.raise_for_status()
                 raw_comments = response.json().get('comments', [])
@@ -765,7 +771,9 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         headers = {'Authorization': f'Bearer {svc_acc_api_key}'}
         # Convert standard Markdown to Jira Wiki Markup for proper rendering
         data = {'body': markdown_to_jira_markup(message)}
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=JIRA_DC_HTTP_TIMEOUT
+        ) as client:
             response = await client.post(url, headers=headers, json=data)
             response.raise_for_status()
             return response.json()
@@ -791,7 +799,9 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         url = f'{base_api_url}/rest/internal/2/reactions'
         headers = {'Authorization': f'Bearer {svc_acc_api_key}'}
         data = {'commentId': comment_id, 'emojiId': emoji_id}
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=JIRA_DC_HTTP_TIMEOUT
+        ) as client:
             response = await client.post(url, headers=headers, json=data)
             response.raise_for_status()
 
@@ -858,7 +868,9 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             'configuration': {'SECRET': secret, 'EXCLUDE_BODY': 'false'},
         }
 
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=JIRA_DC_HTTP_TIMEOUT
+        ) as client:
             # Idempotency: reuse any existing webhook already pointing at our URL.
             listing = await client.get(collection_url, headers=headers)
             listing.raise_for_status()
@@ -911,7 +923,9 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         collection_url = f'{base}/rest/jira-webhook/1.0/webhooks'
         headers = {'Authorization': f'Bearer {admin_api_key}'}
 
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=JIRA_DC_HTTP_TIMEOUT
+        ) as client:
             listing = await client.get(collection_url, headers=headers)
             listing.raise_for_status()
             existing = next(

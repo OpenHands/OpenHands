@@ -1819,3 +1819,35 @@ class TestAddAcknowledgementReaction:
         await jira_dc_manager._add_acknowledgement_reaction(
             sample_job_context, sample_jira_dc_workspace
         )
+
+
+class TestJiraDcHttpTimeout:
+    """Server-side Jira DC calls use the configurable timeout, not httpx's 5s default."""
+
+    def test_default_timeout_is_30s(self):
+        from server.auth.constants import JIRA_DC_HTTP_TIMEOUT
+
+        assert JIRA_DC_HTTP_TIMEOUT == 30.0
+
+    @pytest.mark.asyncio
+    async def test_service_account_call_uses_configured_timeout(self, jira_dc_manager):
+        from server.auth.constants import JIRA_DC_HTTP_TIMEOUT
+
+        resp = MagicMock()
+        resp.raise_for_status = MagicMock()
+        resp.json = MagicMock(return_value={'name': 'openhands', 'key': 'JIRAUSER1'})
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=resp)
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=client)
+        cm.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(
+            'integrations.jira_dc.jira_dc_manager.httpx.AsyncClient', return_value=cm
+        ) as mock_client:
+            name, key = await jira_dc_manager._fetch_service_account_identity(
+                'https://jira.example.com', 'svc-pat'
+            )
+
+        assert (name, key) == ('openhands', 'JIRAUSER1')
+        assert mock_client.call_args.kwargs['timeout'] == JIRA_DC_HTTP_TIMEOUT
