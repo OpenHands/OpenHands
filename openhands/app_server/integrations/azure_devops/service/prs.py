@@ -12,12 +12,6 @@ from openhands.app_server.utils.logger import openhands_logger as logger
 class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
     """Mixin for Azure DevOps pull request operations."""
 
-    def _truncate_comment(self, comment: str, max_length: int = 1000) -> str:
-        """Truncate comment to max length."""
-        if len(comment) <= max_length:
-            return comment
-        return comment[:max_length] + '...'
-
     async def add_pr_thread(
         self,
         repository: str,

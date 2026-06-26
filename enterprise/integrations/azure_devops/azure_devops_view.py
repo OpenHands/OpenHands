@@ -105,8 +105,8 @@ def _extract_work_item_comment(payload: dict[str, Any]) -> str:
         return history
 
     detailed = (payload.get('detailedMessage') or {}).get('text') or ''
-    match = re.search(r'\r?\n([^\r\n].*)\Z', detailed, flags=re.S)
-    return match.group(1).strip() if match else detailed
+    # detailedMessage is "<actor> commented\n<body>"; drop the first line.
+    return detailed.split('\n', 1)[-1].strip() if '\n' in detailed else detailed
 
 
 def _select_project_repo(
@@ -162,7 +162,8 @@ class AzureDevOpsItem(ResolverViewInterface):
     repository_id: str
 
     def _get_branch_name(self) -> str | None:
-        return getattr(self, 'branch_name', None)
+        # Only PR comments carry a branch; overridden there.
+        return None
 
     async def _load_resolver_context(self) -> None:
         azure_service = AzureDevOpsServiceImpl(
@@ -265,6 +266,9 @@ class AzureDevOpsPRComment(AzureDevOpsItem):
     comment_body: str
     thread_id: int | None
     branch_name: str | None
+
+    def _get_branch_name(self) -> str | None:
+        return self.branch_name
 
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         await self._load_resolver_context()
@@ -389,6 +393,13 @@ class AzureDevOpsFactory:
         username = _actor_username(actor)
         actor_id = str(actor.get('id') or actor.get('uniqueName') or username)
         org = _extract_org(payload)
+        if not org:
+            # Without an org, full_repo_name would be malformed ('/project/repo').
+            logger.warning(
+                '[Azure DevOps] Could not determine organization from payload; '
+                'skipping.'
+            )
+            return None
 
         if AzureDevOpsFactory.is_pr_comment(message):
             pull_request = resource.get('pullRequest') or {}
@@ -479,4 +490,5 @@ class AzureDevOpsFactory:
                 comment_body=_extract_work_item_comment(payload),
             )
 
+        # Unreachable: receive_message only calls this after is_job_requested() is True.
         raise ValueError(f'Unhandled Azure DevOps webhook event: {message}')

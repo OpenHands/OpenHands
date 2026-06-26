@@ -16,12 +16,6 @@ class AzureDevOpsWorkItemsMixin(AzureDevOpsMixinBase):
     in Azure Boards. This mixin provides methods to interact with work item comments.
     """
 
-    def _truncate_comment(self, comment: str, max_length: int = 1000) -> str:
-        """Truncate comment to max length."""
-        if len(comment) <= max_length:
-            return comment
-        return comment[:max_length] + '...'
-
     async def add_work_item_comment(
         self, repository: str, work_item_id: int, comment_text: str
     ) -> dict:

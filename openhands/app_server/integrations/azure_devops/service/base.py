@@ -52,7 +52,9 @@ class AzureDevOpsMixinBase(BaseGitService, HTTPClient):
 
     def _truncate_comment(self, comment: str, max_length: int = 1000) -> str:
         """Truncate comment to max length."""
-        raise NotImplementedError('Implemented in AzureDevOpsServiceImpl')
+        if len(comment) <= max_length:
+            return comment
+        return comment[:max_length] + '...'
 
     @staticmethod
     def _encode_url_component(component: str) -> str:

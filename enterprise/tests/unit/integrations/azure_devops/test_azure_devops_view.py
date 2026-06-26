@@ -326,6 +326,33 @@ async def test_work_item_load_resolver_context_uses_work_item_not_pr(monkeypatch
     fake_service.get_issue_or_pr_title_and_body.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_factory_returns_none_when_org_empty(monkeypatch):
+    # No resolvable org -> skip rather than build a malformed '/project/repo'.
+    monkeypatch.setattr(
+        'integrations.azure_devops.azure_devops_view._extract_org',
+        lambda payload: '',
+    )
+
+    view = await AzureDevOpsFactory.create_azure_devops_view_from_payload(
+        _make_pr_message(),
+        keycloak_user_id='kc-alice',
+    )
+
+    assert view is None
+
+
+@pytest.mark.asyncio
+async def test_pr_view_get_branch_name_returns_branch():
+    view = await AzureDevOpsFactory.create_azure_devops_view_from_payload(
+        _make_pr_message(),
+        keycloak_user_id='kc-alice',
+    )
+
+    assert isinstance(view, AzureDevOpsPRComment)
+    assert view._get_branch_name() == 'feature/x'
+
+
 def test_actor_email_extracts_email_from_unique_name_or_display_name():
     assert actor_email({'uniqueName': 'alice@example.com'}) == 'alice@example.com'
     assert (
