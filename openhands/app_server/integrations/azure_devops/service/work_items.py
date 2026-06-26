@@ -16,12 +16,6 @@ class AzureDevOpsWorkItemsMixin(AzureDevOpsMixinBase):
     in Azure Boards. This mixin provides methods to interact with work item comments.
     """
 
-    def _truncate_comment(self, comment: str, max_length: int = 1000) -> str:
-        """Truncate comment to max length."""
-        if len(comment) <= max_length:
-            return comment
-        return comment[:max_length] + '...'
-
     async def add_work_item_comment(
         self, repository: str, work_item_id: int, comment_text: str
     ) -> dict:
@@ -43,10 +37,7 @@ class AzureDevOpsWorkItemsMixin(AzureDevOpsMixinBase):
         org, project, _ = self._parse_repository(repository)
 
         # URL-encode components to handle spaces and special characters
-        org_enc = self._encode_url_component(org)
-        project_enc = self._encode_url_component(project)
-
-        url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/wit/workItems/{work_item_id}/comments?api-version=7.1-preview.4'
+        url = f'{self._project_base_url(org, project)}/_apis/wit/workItems/{work_item_id}/comments?api-version=7.1-preview.4'
 
         payload = {
             'text': comment_text,
@@ -58,6 +49,19 @@ class AzureDevOpsWorkItemsMixin(AzureDevOpsMixinBase):
 
         logger.info(f'Added comment to work item {work_item_id} in project {project}')
         return response
+
+    async def get_work_item_title_and_body(self, work_item_id: int) -> tuple[str, str]:
+        """Get a work item's title and description as plain text.
+
+        Work item IDs are unique per org, so this queries at the org level.
+        """
+        url = (
+            f'{self.base_url}/_apis/wit/workitems/{work_item_id}'
+            '?fields=System.Title,System.Description&api-version=7.1'
+        )
+        response, _ = await self._make_request(url)
+        fields = response.get('fields') or {}
+        return fields.get('System.Title') or '', fields.get('System.Description') or ''
 
     async def get_work_item_comments(
         self, repository: str, work_item_id: int, max_comments: int = 100
@@ -77,10 +81,7 @@ class AzureDevOpsWorkItemsMixin(AzureDevOpsMixinBase):
         org, project, _ = self._parse_repository(repository)
 
         # URL-encode components to handle spaces and special characters
-        org_enc = self._encode_url_component(org)
-        project_enc = self._encode_url_component(project)
-
-        url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/wit/workItems/{work_item_id}/comments?api-version=7.1-preview.4'
+        url = f'{self._project_base_url(org, project)}/_apis/wit/workItems/{work_item_id}/comments?api-version=7.1-preview.4'
 
         response, _ = await self._make_request(url)
 

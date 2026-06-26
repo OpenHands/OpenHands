@@ -62,3 +62,13 @@ UI components → TanStack Query hooks (frontend/src/hooks/query/ or mutation/) 
 ```
 
 Flag any component that imports directly from `#/api/` and calls fetch/mutation functions without a TanStack Query wrapper.
+
+## Review Verdict: Submit the Review State That Matches Your Verdict
+
+GitHub does not clear a prior `CHANGES_REQUESTED` from a reviewer when that reviewer later leaves a `COMMENT` — only an `APPROVE` supersedes it. So always submit the review with the state that matches your actual verdict, or PRs get stuck blocked by a stale decision:
+
+- **APPROVE** when the PR meets the merge bar — no critical or blocking issues remain (only optional/non-blocking suggestions). If you previously requested changes and those blocking issues are now resolved, submit an **APPROVE** (you may still list remaining non-blocking suggestions in the body) so your earlier `CHANGES_REQUESTED` is cleared.
+- **REQUEST_CHANGES** only when there are genuine blocking issues that must be fixed before merge.
+- **COMMENT** only for a purely informational pass where you are neither approving nor blocking.
+
+Do not leave a PR in `CHANGES_REQUESTED` once its blocking issues are resolved and your verdict is effectively "worth merging" — approve it.
