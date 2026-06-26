@@ -104,7 +104,7 @@ def _subscription_is_project_scoped(subscription: dict[str, Any]) -> bool:
 
 def _subscription_is_enabled(subscription: dict[str, Any] | None) -> bool:
     # A Service Hook can exist but be disabled/suspended and not deliver events.
-    return bool(subscription) and subscription.get('status') == 'enabled'
+    return subscription is not None and subscription.get('status') == 'enabled'
 
 
 def _matches_pr_comment_subscription(
