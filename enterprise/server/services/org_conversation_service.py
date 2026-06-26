@@ -129,6 +129,18 @@ class OrgConversationService:
             cache_write_tokens=metrics.accumulated_token_usage.cache_write_tokens,  # type: ignore[union-attr]
         )
 
+    async def _count_conversations_by_sandbox_id(self, sandbox_id: str) -> int:
+        count_query = (
+            select(func.count())
+            .select_from(StoredConversationMetadata)
+            .where(
+                StoredConversationMetadata.conversation_version == 'V1',
+                StoredConversationMetadata.sandbox_id == sandbox_id,
+            )
+        )
+        result = await self.db_session.execute(count_query)
+        return result.scalar() or 0
+
     async def list_org_conversations(
         self,
         org_id: UUID,
@@ -202,18 +214,6 @@ class OrgConversationService:
             cutoff_date = datetime.now(UTC) - timedelta(days=days)
             query = query.where(StoredConversationMetadata.created_at >= cutoff_date)
 
-        # Build count query for total items (before sandbox_status filter is applied)
-        count_query = select(func.count()).select_from(query.subquery())
-
-        # Get total count
-        count_result = await self.db_session.execute(count_query)
-        total_items = count_result.scalar() or 0
-
-        # Track whether pagination count is accurate. sandbox_status filter is
-        # applied post-query (requires sandbox service), so total_items may be
-        # inflated and pages may be shorter/empty when that filter is active.
-        pagination_accurate = not bool(sandbox_status)
-
         # Apply sorting
         sort_column = VALID_SORT_FIELDS.get(
             sort_by, StoredConversationMetadata.last_updated_at
@@ -223,36 +223,30 @@ class OrgConversationService:
         else:
             query = query.order_by(sort_column.desc().nullslast())
 
-        # Apply pagination (offset-based)
-        offset = (page - 1) * per_page
-        query = query.offset(offset).limit(per_page)
-
-        # Execute query
-        result = await self.db_session.execute(query)
-        rows = result.all()
-
-        # Collect sandbox IDs for batch fetch
-        sandbox_ids = [
-            metadata.sandbox_id for metadata, _, _ in rows if metadata.sandbox_id
-        ]
-
-        # Batch fetch sandbox info for live status (always fetches to get current sandbox state)
+        pagination_accurate = not (sandbox_status and not self.sandbox_service)
         sandbox_info_map: dict[str, SandboxInfo | None] = {}
-        if sandbox_ids and self.sandbox_service:
-            try:
-                sandbox_results = await self.sandbox_service.batch_get_sandboxes(
-                    sandbox_ids
-                )
-                for sandbox_id, sandbox_info in zip(sandbox_ids, sandbox_results):
-                    sandbox_info_map[sandbox_id] = sandbox_info
-            except Exception as e:
-                logger.warning(
-                    'Failed to fetch sandbox info for org conversations',
-                    extra={'org_id': str(org_id), 'error': str(e)},
-                )
 
-        # Apply sandbox_status filter post-query (since it's from sandbox service)
         if sandbox_status:
+            result = await self.db_session.execute(query)
+            rows = result.all()
+
+            sandbox_ids = [
+                metadata.sandbox_id for metadata, _, _ in rows if metadata.sandbox_id
+            ]
+
+            if sandbox_ids and self.sandbox_service:
+                try:
+                    sandbox_results = await self.sandbox_service.batch_get_sandboxes(
+                        sandbox_ids
+                    )
+                    for sandbox_id, sandbox_info in zip(sandbox_ids, sandbox_results):
+                        sandbox_info_map[sandbox_id] = sandbox_info
+                except Exception as e:
+                    logger.warning(
+                        'Failed to fetch sandbox info for org conversations',
+                        extra={'org_id': str(org_id), 'error': str(e)},
+                    )
+
             rows = [
                 row
                 for row in rows
@@ -260,6 +254,40 @@ class OrgConversationService:
                 and sandbox_info_map.get(row[0].sandbox_id)
                 and sandbox_info_map[row[0].sandbox_id].status.value in sandbox_status  # type: ignore[union-attr]
             ]
+
+            total_items = len(rows)
+            total_pages = math.ceil(total_items / per_page) if total_items > 0 else 0
+
+            offset = (page - 1) * per_page
+            rows = rows[offset : offset + per_page]
+        else:
+            count_query = select(func.count()).select_from(query.subquery())
+            count_result = await self.db_session.execute(count_query)
+            total_items = count_result.scalar() or 0
+            total_pages = math.ceil(total_items / per_page) if total_items > 0 else 0
+
+            offset = (page - 1) * per_page
+            query = query.offset(offset).limit(per_page)
+
+            result = await self.db_session.execute(query)
+            rows = result.all()
+
+            sandbox_ids = [
+                metadata.sandbox_id for metadata, _, _ in rows if metadata.sandbox_id
+            ]
+
+            if sandbox_ids and self.sandbox_service:
+                try:
+                    sandbox_results = await self.sandbox_service.batch_get_sandboxes(
+                        sandbox_ids
+                    )
+                    for sandbox_id, sandbox_info in zip(sandbox_ids, sandbox_results):
+                        sandbox_info_map[sandbox_id] = sandbox_info
+                except Exception as e:
+                    logger.warning(
+                        'Failed to fetch sandbox info for org conversations',
+                        extra={'org_id': str(org_id), 'error': str(e)},
+                    )
 
         # Build response items
         items: list[OrgConversationResponse] = []
@@ -270,9 +298,6 @@ class OrgConversationService:
                     metadata, saas_metadata, user, sandbox_info
                 )
             )
-
-        # Calculate total pages
-        total_pages = math.ceil(total_items / per_page) if total_items > 0 else 0
 
         logger.info(
             'Listed organization conversations',
@@ -719,6 +744,17 @@ class OrgConversationService:
                         'conversation_id': conversation_id,
                     }
 
+                conversation_count = await self._count_conversations_by_sandbox_id(
+                    metadata.sandbox_id
+                )
+                if conversation_count > 1:
+                    return {
+                        'success': False,
+                        'error': 'Sandbox is shared by multiple conversations',
+                        'conversation_id': conversation_id,
+                        'sandbox_id': metadata.sandbox_id,
+                    }
+
                 # Update execution status to indicate stopping
                 previous_status = metadata.execution_status
                 metadata.execution_status = 'deleting'
@@ -777,18 +813,16 @@ class OrgConversationServiceInjector(Injector[OrgConversationService]):
         self, state: InjectorState, request: Request | None = None
     ) -> AsyncGenerator[OrgConversationService, None]:
         # Local imports to avoid circular dependencies
-        from openhands.app_server.config import depends_sandbox_service, get_db_session
+        from openhands.app_server.config import get_db_session, get_sandbox_service
 
         async with get_db_session(state, request) as db_session:
             service = OrgConversationService(db_session=db_session)
 
             # Try to inject sandbox service if available
             try:
-                sandbox_injector = depends_sandbox_service()
-                async for sandbox_service in sandbox_injector.inject(state, request):
+                async with get_sandbox_service(state, request) as sandbox_service:
                     service.set_sandbox_service(sandbox_service)
-                    break  # Only yield once with sandbox service
-            except (AssertionError, AttributeError) as e:
+            except AssertionError as e:
                 # Sandbox service not configured - log at warning level since
                 # this is a SaaS-specific feature that requires it
                 logger.warning(
