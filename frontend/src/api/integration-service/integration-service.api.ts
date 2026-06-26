@@ -1,7 +1,6 @@
 import { openHands } from "../open-hands-axios";
 import {
-  AzureDevOpsResourceIdentifier,
-  AzureDevOpsResourcesResponse,
+  AzureDevOpsWebhookStatus,
   AzureDevOpsWebhookInstallationResult,
   BitbucketDCResourcesResponse,
   BitbucketDCWebhookEnrollmentResult,
@@ -130,42 +129,36 @@ export const integrationService = {
   },
 
   /**
-   * Get all Azure DevOps repositories visible to the user with resolver hook status.
+   * Get the org-wide Azure DevOps resolver hook installation status.
    */
-  getAzureDevOpsResources: async (): Promise<AzureDevOpsResourcesResponse> => {
-    const { data } = await openHands.get<AzureDevOpsResourcesResponse>(
+  getAzureDevOpsResources: async (): Promise<AzureDevOpsWebhookStatus> => {
+    const { data } = await openHands.get<AzureDevOpsWebhookStatus>(
       "/integration/azure-devops/resources",
     );
     return data;
   },
 
   /**
-   * Install or reinstall the Azure DevOps resolver Service Hooks.
+   * Install or reinstall the org-wide Azure DevOps resolver Service Hooks.
    */
-  reinstallAzureDevOpsWebhook: async ({
-    resource,
-  }: {
-    resource: AzureDevOpsResourceIdentifier;
-  }): Promise<AzureDevOpsWebhookInstallationResult> => {
-    const { data } = await openHands.post<AzureDevOpsWebhookInstallationResult>(
-      "/integration/azure-devops/reinstall-webhook",
-      { resource },
-    );
-    return data;
-  },
+  reinstallAzureDevOpsWebhook:
+    async (): Promise<AzureDevOpsWebhookInstallationResult> => {
+      const { data } =
+        await openHands.post<AzureDevOpsWebhookInstallationResult>(
+          "/integration/azure-devops/reinstall-webhook",
+        );
+      return data;
+    },
 
   /**
-   * Delete the Azure DevOps resolver Service Hooks for a repository.
+   * Delete the org-wide Azure DevOps resolver Service Hooks.
    */
-  uninstallAzureDevOpsWebhook: async ({
-    resource,
-  }: {
-    resource: AzureDevOpsResourceIdentifier;
-  }): Promise<AzureDevOpsWebhookInstallationResult> => {
-    const { data } = await openHands.post<AzureDevOpsWebhookInstallationResult>(
-      "/integration/azure-devops/uninstall-webhook",
-      { resource },
-    );
-    return data;
-  },
+  uninstallAzureDevOpsWebhook:
+    async (): Promise<AzureDevOpsWebhookInstallationResult> => {
+      const { data } =
+        await openHands.post<AzureDevOpsWebhookInstallationResult>(
+          "/integration/azure-devops/uninstall-webhook",
+        );
+      return data;
+    },
 };

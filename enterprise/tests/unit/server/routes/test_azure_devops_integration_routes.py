@@ -34,14 +34,6 @@ async def test_verify_azure_devops_signature_rejects_bad_secret(monkeypatch):
     assert exc_info.value.status_code == 403
 
 
-def _azure_resource():
-    return azure_devops.AzureDevOpsResourceIdentifier(
-        organization='alonaking',
-        project_id='project-id',
-        project_name='Project',
-    )
-
-
 @pytest.mark.asyncio
 async def test_get_azure_devops_resources_reports_installed_status(monkeypatch):
     monkeypatch.setattr(azure_devops, 'HOST_URL', 'https://app.example.com')
@@ -50,22 +42,13 @@ async def test_get_azure_devops_resources_reports_installed_status(monkeypatch):
     class FakeAzureDevOpsService:
         organization = 'alonaking'
 
-        async def get_projects_for_webhook_setup(self):
-            return [
-                {
-                    'organization': 'alonaking',
-                    'project_id': 'project-id',
-                    'project_name': 'Project',
-                    'full_name': 'alonaking/Project',
-                }
-            ]
-
         async def list_service_hook_subscriptions(self):
+            # Org-wide subscriptions carry no projectId.
             return [
                 {
                     'id': 'pr-subscription-id',
                     'eventType': azure_devops.AZURE_DEVOPS_PR_COMMENT_EVENT,
-                    'publisherInputs': {'projectId': 'project-id'},
+                    'publisherInputs': {},
                     'consumerInputs': {
                         'url': 'https://app.example.com/integration/azure-devops/events',
                     },
@@ -73,7 +56,7 @@ async def test_get_azure_devops_resources_reports_installed_status(monkeypatch):
                 {
                     'id': 'work-item-subscription-id',
                     'eventType': azure_devops.AZURE_DEVOPS_WORK_ITEM_COMMENT_EVENT,
-                    'publisherInputs': {'projectId': 'project-id'},
+                    'publisherInputs': {},
                     'consumerInputs': {
                         'url': 'https://app.example.com/integration/azure-devops/events',
                     },
@@ -86,18 +69,16 @@ async def test_get_azure_devops_resources_reports_installed_status(monkeypatch):
         lambda external_auth_id: FakeAzureDevOpsService(),
     )
 
-    response = await azure_devops.get_azure_devops_resources(user_id='user-id')
+    status = await azure_devops.get_azure_devops_resources(user_id='user-id')
 
-    assert len(response.resources) == 1
-    resource = response.resources[0]
-    assert resource.type == 'project'
-    assert resource.full_name == 'alonaking/Project'
-    assert resource.webhook_installed is True
-    assert resource.pr_subscription_id == 'pr-subscription-id'
-    assert resource.work_item_subscription_id == 'work-item-subscription-id'
+    assert status.organization == 'alonaking'
+    assert status.webhook_installed is True
+    assert status.pr_webhook_installed is True
+    assert status.work_item_webhook_installed is True
+    assert status.pr_subscription_id == 'pr-subscription-id'
+    assert status.work_item_subscription_id == 'work-item-subscription-id'
     assert (
-        resource.webhook_url
-        == 'https://app.example.com/integration/azure-devops/events'
+        status.webhook_url == 'https://app.example.com/integration/azure-devops/events'
     )
 
 
@@ -124,7 +105,7 @@ async def test_reinstall_azure_devops_webhook_replaces_existing_hooks(monkeypatc
                 {
                     'id': 'old-pr-subscription-id',
                     'eventType': azure_devops.AZURE_DEVOPS_PR_COMMENT_EVENT,
-                    'publisherInputs': {'projectId': 'project-id'},
+                    'publisherInputs': {},
                     'consumerInputs': {
                         'url': 'https://app.example.com/integration/azure-devops/events',
                     },
@@ -132,7 +113,7 @@ async def test_reinstall_azure_devops_webhook_replaces_existing_hooks(monkeypatc
                 {
                     'id': 'old-work-item-subscription-id',
                     'eventType': azure_devops.AZURE_DEVOPS_WORK_ITEM_COMMENT_EVENT,
-                    'publisherInputs': {'projectId': 'project-id'},
+                    'publisherInputs': {},
                     'consumerInputs': {
                         'url': 'https://app.example.com/integration/azure-devops/events',
                     },
@@ -146,12 +127,10 @@ async def test_reinstall_azure_devops_webhook_replaces_existing_hooks(monkeypatc
         lambda external_auth_id: fake_service,
     )
 
-    response = await azure_devops.reinstall_azure_devops_webhook(
-        body=azure_devops.AzureDevOpsWebhookRequest(resource=_azure_resource()),
-        user_id='user-id',
-    )
+    response = await azure_devops.reinstall_azure_devops_webhook(user_id='user-id')
 
     assert response.success is True
+    assert response.organization == 'alonaking'
     assert response.pr_subscription_id == 'new-pr-subscription-id'
     assert response.work_item_subscription_id == 'new-work-item-subscription-id'
     fake_service.delete_service_hook_subscription.assert_any_await(
@@ -161,12 +140,10 @@ async def test_reinstall_azure_devops_webhook_replaces_existing_hooks(monkeypatc
         'old-work-item-subscription-id'
     )
     fake_service.create_pr_comment_service_hook.assert_awaited_once_with(
-        project_id='project-id',
         webhook_url='https://app.example.com/integration/azure-devops/events',
         webhook_secret='secret',
     )
     fake_service.create_work_item_comment_service_hook.assert_awaited_once_with(
-        project_id='project-id',
         webhook_url='https://app.example.com/integration/azure-devops/events',
         webhook_secret='secret',
     )
@@ -187,9 +164,6 @@ async def test_reinstall_azure_devops_webhook_requires_configured_secret(monkeyp
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await azure_devops.reinstall_azure_devops_webhook(
-            body=azure_devops.AzureDevOpsWebhookRequest(resource=_azure_resource()),
-            user_id='user-id',
-        )
+        await azure_devops.reinstall_azure_devops_webhook(user_id='user-id')
 
     assert exc_info.value.status_code == 503

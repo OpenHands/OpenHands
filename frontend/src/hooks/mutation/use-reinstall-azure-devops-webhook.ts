@@ -1,10 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { integrationService } from "#/api/integration-service/integration-service.api";
-import type {
-  AzureDevOpsResourceIdentifier,
-  AzureDevOpsWebhookInstallationResult,
-} from "#/api/integration-service/integration-service.types";
+import type { AzureDevOpsWebhookInstallationResult } from "#/api/integration-service/integration-service.types";
 import { I18nKey } from "#/i18n/declaration";
 import {
   displayErrorToast,
@@ -18,11 +15,10 @@ export function useReinstallAzureDevOpsWebhook() {
   return useMutation<
     AzureDevOpsWebhookInstallationResult,
     Error,
-    AzureDevOpsResourceIdentifier,
+    void,
     unknown
   >({
-    mutationFn: (resource: AzureDevOpsResourceIdentifier) =>
-      integrationService.reinstallAzureDevOpsWebhook({ resource }),
+    mutationFn: () => integrationService.reinstallAzureDevOpsWebhook(),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["azure-devops-resources"] });
 
