@@ -285,4 +285,4 @@ class TestOrgAppSettingsUpdateMarketplaceValidation:
         assert update.registered_marketplaces[0].name == 'full-featured'
         assert update.registered_marketplaces[0].ref == 'v1.0.0'
         assert update.registered_marketplaces[0].repo_path == 'marketplaces/plugins'
-        assert update.registered_marketplaces[0].auto_load == True
+        assert update.registered_marketplaces[0].auto_load is True
