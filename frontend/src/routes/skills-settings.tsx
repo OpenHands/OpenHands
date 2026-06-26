@@ -18,6 +18,7 @@ import { useMe } from "#/hooks/query/use-me";
 import { useMarketplaceSkills } from "#/hooks/mutation/use-get-marketplace-skills";
 import { useSaveOrgAppSettings } from "#/hooks/mutation/use-save-org-app-settings";
 import { useOrganizationAppSettings } from "#/hooks/query/use-organization-app-settings";
+import { useOrganization } from "#/hooks/query/use-organization";
 import {
   MarketplaceRegistration,
   MarketplaceWithScope,
@@ -74,9 +75,22 @@ function SkillsSettingsScreen() {
   // Fetch org app settings with updated_at for optimistic locking using the hook
   const { data: orgAppSettings } = useOrganizationAppSettings();
 
+  // Get current organization data to determine scope
+  const { data: currentOrganization } = useOrganization();
+
   // Determine user role and permissions
   const userRole = user?.role ?? "member";
   const isAdminOrOwner = userRole === "admin" || userRole === "owner";
+
+  // Determine the scope based on the active organization's is_personal flag
+  const getActiveScope = (): "org" | "personal" => {
+    // If no org selected or it's a personal org, use personal scope
+    if (!currentOrganization || currentOrganization.is_personal) {
+      return "personal";
+    }
+    // Otherwise it's a commercial/org scope
+    return "org";
+  };
 
   // Skills state with marketplace information
   const [skillsState, setSkillsState] = React.useState<SkillWithState[]>([]);
@@ -151,9 +165,6 @@ function SkillsSettingsScreen() {
   const [modalMode, setModalMode] = React.useState<"add" | "edit">("add");
   const [selectedMarketplace, setSelectedMarketplace] =
     React.useState<MarketplaceWithScope | null>(null);
-  const [selectedScope, setSelectedScope] = React.useState<"org" | "personal">(
-    "personal",
-  );
 
   // Delete confirmation modal state
   const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
@@ -556,10 +567,9 @@ function SkillsSettingsScreen() {
   };
 
   // Marketplace modal handlers
-  const openAddModal = (scope: "org" | "personal" = "personal") => {
+  const openAddModal = () => {
     setModalMode("add");
     setSelectedMarketplace(null);
-    setSelectedScope(scope);
     setIsModalOpen(true);
   };
 
@@ -580,8 +590,10 @@ function SkillsSettingsScreen() {
     ref?: string;
     repo_path?: string;
     auto_load?: boolean;
-    scope: "org" | "personal";
   }) => {
+    // Determine scope based on active organization
+    const scope = getActiveScope();
+
     const newMarketplace: MarketplaceRegistration = {
       name: data.name,
       source: data.source,
@@ -590,7 +602,7 @@ function SkillsSettingsScreen() {
       auto_load: data.auto_load,
     };
 
-    if (data.scope === "org") {
+    if (scope === "org") {
       // Save to org settings using the active selectedOrgId
       if (!selectedOrgId) {
         displayErrorToast("No organization selected");
@@ -983,7 +995,7 @@ function SkillsSettingsScreen() {
               testId="add-marketplace-button"
               variant="primary"
               type="button"
-              onClick={() => openAddModal("personal")}
+              onClick={() => openAddModal()}
             >
               {t(I18nKey.SETTINGS$MARKETPLACE_ADD)}
             </BrandButton>
@@ -1255,7 +1267,6 @@ function SkillsSettingsScreen() {
       <MarketplaceModal
         isOpen={isModalOpen}
         mode={modalMode}
-        scope={selectedScope}
         marketplace={
           selectedMarketplace
             ? {
@@ -1270,7 +1281,6 @@ function SkillsSettingsScreen() {
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveMarketplace}
         isSaving={isSavingOrg || isSavingPersonal}
-        isAdminOrOwner={isAdminOrOwner}
       />
 
       {/* Delete Confirmation Modal */}

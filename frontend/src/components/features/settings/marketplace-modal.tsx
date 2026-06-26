@@ -10,7 +10,6 @@ import { cn } from "#/utils/utils";
 interface MarketplaceModalProps {
   isOpen: boolean;
   mode: "add" | "edit";
-  scope?: "org" | "personal"; // Only for add mode
   marketplace?: MarketplaceRegistration | null;
   onClose: () => void;
   onSave: (data: {
@@ -19,25 +18,21 @@ interface MarketplaceModalProps {
     ref?: string;
     repo_path?: string;
     auto_load?: boolean;
-    scope: "org" | "personal";
   }) => void;
   onDelete?: () => void;
   isSaving?: boolean;
   isDeleting?: boolean;
-  isAdminOrOwner?: boolean; // For org scope availability
 }
 
 export function MarketplaceModal({
   isOpen,
   mode,
-  scope: initialScope,
   marketplace,
   onClose,
   onSave,
   onDelete,
   isSaving = false,
   isDeleting = false,
-  isAdminOrOwner = false,
 }: MarketplaceModalProps) {
   const { t } = useTranslation();
   const [name, setName] = React.useState(marketplace?.name || "");
@@ -45,9 +40,6 @@ export function MarketplaceModal({
   const [ref, setRef] = React.useState(marketplace?.ref || "");
   const [repoPath, setRepoPath] = React.useState(marketplace?.repo_path || "");
   const [autoLoad, setAutoLoad] = React.useState(!!marketplace?.auto_load);
-  const [scope, setScope] = React.useState<"org" | "personal">(
-    initialScope || "personal",
-  );
   const [nameError, setNameError] = React.useState<string | null>(null);
   const [sourceError, setSourceError] = React.useState<string | null>(null);
 
@@ -59,11 +51,10 @@ export function MarketplaceModal({
       setRef(marketplace?.ref || "");
       setRepoPath(marketplace?.repo_path || "");
       setAutoLoad(!!marketplace?.auto_load);
-      setScope(initialScope || "personal");
       setNameError(null);
       setSourceError(null);
     }
-  }, [isOpen, marketplace, initialScope]);
+  }, [isOpen, marketplace]);
 
   const handleSave = () => {
     // Validate name on click
@@ -87,13 +78,11 @@ export function MarketplaceModal({
       ref: ref.trim() || undefined,
       repo_path: repoPath.trim() || undefined,
       auto_load: autoLoad || undefined,
-      scope,
     });
   };
 
   if (!isOpen) return null;
 
-  const canAddOrg = isAdminOrOwner;
   const isEdit = mode === "edit";
 
   const footer = (
@@ -143,33 +132,6 @@ export function MarketplaceModal({
             ? t(I18nKey.SETTINGS$MARKETPLACE_EDIT_TITLE)
             : t(I18nKey.SETTINGS$MARKETPLACE_ADD_TITLE)}
         </h3>
-
-        {/* Scope selector - only for add mode */}
-        {!isEdit && (
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-tertiary-alt">
-              {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_LABEL)}
-            </label>
-            <select
-              value={scope}
-              onChange={(e) => setScope(e.target.value as "org" | "personal")}
-              disabled={scope === "org" && !canAddOrg}
-              className="bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 text-sm disabled:opacity-50"
-              title={
-                !canAddOrg
-                  ? t(I18nKey.SETTINGS$MARKETPLACE_ORG_REQUIRE_ADMIN)
-                  : undefined
-              }
-            >
-              <option value="personal">
-                {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_PERSONAL)}
-              </option>
-              <option value="org" disabled={!canAddOrg}>
-                {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_ORG)}
-              </option>
-            </select>
-          </div>
-        )}
 
         {/* Name field */}
         <div className="flex flex-col gap-2">

@@ -13,7 +13,6 @@ const baseProps = {
   onSave,
   isSaving: false,
   isDeleting: false,
-  isAdminOrOwner: true,
 };
 
 beforeEach(() => {
@@ -127,41 +126,17 @@ describe("MarketplaceModal", () => {
       ref: undefined,
       repo_path: undefined,
       auto_load: undefined,
-      scope: "personal",
-      orgId: undefined,
     });
   });
 
-  it("renders scope selector in add mode", () => {
+  it("does not render scope selector in add mode", () => {
     render(
       <MarketplaceModal
         {...baseProps}
       />,
     );
 
-    expect(screen.getByText("SETTINGS$MARKETPLACE_SCOPE_LABEL")).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /personal/i })).toBeInTheDocument();
-  });
-
-  it("calls onSave with personal scope by default", async () => {
-    render(
-      <MarketplaceModal
-        {...baseProps}
-      />,
-    );
-    const user = userEvent.setup();
-
-    // Fill in required fields
-    await user.type(screen.getByPlaceholderText("e.g., my-skills"), "my-marketplace");
-    await user.type(screen.getByPlaceholderText("github:owner/repo"), "github:owner/repo");
-
-    await user.click(screen.getByTestId("marketplace-save-button"));
-
-    expect(onSave).toHaveBeenCalledWith({
-      name: "my-marketplace",
-      source: "github:owner/repo",
-      scope: "personal",
-    });
+    expect(screen.queryByText("SETTINGS$MARKETPLACE_SCOPE_LABEL")).not.toBeInTheDocument();
   });
 
   it("calls onClose when cancel is clicked", async () => {

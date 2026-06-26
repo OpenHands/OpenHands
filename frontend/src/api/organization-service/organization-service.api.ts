@@ -273,7 +273,9 @@ export const organizationService = {
     return data;
   },
 
-  saveOrganizationAppSettings: async (settings: OrganizationAppSettingsUpdate) => {
+  saveOrganizationAppSettings: async (
+    settings: OrganizationAppSettingsUpdate,
+  ) => {
     const { data } = await openHands.post<OrganizationAppSettingsResponse>(
       "/api/organizations/app",
       settings,
