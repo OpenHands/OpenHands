@@ -394,11 +394,101 @@ async def update_legacy_org_defaults_settings(
 
 
 @org_router.get(
-    '/{org_id}/app',
+    '/app',
     response_model=OrgAppSettingsResponse,
     dependencies=[Depends(require_permission(Permission.MANAGE_APPLICATION_SETTINGS))],
 )
 async def get_org_app_settings(
+    service: OrgAppSettingsService = org_app_settings_service_dependency,
+) -> OrgAppSettingsResponse:
+    """Get organization app settings for the user's current organization.
+
+    This endpoint retrieves application settings for the authenticated user's
+    current organization. Access requires the MANAGE_APPLICATION_SETTINGS permission,
+    which is granted to all organization members (member, admin, and owner roles).
+
+    Args:
+        service: OrgAppSettingsService (injected by dependency)
+
+    Returns:
+        OrgAppSettingsResponse: The organization app settings
+
+    Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks MANAGE_APPLICATION_SETTINGS permission
+        HTTPException: 404 if current organization not found
+    """
+    try:
+        return await service.get_org_app_settings()
+    except OrgNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Current organization not found',
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error retrieving organization app settings',
+            extra={'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='An unexpected error occurred',
+        )
+
+
+@org_router.post(
+    '/app',
+    response_model=OrgAppSettingsResponse,
+    dependencies=[Depends(require_permission(Permission.MANAGE_APPLICATION_SETTINGS))],
+)
+async def update_org_app_settings(
+    update_data: OrgAppSettingsUpdate,
+    service: OrgAppSettingsService = org_app_settings_service_dependency,
+) -> OrgAppSettingsResponse:
+    """Update organization app settings for the user's current organization.
+
+    This endpoint updates application settings for the authenticated user's
+    current organization. Access requires the MANAGE_APPLICATION_SETTINGS permission,
+    which is granted to all organization members (member, admin, and owner roles).
+
+    Args:
+        update_data: App settings update data
+        service: OrgAppSettingsService (injected by dependency)
+
+    Returns:
+        OrgAppSettingsResponse: The updated organization app settings
+
+    Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks MANAGE_APPLICATION_SETTINGS permission
+        HTTPException: 404 if current organization not found
+        HTTPException: 422 if validation errors occur (handled by FastAPI)
+        HTTPException: 500 if update fails
+    """
+    try:
+        return await service.update_org_app_settings(update_data)
+    except OrgNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Current organization not found',
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error updating organization app settings',
+            extra={'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='An unexpected error occurred',
+        )
+
+
+@org_router.get(
+    '/{org_id}/app-settings',
+    response_model=OrgAppSettingsResponse,
+    dependencies=[Depends(require_permission(Permission.MANAGE_APPLICATION_SETTINGS))],
+)
+async def get_org_app_settings_by_id(
     org_id: UUID,
     service: OrgAppSettingsService = org_app_settings_service_dependency,
 ) -> OrgAppSettingsResponse:
@@ -438,11 +528,11 @@ async def get_org_app_settings(
 
 
 @org_router.post(
-    '/{org_id}/app',
+    '/{org_id}/app-settings',
     response_model=OrgAppSettingsResponse,
     dependencies=[Depends(require_permission(Permission.MANAGE_APPLICATION_SETTINGS))],
 )
-async def update_org_app_settings(
+async def update_org_app_settings_by_id(
     org_id: UUID,
     update_data: OrgAppSettingsUpdate,
     service: OrgAppSettingsService = org_app_settings_service_dependency,

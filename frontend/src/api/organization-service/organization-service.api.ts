@@ -268,7 +268,7 @@ export const organizationService = {
 
   getOrganizationAppSettings: async ({ orgId }: { orgId: string }) => {
     const { data } = await openHands.get<OrganizationAppSettingsResponse>(
-      `/api/organizations/${orgId}/app`,
+      `/api/organizations/${orgId}/app-settings`,
       {
         headers: {
           "X-Org-Id": orgId,
@@ -286,7 +286,7 @@ export const organizationService = {
     settings: OrganizationAppSettingsUpdate;
   }) => {
     const { data } = await openHands.post<OrganizationAppSettingsResponse>(
-      `/api/organizations/${orgId}/app`,
+      `/api/organizations/${orgId}/app-settings`,
       settings,
       {
         headers: {
