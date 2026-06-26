@@ -55,7 +55,25 @@ def _archive_prefix() -> str:
 
 
 def _archive_format() -> str:
-    return os.getenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'git-delta')
+    # Default to 'both' for now — keep the compact git-delta AND a self-contained
+    # full tar.gz in the bucket until the storage policy is settled (infra#1444).
+    return os.getenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'both')
+
+
+def _formats_to_capture() -> list[str] | None:
+    """Resolve RUNTIME_FILE_ARCHIVE_FORMAT to the list of formats to upload.
+
+    'both' captures the git-delta AND the full tar.gz; a single format captures
+    just that one. Returns None for an unsupported value (a hard config error the
+    SDK producer would 422), so the caller can log + skip instead of mis-reading
+    it as "nothing to archive".
+    """
+    fmt = _archive_format()
+    if fmt == 'both':
+        return ['git-delta', 'tar.gz']
+    if fmt in _ARCHIVE_SUFFIX:
+        return [fmt]
+    return None
 
 
 def _archive_base_path() -> str:
@@ -136,8 +154,8 @@ async def archive_workspace(
         )
         return True
 
-    fmt = _archive_format()
-    if fmt not in _ARCHIVE_SUFFIX:
+    formats = _formats_to_capture()
+    if formats is None:
         # The SDK producer would 422 this; treat it as a hard config error
         # (mirrors runtime-api._validate_archive_format) rather than letting the
         # 4xx be misread as "nothing to archive" and silently deleting.
@@ -145,77 +163,101 @@ async def archive_workspace(
             'Workspace archive for %s: unsupported RUNTIME_FILE_ARCHIVE_FORMAT '
             '%r (valid: %s); skipping archive',
             sandbox_id,
-            fmt,
-            sorted(_ARCHIVE_SUFFIX),
+            _archive_format(),
+            ['git-delta', 'tar.gz', 'both'],
         )
         return not archive_required()
-    suffix = _ARCHIVE_SUFFIX[fmt]
+
     headers = {'X-Session-API-Key': session_api_key} if session_api_key else {}
     # Conversation id keys the archive and locates the (possibly grouped) repo.
     # For cloud conversations the sandbox id is the conversation_id.hex.
     conversation_key = conversation_id or sandbox_id
     archive_path = _archive_path(grouping_strategy, conversation_key)
+    ts = utc_now().strftime('%Y%m%dT%H%M%SZ')
+    base_path = f'{_archive_prefix()}/{sandbox_id}/{ts}'
 
-    try:
-        response = await httpx_client.get(
-            f'{agent_server_url}/api/file/archive',
-            params={'path': archive_path, 'format': fmt},
-            headers=headers,
-            timeout=_archive_timeout(),
-        )
+    # 'both' uploads each format under its own suffix ({ts}.patch + {ts}.tar.gz),
+    # each with its own manifest. base_commit only rides the git-delta response
+    # header, so capture it there and reuse it for the tar.gz manifest.
+    retryable_failure = False
+    base_commit = ''
+    for fmt in formats:
+        suffix = _ARCHIVE_SUFFIX[fmt]
+        try:
+            response = await httpx_client.get(
+                f'{agent_server_url}/api/file/archive',
+                params={'path': archive_path, 'format': fmt},
+                headers=headers,
+                timeout=_archive_timeout(),
+            )
+        except Exception as e:
+            # Network/timeout error: genuinely transient.
+            _logger.warning(
+                'Workspace archive fetch (%s) failed for %s: %s', fmt, sandbox_id, e
+            )
+            retryable_failure = True
+            continue
+
         if response.status_code != 200:
-            # The agent-server (software-agent-sdk GET /api/file/archive) returns
             # 400 (not a directory / not a git repo / bad base_ref) or 404 (path
-            # missing) when there is genuinely nothing to capture — those are
-            # permanent for this workspace, so let the delete proceed even under
-            # REQUIRED. Every OTHER status (401 auth, 422 bad format, 429, any
-            # 5xx, etc.) is a real failure that retrying could fix, so it must
-            # block a REQUIRED delete instead of being misread as "no data".
+            # missing) means there is genuinely nothing to capture for this
+            # format — permanent, so it must not block a REQUIRED delete. Every
+            # OTHER status (401 auth, 422 bad format, 429, any 5xx) is retryable.
             permanent = response.status_code in (400, 404)
             _logger.warning(
-                'Workspace archive for %s: agent-server returned %s; %s',
+                'Workspace archive (%s) for %s: agent-server returned %s; %s',
+                fmt,
                 sandbox_id,
                 response.status_code,
                 'nothing to archive' if permanent else 'retryable failure',
             )
-            return permanent or not archive_required()
-        data = response.content
-        base_commit = response.headers.get('X-Archive-Base-Commit', '')
-    except Exception as e:
-        # Network/timeout error: genuinely transient.
-        _logger.warning('Workspace archive fetch failed for %s: %s', sandbox_id, e)
-        return not archive_required()
+            if not permanent:
+                retryable_failure = True
+            continue
 
-    try:
-        store = _get_archive_file_store()
-        ts = utc_now().strftime('%Y%m%dT%H%M%SZ')
-        base_path = f'{_archive_prefix()}/{sandbox_id}/{ts}'
-        await asyncio.to_thread(store.write, f'{base_path}.{suffix}', data)
-        manifest = json.dumps(
-            {
-                'sandbox_id': sandbox_id,
-                'conversation_id': conversation_key,
-                'phase': 'final',
-                'base_commit': base_commit,
-                'format': fmt,
-                'source_path': archive_path,
-                'byte_count': len(data),
-                'created_at': ts,
-            },
-            sort_keys=True,
-        ).encode('utf-8')
-        await asyncio.to_thread(store.write, f'{base_path}.manifest.json', manifest)
-        _logger.info(
-            'Archived workspace for %s (%d bytes) to %s.%s',
-            sandbox_id,
-            len(data),
-            base_path,
-            suffix,
-        )
-        return True
-    except Exception as e:
-        _logger.exception('Workspace archive upload failed for %s: %s', sandbox_id, e)
-        return not archive_required()
+        data = response.content
+        header_base = response.headers.get('X-Archive-Base-Commit', '')
+        if header_base:
+            base_commit = header_base
+
+        try:
+            store = _get_archive_file_store()
+            await asyncio.to_thread(store.write, f'{base_path}.{suffix}', data)
+            manifest = json.dumps(
+                {
+                    'sandbox_id': sandbox_id,
+                    'conversation_id': conversation_key,
+                    'phase': 'final',
+                    'base_commit': base_commit,
+                    'format': fmt,
+                    'source_path': archive_path,
+                    'byte_count': len(data),
+                    'created_at': ts,
+                },
+                sort_keys=True,
+            ).encode('utf-8')
+            await asyncio.to_thread(
+                store.write, f'{base_path}.{suffix}.manifest.json', manifest
+            )
+            _logger.info(
+                'Archived workspace (%s) for %s (%d bytes) to %s.%s',
+                fmt,
+                sandbox_id,
+                len(data),
+                base_path,
+                suffix,
+            )
+        except Exception as e:
+            _logger.exception(
+                'Workspace archive upload (%s) failed for %s: %s', fmt, sandbox_id, e
+            )
+            retryable_failure = True
+
+    # Deletion may proceed unless archiving is REQUIRED and a retryable failure
+    # left us short of the data we were meant to capture.
+    if archive_required() and retryable_failure:
+        return False
+    return True
 
 
 def initial_archive_enabled() -> bool:

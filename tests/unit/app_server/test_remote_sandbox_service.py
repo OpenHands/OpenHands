@@ -2081,6 +2081,7 @@ class TestArchiveWorkspaceHelper:
         from openhands.app_server.sandbox import workspace_archive
 
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'git-delta')
 
         resp = MagicMock()
         resp.status_code = 200
@@ -2300,6 +2301,7 @@ class TestArchiveWorkspaceHelper:
         )
 
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'git-delta')
 
         resp = MagicMock()
         resp.status_code = 200
@@ -2340,6 +2342,7 @@ class TestArchiveWorkspaceHelper:
         )
 
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'git-delta')
 
         resp = MagicMock()
         resp.status_code = 200
@@ -2363,6 +2366,96 @@ class TestArchiveWorkspaceHelper:
         assert ok is True
         _, kwargs = client.get.call_args
         assert kwargs['params']['path'] == '/workspace/project'
+
+    @pytest.mark.asyncio
+    async def test_archive_both_uploads_delta_and_targz(self, monkeypatch):
+        """FORMAT=both (the default) captures git-delta AND a full tar.gz, each
+        with its own artifact + manifest; base_commit rides the git-delta header
+        and is reused for the tar.gz manifest."""
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'both')
+
+        def make_resp(content, headers):
+            r = MagicMock()
+            r.status_code = 200
+            r.content = content
+            r.headers = headers
+            return r
+
+        responses = {
+            'git-delta': make_resp(b'patch-bytes', {'X-Archive-Base-Commit': 'abc123'}),
+            'tar.gz': make_resp(b'tar-bytes', {}),
+        }
+        client = AsyncMock()
+        client.get = AsyncMock(
+            side_effect=lambda *a, **k: responses[k['params']['format']]
+        )
+        store = MagicMock()
+        writes: dict[str, bytes] = {}
+        store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
+
+        with patch.object(
+            workspace_archive, '_get_archive_file_store', return_value=store
+        ):
+            ok = await workspace_archive.archive_workspace(
+                client,
+                create_runtime_data(),
+                'sandbox-1',
+                conversation_id='conv-1',
+            )
+
+        assert ok is True
+        # Two artifacts under the same {ts} base, one per format.
+        assert any(p.endswith('.patch') for p in writes)
+        assert any(p.endswith('.tar.gz') for p in writes)
+        patch_manifest = json.loads(
+            writes[next(p for p in writes if p.endswith('.patch.manifest.json'))]
+        )
+        targz_manifest = json.loads(
+            writes[next(p for p in writes if p.endswith('.tar.gz.manifest.json'))]
+        )
+        assert patch_manifest['format'] == 'git-delta'
+        assert targz_manifest['format'] == 'tar.gz'
+        # base_commit from the git-delta header is carried onto the tar.gz too.
+        assert patch_manifest['base_commit'] == 'abc123'
+        assert targz_manifest['base_commit'] == 'abc123'
+        assert patch_manifest['phase'] == targz_manifest['phase'] == 'final'
+
+    @pytest.mark.asyncio
+    async def test_archive_both_required_blocks_if_one_format_fails(self, monkeypatch):
+        """In REQUIRED both-mode, a retryable failure on either format blocks the
+        delete so a retry can capture the complete pair."""
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'both')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
+
+        ok_resp = MagicMock()
+        ok_resp.status_code = 200
+        ok_resp.content = b'patch-bytes'
+        ok_resp.headers = {'X-Archive-Base-Commit': 'abc123'}
+        bad_resp = MagicMock()
+        bad_resp.status_code = 500
+        responses = {'git-delta': ok_resp, 'tar.gz': bad_resp}
+        client = AsyncMock()
+        client.get = AsyncMock(
+            side_effect=lambda *a, **k: responses[k['params']['format']]
+        )
+        store = MagicMock()
+        store.write.side_effect = lambda path, data: None
+
+        with patch.object(
+            workspace_archive, '_get_archive_file_store', return_value=store
+        ):
+            ok = await workspace_archive.archive_workspace(
+                client, create_runtime_data(), 'sandbox-1'
+            )
+
+        # tar.gz 500 is retryable + REQUIRED -> block the delete for a retry.
+        assert ok is False
 
 
 class TestArchiveInitialWorkspaceHelper:
