@@ -179,16 +179,15 @@ class V1ConversationService {
   }
 
   /**
-   * Pause a V1 conversation
-   * When VITE_ENABLE_WEBSOCKET_GATEWAY=true, routes through the app-server proxy.
-   * Otherwise, calls the agent-server directly.
+   * Interrupt a V1 conversation
+   * Uses the custom runtime URL from the conversation
    *
    * @param conversationId The conversation ID
    * @param conversationUrl The conversation URL (e.g., "http://localhost:54928/api/conversations/...")
    * @param sessionApiKey Session API key for authentication (required for V1)
    * @returns Success response
    */
-  static async pauseConversation(
+  static async interruptConversation(
     conversationId: string,
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
@@ -207,7 +206,7 @@ class V1ConversationService {
 
     const url = this.buildRuntimeUrl(
       conversationUrl,
-      `/api/conversations/${conversationId}/pause`,
+      `/api/conversations/${conversationId}/interrupt`,
     );
     const headers = buildSessionHeaders(sessionApiKey);
 

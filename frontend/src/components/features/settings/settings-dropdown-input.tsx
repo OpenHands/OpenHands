@@ -15,7 +15,7 @@ interface SettingsDropdownInputProps {
   isDisabled?: boolean;
   isLoading?: boolean;
   defaultSelectedKey?: string;
-  selectedKey?: string;
+  selectedKey?: string | null;
   isClearable?: boolean;
   allowsCustomValue?: boolean;
   required?: boolean;

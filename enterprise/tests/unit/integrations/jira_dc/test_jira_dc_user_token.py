@@ -3,6 +3,7 @@
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from integrations.jira_dc.jira_dc_user_token import (
     JiraDcUserToken,
@@ -251,6 +252,35 @@ async def test_raises_when_refresh_request_fails():
                 token_manager=tm,
                 store=store,
             )
+
+
+@pytest.mark.asyncio
+async def test_raises_actionable_error_when_token_endpoint_unreachable():
+    """A connection error (wrong scheme / blocked egress) surfaces an actionable
+    JiraDcUserTokenError, not a bare httpx exception."""
+    expired = int(time.time()) - 100
+    future_refresh = int(time.time()) + 86400
+    store = _make_store(('enc_access', 'enc_refresh', expired, future_refresh))
+    tm = _make_token_manager(decrypt_return='tok')
+
+    mock_client = AsyncMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.post = AsyncMock(side_effect=httpx.ConnectTimeout('timed out'))
+
+    with patch(
+        'integrations.jira_dc.jira_dc_user_token.httpx.AsyncClient',
+        return_value=mock_client,
+    ):
+        with pytest.raises(JiraDcUserTokenError, match='Could not reach'):
+            await get_user_jira_dc_token(
+                keycloak_user_id='kc1',
+                workspace_id=1,
+                token_manager=tm,
+                store=store,
+            )
+
+    store.update_user_oauth_tokens.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -20,9 +20,13 @@ export const useUnifiedVSCodeUrl = () => {
   const { conversationId } = useConversationId();
   const runtimeIsReady = useRuntimeIsReady({ allowAgentError: true });
 
+  // Don't fetch for task IDs (format: "task-{uuid}"); the real conversation ID is
+  // resolved by useTaskPolling. Mirrors useActiveConversation.
+  const isTaskId = conversationId.startsWith("task-");
+
   // Fetch V1 app conversation to get sandbox_id
   const appConversationsQuery = useBatchAppConversations(
-    conversationId ? [conversationId] : [],
+    isTaskId ? [] : [conversationId],
   );
   const appConversation = appConversationsQuery.data?.[0];
   const sandboxId = appConversation?.sandbox_id;

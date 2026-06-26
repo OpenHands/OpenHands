@@ -96,3 +96,7 @@ asyncio_default_fixture_loop_scope = "function"
 [tool.coverage.run]
 relative_files = true
 omit = [ "tests/*" ]
+
+[tool.uv]
+exclude-newer = "7 days"
+exclude-newer-package = { openhands-agent-server = false, openhands-sdk = false, openhands-tools = false }
