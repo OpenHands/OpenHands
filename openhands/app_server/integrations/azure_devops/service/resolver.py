@@ -27,13 +27,12 @@ class AzureDevOpsResolverMixin(AzureDevOpsMixinBase):
         org, project, repo = self._parse_repository(repository)
 
         # URL-encode components to handle spaces and special characters
-        org_enc = self._encode_url_component(org)
-        project_enc = self._encode_url_component(project)
         repo_enc = self._encode_url_component(repo)
+        project_base_url = self._project_base_url(org, project)
 
         # Try to get as a pull request first
         try:
-            pr_url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests/{issue_number}?api-version=7.1'
+            pr_url = f'{project_base_url}/_apis/git/repositories/{repo_enc}/pullrequests/{issue_number}?api-version=7.1'
             response, _ = await self._make_request(pr_url)
             title = response.get('title') or ''
             body = response.get('description') or ''
@@ -43,7 +42,9 @@ class AzureDevOpsResolverMixin(AzureDevOpsMixinBase):
 
         # Fall back to work item
         try:
-            wi_url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/wit/workitems/{issue_number}?api-version=7.1'
+            wi_url = (
+                f'{project_base_url}/_apis/wit/workitems/{issue_number}?api-version=7.1'
+            )
             response, _ = await self._make_request(wi_url)
             fields = response.get('fields', {})
             title = fields.get('System.Title') or ''
@@ -73,7 +74,8 @@ class AzureDevOpsResolverMixin(AzureDevOpsMixinBase):
             comments = await self.get_pr_comments(  # type: ignore[attr-defined]
                 repository, issue_number, max_comments
             )
-            if comments:
+            # Empty list is a valid result (PR with no comments), not a miss.
+            if comments is not None:
                 return comments
         except Exception as pr_error:
             logger.debug(f'Failed to get PR comments: {pr_error}, trying work item')
@@ -111,11 +113,9 @@ class AzureDevOpsResolverMixin(AzureDevOpsMixinBase):
         org, project, repo = self._parse_repository(repository)
 
         # URL-encode components to handle spaces and special characters
-        org_enc = self._encode_url_component(org)
-        project_enc = self._encode_url_component(project)
         repo_enc = self._encode_url_component(repo)
 
-        url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads/{thread_id}?api-version=7.1'
+        url = f'{self._project_base_url(org, project)}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads/{thread_id}?api-version=7.1'
 
         try:
             response, _ = await self._make_request(url)

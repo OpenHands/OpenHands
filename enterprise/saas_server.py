@@ -16,6 +16,7 @@ from fastapi import Request, status  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from server.auth.auth_error import ExpiredError, NoCredentialsError  # noqa: E402
 from server.auth.constants import (  # noqa: E402
+    AZURE_DEVOPS_CLIENT_ID,
     BITBUCKET_APP_CLIENT_ID,
     BITBUCKET_DATA_CENTER_HOST,
     ENABLE_JIRA,
@@ -23,7 +24,10 @@ from server.auth.constants import (  # noqa: E402
     GITHUB_APP_CLIENT_ID,
     GITLAB_APP_CLIENT_ID,
 )
-from server.constants import PERMITTED_CORS_ORIGINS  # noqa: E402
+from server.constants import (  # noqa: E402
+    PERMITTED_CORS_ORIGINS,
+    USER_PROVISIONING_ENABLED,
+)
 from server.logger import logger  # noqa: E402
 from server.middleware import (  # noqa: E402
     ApiKeyAwareCORSMiddleware,
@@ -51,6 +55,9 @@ from server.routes.orgs import org_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.service import service_router  # noqa: E402
 from server.routes.user_app_settings import user_app_settings_router  # noqa: E402
+from server.routes.user_provisioning import (  # noqa: E402
+    user_provisioning_router,
+)
 from server.routes.users_v1 import (  # noqa: E402
     override_users_me_endpoint,
 )
@@ -130,9 +137,29 @@ if BITBUCKET_APP_CLIENT_ID:
 
     base_app.include_router(bitbucket_integration_router)
 
+# Add Azure DevOps integration router only if Azure DevOps OAuth is configured.
+if AZURE_DEVOPS_CLIENT_ID:
+    from integrations.azure_devops.azure_devops_v1_callback_processor import (  # noqa: E402
+        AzureDevOpsV1CallbackProcessor,
+    )
+    from server.routes.integration.azure_devops import (  # noqa: E402
+        azure_devops_integration_router,
+    )
+
+    logger.debug(f'Loaded {AzureDevOpsV1CallbackProcessor.__name__}')
+
+    base_app.include_router(azure_devops_integration_router)
+
 base_app.include_router(api_keys_router)  # Add routes for API key management
 base_app.include_router(service_router)  # Add routes for internal service API
 base_app.include_router(org_router)  # Add routes for organization management
+if USER_PROVISIONING_ENABLED:
+    # Privileged admin route — registered only when the
+    # USER_PROVISIONING_ENABLED env var (driven by Helm value
+    # ``userProvisioning.enabled``) is truthy. Off by default in
+    # staging and production; enabled per-environment via Helm.
+    base_app.include_router(user_provisioning_router)
+    logger.info('user_provisioning_router:enabled')
 base_app.include_router(
     org_profiles_router, prefix='/api/organizations'
 )  # Add routes for org LLM profiles
