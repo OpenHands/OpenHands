@@ -24,7 +24,7 @@ from openhands.agent_server.utils import utc_now
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
-from openhands.app_server.errors import SandboxError
+from openhands.app_server.errors import SandboxDeleteRetryError, SandboxError
 from openhands.app_server.sandbox import workspace_archive
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
@@ -591,6 +591,12 @@ class RemoteSandboxService(SandboxService):
         the runtime API), there is nothing to archive or stop, so the record is
         deleted directly to avoid orphaning the row and its session_api_key_hash.
 
+        Returns False ONLY when the sandbox does not exist (router -> 404). When
+        the sandbox exists but its delete can't complete (REQUIRED archive failed,
+        or a transient runtime /stop / lookup error), it raises
+        ``SandboxDeleteRetryError`` (router -> 503) and keeps the row + runtime for
+        a retry — so a live sandbox is never reported as 404.
+
         Security: the session_api_key_hash is cleared and committed up front so
         leaked keys are invalidated durably even if the archive or stop step
         below fails and the row is kept for retry (an uncommitted in-memory
@@ -601,9 +607,9 @@ class RemoteSandboxService(SandboxService):
             if not stored_sandbox:
                 return False
             # Security: invalidate leaked session keys eagerly and durably
-            # (mirrors pause_sandbox). Commit now so every return-False/error
-            # path below leaves the key dead in the DB — the row delete and its
-            # commit happen later and may not run on a failed delete.
+            # (mirrors pause_sandbox). Commit now so every error path below
+            # leaves the key dead in the DB — the row delete and its commit
+            # happen later and may not run on a failed delete.
             stored_sandbox.session_api_key_hash = None
             self.db_session.add(stored_sandbox)
             await self.db_session.commit()
@@ -622,22 +628,34 @@ class RemoteSandboxService(SandboxService):
                 return True
 
             if workspace_archive.archive_enabled():
-                # Resolve the grouping strategy so the archive targets the right
-                # (possibly relocated) workspace repo. The sandbox id is the
-                # conversation_id.hex for cloud conversations.
-                grouping_strategy = await self._get_archive_grouping_strategy()
-                archived = await workspace_archive.archive_workspace(
-                    self.httpx_client,
-                    runtime_data,
-                    sandbox_id,
-                    grouping_strategy=grouping_strategy,
-                )
+                try:
+                    # The grouping strategy decides the (possibly relocated)
+                    # workspace repo path. The sandbox id is the
+                    # conversation_id.hex for cloud conversations.
+                    grouping_strategy = await self._get_archive_grouping_strategy()
+                    archived = await workspace_archive.archive_workspace(
+                        self.httpx_client,
+                        runtime_data,
+                        sandbox_id,
+                        grouping_strategy=grouping_strategy,
+                    )
+                except Exception:
+                    # Could not resolve the workspace layout: never archive to the
+                    # wrong (ungrouped) path. Honor REQUIRED (block + retry) vs
+                    # best-effort (proceed without a capture).
+                    _logger.exception(
+                        'Could not resolve grouping for archive of %s', sandbox_id
+                    )
+                    archived = not workspace_archive.archive_required()
                 if not archived:
                     _logger.warning(
                         f'Workspace archive required but failed for {sandbox_id}; '
                         'leaving sandbox intact for retry'
                     )
-                    return False
+                    raise SandboxDeleteRetryError(
+                        f'Workspace archive required but failed for sandbox '
+                        f'{sandbox_id}; kept for retry'
+                    )
 
             response = await self._send_runtime_api_request(
                 'POST',
@@ -651,24 +669,23 @@ class RemoteSandboxService(SandboxService):
             await self.db_session.delete(stored_sandbox)
             return True
         except httpx.HTTPError as e:
+            # Transient runtime lookup/stop failure: the sandbox still exists, so
+            # keep the row + runtime and signal retryable (503) — never a 404.
             _logger.error(f'Error deleting sandbox {sandbox_id}: {e}')
-            return False
+            raise SandboxDeleteRetryError(
+                f'Could not complete delete for sandbox {sandbox_id}: {e}'
+            ) from e
 
     async def _get_archive_grouping_strategy(self) -> SandboxGroupingStrategy:
-        """Best-effort sandbox grouping strategy for archive path resolution.
+        """Sandbox grouping strategy for archive path resolution.
 
-        Falls back to NO_GROUPING (the bare base path) if user info is
-        unavailable, so a lookup failure never blocks deletion.
+        Mirrors the conversation-start layout
+        (live_status _get_sandbox_grouping_strategy). Propagates on failure so the
+        caller fails the archive rather than silently writing to the wrong
+        (ungrouped) path and losing/clobbering the workspace.
         """
-        try:
-            user_info = await self.user_context.get_user_info()
-            return user_info.sandbox_grouping_strategy
-        except Exception:
-            _logger.warning(
-                'Could not resolve grouping strategy for archive; assuming NO_GROUPING',
-                exc_info=True,
-            )
-            return SandboxGroupingStrategy.NO_GROUPING
+        user_info = await self.user_context.get_user_info()
+        return user_info.sandbox_grouping_strategy
 
     async def pause_old_sandboxes(self, max_num_sandboxes: int) -> list[str]:
         """Pause the oldest running sandboxes until at most max_num_sandboxes remain.

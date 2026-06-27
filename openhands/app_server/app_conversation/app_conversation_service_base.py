@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import shlex
@@ -47,6 +48,10 @@ from openhands.sdk.skills import Skill
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 _logger = logging.getLogger(__name__)
+
+# Strong refs to fire-and-forget initial-snapshot tasks so they aren't GC'd
+# mid-flight (asyncio only holds weak refs to running tasks).
+_background_tasks: set[asyncio.Task] = set()
 PRE_COMMIT_HOOK = '.git/hooks/pre-commit'
 PRE_COMMIT_LOCAL = '.git/hooks/pre-commit.local'
 
@@ -266,11 +271,16 @@ class AppConversationServiceBase(AppConversationService, ABC):
         )
 
         # Snapshot the INITIAL workspace state (the repo as cloned, before
-        # setup.sh) for eval/dataset creation. Best-effort and default-OFF; must
-        # never delay or fail conversation startup.
-        await self._maybe_archive_initial_state(
-            task, sandbox, workspace, agent_server_url, project_dir
+        # setup.sh) for eval/dataset creation. Best-effort and default-OFF; runs
+        # in the BACKGROUND so a slow/hung archive (git rev-parse + blocking GET
+        # + upload, ~150s) never delays or fails conversation startup.
+        snapshot_task = asyncio.create_task(
+            self._maybe_archive_initial_state(
+                task, sandbox, workspace, agent_server_url, project_dir
+            )
         )
+        _background_tasks.add(snapshot_task)
+        snapshot_task.add_done_callback(_background_tasks.discard)
 
         task.status = AppConversationStartTaskStatus.RUNNING_SETUP_SCRIPT
         yield task

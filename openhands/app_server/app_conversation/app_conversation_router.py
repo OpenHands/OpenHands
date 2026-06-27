@@ -882,6 +882,12 @@ async def _finalize_sandbox_delete(
         if conversation_count == 0:
             await sandbox_service.delete_sandbox(sandbox_id)
         await db_session.commit()
+    except Exception:
+        # delete_sandbox raised to keep the sandbox for retry (REQUIRED archive
+        # or transient /stop failure): do NOT commit a half-done delete, so no
+        # orphaned row is left; the row + runtime stay for a later retry.
+        logger.exception('Deferred sandbox delete for %s; kept for retry', sandbox_id)
+        await db_session.rollback()
     finally:
         await asyncio.gather(
             db_session.aclose(),

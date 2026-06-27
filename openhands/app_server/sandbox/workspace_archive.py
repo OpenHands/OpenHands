@@ -18,11 +18,12 @@ import asyncio
 import json
 import logging
 import os
+import tempfile
 from typing import Any
 
 from openhands.agent_server.utils import utc_now
+from openhands.app_server.file_store import get_file_store
 from openhands.app_server.file_store.files import FileStore
-from openhands.app_server.file_store.google_cloud import GoogleCloudFileStore
 from openhands.app_server.settings.settings_models import (
     SandboxGroupingStrategy,
     grouped_workspace_dir,
@@ -103,13 +104,69 @@ def _archive_path(
     )
 
 
+def _float_env(name: str, default: float) -> float:
+    """Parse a float env var, falling back to default on a non-numeric value.
+
+    A bad override (``'120s'``, a stray newline) must not raise on every archive
+    call — that would wedge every REQUIRED delete forever.
+    """
+    raw = os.getenv(name)
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        _logger.warning('Invalid %s=%r; using %s', name, raw, default)
+        return default
+
+
 def _archive_timeout() -> float:
-    return float(os.getenv('RUNTIME_FILE_ARCHIVE_TIMEOUT', '120'))
+    return _float_env('RUNTIME_FILE_ARCHIVE_TIMEOUT', 120.0)
+
+
+def _archive_store_type() -> str:
+    # Default to GCS to preserve current behavior; local/s3/memory also work.
+    return os.getenv('RUNTIME_FILE_ARCHIVE_STORE_TYPE', 'google_cloud')
 
 
 def _get_archive_file_store() -> FileStore:
-    """Object store for archives. Currently Google Cloud Storage."""
-    return GoogleCloudFileStore(bucket_name=_archive_bucket())
+    """Object store for archives, built via the backend-portable factory."""
+    return get_file_store(_archive_store_type(), _archive_bucket())
+
+
+def _cleanup_tempfile(path: str | None) -> None:
+    if not path:
+        return
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+async def _stream_to_tempfile(response: Any) -> tuple[str, int]:
+    """Stream a 200 response body to a temp file; return (path, byte_count).
+
+    Avoids buffering the whole archive in app-server RAM (OOM risk under
+    concurrent large deletes). Cleans up its own file if streaming fails.
+    """
+    tmp = tempfile.NamedTemporaryFile(delete=False)
+    byte_count = 0
+    try:
+        async for chunk in response.aiter_bytes():
+            tmp.write(chunk)
+            byte_count += len(chunk)
+        tmp.close()
+        return tmp.name, byte_count
+    except BaseException:
+        tmp.close()
+        _cleanup_tempfile(tmp.name)
+        raise
+
+
+def _write_file_to_store(store: FileStore, name: str, path: str) -> None:
+    """Upload a temp file via the generic store API (bounds peak to one copy)."""
+    with open(path, 'rb') as f:
+        store.write(name, f.read())
 
 
 async def archive_workspace(
@@ -183,46 +240,52 @@ async def archive_workspace(
     base_commit = ''
     for fmt in formats:
         suffix = _ARCHIVE_SUFFIX[fmt]
+        tmp_path: str | None = None
+        byte_count = 0
         try:
-            response = await httpx_client.get(
+            async with httpx_client.stream(
+                'GET',
                 f'{agent_server_url}/api/file/archive',
                 params={'path': archive_path, 'format': fmt},
                 headers=headers,
                 timeout=_archive_timeout(),
-            )
+            ) as response:
+                if response.status_code != 200:
+                    # 400 (not a directory / not a git repo / bad base_ref) or 404
+                    # (path missing) means there is genuinely nothing to capture
+                    # for this format — permanent, so it must not block a REQUIRED
+                    # delete. Every OTHER status (401, 422, 429, any 5xx) retries.
+                    permanent = response.status_code in (400, 404)
+                    _logger.warning(
+                        'Workspace archive (%s) for %s: agent-server returned %s; %s',
+                        fmt,
+                        sandbox_id,
+                        response.status_code,
+                        'nothing to archive' if permanent else 'retryable failure',
+                    )
+                    if not permanent:
+                        retryable_failure = True
+                    continue
+                header_base = response.headers.get('X-Archive-Base-Commit', '')
+                if header_base:
+                    base_commit = header_base
+                # Stream to disk so the archive never sits whole in RAM.
+                tmp_path, byte_count = await _stream_to_tempfile(response)
         except Exception as e:
             # Network/timeout error: genuinely transient.
             _logger.warning(
                 'Workspace archive fetch (%s) failed for %s: %s', fmt, sandbox_id, e
             )
             retryable_failure = True
+            _cleanup_tempfile(tmp_path)
             continue
 
-        if response.status_code != 200:
-            # 400 (not a directory / not a git repo / bad base_ref) or 404 (path
-            # missing) means there is genuinely nothing to capture for this
-            # format — permanent, so it must not block a REQUIRED delete. Every
-            # OTHER status (401 auth, 422 bad format, 429, any 5xx) is retryable.
-            permanent = response.status_code in (400, 404)
-            _logger.warning(
-                'Workspace archive (%s) for %s: agent-server returned %s; %s',
-                fmt,
-                sandbox_id,
-                response.status_code,
-                'nothing to archive' if permanent else 'retryable failure',
-            )
-            if not permanent:
-                retryable_failure = True
-            continue
-
-        data = response.content
-        header_base = response.headers.get('X-Archive-Base-Commit', '')
-        if header_base:
-            base_commit = header_base
-
+        assert tmp_path is not None  # set on the 200 path above
         try:
             store = _get_archive_file_store()
-            await asyncio.to_thread(store.write, f'{base_path}.{suffix}', data)
+            await asyncio.to_thread(
+                _write_file_to_store, store, f'{base_path}.{suffix}', tmp_path
+            )
             manifest = json.dumps(
                 {
                     'sandbox_id': sandbox_id,
@@ -231,7 +294,7 @@ async def archive_workspace(
                     'base_commit': base_commit,
                     'format': fmt,
                     'source_path': archive_path,
-                    'byte_count': len(data),
+                    'byte_count': byte_count,
                     'created_at': ts,
                 },
                 sort_keys=True,
@@ -243,7 +306,7 @@ async def archive_workspace(
                 'Archived workspace (%s) for %s (%d bytes) to %s.%s',
                 fmt,
                 sandbox_id,
-                len(data),
+                byte_count,
                 base_path,
                 suffix,
             )
@@ -252,6 +315,8 @@ async def archive_workspace(
                 'Workspace archive upload (%s) failed for %s: %s', fmt, sandbox_id, e
             )
             retryable_failure = True
+        finally:
+            _cleanup_tempfile(tmp_path)
 
     # Deletion may proceed unless archiving is REQUIRED and a retryable failure
     # left us short of the data we were meant to capture.
@@ -267,9 +332,10 @@ def initial_archive_enabled() -> bool:
     the *final* state) so the pre-agent snapshot can be toggled on its own. Off
     by default — like every other capture knob, nothing happens until enabled.
     """
-    return os.getenv(
-        'RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', 'false'
-    ).lower() in ('true', '1')
+    return os.getenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', 'false').lower() in (
+        'true',
+        '1',
+    )
 
 
 def _initial_archive_format() -> str:
@@ -334,42 +400,48 @@ async def archive_initial_workspace(
     suffix = _ARCHIVE_SUFFIX[fmt]
     headers = {'X-Session-API-Key': session_api_key} if session_api_key else {}
 
+    tmp_path: str | None = None
+    byte_count = 0
     try:
-        response = await httpx_client.get(
+        async with httpx_client.stream(
+            'GET',
             f'{agent_server_url}/api/file/archive',
             params={'path': project_dir, 'format': fmt},
             headers=headers,
             timeout=_archive_timeout(),
-        )
-        if response.status_code != 200:
-            _logger.warning(
-                'Initial workspace archive for %s: agent-server returned %s; '
-                'no initial snapshot',
-                sandbox_id,
-                response.status_code,
+        ) as response:
+            if response.status_code != 200:
+                _logger.warning(
+                    'Initial workspace archive for %s: agent-server returned %s; '
+                    'no initial snapshot',
+                    sandbox_id,
+                    response.status_code,
+                )
+                return False
+            # tar.gz carries no base-commit header (git-delta sets it); fall back
+            # to the caller-provided HEAD sha so the snapshot still records the
+            # commit it came from.
+            captured_base = (
+                response.headers.get('X-Archive-Base-Commit', '') or base_commit
             )
-            return False
-        data = response.content
-        # tar.gz carries no base-commit header (git-delta sets it); fall back to
-        # the caller-provided HEAD sha so the initial snapshot still records the
-        # commit it came from.
-        captured_base = (
-            response.headers.get('X-Archive-Base-Commit', '') or base_commit
-        )
+            # Stream to disk so the archive never sits whole in RAM.
+            tmp_path, byte_count = await _stream_to_tempfile(response)
     except Exception as e:
         _logger.warning(
             'Initial workspace archive fetch failed for %s: %s', sandbox_id, e
         )
+        _cleanup_tempfile(tmp_path)
         return False
 
+    assert tmp_path is not None  # set on the 200 path above
     try:
         store = _get_archive_file_store()
         ts = utc_now().strftime('%Y%m%dT%H%M%SZ')
         conversation_key = conversation_id or sandbox_id
         # Nest under /initial/ so it never collides with the final capture, which
         # writes to {prefix}/{sandbox_id}/{ts}.
-        base_path = f'{_archive_prefix()}/{sandbox_id}/initial/{ts}'
-        await asyncio.to_thread(store.write, f'{base_path}.{suffix}', data)
+        blob_name = f'{_archive_prefix()}/{sandbox_id}/initial/{ts}.{suffix}'
+        await asyncio.to_thread(_write_file_to_store, store, blob_name, tmp_path)
         manifest = json.dumps(
             {
                 'sandbox_id': sandbox_id,
@@ -378,18 +450,19 @@ async def archive_initial_workspace(
                 'base_commit': captured_base,
                 'format': fmt,
                 'source_path': project_dir,
-                'byte_count': len(data),
+                'byte_count': byte_count,
                 'created_at': ts,
             },
             sort_keys=True,
         ).encode('utf-8')
-        await asyncio.to_thread(store.write, f'{base_path}.manifest.json', manifest)
+        # Shared contract: manifest = blob + '.manifest.json' (was dropping the
+        # format suffix, so a downstream enricher could never locate it).
+        await asyncio.to_thread(store.write, f'{blob_name}.manifest.json', manifest)
         _logger.info(
-            'Archived INITIAL workspace for %s (%d bytes) to %s.%s',
+            'Archived INITIAL workspace for %s (%d bytes) to %s',
             sandbox_id,
-            len(data),
-            base_path,
-            suffix,
+            byte_count,
+            blob_name,
         )
         return True
     except Exception as e:
@@ -397,3 +470,5 @@ async def archive_initial_workspace(
             'Initial workspace archive upload failed for %s: %s', sandbox_id, e
         )
         return False
+    finally:
+        _cleanup_tempfile(tmp_path)

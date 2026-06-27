@@ -23,7 +23,7 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openhands.app_server.errors import SandboxError
+from openhands.app_server.errors import SandboxDeleteRetryError, SandboxError
 from openhands.app_server.sandbox.remote_sandbox_service import (
     ALLOW_CORS_ORIGINS_VARIABLE,
     STATUS_MAPPING,
@@ -40,6 +40,7 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
+from openhands.app_server.settings.settings_models import SandboxGroupingStrategy
 from openhands.app_server.user.user_context import UserContext
 
 
@@ -96,6 +97,39 @@ def remote_sandbox_service(
         httpx_client=mock_httpx_client,
         db_session=mock_db_session,
     )
+
+
+def _make_stream_response(
+    status_code: int, content: bytes = b'', headers: dict | None = None
+):
+    """A fake httpx streaming response: status/headers + async aiter_bytes()."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.headers = headers or {}
+
+    async def _aiter_bytes():
+        yield content
+
+    resp.aiter_bytes = _aiter_bytes
+    return resp
+
+
+def _stream_client(resp_or_map):
+    """AsyncMock httpx client whose .stream(...) yields a fake response.
+
+    ``resp_or_map`` is a single fake response or a ``{format: response}`` map.
+    """
+    client = AsyncMock()
+
+    @asynccontextmanager
+    async def _stream(method, url, **kwargs):
+        if isinstance(resp_or_map, dict):
+            yield resp_or_map[kwargs['params']['format']]
+        else:
+            yield resp_or_map
+
+    client.stream = MagicMock(side_effect=_stream)
+    return client
 
 
 def create_runtime_data(
@@ -758,9 +792,10 @@ class TestSandboxLifecycle:
         remote_sandbox_service._get_runtime = AsyncMock(side_effect=server_error)
         remote_sandbox_service.db_session.delete = AsyncMock()
 
-        result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
-
-        assert result is False
+        # Sandbox still exists -> raise (router 503), keep the row for retry;
+        # never report 404.
+        with pytest.raises(SandboxDeleteRetryError):
+            await remote_sandbox_service.delete_sandbox('test-sandbox-123')
         remote_sandbox_service.db_session.delete.assert_not_called()
 
     @pytest.mark.asyncio
@@ -786,9 +821,9 @@ class TestSandboxLifecycle:
         remote_sandbox_service.db_session.add = MagicMock()
         remote_sandbox_service.db_session.commit = AsyncMock()
 
-        result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+        with pytest.raises(SandboxDeleteRetryError):
+            await remote_sandbox_service.delete_sandbox('test-sandbox-123')
 
-        assert result is False
         remote_sandbox_service.db_session.delete.assert_not_called()
         assert stored_sandbox.session_api_key_hash is None
         # The invalidation was persisted up front (committed before the
@@ -1112,11 +1147,9 @@ class TestErrorHandling:
             'API Error'
         )
 
-        # Execute
-        result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
-
-        # Verify
-        assert result is False
+        # A transient runtime error on a live sandbox raises (router 503), not 404.
+        with pytest.raises(SandboxDeleteRetryError):
+            await remote_sandbox_service.delete_sandbox('test-sandbox-123')
 
 
 class TestGetSandboxBySessionApiKey:
@@ -1966,13 +1999,17 @@ class TestDeleteSandboxArchive:
 
     @pytest.mark.asyncio
     async def test_delete_blocked_when_archive_fails(self, remote_sandbox_service):
-        """A failed (required) archive must not stop the runtime or delete the row."""
+        """A failed (required) archive must not stop the runtime or delete the row;
+        the sandbox still exists, so it raises (router 503) rather than 404ing."""
         stored = create_stored_sandbox()
         remote_sandbox_service._get_stored_sandbox = AsyncMock(return_value=stored)
         remote_sandbox_service._get_runtime = AsyncMock(
             return_value=create_runtime_data()
         )
         remote_sandbox_service.db_session.delete = AsyncMock()
+        remote_sandbox_service._get_archive_grouping_strategy = AsyncMock(
+            return_value=SandboxGroupingStrategy.NO_GROUPING
+        )
 
         with (
             patch(
@@ -1984,9 +2021,9 @@ class TestDeleteSandboxArchive:
                 new=AsyncMock(return_value=False),
             ),
         ):
-            result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+            with pytest.raises(SandboxDeleteRetryError):
+                await remote_sandbox_service.delete_sandbox('test-sandbox-123')
 
-        assert result is False
         # Neither /stop nor the row deletion happened.
         remote_sandbox_service.httpx_client.request.assert_not_called()
         remote_sandbox_service.db_session.delete.assert_not_called()
@@ -2011,13 +2048,13 @@ class TestDeleteSandboxArchive:
         remote_sandbox_service.db_session.add = MagicMock()
         remote_sandbox_service.db_session.commit = AsyncMock()
         remote_sandbox_service._get_archive_grouping_strategy = AsyncMock(
-            return_value=None
+            return_value=SandboxGroupingStrategy.NO_GROUPING
         )
 
         # Archive endpoint reports no git repo (permanent 400); /stop returns 200.
-        archive_resp = MagicMock()
-        archive_resp.status_code = 400
-        remote_sandbox_service.httpx_client.get = AsyncMock(return_value=archive_resp)
+        remote_sandbox_service.httpx_client.stream = _stream_client(
+            _make_stream_response(400)
+        ).stream
         stop_resp = MagicMock()
         stop_resp.status_code = 200
         remote_sandbox_service.httpx_client.request = AsyncMock(return_value=stop_resp)
@@ -2040,12 +2077,11 @@ class TestArchiveWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'git-delta')
 
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.content = b'patch-bytes'
-        resp.headers = {'X-Archive-Base-Commit': 'abc123'}
-        client = AsyncMock()
-        client.get = AsyncMock(return_value=resp)
+        client = _stream_client(
+            _make_stream_response(
+                200, b'patch-bytes', {'X-Archive-Base-Commit': 'abc123'}
+            )
+        )
         store = MagicMock()
         writes: dict[str, bytes] = {}
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
@@ -2062,7 +2098,7 @@ class TestArchiveWorkspaceHelper:
 
         assert ok is True
         # session key forwarded; default path is the git repo, format passed.
-        _, kwargs = client.get.call_args
+        _, kwargs = client.stream.call_args
         assert kwargs['headers']['X-Session-API-Key'] == 'test-session-key'
         assert kwargs['params'] == {
             'path': '/workspace/project',
@@ -2083,12 +2119,7 @@ class TestArchiveWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'git-delta')
 
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.content = b'patch-bytes'
-        resp.headers = {}
-        client = AsyncMock()
-        client.get = AsyncMock(return_value=resp)
+        client = _stream_client(_make_stream_response(200, b'patch-bytes', {}))
         store = MagicMock()
         writes: dict[str, bytes] = {}
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
@@ -2115,10 +2146,7 @@ class TestArchiveWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
         monkeypatch.delenv('RUNTIME_FILE_ARCHIVE_REQUIRED', raising=False)
 
-        resp = MagicMock()
-        resp.status_code = 500
-        client = AsyncMock()
-        client.get = AsyncMock(return_value=resp)
+        client = _stream_client(_make_stream_response(500))
 
         ok = await workspace_archive.archive_workspace(
             client, create_runtime_data(), 'sandbox-1'
@@ -2133,10 +2161,7 @@ class TestArchiveWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
 
-        resp = MagicMock()
-        resp.status_code = 500
-        client = AsyncMock()
-        client.get = AsyncMock(return_value=resp)
+        client = _stream_client(_make_stream_response(500))
 
         ok = await workspace_archive.archive_workspace(
             client, create_runtime_data(), 'sandbox-1'
@@ -2156,7 +2181,7 @@ class TestArchiveWorkspaceHelper:
             client, create_runtime_data(url=''), 'sandbox-1'
         )
         assert ok is True
-        client.get.assert_not_called()
+        client.stream.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_archive_400_no_repo_required_allows_delete(self, monkeypatch):
@@ -2167,10 +2192,8 @@ class TestArchiveWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
 
-        resp = MagicMock()
-        resp.status_code = 400  # "Not a git repository" from GET /api/file/archive
-        client = AsyncMock()
-        client.get = AsyncMock(return_value=resp)
+        # "Not a git repository" from GET /api/file/archive
+        client = _stream_client(_make_stream_response(400))
 
         ok = await workspace_archive.archive_workspace(
             client, create_runtime_data(), 'sandbox-1'
@@ -2186,10 +2209,7 @@ class TestArchiveWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
 
-        resp = MagicMock()
-        resp.status_code = 404
-        client = AsyncMock()
-        client.get = AsyncMock(return_value=resp)
+        client = _stream_client(_make_stream_response(404))
 
         ok = await workspace_archive.archive_workspace(
             client, create_runtime_data(), 'sandbox-1'
@@ -2205,10 +2225,7 @@ class TestArchiveWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
 
-        resp = MagicMock()
-        resp.status_code = 500
-        client = AsyncMock()
-        client.get = AsyncMock(return_value=resp)
+        client = _stream_client(_make_stream_response(500))
 
         ok = await workspace_archive.archive_workspace(
             client, create_runtime_data(), 'sandbox-1'
@@ -2225,10 +2242,7 @@ class TestArchiveWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
 
-        resp = MagicMock()
-        resp.status_code = 422
-        client = AsyncMock()
-        client.get = AsyncMock(return_value=resp)
+        client = _stream_client(_make_stream_response(422))
 
         ok = await workspace_archive.archive_workspace(
             client, create_runtime_data(), 'sandbox-1'
@@ -2255,7 +2269,7 @@ class TestArchiveWorkspaceHelper:
             client, create_runtime_data(), 'sandbox-1'
         )
         assert ok is False
-        client.get.assert_not_called()
+        client.stream.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_archive_unsupported_format_not_required_proceeds(self, monkeypatch):
@@ -2271,7 +2285,7 @@ class TestArchiveWorkspaceHelper:
             client, create_runtime_data(), 'sandbox-1'
         )
         assert ok is True
-        client.get.assert_not_called()
+        client.stream.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_archive_no_bucket_required_proceeds(self, monkeypatch):
@@ -2289,7 +2303,7 @@ class TestArchiveWorkspaceHelper:
             client, create_runtime_data(), 'sandbox-1'
         )
         assert ok is True
-        client.get.assert_not_called()
+        client.stream.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_archive_grouped_path_includes_conversation_id(self, monkeypatch):
@@ -2303,12 +2317,7 @@ class TestArchiveWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'git-delta')
 
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.content = b'patch-bytes'
-        resp.headers = {}
-        client = AsyncMock()
-        client.get = AsyncMock(return_value=resp)
+        client = _stream_client(_make_stream_response(200, b'patch-bytes', {}))
         store = MagicMock()
         writes: dict[str, bytes] = {}
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
@@ -2325,7 +2334,7 @@ class TestArchiveWorkspaceHelper:
             )
 
         assert ok is True
-        _, kwargs = client.get.call_args
+        _, kwargs = client.stream.call_args
         # Grouped: repo nested under the conversation id, not the bare base.
         assert kwargs['params']['path'] == '/workspace/project/deadbeef'
         manifest_path = next(p for p in writes if p.endswith('.manifest.json'))
@@ -2344,12 +2353,7 @@ class TestArchiveWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'git-delta')
 
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.content = b'patch-bytes'
-        resp.headers = {}
-        client = AsyncMock()
-        client.get = AsyncMock(return_value=resp)
+        client = _stream_client(_make_stream_response(200, b'patch-bytes', {}))
         store = MagicMock()
 
         with patch.object(
@@ -2364,7 +2368,7 @@ class TestArchiveWorkspaceHelper:
             )
 
         assert ok is True
-        _, kwargs = client.get.call_args
+        _, kwargs = client.stream.call_args
         assert kwargs['params']['path'] == '/workspace/project'
 
     @pytest.mark.asyncio
@@ -2377,21 +2381,13 @@ class TestArchiveWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'both')
 
-        def make_resp(content, headers):
-            r = MagicMock()
-            r.status_code = 200
-            r.content = content
-            r.headers = headers
-            return r
-
         responses = {
-            'git-delta': make_resp(b'patch-bytes', {'X-Archive-Base-Commit': 'abc123'}),
-            'tar.gz': make_resp(b'tar-bytes', {}),
+            'git-delta': _make_stream_response(
+                200, b'patch-bytes', {'X-Archive-Base-Commit': 'abc123'}
+            ),
+            'tar.gz': _make_stream_response(200, b'tar-bytes', {}),
         }
-        client = AsyncMock()
-        client.get = AsyncMock(
-            side_effect=lambda *a, **k: responses[k['params']['format']]
-        )
+        client = _stream_client(responses)
         store = MagicMock()
         writes: dict[str, bytes] = {}
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
@@ -2433,17 +2429,13 @@ class TestArchiveWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'both')
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
 
-        ok_resp = MagicMock()
-        ok_resp.status_code = 200
-        ok_resp.content = b'patch-bytes'
-        ok_resp.headers = {'X-Archive-Base-Commit': 'abc123'}
-        bad_resp = MagicMock()
-        bad_resp.status_code = 500
-        responses = {'git-delta': ok_resp, 'tar.gz': bad_resp}
-        client = AsyncMock()
-        client.get = AsyncMock(
-            side_effect=lambda *a, **k: responses[k['params']['format']]
-        )
+        responses = {
+            'git-delta': _make_stream_response(
+                200, b'patch-bytes', {'X-Archive-Base-Commit': 'abc123'}
+            ),
+            'tar.gz': _make_stream_response(500),
+        }
+        client = _stream_client(responses)
         store = MagicMock()
         store.write.side_effect = lambda path, data: None
 
@@ -2468,12 +2460,7 @@ class TestArchiveInitialWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', 'true')
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
 
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.content = b'tar-bytes'
-        resp.headers = {}
-        client = AsyncMock()
-        client.get = AsyncMock(return_value=resp)
+        client = _stream_client(_make_stream_response(200, b'tar-bytes', {}))
         store = MagicMock()
         writes: dict[str, bytes] = {}
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
@@ -2493,7 +2480,7 @@ class TestArchiveInitialWorkspaceHelper:
 
         assert ok is True
         # tar.gz requested at the (already-resolved) project dir; key forwarded.
-        _, kwargs = client.get.call_args
+        _, kwargs = client.stream.call_args
         assert kwargs['headers']['X-Session-API-Key'] == 'sk'
         assert kwargs['params'] == {
             'path': '/workspace/project/repo',
@@ -2504,6 +2491,8 @@ class TestArchiveInitialWorkspaceHelper:
         archive_path = next(p for p in writes if p.endswith('.tar.gz'))
         assert '/sandbox-1/initial/' in archive_path
         manifest_path = next(p for p in writes if p.endswith('.manifest.json'))
+        # Shared contract: manifest = blob + '.manifest.json' (keeps the suffix).
+        assert manifest_path == archive_path + '.manifest.json'
         manifest = json.loads(writes[manifest_path])
         assert manifest['phase'] == 'initial'
         assert manifest['base_commit'] == 'deadbeef'
@@ -2519,7 +2508,6 @@ class TestArchiveInitialWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
 
         client = AsyncMock()
-        client.get = AsyncMock()
 
         ok = await workspace_archive.archive_initial_workspace(
             client,
@@ -2530,7 +2518,7 @@ class TestArchiveInitialWorkspaceHelper:
         )
         # Off by default: no request, no upload.
         assert ok is False
-        client.get.assert_not_called()
+        client.stream.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_initial_archive_non_200_returns_false(self, monkeypatch):
@@ -2539,10 +2527,7 @@ class TestArchiveInitialWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', 'true')
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
 
-        resp = MagicMock()
-        resp.status_code = 500
-        client = AsyncMock()
-        client.get = AsyncMock(return_value=resp)
+        client = _stream_client(_make_stream_response(500))
 
         ok = await workspace_archive.archive_initial_workspace(
             client,
@@ -2562,7 +2547,6 @@ class TestArchiveInitialWorkspaceHelper:
         monkeypatch.delenv('RUNTIME_FILE_ARCHIVE_BUCKET', raising=False)
 
         client = AsyncMock()
-        client.get = AsyncMock()
 
         ok = await workspace_archive.archive_initial_workspace(
             client,
@@ -2572,7 +2556,7 @@ class TestArchiveInitialWorkspaceHelper:
             sandbox_id='sandbox-1',
         )
         assert ok is False
-        client.get.assert_not_called()
+        client.stream.assert_not_called()
 
 
 class TestDeleteSandboxInvalidationPersistence:
@@ -2636,8 +2620,8 @@ class TestDeleteSandboxInvalidationPersistence:
         real_session.add(row)
         await real_session.commit()
 
-        # Transient (non-404) runtime error -> delete_sandbox returns False
-        # without deleting the row.
+        # Transient (non-404) runtime error -> delete_sandbox raises (keeps the
+        # row for retry) without deleting the row.
         service_with_real_db._get_runtime = AsyncMock(
             side_effect=httpx.HTTPStatusError(
                 'Server Error',
@@ -2646,8 +2630,8 @@ class TestDeleteSandboxInvalidationPersistence:
             )
         )
 
-        result = await service_with_real_db.delete_sandbox('test-sandbox-123')
-        assert result is False
+        with pytest.raises(SandboxDeleteRetryError):
+            await service_with_real_db.delete_sandbox('test-sandbox-123')
 
         # Simulate the DELETE route's session rolling back the failed delete.
         await real_session.rollback()
