@@ -1446,3 +1446,24 @@ class TestLoadSkillsAndUpdateAgent:
                 'registered_marketplaces'
             ]
             assert forwarded == marketplaces
+
+
+@pytest.mark.asyncio
+async def test_maybe_run_setup_script_uses_posix_source_command():
+    """Test setup.sh is executed with POSIX-compatible shell syntax."""
+    workspace = AsyncMock()
+    mock_user_context = Mock(spec=UserContext)
+
+    with patch.object(AppConversationServiceBase, '__abstractmethods__', set()):
+        service = AppConversationServiceBase(
+            init_git_in_empty_workspace=True,
+            user_context=mock_user_context,
+        )
+
+        await service.maybe_run_setup_script(workspace, '/workspace/repo')
+
+    workspace.execute_command.assert_awaited_once_with(
+        'chmod +x /workspace/repo/.openhands/setup.sh && . /workspace/repo/.openhands/setup.sh',
+        cwd='/workspace/repo',
+        timeout=600,
+    )

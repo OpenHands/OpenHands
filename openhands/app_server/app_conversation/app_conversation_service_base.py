@@ -614,7 +614,7 @@ printf 'password=%s\\n' "$token"
         setup_script = project_dir + '/.openhands/setup.sh'
 
         await workspace.execute_command(
-            f'chmod +x {setup_script} && source {setup_script}',
+            f'chmod +x {setup_script} && . {setup_script}',
             cwd=project_dir,
             timeout=600,
         )
