@@ -23,7 +23,7 @@ from typing import AsyncGenerator, cast
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import Enum, String, func, select
+from sqlalchemy import JSON, Enum, String, func, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
@@ -63,6 +63,9 @@ class StoredAppConversationStartTask(Base):
     app_conversation_id: Mapped[UUID | None] = mapped_column(nullable=True)
     sandbox_id: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_server_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    dependency_repos_cloned: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default='[]'
+    )
     request: Mapped[AppConversationStartRequest] = mapped_column(
         create_json_type_decorator(AppConversationStartRequest)
     )
