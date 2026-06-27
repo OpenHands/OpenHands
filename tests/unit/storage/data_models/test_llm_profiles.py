@@ -85,8 +85,11 @@ def test_summaries_empty_by_default():
 
 def test_summaries_resolves_base_url_with_managed_proxy_url():
     profiles = LLMProfiles()
-    # Managed model saved without a base_url (would otherwise display as "—").
-    profiles.save('managed', LLM(model='litellm_proxy/minimax-m2.7'))
+    # Managed model saved in the public SDK shape without a base_url.
+    managed_llm = LLM(model='openhands/minimax-m2.7').model_copy(
+        update={'model': 'openhands/minimax-m2.7', 'base_url': None}
+    )
+    profiles.save('managed', managed_llm)
     # BYOR model with its own base_url.
     profiles.save(
         'byor', LLM(model='openai/gpt-4o', base_url='https://byor.example.com')

@@ -695,7 +695,11 @@ async def _handle_bitbucket_dc_event(
                 'installer_user_id': installer_user_id,
             },
         )
-        await bitbucket_dc_manager.receive_message(message)
+        # Process in the background so we return 200 fast. Creating the
+        # conversation + sandbox synchronously can take ~tens of seconds, which
+        # blows Bitbucket DC's webhook timeout -> it marks the delivery failed
+        # and retries (a duplicate-trigger risk). Mirrors the Jira DC route.
+        background_tasks.add_task(bitbucket_dc_manager.receive_message, message)
 
         return JSONResponse(
             status_code=200,

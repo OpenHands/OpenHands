@@ -118,6 +118,17 @@ def test_is_pr_comment_returns_false_for_unknown_event_key():
     assert BitbucketDCFactory.is_pr_comment(msg) is False
 
 
+def test_is_pr_comment_returns_false_for_edited_event():
+    # Created-only: editing an @openhands comment must not re-trigger a job.
+    msg = _make_message(body='@openhands fix', event_key='pr:comment:edited')
+    assert BitbucketDCFactory.is_pr_comment(msg) is False
+
+
+def test_is_pr_comment_returns_true_for_added_event_with_mention():
+    msg = _make_message(body='@openhands fix', event_key='pr:comment:added')
+    assert BitbucketDCFactory.is_pr_comment(msg) is True
+
+
 @pytest.mark.asyncio
 async def test_factory_records_actor_slug_and_assigns_keycloak_user_id():
     msg = _make_message(body='@openhands fix')

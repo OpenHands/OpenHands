@@ -563,3 +563,121 @@ async def test_add_multiple_git_providers_with_hosts(test_client, file_secrets_s
             stored_secrets.provider_tokens[ProviderType.GITLAB].host
             == 'gitlab.enterprise.com'
         )
+
+
+@pytest.mark.asyncio
+async def test_create_secret_with_invalid_name_hyphen(test_client, file_secrets_store):
+    await file_secrets_store.store(Secrets())
+    response = test_client.post(
+        '/secrets',
+        json={'name': 'MY-INVALID-SECRET', 'value': 'secret-value'},
+    )
+    assert response.status_code == 422
+    assert 'MY-INVALID-SECRET' in response.text or 'Invalid' in response.text
+
+
+@pytest.mark.asyncio
+async def test_create_secret_with_invalid_name_starts_with_digit(
+    test_client, file_secrets_store
+):
+    await file_secrets_store.store(Secrets())
+    response = test_client.post(
+        '/secrets',
+        json={'name': '1_INVALID_SECRET', 'value': 'secret-value'},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_secret_with_invalid_name_space(test_client, file_secrets_store):
+    await file_secrets_store.store(Secrets())
+    response = test_client.post(
+        '/secrets',
+        json={'name': 'MY INVALID SECRET', 'value': 'secret-value'},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_secret_with_valid_name_underscore(
+    test_client, file_secrets_store
+):
+    await file_secrets_store.store(Secrets())
+    response = test_client.post(
+        '/secrets',
+        json={'name': 'MY_VALID_SECRET', 'value': 'secret-value'},
+    )
+    assert response.status_code == 201
+    stored = await file_secrets_store.load()
+    assert 'MY_VALID_SECRET' in stored.custom_secrets
+
+
+@pytest.mark.asyncio
+async def test_create_secret_with_valid_name_starts_with_underscore(
+    test_client, file_secrets_store
+):
+    await file_secrets_store.store(Secrets())
+    response = test_client.post(
+        '/secrets',
+        json={'name': '_PRIVATE_SECRET', 'value': 'secret-value'},
+    )
+    assert response.status_code == 201
+    stored = await file_secrets_store.load()
+    assert '_PRIVATE_SECRET' in stored.custom_secrets
+
+
+@pytest.mark.asyncio
+async def test_update_secret_with_invalid_name(test_client, file_secrets_store):
+    custom_secrets = {'VALID_SECRET': CustomSecret(secret=SecretStr('old-value'))}
+    await file_secrets_store.store(Secrets(custom_secrets=custom_secrets))  # type: ignore[arg-type]
+    response = test_client.put(
+        '/secrets/VALID_SECRET',
+        json={'name': 'INVALID-NEW-NAME', 'description': 'Updated'},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_update_secret_with_valid_name(test_client, file_secrets_store):
+    custom_secrets = {'OLD_NAME': CustomSecret(secret=SecretStr('secret-value'))}
+    await file_secrets_store.store(Secrets(custom_secrets=custom_secrets))  # type: ignore[arg-type]
+    response = test_client.put(
+        '/secrets/OLD_NAME',
+        json={'name': 'NEW_VALID_NAME', 'description': 'Updated'},
+    )
+    assert response.status_code == 200
+    stored = await file_secrets_store.load()
+    assert 'OLD_NAME' not in stored.custom_secrets
+    assert 'NEW_VALID_NAME' in stored.custom_secrets
+
+
+@pytest.mark.asyncio
+async def test_create_secret_with_empty_name(test_client, file_secrets_store):
+    await file_secrets_store.store(Secrets())
+    response = test_client.post(
+        '/secrets',
+        json={'name': '', 'value': 'secret-value'},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_update_secret_not_found_returns_404(test_client, file_secrets_store):
+    await file_secrets_store.store(Secrets())
+    response = test_client.put(
+        '/secrets/NONEXISTENT',
+        json={'name': 'NONEXISTENT', 'description': 'Updated'},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_secrets_tolerates_legacy_invalid_names(
+    test_client, file_secrets_store
+):
+    custom_secrets = {'MY-LEGACY-SECRET': CustomSecret(secret=SecretStr('value'))}
+    await file_secrets_store.store(Secrets(custom_secrets=custom_secrets))  # type: ignore[arg-type]
+    response = test_client.get('/secrets/search')
+    assert response.status_code == 200
+    data = response.json()
+    assert any(item['name'] == 'MY-LEGACY-SECRET' for item in data['items'])

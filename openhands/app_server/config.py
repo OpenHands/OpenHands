@@ -129,9 +129,9 @@ def get_default_tavily_api_key() -> str | None:
     return os.getenv('TAVILY_API_KEY') or os.getenv('SEARCH_API_KEY') or None
 
 
-# The SDK auto-fills this URL as the default for openhands/ and litellm_proxy/
-# models.  Deployments (e.g. staging) may use a different LLM proxy, configured
-# via OPENHANDS_PROVIDER_BASE_URL.
+# OpenHands provider models use this proxy at the SDK transport boundary.
+# Deployments (e.g. staging) may use a different LLM proxy, configured via
+# OPENHANDS_PROVIDER_BASE_URL.
 _SDK_DEFAULT_PROXY = 'https://llm-proxy.app.all-hands.dev/'
 
 
@@ -142,21 +142,19 @@ def resolve_provider_llm_base_url(
 ) -> str | None:
     """Apply deployment-specific LLM proxy override when needed.
 
-    When the model uses ``openhands/`` or ``litellm_proxy/`` prefix and the
-    stored ``base_url`` is the SDK default, replace it with the deployment's
-    provider URL.
+    When the model uses the public ``openhands/`` prefix and the stored
+    ``base_url`` is the SDK default, replace it with the deployment's provider
+    URL.
 
     Priority: user-explicit URL > deployment provider URL > SDK default.
 
     Args:
-        model: LLM model name (e.g. ``litellm_proxy/gpt-4``).
+        model: LLM model name (e.g. ``openhands/gpt-5.5``).
         base_url: The base URL from user/org settings.
         provider_base_url: Deployment provider URL.  Falls back to
             ``get_openhands_provider_base_url()`` when *None*.
     """
-    if not model or not (
-        model.startswith('openhands/') or model.startswith('litellm_proxy/')
-    ):
+    if not model or not model.startswith('openhands/'):
         return base_url
 
     user_set_custom = base_url and base_url.rstrip('/') != _SDK_DEFAULT_PROXY.rstrip(

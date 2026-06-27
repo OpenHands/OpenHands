@@ -22,6 +22,13 @@ export function BadgeInput({
 }: BadgeInputProps) {
   const [inputValue, setInputValue] = React.useState("");
 
+  const commitInput = (text: string) => {
+    // Pasted lists may hold several values split by whitespace/commas/semicolons
+    const newBadges = text.split(/[\s,;]+/).filter(Boolean);
+    if (newBadges.length > 0) onChange([...value, ...newBadges]);
+    setInputValue("");
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     // If pressing Backspace with empty input, remove the last badge
     if (e.key === "Backspace" && inputValue === "" && value.length > 0) {
@@ -31,12 +38,13 @@ export function BadgeInput({
       return;
     }
 
-    // If pressing Space or Enter with non-empty input, add a new badge
-    if (e.key === " " && inputValue.trim() !== "") {
+    // If pressing Space, Enter or comma with non-empty input, add a new badge
+    if (
+      (e.key === " " || e.key === "Enter" || e.key === ",") &&
+      inputValue.trim() !== ""
+    ) {
       e.preventDefault();
-      const newBadge = inputValue.trim();
-      onChange([...value, newBadge]);
-      setInputValue("");
+      commitInput(inputValue);
     }
   };
 
@@ -74,6 +82,7 @@ export function BadgeInput({
         placeholder={value.length === 0 ? placeholder : ""}
         onChange={(e) => setInputValue(e.target.value)}
         onKeyDown={handleKeyDown}
+        onBlur={() => commitInput(inputValue)}
         className={cn("flex-grow outline-none bg-transparent", inputClassName)}
       />
     </div>

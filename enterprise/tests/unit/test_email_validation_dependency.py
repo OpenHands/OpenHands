@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request
-from server.email_validation import get_admin_user_id
+from server.email_validation import get_admin_user_id, get_org_creator_user_id
 
 
 @pytest.fixture
@@ -270,3 +270,102 @@ async def test_get_openhands_user_id_empty_email(mock_request, mock_user_auth):
 
         assert exc_info.value.status_code == 401
         assert 'email not available' in exc_info.value.detail.lower()
+
+
+# ---------------------------------------------------------------------------
+# Tests for get_org_creator_user_id (OPEN_ORG_CREATION_ENABLED feature switch)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_org_creator_user_id_no_user_id_raises_401(mock_request):
+    """
+    GIVEN: No user ID provided (None)
+    WHEN: get_org_creator_user_id is called (regardless of feature switch)
+    THEN: 401 Unauthorized is raised
+    """
+    with pytest.raises(HTTPException) as exc_info:
+        await get_org_creator_user_id(mock_request, None)
+
+    assert exc_info.value.status_code == 401
+    assert 'not authenticated' in exc_info.value.detail.lower()
+
+
+@pytest.mark.asyncio
+async def test_get_org_creator_user_id_feature_disabled_uses_admin_check(
+    mock_request, mock_user_auth
+):
+    """
+    GIVEN: OPEN_ORG_CREATION_ENABLED is disabled and user has non-admin email
+    WHEN: get_org_creator_user_id is called
+    THEN: Falls back to get_admin_user_id and raises 403 Forbidden
+    """
+    user_id = 'test-user-123'
+    mock_user_auth.get_user_email.return_value = 'test@external.com'
+
+    with (
+        patch('server.email_validation.OPEN_ORG_CREATION_ENABLED', False),
+        patch('server.email_validation.get_user_auth', return_value=mock_user_auth),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await get_org_creator_user_id(mock_request, user_id)
+
+    assert exc_info.value.status_code == 403
+    assert 'openhands.dev' in exc_info.value.detail.lower()
+
+
+@pytest.mark.asyncio
+async def test_get_org_creator_user_id_feature_disabled_admin_email_succeeds(
+    mock_request, mock_user_auth
+):
+    """
+    GIVEN: OPEN_ORG_CREATION_ENABLED is disabled and user has @openhands.dev email
+    WHEN: get_org_creator_user_id is called
+    THEN: User ID is returned (existing admin behavior is preserved)
+    """
+    user_id = 'test-user-123'
+    mock_user_auth.get_user_email.return_value = 'test@openhands.dev'
+
+    with (
+        patch('server.email_validation.OPEN_ORG_CREATION_ENABLED', False),
+        patch('server.email_validation.get_user_auth', return_value=mock_user_auth),
+    ):
+        result = await get_org_creator_user_id(mock_request, user_id)
+
+    assert result == user_id
+
+
+@pytest.mark.asyncio
+async def test_get_org_creator_user_id_feature_enabled_allows_non_admin(mock_request):
+    """
+    GIVEN: OPEN_ORG_CREATION_ENABLED is enabled and user has non-admin email
+    WHEN: get_org_creator_user_id is called
+    THEN: User ID is returned without consulting email/admin check
+    """
+    user_id = 'test-user-123'
+
+    with patch('server.email_validation.OPEN_ORG_CREATION_ENABLED', True):
+        # get_user_auth must not be invoked when the feature is enabled.
+        with patch(
+            'server.email_validation.get_user_auth',
+            side_effect=AssertionError('get_user_auth should not be called'),
+        ):
+            result = await get_org_creator_user_id(mock_request, user_id)
+
+    assert result == user_id
+
+
+@pytest.mark.asyncio
+async def test_get_org_creator_user_id_feature_enabled_still_rejects_unauthenticated(
+    mock_request,
+):
+    """
+    GIVEN: OPEN_ORG_CREATION_ENABLED is enabled but no user_id is provided
+    WHEN: get_org_creator_user_id is called
+    THEN: 401 Unauthorized is still raised
+    """
+    with patch('server.email_validation.OPEN_ORG_CREATION_ENABLED', True):
+        with pytest.raises(HTTPException) as exc_info:
+            await get_org_creator_user_id(mock_request, None)
+
+    assert exc_info.value.status_code == 401

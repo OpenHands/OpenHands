@@ -352,3 +352,73 @@ class TestCreateInvitationBatchEndpoint:
 
             assert response.status_code == 400
             assert 'Invalid role' in response.json()['detail']
+
+
+class TestOrgAutoAddsUsers:
+    """The auto_add_enabled hint on the pending-invitations response."""
+
+    @pytest.mark.asyncio
+    async def test_true_for_default_org_with_auto_add(self):
+        from uuid import UUID
+
+        from server.routes.org_invitations import _org_auto_adds_users
+
+        org_id = UUID('12345678-1234-5678-1234-567812345678')
+        default_org = MagicMock()
+        default_org.id = org_id
+
+        config = MagicMock(enabled=True, auto_add_users=True)
+        with (
+            patch(
+                'server.routes.org_invitations.get_default_org_config',
+                return_value=config,
+            ),
+            patch(
+                'server.routes.org_invitations.OrgStore.get_default_org',
+                new_callable=AsyncMock,
+                return_value=default_org,
+            ),
+        ):
+            assert await _org_auto_adds_users(org_id) is True
+
+    @pytest.mark.asyncio
+    async def test_false_when_auto_add_disabled(self):
+        from uuid import UUID
+
+        from server.routes.org_invitations import _org_auto_adds_users
+
+        config = MagicMock(enabled=True, auto_add_users=False)
+        with patch(
+            'server.routes.org_invitations.get_default_org_config',
+            return_value=config,
+        ):
+            assert (
+                await _org_auto_adds_users(UUID('12345678-1234-5678-1234-567812345678'))
+                is False
+            )
+
+    @pytest.mark.asyncio
+    async def test_false_for_non_default_org(self):
+        from uuid import UUID
+
+        from server.routes.org_invitations import _org_auto_adds_users
+
+        default_org = MagicMock()
+        default_org.id = UUID('99999999-9999-9999-9999-999999999999')
+
+        config = MagicMock(enabled=True, auto_add_users=True)
+        with (
+            patch(
+                'server.routes.org_invitations.get_default_org_config',
+                return_value=config,
+            ),
+            patch(
+                'server.routes.org_invitations.OrgStore.get_default_org',
+                new_callable=AsyncMock,
+                return_value=default_org,
+            ),
+        ):
+            assert (
+                await _org_auto_adds_users(UUID('12345678-1234-5678-1234-567812345678'))
+                is False
+            )

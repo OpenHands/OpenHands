@@ -64,6 +64,8 @@ class Org(Base):
     max_budget_per_task: Mapped[float | None] = mapped_column(nullable=True)
     v1_enabled: Mapped[bool | None] = mapped_column(nullable=True)
     conversation_expiration: Mapped[int | None] = mapped_column(nullable=True)
+    # Source of truth for BYOR/OpenHands LLM key export entitlement.
+    # Set by completed billing sessions or when positive org credits are detected.
     byor_export_enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
     sandbox_grouping_strategy: Mapped[str | None] = mapped_column(String, nullable=True)
     # Encrypted column for LLM profiles (contains API keys)

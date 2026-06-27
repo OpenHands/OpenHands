@@ -5,11 +5,11 @@ import React from "react";
 import { useGitUser } from "#/hooks/query/use-git-user";
 import { useLogout } from "#/hooks/mutation/use-logout";
 import UserService from "#/api/user-service/user-service.api";
-import * as useShouldShowUserFeaturesModule from "#/hooks/use-should-show-user-features";
+import * as useShouldShowGitFeaturesModule from "#/hooks/use-should-show-git-features";
 import * as useConfigModule from "#/hooks/query/use-config";
 import { AxiosError } from "axios";
 
-vi.mock("#/hooks/use-should-show-user-features");
+vi.mock("#/hooks/use-should-show-git-features");
 vi.mock("#/hooks/query/use-config");
 vi.mock("#/hooks/mutation/use-logout");
 vi.mock("#/api/user-service/user-service.api");
@@ -38,7 +38,7 @@ describe("useGitUser", () => {
       status: "idle",
     } as unknown as ReturnType<typeof useLogout>;
 
-    vi.mocked(useShouldShowUserFeaturesModule.useShouldShowUserFeatures).mockReturnValue(true);
+    vi.mocked(useShouldShowGitFeaturesModule.useShouldShowGitFeatures).mockReturnValue(true);
     vi.mocked(useConfigModule.useConfig).mockReturnValue({
       data: { app_mode: "saas" },
       isLoading: false,

@@ -122,10 +122,19 @@ async def test_receive_message_runs_job_as_mentioner_when_linked_in_keycloak():
         captured['view'] = view
 
     with (
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            'bot-pat',
+        ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_USERNAME',
+            'openhands-bot',
+        ),
         patch.object(
             manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
         ),
         patch.object(manager, '_commenter_has_write_access', return_value=True),
+        patch.object(manager, '_add_eyes_reaction', new=AsyncMock()),
         patch.object(manager, 'start_job', new=fake_start_job),
     ):
         await manager.receive_message(_comment_message())
@@ -155,6 +164,14 @@ async def test_receive_message_asks_unenrolled_mentioner_to_sign_up():
     manager = BitbucketDCManager(token_manager)
 
     with (
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            'bot-pat',
+        ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_USERNAME',
+            'openhands-bot',
+        ),
         patch.object(
             manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
         ),
@@ -188,6 +205,14 @@ async def test_receive_message_drops_event_when_keycloak_lookup_raises():
     manager = BitbucketDCManager(token_manager)
 
     with (
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            'bot-pat',
+        ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_USERNAME',
+            'openhands-bot',
+        ),
         patch.object(
             manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
         ),
@@ -201,6 +226,106 @@ async def test_receive_message_drops_event_when_keycloak_lookup_raises():
 
     mock_start.assert_not_called()
     mock_not_found.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_receive_message_skips_when_bot_token_unset():
+    """Drop the event when no bot token is configured.
+
+    Without the bot PAT there is no safe identity to post results, so the gate
+    drops the event before any installer/permission/lookup work.
+    """
+    token_manager = AsyncMock()
+    manager = BitbucketDCManager(token_manager)
+
+    with (
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            '',
+        ),
+        patch.object(
+            manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
+        ),
+        patch.object(manager, '_commenter_has_write_access', return_value=True),
+        patch.object(manager, 'start_job', new=AsyncMock()) as mock_start,
+        patch.object(
+            manager, '_send_user_not_found_message', new=AsyncMock()
+        ) as mock_not_found,
+    ):
+        await manager.receive_message(_comment_message())
+
+    mock_start.assert_not_called()
+    mock_not_found.assert_not_called()
+    token_manager.get_user_id_from_idp_user_id.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_receive_message_skips_when_bot_username_unset():
+    """Drop the event when the bot username is missing even if the token is set.
+
+    Token + username are one required unit: without the username the self-author
+    guard can't run, so a bot reply could re-trigger a job -- so gate on both.
+    """
+    token_manager = AsyncMock()
+    manager = BitbucketDCManager(token_manager)
+
+    with (
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            'bot-pat',
+        ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_USERNAME',
+            '',
+        ),
+        patch.object(
+            manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
+        ),
+        patch.object(manager, '_commenter_has_write_access', return_value=True),
+        patch.object(manager, 'start_job', new=AsyncMock()) as mock_start,
+        patch.object(
+            manager, '_send_user_not_found_message', new=AsyncMock()
+        ) as mock_not_found,
+    ):
+        await manager.receive_message(_comment_message())
+
+    mock_start.assert_not_called()
+    mock_not_found.assert_not_called()
+    token_manager.get_user_id_from_idp_user_id.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('actor_slug', ['openhands', 'OpenHands'])
+async def test_receive_message_skips_event_authored_by_bot(actor_slug):
+    """Skip events the bot account authored (case-insensitive).
+
+    The agent's reply is posted via the bot PAT and can contain "@openhands";
+    the self-author guard stops it from re-triggering a job.
+    """
+    token_manager = AsyncMock()
+    manager = BitbucketDCManager(token_manager)
+    message = _comment_message()
+    message.message['payload']['actor']['slug'] = actor_slug
+
+    with (
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            'bot-pat',
+        ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_USERNAME',
+            'openhands',
+        ),
+        patch.object(
+            manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
+        ),
+        patch.object(manager, '_commenter_has_write_access', return_value=True),
+        patch.object(manager, 'start_job', new=AsyncMock()) as mock_start,
+    ):
+        await manager.receive_message(message)
+
+    mock_start.assert_not_called()
+    token_manager.get_user_id_from_idp_user_id.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -241,6 +366,14 @@ async def test_receive_message_skips_when_commenter_lacks_write_access():
     manager = BitbucketDCManager(AsyncMock())
 
     with (
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            'bot-pat',
+        ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_USERNAME',
+            'openhands-bot',
+        ),
         patch.object(
             manager.webhook_store, 'get_webhook_user_id', return_value='kc-installer'
         ),
@@ -257,6 +390,14 @@ async def test_receive_message_skips_when_no_installer_recorded_for_repo():
     manager = BitbucketDCManager(AsyncMock())
 
     with (
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            'bot-pat',
+        ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_USERNAME',
+            'openhands-bot',
+        ),
         patch.object(manager.webhook_store, 'get_webhook_user_id', return_value=None),
         patch.object(manager, 'start_job', new=AsyncMock()) as mock_start,
     ):
@@ -269,9 +410,15 @@ async def test_receive_message_skips_when_no_installer_recorded_for_repo():
 async def test_send_message_replies_inline_with_anchor_for_inline_view():
     manager = BitbucketDCManager(AsyncMock())
     fake_service = AsyncMock()
-    with patch(
-        'integrations.bitbucket_data_center.bitbucket_dc_service.SaaSBitbucketDCService',
-        return_value=fake_service,
+    with (
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_service_account.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            'bot-pat',
+        ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_service_account.SaaSBitbucketDCService',
+            return_value=fake_service,
+        ),
     ):
         await manager.send_message('Done', _inline_view())
 
@@ -288,9 +435,15 @@ async def test_send_message_replies_inline_with_anchor_for_inline_view():
 async def test_send_message_replies_via_parent_id_for_pr_comment_view():
     manager = BitbucketDCManager(AsyncMock())
     fake_service = AsyncMock()
-    with patch(
-        'integrations.bitbucket_data_center.bitbucket_dc_service.SaaSBitbucketDCService',
-        return_value=fake_service,
+    with (
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_service_account.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            'bot-pat',
+        ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_service_account.SaaSBitbucketDCService',
+            return_value=fake_service,
+        ),
     ):
         await manager.send_message('I am on it!', _pr_comment_view(parent_id=42))
 
@@ -308,68 +461,73 @@ def test_confirm_incoming_source_type_raises_on_wrong_source():
 
 
 @pytest.mark.asyncio
-async def test_send_message_uses_view_user_info_keycloak_id():
-    """Post replies with the view user auth id.
+async def test_send_message_posts_as_bot_not_mentioner():
+    """Post replies as the bot, never the mentioner.
 
-    send_message constructs the BBDC service with the view's
-    ``user_info.keycloak_user_id`` (the mentioner) rather than the installer,
-    so replies post under the mentioner's BBDC account.
+    send_message builds the posting service via ``bitbucket_dc_posting_service``,
+    which auths as the bot account. The service is constructed with no per-user
+    ``external_auth_id`` and the raw bot token is set directly.
     """
     manager = BitbucketDCManager(AsyncMock())
+    fake_service = AsyncMock()
 
-    with patch(
-        'integrations.bitbucket_data_center.bitbucket_dc_service.SaaSBitbucketDCService'
-    ) as service_cls:
-        service_cls.return_value = AsyncMock()
+    with (
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_service_account.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            'bot-pat-123',
+        ),
+        patch(
+            'integrations.bitbucket_data_center.bitbucket_dc_service_account.SaaSBitbucketDCService',
+            return_value=fake_service,
+        ) as service_cls,
+    ):
         await manager.send_message('Done', _pr_comment_view())
 
-    service_cls.assert_called_once_with(external_auth_id='kc-alice')
+    service_cls.assert_called_once_with()
+    assert 'external_auth_id' not in service_cls.call_args.kwargs
+    assert fake_service.token.get_secret_value() == 'bot-pat-123'
 
 
 def test_posting_service_uses_bot_token_when_set():
     """Use the bot token when it is configured.
 
-    With ``BITBUCKET_DATA_CENTER_BOT_TOKEN`` set, the posting service auths as
-    the bot and does not fall back to the per-user token.
+    ``_posting_service`` takes no args and always auths as the bot, never the
+    per-user token.
     """
     manager = BitbucketDCManager(AsyncMock())
 
     with (
         patch(
-            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+            'integrations.bitbucket_data_center.bitbucket_dc_service_account.BITBUCKET_DATA_CENTER_BOT_TOKEN',
             'bot-pat-123',
         ),
         patch(
-            'integrations.bitbucket_data_center.bitbucket_dc_service.SaaSBitbucketDCService'
+            'integrations.bitbucket_data_center.bitbucket_dc_service_account.SaaSBitbucketDCService'
         ) as service_cls,
     ):
-        svc = manager._posting_service('kc-alice')
+        svc = manager._posting_service()
 
     # Built with no per-user auth; the raw bot token is set directly so the
     # service sends Bearer. NOT via external_auth_id, and NOT via the token=
     # constructor arg (which would downgrade it to x-token-auth HTTP Basic,
     # rejected by Bitbucket Data Center).
+    service_cls.assert_called_once_with()
     assert 'external_auth_id' not in service_cls.call_args.kwargs
     assert svc.token.get_secret_value() == 'bot-pat-123'
 
 
-def test_posting_service_falls_back_to_user_token_when_bot_unset():
-    """Use the per-user token when no bot token is configured.
+def test_posting_service_raises_when_bot_token_unset():
+    """Raise instead of falling back to a user token.
 
-    Without a bot token, the posting service uses the per-user/installer OAuth
-    token.
+    Without a bot token there is no safe posting identity (a user-authored
+    reply with "@openhands" would re-fire the webhook), so building the posting
+    service must raise rather than fall back.
     """
     manager = BitbucketDCManager(AsyncMock())
 
-    with (
-        patch(
-            'integrations.bitbucket_data_center.bitbucket_dc_manager.BITBUCKET_DATA_CENTER_BOT_TOKEN',
-            '',
-        ),
-        patch(
-            'integrations.bitbucket_data_center.bitbucket_dc_service.SaaSBitbucketDCService'
-        ) as service_cls,
+    with patch(
+        'integrations.bitbucket_data_center.bitbucket_dc_service_account.BITBUCKET_DATA_CENTER_BOT_TOKEN',
+        '',
     ):
-        manager._posting_service('kc-alice')
-
-    service_cls.assert_called_once_with(external_auth_id='kc-alice')
+        with pytest.raises(RuntimeError):
+            manager._posting_service()

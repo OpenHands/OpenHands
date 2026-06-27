@@ -3,6 +3,7 @@ Pydantic models and custom exceptions for organization invitations.
 """
 
 from pydantic import BaseModel, EmailStr
+from server.services.email_service import EmailService
 from storage.org_invitation import OrgInvitation
 from storage.role_store import RoleStore
 
@@ -74,6 +75,10 @@ class InvitationResponse(BaseModel):
     created_at: str
     expires_at: str
     inviter_email: str | None = None
+    # Absolute acceptance link for this invitation. Only surfaced through
+    # admin/owner-gated endpoints (creating or listing invitations), so the
+    # token is never exposed to regular members.
+    invite_url: str | None = None
 
     @classmethod
     async def from_invitation(
@@ -105,6 +110,7 @@ class InvitationResponse(BaseModel):
             created_at=invitation.created_at.isoformat(),
             expires_at=invitation.expires_at.isoformat(),
             inviter_email=inviter_email,
+            invite_url=EmailService.build_invitation_url(invitation.token),
         )
 
 
@@ -120,6 +126,22 @@ class BatchInvitationResponse(BaseModel):
 
     successful: list[InvitationResponse]
     failed: list[InvitationFailure]
+    # False when no email provider is configured (e.g. OHE installs without
+    # RESEND_API_KEY): invitations were created but no email was sent, so the
+    # UI should tell the inviter to share the invite links directly.
+    email_delivery_configured: bool = True
+
+
+class PendingInvitationsResponse(BaseModel):
+    """Response model for listing an org's pending invitations."""
+
+    items: list[InvitationResponse]
+    email_delivery_configured: bool = True
+    # True when this org is the bootstrapped default org and auto-add is on:
+    # anyone who signs in joins automatically, so invitations only matter for
+    # pre-assigning a role. Lets the UI say so instead of implying invites
+    # are the membership path.
+    auto_add_enabled: bool = False
 
 
 class AcceptInvitationRequest(BaseModel):

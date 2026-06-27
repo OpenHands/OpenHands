@@ -1900,18 +1900,28 @@ async def test_check_byor_export_enabled_returns_true_when_enabled():
             new_callable=AsyncMock,
             return_value=mock_org,
         ),
+        patch(
+            'storage.org_service.OrgService.get_org_credits',
+            new_callable=AsyncMock,
+        ) as mock_get_credits,
+        patch(
+            'storage.org_service.OrgStore.enable_byor_export',
+            new_callable=AsyncMock,
+        ) as mock_enable_byor_export,
     ):
         # Act
         result = await OrgService.check_byor_export_enabled(user_id)
 
         # Assert
         assert result is True
+        mock_get_credits.assert_not_called()
+        mock_enable_byor_export.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_check_byor_export_enabled_returns_false_when_disabled():
+async def test_check_byor_export_enabled_returns_false_when_disabled_without_credits():
     """
-    GIVEN: User has current_org with byor_export_enabled=False
+    GIVEN: User has current_org with byor_export_enabled=False and no credits
     WHEN: check_byor_export_enabled is called
     THEN: Returns False
     """
@@ -1935,12 +1945,69 @@ async def test_check_byor_export_enabled_returns_false_when_disabled():
             new_callable=AsyncMock,
             return_value=mock_org,
         ),
+        patch(
+            'storage.org_service.OrgService.get_org_credits',
+            AsyncMock(return_value=0),
+        ) as mock_get_credits,
+        patch(
+            'storage.org_service.OrgStore.enable_byor_export',
+            new_callable=AsyncMock,
+        ) as mock_enable_byor_export,
     ):
         # Act
         result = await OrgService.check_byor_export_enabled(user_id)
 
         # Assert
         assert result is False
+        mock_get_credits.assert_called_once_with(user_id, org_id)
+        mock_enable_byor_export.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_check_byor_export_enabled_sets_flag_when_disabled_with_credits():
+    """
+    GIVEN: User has current_org with byor_export_enabled=False and credits
+    WHEN: check_byor_export_enabled is called
+    THEN: Persists byor_export_enabled=True and returns True
+    """
+    # Arrange
+    user_id = 'test-user-123'
+    org_id = uuid.uuid4()
+
+    mock_user = MagicMock()
+    mock_user.current_org_id = org_id
+
+    mock_org = MagicMock()
+    mock_org.byor_export_enabled = False
+    enabled_org = MagicMock()
+    enabled_org.byor_export_enabled = True
+
+    with (
+        patch(
+            'storage.org_service.UserStore.get_user_by_id',
+            AsyncMock(return_value=mock_user),
+        ),
+        patch(
+            'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_service.OrgService.get_org_credits',
+            AsyncMock(return_value=25.0),
+        ) as mock_get_credits,
+        patch(
+            'storage.org_service.OrgStore.enable_byor_export',
+            AsyncMock(return_value=enabled_org),
+        ) as mock_enable_byor_export,
+    ):
+        # Act
+        result = await OrgService.check_byor_export_enabled(user_id)
+
+        # Assert
+        assert result is True
+        mock_get_credits.assert_called_once_with(user_id, org_id)
+        mock_enable_byor_export.assert_called_once_with(org_id)
 
 
 @pytest.mark.asyncio

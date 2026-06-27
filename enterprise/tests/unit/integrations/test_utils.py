@@ -2,6 +2,7 @@
 
 from integrations.utils import (
     HOST_URL,
+    get_jira_dc_relink_message,
     get_session_expired_message,
     get_user_not_found_message,
 )
@@ -133,3 +134,23 @@ class TestGetUserNotFoundMessage:
         result = get_user_not_found_message(None)
         assert not result.startswith('@')
         assert 'It looks like' in result
+
+
+class TestGetJiraDcRelinkMessage:
+    """Test cases for get_jira_dc_relink_message function."""
+
+    def test_message_with_display_name_uses_jira_wiki_link(self):
+        result = get_jira_dc_relink_message('Alona')
+
+        assert result.startswith('Hi Alona,')
+        assert f'[OpenHands Cloud|{HOST_URL}]' in result
+        assert 're-link' in result
+        assert 'Settings' in result
+        assert 'Integrations' in result
+
+    def test_message_without_display_name_is_generic(self):
+        result = get_jira_dc_relink_message()
+
+        assert not result.startswith('Hi ')
+        assert f'[OpenHands Cloud|{HOST_URL}]' in result
+        assert 'your Jira workspace link has expired' in result

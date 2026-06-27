@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from abc import ABC, abstractmethod
 
@@ -13,7 +14,7 @@ from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 # The version of the agent server to use for deployments.
 # Typically this will be the same as the values from the pyproject.toml
-AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:1.27.1-python'
+AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:1.29.0-python'
 
 
 class SandboxSpecService(ABC):
@@ -61,12 +62,55 @@ class SandboxSpecServiceInjector(
     pass
 
 
+async def resolve_sandbox_spec(
+    sandbox_spec_id: str | None,
+    user_default_spec_id: str | None,
+    sandbox_spec_service: SandboxSpecService,
+    logger: logging.Logger,
+) -> SandboxSpecInfo:
+    """Return the SandboxSpecInfo to use for a new sandbox.
+
+    Resolution order:
+    1. ``sandbox_spec_id`` (caller-explicit) — not found is a hard error.
+    2. ``user_default_spec_id`` (user preference) — if missing, log a warning
+       and fall back to the system default.
+    3. System default (first spec returned by the service).
+    """
+    from_user_default = sandbox_spec_id is None and user_default_spec_id is not None
+    effective_id = (
+        sandbox_spec_id if sandbox_spec_id is not None else user_default_spec_id
+    )
+
+    if effective_id is None:
+        return await sandbox_spec_service.get_default_sandbox_spec()
+
+    spec = await sandbox_spec_service.get_sandbox_spec(effective_id)
+    if spec is not None:
+        return spec
+
+    if from_user_default:
+        logger.warning(
+            'User default sandbox spec %r not found; falling back to system default.',
+            effective_id,
+        )
+        return await sandbox_spec_service.get_default_sandbox_spec()
+
+    raise ValueError(f'Sandbox Spec {effective_id!r} not found')
+
+
 def get_agent_server_image() -> str:
     agent_server_image_repository = os.getenv('AGENT_SERVER_IMAGE_REPOSITORY')
     agent_server_image_tag = os.getenv('AGENT_SERVER_IMAGE_TAG')
     if agent_server_image_repository and agent_server_image_tag:
         return f'{agent_server_image_repository}:{agent_server_image_tag}'
     return AGENT_SERVER_IMAGE
+
+
+def is_custom_agent_server_image() -> bool:
+    """True only when an admin pinned a custom sandbox image (tag differs from the
+    release-default tag). Default/upgrade installs keep the release tag, never gated."""
+    tag = os.getenv('AGENT_SERVER_IMAGE_TAG')
+    return bool(tag) and tag != AGENT_SERVER_IMAGE.rsplit(':', 1)[-1]
 
 
 # Prefixes for environment variables that should be auto-forwarded to agent-server
