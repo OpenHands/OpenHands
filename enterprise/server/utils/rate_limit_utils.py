@@ -1,11 +1,51 @@
+import os
+
 from fastapi import HTTPException, Request, status
 from storage.redis import get_redis_client_async
 
 from openhands.app_server.utils.logger import openhands_logger as logger
 
-# Rate limiting constants
-RATE_LIMIT_USER_SECONDS = 120  # 2 minutes per user_id
-RATE_LIMIT_IP_SECONDS = 300  # 5 minutes per IP address
+# Rate limiting configuration.
+#
+# Every rate limit below is configurable via an environment variable, falling
+# back to the default when the variable is unset.
+
+# Per-user request limiter for authenticated API requests (see
+# server.auth.saas_user_auth). Value is a `limits`-style window string, where
+# multiple windows are separated by ';', e.g. "10/second; 100/minute".
+RATE_LIMIT_AUTH_WINDOWS = os.environ.get(
+    'RATE_LIMIT_AUTH_WINDOWS', '10/second; 100/minute'
+)
+
+# Generic fallback windows used by check_rate_limit_by_user_id when a caller does
+# not pass its own values.
+RATE_LIMIT_USER_SECONDS = int(
+    os.environ.get('RATE_LIMIT_USER_SECONDS', '120')
+)  # 2 minutes per user_id
+RATE_LIMIT_IP_SECONDS = int(
+    os.environ.get('RATE_LIMIT_IP_SECONDS', '300')
+)  # 5 minutes per IP address
+
+# Email verification during the auth flow (server.routes.auth).
+RATE_LIMIT_AUTH_VERIFY_EMAIL_USER_SECONDS = int(
+    os.environ.get('RATE_LIMIT_AUTH_VERIFY_EMAIL_USER_SECONDS', '60')
+)
+RATE_LIMIT_AUTH_VERIFY_EMAIL_IP_SECONDS = int(
+    os.environ.get('RATE_LIMIT_AUTH_VERIFY_EMAIL_IP_SECONDS', '120')
+)
+
+# Manual verification email resend (server.routes.email).
+RATE_LIMIT_EMAIL_RESEND_USER_SECONDS = int(
+    os.environ.get('RATE_LIMIT_EMAIL_RESEND_USER_SECONDS', '30')
+)
+RATE_LIMIT_EMAIL_RESEND_IP_SECONDS = int(
+    os.environ.get('RATE_LIMIT_EMAIL_RESEND_IP_SECONDS', '60')
+)
+
+# Organization invitation creation (server.routes.org_invitations).
+RATE_LIMIT_ORG_INVITATION_USER_SECONDS = int(
+    os.environ.get('RATE_LIMIT_ORG_INVITATION_USER_SECONDS', '6')
+)
 
 
 async def check_rate_limit_by_user_id(

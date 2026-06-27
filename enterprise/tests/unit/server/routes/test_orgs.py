@@ -11,7 +11,7 @@ import httpx
 import pytest
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.testclient import TestClient
-from server.email_validation import get_admin_user_id
+from server.email_validation import get_admin_user_id, get_org_creator_user_id
 from server.routes.org_models import (
     CannotModifySelfError,
     InsufficientPermissionError,
@@ -64,8 +64,12 @@ def mock_app():
     def mock_get_user_id():
         return TEST_USER_ID
 
+    def mock_get_org_creator_user_id():
+        return TEST_USER_ID
+
     app.dependency_overrides[get_admin_user_id] = mock_get_admin_user_id
     app.dependency_overrides[get_user_id] = mock_get_user_id
+    app.dependency_overrides[get_org_creator_user_id] = mock_get_org_creator_user_id
 
     return app
 
@@ -324,7 +328,7 @@ async def test_create_org_unauthorized():
     async def mock_unauthenticated():
         raise HTTPException(status_code=401, detail='User not authenticated')
 
-    app.dependency_overrides[get_admin_user_id] = mock_unauthenticated
+    app.dependency_overrides[get_org_creator_user_id] = mock_unauthenticated
 
     request_data = {
         'name': 'Test Organization',
@@ -358,7 +362,7 @@ async def test_create_org_forbidden_non_openhands_email():
             status_code=403, detail='Access restricted to @openhands.dev users'
         )
 
-    app.dependency_overrides[get_admin_user_id] = mock_forbidden
+    app.dependency_overrides[get_org_creator_user_id] = mock_forbidden
 
     request_data = {
         'name': 'Test Organization',
@@ -1487,11 +1491,17 @@ async def test_delete_org_unauthorized(mock_app, mock_owner_role):
 
 
 @pytest.mark.asyncio
-async def test_delete_org_orphaned_users(mock_app, mock_owner_role):
+async def test_delete_org_other_members_would_be_orphaned(mock_app, mock_owner_role):
     """
-    GIVEN: Deleting org would leave users without any organization
-    WHEN: DELETE /api/organizations/{org_id} is called
-    THEN: 400 Bad Request error is returned with user count in message
+    GIVEN: A multi-user org where some members other than the requester would
+           be left without any organization
+    WHEN:  DELETE /api/organizations/{org_id} is called
+    THEN:  400 Bad Request is returned listing the affected member count, and
+           the requester's account is NOT silently destroyed.
+
+    This is the multi-user safeguard: an org owner cannot delete an org if
+    doing so would orphan another member's account. Only the requester
+    themselves may be cascade-deleted as a sole-org user.
     """
     # Arrange
     org_id = uuid.uuid4()
@@ -1514,7 +1524,7 @@ async def test_delete_org_orphaned_users(mock_app, mock_owner_role):
 
         # Assert
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert '2 user(s)' in response.json()['detail']
+        assert '2 other user(s)' in response.json()['detail']
         assert 'no remaining organization' in response.json()['detail']
 
 

@@ -400,9 +400,11 @@ class GitlabFactory:
         keycloak_user_id = await token_manager.get_user_id_from_idp_user_id(
             user_id, ProviderType.GITLAB
         )
-
+        # TODO: When keycloak_user_id is None, perhaps this should raise unauthorized.
         user_info = UserData(
-            user_id=user_id, username=username, keycloak_user_id=keycloak_user_id
+            user_id=user_id,
+            username=username,
+            keycloak_user_id=keycloak_user_id,  # type: ignore[arg-type]
         )
 
         if GitlabFactory.is_labeled_issue(message):

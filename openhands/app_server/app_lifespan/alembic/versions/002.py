@@ -7,16 +7,16 @@ Create Date: 2025-10-05 11:28:41.772294
 """
 
 from enum import Enum
-from typing import Sequence, Union
+from typing import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = '002'
-down_revision: Union[str, None] = '001'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = '001'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 class EventCallbackStatus(Enum):

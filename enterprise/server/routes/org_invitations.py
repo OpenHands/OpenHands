@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
+from server.auth.authorization import Permission, require_permission
 from server.auth.org_context import REJECT_X_ORG_ID_PATH_MISMATCH
 from server.routes.org_invitation_models import (
     AcceptInvitationRequest,
@@ -16,10 +17,16 @@ from server.routes.org_invitation_models import (
     InvitationFailure,
     InvitationInvalidError,
     InvitationResponse,
+    PendingInvitationsResponse,
     UserAlreadyMemberError,
 )
+from server.services.email_service import EmailService
 from server.services.org_invitation_service import OrgInvitationService
-from server.utils.rate_limit_utils import check_rate_limit_by_user_id
+from server.utils.rate_limit_utils import (
+    RATE_LIMIT_ORG_INVITATION_USER_SECONDS,
+    check_rate_limit_by_user_id,
+)
+from storage.default_org_service import get_default_org_config
 from storage.org_store import OrgStore
 from storage.role_store import RoleStore
 
@@ -78,12 +85,14 @@ async def create_invitation(
         HTTPException 403: User lacks permission to invite
         HTTPException 429: Rate limit exceeded
     """
-    # Rate limit: 10 invitations per minute per user (6 seconds between requests)
+    # Rate limit invitation creation per user (default: 6s between requests, i.e.
+    # 10 invitations per minute; configurable via
+    # RATE_LIMIT_ORG_INVITATION_USER_SECONDS).
     await check_rate_limit_by_user_id(
         request=request,
         key_prefix='org_invitation_create',
         user_id=user_id,
-        user_rate_limit_seconds=6,
+        user_rate_limit_seconds=RATE_LIMIT_ORG_INVITATION_USER_SECONDS,
     )
 
     try:
@@ -140,6 +149,7 @@ async def create_invitation(
             failed=[
                 InvitationFailure(email=email, error=error) for email, error in failed
             ],
+            email_delivery_configured=EmailService.is_configured(),
         )
 
     except InsufficientPermissionError as e:
@@ -160,6 +170,91 @@ async def create_invitation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='An unexpected error occurred',
+        )
+
+
+@invitation_router.get(
+    '/invite',
+    response_model=PendingInvitationsResponse,
+)
+async def list_pending_invitations(
+    org_id: UUID,
+    user_id: str = Depends(require_permission(Permission.INVITE_USER_TO_ORGANIZATION)),
+):
+    """List an organization's pending invitations, including invite links.
+
+    Gated on the invite permission (admins/owners): responses include each
+    invitation's acceptance link so inviters can share it directly when no
+    email provider is configured.
+    """
+    try:
+        from storage.org_invitation_store import OrgInvitationStore
+
+        invitations = await OrgInvitationStore.get_pending_invitations_for_org(org_id)
+        items = [await InvitationResponse.from_invitation(inv) for inv in invitations]
+        return PendingInvitationsResponse(
+            items=items,
+            email_delivery_configured=EmailService.is_configured(),
+            auto_add_enabled=await _org_auto_adds_users(org_id),
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            'Error listing pending invitations',
+            extra={'org_id': str(org_id)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to list pending invitations',
+        )
+
+
+async def _org_auto_adds_users(org_id: UUID) -> bool:
+    """Whether sign-in alone already makes users members of this org."""
+    config = get_default_org_config()
+    if not (config.enabled and config.auto_add_users):
+        return False
+    default_org = await OrgStore.get_default_org()
+    return default_org is not None and default_org.id == org_id
+
+
+@invitation_router.delete(
+    '/invite/{invitation_id}',
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def revoke_invitation(
+    org_id: UUID,
+    invitation_id: int,
+    user_id: str = Depends(require_permission(Permission.INVITE_USER_TO_ORGANIZATION)),
+):
+    """Revoke a pending invitation, invalidating its token and invite link.
+
+    Gated on the invite permission (admins/owners), same as creating and
+    listing invitations.
+
+    Raises:
+        HTTPException 404: Unknown invitation, or it belongs to another org
+        HTTPException 409: Invitation is not pending (already accepted/expired)
+    """
+    try:
+        revoked = await OrgInvitationService.revoke_invitation(org_id, invitation_id)
+    except InvitationInvalidError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except Exception:
+        logger.exception(
+            'Error revoking invitation',
+            extra={'org_id': str(org_id), 'invitation_id': invitation_id},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to revoke invitation',
+        )
+
+    if revoked is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Invitation not found',
         )
 
 

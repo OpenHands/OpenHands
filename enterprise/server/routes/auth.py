@@ -5,7 +5,7 @@ import warnings
 from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
 from typing import Annotated, Optional, cast
-from urllib.parse import quote, urlencode
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 from uuid import UUID as parse_uuid
 
 from fastapi import (
@@ -18,13 +18,18 @@ from fastapi import (
     status,
 )
 from fastapi.responses import JSONResponse, RedirectResponse
-from pydantic import SecretStr
+from pydantic import BaseModel, SecretStr
 from server.auth.constants import (
     KEYCLOAK_CLIENT_ID,
     KEYCLOAK_REALM_NAME,
     KEYCLOAK_SERVER_URL_EXT,
     RECAPTCHA_SITE_KEY,
     ROLE_CHECK_ENABLED,
+)
+from server.auth.cookie_chunking import (
+    delete_chunked_cookie,
+    read_chunked_cookie,
+    set_chunked_cookie,
 )
 from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.recaptcha_service import recaptcha_service
@@ -46,14 +51,19 @@ from server.services.org_invitation_service import (
     UserAlreadyMemberError,
 )
 from server.utils.conversation_utils import get_session_api_key, get_user_id
-from server.utils.rate_limit_utils import check_rate_limit_by_user_id
+from server.utils.rate_limit_utils import (
+    RATE_LIMIT_AUTH_VERIFY_EMAIL_IP_SECONDS,
+    RATE_LIMIT_AUTH_VERIFY_EMAIL_USER_SECONDS,
+    check_rate_limit_by_user_id,
+)
 from server.utils.url_utils import get_cookie_domain, get_cookie_samesite, get_web_url
 from sqlalchemy import select
 from storage.database import a_session_maker
+from storage.default_org_service import DefaultOrgBootstrapService
 from storage.user import User
 from storage.user_store import UserStore
 
-from openhands.analytics import get_analytics_service
+from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderHandler,
@@ -61,7 +71,7 @@ from openhands.app_server.integrations.provider import (
 )
 from openhands.app_server.integrations.service_types import ProviderType, TokenResponse
 from openhands.app_server.user_auth import get_access_token
-from openhands.app_server.user_auth.user_auth import get_user_auth
+from openhands.app_server.user_auth.user_auth import AuthType, get_user_auth
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 with warnings.catch_warnings():
@@ -105,25 +115,20 @@ def set_response_cookie(
         cookie_data, expires_in=timedelta(weeks=1)
     )
 
-    # Set secure cookie with signed token
-    domain = get_cookie_domain()
-    if domain:
-        response.set_cookie(
-            key='keycloak_auth',
-            value=signed_token,
-            domain=domain,
-            httponly=True,
-            secure=secure,
-            samesite=get_cookie_samesite(),
-        )
-    else:
-        response.set_cookie(
-            key='keycloak_auth',
-            value=signed_token,
-            httponly=True,
-            secure=secure,
-            samesite=get_cookie_samesite(),
-        )
+    # Set secure cookie with signed token. The value can exceed the
+    # browser's 4096-byte single-cookie cap for users with large Keycloak
+    # claim sets, so write it through the chunked-cookie helper, which
+    # splits oversized values across sibling cookies and stays
+    # byte-identical for values that fit in one cookie.
+    set_chunked_cookie(
+        response,
+        'keycloak_auth',
+        signed_token,
+        domain=get_cookie_domain(),
+        secure=secure,
+        httponly=True,
+        samesite=get_cookie_samesite(),
+    )
 
 
 def _extract_oauth_state(state: str | None) -> tuple[str, str | None, str | None]:
@@ -326,8 +331,10 @@ async def keycloak_callback(
     user_id = user_info.sub
     user_info_dict = user_info.model_dump(exclude_none=True)
     user = await UserStore.get_user_by_id(user_id)
+    is_new_user: bool = False
     if not user:
         user = await UserStore.create_user(user_id, user_info_dict)
+        is_new_user = True
     else:
         # Existing user — gradually backfill contact_name if it still has a username-style value
         await UserStore.backfill_contact_name(user_id, user_info_dict)
@@ -399,16 +406,17 @@ async def keycloak_callback(
         # Import locally to avoid circular import with email.py
         from server.routes.email import verify_email
 
-        # Rate limit verification emails during auth flow (60 seconds per user)
-        # This is separate from the manual resend rate limit which uses 30 seconds
+        # Rate limit verification emails during auth flow (defaults: 60s per user,
+        # 120s per IP; configurable via RATE_LIMIT_AUTH_VERIFY_EMAIL_* env vars).
+        # This is separate from the manual resend limit (RATE_LIMIT_EMAIL_RESEND_*).
         rate_limited = False
         try:
             await check_rate_limit_by_user_id(
                 request=request,
                 key_prefix='auth_verify_email',
                 user_id=user_id,
-                user_rate_limit_seconds=60,
-                ip_rate_limit_seconds=120,
+                user_rate_limit_seconds=RATE_LIMIT_AUTH_VERIFY_EMAIL_USER_SECONDS,
+                ip_rate_limit_seconds=RATE_LIMIT_AUTH_VERIFY_EMAIL_IP_SECONDS,
             )
             await verify_email(request=request, user_id=user_id, is_auth_flow=True)
         except HTTPException as e:
@@ -574,6 +582,32 @@ async def keycloak_callback(
             else:
                 redirect_url = f'{redirect_url}?invitation_error=true'
 
+    # Accept pending invitations addressed to the user's email. Runs before
+    # the default-org bootstrap so an invitation's role (e.g. admin) wins
+    # over the bootstrap's auto-add member role for the same org.
+    try:
+        accepted_invitations = (
+            await OrgInvitationService.accept_pending_invitations_for_user(user)
+        )
+        if accepted_invitations:
+            user = await UserStore.get_user_by_id(user_id) or user
+    except Exception as e:
+        logger.exception(
+            'Unexpected error accepting pending invitations at login',
+            extra={'user_id': user_id, 'error': str(e)},
+        )
+
+    try:
+        user = await DefaultOrgBootstrapService.apply_for_user(
+            user,
+            is_new_user=is_new_user,
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error applying default organization bootstrap',
+            extra={'user_id': user_id, 'error': str(e)},
+        )
+
     # If the user hasn't accepted the TOS, redirect to the TOS page
     if not has_accepted_tos:
         encoded_redirect_url = quote(redirect_url, safe='')
@@ -586,7 +620,10 @@ async def keycloak_callback(
         # Only redirect to onboarding if user has a valid offline token,
         # otherwise they need to complete the Keycloak offline token flow first
         if valid_offline_token and await _should_redirect_to_onboarding(user_id, user):
-            redirect_url = f'{web_url}/onboarding'
+            # Preserve the user's originally requested destination as
+            # ``?returnTo=...`` so the frontend ``OnboardingForm`` can
+            # restore it after the user finishes the form.
+            redirect_url = _build_onboarding_redirect(redirect_url, web_url)
             logger.info(
                 'Redirecting returning user to onboarding',
                 extra={'user_id': user_id, 'deployment_mode': DEPLOYMENT_MODE},
@@ -677,16 +714,108 @@ async def authenticate(request: Request):
             content={'error': 'User is not authenticated'},
         )
 
-        # Delete the auth cookie if it exists
-        keycloak_auth_cookie = request.cookies.get('keycloak_auth')
+        # Delete the auth cookie (and any sibling chunks) if it exists
+        keycloak_auth_cookie = read_chunked_cookie(request, 'keycloak_auth')
         if keycloak_auth_cookie:
-            response.delete_cookie(
-                key='keycloak_auth',
+            delete_chunked_cookie(
+                response,
+                'keycloak_auth',
                 domain=get_cookie_domain(),
                 samesite=get_cookie_samesite(),
             )
 
         return response
+
+
+def _extract_login_inner_return_to(relative_url: str) -> str | None:
+    """Extract the inner ``returnTo`` from a ``/login?returnTo=...`` URL.
+
+    Returns the decoded inner ``returnTo`` value, or ``None`` if
+    ``relative_url`` is not a login URL or has no inner ``returnTo``.
+
+    The OAuth flow's ``state`` is set to the full URL of the page that
+    triggered the login (see ``generateAuthUrl`` in the frontend).
+    For an unauthenticated deep-link visit, that page is itself
+    ``/login?returnTo=<actual destination>``, so the OAuth callback's
+    ``redirect_url`` ends up *wrapping* the user's true destination
+    inside a login URL. Sending the user back through ``/login`` after
+    onboarding works in principle (``LoginPage`` re-redirects authed
+    users to its own ``returnTo``), but the round-trip adds extra
+    state and is brittle when query-string layering goes wrong.
+
+    Unwrapping here keeps the post-onboarding navigation a single
+    direct step, e.g. ``/onboarding?returnTo=%2Fsettings%2Fuser``
+    rather than the doubly-nested
+    ``/onboarding?returnTo=%2Flogin%3FreturnTo%3D%252Fsettings...``.
+    """
+    parsed = urlparse(relative_url)
+    if parsed.path != '/login':
+        return None
+    inner = parse_qs(parsed.query).get('returnTo')
+    if not inner:
+        return None
+    value = inner[0]
+    if not value.startswith('/'):
+        return None
+    return value
+
+
+def _build_onboarding_redirect(original_url: str, web_url: str) -> str:
+    """Build the ``/onboarding`` redirect URL preserving ``returnTo``.
+
+    The user's originally requested destination is preserved as a
+    ``returnTo`` query parameter on ``/onboarding``.
+
+    Without this, any deep link the user clicked while logged out
+    (e.g. ``/conversations/abc?foo=bar``) is silently dropped at the
+    onboarding interstitial because the OAuth callback would clobber
+    its working ``redirect_url`` with a bare ``f'{web_url}/onboarding'``.
+    The frontend ``OnboardingForm`` reads this ``returnTo`` query
+    parameter and restores it after the user finishes the form.
+
+    The trivial home-page case (``original_url`` empty, equal to
+    ``web_url``, or pointing at ``web_url/``) returns the bare
+    ``/onboarding`` URL to keep the URL bar clean — that is already
+    the default landing page once onboarding completes.
+
+    The ``returnTo`` value is always a *relative* path (``/foo?bar``)
+    rather than an absolute URL: that keeps the URL short, avoids
+    leaking the deployment origin into the browser bar a second time,
+    and lets the frontend use ``navigate(returnTo)`` directly.
+
+    When ``original_url`` is itself a ``/login?returnTo=...`` URL —
+    which is the common case for unauthenticated deep-link visits,
+    because the OAuth flow's ``state`` carries the full login page
+    URL — the *inner* ``returnTo`` is extracted so the user lands at
+    their real destination in a single navigation rather than
+    bouncing through ``/login`` after onboarding.
+    """
+    onboarding_url = f'{web_url}/onboarding'
+    if not original_url:
+        return onboarding_url
+
+    # Compute the path-and-query portion of the original URL. We try
+    # to strip the deployment origin first so we end up with a
+    # relative path; if the URL points at a different host we fall
+    # back to the URL as-is. The ``OnboardingForm`` component's
+    # ``sanitizeReturnTo`` helper rejects absolute/protocol-relative
+    # URLs before use, so any unexpected absolute value here is safe.
+    relative = original_url
+    if web_url and original_url.startswith(web_url):
+        relative = original_url[len(web_url) :] or '/'
+
+    # If we ended up with a login-page URL, unwrap its inner
+    # ``returnTo`` so post-onboarding navigation goes straight to the
+    # user's real destination instead of bouncing through ``/login``.
+    inner_return_to = _extract_login_inner_return_to(relative)
+    if inner_return_to is not None:
+        relative = inner_return_to
+
+    # Skip the trivial home-page case to keep the URL clean.
+    if relative in ('', '/'):
+        return onboarding_url
+
+    return f'{onboarding_url}?returnTo={quote(relative, safe="")}'
 
 
 async def _should_redirect_to_onboarding(user_id: str, user: User) -> bool:
@@ -748,7 +877,10 @@ async def _get_post_auth_redirect(
             'Redirecting user to onboarding',
             extra={'user_id': user_id, 'deployment_mode': DEPLOYMENT_MODE},
         )
-        return f'{web_url}/onboarding'
+        # Preserve the user's originally requested destination as
+        # ``?returnTo=...`` so the frontend ``OnboardingForm`` can
+        # restore it after the user finishes the form.
+        return _build_onboarding_redirect(default_url, web_url)
     return default_url
 
 
@@ -878,9 +1010,32 @@ async def onboarding_status(request: Request):
     )
 
 
+class OnboardingSubmission(BaseModel):
+    """Payload posted from the onboarding form.
+
+    ``selections`` maps onboarding question_id -> selected option(s), e.g.
+    ``{"role": "software_engineer", "org_size": "solo",
+       "use_case": ["new_features", "fixing_bugs"]}``.
+
+    The field is optional so the endpoint stays backwards-compatible with any
+    client that previously called it with an empty body, but the current
+    frontend always submits a populated mapping.
+    """
+
+    selections: dict[str, str | list[str]] = {}
+
+
 @api_router.post('/complete_onboarding')
-async def complete_onboarding(request: Request):
-    """Mark onboarding as completed for the current user."""
+async def complete_onboarding(
+    request: Request, body: OnboardingSubmission | None = None
+):
+    """Mark onboarding as completed for the current user and fire analytics.
+
+    Persists ``user.onboarding_completed = True`` and emits the
+    ``onboarding completed`` PostHog event (plus an org ``group_identify`` to
+    stamp ``onboarding_completed_at``). Analytics failures are swallowed so
+    they never block the user from leaving the onboarding flow.
+    """
     user_auth = cast(SaasUserAuth, await get_user_auth(request))
     user_id = await user_auth.get_user_id()
 
@@ -902,6 +1057,31 @@ async def complete_onboarding(request: Request):
         extra={'user_id': user_id},
     )
 
+    # Analytics: 'onboarding completed' event + org group_identify.
+    # Best-effort: never let a tracking failure break the onboarding flow.
+    selections = body.selections if body is not None else {}
+    try:
+        analytics = get_analytics_service()
+        if analytics:
+            ctx = await resolve_analytics_context(user_id)
+            analytics.track_onboarding_completed(
+                ctx=ctx,
+                selections=selections,
+            )
+            if ctx.org_id:
+                analytics.group_identify(
+                    ctx=ctx,
+                    group_type='org',
+                    group_key=ctx.org_id,
+                    properties={
+                        'onboarding_completed_at': datetime.now(
+                            timezone.utc
+                        ).isoformat(),
+                    },
+                )
+    except Exception:
+        logger.exception('analytics:onboarding_completed:failed')
+
     return JSONResponse(
         status_code=status.HTTP_200_OK,
         content={'message': 'Onboarding completed'},
@@ -916,17 +1096,33 @@ async def logout(request: Request):
         content={'message': 'User logged out'},
     )
 
-    # Always delete the cookie regardless of what happens
-    response.delete_cookie(
-        key='keycloak_auth',
+    # Always delete the cookie (and any sibling chunks) regardless of what happens
+    delete_chunked_cookie(
+        response,
+        'keycloak_auth',
         domain=get_cookie_domain(),
         samesite=get_cookie_samesite(),
     )
 
-    # Try to properly logout from Keycloak, but don't fail if it doesn't work
+    # Try to properly logout from Keycloak, but don't fail if it doesn't work.
+    #
+    # IMPORTANT: only terminate the Keycloak session when the resolved
+    # auth is the *cookie* (browser session). ``get_user_auth`` resolves
+    # bearer tokens before cookies, so a request that carries both an
+    # ``Authorization: Bearer <api-key>`` header *and* a
+    # ``keycloak_auth`` cookie would otherwise have its API-key-bound
+    # *offline_token* terminated when the user clicked "logout" in the
+    # browser. The browser intent is to drop the cookie session, not to
+    # revoke a long-lived API key. The cookie itself is always deleted
+    # above; we just must not nuke an offline session that belongs to a
+    # different auth surface.
     try:
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
-        if user_auth and user_auth.refresh_token:
+        if (
+            user_auth
+            and user_auth.refresh_token
+            and user_auth.auth_type == AuthType.COOKIE
+        ):
             refresh_token = user_auth.refresh_token.get_secret_value()
             await token_manager.logout(refresh_token)
     except Exception as e:

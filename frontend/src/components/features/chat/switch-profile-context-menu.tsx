@@ -20,6 +20,10 @@ const itemClassName = cn(
   CONTEXT_MENU_ICON_TEXT_CLASSNAME,
 );
 
+// Profile rows are two lines (name + model), so they need auto height —
+// unlike `itemClassName`, which keeps the single-line Settings link compact.
+const profileItemClassName = "cursor-pointer p-0 h-auto hover:bg-transparent";
+
 interface SwitchProfileContextMenuProps {
   profiles: LlmProfileSummary[];
   activeProfileName: string | null;
@@ -58,7 +62,7 @@ export function SwitchProfileContextMenu({
       testId="switch-profile-context-menu"
       position="top"
       alignment="left"
-      className="left-0 mb-2 bottom-full min-w-[220px] max-h-[60vh] overflow-y-auto"
+      className="left-0 mb-2 bottom-full min-w-[260px] max-h-[60vh] overflow-y-auto"
     >
       <SettingsNavHeader
         text={I18nKey.SETTINGS$AVAILABLE_PROFILES}
@@ -71,20 +75,33 @@ export function SwitchProfileContextMenu({
             key={profile.name}
             testId={`switch-profile-option-${profile.name}`}
             onClick={(event) => handleSelect(event, profile.name)}
-            className={itemClassName}
+            className={profileItemClassName}
             ariaCurrent={isActive ? "true" : undefined}
           >
-            <ToolsContextMenuIconText
-              icon={<CircuitIcon width={16} height={16} />}
-              text={profile.name}
-              rightIcon={
-                isActive ? <CheckIcon width={14} height={14} /> : undefined
-              }
+            {/* Two lines: the profile name, with its provider/model beneath
+                (matches agent-canvas). Full model also in the title tooltip. */}
+            <div
+              title={profile.model ?? undefined}
               className={cn(
-                CONTEXT_MENU_ICON_TEXT_CLASSNAME,
-                isActive && "bg-[#5C5D62]",
+                "flex flex-col gap-0.5 p-2 rounded",
+                isActive ? "bg-[#5C5D62]" : "hover:bg-[#5C5D62]",
               )}
-            />
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <CircuitIcon width={16} height={16} className="shrink-0" />
+                  <span className="truncate">{profile.name}</span>
+                </div>
+                {isActive && (
+                  <CheckIcon width={14} height={14} className="shrink-0" />
+                )}
+              </div>
+              {profile.model && (
+                <span className="block truncate text-xs leading-4 text-gray-400 pl-6">
+                  {profile.model}
+                </span>
+              )}
+            </div>
           </ContextMenuListItem>
         );
       })}

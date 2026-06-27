@@ -3,6 +3,7 @@ import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
 import { ToolsContextMenuIconText } from "./tools-context-menu-icon-text";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useTrackCreatePrButtonClicked } from "#/hooks/mutation/use-track-create-pr-button-clicked";
 import { Provider } from "#/types/settings";
 import {
   getGitPullPrompt,
@@ -29,6 +30,8 @@ export function GitToolsSubmenu({ onClose }: GitToolsSubmenuProps) {
   const { t } = useTranslation();
   const { setMessageToSend } = useConversationStore();
   const { data: conversation } = useActiveConversation();
+  const { mutate: trackCreatePrButtonClicked } =
+    useTrackCreatePrButtonClicked();
 
   const currentGitProvider = conversation?.git_provider as Provider;
 
@@ -43,6 +46,7 @@ export function GitToolsSubmenu({ onClose }: GitToolsSubmenuProps) {
   };
 
   const onCreatePR = () => {
+    trackCreatePrButtonClicked(currentGitProvider ?? null);
     setMessageToSend(getCreatePRPrompt(currentGitProvider));
     onClose();
   };

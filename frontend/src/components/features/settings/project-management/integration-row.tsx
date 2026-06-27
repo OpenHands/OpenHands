@@ -54,8 +54,8 @@ export function IntegrationRow({
     linkMutation.mutate(workspace);
   };
 
-  const handleUnlink = () => {
-    unlinkMutation.mutate();
+  const handleUnlink = (adminApiKey?: string) => {
+    unlinkMutation.mutate(adminApiKey);
   };
 
   const handleConfigureConfirm = (data: {
@@ -63,6 +63,7 @@ export function IntegrationRow({
     webhookSecret: string;
     serviceAccountEmail: string;
     serviceAccountApiKey: string;
+    adminApiKey: string;
     isActive: boolean;
   }) => {
     configureMutation.mutate(data);

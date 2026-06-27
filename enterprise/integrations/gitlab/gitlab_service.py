@@ -29,7 +29,7 @@ class SaaSGitLabService(GitLabService):
         base_domain: str | None = None,
     ):
         logger.info(
-            f'SaaSGitLabService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {'set' if external_auth_token else 'None'}, gitlab_token {'set' if token else 'None'}, external_token_manager {external_token_manager}'
+            f'SaaSGitLabService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {"set" if external_auth_token else "None"}, gitlab_token {"set" if token else "None"}, external_token_manager {external_token_manager}'
         )
         super().__init__(
             user_id=user_id,
@@ -59,20 +59,22 @@ class SaaSGitLabService(GitLabService):
             offline_token = await self.token_manager.load_offline_token(
                 self.external_auth_id
             )
-            gitlab_token = SecretStr(
+            gitlab_token_str: str | None = (
                 await self.token_manager.get_idp_token_from_offline_token(
                     offline_token, ProviderType.GITLAB
                 )
+                if offline_token
+                else None
             )
+            gitlab_token = SecretStr(gitlab_token_str) if gitlab_token_str else None
             logger.info(
-                f'Got GitLab token {gitlab_token.get_secret_value()} from external auth user ID: {self.external_auth_id}'
+                f'Got GitLab token {gitlab_token} from external auth user ID: {self.external_auth_id}'
             )
         elif self.user_id:
-            gitlab_token = SecretStr(
-                await self.token_manager.get_idp_token_from_idp_user_id(
-                    self.user_id, ProviderType.GITLAB
-                )
+            gitlab_token_str = await self.token_manager.get_idp_token_from_idp_user_id(
+                self.user_id, ProviderType.GITLAB
             )
+            gitlab_token = SecretStr(gitlab_token_str) if gitlab_token_str else None
             logger.debug(
                 f'Got Gitlab token {gitlab_token} from user ID: {self.user_id}'
             )
@@ -314,7 +316,7 @@ class SaaSGitLabService(GitLabService):
 
         # Store webhook and repository info
         if store_in_background:
-            asyncio.create_task(
+            _ = asyncio.create_task(
                 self.store_repository_data(users_personal_projects, repositories)
             )
         else:

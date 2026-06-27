@@ -19,6 +19,9 @@ class SpecifyUserContext(UserContext):
     async def get_user_id(self) -> str | None:
         return self.user_id
 
+    async def get_user_email(self) -> str | None:
+        return None
+
     async def get_user_info(self) -> UserInfo:
         raise NotImplementedError()
 
@@ -43,6 +46,9 @@ class SpecifyUserContext(UserContext):
 
     async def get_user_git_info(self) -> UserGitInfo | None:
         raise NotImplementedError()
+
+    async def get_default_sandbox_spec_id(self) -> str | None:
+        return None
 
 
 USER_CONTEXT_ATTR = 'user_context'

@@ -1,4 +1,4 @@
-"""Add a table for tracking output from maintainance scripts. These are basically migrations that are not sql centric.
+"""Add a table for tracking output from maintenance scripts. These are basically migrations that are not sql centric.
 Revision ID: 018
 Revises: 017
 Create Date: 2025-03-26 19:45:00.000

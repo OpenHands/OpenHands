@@ -1,8 +1,11 @@
 import { openHands } from "../open-hands-axios";
 import {
+  AzureDevOpsWebhookStatus,
+  AzureDevOpsWebhookInstallationResult,
   BitbucketDCResourcesResponse,
   BitbucketDCWebhookEnrollmentResult,
   BitbucketDCWebhookIdUpdateResult,
+  BitbucketDCWebhookInstallationResult,
   BitbucketDCResourceIdentifier,
   GitLabResourcesResponse,
   UpdateBitbucketDCWebhookIdRequest,
@@ -70,6 +73,9 @@ export const integrationService = {
 
   /**
    * Record the numeric Bitbucket Data Center webhook id after manual creation.
+   * @deprecated Manual flow superseded by reinstallBitbucketDCWebhook, which
+   *   auto-creates the webhook on BBDC and records the assigned id in one step.
+   *   Kept for backward compatibility with older clients.
    */
   updateBitbucketDCWebhookId: async ({
     resource,
@@ -88,4 +94,71 @@ export const integrationService = {
     );
     return data;
   },
+
+  /**
+   * Install or reinstall the webhook on a Bitbucket Data Center repository
+   * via BBDC's REST API. Rotates the shared secret, idempotently creates or
+   * updates the webhook on BBDC, and persists the result. Requires the
+   * caller's BBDC OAuth token to have REPO_ADMIN scope.
+   */
+  reinstallBitbucketDCWebhook: async ({
+    resource,
+  }: {
+    resource: BitbucketDCResourceIdentifier;
+  }): Promise<BitbucketDCWebhookInstallationResult> => {
+    const { data } = await openHands.post<BitbucketDCWebhookInstallationResult>(
+      "/integration/bitbucket-dc/reinstall-webhook",
+      { resource },
+    );
+    return data;
+  },
+
+  /**
+   * Delete the webhook on Bitbucket Data Center and clear the local enrollment.
+   */
+  uninstallBitbucketDCWebhook: async ({
+    resource,
+  }: {
+    resource: BitbucketDCResourceIdentifier;
+  }): Promise<BitbucketDCWebhookInstallationResult> => {
+    const { data } = await openHands.post<BitbucketDCWebhookInstallationResult>(
+      "/integration/bitbucket-dc/uninstall-webhook",
+      { resource },
+    );
+    return data;
+  },
+
+  /**
+   * Get the org-wide Azure DevOps resolver hook installation status.
+   */
+  getAzureDevOpsResources: async (): Promise<AzureDevOpsWebhookStatus> => {
+    const { data } = await openHands.get<AzureDevOpsWebhookStatus>(
+      "/integration/azure-devops/resources",
+    );
+    return data;
+  },
+
+  /**
+   * Install or reinstall the org-wide Azure DevOps resolver Service Hooks.
+   */
+  reinstallAzureDevOpsWebhook:
+    async (): Promise<AzureDevOpsWebhookInstallationResult> => {
+      const { data } =
+        await openHands.post<AzureDevOpsWebhookInstallationResult>(
+          "/integration/azure-devops/reinstall-webhook",
+        );
+      return data;
+    },
+
+  /**
+   * Delete the org-wide Azure DevOps resolver Service Hooks.
+   */
+  uninstallAzureDevOpsWebhook:
+    async (): Promise<AzureDevOpsWebhookInstallationResult> => {
+      const { data } =
+        await openHands.post<AzureDevOpsWebhookInstallationResult>(
+          "/integration/azure-devops/uninstall-webhook",
+        );
+      return data;
+    },
 };

@@ -8,10 +8,15 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 
 interface ConfigureIntegrationData {
   workspace: string;
+  // May be empty for Jira DC auto-enroll mode; the server generates one.
   webhookSecret: string;
   serviceAccountEmail: string;
   serviceAccountApiKey: string;
+  // Jira DC only: one-time admin PAT to auto-install the webhook. Never stored.
+  adminApiKey?: string;
   isActive: boolean;
+  reloadOnSuccess?: boolean;
+  invalidateOnSuccess?: boolean;
 }
 
 export function useConfigureIntegration(
@@ -27,13 +32,25 @@ export function useConfigureIntegration(
 
   return useMutation({
     mutationFn: async (data: ConfigureIntegrationData) => {
-      const input = {
+      const input: Record<string, unknown> = {
         workspace_name: data.workspace,
-        webhook_secret: data.webhookSecret,
         svc_acc_email: data.serviceAccountEmail,
-        svc_acc_api_key: data.serviceAccountApiKey,
         is_active: data.isActive,
       };
+      // Omit an empty service-account PAT so the server keeps the stored one
+      // when editing (Jira DC); required server-side for a new workspace.
+      if (data.serviceAccountApiKey) {
+        input.svc_acc_api_key = data.serviceAccountApiKey;
+      }
+      // Omit an empty webhook secret so the server generates one (Jira DC
+      // auto-enroll); send it verbatim otherwise.
+      if (data.webhookSecret) {
+        input.webhook_secret = data.webhookSecret;
+      }
+      // Only present for Jira DC auto-enroll; used once server-side, never stored.
+      if (data.adminApiKey) {
+        input.admin_api_key = data.adminApiKey;
+      }
 
       const response = await openHands.post(
         `/integration/${platform}/workspaces`,
@@ -41,6 +58,11 @@ export function useConfigureIntegration(
       );
 
       const { success, redirect, authorizationUrl } = response.data;
+      const webhookInstallFailed = Boolean(
+        platform === "jira-dc" &&
+        data.adminApiKey?.trim() &&
+        response.data.webhookEnrolled === false,
+      );
 
       if (success) {
         if (redirect) {
@@ -49,7 +71,11 @@ export function useConfigureIntegration(
           } else {
             throw new Error("Could not get authorization URL from the server.");
           }
-        } else {
+        } else if (webhookInstallFailed) {
+          displayErrorToast(
+            t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_INSTALL_FAILED),
+          );
+        } else if (data.reloadOnSuccess !== false) {
           window.location.reload();
         }
       } else {
@@ -58,10 +84,12 @@ export function useConfigureIntegration(
 
       return response.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["integration-status", platform],
-      });
+    onSuccess: (_data, variables) => {
+      if (variables.invalidateOnSuccess !== false) {
+        queryClient.invalidateQueries({
+          queryKey: ["integration-status", platform],
+        });
+      }
     },
     onError: (error) => {
       const errorMessage = retrieveAxiosErrorMessage(error);

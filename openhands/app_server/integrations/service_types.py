@@ -175,7 +175,7 @@ class AuthenticationError(ValueError):
 
 
 class UnknownException(ValueError):
-    """Raised when there is an issue with GitHub communcation."""
+    """Raised when there is an issue with GitHub communication."""
 
     pass
 
@@ -201,6 +201,8 @@ class ResourceNotFoundError(ValueError):
 class RequestMethod(Enum):
     POST = 'post'
     GET = 'get'
+    PUT = 'put'
+    DELETE = 'delete'
 
 
 class BaseGitService(ABC):

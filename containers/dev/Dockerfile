@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 ###
-FROM ubuntu:22.04 AS dind
+FROM ubuntu:26.04 AS dind
 
 # https://docs.docker.com/engine/install/ubuntu/
 RUN apt-get update && apt-get install -y \

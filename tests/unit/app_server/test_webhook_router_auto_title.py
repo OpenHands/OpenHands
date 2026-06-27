@@ -26,7 +26,7 @@ from openhands.app_server.event_callback.set_title_callback_processor import (
     SetTitleCallbackProcessor,
 )
 from openhands.app_server.event_callback.webhook_router import on_conversation_update
-from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxStatus
+from openhands.app_server.sandbox.sandbox_models import SandboxRecord
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
 from openhands.sdk.conversation import ConversationExecutionStatus
@@ -73,14 +73,11 @@ def app_conversation_info_service(
 
 
 @pytest.fixture
-def sandbox_info() -> SandboxInfo:
+def sandbox_record() -> SandboxRecord:
     """Create a test sandbox info."""
-    return SandboxInfo(
+    return SandboxRecord(
         id='sandbox_123',
-        status=SandboxStatus.RUNNING,
-        session_api_key='test_session_key',
         created_by_user_id='user_123',
-        sandbox_spec_id='spec_123',
     )
 
 
@@ -114,7 +111,7 @@ class TestOnConversationUpdateAutoTitle:
         self,
         async_session,
         app_conversation_info_service,
-        sandbox_info,
+        sandbox_record,
         mock_conversation_info,
     ):
         """Test that SetTitleCallbackProcessor is registered for new conversations.
@@ -163,7 +160,7 @@ class TestOnConversationUpdateAutoTitle:
         ):
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
-                sandbox_info=sandbox_info,
+                sandbox_record=sandbox_record,
                 app_conversation_info_service=app_conversation_info_service,
             )
 
@@ -174,6 +171,7 @@ class TestOnConversationUpdateAutoTitle:
         assert len(saved_callbacks) == 1
         callback = saved_callbacks[0]
         assert callback.conversation_id == conversation_id
+        assert callback.event_kind == 'MessageEvent'
         assert isinstance(callback.processor, SetTitleCallbackProcessor)
 
     @pytest.mark.asyncio
@@ -181,7 +179,7 @@ class TestOnConversationUpdateAutoTitle:
         self,
         async_session,
         app_conversation_info_service,
-        sandbox_info,
+        sandbox_record,
         mock_conversation_info,
     ):
         """Test that SetTitleCallbackProcessor is NOT registered for existing conversations.
@@ -230,7 +228,7 @@ class TestOnConversationUpdateAutoTitle:
         ):
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
-                sandbox_info=sandbox_info,
+                sandbox_record=sandbox_record,
                 app_conversation_info_service=app_conversation_info_service,
             )
 
@@ -245,7 +243,7 @@ class TestOnConversationUpdateAutoTitle:
         self,
         async_session,
         app_conversation_info_service,
-        sandbox_info,
+        sandbox_record,
         mock_conversation_info,
     ):
         """Test that SetTitleCallbackProcessor is NOT registered for deleting conversations.
@@ -298,7 +296,7 @@ class TestOnConversationUpdateAutoTitle:
         ):
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
-                sandbox_info=sandbox_info,
+                sandbox_record=sandbox_record,
                 app_conversation_info_service=app_conversation_info_service,
             )
 
@@ -313,18 +311,18 @@ class TestOnConversationUpdateAutoTitle:
         self,
         async_session,
         app_conversation_info_service,
-        sandbox_info,
+        sandbox_record,
         mock_conversation_info,
     ):
-        """Test that the callback registration uses the user_id from sandbox_info.
+        """Test that the callback registration uses the user_id from sandbox_record.
 
         Arrange:
             - Create a stub conversation (title=None)
-            - sandbox_info has specific user_id
+            - sandbox_record has specific user_id
         Act:
             - Call on_conversation_update webhook
         Assert:
-            - InjectorState is created with sandbox_info.created_by_user_id
+            - InjectorState is created with sandbox_record.created_by_user_id
         """
         # Arrange
         conversation_id = mock_conversation_info.id
@@ -361,7 +359,7 @@ class TestOnConversationUpdateAutoTitle:
         ):
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
-                sandbox_info=sandbox_info,
+                sandbox_record=sandbox_record,
                 app_conversation_info_service=app_conversation_info_service,
             )
 
@@ -375,14 +373,14 @@ class TestOnConversationUpdateAutoTitle:
         user_context = getattr(captured_state, USER_CONTEXT_ATTR)
         # get_user_id() is async, so we need to await it
         user_id = await user_context.get_user_id()
-        assert user_id == sandbox_info.created_by_user_id
+        assert user_id == sandbox_record.created_by_user_id
 
     @pytest.mark.asyncio
     async def test_conversation_saved_before_callback_registration(
         self,
         async_session,
         app_conversation_info_service,
-        sandbox_info,
+        sandbox_record,
         mock_conversation_info,
     ):
         """Test that conversation is saved before SetTitleCallbackProcessor is registered.
@@ -446,7 +444,7 @@ class TestOnConversationUpdateAutoTitle:
         ):
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
-                sandbox_info=sandbox_info,
+                sandbox_record=sandbox_record,
                 app_conversation_info_service=app_conversation_info_service,
             )
 

@@ -35,6 +35,27 @@ class TestGithubLabels(TestCase):
         self.assertEqual(oh_label, 'openhands-exp')
         self.assertEqual(inline_oh_label, '@openhands-exp')
 
+    @mock.patch.dict('os.environ', {'OH_RESOLVER_LABEL': 'openhands-dev'})
+    def test_labels_with_override(self):
+        """An explicit OH_RESOLVER_LABEL overrides host inference."""
+        oh_label, inline_oh_label = get_oh_labels('app.all-hands.dev')
+        self.assertEqual(oh_label, 'openhands-dev')
+        self.assertEqual(inline_oh_label, '@openhands-dev')
+
+    @mock.patch.dict('os.environ', {'OH_RESOLVER_LABEL': '  openhands-dev  '})
+    def test_labels_override_is_stripped(self):
+        """The override is trimmed before use."""
+        oh_label, inline_oh_label = get_oh_labels('staging.all-hands.dev')
+        self.assertEqual(oh_label, 'openhands-dev')
+        self.assertEqual(inline_oh_label, '@openhands-dev')
+
+    @mock.patch.dict('os.environ', {'OH_RESOLVER_LABEL': ''})
+    def test_labels_empty_override_falls_back(self):
+        """An empty override falls back to host inference."""
+        oh_label, inline_oh_label = get_oh_labels('staging.all-hands.dev')
+        self.assertEqual(oh_label, 'openhands-exp')
+        self.assertEqual(inline_oh_label, '@openhands-exp')
+
 
 class TestGithubCommentCaseInsensitivity(TestCase):
     @mock.patch('integrations.github.github_view.INLINE_OH_LABEL', '@openhands')

@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: 'npm'
@@ -47,7 +47,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: 3.12
           cache: "pip"
@@ -64,7 +64,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: 3.12
           cache: "pip"

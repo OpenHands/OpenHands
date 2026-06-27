@@ -33,7 +33,7 @@ runs:
   steps:
     - name: Compute tags
       id: meta
-      uses: docker/metadata-action@v6
+      uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
       env:
         # Use the PR head SHA (not the merge SHA) for sha-prefixed tags.
         DOCKER_METADATA_PR_HEAD_SHA: "true"

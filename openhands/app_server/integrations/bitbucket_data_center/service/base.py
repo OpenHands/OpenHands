@@ -1,5 +1,6 @@
 import base64
 from typing import Any
+from urllib.parse import unquote
 
 import httpx
 from pydantic import SecretStr
@@ -196,12 +197,68 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
         response, _ = await self._make_request(url)
         return response.get('values', [])
 
+    @staticmethod
+    def _select_user_data(users: list[dict], username: str) -> dict | None:
+        """Pick the user matching ``username`` from a /users?filter= response.
+
+        The filter parameter is a substring match, so the first result is not
+        necessarily the requested user. Match case-insensitively on name,
+        email, and slug, falling back to the first result.
+        """
+        username_folded = username.casefold()
+        for user in users:
+            for key in ('name', 'emailAddress', 'slug'):
+                value = user.get(key)
+                if isinstance(value, str) and value.casefold() == username_folded:
+                    return user
+
+        return users[0] if users else None
+
+    async def _get_authenticated_username(self) -> str | None:
+        """Resolve the authenticated user's username, or None for credentials
+        not tied to a user (e.g. project/repo-scoped HTTP access tokens).
+
+        Bitbucket Data Center has no ``/user`` (myself) REST resource, so try
+        the applinks whoami servlet first (some servers answer it with 200 and
+        an *empty* body for HTTP access tokens), then fall back to the
+        URL-encoded ``X-AUSERNAME`` header from a cheap REST call.
+        """
+        if not self.BASE_URL:
+            return None
+        base_server_url = self.BASE_URL.rsplit('/rest/api/1.0', 1)[0]
+        whoami_url = f'{base_server_url}/plugins/servlet/applinks/whoami'
+        try:
+            data, _ = await self._make_request(whoami_url)
+        except Exception as e:
+            logger.warning(f'Bitbucket data center whoami lookup failed: {e}')
+            data = None
+        if isinstance(data, str) and data.strip():
+            return data.strip()
+
+        # Fall back to the X-AUSERNAME header from a cheap REST call.
+        try:
+            _, headers = await self._make_request(
+                f'{self.BASE_URL}/projects', {'limit': '0'}
+            )
+        except Exception as e:
+            logger.warning(f'Bitbucket data center username lookup failed: {e}')
+            return None
+        username = next(
+            (v for k, v in headers.items() if k.lower() == 'x-ausername'), None
+        )
+        if username:
+            return unquote(username)
+        return None
+
     async def get_user(self) -> User:
         """Get the authenticated user's information."""
 
-        if not self.user_id:
-            # HTTP Access tokens (x-token-auth) don't have user info.
-            # For OAuth, the user_id should be set.
+        user_id = self.user_id
+        if not user_id:
+            user_id = await self._get_authenticated_username()
+
+        if not user_id:
+            # Credentials not tied to a user don't have user info.
             return User(
                 id='',
                 login='',
@@ -210,16 +267,26 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
                 email=None,
             )
 
-        # Basic auth - extract username and query users API to get slug
+        # Query the users API with the username to get id, avatar, and email
         users_url = f'{self.BASE_URL}/users'
         data, _ = await self._make_request(
-            users_url, {'filter': self.user_id, 'avatarSize': 64}
+            users_url, {'filter': user_id, 'avatarSize': 64}
         )
-        users = data.get('values', [])
-        if not users:
-            raise AuthenticationError(f'User not found: {self.user_id}')
+        user_data = self._select_user_data(data.get('values', []), user_id)
+        if not user_data:
+            if not self.user_id:
+                # The username was auto-resolved; degrade to the empty user
+                # rather than failing the whole user-info request.
+                logger.warning(f'Bitbucket data center user not found: {user_id}')
+                return User(
+                    id='',
+                    login='',
+                    avatar_url='',
+                    name=None,
+                    email=None,
+                )
+            raise AuthenticationError(f'User not found: {user_id}')
 
-        user_data = users[0]
         avatar = user_data.get('avatarUrl', '')
         # Handle relative avatar URLs (Server returns /users/... paths)
         if avatar.startswith('/users'):
@@ -229,8 +296,8 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
         display_name = user_data.get('displayName')
         email = user_data.get('emailAddress')
         return User(
-            id=str(user_data.get('id') or user_data.get('slug') or self.user_id),
-            login=user_data.get('name') or self.user_id,
+            id=str(user_data.get('id') or user_data.get('slug') or user_id),
+            login=user_data.get('name') or user_id,
             avatar_url=avatar,
             name=display_name,
             email=email,

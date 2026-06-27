@@ -13,6 +13,9 @@ import type { LlmProfileSummary } from "#/api/settings-service/profiles-service.
 const mockUseLlmProfiles = vi.hoisted(() => vi.fn());
 const mockUseActiveConversation = vi.hoisted(() => vi.fn());
 const mockSwitchAndLog = vi.hoisted(() => vi.fn());
+const mockModelStore = vi.hoisted(() => ({
+  activeProfileByConversation: {} as Record<string, string>,
+}));
 
 vi.mock("#/hooks/query/use-llm-profiles", () => ({
   useLlmProfiles: () => mockUseLlmProfiles(),
@@ -32,6 +35,14 @@ vi.mock("#/hooks/mutation/use-switch-llm-profile-and-log", () => ({
 
 vi.mock("#/hooks/use-conversation-id", () => ({
   useConversationId: () => ({ conversationId: "conv-1" }),
+}));
+
+vi.mock("#/stores/model-store", () => ({
+  useModelStore: (
+    selector: (s: {
+      activeProfileByConversation: Record<string, string>;
+    }) => unknown,
+  ) => selector(mockModelStore),
 }));
 
 const PROFILES: LlmProfileSummary[] = [
@@ -68,6 +79,7 @@ const setupHooks = (
     activeProfile?: string | null;
     conversationModel?: string | null;
     agentKind?: "openhands" | "acp";
+    switchedProfile?: string;
   } = {},
 ) => {
   mockUseLlmProfiles.mockReturnValue({
@@ -82,6 +94,9 @@ const setupHooks = (
       agent_kind: options.agentKind ?? "openhands",
     },
   });
+  mockModelStore.activeProfileByConversation = options.switchedProfile
+    ? { "conv-1": options.switchedProfile }
+    : {};
 };
 
 describe("SwitchProfileButton", () => {
@@ -132,6 +147,32 @@ describe("SwitchProfileButton", () => {
     renderButton();
     expect(screen.getByTestId("switch-profile-button")).toHaveTextContent(
       "default",
+    );
+  });
+
+  it("prefers an in-session switch over the llm_model match (by name, not model)", () => {
+    // The running model maps to "gpt-5", but the user just switched to
+    // "default" — the button must show the switched profile by name. This is
+    // what fixes SaaS, where managed profiles can share a model string and the
+    // model-match would otherwise resolve to the wrong (or a stale) profile.
+    setupHooks({
+      conversationModel: "openai/gpt-5",
+      switchedProfile: "default",
+    });
+    renderButton();
+    expect(screen.getByTestId("switch-profile-button")).toHaveTextContent(
+      "default",
+    );
+  });
+
+  it("ignores a switched profile that no longer exists and falls back to the model match", () => {
+    setupHooks({
+      conversationModel: "openai/gpt-5",
+      switchedProfile: "deleted-profile",
+    });
+    renderButton();
+    expect(screen.getByTestId("switch-profile-button")).toHaveTextContent(
+      "gpt-5",
     );
   });
 

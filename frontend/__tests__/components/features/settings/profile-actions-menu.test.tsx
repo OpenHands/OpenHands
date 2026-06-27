@@ -42,13 +42,13 @@ describe("ProfileActionsMenu", () => {
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("disables Set as active when the profile is already active", () => {
+  it("disables Set as default when the profile is already default", () => {
     renderMenu({ isActive: true });
 
     expect(screen.getByTestId("profile-set-active")).toBeDisabled();
   });
 
-  it("disables Set as active while an activation is in flight", () => {
+  it("disables Set as default while an activation is in flight", () => {
     renderMenu({ isActivating: true });
 
     expect(screen.getByTestId("profile-set-active")).toBeDisabled();

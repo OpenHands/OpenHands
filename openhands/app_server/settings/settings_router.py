@@ -143,19 +143,9 @@ async def load_settings(
             provider_tokens_set=provider_tokens_set,
         )
 
-        # Convert litellm_proxy/ back to openhands/ for the frontend, but only
-        # if the base_url is the OpenHands proxy. Custom litellm_proxy endpoints
-        # should keep their litellm_proxy/ prefix.
         resp_llm = settings_with_token_data.agent_settings.llm
         normalized_base = (llm.base_url or '').rstrip('/')
         normalized_proxy = LITE_LLM_API_URL.rstrip('/')
-
-        if resp_llm.model and resp_llm.model.startswith('litellm_proxy/'):
-            # Only convert to openhands/ if using the OpenHands proxy URL
-            if normalized_base == normalized_proxy:
-                resp_llm.model = (
-                    f'openhands/{resp_llm.model.removeprefix("litellm_proxy/")}'
-                )
 
         # If the base url matches the default for the provider, we don't send it
         # So that the frontend can display basic mode.
@@ -417,6 +407,9 @@ class SaveProfileRequest(BaseModel):
 
     include_secrets: bool = True
     llm: StrictLLM | None = None
+    # Set when the caller has no new key (UI key field left blank), so an
+    # existing profile's stored key survives instead of the snapshotted active one.
+    preserve_existing_api_key: bool = False
 
 
 @router.get('/profiles', response_model=ProfileListResponse)
@@ -431,7 +424,10 @@ async def list_profiles(
         return ProfileListResponse(profiles=[], active_profile=None)
 
     return ProfileListResponse(
-        profiles=[ProfileInfo(**p) for p in settings.llm_profiles.summaries()],
+        profiles=[
+            ProfileInfo(**p)
+            for p in settings.llm_profiles.summaries(managed_proxy_url=LITE_LLM_API_URL)
+        ],
         active_profile=settings.llm_profiles.active,
     )
 
@@ -492,6 +488,7 @@ async def save_profile(
                 detail='Settings not found',
             )
 
+        existing = settings.llm_profiles.get(name)
         llm: LLM
         if request.llm is not None:
             llm = request.llm
@@ -499,12 +496,15 @@ async def save_profile(
             # update (e.g. a frontend round-tripping a GET response where
             # the key was nulled out). Mirrors the deep-merge behaviour
             # the main ``POST /api/v1/settings`` relies on.
-            if llm.api_key is None:
-                existing = settings.llm_profiles.get(name)
-                if existing is not None and existing.api_key is not None:
+            if llm.api_key is None and existing is not None:
+                if existing.api_key is not None:
                     llm = llm.model_copy(update={'api_key': existing.api_key})
         else:
             llm = settings.agent_settings.llm
+        if request.preserve_existing_api_key and existing is not None:
+            # Caller has no new key: keep the profile's stored key (even "no
+            # key") instead of the snapshotted active-settings key.
+            llm = llm.model_copy(update={'api_key': existing.api_key})
 
         try:
             settings.llm_profiles.save(

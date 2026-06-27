@@ -11,6 +11,7 @@ import {
 } from "#/components/shared/modals/confirmation-modals/base-modal";
 import { SettingsSwitch } from "#/components/features/settings/settings-switch";
 import { useValidateIntegration } from "#/hooks/mutation/use-validate-integration";
+import { useConfig } from "#/hooks/query/use-config";
 
 interface ConfigureButtonProps {
   onClick: () => void;
@@ -28,7 +29,7 @@ export function ConfigureButton({
   const { t } = useTranslation();
   return (
     <BrandButton
-      data-testid={dataTestId}
+      testId={dataTestId}
       variant="primary"
       onClick={onClick}
       isDisabled={isDisabled}
@@ -40,6 +41,86 @@ export function ConfigureButton({
   );
 }
 
+// Generate a URL-safe random secret in the browser for the manual-setup flow,
+// so the admin sees the exact value to paste into Jira's webhook config. In
+// auto-enroll mode we send an empty secret and the server generates its own.
+export function generateWebhookSecret(): string {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  let binary = "";
+  bytes.forEach((b) => {
+    binary += String.fromCharCode(b);
+  });
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function buildJiraDcEventsUrl(workspaceId?: number, serverEventsUrl?: string) {
+  if (serverEventsUrl) {
+    return serverEventsUrl;
+  }
+
+  if (!workspaceId) {
+    return "";
+  }
+
+  const path = `/integration/jira-dc/connections/${workspaceId}/events`;
+
+  return typeof window !== "undefined"
+    ? `${window.location.origin}${path}`
+    : path;
+}
+
+interface CopyableValueProps {
+  label: string;
+  value: string;
+  testId?: string;
+}
+
+// Read-only, selectable value with a copy button - used to surface the webhook
+// URL and secret the admin must paste into Jira during manual setup.
+export function CopyableValue({ label, value, testId }: CopyableValueProps) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard may be unavailable (insecure context); the value is still
+      // selectable by hand.
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-sm">{label}</span>
+      <div className="flex items-center gap-2">
+        <code
+          data-testid={testId}
+          className="flex-1 select-all break-all bg-tertiary border border-[#717888] rounded-sm p-2 text-xs"
+        >
+          {value}
+        </code>
+        <BrandButton
+          variant="secondary"
+          onClick={handleCopy}
+          type="button"
+          className="min-w-16"
+        >
+          {copied
+            ? t(I18nKey.PROJECT_MANAGEMENT$COPIED_LABEL)
+            : t(I18nKey.PROJECT_MANAGEMENT$COPY_LABEL)}
+        </BrandButton>
+      </div>
+    </div>
+  );
+}
+
 interface ConfigureModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -48,10 +129,11 @@ interface ConfigureModalProps {
     webhookSecret: string;
     serviceAccountEmail: string;
     serviceAccountApiKey: string;
+    adminApiKey: string;
     isActive: boolean;
   }) => void;
   onLink: (workspace: string) => void;
-  onUnlink?: () => void;
+  onUnlink?: (adminApiKey?: string) => void;
   platformName: string;
   platform: "jira" | "jira-dc" | "linear";
   integrationData?: {
@@ -63,6 +145,9 @@ interface ConfigureModalProps {
       name: string;
       status: string;
       editable: boolean;
+      events_url?: string;
+      // Jira DC only: returned so the form can pre-fill the bot email on edit.
+      svc_acc_email?: string;
     };
   } | null;
 }
@@ -78,6 +163,13 @@ export function ConfigureModal({
   integrationData,
 }: ConfigureModalProps) {
   const { t } = useTranslation();
+  const { data: config } = useConfig();
+  const isJiraDc = platform === "jira-dc";
+  // In Jira DC OAuth installs the server host is known from config; pre-fill +
+  // lock the host field instead of asking the admin to re-type it.
+  const jiraDcOAuthHost = isJiraDc
+    ? (config?.jira_dc_oauth_host ?? null)
+    : null;
   const [workspace, setWorkspace] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
   const [serviceAccountEmail, setServiceAccountEmail] = useState("");
@@ -85,20 +177,98 @@ export function ConfigureModal({
   const [isActive, setIsActive] = useState(true);
   const [showConfigurationFields, setShowConfigurationFields] = useState(false);
 
+  // Jira DC only: a one-time admin PAT auto-installs the webhook, and a manual
+  // mode reveals the URL + generated secret so an admin can install it by hand.
+  const [adminApiKey, setAdminApiKey] = useState("");
+  const [manualMode, setManualMode] = useState(false);
+  const [manualSecret, setManualSecret] = useState("");
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  // True when editing a workspace that already has a stored service-account PAT,
+  // so the field shows "saved — leave blank to keep" instead of looking empty.
+  const [hasSavedApiKey, setHasSavedApiKey] = useState(false);
+  // Dedicated, optional admin PAT for the Remove flow (decoupled from the
+  // install PAT above): supplying it also revokes the Jira webhook.
+  const [removeAdminApiKey, setRemoveAdminApiKey] = useState("");
+
   // Determine initial state based on integrationData
   const existingWorkspace = integrationData?.workspace;
   const isWorkspaceEditable = existingWorkspace?.editable ?? false;
+  const eventsUrl = buildJiraDcEventsUrl(
+    existingWorkspace?.id,
+    existingWorkspace?.events_url,
+  );
+  let jiraDcManualInstructionKey =
+    I18nKey.PROJECT_MANAGEMENT$JIRA_DC_MANUAL_PREPARE_INSTRUCTIONS;
+  if (eventsUrl && existingWorkspace) {
+    jiraDcManualInstructionKey =
+      I18nKey.PROJECT_MANAGEMENT$JIRA_DC_MANUAL_UPDATE_INSTRUCTIONS;
+  } else if (eventsUrl) {
+    jiraDcManualInstructionKey =
+      I18nKey.PROJECT_MANAGEMENT$JIRA_DC_MANUAL_INSTRUCTIONS;
+  }
 
-  // Set initial workspace value when modal opens
+  // Validation states
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [webhookSecretError, setWebhookSecretError] = useState<string | null>(
+    null,
+  );
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+
+  const resetTransientFields = React.useCallback(() => {
+    setWorkspace("");
+    setWebhookSecret("");
+    setServiceAccountEmail("");
+    setServiceAccountApiKey("");
+    setAdminApiKey("");
+    setManualMode(false);
+    setManualSecret("");
+    setShowRemoveConfirm(false);
+    setHasSavedApiKey(false);
+    setRemoveAdminApiKey("");
+    setIsActive(false);
+    setShowConfigurationFields(false);
+    setWorkspaceError(null);
+    setWebhookSecretError(null);
+    setEmailError(null);
+    setApiKeyError(null);
+  }, []);
+
+  // Set initial state when the modal opens.
   React.useEffect(() => {
     if (isOpen && existingWorkspace) {
       setWorkspace(existingWorkspace.name);
       setShowConfigurationFields(isWorkspaceEditable);
+      // Editing (Jira DC): pre-fill the bot email and mark the PAT as saved
+      // (it's never returned), and reflect the stored active state.
+      if (isJiraDc && isWorkspaceEditable) {
+        setServiceAccountEmail(existingWorkspace.svc_acc_email ?? "");
+        setHasSavedApiKey(true);
+        setIsActive(existingWorkspace.status === "active");
+      }
     } else if (isOpen && !existingWorkspace) {
-      setWorkspace("");
-      setShowConfigurationFields(false);
+      // OAuth installs already know the host — pre-fill + lock it below.
+      setWorkspace(isJiraDc && jiraDcOAuthHost ? jiraDcOAuthHost : "");
+      // Jira DC has no meaningful stage-1 validation gate, so show the full
+      // single-stage form immediately. Cloud/Linear keep the two-stage flow.
+      setShowConfigurationFields(isJiraDc);
     }
-  }, [isOpen, existingWorkspace, isWorkspaceEditable]);
+  }, [
+    isOpen,
+    existingWorkspace,
+    isWorkspaceEditable,
+    isJiraDc,
+    jiraDcOAuthHost,
+  ]);
+
+  // Successful configure/remove actions close the modal from the parent. Clear
+  // transient secrets here too so one-time admin PATs cannot linger in local UI
+  // state while the Settings page remains mounted.
+  React.useEffect(() => {
+    if (!isOpen) {
+      resetTransientFields();
+    }
+  }, [isOpen, resetTransientFields]);
 
   // Helper function to get platform-specific placeholder
   const getWorkspacePlaceholder = () => {
@@ -111,13 +281,25 @@ export function ConfigureModal({
     return I18nKey.PROJECT_MANAGEMENT$LINEAR_WORKSPACE_NAME_PLACEHOLDER;
   };
 
-  // Validation states
-  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const [webhookSecretError, setWebhookSecretError] = useState<string | null>(
-    null,
-  );
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  // Jira DC's "workspace" is the server hostname, so it gets a host-specific
+  // label; Cloud/Linear keep the generic "Workspace Name".
+  const getWorkspaceLabel = () =>
+    isJiraDc
+      ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_HOST_LABEL
+      : I18nKey.PROJECT_MANAGEMENT$WORKSPACE_NAME_LABEL;
+
+  // Helper function to get the platform-specific service-account credential label.
+  // Jira Cloud issues an "API token", Jira DC a "Personal Access Token (PAT)", and
+  // Linear an "API key", so the label must reflect the platform's own terminology.
+  const getApiKeyLabel = () => {
+    if (platform === "jira") {
+      return I18nKey.PROJECT_MANAGEMENT$JIRA_SERVICE_ACCOUNT_API_LABEL;
+    }
+    if (platform === "jira-dc") {
+      return I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_API_LABEL;
+    }
+    return I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_API_LABEL;
+  };
 
   const validateMutation = useValidateIntegration(platform, {
     onSuccess: (data) => {
@@ -214,17 +396,25 @@ export function ConfigureModal({
     validateApiKey(value);
   };
 
+  // Reveal the manual-setup view, generating the secret to display once.
+  const handleEnableManualMode = () => {
+    setManualSecret((prev) => prev || generateWebhookSecret());
+    setAdminApiKey("");
+    setManualMode(true);
+  };
+
+  const handleEnableAutoMode = () => {
+    setManualMode(false);
+  };
+
+  const confirmAdminRemove = () => {
+    // Uses the dedicated Remove-flow PAT, not the install PAT above.
+    const trimmedAdminApiKey = removeAdminApiKey.trim();
+    onUnlink?.(trimmedAdminApiKey || undefined);
+  };
+
   const handleClose = () => {
-    setWorkspace("");
-    setWebhookSecret("");
-    setServiceAccountEmail("");
-    setServiceAccountApiKey("");
-    setIsActive(false);
-    setShowConfigurationFields(false);
-    setWorkspaceError(null);
-    setWebhookSecretError(null);
-    setEmailError(null);
-    setApiKeyError(null);
+    resetTransientFields();
     onClose();
   };
 
@@ -234,12 +424,25 @@ export function ConfigureModal({
 
   const handleConnect = () => {
     if (showConfigurationFields) {
-      // Full configuration flow (either new configuration or editing existing)
+      // For Jira DC the webhook secret is never typed: in manual mode we send
+      // the generated secret the admin is copying into Jira; in auto mode we
+      // send a blank secret (server-generated) plus the one-time admin PAT.
+      let outboundSecret = webhookSecret;
+      let outboundAdmin = "";
+      if (isJiraDc) {
+        if (manualMode) {
+          outboundSecret = manualSecret;
+        } else {
+          outboundSecret = "";
+          outboundAdmin = adminApiKey.trim();
+        }
+      }
       onConfirm({
         workspace,
-        webhookSecret,
+        webhookSecret: outboundSecret,
         serviceAccountEmail,
         serviceAccountApiKey,
+        adminApiKey: outboundAdmin,
         isActive,
       });
     } else if (!existingWorkspace) {
@@ -250,19 +453,58 @@ export function ConfigureModal({
     // This case shouldn't happen as the button should be hidden
   };
 
-  const isConnectDisabled = showConfigurationFields
-    ? !workspace.trim() ||
-      !webhookSecret.trim() ||
-      !serviceAccountEmail.trim() ||
-      !serviceAccountApiKey.trim() ||
-      workspaceError !== null ||
-      webhookSecretError !== null ||
-      emailError !== null ||
-      apiKeyError !== null ||
-      validateMutation.isPending
-    : !workspace.trim() ||
+  // For Jira DC the webhook secret is auto-generated, so it is not part of the
+  // gate. Auto mode on a brand-new workspace requires the admin PAT; manual
+  // mode never requires it; editing an existing workspace requires neither
+  // (the admin may just be updating other fields).
+  const jiraDcWebhookSatisfied =
+    !!existingWorkspace || manualMode || adminApiKey.trim() !== "";
+
+  // The service-account PAT is required to create a new workspace, but optional
+  // when editing an existing Jira DC one (blank = keep the stored token).
+  const apiKeyRequired = !isJiraDc || !existingWorkspace;
+  const baseFieldsInvalid =
+    !workspace.trim() ||
+    !serviceAccountEmail.trim() ||
+    (apiKeyRequired && !serviceAccountApiKey.trim()) ||
+    workspaceError !== null ||
+    emailError !== null ||
+    apiKeyError !== null ||
+    validateMutation.isPending;
+
+  // Jira DC uses platform-specific PAT placeholders; when a token is already
+  // stored, the field reads "saved — leave blank to keep" rather than empty.
+  const apiKeyPlaceholderKey = ((): I18nKey => {
+    if (!isJiraDc) {
+      return I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_API_PLACEHOLDER;
+    }
+    return hasSavedApiKey
+      ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SVC_ACC_API_SAVED_PLACEHOLDER
+      : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SVC_ACC_API_PLACEHOLDER;
+  })();
+
+  let isConnectDisabled: boolean;
+  if (!showConfigurationFields) {
+    isConnectDisabled =
+      !workspace.trim() ||
       workspaceError !== null ||
       validateMutation.isPending;
+  } else if (isJiraDc) {
+    isConnectDisabled = baseFieldsInvalid || !jiraDcWebhookSatisfied;
+  } else {
+    isConnectDisabled =
+      baseFieldsInvalid || !webhookSecret.trim() || webhookSecretError !== null;
+  }
+
+  const showAdminRemove =
+    !!existingWorkspace && isWorkspaceEditable && !!onUnlink;
+  const showSelfDisconnect =
+    !!existingWorkspace && !isWorkspaceEditable && !!onUnlink;
+  const removeWillRevokeWebhook = removeAdminApiKey.trim() !== "";
+  const removeHelpKey = I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_HELP;
+  const removeConfirmKey = removeWillRevokeWebhook
+    ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_WITH_REVOKE_CONFIRM
+    : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_WITHOUT_REVOKE_CONFIRM;
 
   return (
     <ModalBackdrop onClose={handleClose}>
@@ -316,36 +558,44 @@ export function ConfigureModal({
               }}
             />
           )}
-          <p className="mt-4">
-            {t(I18nKey.PROJECT_MANAGEMENT$WORKSPACE_NAME_HINT, {
-              platform: platformName,
-            })}
-          </p>
+          {isJiraDc ? (
+            !jiraDcOAuthHost && (
+              <p className="mt-4">
+                {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_HOST_HELP)}
+              </p>
+            )
+          ) : (
+            <p className="mt-4">
+              {t(I18nKey.PROJECT_MANAGEMENT$WORKSPACE_NAME_HINT, {
+                platform: platformName,
+              })}
+            </p>
+          )}
         </BaseModalDescription>
         <div className="w-full flex flex-col gap-4 mt-1">
           <div>
             <div className="flex gap-2 items-end">
               <div className="flex-1">
                 <SettingsInput
-                  label={t(I18nKey.PROJECT_MANAGEMENT$WORKSPACE_NAME_LABEL)}
+                  label={t(getWorkspaceLabel())}
                   placeholder={t(getWorkspacePlaceholder())}
                   value={workspace}
                   onChange={handleWorkspaceChange}
                   className="w-full"
                   type="text"
                   pattern="^[a-zA-Z0-9\-_.]*$"
-                  isDisabled={!!existingWorkspace}
+                  isDisabled={!!existingWorkspace || !!jiraDcOAuthHost}
                 />
               </div>
-              {existingWorkspace && onUnlink && (
+              {showSelfDisconnect && (
                 <BrandButton
                   variant="secondary"
-                  onClick={onUnlink}
-                  data-testid="unlink-button"
+                  onClick={() => onUnlink?.()}
+                  testId="unlink-button"
                   type="button"
                   className="mb-0"
                 >
-                  {t(I18nKey.PROJECT_MANAGEMENT$UNLINK_BUTTON_LABEL)}
+                  {t(I18nKey.PROJECT_MANAGEMENT$DISCONNECT_BUTTON_LABEL)}
                 </BrandButton>
               )}
             </div>
@@ -356,23 +606,138 @@ export function ConfigureModal({
 
           {showConfigurationFields && (
             <>
-              <div>
-                <SettingsInput
-                  label={t(I18nKey.PROJECT_MANAGEMENT$WEBHOOK_SECRET_LABEL)}
-                  placeholder={t(
-                    I18nKey.PROJECT_MANAGEMENT$WEBHOOK_SECRET_PLACEHOLDER,
+              {/* Webhook (Jira -> OpenHands). Jira DC: auto-install via a
+                  one-time admin PAT, or reveal the URL + secret for manual
+                  setup. Jira Cloud / Linear: a typed webhook secret. */}
+              {isJiraDc ? (
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <span className="text-sm font-medium text-white">
+                      {t(
+                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_SECTION_LABEL,
+                      )}
+                    </span>
+                    <p className="text-xs text-tertiary-alt mt-1">
+                      {t(
+                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_SECTION_HELP,
+                      )}
+                    </p>
+                  </div>
+                  {/* Visible two-option control instead of a buried text link. */}
+                  <div className="flex w-fit overflow-hidden rounded-sm border border-[#717888] text-sm">
+                    <button
+                      type="button"
+                      data-testid="webhook-mode-auto"
+                      onClick={handleEnableAutoMode}
+                      className={`px-3 py-1.5 ${
+                        !manualMode
+                          ? "bg-[#717888] text-white"
+                          : "bg-transparent text-tertiary-alt"
+                      }`}
+                    >
+                      {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_MODE_AUTO)}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="webhook-mode-manual"
+                      onClick={handleEnableManualMode}
+                      className={`px-3 py-1.5 ${
+                        manualMode
+                          ? "bg-[#717888] text-white"
+                          : "bg-transparent text-tertiary-alt"
+                      }`}
+                    >
+                      {t(
+                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_MODE_MANUAL,
+                      )}
+                    </button>
+                  </div>
+                  {!manualMode ? (
+                    <>
+                      <SettingsInput
+                        testId="admin-api-key-input"
+                        label={t(
+                          I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_LABEL,
+                        )}
+                        placeholder={t(
+                          I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_PLACEHOLDER,
+                        )}
+                        value={adminApiKey}
+                        onChange={setAdminApiKey}
+                        className="w-full"
+                        type="password"
+                        showOptionalTag={!!existingWorkspace}
+                      />
+                      <p className="text-xs text-tertiary-alt">
+                        {t(
+                          existingWorkspace
+                            ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_EXISTING_ADMIN_TOKEN_HELP
+                            : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_HELP,
+                        )}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-tertiary-alt">
+                        {t(jiraDcManualInstructionKey)}
+                      </p>
+                      {eventsUrl && (
+                        <>
+                          <CopyableValue
+                            testId="webhook-url-value"
+                            label={t(
+                              I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_URL_LABEL,
+                            )}
+                            value={eventsUrl}
+                          />
+                          <CopyableValue
+                            testId="webhook-secret-value"
+                            label={t(
+                              I18nKey.PROJECT_MANAGEMENT$WEBHOOK_SECRET_LABEL,
+                            )}
+                            value={manualSecret}
+                          />
+                        </>
+                      )}
+                    </>
                   )}
-                  value={webhookSecret}
-                  onChange={handleWebhookSecretChange}
-                  className="w-full"
-                  type="password"
-                />
-                {webhookSecretError && (
-                  <p className="text-red-500 text-sm mt-2">
-                    {webhookSecretError}
+                </div>
+              ) : (
+                <div>
+                  <SettingsInput
+                    label={t(I18nKey.PROJECT_MANAGEMENT$WEBHOOK_SECRET_LABEL)}
+                    placeholder={t(
+                      I18nKey.PROJECT_MANAGEMENT$WEBHOOK_SECRET_PLACEHOLDER,
+                    )}
+                    value={webhookSecret}
+                    onChange={handleWebhookSecretChange}
+                    className="w-full"
+                    type="password"
+                  />
+                  {webhookSecretError && (
+                    <p className="text-red-500 text-sm mt-2">
+                      {webhookSecretError}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Service account (OpenHands -> Jira): used to post comments and
+                  reactions on every event. Required regardless of webhook mode. */}
+              {isJiraDc && (
+                <div>
+                  <span className="text-sm font-medium text-white">
+                    {t(
+                      I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_SECTION_LABEL,
+                    )}
+                  </span>
+                  <p className="text-xs text-tertiary-alt mt-1">
+                    {t(
+                      I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_SECTION_HELP,
+                    )}
                   </p>
-                )}
-              </div>
+                </div>
+              )}
               <div>
                 <SettingsInput
                   label={t(
@@ -392,16 +757,13 @@ export function ConfigureModal({
               </div>
               <div>
                 <SettingsInput
-                  label={t(
-                    I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_API_LABEL,
-                  )}
-                  placeholder={t(
-                    I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_API_PLACEHOLDER,
-                  )}
+                  label={t(getApiKeyLabel())}
+                  placeholder={t(apiKeyPlaceholderKey)}
                   value={serviceAccountApiKey}
                   onChange={handleApiKeyChange}
                   className="w-full"
                   type="password"
+                  showOptionalTag={isJiraDc && hasSavedApiKey}
                 />
                 {apiKeyError && (
                   <p className="text-red-500 text-sm mt-2">{apiKeyError}</p>
@@ -415,6 +777,11 @@ export function ConfigureModal({
                 >
                   {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_LABEL)}
                 </SettingsSwitch>
+                {isJiraDc && (
+                  <p className="text-xs text-tertiary-alt mt-1">
+                    {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_HELP)}
+                  </p>
+                )}
               </div>
             </>
           )}
@@ -425,7 +792,7 @@ export function ConfigureModal({
             <BrandButton
               variant="primary"
               onClick={handleConnect}
-              data-testid="connect-button"
+              testId="connect-button"
               type="button"
               className="w-full"
               isDisabled={isConnectDisabled}
@@ -438,10 +805,83 @@ export function ConfigureModal({
               })()}
             </BrandButton>
           )}
+          {showAdminRemove && (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-tertiary-alt">
+                {t(showRemoveConfirm ? removeConfirmKey : removeHelpKey)}
+              </p>
+              {showRemoveConfirm ? (
+                <>
+                  {/* Admin PAT scoped to the Remove flow: supplying it also
+                      revokes the Jira webhook. Separate from the install PAT in
+                      the webhook section so each field has one job. */}
+                  {isJiraDc && (
+                    <SettingsInput
+                      testId="remove-admin-api-key-input"
+                      label={t(
+                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_ADMIN_TOKEN_LABEL,
+                      )}
+                      placeholder={t(
+                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_PLACEHOLDER,
+                      )}
+                      value={removeAdminApiKey}
+                      onChange={setRemoveAdminApiKey}
+                      className="w-full"
+                      type="password"
+                      description={
+                        <p className="text-xs text-tertiary-alt">
+                          {t(
+                            I18nKey.PROJECT_MANAGEMENT$JIRA_DC_REMOVE_ADMIN_TOKEN_HELP,
+                          )}
+                        </p>
+                      }
+                    />
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <BrandButton
+                      variant="danger"
+                      onClick={confirmAdminRemove}
+                      testId="confirm-remove-integration-button"
+                      type="button"
+                      className="w-full"
+                    >
+                      {t(
+                        I18nKey.PROJECT_MANAGEMENT$REMOVE_INTEGRATION_BUTTON_LABEL,
+                      )}
+                    </BrandButton>
+                    <BrandButton
+                      variant="secondary"
+                      onClick={() => {
+                        setShowRemoveConfirm(false);
+                        setRemoveAdminApiKey("");
+                      }}
+                      testId="cancel-remove-integration-button"
+                      type="button"
+                      className="w-full"
+                    >
+                      {t(I18nKey.FEEDBACK$CANCEL_LABEL)}
+                    </BrandButton>
+                  </div>
+                </>
+              ) : (
+                <BrandButton
+                  variant="danger"
+                  onClick={() => setShowRemoveConfirm(true)}
+                  testId="remove-integration-button"
+                  type="button"
+                  className="w-full"
+                >
+                  {t(
+                    I18nKey.PROJECT_MANAGEMENT$REMOVE_INTEGRATION_BUTTON_LABEL,
+                  )}
+                </BrandButton>
+              )}
+            </div>
+          )}
           <BrandButton
             variant="secondary"
             onClick={handleClose}
-            data-testid="cancel-button"
+            testId="cancel-button"
             type="button"
             className="w-full"
           >

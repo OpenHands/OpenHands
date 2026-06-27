@@ -2,11 +2,11 @@
 name: PR Readiness Confirmation
 
 on:
-  # Trigger when a PR is opened (non-draft) or converted from draft to ready.
+  # Trigger when a PR is opened, edited while ready for review, or converted from draft.
   pull_request:
-    types: [opened, ready_for_review]
+    types: [opened, edited, ready_for_review]
   pull_request_target:
-    types: [opened, ready_for_review]
+    types: [opened, edited, ready_for_review]
 
   # Daily check for stale unconfirmed PRs.
   schedule:
@@ -14,13 +14,147 @@ on:
 
 permissions:
   contents: read
+  issues: write
   pull-requests: write
 
 jobs:
+  # ── Require a short human-written summary on ready-for-review PRs ──
+  check-human-context:
+    if: |
+      github.event_name != 'schedule' &&
+      github.event.pull_request.draft == false &&
+      (
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        ) ||
+        (
+          github.event_name == 'pull_request_target' &&
+          github.event.pull_request.head.repo.full_name != github.repository
+        )
+      )
+    concurrency:
+      group: pr-human-context-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate HUMAN section
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const reminderMarker = '<!-- pr-human-context-required -->';
+            const humanTestedCheckboxText = 'A human has tested these changes.';
+            const pr = context.payload.pull_request;
+            const issueNumber = pr.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const body = pr.body || '';
+
+            const escapeRegex = (text) =>
+              text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const humanSectionPattern = new RegExp(
+              `(?:^|\\n)HUMAN:\\s*\\n([\\s\\S]*?)(?=\\n(?:- )?\\[[ xX]\\] ${escapeRegex(humanTestedCheckboxText)})`
+            );
+            const warnOnly = async (label, operation) => {
+              try {
+                return await operation();
+              } catch (error) {
+                core.warning(`${label}: ${error.message}`);
+                return null;
+              }
+            };
+
+            const extractHumanSection = (text) => {
+              const match = text.match(humanSectionPattern);
+              if (!match) {
+                return '';
+              }
+              return match[1].replace(/<!--[\s\S]*?-->/g, '').trim();
+            };
+
+            const humanSection = extractHumanSection(body);
+            const hasHumanText = humanSection
+              .split(/\r?\n/)
+              .some((line) => line.trim().length > 0);
+
+            const comments = await warnOnly('Failed to list PR comments', () =>
+              github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number: issueNumber,
+              })
+            );
+            if (!comments) {
+              return;
+            }
+            const existingReminder = comments.find((comment) =>
+              comment.body.includes(reminderMarker)
+            );
+
+            if (hasHumanText) {
+              if (existingReminder) {
+                await warnOnly('Failed to delete HUMAN reminder comment', () =>
+                  github.rest.issues.deleteComment({
+                    owner,
+                    repo,
+                    comment_id: existingReminder.id,
+                  })
+                );
+              }
+
+              const reactions = await warnOnly('Failed to list PR reactions', () =>
+                github.paginate(github.rest.reactions.listForIssue, {
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                })
+              );
+              if (!reactions) {
+                return;
+              }
+              const botAlreadyReacted = reactions.some(
+                (reaction) =>
+                  reaction.user?.login === 'github-actions[bot]' &&
+                  reaction.content === '+1'
+              );
+
+              if (!botAlreadyReacted) {
+                await warnOnly('Failed to add HUMAN thumbs up reaction', () =>
+                  github.rest.reactions.createForIssue({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    content: '+1',
+                  })
+                );
+              }
+
+              return;
+            }
+
+            if (!existingReminder) {
+              await warnOnly('Failed to create HUMAN reminder comment', () =>
+                github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  body: [
+                    reminderMarker,
+                    '👋 Thanks for opening this PR!',
+                    '',
+                    'Before review, please add a short note in the `HUMAN:` section at the top of the PR description telling maintainers, in your own words, what this PR does.',
+                    '',
+                    `Please put that note between \`HUMAN:\` and the \`- [ ] ${humanTestedCheckboxText}\` checkbox.`,
+                  ].join('\n'),
+                })
+              );
+            }
+
   # ── Post a confirmation request when a PR becomes ready for review ──
   ask-confirmation:
     if: |
       github.event_name != 'schedule' &&
+      github.event.action != 'edited' &&
       github.event.pull_request.draft == false &&
       (
         (
@@ -43,7 +177,7 @@ jobs:
     steps:
       - name: Check for existing confirmation comment
         id: check
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const marker = '<!-- pr-readiness-confirm -->';
@@ -57,7 +191,7 @@ jobs:
 
       - name: Post confirmation request
         if: steps.check.outputs.exists != 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const marker = '<!-- pr-readiness-confirm -->';
@@ -83,7 +217,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Find and convert stale unconfirmed PRs
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const STALE_DAYS = 7;

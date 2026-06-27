@@ -481,7 +481,7 @@ class TestDockerSandboxService:
         # Execute & Verify
         with (
             patch.object(service, 'pause_old_sandboxes', return_value=[]),
-            pytest.raises(ValueError, match='Sandbox Spec not found'),
+            pytest.raises(ValueError, match=r"Sandbox Spec '.*' not found"),
         ):
             await service.start_sandbox(sandbox_spec_id='nonexistent')
 

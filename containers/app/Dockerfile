@@ -21,7 +21,7 @@ ENV POETRY_NO_INTERACTION=1 \
     POETRY_CACHE_DIR=/tmp/poetry_cache
 
 # Pin Poetry version to match the version used to generate poetry.lock
-ARG POETRY_VERSION=2.3.3
+ARG POETRY_VERSION=2.3.4
 RUN apt-get update -y \
     && apt-get install -y curl make git build-essential jq gettext \
     && python3 -m pip install "poetry==${POETRY_VERSION}" --break-system-packages

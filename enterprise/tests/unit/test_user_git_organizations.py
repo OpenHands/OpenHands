@@ -84,8 +84,13 @@ async def test_raises_400_when_provider_unsupported():
             'get_installations',
             ['my-workspace'],
         ),
+        (
+            ProviderType.BITBUCKET_DATA_CENTER,
+            'get_installations',
+            ['PROJ'],
+        ),
     ],
-    ids=['github', 'gitlab', 'bitbucket'],
+    ids=['github', 'gitlab', 'bitbucket', 'bitbucket_data_center'],
 )
 async def test_returns_organizations_for_supported_provider(
     provider, service_method, service_return

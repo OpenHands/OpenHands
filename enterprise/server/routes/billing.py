@@ -169,7 +169,7 @@ async def create_customer_setup_session(
         success_url=f'{base_url}?setup=success',
         cancel_url=f'{base_url}',
     )
-    return CreateBillingSessionResponse(redirect_url=checkout_session.url)
+    return CreateBillingSessionResponse(redirect_url=checkout_session.url)  # type: ignore[arg-type]
 
 
 # Endpoint to create a new Stripe checkout session for credit purchase
@@ -235,7 +235,7 @@ async def create_checkout_session(
         session.add(billing_session)
         await session.commit()
 
-    return CreateBillingSessionResponse(redirect_url=checkout_session.url)
+    return CreateBillingSessionResponse(redirect_url=checkout_session.url)  # type: ignore[arg-type]
 
 
 # Callback endpoint for successful Stripe payments - updates user credits and billing session status

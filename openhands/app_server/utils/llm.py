@@ -65,7 +65,7 @@ _BARE_OPENAI_MODELS: set[str] = set(_SDK_OPENAI)
 _BARE_ANTHROPIC_MODELS: set[str] = set(_SDK_ANTHROPIC)
 _BARE_MISTRAL_MODELS: set[str] = set(_SDK_MISTRAL)
 
-DEFAULT_OPENHANDS_MODEL = 'openhands/claude-opus-4-5-20251101'
+DEFAULT_OPENHANDS_MODEL = 'openhands/minimax-m2.7'
 
 
 # ---------------------------------------------------------------------------
@@ -81,31 +81,29 @@ class ModelsResponse(BaseModel):
     * ``verified_providers`` — provider names shown in the "Verified"
       section of the model selector.
     * ``default_model`` — the recommended default model id.
+    * ``hidden_models`` — ``provider/model`` strings that the backend still
+      serves but does not promote: they must not be offered as dropdown
+      options, yet an already-saved setting referencing one is still valid
+      (e.g. legacy alias routes on a managed LiteLLM proxy). Default empty,
+      so SaaS / default discovery behavior is unchanged.
+    * ``hidden_model_canonicals`` — maps a hidden ``provider/model`` string
+      to the visible ``provider/model`` it aliases, so clients can display a
+      saved hidden model under its canonical name. Only mappings whose
+      target is in ``models`` are included. Default empty, so SaaS / default
+      discovery behavior is unchanged.
     """
 
     models: list[str]
     verified_models: list[str]
     verified_providers: list[str]
     default_model: str
+    hidden_models: list[str] = []
+    hidden_model_canonicals: dict[str, str] = {}
 
 
 def is_openhands_model(model: str | None) -> bool:
-    """Check if the model uses the OpenHands provider.
-
-    The SDK's ``AgentSettings`` validator automatically transforms
-    ``openhands/X`` to ``litellm_proxy/X`` (the internal proxy name),
-    so both prefixes must be recognised.
-
-    Args:
-        model: The model name to check.
-
-    Returns:
-        True if the model starts with 'openhands/' or 'litellm_proxy/',
-        False otherwise.
-    """
-    return bool(
-        model and (model.startswith('openhands/') or model.startswith('litellm_proxy/'))
-    )
+    """Return True when the model uses the public OpenHands provider prefix."""
+    return bool(model and model.startswith('openhands/'))
 
 
 # Canonical masked placeholder for LLM API keys. Matches pydantic's

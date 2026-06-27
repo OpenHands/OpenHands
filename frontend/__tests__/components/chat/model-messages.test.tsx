@@ -73,10 +73,17 @@ describe("<ModelMessages />", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("starts collapsed and reveals profile rows then row details on expansion", async () => {
-    useModelStore
-      .getState()
-      .show(CONV, null, [profile("default"), profile("scratch")]);
+  it("starts collapsed, reveals profile rows, then model + base_url (no api_key) on row expansion", async () => {
+    useModelStore.getState().show(CONV, null, [
+      profile("default", {
+        model: "anthropic/claude-sonnet-4-6",
+        base_url: null,
+      }),
+      profile("scratch", {
+        model: "openai/gpt-5",
+        base_url: "https://api.example.com",
+      }),
+    ]);
     const user = userEvent.setup();
     render(<ModelMessages conversationId={CONV} anchorEventId={null} />);
 
@@ -88,11 +95,20 @@ describe("<ModelMessages />", () => {
 
     await user.click(screen.getByRole("button", { name: /expand/i }));
 
-    // Profile rows are now visible, but per-row details remain collapsed.
-    expect(screen.queryByText(/api_key:/i)).toBeNull();
+    // Profile rows are now visible (as toggles), but their details stay
+    // collapsed until the row is opened.
+    expect(
+      screen.getByRole("button", { name: /default/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/model:/i)).toBeNull();
 
+    // Opening a row reveals just its model and base_url — never the api_key.
     await user.click(screen.getByRole("button", { name: /default/i }));
-    expect(screen.getByText(/api_key:\s+set/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/model:\s+anthropic\/claude-sonnet-4-6/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/base_url:/i)).toBeInTheDocument();
+    expect(screen.queryByText(/api_key/i)).toBeNull();
   });
 
   it("only renders entries whose anchor matches the prop", () => {

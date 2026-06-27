@@ -92,6 +92,6 @@ async def get_saas_user_auth(
 
     user_auth = SaasUserAuth(
         user_id=keycloak_user_id,
-        refresh_token=SecretStr(offline_token),
+        refresh_token=SecretStr(offline_token or ''),
     )
     return user_auth

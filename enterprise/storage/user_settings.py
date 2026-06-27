@@ -42,6 +42,7 @@ class UserSettings(Base):
         String, nullable=True
     )
     sandbox_grouping_strategy: Mapped[str | None] = mapped_column(String, nullable=True)
+    default_sandbox_spec_id: Mapped[str | None] = mapped_column(String, nullable=True)
     user_version: Mapped[int] = mapped_column(nullable=False, default=0)
     accepted_tos: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Deprecated (v0): mcp_config now lives inside AgentSettings on Org / OrgMember.

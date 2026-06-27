@@ -198,7 +198,7 @@ class GitlabWebhookStore:
 
     async def get_webhook_secret(self, webhook_uuid: str, user_id: str) -> str | None:
         """
-        Get's webhook secret given the webhook uuid and admin keycloak user id
+        Gets webhook secret given the webhook uuid and admin keycloak user id
         """
         async with a_session_maker() as session:
             query = (

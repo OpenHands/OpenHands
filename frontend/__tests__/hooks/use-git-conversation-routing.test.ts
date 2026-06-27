@@ -89,9 +89,7 @@ describe("useGitConversationRouting", () => {
 
     expect(result.current.orgs).toHaveLength(2);
 
-    const claimedOrg = result.current.orgs.find(
-      (o) => o.name === "OpenHands",
-    );
+    const claimedOrg = result.current.orgs.find((o) => o.name === "OpenHands");
     expect(claimedOrg).toMatchObject({
       id: "github:openhands",
       claimId: "claim-1",
@@ -99,9 +97,7 @@ describe("useGitConversationRouting", () => {
       status: "claimed",
     });
 
-    const unclaimedOrg = result.current.orgs.find(
-      (o) => o.name === "AcmeCo",
-    );
+    const unclaimedOrg = result.current.orgs.find((o) => o.name === "AcmeCo");
     expect(unclaimedOrg).toMatchObject({
       id: "github:acmeco",
       claimId: null,
@@ -134,6 +130,35 @@ describe("useGitConversationRouting", () => {
       status: "claimed",
       claimId: "claim-1",
       name: "All-Hands-AI",
+    });
+  });
+
+  it("supports Bitbucket Data Center projects", () => {
+    setupMocks({
+      userOrgs: {
+        provider: "bitbucket_data_center",
+        organizations: ["PROJ"],
+      },
+      claims: [
+        {
+          id: "claim-1",
+          org_id: "org-1",
+          provider: "bitbucket_data_center",
+          git_organization: "proj",
+          claimed_by: "user-1",
+          claimed_at: "2026-01-01T00:00:00",
+        },
+      ],
+    });
+
+    const { result } = renderHook(() => useGitConversationRouting());
+
+    expect(result.current.orgs[0]).toMatchObject({
+      id: "bitbucket_data_center:proj",
+      claimId: "claim-1",
+      provider: "bitbucket_data_center",
+      name: "PROJ",
+      status: "claimed",
     });
   });
 
@@ -200,10 +225,7 @@ describe("useGitConversationRouting", () => {
     setupMocks();
 
     mockClaimMutate.mockImplementation(
-      (
-        _args: unknown,
-        options: { onSettled?: () => void },
-      ) => {
+      (_args: unknown, options: { onSettled?: () => void }) => {
         options?.onSettled?.();
       },
     );

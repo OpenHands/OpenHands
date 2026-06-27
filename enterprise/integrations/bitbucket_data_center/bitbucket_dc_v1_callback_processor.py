@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Any, ClassVar
 from uuid import UUID
 
 import httpx
@@ -11,6 +11,7 @@ from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
+    EventKind,
 )
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
@@ -33,6 +34,8 @@ class BitbucketDCV1CallbackProcessor(EventCallbackProcessor):
     Posts a summary comment back to the originating PR when the agent
     finishes successfully. Mirrors :class:`BitbucketV1CallbackProcessor`.
     """
+
+    event_kind: ClassVar[EventKind] = 'ConversationStateUpdateEvent'
 
     bitbucket_dc_view_data: dict[str, Any] = Field(default_factory=dict)
     should_request_summary: bool = Field(default=True)
@@ -85,15 +88,13 @@ class BitbucketDCV1CallbackProcessor(EventCallbackProcessor):
             )
 
     async def _post_summary_to_bitbucket_dc(self, summary: str) -> None:
-        from integrations.bitbucket_data_center.bitbucket_dc_service import (
-            SaaSBitbucketDCService,
+        from integrations.bitbucket_data_center.bitbucket_dc_service_account import (
+            bitbucket_dc_posting_service,
         )
 
-        keycloak_user_id = self.bitbucket_dc_view_data.get('keycloak_user_id')
-        if not keycloak_user_id:
-            raise RuntimeError('Missing keycloak user ID for Bitbucket DC')
-
-        bitbucket_service = SaaSBitbucketDCService(external_auth_id=keycloak_user_id)
+        # Always post as the bot account -- a user-authored reply containing
+        # "@openhands" would re-fire the webhook (duplicate run).
+        bitbucket_service = bitbucket_dc_posting_service()
         await bitbucket_service.reply_to_pr_comment(
             owner=self.bitbucket_dc_view_data['project_key'],
             repo_slug=self.bitbucket_dc_view_data['repo_slug'],
@@ -112,7 +113,7 @@ class BitbucketDCV1CallbackProcessor(EventCallbackProcessor):
     ) -> str:
         send_message_request = AskAgentRequest(question=message_content)
         url = (
-            f"{agent_server_url.rstrip('/')}"
+            f'{agent_server_url.rstrip("/")}'
             f'/api/conversations/{conversation_id}/ask_agent'
         )
         headers = {'X-Session-API-Key': session_api_key}

@@ -66,7 +66,7 @@ function VSCodeTab() {
     return (
       <div className="w-full h-full flex items-center text-center justify-center text-2xl text-tertiary-light">
         {iframeError ||
-          data?.error ||
+          (data?.error ? t(data.error) : null) ||
           String(error) ||
           t(I18nKey.VSCODE$URL_NOT_AVAILABLE)}
       </div>

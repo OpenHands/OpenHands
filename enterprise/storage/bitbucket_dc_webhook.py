@@ -27,7 +27,7 @@ class BitbucketDCWebhook(Base):
     webhook_id: Mapped[str | None] = mapped_column(String, nullable=True)
     webhook_secret: Mapped[str | None] = mapped_column(String, nullable=True)
     last_synced: Mapped[datetime | None] = mapped_column(
-        DateTime,
+        DateTime(timezone=True),
         server_default=text('CURRENT_TIMESTAMP'),
         onupdate=text('CURRENT_TIMESTAMP'),
         nullable=True,

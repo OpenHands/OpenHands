@@ -68,4 +68,4 @@ def schedule_gitlab_repo_sync(
         except Exception:
             logger.warning('gitlab_repo_sync_failed', exc_info=True)
 
-    asyncio.create_task(_run())
+    _ = asyncio.create_task(_run())

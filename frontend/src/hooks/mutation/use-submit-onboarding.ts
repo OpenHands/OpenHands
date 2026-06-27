@@ -6,6 +6,13 @@ import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 type SubmitOnboardingArgs = {
   selections: Record<string, string | string[]>;
+  /**
+   * Fallback destination to navigate to when the server response does
+   * not include a ``redirect_url``. ``OnboardingForm`` passes the
+   * caller's ``returnTo`` here so deep links survive the onboarding
+   * interstitial. Defaults to ``/`` when omitted.
+   */
+  returnTo?: string;
 };
 
 interface OnboardingResponse {
@@ -25,11 +32,11 @@ export const useSubmitOnboarding = () => {
       );
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, { returnTo }) => {
       queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
       queryClient.invalidateQueries({ queryKey: ["onboarding-status"] });
 
-      const finalRedirectUrl = data.redirect_url || "/";
+      const finalRedirectUrl = data.redirect_url || returnTo || "/";
       // Check if the redirect URL is an external URL (starts with http or https)
       if (
         finalRedirectUrl.startsWith("http://") ||

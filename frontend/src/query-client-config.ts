@@ -4,6 +4,10 @@ import { AxiosError } from "axios";
 import { I18nKey } from "./i18n/declaration";
 import { retrieveAxiosErrorMessage } from "./utils/retrieve-axios-error-message";
 import { displayErrorToast } from "./utils/custom-toast-handlers";
+import {
+  isRateLimitError,
+  getRateLimitRetryDelayMs,
+} from "./utils/rate-limit-retry";
 
 const handle401Error = (error: AxiosError, queryClient: QueryClient) => {
   if (error?.response?.status === 401 || error?.status === 401) {
@@ -13,6 +17,17 @@ const handle401Error = (error: AxiosError, queryClient: QueryClient) => {
 
 const shownErrors = new Set<string>();
 export const queryClient = new QueryClient({
+  defaultOptions: {
+    mutations: {
+      // A 429 means the request was rejected before being processed, so a
+      // retry can't double-apply the mutation. Bursts (e.g. the post-login
+      // query storm) can momentarily trip the per-user API rate limit and
+      // would otherwise surface as a spurious error toast.
+      retry: (failureCount, error) =>
+        failureCount < 2 && isRateLimitError(error),
+      retryDelay: (_, error) => getRateLimitRetryDelayMs(error),
+    },
+  },
   queryCache: new QueryCache({
     onError: (error, query) => {
       const isAuthQuery =

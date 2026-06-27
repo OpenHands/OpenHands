@@ -13,14 +13,14 @@ runs:
   using: composite
   steps:
     - name: Login to GHCR
-      uses: docker/login-action@v4
+      uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
       with:
         registry: ghcr.io
         username: ${{ github.repository_owner }}
         password: ${{ github.token }}
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
     - name: Create multi-arch manifests
       shell: bash

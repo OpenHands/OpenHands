@@ -119,7 +119,7 @@ class VerifyWebhookStatus:
         Rows with valid conditions with contain (webhook_exists=False, status=WebhookStatus.VERIFIED)
 
         Conditions we check for
-            1. Resoure exists
+            1. Resource exists
                 - user could have deleted resource
             2. User has admin access to resource
                 - user's permissions to install webhook could have changed

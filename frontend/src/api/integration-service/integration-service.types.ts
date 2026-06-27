@@ -34,8 +34,10 @@ export interface BitbucketDCResource {
   name: string;
   full_name: string;
   type: "repository";
+  connection_id: number | null;
   webhook_enrolled: boolean;
   webhook_id: string | null;
+  webhook_url: string | null;
   webhook_secret_set: boolean;
   installed_by_user_id: string | null;
   last_synced: string | null;
@@ -59,6 +61,7 @@ export interface BitbucketDCWebhookEnrollmentResult {
   repo_slug: string;
   success: boolean;
   error: string | null;
+  connection_id: number | null;
   webhook_url: string | null;
   webhook_secret: string | null;
   webhook_name: string;
@@ -75,4 +78,38 @@ export interface BitbucketDCWebhookIdUpdateResult {
   repo_slug: string;
   success: boolean;
   error: string | null;
+}
+
+export interface BitbucketDCWebhookRequest {
+  resource: BitbucketDCResourceIdentifier;
+}
+
+export interface BitbucketDCWebhookInstallationResult {
+  project_key: string;
+  repo_slug: string;
+  success: boolean;
+  error: string | null;
+  webhook_id: string | null;
+  connection_id: number | null;
+  webhook_url: string | null;
+}
+
+export interface AzureDevOpsWebhookStatus {
+  organization: string;
+  webhook_installed: boolean;
+  pr_webhook_installed: boolean;
+  work_item_webhook_installed: boolean;
+  pr_subscription_id: string | null;
+  work_item_subscription_id: string | null;
+  webhook_url: string;
+  webhook_secret_set: boolean;
+}
+
+export interface AzureDevOpsWebhookInstallationResult {
+  organization: string;
+  success: boolean;
+  error: string | null;
+  pr_subscription_id: string | null;
+  work_item_subscription_id: string | null;
+  webhook_url: string;
 }

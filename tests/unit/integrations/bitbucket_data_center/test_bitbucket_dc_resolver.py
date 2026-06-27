@@ -116,6 +116,46 @@ async def test_get_pr_comments_respects_max(svc):
 
 
 @pytest.mark.asyncio
+async def test_get_pr_comments_excludes_triggering_comment(svc):
+    activities = {
+        'values': [
+            {
+                'action': 'COMMENTED',
+                'comment': {
+                    'id': 10,
+                    'text': 'older context',
+                    'author': {'slug': 'alice'},
+                    'createdDate': 1_700_000_000_000,
+                    'updatedDate': 1_700_000_000_000,
+                },
+            },
+            {
+                'action': 'COMMENTED',
+                'comment': {
+                    'id': 11,
+                    'text': '@openhands do this',
+                    'author': {'slug': 'bob'},
+                    'createdDate': 1_700_000_001_000,
+                    'updatedDate': 1_700_000_001_000,
+                },
+            },
+        ],
+        'isLastPage': True,
+    }
+
+    with patch.object(svc, '_make_request', return_value=(activities, {})):
+        comments = await svc.get_pr_comments(
+            'PROJ',
+            'myrepo',
+            1,
+            max_comments=10,
+            exclude_comment_id=11,
+        )
+
+    assert [comment.id for comment in comments] == ['10']
+
+
+@pytest.mark.asyncio
 async def test_get_pr_comments_empty(svc):
     with patch.object(
         svc, '_make_request', return_value=({'values': [], 'isLastPage': True}, {})

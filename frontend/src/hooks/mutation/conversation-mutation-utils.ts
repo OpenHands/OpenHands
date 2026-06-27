@@ -39,12 +39,12 @@ export const pauseV1ConversationSandbox = async (conversationId: string) => {
 };
 
 /**
- * Pause a V1 conversation by fetching the conversation data and pausing it
+ * Interrupt a V1 conversation by fetching the conversation data and interrupting it
  */
-export const pauseV1Conversation = async (conversationId: string) => {
+export const interruptV1Conversation = async (conversationId: string) => {
   const { conversationUrl, sessionApiKey } =
     await fetchV1ConversationData(conversationId);
-  return V1ConversationService.pauseConversation(
+  return V1ConversationService.interruptConversation(
     conversationId,
     conversationUrl,
     sessionApiKey,
@@ -130,6 +130,22 @@ export const updateConversationSandboxStatusInCache = (
       })),
     };
   });
+};
+
+/**
+ * Optimistically updates the conversation's running model in the cache, so the
+ * chat header and switch-profile button reflect an agent-initiated LLM switch
+ * immediately (before the conversation query refetches).
+ */
+export const updateConversationLlmModelInCache = (
+  queryClient: QueryClient,
+  conversationId: string,
+  llm_model: string,
+): void => {
+  queryClient.setQueryData<V1AppConversation | null>(
+    ["user", "conversation", conversationId],
+    (oldData) => (oldData ? { ...oldData, llm_model } : oldData),
+  );
 };
 
 /**

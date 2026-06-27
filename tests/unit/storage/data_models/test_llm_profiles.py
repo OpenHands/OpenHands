@@ -83,6 +83,30 @@ def test_summaries_empty_by_default():
     assert LLMProfiles().summaries() == []
 
 
+def test_summaries_resolves_base_url_with_managed_proxy_url():
+    profiles = LLMProfiles()
+    # Managed model saved in the public SDK shape without a base_url.
+    managed_llm = LLM(model='openhands/minimax-m2.7').model_copy(
+        update={'model': 'openhands/minimax-m2.7', 'base_url': None}
+    )
+    profiles.save('managed', managed_llm)
+    # BYOR model with its own base_url.
+    profiles.save(
+        'byor', LLM(model='openai/gpt-4o', base_url='https://byor.example.com')
+    )
+
+    resolved = {
+        s['name']: s for s in profiles.summaries(managed_proxy_url='https://proxy.test')
+    }
+    # The managed profile resolves to the proxy it will actually use.
+    assert resolved['managed']['base_url'] == 'https://proxy.test'
+    # The BYOR profile keeps its own base_url.
+    assert resolved['byor']['base_url'] == 'https://byor.example.com'
+
+    # Without the proxy url, base_url is returned raw (None for the managed one).
+    assert {s['name']: s['base_url'] for s in profiles.summaries()}['managed'] is None
+
+
 # ── Mutations ─────────────────────────────────────────────────────
 
 

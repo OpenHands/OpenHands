@@ -43,4 +43,24 @@ describe("GitOrgRow", () => {
     // Assert
     expect(screen.getByTestId("claim-button-1")).toBeInTheDocument();
   });
+
+  it("renders a readable Bitbucket Data Center provider label", () => {
+    // Arrange & Act
+    renderWithProviders(
+      <GitOrgRow
+        org={createOrg({
+          provider: "bitbucket_data_center",
+          name: "PROJ",
+        })}
+        isLast={false}
+        onClaim={vi.fn()}
+        onDisconnect={vi.fn()}
+      />,
+    );
+
+    // Assert
+    expect(screen.getByTestId("org-row-1")).toHaveTextContent(
+      "Bitbucket Data Center/PROJ",
+    );
+  });
 });

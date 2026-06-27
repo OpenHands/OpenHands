@@ -13,13 +13,15 @@ is tracked as a follow-up.
 
 from __future__ import annotations
 
-from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_models import (
+    Settings,
+    _load_persisted_agent_settings,
+)
+from openhands.sdk.settings.model import AGENT_SETTINGS_SCHEMA_VERSION
 
 
 def _set_acp(
     command: list[str] | None = None,
-    *,
-    acp_env: dict | None = None,
 ) -> dict:
     return {
         'agent_settings_diff': {
@@ -27,7 +29,6 @@ def _set_acp(
             'acp_command': command
             or ['npx', '-y', '@agentclientprotocol/claude-agent-acp'],
             'acp_args': [],
-            **({'acp_env': acp_env} if acp_env is not None else {}),
         }
     }
 
@@ -79,21 +80,6 @@ def test_kind_switch_resets_new_kind_to_defaults():
     assert s.agent_settings.llm.model != 'anthropic/claude-sonnet-4-5'
 
 
-def test_acp_env_replaced_wholesale():
-    """``acp_env`` is replaced wholesale (not deep-merged) so removed keys
-    don't leak across saves.
-
-    This is independent of the kind switch: any ``acp_env`` in the update
-    payload replaces the stored dict in full.
-    """
-    s = Settings()
-    s.update(_set_acp(acp_env={'FOO': '1', 'BAR': '2'}))
-    assert s.agent_settings.acp_env == {'FOO': '1', 'BAR': '2'}
-
-    s.update({'agent_settings_diff': {'acp_env': {'FOO': '9'}}})
-    assert s.agent_settings.acp_env == {'FOO': '9'}
-
-
 def test_kind_switch_with_inline_field_override():
     """An ``agent_kind`` switch alongside other fields in the same payload
     must apply those fields on top of the fresh base.
@@ -117,3 +103,44 @@ def test_replace_mcp_config_in_kind_switch():
     s.update(_set_openhands(mcp_config={'mcpServers': {'foo': {'command': 'foo-bin'}}}))
     assert s.agent_settings.mcp_config is not None
     assert 'foo' in s.agent_settings.mcp_config.mcpServers
+
+
+def test_loader_normalizes_legacy_llm_tag_at_current_schema_version():
+    """A persisted ``agent_kind: 'llm'`` row already at the current
+    ``schema_version`` must read back as ``openhands``.
+
+    The SDK's ``llm -> openhands`` rename only fires while advancing the
+    schema version, so an ``'llm'`` payload already at the current version is
+    not migrated and would otherwise validate as the deprecated
+    ``LLMAgentSettings`` (``agent_kind == 'llm'``). The loader normalizes it so
+    every read stays on the canonical ``{openhands, acp}`` variants — this is
+    the one legitimate job the deleted force-cast used to do.
+    """
+    loaded = _load_persisted_agent_settings(
+        {
+            'agent_kind': 'llm',
+            'schema_version': AGENT_SETTINGS_SCHEMA_VERSION,
+            'llm': {'model': 'anthropic/claude-sonnet-4-5'},
+        }
+    )
+
+    assert loaded.agent_kind == 'openhands'
+    assert loaded.llm.model == 'anthropic/claude-sonnet-4-5'
+
+
+def test_loader_preserves_acp_variant_without_coercion():
+    """The loader must leave ``agent_kind: 'acp'`` alone — the ``llm``
+    normalization must not regress into the cross-variant coercion that 500'd
+    ACP settings (``ACPAgentSettings.agent_context`` is nullable; the OpenHands
+    shape rejects ``None``).
+    """
+    loaded = _load_persisted_agent_settings(
+        {
+            'agent_kind': 'acp',
+            'acp_server': 'claude-code',
+            'llm': {'model': 'litellm_proxy/anthropic/claude-sonnet-4'},
+        }
+    )
+
+    assert loaded.agent_kind == 'acp'
+    assert loaded.agent_context is None

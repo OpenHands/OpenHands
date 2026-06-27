@@ -7,6 +7,7 @@ type EventType =
   | "FileEditor"
   | "StrReplaceEditor"
   | "TaskTracker"
+  | "Task"
   | "PlanningFileEditor";
 
 type ActionOnlyType =
@@ -33,7 +34,8 @@ type ObservationEventType =
   | `${EventType}Observation`
   | "TerminalObservation"
   | "GlobObservation"
-  | "GrepObservation";
+  | "GrepObservation"
+  | "SwitchLLMObservation";
 
 export interface ActionBase<T extends ActionEventType = ActionEventType> {
   kind: T;

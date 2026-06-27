@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
@@ -13,6 +14,8 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from openhands.app_server.config import get_global_config
+
+_RESUME_RE = re.compile(r'^/api/v1/sandboxes/[^/]+/resume/?$')
 
 
 class LocalhostCORSMiddleware(CORSMiddleware):
@@ -83,7 +86,6 @@ class InMemoryRateLimiter:
         self.seconds = seconds
         self.sleep_seconds = sleep_seconds
         self.history = defaultdict(list)
-        self.sleep_seconds = sleep_seconds
 
     def _clean_old_requests(self, key: str) -> None:
         now = datetime.now()
@@ -130,7 +132,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
     def is_rate_limited_request(self, request: StarletteRequest) -> bool:
-        if request.url.path.startswith('/assets'):
-            return False
-        # Put Other non rate limited checks here
-        return True
+        return not (
+            request.url.path.startswith('/assets')
+            or self._is_sandbox_resume_request(request)
+        )
+
+    def _is_sandbox_resume_request(self, request: StarletteRequest) -> bool:
+        return request.method == 'POST' and bool(_RESUME_RE.match(request.url.path))

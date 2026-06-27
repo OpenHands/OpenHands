@@ -8,6 +8,11 @@ import pytest
 class TestDeploymentMode:
     """Tests for _get_deployment_mode() and _is_all_hands_managed_domain() functions."""
 
+    @pytest.fixture(autouse=True)
+    def _no_explicit_mode(self, monkeypatch):
+        """Host-heuristic tests must ignore any ambient OH_DEPLOYMENT_MODE."""
+        monkeypatch.delenv('OH_DEPLOYMENT_MODE', raising=False)
+
     @pytest.mark.parametrize(
         'web_host,expected_mode',
         [
@@ -33,6 +38,34 @@ class TestDeploymentMode:
         """Test that DEPLOYMENT_MODE is correctly determined based on WEB_HOST."""
         with patch.dict('os.environ', {'WEB_HOST': web_host}):
             # Need to reimport to pick up the mocked environment variable
+            import importlib
+
+            import server.constants as constants_module
+
+            importlib.reload(constants_module)
+
+            assert constants_module.DEPLOYMENT_MODE == expected_mode
+
+    @pytest.mark.parametrize(
+        'flag,web_host,expected_mode',
+        [
+            # Explicit flag wins over the host heuristic
+            ('self_hosted', 'app.all-hands.dev', 'self_hosted'),
+            ('cloud', 'openhands.acme.com', 'cloud'),
+            # Case/whitespace tolerant
+            ('  Self_Hosted ', 'app.all-hands.dev', 'self_hosted'),
+            # Invalid/empty values fall back to the host heuristic
+            ('bogus', 'app.all-hands.dev', 'cloud'),
+            ('', 'openhands.acme.com', 'self_hosted'),
+        ],
+    )
+    def test_explicit_deployment_mode_overrides_host(
+        self, flag: str, web_host: str, expected_mode: str
+    ):
+        """OH_DEPLOYMENT_MODE takes precedence; invalid values fall back to WEB_HOST."""
+        with patch.dict(
+            'os.environ', {'OH_DEPLOYMENT_MODE': flag, 'WEB_HOST': web_host}
+        ):
             import importlib
 
             import server.constants as constants_module
@@ -103,3 +136,147 @@ class TestDeploymentModeInConfig:
             assert 'FEATURE_FLAGS' in config
             assert 'DEPLOYMENT_MODE' in config['FEATURE_FLAGS']
             assert config['FEATURE_FLAGS']['DEPLOYMENT_MODE'] == 'self_hosted'
+
+
+class TestEnableAutomationsInConfig:
+    """Tests for enable_automations flag in SaaSServerConfig and get_config()."""
+
+    def test_enable_automations_true_in_feature_flags(self):
+        """Test that ENABLE_AUTOMATIONS: True is included in FEATURE_FLAGS."""
+        from server.config import SaaSServerConfig
+
+        with patch('server.config.ENABLE_AUTOMATIONS', True):
+            saas_config = SaaSServerConfig()
+            saas_config.enable_automations = True
+            config = saas_config.get_config()
+
+            assert 'FEATURE_FLAGS' in config
+            assert 'ENABLE_AUTOMATIONS' in config['FEATURE_FLAGS']
+            assert config['FEATURE_FLAGS']['ENABLE_AUTOMATIONS'] is True
+
+    def test_enable_automations_false_in_feature_flags(self):
+        """Test that ENABLE_AUTOMATIONS: False is included in FEATURE_FLAGS."""
+        from server.config import SaaSServerConfig
+
+        with patch('server.config.ENABLE_AUTOMATIONS', False):
+            saas_config = SaaSServerConfig()
+            saas_config.enable_automations = False
+            config = saas_config.get_config()
+
+            assert 'FEATURE_FLAGS' in config
+            assert 'ENABLE_AUTOMATIONS' in config['FEATURE_FLAGS']
+            assert config['FEATURE_FLAGS']['ENABLE_AUTOMATIONS'] is False
+
+    def test_enable_automations_defaults_to_true_for_saas(self):
+        """Test that enable_automations defaults to True in SaaSServerConfig (SaaS default)."""
+        import importlib
+
+        import server.auth.constants as constants_module
+
+        with patch.dict('os.environ', {}, clear=True):
+            import os
+
+            os.environ.pop('ENABLE_AUTOMATIONS', None)
+            importlib.reload(constants_module)
+            assert constants_module.ENABLE_AUTOMATIONS is True
+
+
+class TestUserProvisioningEnabled:
+    """Tests for the USER_PROVISIONING_ENABLED feature switch.
+
+    The switch is driven by the ``USER_PROVISIONING_ENABLED`` env var
+    (populated from the ``userProvisioning.enabled`` Helm value). It
+    must accept both ``'true'`` and ``'1'`` because older Helm chart
+    versions emit the latter form — accepting only one variant would
+    silently disable the feature in those deployments. See AGENTS.md
+    "Environment Variable Enable Toggles".
+    """
+
+    @pytest.mark.parametrize(
+        'env_value,expected',
+        [
+            # Truthy variants accepted by the toggle convention.
+            ('true', True),
+            ('True', True),
+            ('TRUE', True),
+            ('1', True),
+            # Falsy / unset / unknown values all disable the feature.
+            ('false', False),
+            ('False', False),
+            ('0', False),
+            ('', False),
+            ('yes', False),  # Not part of the documented accepted set.
+            ('on', False),
+        ],
+    )
+    def test_user_provisioning_enabled_truthy_parsing(
+        self, env_value: str, expected: bool
+    ) -> None:
+        with patch.dict('os.environ', {'USER_PROVISIONING_ENABLED': env_value}):
+            import importlib
+
+            import server.constants as constants_module
+
+            importlib.reload(constants_module)
+            assert constants_module.USER_PROVISIONING_ENABLED is expected
+
+    def test_user_provisioning_enabled_default_is_false(self) -> None:
+        """When the env var is unset, the feature must default to off."""
+        with patch.dict('os.environ', {}, clear=True):
+            import importlib
+            import os
+
+            os.environ.pop('USER_PROVISIONING_ENABLED', None)
+            import server.constants as constants_module
+
+            importlib.reload(constants_module)
+            assert constants_module.USER_PROVISIONING_ENABLED is False
+
+
+class TestOpenOrgCreationEnabled:
+    """Tests for the OPEN_ORG_CREATION_ENABLED feature switch.
+
+    Must accept both ``'true'`` and ``'1'`` per the documented enable-toggle
+    convention so that older Helm chart versions emitting ``'1'`` keep the
+    feature working. See AGENTS.md "Environment Variable Enable Toggles".
+    """
+
+    @pytest.mark.parametrize(
+        'env_value,expected',
+        [
+            # Truthy variants accepted by the toggle convention.
+            ('true', True),
+            ('True', True),
+            ('TRUE', True),
+            ('1', True),
+            # Falsy / unset / unknown values all disable the feature.
+            ('false', False),
+            ('False', False),
+            ('0', False),
+            ('', False),
+            ('yes', False),  # Not part of the documented accepted set.
+            ('on', False),
+        ],
+    )
+    def test_open_org_creation_enabled_truthy_parsing(
+        self, env_value: str, expected: bool
+    ) -> None:
+        with patch.dict('os.environ', {'OPEN_ORG_CREATION_ENABLED': env_value}):
+            import importlib
+
+            import server.constants as constants_module
+
+            importlib.reload(constants_module)
+            assert constants_module.OPEN_ORG_CREATION_ENABLED is expected
+
+    def test_open_org_creation_enabled_default_is_false(self) -> None:
+        """When the env var is unset, the feature must default to off."""
+        with patch.dict('os.environ', {}, clear=True):
+            import importlib
+            import os
+
+            os.environ.pop('OPEN_ORG_CREATION_ENABLED', None)
+            import server.constants as constants_module
+
+            importlib.reload(constants_module)
+            assert constants_module.OPEN_ORG_CREATION_ENABLED is False

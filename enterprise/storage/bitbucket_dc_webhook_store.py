@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, delete, or_, select, update
 from storage.bitbucket_dc_webhook import BitbucketDCWebhook
 from storage.database import a_session_maker
 
@@ -32,6 +32,16 @@ class BitbucketDCWebhookStore:
             webhook = result.scalars().first()
             return webhook.webhook_secret if webhook else None
 
+    async def get_webhook_by_id(self, webhook_id: int) -> BitbucketDCWebhook | None:
+        async with a_session_maker() as session:
+            query = (
+                select(BitbucketDCWebhook)
+                .where(BitbucketDCWebhook.id == webhook_id)
+                .limit(1)
+            )
+            result = await session.execute(query)
+            return result.scalars().first()
+
     async def get_webhook_user_id(self, project_key: str, repo_slug: str) -> str | None:
         async with a_session_maker() as session:
             query = (
@@ -44,6 +54,45 @@ class BitbucketDCWebhookStore:
             )
             result = await session.execute(query)
             return result.scalar_one_or_none()
+
+    async def ensure_webhook_enrollment(
+        self,
+        *,
+        project_key: str,
+        repo_slug: str,
+        user_id: str,
+    ) -> BitbucketDCWebhook:
+        """Ensure a local row exists so its id can be used in webhook URLs.
+
+        This intentionally does not rotate an existing secret. Automatic
+        reinstall first needs a stable row id to build the provider webhook URL;
+        the active secret is updated only after the Bitbucket-side write
+        succeeds.
+        """
+        async with a_session_maker() as session:
+            async with session.begin():
+                query = (
+                    select(BitbucketDCWebhook)
+                    .where(
+                        BitbucketDCWebhook.project_key == project_key,
+                        BitbucketDCWebhook.repo_slug == repo_slug,
+                    )
+                    .limit(1)
+                )
+                result = await session.execute(query)
+                webhook = result.scalars().first()
+
+                if not webhook:
+                    webhook = BitbucketDCWebhook(
+                        project_key=project_key,
+                        repo_slug=repo_slug,
+                        user_id=user_id,
+                        webhook_secret=None,
+                    )
+                    session.add(webhook)
+
+            await session.refresh(webhook)
+            return webhook
 
     async def get_webhook_by_repo(
         self, project_key: str, repo_slug: str
@@ -138,6 +187,22 @@ class BitbucketDCWebhookStore:
                         webhook_id=webhook_id,
                         last_synced=datetime.now(timezone.utc),
                     )
+                )
+                result = await session.execute(stmt)
+                return result.rowcount > 0
+
+    async def delete_webhook_by_repo(self, *, project_key: str, repo_slug: str) -> bool:
+        """Remove the enrollment row for ``(project_key, repo_slug)``.
+
+        Returns ``True`` when a row was deleted, ``False`` if none existed
+        — uninstall is idempotent at the route layer so the caller treats
+        both as success.
+        """
+        async with a_session_maker() as session:
+            async with session.begin():
+                stmt = delete(BitbucketDCWebhook).where(
+                    BitbucketDCWebhook.project_key == project_key,
+                    BitbucketDCWebhook.repo_slug == repo_slug,
                 )
                 result = await session.execute(stmt)
                 return result.rowcount > 0

@@ -95,8 +95,13 @@ class SlackMessageView:
         )
 
 
+@dataclass
 class SlackViewInterface(SlackMessageView, SummaryExtractionTracker, ABC):
     """Interface for authenticated Slack views that can create conversations.
+
+    Note: The @dataclass decorator is required to resolve __replace__ method
+    incompatibility between parent dataclasses (SlackMessageView and
+    SummaryExtractionTracker). See: https://github.com/python/mypy/issues/5580
 
     All fields are required (non-None) because this interface is only used
     for users who have linked their Slack account to OpenHands.

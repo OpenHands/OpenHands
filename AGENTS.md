@@ -44,6 +44,12 @@ then re-run the command to ensure it passes. Common issues include:
 - Be especially careful with `git reset --hard` after staging files, as it will remove accidentally staged files
 - When remote has new changes, use `git fetch upstream && git rebase upstream/<branch>` on the same branch
 
+## GitHub Actions
+
+- Pin external third-party actions to a full 40-character commit SHA, with the version tag in a trailing comment (e.g. `uses: owner/repo@<sha> # v1.2.3`). Do not use mutable tags (`@v1`) or branches for third-party actions.
+- GitHub-authored (`actions/*`, `github/*`) and first-party (`OpenHands/*`) actions are currently exempt.
+- Dependabot's `github-actions` ecosystem bumps the pinned SHA and the trailing comment under the configured cooldown, so pinning does not block security or version updates.
+
 ## Lockfile Regeneration (Preserve Original Tool Versions)
 
 When regenerating lockfiles (poetry.lock, uv.lock, etc.), you MUST use the same tool version that originally generated the lockfile to avoid unnecessary diff noise. Each lockfile contains a version header indicating which tool version was used.
@@ -279,6 +285,9 @@ Each integration follows a consistent pattern with service classes, storage mode
 ## Template for Github Pull Request
 
 If you are starting a pull request (PR), please follow the template in `.github/pull_request_template.md`.
+- The PR template now starts with a `HUMAN:` section, the human-tested checkbox, and an `AGENT:` section.
+- `.github/workflows/pr-readiness-confirm.yml` checks non-draft PRs for non-empty text between `HUMAN:` and the human-tested checkbox; if present it adds a 👍 reaction, and if absent it posts a reminder comment.
+
 
 ## Implementation Details
 
@@ -497,3 +506,9 @@ Called by `workspace.get_llm()` in the SDK to retrieve LLM config with the API k
 - `openhands/sdk/llm/llm.py`: `LLM.api_key` accepts `SecretSource` (including `LookupSecret`)
 - `openhands/workspace/cloud/workspace.py`: `get_llm()` and `get_secrets()` return LookupSecret-backed objects
 - Tests: `tests/sdk/llm/test_llm_secret_source_api_key.py`, `tests/workspace/test_cloud_workspace_sdk_settings.py`
+
+### Issue Triage Automation
+
+- `.github/workflows/issue-opened.yml` has a second issue-opened job that auto-applies `good first issue` after the duplicate check completes.
+- The duplicate check is used only as a veto/guardrail for `good first issue` automation: duplicate or overlapping-scope issues should not be auto-labeled.
+- The OpenHands classifier logic for newcomer suitability lives in `scripts/issue_good_first_issue_check_openhands.py`, with focused unit coverage in `tests/unit/test_issue_good_first_issue_check_openhands.py`.

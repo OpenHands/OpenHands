@@ -17,6 +17,8 @@ from google.cloud.sql.connector import Connector  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 from storage.base import Base  # noqa: E402
 
+from openhands.db.ssl import build_db_url_query, build_pg8000_connect_args  # noqa: E402
+
 target_metadata = Base.metadata
 
 DB_USER = os.getenv('DB_USER', 'postgres')
@@ -24,6 +26,12 @@ DB_PASS = os.getenv('DB_PASS', 'postgres')
 DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_PORT = os.getenv('DB_PORT', '5432')
 DB_NAME = os.getenv('DB_NAME', 'openhands')
+# Driver for the non-Cloud-SQL (DB_HOST) path used by feature/local/CI. Production
+# connects through the Cloud SQL connector on pg8000, so we default to pg8000 here
+# too: this keeps every environment on the same driver and lets pg8000-specific
+# migration failures surface before deploy. Set DB_DRIVER='' to use psycopg2.
+DB_DRIVER = os.getenv('DB_DRIVER', 'pg8000')
+DB_SSL_MODE = os.getenv('DB_SSL_MODE') or os.getenv('PGSSLMODE')
 
 GCP_DB_INSTANCE = os.getenv('GCP_DB_INSTANCE')
 GCP_PROJECT = os.getenv('GCP_PROJECT')
@@ -56,12 +64,18 @@ def get_engine(database_name=DB_NAME):
             pool_pre_ping=True,
         )
     else:
-        url = f'postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{database_name}'
+        scheme = f'postgresql+{DB_DRIVER}' if DB_DRIVER else 'postgresql'
+        url = f'{scheme}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{database_name}'
+        if DB_DRIVER != 'pg8000':
+            url += build_db_url_query(DB_SSL_MODE)
         return create_engine(
             url,
             pool_size=POOL_SIZE,
             max_overflow=MAX_OVERFLOW,
             pool_pre_ping=True,
+            connect_args=(
+                build_pg8000_connect_args(DB_SSL_MODE) if DB_DRIVER == 'pg8000' else {}
+            ),
         )
 
 

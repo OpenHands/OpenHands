@@ -1,14 +1,17 @@
 import logging
+from typing import ClassVar
 from uuid import UUID
 
 import httpx
 from integrations.utils import format_jira_comment_body, get_summary_instruction
 from pydantic import Field
+from server.auth.constants import JIRA_HTTP_TIMEOUT
 
 from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
+    EventKind,
 )
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
@@ -30,6 +33,8 @@ JIRA_CLOUD_API_URL = 'https://api.atlassian.com/ex/jira'
 
 class JiraV1CallbackProcessor(EventCallbackProcessor):
     """Callback processor for Jira V1 integrations."""
+
+    event_kind: ClassVar[EventKind] = 'ConversationStateUpdateEvent'
 
     should_request_summary: bool = Field(default=True)
     svc_acc_email: str
@@ -127,9 +132,9 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
                 app_conversation_info.sandbox_id,
             )
 
-            assert (
-                sandbox.session_api_key is not None
-            ), f'No session API key for sandbox: {sandbox.id}'
+            assert sandbox.session_api_key is not None, (
+                f'No session API key for sandbox: {sandbox.id}'
+            )
 
             # 3. URL + instruction
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)
@@ -158,8 +163,8 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
         send_message_request = AskAgentRequest(question=message_content)
 
         url = (
-            f"{agent_server_url.rstrip('/')}"
-            f"/api/conversations/{conversation_id}/ask_agent"
+            f'{agent_server_url.rstrip("/")}'
+            f'/api/conversations/{conversation_id}/ask_agent'
         )
         headers = {'X-Session-API-Key': session_api_key}
         payload = send_message_request.model_dump()
@@ -169,7 +174,7 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
                 url,
                 json=payload,
                 headers=headers,
-                timeout=30.0,
+                timeout=JIRA_HTTP_TIMEOUT,
             )
             response.raise_for_status()
 
@@ -197,7 +202,9 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
             raise Exception(f'Failed to send message to agent server: {error_detail}')
 
         except httpx.TimeoutException:
-            error_detail = f'Request timeout after 30 seconds to {url}'
+            error_detail = (
+                f'Request timeout after {JIRA_HTTP_TIMEOUT:g} seconds to {url}'
+            )
             _logger.exception(
                 '[Jira] Timeout error: %s. Request payload: %s',
                 error_detail,
@@ -228,7 +235,9 @@ class JiraV1CallbackProcessor(EventCallbackProcessor):
         message = f'OpenHands resolved this issue:\n\n{summary}'
         comment_body = format_jira_comment_body(message)
 
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=JIRA_HTTP_TIMEOUT
+        ) as client:
             response = await client.post(
                 comment_url,
                 auth=(self.svc_acc_email, self.decrypted_api_key),

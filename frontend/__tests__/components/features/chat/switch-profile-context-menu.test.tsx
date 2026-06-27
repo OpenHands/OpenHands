@@ -62,6 +62,12 @@ describe("SwitchProfileContextMenu", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows each profile's provider/model under its name", () => {
+    renderMenu();
+    expect(screen.getByText("anthropic/claude-sonnet-4-6")).toBeInTheDocument();
+    expect(screen.getByText("openai/gpt-5")).toBeInTheDocument();
+  });
+
   it("marks the active profile with aria-current=true and others without", () => {
     renderMenu({ activeProfileName: "gpt-5" });
     expect(screen.getByTestId("switch-profile-option-gpt-5")).toHaveAttribute(

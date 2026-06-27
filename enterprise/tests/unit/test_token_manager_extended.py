@@ -229,6 +229,38 @@ async def test_get_idp_token(token_manager, create_keycloak_user_info):
 
 
 @pytest.mark.asyncio
+async def test_get_idp_token_by_user_id(token_manager):
+    """Resolving an IDP token by user_id needs no Keycloak userinfo round-trip.
+
+    The token is read from the auth_tokens store (and refreshed via the
+    provider's OAuth endpoint), so this path is independent of the user's
+    Keycloak offline session.
+    """
+    with (
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info',
+            AsyncMock(),
+        ) as mock_get_user_info,
+        patch('server.auth.token_manager.AuthTokenStore') as mock_token_store_cls,
+    ):
+        mock_token_store = AsyncMock()
+        mock_token_store.return_value.load_tokens.return_value = {
+            'access_token': token_manager.encrypt_text('github_access_token'),
+        }
+        mock_token_store_cls.get_instance = mock_token_store
+
+        token = await token_manager.get_idp_token_by_user_id(
+            'test_user_id', ProviderType.GITHUB
+        )
+
+        assert token == 'github_access_token'
+        mock_token_store_cls.get_instance.assert_called_once_with(
+            keycloak_user_id='test_user_id', idp=ProviderType.GITHUB
+        )
+        mock_get_user_info.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_refresh(token_manager):
     """Test refreshing a token."""
     mock_tokens = {
@@ -450,6 +482,102 @@ class TestRefreshBitbucketDataCenterToken:
                 await token_manager._refresh_bitbucket_data_center_token(
                     'old_refresh_token'
                 )
+
+
+class TestRefreshAzureDevOpsToken:
+    """Tests for the _refresh_azure_devops_token code path."""
+
+    @pytest.mark.asyncio
+    async def test_happy_path(self, token_manager):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
+            'access_token': 'new_azure_access',
+            'refresh_token': 'new_azure_refresh',
+            'expires_in': 3600,
+            'refresh_token_expires_in': 86400,
+        }
+
+        with (
+            patch('server.auth.token_manager.AZURE_DEVOPS_TENANT_ID', 'tenant-id'),
+            patch('server.auth.token_manager.AZURE_DEVOPS_CLIENT_ID', 'client-id'),
+            patch(
+                'server.auth.token_manager.AZURE_DEVOPS_CLIENT_SECRET',
+                'client-secret',
+            ),
+            patch(
+                'server.auth.token_manager.AZURE_DEVOPS_SCOPE',
+                'https://app.vssps.visualstudio.com/.default',
+            ),
+            patch(
+                'server.auth.token_manager.AZURE_DEVOPS_TOKEN_URL',
+                'https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token',
+            ),
+            patch('httpx.AsyncClient') as mock_client_cls,
+        ):
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client
+            )
+            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await token_manager._refresh_azure_devops_token(
+                'old_refresh_token'
+            )
+
+        mock_client.post.assert_called_once_with(
+            'https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token',
+            data={
+                'client_id': 'client-id',
+                'client_secret': 'client-secret',
+                'refresh_token': 'old_refresh_token',
+                'grant_type': 'refresh_token',
+                'scope': 'https://app.vssps.visualstudio.com/.default',
+            },
+        )
+        assert result['access_token'] == 'new_azure_access'
+        assert result['refresh_token'] == 'new_azure_refresh'
+
+    @pytest.mark.asyncio
+    async def test_reuses_existing_refresh_token_when_response_omits_one(
+        self, token_manager
+    ):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
+            'access_token': 'new_azure_access',
+            'expires_in': 3600,
+        }
+
+        with (
+            patch('server.auth.token_manager.AZURE_DEVOPS_TENANT_ID', 'tenant-id'),
+            patch('server.auth.token_manager.AZURE_DEVOPS_CLIENT_ID', 'client-id'),
+            patch(
+                'server.auth.token_manager.AZURE_DEVOPS_CLIENT_SECRET',
+                'client-secret',
+            ),
+            patch('httpx.AsyncClient') as mock_client_cls,
+        ):
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client
+            )
+            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await token_manager._refresh_azure_devops_token(
+                'old_refresh_token'
+            )
+
+        assert result['access_token'] == 'new_azure_access'
+        assert result['refresh_token'] == 'old_refresh_token'
+
+    @pytest.mark.asyncio
+    async def test_missing_config_raises_value_error(self, token_manager):
+        with patch('server.auth.token_manager.AZURE_DEVOPS_TENANT_ID', ''):
+            with pytest.raises(ValueError, match='Azure DevOps OAuth'):
+                await token_manager._refresh_azure_devops_token('refresh-token')
 
 
 class TestOrgTokenMethods:

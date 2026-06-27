@@ -19,6 +19,7 @@ from server.routes.auth import (
 )
 
 from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.user_auth.user_auth import AuthType
 
 
 def create_mock_user_authorizer(success: bool = True, error_detail: str | None = None):
@@ -871,7 +872,12 @@ async def test_authenticate_failure():
     with patch('server.routes.auth.get_access_token') as mock_get_token:
         mock_get_token.side_effect = AuthError()
 
-        result = await authenticate(MagicMock())
+        # request.cookies is a real Mapping[str, str] in production; give the
+        # mock a concrete dict so the cookie-clearing path (which now
+        # reassembles chunked cookies) reads strings rather than MagicMocks.
+        request = MagicMock()
+        request.cookies = {'keycloak_auth': 'some-token'}
+        result = await authenticate(request)
 
         assert isinstance(result, JSONResponse)
         assert result.status_code == status.HTTP_401_UNAUTHORIZED
@@ -921,6 +927,61 @@ async def test_logout_without_refresh_token():
 
             mock_token_manager.logout.assert_not_called()
             assert 'set-cookie' in result.headers
+
+
+@pytest.mark.asyncio
+async def test_logout_with_bearer_auth_does_not_revoke_offline_token():
+    """``/api/logout`` must not revoke the offline_token for bearer auth.
+
+    A logout call that resolves to a *bearer* auth user (e.g., the
+    browser also carried an ``Authorization: Bearer <api-key>`` header)
+    must NOT invoke Keycloak's logout — that would revoke the user's
+    offline session and break every API key minted for them. The cookie
+    itself must still be deleted.
+    """
+    mock_request = MagicMock()
+    mock_request.state.user_auth = SaasUserAuth(
+        refresh_token=SecretStr('the-users-offline-token'),
+        user_id='test_user_id',
+        auth_type=AuthType.BEARER,
+    )
+
+    with patch('server.routes.auth.token_manager') as mock_token_manager:
+        mock_token_manager.logout = AsyncMock()
+        result = await logout(mock_request)
+
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == status.HTTP_200_OK
+        assert 'User logged out' in result.body.decode()
+
+        # The offline token must NOT be revoked by a browser logout click.
+        mock_token_manager.logout.assert_not_called()
+        # The cookie itself is always removed.
+        assert 'set-cookie' in result.headers
+
+
+@pytest.mark.asyncio
+async def test_logout_with_cookie_auth_terminates_keycloak_session():
+    """Cookie-auth logout still terminates the Keycloak session.
+
+    The bearer-auth guard added to ``/api/logout`` must not regress this
+    common case.
+    """
+    mock_request = MagicMock()
+    mock_request.state.user_auth = SaasUserAuth(
+        refresh_token=SecretStr('cookie-refresh-token'),
+        user_id='test_user_id',
+        auth_type=AuthType.COOKIE,
+    )
+
+    with patch('server.routes.auth.token_manager') as mock_token_manager:
+        mock_token_manager.logout = AsyncMock()
+        result = await logout(mock_request)
+
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == status.HTTP_200_OK
+        mock_token_manager.logout.assert_awaited_once_with('cookie-refresh-token')
+        assert 'set-cookie' in result.headers
 
 
 @pytest.mark.asyncio
@@ -1401,7 +1462,7 @@ class TestKeycloakCallbackRecaptcha:
     """Tests for reCAPTCHA integration in keycloak_callback()."""
 
     @pytest.mark.asyncio
-    async def test_should_verify_recaptcha_and_allow_login_when_score_is_high(
+    async def test_login_allows_when_recaptcha_score_is_high(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that login proceeds when reCAPTCHA score is high."""
@@ -1491,7 +1552,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_recaptcha_service.create_assessment.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_should_block_login_when_recaptcha_score_is_low(
+    async def test_login_blocks_when_recaptcha_score_is_low(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that login is blocked and redirected when reCAPTCHA score is low."""
@@ -1562,7 +1623,7 @@ class TestKeycloakCallbackRecaptcha:
             assert 'recaptcha_blocked=true' in result.headers['location']
 
     @pytest.mark.asyncio
-    async def test_should_extract_ip_from_x_forwarded_for_header(
+    async def test_login_extracts_ip_from_x_forwarded_for(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that IP is extracted from X-Forwarded-For header when present."""
@@ -1653,7 +1714,7 @@ class TestKeycloakCallbackRecaptcha:
             assert call_args[1]['user_ip'] == '192.168.1.1'
 
     @pytest.mark.asyncio
-    async def test_should_use_client_host_when_x_forwarded_for_missing(
+    async def test_login_uses_client_host_when_x_forwarded_for_missing(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that client.host is used when X-Forwarded-For is missing."""
@@ -1745,7 +1806,7 @@ class TestKeycloakCallbackRecaptcha:
             assert call_args[1]['user_ip'] == '192.168.1.2'
 
     @pytest.mark.asyncio
-    async def test_should_use_unknown_ip_when_client_is_none(
+    async def test_login_uses_unknown_ip_when_client_is_none(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that 'unknown' IP is used when client is None."""
@@ -1836,7 +1897,7 @@ class TestKeycloakCallbackRecaptcha:
             assert call_args[1]['user_ip'] == 'unknown'
 
     @pytest.mark.asyncio
-    async def test_should_include_email_in_assessment_when_available(
+    async def test_login_includes_email_in_assessment(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that email is included in assessment when available."""
@@ -1924,7 +1985,7 @@ class TestKeycloakCallbackRecaptcha:
             assert call_args[1]['email'] == 'user@example.com'
 
     @pytest.mark.asyncio
-    async def test_should_skip_recaptcha_when_site_key_not_configured(
+    async def test_login_skips_recaptcha_when_site_key_not_configured(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that reCAPTCHA is skipped when RECAPTCHA_SITE_KEY is not configured."""
@@ -2003,7 +2064,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_recaptcha_service.create_assessment.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_should_skip_recaptcha_when_token_is_missing(
+    async def test_login_skips_recaptcha_when_token_is_missing(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that reCAPTCHA is skipped when token is missing from state."""
@@ -2076,7 +2137,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_recaptcha_service.create_assessment.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_should_fail_open_when_recaptcha_service_throws_exception(
+    async def test_login_fails_open_when_recaptcha_raises(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that login proceeds (fail open) when reCAPTCHA service throws exception."""
@@ -2166,7 +2227,7 @@ class TestKeycloakCallbackRecaptcha:
             assert len(recaptcha_error_calls) > 0
 
     @pytest.mark.asyncio
-    async def test_should_log_warning_when_recaptcha_blocks_user(
+    async def test_login_logs_warning_when_recaptcha_blocks(
         self, mock_request, mock_background_tasks, create_keycloak_user_info
     ):
         """Test that warning is logged when reCAPTCHA blocks user."""

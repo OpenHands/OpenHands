@@ -73,6 +73,10 @@ class HTTPClient(ABC):
         """Execute an HTTP request using the provided client."""
         if method == RequestMethod.POST:
             return await client.post(url, headers=headers, json=params)
+        if method == RequestMethod.PUT:
+            return await client.put(url, headers=headers, json=params)
+        if method == RequestMethod.DELETE:
+            return await client.delete(url, headers=headers, params=params)
         return await client.get(url, headers=headers, params=params)
 
     def handle_http_status_error(

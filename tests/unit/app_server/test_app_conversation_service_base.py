@@ -16,7 +16,8 @@ from openhands.app_server.app_conversation.app_conversation_models import AgentT
 from openhands.app_server.app_conversation.app_conversation_service_base import (
     AppConversationServiceBase,
 )
-from openhands.app_server.sandbox.sandbox_models import SandboxInfo
+from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxStatus
 from openhands.app_server.user.user_context import UserContext
 from openhands.sdk.skills import Skill
 
@@ -25,10 +26,14 @@ class MockUserInfo:
     """Mock class for UserInfo to simulate user settings."""
 
     def __init__(
-        self, git_user_name: str | None = None, git_user_email: str | None = None
+        self,
+        git_user_name: str | None = None,
+        git_user_email: str | None = None,
+        git_full_clone: bool = False,
     ):
         self.git_user_name = git_user_name
         self.git_user_email = git_user_email
+        self.git_full_clone = git_full_clone
 
 
 class MockCommandResult:
@@ -763,12 +768,113 @@ def mock_workspace():
 
 
 @pytest.mark.asyncio
+async def test_clone_or_init_git_repo_uses_shallow_clone_by_default(mock_workspace):
+    user_info = MockUserInfo()
+    service, mock_user_context = _create_service_with_mock_user_context(
+        user_info,
+        bind_methods=(
+            'clone_or_init_git_repo',
+            '_get_azure_devops_bearer_token_for_git',
+        ),
+    )
+    service.init_git_in_empty_workspace = True
+    mock_user_context.get_authenticated_git_url = AsyncMock(
+        return_value='https://github.com/owner/repo.git'
+    )
+
+    task = Mock()
+    task.request = Mock(
+        selected_repository='owner/repo',
+        selected_branch=None,
+        git_provider=ProviderType.GITHUB,
+    )
+
+    await service.clone_or_init_git_repo(task, mock_workspace)
+
+    mock_workspace.execute_command.assert_any_call(
+        'git clone --depth 1 https://github.com/owner/repo.git repo',
+        mock_workspace.working_dir,
+        120,
+    )
+
+
+@pytest.mark.asyncio
+async def test_clone_or_init_git_repo_shallow_clones_selected_branch(mock_workspace):
+    user_info = MockUserInfo()
+    service, mock_user_context = _create_service_with_mock_user_context(
+        user_info,
+        bind_methods=(
+            'clone_or_init_git_repo',
+            '_get_azure_devops_bearer_token_for_git',
+        ),
+    )
+    service.init_git_in_empty_workspace = True
+    mock_user_context.get_authenticated_git_url = AsyncMock(
+        return_value='https://github.com/owner/repo.git'
+    )
+
+    task = Mock()
+    task.request = Mock(
+        selected_repository='owner/repo',
+        selected_branch='feature-branch',
+        git_provider=ProviderType.GITHUB,
+    )
+
+    await service.clone_or_init_git_repo(task, mock_workspace)
+
+    mock_workspace.execute_command.assert_any_call(
+        'git clone --depth 1 --branch feature-branch https://github.com/owner/repo.git repo',
+        mock_workspace.working_dir,
+        120,
+    )
+
+
+@pytest.mark.asyncio
+async def test_clone_or_init_git_repo_preserves_full_clone_when_enabled(
+    mock_workspace,
+):
+    user_info = MockUserInfo(git_full_clone=True)
+    service, mock_user_context = _create_service_with_mock_user_context(
+        user_info,
+        bind_methods=(
+            'clone_or_init_git_repo',
+            '_get_azure_devops_bearer_token_for_git',
+        ),
+    )
+    service.init_git_in_empty_workspace = True
+    mock_user_context.get_authenticated_git_url = AsyncMock(
+        return_value='https://github.com/owner/repo.git'
+    )
+
+    task = Mock()
+    task.request = Mock(
+        selected_repository='owner/repo',
+        selected_branch='feature-branch',
+        git_provider=ProviderType.GITHUB,
+    )
+
+    await service.clone_or_init_git_repo(task, mock_workspace)
+
+    mock_workspace.execute_command.assert_any_call(
+        'git clone https://github.com/owner/repo.git repo',
+        mock_workspace.working_dir,
+        120,
+    )
+    commands = [call.args[0] for call in mock_workspace.execute_command.call_args_list]
+    assert not any('git clone --depth 1' in command for command in commands)
+
+
+@pytest.mark.asyncio
 async def test_clone_or_init_git_repo_quotes_selected_branch_before_checkout(
     mock_workspace,
 ):
     user_info = MockUserInfo()
     service, mock_user_context = _create_service_with_mock_user_context(
-        user_info, bind_methods=('clone_or_init_git_repo',)
+        user_info,
+        bind_methods=(
+            'clone_or_init_git_repo',
+            '_get_azure_devops_bearer_token_for_git',
+        ),
     )
     service.init_git_in_empty_workspace = True
     mock_user_context.get_authenticated_git_url = AsyncMock(
@@ -786,6 +892,104 @@ async def test_clone_or_init_git_repo_quotes_selected_branch_before_checkout(
     mock_workspace.execute_command.assert_any_call(
         "git checkout 'feature>tmp'",
         Path(mock_workspace.working_dir) / 'repo',
+    )
+
+
+@pytest.mark.asyncio
+async def test_clone_or_init_git_repo_configures_dynamic_azure_devops_helper(
+    mock_workspace,
+):
+    user_info = MockUserInfo()
+    service, mock_user_context = _create_service_with_mock_user_context(
+        user_info,
+        bind_methods=(
+            'clone_or_init_git_repo',
+            '_get_azure_devops_bearer_token_for_git',
+            '_configure_azure_devops_git_credential_helper',
+        ),
+    )
+    service.init_git_in_empty_workspace = True
+    mock_user_context.get_authenticated_git_url = AsyncMock(
+        return_value='https://dev.azure.com/org/project/_git/repo'
+    )
+    mock_user_context.get_latest_token = AsyncMock(
+        return_value='header.payload.signature'
+    )
+    task = Mock()
+    task.request = Mock(
+        selected_repository='org/project/repo',
+        selected_branch='main',
+        git_provider=ProviderType.AZURE_DEVOPS,
+    )
+    sandbox = SandboxInfo(
+        id='sandbox-123',
+        created_by_user_id='user-123',
+        sandbox_spec_id='spec-123',
+        status=SandboxStatus.RUNNING,
+        session_api_key='session-key',
+    )
+
+    await service.clone_or_init_git_repo(task, mock_workspace, sandbox)
+
+    commands = [call.args[0] for call in mock_workspace.execute_command.call_args_list]
+    assert any(
+        "git -c http.extraheader='Authorization: Bearer header.payload.signature' clone --depth 1 --branch main"
+        in command
+        for command in commands
+    )
+    helper_command = next(
+        command
+        for command in commands
+        if 'openhands-azure-devops-credential-helper' in command
+    )
+    assert (
+        '/api/v1/sandboxes/sandbox-123/settings/secrets/azure_devops_token'
+        in helper_command
+    )
+    assert (
+        'git config --local --unset-all http.https://dev.azure.com/org/.extraheader'
+        in helper_command
+    )
+    assert 'credential.https://dev.azure.com/org.helper' in helper_command
+    assert not any(
+        command.startswith(
+            'git config --local http.https://dev.azure.com/org/.extraheader'
+        )
+        for command in commands
+    )
+
+
+@pytest.mark.asyncio
+async def test_azure_devops_git_credential_helper_logs_without_web_url(
+    mock_workspace,
+):
+    user_info = MockUserInfo()
+    service, _ = _create_service_with_mock_user_context(
+        user_info,
+        bind_methods=('_configure_azure_devops_git_credential_helper',),
+    )
+    service.web_url = None
+    sandbox = SandboxInfo(
+        id='sandbox-123',
+        created_by_user_id='user-123',
+        sandbox_spec_id='spec-123',
+        status=SandboxStatus.RUNNING,
+        session_api_key='session-key',
+    )
+
+    with patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base._logger.debug'
+    ) as mock_debug:
+        await service._configure_azure_devops_git_credential_helper(
+            mock_workspace,
+            Path(mock_workspace.working_dir),
+            'org/project/repo',
+            sandbox,
+        )
+
+    mock_debug.assert_called_once_with(
+        'Azure DevOps git credential helper has no configured web_url; '
+        'it will rely on OH_WEBHOOKS_0_BASE_URL at runtime.'
     )
 
 
@@ -1021,7 +1225,7 @@ class TestLoadAndMergeAllSkills:
         'openhands.app_server.app_conversation.app_conversation_service_base.load_skills_from_agent_server'
     )
     @patch(
-        'openhands.app_server.app_conversation.app_conversation_service_base.build_org_config'
+        'openhands.app_server.app_conversation.app_conversation_service_base.build_org_configs'
     )
     @patch(
         'openhands.app_server.app_conversation.app_conversation_service_base.build_sandbox_config'
@@ -1029,7 +1233,7 @@ class TestLoadAndMergeAllSkills:
     async def test_loads_skills_successfully(
         self,
         mock_build_sandbox_config,
-        mock_build_org_config,
+        mock_build_org_configs,
         mock_load_skills,
     ):
         """Test successfully loading skills from agent-server."""
@@ -1058,7 +1262,7 @@ class TestLoadAndMergeAllSkills:
             skill2.name = 'skill2'
 
             mock_load_skills.return_value = [skill1, skill2]
-            mock_build_org_config.return_value = {'repository': 'owner/repo'}
+            mock_build_org_configs.return_value = []
             mock_build_sandbox_config.return_value = {'exposed_urls': []}
 
             # Act
@@ -1112,7 +1316,7 @@ class TestLoadAndMergeAllSkills:
         'openhands.app_server.app_conversation.app_conversation_service_base.load_skills_from_agent_server'
     )
     @patch(
-        'openhands.app_server.app_conversation.app_conversation_service_base.build_org_config'
+        'openhands.app_server.app_conversation.app_conversation_service_base.build_org_configs'
     )
     @patch(
         'openhands.app_server.app_conversation.app_conversation_service_base.build_sandbox_config'
@@ -1120,7 +1324,7 @@ class TestLoadAndMergeAllSkills:
     async def test_uses_project_dir_when_no_repository(
         self,
         mock_build_sandbox_config,
-        mock_build_org_config,
+        mock_build_org_configs,
         mock_load_skills,
     ):
         """Test uses project_dir directly when no repository is selected."""
@@ -1142,7 +1346,7 @@ class TestLoadAndMergeAllSkills:
             sandbox.session_api_key = 'test-key'
 
             mock_load_skills.return_value = []
-            mock_build_org_config.return_value = None
+            mock_build_org_configs.return_value = []
             mock_build_sandbox_config.return_value = None
 
             # Act
@@ -1159,7 +1363,7 @@ class TestLoadAndMergeAllSkills:
         'openhands.app_server.app_conversation.app_conversation_service_base.load_skills_from_agent_server'
     )
     @patch(
-        'openhands.app_server.app_conversation.app_conversation_service_base.build_org_config'
+        'openhands.app_server.app_conversation.app_conversation_service_base.build_org_configs'
     )
     @patch(
         'openhands.app_server.app_conversation.app_conversation_service_base.build_sandbox_config'
@@ -1167,7 +1371,7 @@ class TestLoadAndMergeAllSkills:
     async def test_handles_exception_gracefully(
         self,
         mock_build_sandbox_config,
-        mock_build_org_config,
+        mock_build_org_configs,
         mock_load_skills,
     ):
         """Test handles exceptions during skill loading."""

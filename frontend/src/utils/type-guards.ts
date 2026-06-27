@@ -8,6 +8,14 @@ export const isAxiosErrorWithErrorField = (
   "error" in error.response.data &&
   typeof error.response?.data?.error === "string";
 
+export const isAxiosErrorWithDetailField = (
+  error: AxiosError,
+): error is AxiosError<{ detail: string }> =>
+  typeof error.response?.data === "object" &&
+  error.response?.data !== null &&
+  "detail" in error.response.data &&
+  typeof error.response?.data?.detail === "string";
+
 export const isAxiosErrorWithMessageField = (
   error: AxiosError,
 ): error is AxiosError<{ message: string }> =>
