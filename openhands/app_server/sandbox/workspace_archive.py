@@ -56,8 +56,12 @@ def _archive_prefix() -> str:
 
 
 def _archive_format() -> str:
-    # Default to 'both' for now — keep the compact git-delta AND a self-contained
-    # full tar.gz in the bucket until the storage policy is settled (infra#1444).
+    # Default to 'both' — the compact git-delta AND a self-contained full tar.gz.
+    # git-delta alone is lossy as a sole capture: it respects the repo's
+    # .gitignore (so agent-authored gitignored files are dropped) and needs the
+    # base tree to reconstruct, whereas the tar.gz is self-contained and captures
+    # those files. Keep both until the storage cost is measured, then narrow to
+    # 'git-delta' (+ bucket lifecycle) if warranted (infra#1444).
     return os.getenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'both')
 
 
@@ -121,7 +125,12 @@ def _float_env(name: str, default: float) -> float:
 
 
 def _archive_timeout() -> float:
-    return _float_env('RUNTIME_FILE_ARCHIVE_TIMEOUT', 120.0)
+    # Must cover the agent-server git build budget (read-tree 60 + add 300 + diff
+    # 300 = up to ~660s) before the first response byte flows, or large repos
+    # ReadTimeout and never capture. The final archive runs in the detached
+    # delete finalizer, so a long wait here doesn't block any user request; the
+    # initial snapshot is separately bounded by initial_archive_deadline().
+    return _float_env('RUNTIME_FILE_ARCHIVE_TIMEOUT', 660.0)
 
 
 def _archive_store_type() -> str:
@@ -336,6 +345,11 @@ def initial_archive_enabled() -> bool:
         'true',
         '1',
     )
+
+
+def initial_archive_deadline() -> float:
+    """Max seconds the (now inline, pre-setup) initial snapshot may delay startup."""
+    return _float_env('RUNTIME_FILE_ARCHIVE_INITIAL_DEADLINE', 60.0)
 
 
 def _initial_archive_format() -> str:

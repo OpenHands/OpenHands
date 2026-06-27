@@ -384,8 +384,12 @@ class ProcessSandboxService(SandboxService):
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             return False
 
-    async def delete_sandbox(self, sandbox_id: str) -> bool:
-        """Delete a sandbox."""
+    async def delete_sandbox(
+        self,
+        sandbox_id: str,
+        conversation_id: str | None = None,
+    ) -> bool:
+        """Delete a sandbox. (No workspace archiving for local processes.)"""
         process_info = _processes.get(sandbox_id)
         if process_info is None:
             return False

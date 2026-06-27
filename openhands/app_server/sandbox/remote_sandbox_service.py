@@ -571,7 +571,11 @@ class RemoteSandboxService(SandboxService):
             _logger.error(f'Error pausing sandbox {sandbox_id}: {e}')
             return False
 
-    async def delete_sandbox(self, sandbox_id: str) -> bool:
+    async def delete_sandbox(
+        self,
+        sandbox_id: str,
+        conversation_id: str | None = None,
+    ) -> bool:
         """Delete a sandbox by stopping its runtime.
 
         When workspace archiving is enabled (APP-2403), the workspace is first
@@ -582,10 +586,18 @@ class RemoteSandboxService(SandboxService):
         - By default (``RUNTIME_FILE_ARCHIVE_REQUIRED`` unset) archiving is
           best-effort: a failure is logged and deletion proceeds, so a transient
           failure loses the workspace rather than blocking cleanup.
-        - Only when ``RUNTIME_FILE_ARCHIVE_REQUIRED`` is set does a genuinely
-          transient archive failure block deletion, leaving the sandbox intact
-          for a retry. "Nothing to archive" (no git repo at the path) is not a
-          failure and never blocks the delete.
+        - Only when archiving is required does a genuinely transient archive
+          failure block deletion, leaving the sandbox intact for a retry.
+          "Nothing to archive" (no git repo at the path) is not a failure and
+          never blocks the delete.
+
+        REQUIRED durability differs by caller: invoked SYNCHRONOUSLY (the direct
+        sandbox DELETE endpoint) the raised ``SandboxDeleteRetryError`` reaches
+        the client as a 503 it can retry; invoked from the detached
+        conversation-delete finalizer the error is logged and the row + still-up
+        runtime are kept, so the runtime-api idle reap captures the workspace
+        later (the eval-durability backstop). Non-REQUIRED is best-effort either
+        way (a transient failure loses the capture and the delete proceeds).
 
         If the runtime is already gone (paused/reaped/double-delete, a 404 from
         the runtime API), there is nothing to archive or stop, so the record is
@@ -637,6 +649,7 @@ class RemoteSandboxService(SandboxService):
                         self.httpx_client,
                         runtime_data,
                         sandbox_id,
+                        conversation_id=conversation_id,
                         grouping_strategy=grouping_strategy,
                     )
                 except Exception:

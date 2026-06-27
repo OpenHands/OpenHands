@@ -49,9 +49,6 @@ from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWor
 
 _logger = logging.getLogger(__name__)
 
-# Strong refs to fire-and-forget initial-snapshot tasks so they aren't GC'd
-# mid-flight (asyncio only holds weak refs to running tasks).
-_background_tasks: set[asyncio.Task] = set()
 PRE_COMMIT_HOOK = '.git/hooks/pre-commit'
 PRE_COMMIT_LOCAL = '.git/hooks/pre-commit.local'
 
@@ -258,6 +255,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         sandbox: SandboxInfo,
         workspace: AsyncRemoteWorkspace,
         agent_server_url: str,
+        conversation_id: UUID,
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         task.status = AppConversationStartTaskStatus.PREPARING_REPOSITORY
         yield task
@@ -270,17 +268,26 @@ class AppConversationServiceBase(AppConversationService, ABC):
             workspace.working_dir, task.request.selected_repository
         )
 
-        # Snapshot the INITIAL workspace state (the repo as cloned, before
-        # setup.sh) for eval/dataset creation. Best-effort and default-OFF; runs
-        # in the BACKGROUND so a slow/hung archive (git rev-parse + blocking GET
-        # + upload, ~150s) never delays or fails conversation startup.
-        snapshot_task = asyncio.create_task(
-            self._maybe_archive_initial_state(
-                task, sandbox, workspace, agent_server_url, project_dir
+        # Snapshot the INITIAL workspace (repo exactly as cloned, before setup.sh)
+        # for eval/dataset creation. Awaited HERE — before any mutating step — so
+        # the capture is deterministic and can't race setup.sh writing the same
+        # tree. Best-effort and bounded so it never fails or unduly delays startup.
+        try:
+            await asyncio.wait_for(
+                self._maybe_archive_initial_state(
+                    task,
+                    sandbox,
+                    workspace,
+                    agent_server_url,
+                    project_dir,
+                    conversation_id,
+                ),
+                timeout=workspace_archive.initial_archive_deadline(),
             )
-        )
-        _background_tasks.add(snapshot_task)
-        snapshot_task.add_done_callback(_background_tasks.discard)
+        except Exception as e:
+            _logger.warning(
+                'Initial workspace archive did not complete in time (ignored): %s', e
+            )
 
         task.status = AppConversationStartTaskStatus.RUNNING_SETUP_SCRIPT
         yield task
@@ -306,13 +313,15 @@ class AppConversationServiceBase(AppConversationService, ABC):
         workspace: AsyncRemoteWorkspace,
         agent_server_url: str,
         project_dir: str,
+        conversation_id: UUID,
     ) -> None:
         """Snapshot the initial (as-cloned) workspace for evals — best-effort.
 
-        No-op unless ``RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED`` is set and a
-        repository was actually cloned (an empty workspace is not a useful eval
-        starting state). Every failure is swallowed so this can never break
-        conversation startup.
+        Awaited before setup.sh, so it captures the repo exactly as cloned with no
+        concurrent mutation, keyed to the real conversation id. No-op unless
+        ``RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED`` is set and a repository was
+        actually cloned (an empty workspace is not a useful eval starting state).
+        Every failure is swallowed so this can never break conversation startup.
         """
         try:
             if not workspace_archive.initial_archive_enabled():
@@ -333,16 +342,14 @@ class AppConversationServiceBase(AppConversationService, ABC):
             except Exception as e:
                 _logger.debug('Initial-state base commit lookup failed: %s', e)
 
-            conversation_id = (
-                task.app_conversation_id.hex if task.app_conversation_id else None
-            )
+            conv_hex = conversation_id.hex if conversation_id else None
             await workspace_archive.archive_initial_workspace(
                 workspace.client,
                 agent_server_url=agent_server_url,
                 session_api_key=sandbox.session_api_key,
                 project_dir=project_dir,
                 sandbox_id=sandbox.id,
-                conversation_id=conversation_id,
+                conversation_id=conv_hex,
                 base_commit=base_commit,
             )
         except Exception as e:

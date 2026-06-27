@@ -871,8 +871,17 @@ async def _finalize_sandbox_delete(
     sandbox_id: str,
     db_session: AsyncSession,
     httpx_client: httpx.AsyncClient,
+    conversation_id: UUID | None = None,
 ) -> None:
-    """Delete sandbox if no other conversations reference it, then close connections."""
+    """Delete sandbox if no other conversations reference it, then close connections.
+
+    This runs detached (background task) AFTER the delete response was already
+    returned, so a SandboxDeleteRetryError 503 cannot reach the client here. We
+    still honor the RUNTIME_FILE_ARCHIVE_REQUIRED env: on a REQUIRED archive
+    failure delete_sandbox raises, which we log and roll back, keeping the row +
+    still-running runtime so the runtime-api idle reap captures the workspace
+    later (the eval-durability backstop). Non-REQUIRED stays best-effort.
+    """
     try:
         conversation_count = (
             await app_conversation_info_service.count_conversations_by_sandbox_id(
@@ -880,12 +889,15 @@ async def _finalize_sandbox_delete(
             )
         )
         if conversation_count == 0:
-            await sandbox_service.delete_sandbox(sandbox_id)
+            await sandbox_service.delete_sandbox(
+                sandbox_id,
+                conversation_id=conversation_id.hex if conversation_id else None,
+            )
         await db_session.commit()
     except Exception:
-        # delete_sandbox raised to keep the sandbox for retry (REQUIRED archive
-        # or transient /stop failure): do NOT commit a half-done delete, so no
-        # orphaned row is left; the row + runtime stay for a later retry.
+        # REQUIRED-archive failure (or a transient stop/lookup error): do NOT
+        # commit a half-done delete, so no orphaned row is left; the row +
+        # running runtime stay for the runtime-api idle reap to capture + reap.
         logger.exception('Deferred sandbox delete for %s; kept for retry', sandbox_id)
         await db_session.rollback()
     finally:
@@ -978,6 +990,7 @@ async def delete_app_conversation(
                 sandbox_id,
                 db_session,
                 httpx_client,
+                conversation_id=conversation_uuid,
             )
         )
 

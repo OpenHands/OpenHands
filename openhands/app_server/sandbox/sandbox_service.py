@@ -194,10 +194,16 @@ class SandboxService(ABC):
         """
 
     @abstractmethod
-    async def delete_sandbox(self, sandbox_id: str) -> bool:
+    async def delete_sandbox(
+        self,
+        sandbox_id: str,
+        conversation_id: str | None = None,
+    ) -> bool:
         """Begin the process of deleting a sandbox (which may involve stopping it).
 
-        Return False if the sandbox did not exist.
+        Return False if the sandbox did not exist. ``conversation_id`` is honored
+        by backends that archive the workspace before delete (see
+        RemoteSandboxService); others ignore it.
         """
 
     async def pause_old_sandboxes(self, max_num_sandboxes: int) -> list[str]:
