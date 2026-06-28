@@ -2,7 +2,8 @@ import asyncio
 import hashlib
 import logging
 import os
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, AsyncGenerator
 from urllib.parse import urlparse
@@ -66,6 +67,14 @@ AGENT_SERVER_PORT = 60000
 VSCODE_PORT = 60001
 WORKER_1_PORT = 12000
 WORKER_2_PORT = 12001
+RUNTIME_STATUS_CACHE_TTL_SECONDS = 2.0
+RUNTIME_STATUS_MISSING_BACKOFF_SECONDS = 2.0
+
+
+@dataclass
+class _RuntimeCacheEntry:
+    runtime: dict[str, Any]
+    expires_at: float
 
 
 def _hash_session_api_key(session_api_key: str) -> str:
@@ -117,6 +126,15 @@ class RemoteSandboxService(SandboxService):
     user_context: UserContext
     httpx_client: httpx.AsyncClient
     db_session: AsyncSession
+    _runtime_cache: dict[str, _RuntimeCacheEntry] = field(
+        default_factory=dict, init=False
+    )
+    _runtime_missing_backoff_until: dict[str, float] = field(
+        default_factory=dict, init=False
+    )
+    _runtime_inflight: dict[str, asyncio.Task[dict[str, Any]]] = field(
+        default_factory=dict, init=False
+    )
 
     async def _send_runtime_api_request(
         self, method: str, path: str, **kwargs: Any
@@ -222,13 +240,62 @@ class RemoteSandboxService(SandboxService):
         stored_sandbox = result.scalar_one_or_none()
         return stored_sandbox
 
-    async def _get_runtime(self, sandbox_id: str) -> dict[str, Any]:
+    def _get_cached_runtime(self, sandbox_id: str) -> dict[str, Any] | None:
+        entry = self._runtime_cache.get(sandbox_id)
+        if entry is None:
+            return None
+        if entry.expires_at <= time.monotonic():
+            self._runtime_cache.pop(sandbox_id, None)
+            return None
+        return entry.runtime
+
+    def _cache_runtime(self, sandbox_id: str, runtime: dict[str, Any]) -> None:
+        self._runtime_cache[sandbox_id] = _RuntimeCacheEntry(
+            runtime=runtime,
+            expires_at=time.monotonic() + RUNTIME_STATUS_CACHE_TTL_SECONDS,
+        )
+        self._runtime_missing_backoff_until.pop(sandbox_id, None)
+
+    def _mark_runtime_missing(self, sandbox_id: str) -> None:
+        self._runtime_missing_backoff_until[sandbox_id] = (
+            time.monotonic() + RUNTIME_STATUS_MISSING_BACKOFF_SECONDS
+        )
+
+    def _is_runtime_missing_backed_off(self, sandbox_id: str) -> bool:
+        backoff_until = self._runtime_missing_backoff_until.get(sandbox_id)
+        if backoff_until is None:
+            return False
+        if backoff_until <= time.monotonic():
+            self._runtime_missing_backoff_until.pop(sandbox_id, None)
+            return False
+        return True
+
+    async def _fetch_runtime(self, sandbox_id: str) -> dict[str, Any]:
         response = await self._send_runtime_api_request(
             'GET',
             f'/sessions/{sandbox_id}',
         )
         response.raise_for_status()
         runtime_data = response.json()
+        return runtime_data
+
+    async def _get_runtime(self, sandbox_id: str) -> dict[str, Any]:
+        cached_runtime = self._get_cached_runtime(sandbox_id)
+        if cached_runtime is not None:
+            return cached_runtime
+
+        task = self._runtime_inflight.get(sandbox_id)
+        if task is None:
+            task = asyncio.create_task(self._fetch_runtime(sandbox_id))
+            self._runtime_inflight[sandbox_id] = task
+
+        try:
+            runtime_data = await task
+        finally:
+            if self._runtime_inflight.get(sandbox_id) is task:
+                self._runtime_inflight.pop(sandbox_id, None)
+
+        self._cache_runtime(sandbox_id, runtime_data)
         return runtime_data
 
     async def _get_runtimes_batch(
@@ -245,8 +312,27 @@ class RemoteSandboxService(SandboxService):
         if not sandbox_ids:
             return {}
 
+        runtimes_by_id: dict[str, dict[str, Any]] = {}
+        uncached_ids = []
+        seen_ids = set()
+        for sandbox_id in sandbox_ids:
+            if sandbox_id in seen_ids:
+                continue
+            seen_ids.add(sandbox_id)
+
+            cached_runtime = self._get_cached_runtime(sandbox_id)
+            if cached_runtime is not None:
+                runtimes_by_id[sandbox_id] = cached_runtime
+                continue
+            if self._is_runtime_missing_backed_off(sandbox_id):
+                continue
+            uncached_ids.append(sandbox_id)
+
+        if not uncached_ids:
+            return runtimes_by_id
+
         # Build query parameters for the batch endpoint
-        params = [('ids', sandbox_id) for sandbox_id in sandbox_ids]
+        params = [('ids', sandbox_id) for sandbox_id in uncached_ids]
 
         response = await self._send_runtime_api_request(
             'GET',
@@ -258,10 +344,15 @@ class RemoteSandboxService(SandboxService):
 
         # The batch endpoint should return a list of runtimes
         # Convert to a dictionary keyed by session_id for easy lookup
-        runtimes_by_id = {}
         for runtime in batch_data:
             if runtime and 'session_id' in runtime:
-                runtimes_by_id[runtime['session_id']] = runtime
+                sandbox_id = runtime['session_id']
+                runtimes_by_id[sandbox_id] = runtime
+                self._cache_runtime(sandbox_id, runtime)
+
+        for sandbox_id in uncached_ids:
+            if sandbox_id not in runtimes_by_id:
+                self._mark_runtime_missing(sandbox_id)
 
         return runtimes_by_id
 

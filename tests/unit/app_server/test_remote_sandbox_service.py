@@ -23,6 +23,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.app_server.errors import SandboxError
+from openhands.app_server.sandbox import remote_sandbox_service as remote_sandbox_module
 from openhands.app_server.sandbox.remote_sandbox_service import (
     ALLOW_CORS_ORIGINS_VARIABLE,
     STATUS_MAPPING,
@@ -845,6 +846,119 @@ class TestSandboxSearch:
         assert 'sb1' in result
         assert 'sb2' not in result  # Missing from response
         assert 'sb3' in result
+
+    @pytest.mark.asyncio
+    async def test_get_runtime_uses_short_ttl_cache(self, remote_sandbox_service):
+        """Repeated runtime lookups inside the TTL reuse the cached runtime."""
+        sandbox_id = 'sb1'
+        runtime_data = create_runtime_data(sandbox_id)
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = runtime_data
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_response
+        )
+
+        first = await remote_sandbox_service._get_runtime(sandbox_id)
+        second = await remote_sandbox_service._get_runtime(sandbox_id)
+
+        assert first == runtime_data
+        assert second == runtime_data
+        remote_sandbox_service.httpx_client.request.assert_called_once_with(
+            'GET',
+            'https://api.example.com/sessions/sb1',
+            headers={'X-API-Key': 'test-api-key'},
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_runtime_refreshes_after_cache_ttl(
+        self, remote_sandbox_service, monkeypatch
+    ):
+        """Runtime cache entries expire so status transitions can be observed."""
+        now = 100.0
+        monkeypatch.setattr(remote_sandbox_module.time, 'monotonic', lambda: now)
+        first_response = MagicMock()
+        first_response.raise_for_status.return_value = None
+        first_response.json.return_value = create_runtime_data('sb1', status='starting')
+        second_response = MagicMock()
+        second_response.raise_for_status.return_value = None
+        second_response.json.return_value = create_runtime_data('sb1', status='running')
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            side_effect=[first_response, second_response]
+        )
+
+        first = await remote_sandbox_service._get_runtime('sb1')
+        now += remote_sandbox_module.RUNTIME_STATUS_CACHE_TTL_SECONDS + 0.1
+        second = await remote_sandbox_service._get_runtime('sb1')
+
+        assert first['status'] == 'starting'
+        assert second['status'] == 'running'
+        assert remote_sandbox_service.httpx_client.request.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_get_runtime_coalesces_concurrent_duplicate_requests(
+        self, remote_sandbox_service
+    ):
+        """Concurrent lookups for the same sandbox share one runtime-api call."""
+        sandbox_id = 'sb1'
+        runtime_data = create_runtime_data(sandbox_id)
+        request_started = asyncio.Event()
+        release_response = asyncio.Event()
+
+        async def request_side_effect(*args, **kwargs):
+            request_started.set()
+            await release_response.wait()
+            mock_response = MagicMock()
+            mock_response.raise_for_status.return_value = None
+            mock_response.json.return_value = runtime_data
+            return mock_response
+
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            side_effect=request_side_effect
+        )
+
+        first_task = asyncio.create_task(
+            remote_sandbox_service._get_runtime(sandbox_id)
+        )
+        await request_started.wait()
+        second_task = asyncio.create_task(
+            remote_sandbox_service._get_runtime(sandbox_id)
+        )
+        await asyncio.sleep(0)
+        release_response.set()
+
+        first, second = await asyncio.gather(first_task, second_task)
+
+        assert first == runtime_data
+        assert second == runtime_data
+        remote_sandbox_service.httpx_client.request.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_runtimes_batch_backs_off_missing_sandbox_ids(
+        self, remote_sandbox_service
+    ):
+        """Missing runtimes from a batch response are not immediately re-polled."""
+        first_response = MagicMock()
+        first_response.raise_for_status.return_value = None
+        first_response.json.return_value = [create_runtime_data('sb1')]
+        second_response = MagicMock()
+        second_response.raise_for_status.return_value = None
+        second_response.json.return_value = [create_runtime_data('sb2')]
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            side_effect=[first_response, second_response]
+        )
+
+        first = await remote_sandbox_service._get_runtimes_batch(['sb1', 'sb2'])
+        second = await remote_sandbox_service._get_runtimes_batch(['sb1', 'sb2'])
+
+        assert set(first) == {'sb1'}
+        assert set(second) == {'sb1'}
+        remote_sandbox_service.httpx_client.request.assert_called_once_with(
+            'GET',
+            'https://api.example.com/sessions/batch',
+            headers={'X-API-Key': 'test-api-key'},
+            params=[('ids', 'sb1'), ('ids', 'sb2')],
+        )
 
     @pytest.mark.asyncio
     async def test_get_sandbox_exists(self, remote_sandbox_service):
