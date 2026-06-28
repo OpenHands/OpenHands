@@ -208,9 +208,7 @@ async def websocket_endpoint(
             # Forward ALL query parameters verbatim to the agent-server.
             # This ensures future SDK parameters (resend_mode, after_timestamp,
             # etc.) are automatically proxied without code changes.
-            raw_query_string = websocket.scope.get('query_string', b'').decode(
-                'utf-8'
-            )
+            raw_query_string = websocket.scope.get('query_string', b'').decode('utf-8')
             if raw_query_string:
                 full_url = f'{scheme}://{parsed.netloc}{path}?{raw_query_string}'
             else:
