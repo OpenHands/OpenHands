@@ -2,94 +2,46 @@ import pytest
 
 from openhands.app_server.utils.chunk_localizer import (
     Chunk,
+    _create_chunks_from_raw_string,
     create_chunks,
     get_top_k_chunk_matches,
     normalized_lcs,
 )
 
 
-def _assert_chunk_invariants(
-    chunks: list[Chunk],
+def assert_chunk_invariants(
     text: str,
-    max_size: int,
+    size: int,
+    language: str | None = None,
     *,
     strict_max: bool = True,
-) -> None:
-    """Assert core chunk invariants.
+) -> list[Chunk]:
+    """Run ``create_chunks`` and assert all core invariants.
 
-    Checks:
-        1. First chunk starts at line 1
-        2. Each chunk has start <= end
-        3. Each chunk end is within total line count
-        4. chunks[i].end + 1 == chunks[i+1].start  (contiguity)
-        5. Last chunk ends at EOF
-        6. '\\n'.join(c.text for c in chunks) == text  (reconstruction)
-        7. Chunk.visualize() does not raise
-        8. (optional) every chunk has at most max_size lines
+    Calls ``create_chunks(text, size, language)`` and checks:
+        1. At least one chunk is produced
+        2. First chunk starts at line 1
+        3. Each chunk has start <= end  (no inverted ranges)
+        4. Each chunk is within bounds  (end <= total_lines)
+        5. Text line count matches declared range width
+        6. Chunk.visualize() does not raise
+        7. chunks[i].end + 1 == chunks[i+1].start  (contiguity)
+        8. Last chunk ends at EOF
+        9. '\\n'.join(c.text for c in chunks) == text  (reconstruction)
+       10. (optional) every chunk has at most ``size`` lines
 
     Args:
-        chunks: List of chunks to validate.
-        text: The original source text.
-        max_size: The max_chunk_lines value used.
-        strict_max: When True, assert every chunk has at most max_size lines.
-    """
-    total_lines = len(text.split('\n'))
-    assert len(chunks) > 0, 'Expected at least one chunk'
+        text: Source text to chunk.
+        size: Maximum lines per chunk (passed to ``create_chunks``).
+        language: Language hint passed to ``create_chunks``.
+        strict_max: When True (default), also assert that no chunk
+            exceeds ``size`` lines.
 
-    assert chunks[0].line_range[0] == 1, (
-        f'First chunk should start at line 1, got {chunks[0].line_range[0]}'
-    )
-
-    for i, c in enumerate(chunks):
-        assert c.line_range[0] <= c.line_range[1], (
-            f'Chunk {i} has inverted range: {c.line_range}'
-        )
-        assert c.line_range[1] <= total_lines, (
-            f'Chunk {i} out of bounds: {c.line_range}, total={total_lines}'
-        )
-        declared_lines = c.line_range[1] - c.line_range[0] + 1
-        actual_lines = len(c.text.split('\n'))
-        assert actual_lines == declared_lines, (
-            f'Chunk {i} range says {declared_lines} lines, but text has {actual_lines}'
-        )
-        c.visualize()
-
-        if strict_max:
-            assert declared_lines <= max_size, (
-                f'Chunk {i} has {declared_lines} lines, '
-                f'exceeding max_size={max_size}: {c.line_range}'
-            )
-
-    for i in range(len(chunks) - 1):
-        assert chunks[i].line_range[1] + 1 == chunks[i + 1].line_range[0], (
-            f'Gap or overlap between chunk {i} and {i + 1}: '
-            f'{chunks[i].line_range} -> {chunks[i + 1].line_range}'
-        )
-
-    assert chunks[-1].line_range[1] == total_lines, (
-        f'Last chunk should end at line {total_lines}, got {chunks[-1].line_range[1]}'
-    )
-
-    reconstructed = '\n'.join(c.text for c in chunks)
-    assert reconstructed == text, "Reconstruction failed: '\\n'.join(c.text) != text"
-
-
-def assert_chunk_invariants(text: str, size: int, language: str | None = None) -> None:
-    """Assert INVARIANT-FULL for create_chunks(text, size, language).
-
-    Raises AssertionError with a diagnostic message on the first violation.
-
-    Invariants checked:
-        - len(chunks) >= 1
-        - chunks[0].line_range[0] == 1
-        - chunks[-1].line_range[1] == len(text.split('\\n'))
-        - for every chunk: start <= end, 1 <= start <= N, 1 <= end <= N
-        - for every adjacent pair: chunks[i].end + 1 == chunks[i+1].start
-        - '\\n'.join(c.text for c in chunks) == text
+    Returns:
+        The produced chunk list, so callers can make additional assertions.
     """
     chunks = create_chunks(text, size=size, language=language)
-    lines = text.split('\n')
-    N = len(lines)
+    N = len(text.split('\n'))
 
     assert len(chunks) >= 1, f'size={size}: expected at least one chunk, got 0'
 
@@ -108,6 +60,18 @@ def assert_chunk_invariants(text: str, size: int, language: str | None = None) -
             f'size={size}: chunk[{i}] start={s} is out of bounds [1, {N}]'
         )
         assert 1 <= e <= N, f'size={size}: chunk[{i}] end={e} is out of bounds [1, {N}]'
+        declared = e - s + 1
+        actual = len(c.text.split('\n'))
+        assert actual == declared, (
+            f'size={size}: chunk[{i}] range implies {declared} lines '
+            f'but text has {actual}'
+        )
+        c.visualize()
+        if strict_max:
+            assert declared <= size, (
+                f'size={size}: chunk[{i}] has {declared} lines, '
+                f'exceeding limit: {c.line_range}'
+            )
 
     for i in range(len(chunks) - 1):
         curr_end = chunks[i].line_range[1]
@@ -123,6 +87,8 @@ def assert_chunk_invariants(text: str, size: int, language: str | None = None) -
         f'  expected : {repr(text[:120])}\n'
         f'  got      : {repr(reconstructed[:120])}'
     )
+
+    return chunks
 
 
 def test_chunk_creation():
@@ -290,8 +256,7 @@ def test_create_chunks_empty_file_raw():
 
 def test_create_chunks_tree_sitter_whitespace_only():
     text = '\n\n\n\n\n'
-    chunks = create_chunks(text, size=2, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=2)
+    assert_chunk_invariants(text, size=2, language='python')
 
 
 def test_create_chunks_tree_sitter_python_basic():
@@ -306,8 +271,7 @@ def test_create_chunks_tree_sitter_python_basic():
 
 def test_create_chunks_tree_sitter_python_oversized():
     text = """\n    class MyClass:\n        def method1(self):\n            a = 1\n            b = 2\n\n        def method2(self):\n            c = 3\n            d = 4\n    """
-    chunks = create_chunks(text, size=4, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=4)
+    assert_chunk_invariants(text, size=4, language='python')
 
 
 def test_create_chunks_tree_sitter_prefix_respects_max_lines():
@@ -316,8 +280,7 @@ def test_create_chunks_tree_sitter_prefix_respects_max_lines():
         '# comment 1\n# comment 2\n# comment 3\n'
         '# comment 4\n# comment 5\ndef foo():\n    pass'
     )
-    chunks = create_chunks(text, size=3, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=3)
+    assert_chunk_invariants(text, size=3, language='python')
 
 
 def test_create_chunks_tree_sitter_gap_respects_max_lines():
@@ -334,41 +297,35 @@ def test_create_chunks_tree_sitter_gap_respects_max_lines():
         '    pass',
     ]
     text = '\n'.join(lines)
-    chunks = create_chunks(text, size=3, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=3)
+    assert_chunk_invariants(text, size=3, language='python')
 
 
 def test_create_chunks_tree_sitter_suffix_respects_max_lines():
     """Trailing lines after the last AST node must not push a chunk past max_chunk_lines."""
     text = 'def foo():\n    pass\n\n\n\n\n'
-    chunks = create_chunks(text, size=3, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=3)
+    assert_chunk_invariants(text, size=3, language='python')
 
 
 def test_create_chunks_tree_sitter_single_line_functions():
     """Multiple single-line statements are grouped up to max_chunk_lines."""
     text = 'a = 1\nb = 2\nc = 3\nd = 4\ne = 5\nf = 6'
-    chunks = create_chunks(text, size=2, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=2)
+    assert_chunk_invariants(text, size=2, language='python')
 
 
 def test_create_chunks_tree_sitter_tuple_literal_size_5():
     text = 'DATA = tuple([\n' + '\n'.join(f'    {i},' for i in range(12)) + '\n])'
-    chunks = create_chunks(text, size=5, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=5)
+    assert_chunk_invariants(text, size=5, language='python')
 
 
 def test_create_chunks_tree_sitter_tuple_literal_size_100():
     text = 'DATA = tuple([\n' + '\n'.join(f'    {i},' for i in range(12)) + '\n])'
-    chunks = create_chunks(text, size=100, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=100)
+    chunks = assert_chunk_invariants(text, size=100, language='python')
     assert len(chunks) == 1
 
 
 def test_create_chunks_tree_sitter_large_tuple_literal():
     text = 'DATA = tuple([\n' + '\n'.join(f'    {i},' for i in range(200)) + '\n])'
-    chunks = create_chunks(text, size=100, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=100)
+    assert_chunk_invariants(text, size=100, language='python')
 
 
 def test_create_chunks_tree_sitter_deeply_nested():
@@ -385,37 +342,32 @@ def test_create_chunks_tree_sitter_deeply_nested():
             '                    z = i + 2',
         ]
     )
-    chunks = create_chunks(text, size=3, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=3)
+    assert_chunk_invariants(text, size=3, language='python')
 
 
 def test_create_chunks_tree_sitter_single_huge_function():
     """A function longer than max_chunk_lines is still chunked correctly."""
     body_lines = [f'    x{i} = {i}' for i in range(20)]
     text = 'def big():\n' + '\n'.join(body_lines)
-    chunks = create_chunks(text, size=5, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=5)
+    assert_chunk_invariants(text, size=5, language='python')
 
 
 def test_create_chunks_tree_sitter_same_row_nested_nodes():
     """Nodes sharing the same start row must not produce inverted or duplicate ranges."""
     text = 'x = [1, 2, 3]'
-    chunks = create_chunks(text, size=1, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=1)
+    assert_chunk_invariants(text, size=1, language='python')
 
 
 def test_create_chunks_tree_sitter_multiline_dict():
     """Multi-line dict literal with a same-row opening brace."""
     text = 'config = {\n' + '\n'.join(f'    "key{i}": {i},' for i in range(15)) + '\n}'
-    chunks = create_chunks(text, size=5, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=5)
+    assert_chunk_invariants(text, size=5, language='python')
 
 
 def test_create_chunks_tree_sitter_nested_function_calls():
     """Deeply nested function calls on a single line."""
     text = 'result = foo(bar(baz(qux(42))))'
-    chunks = create_chunks(text, size=1, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=1)
+    assert_chunk_invariants(text, size=1, language='python')
 
 
 def test_create_chunks_tree_sitter_mixed_constructs():
@@ -442,8 +394,7 @@ def test_create_chunks_tree_sitter_mixed_constructs():
             '        return 1',
         ]
     )
-    chunks = create_chunks(text, size=5, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=5)
+    assert_chunk_invariants(text, size=5, language='python')
 
 
 def test_create_chunks_tree_sitter_visualize_all_chunks():
@@ -509,8 +460,7 @@ _CODE_SAMPLES: dict[str, str] = {
 def test_invariants_parametrized(sample_name: str, size: int):
     """Invariant sweep across multiple code samples and chunk sizes."""
     text = _CODE_SAMPLES[sample_name]
-    chunks = create_chunks(text, size=size, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=size)
+    assert_chunk_invariants(text, size=size, language='python')
 
 
 @pytest.mark.parametrize('size', [1, 2, 3, 5, 10])
@@ -532,8 +482,7 @@ def test_max_chunk_lines_enforced(size):
             '        pass',
         ]
     )
-    chunks = create_chunks(text, size=size, language='python')
-    _assert_chunk_invariants(chunks, text, max_size=size)
+    assert_chunk_invariants(text, size=size, language='python')
 
 
 class TestChunkInvariantPython:
@@ -643,3 +592,102 @@ class TestChunkInvariantPython:
         """language=None uses raw-string chunking."""
         text = '\n'.join(f'line {i}' for i in range(20))
         assert_chunk_invariants(text, size=5, language=None)
+
+
+class TestSemanticBoundaries:
+    """Assert that tree-sitter produces *different* boundaries than raw splitting.
+
+    Each test constructs input where semantic chunking and raw line splitting
+    produce different chunk boundaries, then asserts the semantic boundaries
+    explicitly.  If ``_create_chunks_from_tree_sitter`` were swapped for the
+    raw splitter, these tests would fail.
+    """
+
+    def test_unequal_sibling_functions_split_on_function_boundary(self):
+        """A short function followed by a longer one: chunk ends at the function
+        boundary, not at the raw budget line.
+        """
+        text = '\n'.join(
+            [
+                'def short():',
+                '    return 1',
+                '',
+                'def long_func():',
+                '    a = 1',
+                '    b = 2',
+                '    return a + b',
+            ]
+        )
+        chunks = create_chunks(text, size=5, language='python')
+
+        # Semantic boundary: first chunk contains only short() (lines 1-2),
+        # second chunk contains the blank line + long_func() (lines 3-7).
+        boundaries = [c.line_range for c in chunks]
+        assert boundaries == [(1, 2), (3, 7)], (
+            f'Expected semantic split after short(), got {boundaries}'
+        )
+
+        # Verify this differs from raw splitting.
+        raw_chunks = _create_chunks_from_raw_string(text, 5)
+        raw_boundaries = [c.line_range for c in raw_chunks]
+        assert raw_boundaries != boundaries, (
+            'Semantic and raw boundaries should differ for this input'
+        )
+
+    def test_oversized_class_splits_between_methods(self):
+        """A class with three methods: chunks split between methods, not mid-method."""
+        text = '\n'.join(
+            [
+                'class MyClass:',
+                '    def method_a(self):',
+                '        return 1',
+                '',
+                '    def method_b(self):',
+                '        return 2',
+                '',
+                '    def method_c(self):',
+                '        return 3',
+            ]
+        )
+        chunks = create_chunks(text, size=4, language='python')
+
+        boundaries = [c.line_range for c in chunks]
+        assert boundaries == [(1, 3), (4, 6), (7, 9)], (
+            f'Expected splits between methods, got {boundaries}'
+        )
+
+        raw_chunks = _create_chunks_from_raw_string(text, 4)
+        raw_boundaries = [c.line_range for c in raw_chunks]
+        assert raw_boundaries != boundaries
+
+    def test_semantic_split_keeps_decorator_with_function(self):
+        """A decorated function stays in the same chunk as its decorator."""
+        text = '\n'.join(
+            [
+                'import os',
+                'import sys',
+                '',
+                '@my_decorator',
+                'def decorated():',
+                '    return 42',
+                '',
+            ]
+        )
+        chunks = create_chunks(text, size=5, language='python')
+        boundaries = [c.line_range for c in chunks]
+
+        # The decorator + function must be in the same chunk.
+        # Find the chunk containing '@my_decorator'.
+        decorator_chunk = [c for c in chunks if '@my_decorator' in c.text]
+        assert len(decorator_chunk) == 1
+        assert 'def decorated():' in decorator_chunk[0].text, (
+            'Decorator and function definition should be in the same chunk'
+        )
+        assert 'return 42' in decorator_chunk[0].text, (
+            'Function body should be in the same chunk as its decorator'
+        )
+
+        # Verify this differs from raw.
+        raw_chunks = _create_chunks_from_raw_string(text, 5)
+        raw_boundaries = [c.line_range for c in raw_chunks]
+        assert raw_boundaries != boundaries
