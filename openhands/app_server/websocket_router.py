@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Annotated, Any
+from typing import Any
 from uuid import UUID
 
 import websockets
 import websockets.exceptions
-from fastapi import APIRouter, Query, WebSocket
+from fastapi import APIRouter, WebSocket
 from starlette.websockets import WebSocketState
 
 logger = logging.getLogger(__name__)
@@ -126,8 +126,6 @@ async def _proxy_websocket_messages(
 async def websocket_endpoint(
     conversation_id: str,
     websocket: WebSocket,
-    session_api_key: Annotated[str | None, Query(alias='session_api_key')] = None,
-    resend_all: Annotated[bool, Query()] = False,
 ):
     """Centralized WebSocket endpoint that proxies to sandbox agent servers.
 
@@ -135,11 +133,13 @@ async def websocket_endpoint(
     appropriate sandbox's agent_server without any modification. The conversation_id
     from the URL path is normalized to UUID format with dashes before being used.
 
+    All query parameters from the incoming connection (session_api_key, resend_all,
+    resend_mode, after_timestamp, etc.) are forwarded verbatim to the agent-server,
+    so future SDK parameters are automatically supported without code changes.
+
     Args:
         conversation_id: The conversation ID (UUID string, may or may not have dashes)
         websocket: The WebSocket connection from the client
-        session_api_key: Session API key for authentication
-        resend_all: Whether to resend all events
     """
     # Normalize conversation_id to UUID format with dashes
     try:
@@ -186,7 +186,7 @@ async def websocket_endpoint(
                 return
 
             # Build the agent server WebSocket URL
-            from urllib.parse import urlencode, urlparse
+            from urllib.parse import urlparse
 
             parsed = urlparse(conversation.conversation_url)
 
@@ -205,14 +205,16 @@ async def websocket_endpoint(
                     else f'/sockets/events/{parsed_uuid}'
                 )
 
-            # Build query parameters
-            query_params = {'resend_all': str(resend_all).lower()}
-            if session_api_key:
-                query_params['session_api_key'] = session_api_key
-
-            logger.info(f'Query params: {query_params}')
-
-            full_url = f'{scheme}://{parsed.netloc}{path}?{urlencode(query_params)}'
+            # Forward ALL query parameters verbatim to the agent-server.
+            # This ensures future SDK parameters (resend_mode, after_timestamp,
+            # etc.) are automatically proxied without code changes.
+            raw_query_string = websocket.scope.get('query_string', b'').decode(
+                'utf-8'
+            )
+            if raw_query_string:
+                full_url = f'{scheme}://{parsed.netloc}{path}?{raw_query_string}'
+            else:
+                full_url = f'{scheme}://{parsed.netloc}{path}'
 
             logger.info('=== DESTINATION WEBSOCKET URL ===')
             logger.info(f'Destination: {full_url}')
