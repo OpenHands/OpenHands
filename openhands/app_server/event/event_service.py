@@ -61,6 +61,18 @@ class EventService(ABC):
     async def save_event(self, conversation_id: UUID, event: Event):
         """Save an event. Internal method intended not be part of the REST api."""
 
+    async def save_subagent_event(
+        self, conversation_id: UUID, tool_call_id: str, event: Event
+    ) -> None:
+        """Persist a sub-agent event under a separate store keyed by tool_call_id.
+
+        Default implementation delegates to save_event so that EventService
+        implementations that don't override this still work correctly.
+        Concrete implementations (e.g. FilesystemEventService / AWS) override
+        this to write to an isolated sub-agent directory.
+        """
+        await self.save_event(conversation_id, event)
+
     async def batch_get_events(
         self, conversation_id: UUID, event_ids: list[UUID]
     ) -> list[Event | None]:

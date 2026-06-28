@@ -460,13 +460,26 @@ async def on_event(
 ) -> Success:
     """Webhook callback for when event stream events occur."""
     try:
-        # Save events...
+        # Save events — sub-agent events go to their own store keyed by tool_use_id.
         await asyncio.gather(
-            *[event_service.save_event(conversation_id, event) for event in events]
+            *[
+                (
+                    event_service.save_subagent_event(
+                        conversation_id,
+                        getattr(event, 'parent_tool_use_id'),
+                        event,
+                    )
+                    if getattr(event, 'parent_tool_use_id', None)
+                    else event_service.save_event(conversation_id, event)
+                )
+                for event in events
+            ]
         )
 
-        # Process stats events for V1 conversations
+        # Process stats events for V1 conversations (main-agent events only)
         for event in events:
+            if getattr(event, 'parent_tool_use_id', None):
+                continue
             if isinstance(event, ConversationStateUpdateEvent) and event.key == 'stats':
                 await app_conversation_info_service.process_stats_event(
                     event, conversation_id
@@ -479,8 +492,11 @@ async def on_event(
         # switch-profile button would otherwise stay stale until the next full
         # conversation-info webhook (which only fires on start/pause/interrupt/
         # delete, never mid-run). ``active_model`` is only set on success.
+        # Sub-agent events are skipped — only the main agent governs the LLM model.
         switched_model: str | None = None
         for event in events:
+            if getattr(event, 'parent_tool_use_id', None):
+                continue
             if (
                 isinstance(event, ObservationEvent)
                 and isinstance(event.observation, SwitchLLMObservation)
@@ -495,8 +511,10 @@ async def on_event(
                 info.llm_model = switched_model
                 await app_conversation_info_service.save_app_conversation_info(info)
 
-        # Analytics: conversation terminal state detection
+        # Analytics: conversation terminal state detection (main-agent events only)
         for event in events:
+            if getattr(event, 'parent_tool_use_id', None):
+                continue
             if not isinstance(event, ConversationStateUpdateEvent):
                 continue
             if event.key != 'execution_status':
