@@ -149,6 +149,9 @@ def _create_chunks_from_tree_sitter(
 def create_chunks(
     text: str, size: int = 100, language: str | None = None
 ) -> list[Chunk]:
+    if size <= 0:
+        raise ValueError(f'size must be a positive integer, got {size}')
+
     try:
         parser = get_parser(language) if language is not None else None
     except (AttributeError, LookupError):

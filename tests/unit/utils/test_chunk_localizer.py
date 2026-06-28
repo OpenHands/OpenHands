@@ -230,6 +230,18 @@ def test_create_chunks_unsupported_language_fallback():
     assert chunks[1].line_range == (3, 4)
 
 
+@pytest.mark.parametrize('size', [0, -1, -100])
+@pytest.mark.parametrize('language', [None, 'python'])
+def test_create_chunks_non_positive_size_raises(size, language):
+    """A non-positive size must fail fast rather than loop forever.
+
+    The tree-sitter path would otherwise spin indefinitely (the chunk cursor
+    never advances when the budget is empty), so guard it explicitly.
+    """
+    with pytest.raises(ValueError):
+        create_chunks('def foo():\n    pass', size=size, language=language)
+
+
 def test_create_chunks_no_language_uses_raw():
     """When language=None the raw string chunker is used."""
     text = 'a\nb\nc\nd\ne'
