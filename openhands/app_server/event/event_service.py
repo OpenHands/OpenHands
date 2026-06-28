@@ -73,6 +73,17 @@ class EventService(ABC):
         """
         await self.save_event(conversation_id, event)
 
+    async def search_subagent_events(
+        self, conversation_id: UUID, tool_call_id: str
+    ) -> list[Event]:
+        """Return all events stored for the given sub-agent (tool_call_id).
+
+        Default implementation returns an empty list. Concrete implementations
+        (e.g. FilesystemEventService / AWS) override this to read from the
+        isolated sub-agent directory.
+        """
+        return []
+
     async def batch_get_events(
         self, conversation_id: UUID, event_ids: list[UUID]
     ) -> list[Event | None]:
