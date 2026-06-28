@@ -203,3 +203,36 @@ class EventServiceBase(EventService, ABC):
         return await asyncio.gather(
             *[self.get_event(conversation_id, event_id) for event_id in event_ids]
         )
+
+    async def get_subagent_conversation_path(
+        self, conversation_id: UUID, tool_call_id: str
+    ) -> Path:
+        """Return the directory where sub-agent events for a given tool_call_id are stored.
+
+        Path layout: <conversation path>/subagents/<tool_call_id>/events
+        """
+        base = await self.get_conversation_path(conversation_id)
+        return base / 'subagents' / tool_call_id / 'events'
+
+    async def save_subagent_event(
+        self, conversation_id: UUID, tool_call_id: str, event: Event
+    ):
+        """Persist a sub-agent event under a separate directory keyed by tool_call_id."""
+        id_hex = (
+            event.id.replace('-', '') if isinstance(event.id, str) else event.id.hex
+        )  # type: ignore[union-attr]
+        path = (
+            await self.get_subagent_conversation_path(conversation_id, tool_call_id)
+        ) / f'{id_hex}.json'
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self._store_event, path, event)
+
+    async def search_subagent_events(
+        self, conversation_id: UUID, tool_call_id: str
+    ) -> list[Event]:
+        """Return all events stored for the given sub-agent (tool_call_id)."""
+        base = await self.get_subagent_conversation_path(conversation_id, tool_call_id)
+        loop = asyncio.get_running_loop()
+        paths = await loop.run_in_executor(None, self._search_paths, base)
+        events = await self._load_events_from_paths(sorted(paths))
+        return [e for e in events if e is not None]
