@@ -5,7 +5,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from openhands.agent_server.models import EventPage, EventSortOrder
@@ -83,6 +83,10 @@ router = APIRouter(
     dependencies=get_dependencies(),
 )
 event_service_dependency = depends_event_service()
+app_conversation_service_dependency = depends_app_conversation_service()
+sandbox_service_dependency = depends_sandbox_service()
+sandbox_spec_service_dependency = depends_sandbox_spec_service()
+httpx_client_dependency = depends_httpx_client()
 
 
 # Read methods
@@ -117,10 +121,10 @@ async def search_events(
         Query(title='The max number of results in the page', gt=0, le=100),
     ] = 100,
     event_service: EventService = event_service_dependency,
-    app_conversation_service: Any = depends_app_conversation_service(),
-    sandbox_service: Any = depends_sandbox_service(),
-    sandbox_spec_service: Any = depends_sandbox_spec_service(),
-    httpx_client: httpx.AsyncClient = depends_httpx_client(),
+    app_conversation_service: Any = app_conversation_service_dependency,
+    sandbox_service: Any = sandbox_service_dependency,
+    sandbox_spec_service: Any = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
 ) -> Response | EventPage:
     """Search / List events. Falls back to agent-server proxy if local store is empty."""
     local_result = await event_service.search_events(
@@ -178,10 +182,10 @@ async def count_events(
         Query(title='Optional filter by timestamp less than'),
     ] = None,
     event_service: EventService = event_service_dependency,
-    app_conversation_service: Any = depends_app_conversation_service(),
-    sandbox_service: Any = depends_sandbox_service(),
-    sandbox_spec_service: Any = depends_sandbox_spec_service(),
-    httpx_client: httpx.AsyncClient = depends_httpx_client(),
+    app_conversation_service: Any = app_conversation_service_dependency,
+    sandbox_service: Any = sandbox_service_dependency,
+    sandbox_spec_service: Any = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
 ) -> Response | int:
     """Count events matching the given filters. Falls back to agent-server proxy if local store is empty."""
     local_count = await event_service.count_events(
