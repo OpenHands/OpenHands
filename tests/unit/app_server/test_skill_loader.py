@@ -932,8 +932,8 @@ class TestLoadSkillsWithMarketplaces:
         assert mp2['source'] == 'github:acme/plugins'
         assert mp2['ref'] == 'v1.0.0'
         assert mp2['repo_path'] == 'marketplaces/internal'
-        # None values are stripped by model_dump()
-        assert 'auto_load' not in mp2
+        # auto_load=False is included (not stripped like None values)
+        assert mp2['auto_load'] is False
 
     @pytest.mark.asyncio
     @patch('httpx.AsyncClient')

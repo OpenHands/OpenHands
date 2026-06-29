@@ -130,8 +130,8 @@ class MarketplaceRegistration(BaseModel):
     )
 
     def model_dump(self, **kwargs) -> dict:
-        """Serialize, stripping None values for optional fields."""
-        data = super().model_dump(**kwargs)
+        """Serialize to dict, converting enums to values and stripping None."""
+        data = super().model_dump(mode='json', **kwargs)
         return {k: v for k, v in data.items() if v is not None}
 
     @field_validator('name')

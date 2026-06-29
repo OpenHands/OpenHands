@@ -184,7 +184,8 @@ class OrgAppSettingsStore:
                     if 'auto_load' not in db_mp:
                         db_mp['auto_load'] = False
                     validated_marketplaces.append(MarketplaceRegistration.model_validate(db_mp))
-            org.registered_marketplaces = validated_marketplaces
+            # Convert to dicts for JSON storage
+            org.registered_marketplaces = [mp.model_dump() for mp in validated_marketplaces]
 
         # Update regular org fields
         for field, value in update_dict.items():

@@ -125,7 +125,7 @@ describe("MarketplaceModal", () => {
       source: "github:owner/repo",
       ref: undefined,
       repo_path: undefined,
-      auto_load: undefined,
+      auto_load: false,
     });
   });
 

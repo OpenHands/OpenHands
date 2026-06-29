@@ -23,7 +23,10 @@ from storage.user_settings import UserSettings
 from storage.user_store import UserStore
 
 from openhands.app_server.settings.llm_profiles import LLMProfiles
-from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_models import (
+    MarketplaceRegistration,
+    Settings,
+)
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.utils.jsonpatch_compat import (
     WHOLESALE_REPLACEMENT_KEYS,
@@ -233,16 +236,15 @@ class SaasSettingsStore(SettingsStore):
         if user_settings and user_settings.registered_marketplaces:
             # Normalize marketplaces: use 'personal' scope for legacy data without scope
             # The merge function will override with the correct scope value
-            normalized_mps = []
+            normalized_mps: list[dict[str, Any]] = []
             for mp in user_settings.registered_marketplaces:
                 if isinstance(mp, dict):
                     if mp.get('scope') is None:
                         mp = {**mp, 'scope': 'personal'}
-                        normalized_mps.append(mp)
-                    else:
-                        normalized_mps.append(mp)
-                else:
                     normalized_mps.append(mp)
+                else:
+                    # Convert MarketplaceRegistration to dict
+                    normalized_mps.append(mp.model_dump())
             kwargs['registered_marketplaces'] = normalized_mps
         # Profiles in SaaS live on the org (managed via
         # /api/organizations/{org_id}/profiles). Surface them through
