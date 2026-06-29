@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated, Any
 
 from pydantic import (
@@ -658,3 +659,102 @@ class OrgMemberFinancialPage(BaseModel):
     current_page: int = 1
     per_page: int = 10
     next_page_id: str | None = None
+
+
+class OrgConversationResponse(BaseModel):
+    """Response model for a single conversation in an organization."""
+
+    id: str  # conversation_id
+    title: str | None = None
+    llm_model: str | None = None
+    agent_kind: str = 'openhands'
+    user_id: str  # UUID of user who created the conversation
+    user_email: str | None = None  # Email of user who created the conversation
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    sandbox_id: str | None = None
+    sandbox_status: str | None = None  # STARTING, RUNNING, PAUSED, ERROR, MISSING
+    runtime_url: str | None = None  # URL to access the conversation runtime
+    execution_status: str | None = (
+        None  # Agent execution status (requires agent server call)
+    )
+    selected_repository: str | None = None
+    selected_branch: str | None = None
+    trigger: str | None = None
+    tags: dict[str, str] = Field(default_factory=dict)
+    # Cost and token metrics
+    accumulated_cost: float = 0.0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+
+
+class OrgConversationPage(BaseModel):
+    """Paginated response for organization conversations."""
+
+    items: list[OrgConversationResponse]
+    total_items: int = 0  # Total count for pagination controls
+    page: int = 1  # Current page number
+    per_page: int = 100  # Items per page
+    total_pages: int = 0  # Total number of pages
+    pagination_accurate: bool = (
+        True  # False when sandbox_status filter lacks sandbox data
+    )
+
+
+class OrgConversationStats(BaseModel):
+    """Aggregated statistics for organization conversations."""
+
+    # Conversation counts
+    active_conversations: int = (
+        0  # Count of conversations with execution_status='running'
+    )
+    running_runtimes: int = 0  # Count of distinct sandboxes currently running
+
+    # Completion metrics
+    completed_24h: int = 0  # Conversations that finished (terminal status) in last 24h
+    completed_7d: int = 0  # Conversations that finished in last 7 days
+    completed_30d: int = 0  # Conversations that finished in last 30 days
+
+    # Cost and usage aggregation
+    total_cost: float = 0.0  # Sum of accumulated_cost
+    total_prompt_tokens: int = 0
+    total_completion_tokens: int = 0
+    total_tokens: int = 0  # Combined token count
+
+
+class DailyUsageData(BaseModel):
+    """Daily usage data for a single day."""
+
+    date: str  # ISO date string (YYYY-MM-DD)
+    tokens: int = 0
+    conversations: int = 0
+
+
+class TeamUsageData(BaseModel):
+    """Usage data for a single user/team."""
+
+    user_id: str
+    user_email: str | None = None
+    user_name: str | None = None
+    conversation_count: int = 0
+    total_tokens: int = 0
+    percentage: float = 0.0
+
+
+class OrgUsageStats(BaseModel):
+    """Detailed usage statistics for organization dashboard."""
+
+    # Top-level metrics
+    active_users: int = 0  # Users with activity in last 7 days
+    agent_runs: int = 0  # Total conversations in last 7 days
+    total_tokens: int = 0  # Total tokens in last 7 days
+    estimated_spend: float = 0.0  # Estimated cost in last 7 days
+
+    # Daily breakdown (last 7 days)
+    daily_usage: list[DailyUsageData] = Field(default_factory=list)
+
+    # Team breakdown (by user)
+    team_usage: list[TeamUsageData] = Field(default_factory=list)

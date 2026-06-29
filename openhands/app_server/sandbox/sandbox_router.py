@@ -110,6 +110,9 @@ async def delete_sandbox(
     sandbox_id: str,
     sandbox_service: SandboxService = sandbox_service_dependency,
 ) -> Success:
+    # delete_sandbox is sandbox-scoped (stop + delete) and never archives, so this
+    # request handler can't block on a minutes-long capture. Workspace capture is
+    # owned by the conversation-delete finalizer and the runtime-api idle reaper.
     exists = await sandbox_service.delete_sandbox(sandbox_id)
     if not exists:
         raise HTTPException(status.HTTP_404_NOT_FOUND)

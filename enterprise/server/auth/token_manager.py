@@ -624,10 +624,19 @@ class TokenManager:
     async def get_user_id_from_user_email(self, email: str) -> str | None:
         keycloak_admin = get_keycloak_admin(self.external)
         users = await keycloak_admin.a_get_users({'q': f'email:{email}'})
-        if not users:
+        # Keycloak's email query is a substring match, so narrow to an exact,
+        # unique match -- otherwise users[0] could be a different user whose email
+        # merely contains this one (e.g. bob@acme.com vs bob@acme.com.au).
+        exact = [u for u in users if (u.get('email') or '').lower() == email.lower()]
+        if not exact:
             logger.error(f'User with email {email} not found.')
             return None
-        keycloak_user_id = users[0]['id']
+        if len(exact) > 1:
+            logger.error(
+                f'Multiple users with email {email}; refusing ambiguous match.'
+            )
+            return None
+        keycloak_user_id = exact[0]['id']
         logger.info(f'Got user ID {keycloak_user_id} from email: {email}')
         return keycloak_user_id
 
