@@ -1,7 +1,7 @@
 """Add org_id column to device_codes table.
 
-Revision ID: 127
-Revises: 126
+Revision ID: 128
+Revises: 127
 Create Date: 2026-06-05
 
 """
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = '127'
-down_revision: str | None = '126'
+revision: str = '128'
+down_revision: str | None = '127'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
