@@ -544,14 +544,14 @@ files = [
 
 [[package]]
 name = "authlib"
-version = "1.6.9"
+version = "1.6.12"
 description = "The ultimate Python library in building OAuth and OpenID Connect servers and clients."
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "authlib-1.6.9-py2.py3-none-any.whl", hash = "sha256:f08b4c14e08f0861dc18a32357b33fbcfd2ea86cfe3fe149484b4d764c4a0ac3"},
-    {file = "authlib-1.6.9.tar.gz", hash = "sha256:d8f2421e7e5980cc1ddb4e32d3f5fa659cfaf60d8eaf3281ebed192e4ab74f04"},
+    {file = "authlib-1.6.12-py2.py3-none-any.whl", hash = "sha256:e9229ad7fde610b139dd12f5edbe97eab9ee78bfb85691247e767727850b99ab"},
+    {file = "authlib-1.6.12.tar.gz", hash = "sha256:0656d8482f28fc8221929d5f35b2bde5d13e10555ebc06b4561b0d622e83b1bd"},
 ]
 
 [package.dependencies]
@@ -5814,7 +5814,7 @@ aiohttp = ">=3.14.1"
 anthropic = {version = "*", extras = ["vertex"]}
 anyio = "4.9"
 asyncpg = ">=0.30"
-authlib = ">=1.6.9"
+authlib = ">=1.6.12"
 bashlex = ">=0.18"
 binaryornot = ">=0.5.0,<1"
 boto3 = "*"
@@ -5866,7 +5866,7 @@ pybase62 = ">=1"
 pygithub = ">=2.5"
 pyjwt = ">=2.13.0"
 pylatexenc = "*"
-pypdf = ">=6.10.2"
+pypdf = ">=6.13.3"
 python-docx = "*"
 python-dotenv = "*"
 python-frontmatter = ">=1.1"
@@ -5884,7 +5884,7 @@ setuptools = ">=78.1.1"
 shellingham = ">=1.5.4"
 sqlalchemy = {version = ">=2.0.40", extras = ["asyncio"]}
 sse-starlette = ">=3.0.2"
-starlette = ">=0.49.1"
+starlette = ">=1.3.1"
 tenacity = ">=8.5,<10"
 termcolor = "*"
 toml = "*"
@@ -14458,4 +14458,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "55a09a40217bbbc876e5864b78c941d86a261e4111bce7e4495c1dd75df43fd7"
+content-hash = "3ed1ff54e78b57ec90cadf57dd1165ef76945c01c87ae358c6a8f3da1fd1e5a8"

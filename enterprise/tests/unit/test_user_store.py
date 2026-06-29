@@ -10,6 +10,8 @@ import pytest
 from pydantic import SecretStr
 from sqlalchemy import select
 from storage.org import Org
+from storage.org_member import OrgMember
+from storage.role import Role
 from storage.user import User
 from storage.user_store import UserStore
 
@@ -241,6 +243,79 @@ async def test_create_default_settings_v1_enabled_false_when_default_is_false(
 
     assert captured_settings is not None
     assert captured_settings.v1_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_create_user_reuses_existing_org(async_session_maker):
+    user_id = str(uuid.uuid4())
+    user_uuid = uuid.UUID(user_id)
+    user_info = {
+        'email': 'user@example.com',
+        'preferred_username': 'test-user',
+        'name': 'Test User',
+    }
+
+    mock_settings = Settings(language='en')
+    mock_settings.update(
+        {
+            'agent_settings_diff': {
+                'agent': 'CodeActAgent',
+                'llm': {
+                    'model': 'anthropic/claude-sonnet-4-5-20250929',
+                    'api_key': 'test_api_key',
+                    'base_url': 'http://test.url',
+                },
+            },
+        }
+    )
+
+    async with async_session_maker() as session:
+        session.add(
+            Org(
+                id=user_uuid,
+                name=f'user_{user_id}_org',
+                contact_name='Existing User',
+                contact_email='existing@example.com',
+            )
+        )
+        session.add(Role(id=1, name='owner', rank=10))
+        await session.commit()
+
+    with (
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.role_store.a_session_maker', async_session_maker),
+        patch(
+            'storage.user_store.UserStore.create_default_settings',
+            new_callable=AsyncMock,
+            return_value=mock_settings,
+        ),
+    ):
+        user = await UserStore.create_user(user_id, user_info)
+
+    assert user is not None
+    assert user.id == user_uuid
+    assert user.current_org_id == user_uuid
+
+    async with async_session_maker() as session:
+        db_user = (
+            (await session.execute(select(User).filter(User.id == user_uuid)))
+            .scalars()
+            .first()
+        )
+        org_member = (
+            (
+                await session.execute(
+                    select(OrgMember).filter(
+                        OrgMember.org_id == user_uuid, OrgMember.user_id == user_uuid
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+
+    assert db_user is not None
+    assert org_member is not None
 
 
 # --- Tests for get_user_by_id ---
