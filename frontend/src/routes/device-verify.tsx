@@ -3,9 +3,17 @@ import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useIsAuthed } from "#/hooks/query/use-is-authed";
 import { LoginCTA } from "#/components/features/auth/login-cta";
+import { RiskAlert } from "#/components/shared/risk-alert";
 import { I18nKey } from "#/i18n/declaration";
 import { H1 } from "#/ui/typography";
+import WarningIcon from "#/icons/u-warning.svg?react";
 import { useAppMode } from "#/hooks/use-app-mode";
+import { useOrganizations } from "#/hooks/query/use-organizations";
+import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { useSwitchOrganization } from "#/hooks/mutation/use-switch-organization";
+import { useShouldHideOrgSelector } from "#/hooks/use-should-hide-org-selector";
+import { Dropdown } from "#/ui/dropdown/dropdown";
+import type { Organization } from "#/types/org";
 
 export default function DeviceVerify() {
   const { t } = useTranslation();
@@ -17,6 +25,26 @@ export default function DeviceVerify() {
   } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const { isEnterpriseCloud } = useAppMode();
+
+  // Organization dropdown state — defaults to the user's current workspace.
+  const { data: orgData, isLoading: isOrgsLoading } = useOrganizations();
+  const { organizationId: selectedOrgId } = useSelectedOrganizationId();
+  const { mutate: switchOrganization, isPending: isSwitchingOrg } =
+    useSwitchOrganization();
+  const shouldHideOrgSelector = useShouldHideOrgSelector();
+
+  const organizations = orgData?.organizations;
+  const getOrgDisplayName = React.useCallback(
+    (org: Organization) =>
+      org.is_personal ? t(I18nKey.ORG$PERSONAL_WORKSPACE) : org.name,
+    [t],
+  );
+  const selectedOrg = React.useMemo(() => {
+    if (!organizations) return undefined;
+    return (
+      organizations.find((org) => org.id === selectedOrgId) ?? organizations[0]
+    );
+  }, [organizations, selectedOrgId]);
 
   // Get user_code from URL parameters
   const userCode = searchParams.get("user_code");
@@ -168,17 +196,53 @@ export default function DeviceVerify() {
                 {userCode}
               </p>
             </div>
-            <div className="mb-6 p-4 bg-amber-950/50 border-l-2 border-amber-500 rounded-r-lg">
-              <p className="text-sm font-medium text-amber-500 mb-1">
-                {t(I18nKey.DEVICE$SECURITY_NOTICE)}
-              </p>
-              <p className="text-sm text-gray-400">
-                {t(I18nKey.DEVICE$SECURITY_WARNING)}
-              </p>
+            <div className="mb-6">
+              <RiskAlert
+                severity="medium"
+                icon={<WarningIcon width={16} height={16} />}
+                title={t(I18nKey.DEVICE$SECURITY_NOTICE)}
+                content={t(I18nKey.DEVICE$SECURITY_WARNING)}
+              />
             </div>
             <p className="text-muted-foreground mb-6 text-center">
               {t(I18nKey.DEVICE$CONFIRM_PROMPT)}
             </p>
+            {!shouldHideOrgSelector && (
+              <div className="mb-6">
+                <label className="flex flex-col gap-2">
+                  <span className="text-sm font-medium">
+                    {t(I18nKey.WORKSPACE$TITLE)}
+                  </span>
+                  <Dropdown
+                    testId="device-verify-org-selector"
+                    key={`${selectedOrg?.id}-${selectedOrg?.name}`}
+                    defaultValue={{
+                      label: selectedOrg ? getOrgDisplayName(selectedOrg) : "",
+                      value: selectedOrg?.id ?? "",
+                    }}
+                    placeholder={t(I18nKey.ORG$SELECT_ORGANIZATION_PLACEHOLDER)}
+                    loading={isOrgsLoading || isSwitchingOrg}
+                    options={
+                      organizations?.map((org) => ({
+                        value: org.id,
+                        label: getOrgDisplayName(org),
+                      })) ?? []
+                    }
+                    onChange={(item) => {
+                      if (!item || item.value === selectedOrgId) return;
+                      const org = organizations?.find(
+                        (o) => o.id === item.value,
+                      );
+                      switchOrganization({
+                        orgId: item.value,
+                        orgName: item.label,
+                        isPersonal: org?.is_personal ?? false,
+                      });
+                    }}
+                  />
+                </label>
+              </div>
+            )}
             <div className="flex gap-3">
               <button
                 type="button"
@@ -190,7 +254,7 @@ export default function DeviceVerify() {
               <button
                 type="button"
                 onClick={() => processDeviceVerification(userCode)}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                className="flex-1 px-4 py-2 bg-primary text-[#0D0F11] rounded-md hover:opacity-80"
               >
                 {t(I18nKey.DEVICE$AUTHORIZE)}
               </button>
