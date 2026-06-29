@@ -246,9 +246,9 @@ async def test_secrets_store_store_uses_effective_org_id_when_set():
     ):
         await store.store(item)
 
-    assert captured_org_ids == [
-        EFFECTIVE_ORG_ID
-    ], f'store() wrote under {captured_org_ids[0]!s}, expected {EFFECTIVE_ORG_ID!s}'
+    assert captured_org_ids == [EFFECTIVE_ORG_ID], (
+        f'store() wrote under {captured_org_ids[0]!s}, expected {EFFECTIVE_ORG_ID!s}'
+    )
 
 
 @pytest.mark.asyncio

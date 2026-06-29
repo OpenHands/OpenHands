@@ -15,7 +15,7 @@ import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { Provider } from "#/types/settings";
 import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
-import { agentDisplayLabel } from "#/utils/agent-display-label";
+import { resolveAgentChip } from "#/utils/agent-display-label";
 import { useConfig } from "#/hooks/query/use-config";
 import { ConversationCard } from "./conversation-card/conversation-card";
 import { StartTaskCard } from "./start-task-card/start-task-card";
@@ -204,10 +204,10 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
             onContextMenuToggle={(isOpen) =>
               setOpenContextMenuId(isOpen ? conversation.id : null)
             }
-            llmModel={agentDisplayLabel(
+            agentChip={resolveAgentChip(
               conversation.agent_kind,
               conversation.llm_model,
-              conversation.tags,
+              conversation.acp_server,
               config?.acp_providers,
             )}
           />

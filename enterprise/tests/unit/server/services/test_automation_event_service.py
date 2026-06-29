@@ -841,6 +841,253 @@ class TestSendToAutomationService:
             mock_logger.warning.assert_called()
             assert 'not configured' in str(mock_logger.warning.call_args)
 
+    @pytest.mark.asyncio
+    async def test_send_timeout_logs_error(self, mock_token_manager):
+        """
+        GIVEN: AUTOMATION_SERVICE_URL is configured
+        WHEN: _send_to_automation_service times out
+        THEN: Error is logged (not warning) since the event was never delivered
+        """
+        import asyncio
+
+        org_id = uuid.UUID('12345678-1234-5678-1234-567812345678')
+        payload = {'test': 'data'}
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={'matched': 2})
+
+        # Create a mock post that raises TimeoutError within the async context
+        async def raise_timeout(*args, **kwargs):
+            raise asyncio.TimeoutError('Connection timed out')
+
+        mock_post_context = MagicMock()
+        mock_post_context.__aenter__ = AsyncMock(
+            side_effect=asyncio.TimeoutError('Connection timed out')
+        )
+        mock_post_context.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session_instance = MagicMock()
+        mock_session_instance.post = MagicMock(return_value=mock_post_context)
+
+        mock_session_context = MagicMock()
+        mock_session_context.__aenter__ = AsyncMock(return_value=mock_session_instance)
+        mock_session_context.__aexit__ = AsyncMock(return_value=None)
+
+        with (
+            patch(
+                'server.services.automation_event_service.AUTOMATION_SERVICE_URL',
+                'https://automation.example.com',
+            ),
+            patch(
+                'server.services.automation_event_service.aiohttp.ClientSession',
+                return_value=mock_session_context,
+            ),
+            patch('server.services.automation_event_service.logger') as mock_logger,
+        ):
+            service = create_service(mock_token_manager)
+            await service._send_to_automation_service(
+                ProviderType.GITHUB, org_id, payload
+            )
+
+            mock_logger.error.assert_called()
+            assert 'Timeout' in str(mock_logger.error.call_args)
+            assert (
+                'never delivered' in str(mock_logger.error.call_args).lower()
+                or 'timeout' in str(mock_logger.error.call_args).lower()
+            )
+
+    @pytest.mark.asyncio
+    async def test_send_5xx_logs_error(self, mock_token_manager):
+        """
+        GIVEN: Automation service returns 5xx (server error)
+        WHEN: _send_to_automation_service is called
+        THEN: Error is logged (event was dropped, user impact)
+        """
+        org_id = uuid.UUID('12345678-1234-5678-1234-567812345678')
+        payload = {'organization': {'git_org': 'test'}, 'payload': {}}
+
+        mock_response = MagicMock()
+        mock_response.status = 500
+        mock_response.json = AsyncMock(return_value={'error': 'internal error'})
+
+        mock_post_context = MagicMock()
+        mock_post_context.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_post_context.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session_instance = MagicMock()
+        mock_session_instance.post = MagicMock(return_value=mock_post_context)
+
+        mock_session_context = MagicMock()
+        mock_session_context.__aenter__ = AsyncMock(return_value=mock_session_instance)
+        mock_session_context.__aexit__ = AsyncMock(return_value=None)
+
+        with (
+            patch(
+                'server.services.automation_event_service.AUTOMATION_SERVICE_URL',
+                'https://automation.example.com',
+            ),
+            patch(
+                'server.services.automation_event_service.aiohttp.ClientSession',
+                return_value=mock_session_context,
+            ),
+            patch('server.services.automation_event_service.logger') as mock_logger,
+        ):
+            service = create_service(mock_token_manager)
+            await service._send_to_automation_service(
+                ProviderType.GITHUB, org_id, payload
+            )
+
+            mock_logger.error.assert_called()
+            assert '500' in str(mock_logger.error.call_args)
+            mock_logger.warning.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_send_client_error_logs_error(self, mock_token_manager):
+        """
+        GIVEN: AUTOMATION_SERVICE_URL is configured
+        WHEN: _send_to_automation_service fails with HTTP error
+        THEN: Error is logged (not warning) since the event was not delivered
+        """
+        import aiohttp
+
+        org_id = uuid.UUID('12345678-1234-5678-1234-567812345678')
+        payload = {'test': 'data'}
+
+        mock_session_instance = MagicMock()
+        mock_session_instance.post = MagicMock()
+
+        # Create a mock that raises ClientError when used as async context manager
+        mock_post_context = MagicMock()
+        mock_post_context.__aenter__ = AsyncMock(
+            side_effect=aiohttp.ClientError('Connection refused')
+        )
+        mock_post_context.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session_instance.post = MagicMock(return_value=mock_post_context)
+
+        mock_session_context = MagicMock()
+        mock_session_context.__aenter__ = AsyncMock(return_value=mock_session_instance)
+        mock_session_context.__aexit__ = AsyncMock(return_value=None)
+
+        with (
+            patch(
+                'server.services.automation_event_service.AUTOMATION_SERVICE_URL',
+                'https://automation.example.com',
+            ),
+            patch(
+                'server.services.automation_event_service.aiohttp.ClientSession',
+                return_value=mock_session_context,
+            ),
+            patch('server.services.automation_event_service.logger') as mock_logger,
+        ):
+            service = create_service(mock_token_manager)
+            await service._send_to_automation_service(
+                ProviderType.GITHUB, org_id, payload
+            )
+
+            mock_logger.error.assert_called()
+            assert 'HTTP error' in str(mock_logger.error.call_args)
+
+    @pytest.mark.asyncio
+    async def test_send_503_logs_error(self, mock_token_manager):
+        """
+        GIVEN: Automation service returns 503 (service unavailable)
+        WHEN: _send_to_automation_service is called
+        THEN: Error is logged (event was dropped, user impact)
+        """
+        import aiohttp
+
+        org_id = uuid.UUID('12345678-1234-5678-1234-567812345678')
+        payload = {'organization': {'git_org': 'test'}, 'payload': {}}
+
+        mock_response = MagicMock()
+        mock_response.status = 503
+        # Simulate JSON parse failure (e.g., load balancer 503 returns text)
+        mock_response.json = AsyncMock(
+            side_effect=aiohttp.ContentTypeError(
+                request_info=MagicMock(),
+                history=(),
+            )
+        )
+        mock_response.text = AsyncMock(return_value='Service Temporarily Unavailable')
+
+        mock_post_context = MagicMock()
+        mock_post_context.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_post_context.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session_instance = MagicMock()
+        mock_session_instance.post = MagicMock(return_value=mock_post_context)
+
+        mock_session_context = MagicMock()
+        mock_session_context.__aenter__ = AsyncMock(return_value=mock_session_instance)
+        mock_session_context.__aexit__ = AsyncMock(return_value=None)
+
+        with (
+            patch(
+                'server.services.automation_event_service.AUTOMATION_SERVICE_URL',
+                'https://automation.example.com',
+            ),
+            patch(
+                'server.services.automation_event_service.aiohttp.ClientSession',
+                return_value=mock_session_context,
+            ),
+            patch('server.services.automation_event_service.logger') as mock_logger,
+        ):
+            service = create_service(mock_token_manager)
+            await service._send_to_automation_service(
+                ProviderType.GITHUB, org_id, payload
+            )
+
+            mock_logger.error.assert_called()
+            assert '503' in str(mock_logger.error.call_args)
+            mock_logger.warning.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_send_4xx_logs_warning(self, mock_token_manager):
+        """
+        GIVEN: Automation service returns 4xx (client error)
+        WHEN: _send_to_automation_service is called
+        THEN: Warning is logged (contract/client problem, not downstream outage)
+        """
+        org_id = uuid.UUID('12345678-1234-5678-1234-567812345678')
+        payload = {'organization': {'git_org': 'test'}, 'payload': {}}
+
+        mock_response = MagicMock()
+        mock_response.status = 400
+        mock_response.json = AsyncMock(return_value={'error': 'bad request'})
+
+        mock_post_context = MagicMock()
+        mock_post_context.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_post_context.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session_instance = MagicMock()
+        mock_session_instance.post = MagicMock(return_value=mock_post_context)
+
+        mock_session_context = MagicMock()
+        mock_session_context.__aenter__ = AsyncMock(return_value=mock_session_instance)
+        mock_session_context.__aexit__ = AsyncMock(return_value=None)
+
+        with (
+            patch(
+                'server.services.automation_event_service.AUTOMATION_SERVICE_URL',
+                'https://automation.example.com',
+            ),
+            patch(
+                'server.services.automation_event_service.aiohttp.ClientSession',
+                return_value=mock_session_context,
+            ),
+            patch('server.services.automation_event_service.logger') as mock_logger,
+        ):
+            service = create_service(mock_token_manager)
+            await service._send_to_automation_service(
+                ProviderType.GITHUB, org_id, payload
+            )
+
+            mock_logger.warning.assert_called()
+            assert '400' in str(mock_logger.warning.call_args)
+            mock_logger.error.assert_not_called()
+
 
 class TestSignPayload:
     """Tests for _sign_payload method."""
@@ -968,3 +1215,166 @@ class TestCacheHelpers:
             service = create_service(mock_token_manager)
             # Should not raise
             await service._set_cached_value('test-key', 'test-value', 3600)
+
+
+class TestResolveDefaultOrgFallback:
+    """Tests for the single-org default-org fallback in org resolution."""
+
+    @staticmethod
+    def _team_org(name='AcmeOrg'):
+        org = MagicMock()
+        org.id = uuid.UUID('87654321-4321-8765-4321-876543218765')
+        org.name = name
+        return org
+
+    @pytest.mark.asyncio
+    async def test_fallback_resolves_single_team_org(
+        self, mock_token_manager, monkeypatch
+    ):
+        """
+        GIVEN: A configured default org that is the only team org, no claim
+        WHEN: _resolve_default_org_fallback is called
+        THEN: The default org id is returned and cached
+        """
+        monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
+        org = self._team_org()
+        mock_redis = AsyncMock()
+        mock_redis.get = AsyncMock(return_value=None)
+        mock_redis.setex = AsyncMock()
+
+        with (
+            patch(
+                'server.services.automation_event_service.OrgStore'
+            ) as mock_org_store,
+            patch(REDIS_PATCH, return_value=mock_redis),
+        ):
+            mock_org_store.get_default_org = AsyncMock(return_value=org)
+            mock_org_store.count_team_orgs = AsyncMock(return_value=1)
+            service = create_service(mock_token_manager)
+            result = await service._resolve_default_org_fallback(
+                ProviderType.BITBUCKET_DATA_CENTER, 'proj'
+            )
+
+            assert result == org.id
+            mock_redis.setex.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_fallback_disabled_without_default_org_config(
+        self, mock_token_manager, monkeypatch
+    ):
+        """
+        GIVEN: No default org configured
+        WHEN: _resolve_default_org_fallback is called
+        THEN: None is returned without touching the DB
+        """
+        monkeypatch.delenv('OPENHANDS_DEFAULT_ORG_ENABLED', raising=False)
+        mock_redis = AsyncMock()
+
+        with (
+            patch(
+                'server.services.automation_event_service.OrgStore'
+            ) as mock_org_store,
+            patch(REDIS_PATCH, return_value=mock_redis),
+        ):
+            mock_org_store.get_default_org = AsyncMock()
+            service = create_service(mock_token_manager)
+            result = await service._resolve_default_org_fallback(
+                ProviderType.BITBUCKET_DATA_CENTER, 'proj'
+            )
+
+            assert result is None
+            mock_org_store.get_default_org.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_fallback_off_with_multiple_team_orgs(
+        self, mock_token_manager, monkeypatch
+    ):
+        """
+        GIVEN: A default org configured but a second team org exists
+        WHEN: _resolve_default_org_fallback is called
+        THEN: None is returned (multi-org installs require explicit claims)
+        """
+        monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
+        org = self._team_org()
+        mock_redis = AsyncMock()
+        mock_redis.get = AsyncMock(return_value=None)
+        mock_redis.setex = AsyncMock()
+
+        with (
+            patch(
+                'server.services.automation_event_service.OrgStore'
+            ) as mock_org_store,
+            patch(REDIS_PATCH, return_value=mock_redis),
+        ):
+            mock_org_store.get_default_org = AsyncMock(return_value=org)
+            mock_org_store.count_team_orgs = AsyncMock(return_value=2)
+            service = create_service(mock_token_manager)
+            result = await service._resolve_default_org_fallback(
+                ProviderType.BITBUCKET_DATA_CENTER, 'proj'
+            )
+
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_fallback_cache_hit_skips_db(self, mock_token_manager, monkeypatch):
+        """
+        GIVEN: A cached fallback result
+        WHEN: _resolve_default_org_fallback is called
+        THEN: The cached org id is returned without DB lookups
+        """
+        monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
+        cached_id = '87654321-4321-8765-4321-876543218765'
+        mock_redis = AsyncMock()
+        mock_redis.get = AsyncMock(return_value=cached_id.encode())
+
+        with (
+            patch(
+                'server.services.automation_event_service.OrgStore'
+            ) as mock_org_store,
+            patch(REDIS_PATCH, return_value=mock_redis),
+        ):
+            mock_org_store.get_default_org = AsyncMock()
+            service = create_service(mock_token_manager)
+            result = await service._resolve_default_org_fallback(
+                ProviderType.BITBUCKET_DATA_CENTER, 'proj'
+            )
+
+            assert result == uuid.UUID(cached_id)
+            mock_org_store.get_default_org.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_unclaimed_bitbucket_dc_event_routes_to_default_org(
+        self, mock_token_manager, bitbucket_dc_pr_payload, monkeypatch
+    ):
+        """
+        GIVEN: An unclaimed Bitbucket DC project on a single-org install
+        WHEN: _resolve_org_context is called
+        THEN: The event resolves to the default org instead of being dropped
+        """
+        monkeypatch.setenv('OPENHANDS_DEFAULT_ORG_ENABLED', 'true')
+        org = self._team_org()
+        mock_redis = AsyncMock()
+        mock_redis.get = AsyncMock(return_value=None)
+        mock_redis.setex = AsyncMock()
+
+        with (
+            patch(
+                'server.services.automation_event_service.resolve_org_for_repo',
+                new_callable=AsyncMock,
+                return_value=None,  # No claim
+            ),
+            patch(
+                'server.services.automation_event_service.OrgStore'
+            ) as mock_org_store,
+            patch(REDIS_PATCH, return_value=mock_redis),
+        ):
+            mock_org_store.get_default_org = AsyncMock(return_value=org)
+            mock_org_store.count_team_orgs = AsyncMock(return_value=1)
+            service = create_service(mock_token_manager)
+            context = await service._resolve_org_context(
+                ProviderType.BITBUCKET_DATA_CENTER, bitbucket_dc_pr_payload
+            )
+
+            assert context is not None
+            assert context.org_id == org.id
+            assert context.git_org == 'PROJ'

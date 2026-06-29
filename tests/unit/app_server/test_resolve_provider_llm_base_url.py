@@ -73,7 +73,7 @@ class TestOpenHandsPrefixNoProviderUrl:
 
 
 class TestNonMatchingModelPrefix:
-    """Model without openhands/ or litellm_proxy/ prefix → returns base_url unchanged."""
+    """Model without openhands/ prefix → returns base_url unchanged."""
 
     def test_plain_model_returns_base_url(self):
         result = resolve_provider_llm_base_url(
@@ -101,15 +101,15 @@ class TestNonMatchingModelPrefix:
 
 
 class TestLitellmProxyPrefix:
-    """litellm_proxy/ prefix behaves identically to openhands/ prefix."""
+    """litellm_proxy/ prefix is treated as an explicit LiteLLM proxy model."""
 
-    def test_replaces_sdk_default(self):
+    def test_provider_url_not_applied_to_litellm_proxy(self):
         result = resolve_provider_llm_base_url(
             model='litellm_proxy/gpt-4',
             base_url=SDK_DEFAULT,
             provider_base_url=STAGING_URL,
         )
-        assert result == STAGING_URL
+        assert result == SDK_DEFAULT
 
     def test_custom_url_preserved(self):
         result = resolve_provider_llm_base_url(
@@ -119,13 +119,13 @@ class TestLitellmProxyPrefix:
         )
         assert result == CUSTOM_URL
 
-    def test_sdk_default_returned_when_no_provider(self):
+    def test_none_base_url_stays_none(self):
         result = resolve_provider_llm_base_url(
             model='litellm_proxy/gpt-4',
-            base_url=SDK_DEFAULT,
-            provider_base_url='',
+            base_url=None,
+            provider_base_url=STAGING_URL,
         )
-        assert result == SDK_DEFAULT
+        assert result is None
 
 
 class TestEdgeCases:

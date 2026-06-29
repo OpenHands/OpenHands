@@ -419,6 +419,116 @@ async def test_edit_profile_with_new_api_key_replaces_old(test_client, settings_
 
 
 @pytest.mark.asyncio
+async def test_snapshot_save_with_preserve_flag_keeps_existing_profile_key(
+    test_client, settings_store
+):
+    """The UI's no-key edit-save: settings are saved first (active key kept),
+    then the profile is snapshotted. ``preserve_existing_api_key`` must stop
+    the snapshot from replacing the profile's stored key with the active one,
+    while the rest of the snapshot (model etc.) still lands.
+    """
+    settings = _base_settings()  # active llm: openai/gpt-4o + sk-current
+    settings.llm_profiles.save(
+        'p', LLM(model='anthropic/claude-opus-4', api_key=SecretStr('sk-profile'))
+    )
+    await _seed(settings_store, settings)
+
+    resp = test_client.post(
+        '/api/v1/settings/profiles/p',
+        json={'include_secrets': True, 'preserve_existing_api_key': True},
+    )
+    assert resp.status_code == 201
+
+    stored = await settings_store.load()
+    saved = stored.llm_profiles.get('p')
+    assert saved.model == 'openai/gpt-4o'  # snapshot of active settings
+    assert saved.api_key.get_secret_value() == 'sk-profile'  # key preserved
+
+
+@pytest.mark.asyncio
+async def test_snapshot_save_with_preserve_flag_keeps_profile_keyless(
+    test_client, settings_store
+):
+    """A keyless profile must stay keyless on a no-key edit-save — it must
+    not silently inherit the active settings' key."""
+    settings = _base_settings()
+    settings.llm_profiles.save('p', LLM(model='anthropic/claude-opus-4'))
+    await _seed(settings_store, settings)
+
+    resp = test_client.post(
+        '/api/v1/settings/profiles/p',
+        json={'preserve_existing_api_key': True},
+    )
+    assert resp.status_code == 201
+
+    stored = await settings_store.load()
+    assert stored.llm_profiles.get('p').api_key is None
+
+
+@pytest.mark.asyncio
+async def test_snapshot_save_preserve_flag_noop_for_new_profile(
+    test_client, settings_store
+):
+    """With no existing profile there is nothing to preserve — the snapshot
+    keeps its key (current create behaviour, unchanged)."""
+    await _seed(settings_store, _base_settings())
+
+    resp = test_client.post(
+        '/api/v1/settings/profiles/fresh',
+        json={'preserve_existing_api_key': True},
+    )
+    assert resp.status_code == 201
+
+    stored = await settings_store.load()
+    assert stored.llm_profiles.get('fresh').api_key.get_secret_value() == 'sk-current'
+
+
+@pytest.mark.asyncio
+async def test_preserve_flag_wins_over_explicit_llm_key(test_client, settings_store):
+    """The flag declares 'no new key from the user'; a key smuggled in the
+    body alongside it is ignored in favour of the stored one."""
+    await _seed(settings_store, _base_settings())
+    test_client.post(
+        '/api/v1/settings/profiles/p',
+        json={'llm': {'model': 'openai/gpt-4o', 'api_key': 'OLD-KEY'}},
+    )
+
+    resp = test_client.post(
+        '/api/v1/settings/profiles/p',
+        json={
+            'preserve_existing_api_key': True,
+            'llm': {'model': 'openai/gpt-4o', 'api_key': 'NEW-KEY'},
+        },
+    )
+    assert resp.status_code == 201
+
+    stored = await settings_store.load()
+    assert stored.llm_profiles.get('p').api_key.get_secret_value() == 'OLD-KEY'
+
+
+@pytest.mark.asyncio
+async def test_preserve_flag_then_include_secrets_false_still_clears_key(
+    test_client, settings_store
+):
+    """``include_secrets: false`` is the explicit 'store no secret' switch and
+    must win over key preservation."""
+    settings = _base_settings()
+    settings.llm_profiles.save(
+        'p', LLM(model='openai/gpt-4o', api_key=SecretStr('sk-profile'))
+    )
+    await _seed(settings_store, settings)
+
+    resp = test_client.post(
+        '/api/v1/settings/profiles/p',
+        json={'include_secrets': False, 'preserve_existing_api_key': True},
+    )
+    assert resp.status_code == 201
+
+    stored = await settings_store.load()
+    assert stored.llm_profiles.get('p').api_key is None
+
+
+@pytest.mark.asyncio
 async def test_list_profiles_reports_api_key_set_per_row(test_client, settings_store):
     settings = _base_settings()
     settings.llm_profiles.save(

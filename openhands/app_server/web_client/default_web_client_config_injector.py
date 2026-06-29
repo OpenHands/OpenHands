@@ -13,6 +13,7 @@ from openhands.app_server.web_client.web_client_config_injector import (
     WebClientConfigInjector,
 )
 from openhands.app_server.web_client.web_client_models import (
+    ACPModelOption,
     ACPProviderConfig,
     WebClientConfig,
     WebClientFeatureFlags,
@@ -159,8 +160,12 @@ def _get_feature_flags() -> WebClientFeatureFlags:
 
     Reads ENABLE_BILLING, HIDE_LLM_SETTINGS, ENABLE_JIRA, ENABLE_JIRA_DC,
     ENABLE_LINEAR, HIDE_USERS_PAGE, HIDE_BILLING_PAGE, HIDE_INTEGRATIONS_PAGE,
-    ENABLE_ACP, and OH_ENABLE_ONBOARDING from environment. Each flag is True
-    only if the corresponding env var is exactly 'true', otherwise False.
+    HIDE_PERSONAL_WORKSPACES, ENABLE_ACP, and OH_ENABLE_ONBOARDING from
+    environment. Each flag is True only if the corresponding env var is
+    exactly 'true', otherwise False.
+
+    OH_ALLOW_USER_LLM_CONFIGURATION is the exception: it defaults to 'true'
+    when unset so SaaS and existing installs keep the BYOK editing UI.
     """
     return WebClientFeatureFlags(
         enable_billing=os.getenv('ENABLE_BILLING', 'false') == 'true',
@@ -171,8 +176,15 @@ def _get_feature_flags() -> WebClientFeatureFlags:
         hide_users_page=os.getenv('HIDE_USERS_PAGE', 'false') == 'true',
         hide_billing_page=os.getenv('HIDE_BILLING_PAGE', 'false') == 'true',
         hide_integrations_page=os.getenv('HIDE_INTEGRATIONS_PAGE', 'false') == 'true',
+        hide_personal_workspaces=os.getenv('HIDE_PERSONAL_WORKSPACES', 'false')
+        == 'true',
+        allow_user_llm_configuration=os.getenv(
+            'OH_ALLOW_USER_LLM_CONFIGURATION', 'true'
+        )
+        == 'true',
         enable_acp=os.getenv('ENABLE_ACP', 'false') == 'true',
         enable_onboarding=os.getenv('OH_ENABLE_ONBOARDING', 'false') == 'true',
+        enable_automations=os.getenv('ENABLE_AUTOMATIONS', 'true') == 'true',
     )
 
 
@@ -221,10 +233,14 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
             ACPProviderConfig(
                 key=provider.key,
                 display_name=provider.display_name,
-                # SDK exposes ``default_command`` as ``tuple[str, ...]`` (frozen
-                # registry record); the API contract uses ``list[str]`` for
-                # JSON-friendliness.
                 default_command=list(provider.default_command),
+                default_model=provider.default_model or None,
+                available_models=[
+                    ACPModelOption(id=m.id, label=m.label)
+                    for m in (provider.available_models or [])
+                ],
+                api_key_env_var=provider.api_key_env_var,
+                base_url_env_var=provider.base_url_env_var,
             )
             for provider in ACP_PROVIDERS.values()
         ]

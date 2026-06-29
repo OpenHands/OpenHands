@@ -142,14 +142,14 @@ def test_from_org_preserves_acp_agent_settings_without_500():
     assert response.agent_settings.agent_context is None
 
 
-def test_from_org_denormalizes_litellm_proxy_prefix_and_returns_base_url_as_stored():
-    """Managed-model responses should be denormalized for the frontend."""
+def test_from_org_keeps_openhands_prefix_and_hides_managed_base_url():
+    """Managed OpenHands models should return the public prefix in basic mode."""
     org = MagicMock(spec=Org)
     org.agent_settings = {
         'schema_version': 1,
         'agent': 'CodeActAgent',
         'llm': {
-            'model': 'litellm_proxy/minimax-m2.5',
+            'model': 'openhands/minimax-m2.5',
             'base_url': LITE_LLM_API_URL,
             'api_key': MASKED_API_KEY,
         },
@@ -161,7 +161,7 @@ def test_from_org_denormalizes_litellm_proxy_prefix_and_returns_base_url_as_stor
     response = OrgDefaultsSettingsResponse.from_org(org)
 
     assert response.agent_settings.llm.model == 'openhands/minimax-m2.5'
-    assert response.agent_settings.llm.base_url == LITE_LLM_API_URL
+    assert response.agent_settings.llm.base_url is None
     assert response.agent_settings.llm.api_key is None
 
 

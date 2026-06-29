@@ -274,12 +274,15 @@ async def test_logout_skips_keycloak_for_bearer_auth():
     bearer_user_auth.auth_type = AuthType.BEARER
     bearer_user_auth.refresh_token = SecretStr('the-users-offline-token')
 
-    with patch(
-        'server.middleware.get_user_auth',
-        new=AsyncMock(return_value=bearer_user_auth),
-    ), patch(
-        'server.middleware.token_manager.logout', new=AsyncMock()
-    ) as mock_kc_logout:
+    with (
+        patch(
+            'server.middleware.get_user_auth',
+            new=AsyncMock(return_value=bearer_user_auth),
+        ),
+        patch(
+            'server.middleware.token_manager.logout', new=AsyncMock()
+        ) as mock_kc_logout,
+    ):
         await middleware._logout(mock_request)
 
     mock_kc_logout.assert_not_called()
@@ -300,12 +303,15 @@ async def test_logout_invokes_keycloak_for_cookie_auth():
     cookie_user_auth.auth_type = AuthType.COOKIE
     cookie_user_auth.refresh_token = SecretStr('cookie-refresh-token')
 
-    with patch(
-        'server.middleware.get_user_auth',
-        new=AsyncMock(return_value=cookie_user_auth),
-    ), patch(
-        'server.middleware.token_manager.logout', new=AsyncMock()
-    ) as mock_kc_logout:
+    with (
+        patch(
+            'server.middleware.get_user_auth',
+            new=AsyncMock(return_value=cookie_user_auth),
+        ),
+        patch(
+            'server.middleware.token_manager.logout', new=AsyncMock()
+        ) as mock_kc_logout,
+    ):
         await middleware._logout(mock_request)
 
     mock_kc_logout.assert_awaited_once_with('cookie-refresh-token')

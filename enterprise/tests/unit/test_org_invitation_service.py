@@ -7,6 +7,8 @@ import pytest
 from pydantic import SecretStr
 from server.routes.org_invitation_models import (
     EmailMismatchError,
+    InvitationInvalidError,
+    UserAlreadyMemberError,
 )
 from server.services.org_invitation_service import OrgInvitationService
 from storage.org_invitation import OrgInvitation
@@ -666,3 +668,419 @@ class TestCreateInvitationsBatch:
                 )
 
             assert 'Invalid role' in str(exc_info.value)
+
+
+class TestAcceptInvitationAlreadyAccepted:
+    """Accepting an already-accepted invitation should be benign for members.
+
+    The invitation may have been accepted on the user's behalf already (e.g.
+    by verified-email match during sign-in), after which the frontend still
+    submits the token. That must surface as "already a member", not as an
+    invalid-token error.
+    """
+
+    def _invitation(self, status=OrgInvitation.STATUS_ACCEPTED):
+        invitation = MagicMock(spec=OrgInvitation)
+        invitation.id = 1
+        invitation.email = 'alice@example.com'
+        invitation.status = status
+        invitation.org_id = UUID('12345678-1234-5678-1234-567812345678')
+        invitation.role_id = 1
+        return invitation
+
+    @pytest.mark.asyncio
+    async def test_already_accepted_and_member_raises_already_member(self):
+        user_id = UUID('87654321-4321-8765-4321-876543218765')
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_token',
+                new_callable=AsyncMock,
+            ) as mock_get_invitation,
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_member,
+        ):
+            mock_get_invitation.return_value = self._invitation()
+            mock_get_member.return_value = MagicMock()
+
+            with pytest.raises(UserAlreadyMemberError):
+                await OrgInvitationService.accept_invitation('inv-token', user_id)
+
+    @pytest.mark.asyncio
+    async def test_already_accepted_but_not_member_raises_invalid(self):
+        user_id = UUID('87654321-4321-8765-4321-876543218765')
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_token',
+                new_callable=AsyncMock,
+            ) as mock_get_invitation,
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
+            ) as mock_get_member,
+        ):
+            mock_get_invitation.return_value = self._invitation()
+            mock_get_member.return_value = None
+
+            with pytest.raises(InvitationInvalidError):
+                await OrgInvitationService.accept_invitation('inv-token', user_id)
+
+    @pytest.mark.asyncio
+    async def test_revoked_invitation_still_raises_invalid(self):
+        user_id = UUID('87654321-4321-8765-4321-876543218765')
+
+        with patch(
+            'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_token',
+            new_callable=AsyncMock,
+        ) as mock_get_invitation:
+            mock_get_invitation.return_value = self._invitation(
+                status=OrgInvitation.STATUS_REVOKED
+            )
+
+            with pytest.raises(InvitationInvalidError):
+                await OrgInvitationService.accept_invitation('inv-token', user_id)
+
+
+class TestRevokeInvitation:
+    """Revoking pending invitations."""
+
+    def _invitation(self, status=OrgInvitation.STATUS_PENDING):
+        invitation = MagicMock(spec=OrgInvitation)
+        invitation.id = 7
+        invitation.org_id = UUID('12345678-1234-5678-1234-567812345678')
+        invitation.status = status
+        return invitation
+
+    @pytest.mark.asyncio
+    async def test_revoke_pending_invitation(self):
+        invitation = self._invitation()
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_id',
+                new_callable=AsyncMock,
+                return_value=invitation,
+            ),
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore.update_invitation_status',
+                new_callable=AsyncMock,
+            ) as mock_update,
+        ):
+            mock_update.return_value = invitation
+            result = await OrgInvitationService.revoke_invitation(
+                invitation.org_id, invitation.id
+            )
+
+        assert result is invitation
+        mock_update.assert_awaited_once_with(
+            invitation.id, OrgInvitation.STATUS_REVOKED
+        )
+
+    @pytest.mark.asyncio
+    async def test_revoke_unknown_invitation_returns_none(self):
+        with patch(
+            'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_id',
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            result = await OrgInvitationService.revoke_invitation(
+                UUID('12345678-1234-5678-1234-567812345678'), 999
+            )
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_revoke_other_orgs_invitation_returns_none(self):
+        invitation = self._invitation()
+
+        with patch(
+            'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_id',
+            new_callable=AsyncMock,
+            return_value=invitation,
+        ):
+            result = await OrgInvitationService.revoke_invitation(
+                UUID('99999999-9999-9999-9999-999999999999'), invitation.id
+            )
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_revoke_non_pending_invitation_raises(self):
+        invitation = self._invitation(status=OrgInvitation.STATUS_ACCEPTED)
+
+        with patch(
+            'server.services.org_invitation_service.OrgInvitationStore.get_invitation_by_id',
+            new_callable=AsyncMock,
+            return_value=invitation,
+        ):
+            with pytest.raises(InvitationInvalidError):
+                await OrgInvitationService.revoke_invitation(
+                    invitation.org_id, invitation.id
+                )
+
+
+class TestAcceptPendingInvitationsForUser:
+    """Login-time acceptance of invitations by verified-email match."""
+
+    @staticmethod
+    def _user(email='invitee@example.com'):
+        import uuid as uuid_mod
+
+        user = MagicMock()
+        user.id = uuid_mod.uuid4()
+        user.email = email
+        user.current_org_id = user.id  # parked on personal workspace
+        return user
+
+    @staticmethod
+    def _invitation(invitation_id=1):
+        import uuid as uuid_mod
+
+        invitation = MagicMock()
+        invitation.id = invitation_id
+        invitation.org_id = uuid_mod.uuid4()
+        invitation.role_id = 3
+        invitation.status = OrgInvitation.STATUS_PENDING
+        return invitation
+
+    @staticmethod
+    def _settings():
+        settings = MagicMock()
+        settings.agent_settings.llm.api_key = SecretStr('llm-key')
+        return settings
+
+    @pytest.mark.asyncio
+    async def test_accepts_matching_invitation_and_moves_off_personal(self):
+        user = self._user()
+        invitation = self._invitation()
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore'
+            ) as mock_store,
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore'
+            ) as mock_member_store,
+            patch('server.services.org_invitation_service.OrgStore') as mock_org_store,
+            patch(
+                'server.services.org_invitation_service.OrgService'
+            ) as mock_org_service,
+            patch(
+                'server.services.org_invitation_service.UserStore'
+            ) as mock_user_store,
+        ):
+            mock_store.get_pending_invitations_for_email = AsyncMock(
+                return_value=[invitation]
+            )
+            mock_store.is_token_expired = MagicMock(return_value=False)
+            mock_store.update_invitation_status = AsyncMock()
+            mock_member_store.get_org_member = AsyncMock(return_value=None)
+            mock_member_store.add_user_to_org = AsyncMock()
+            mock_org_store.get_org_by_id = AsyncMock(return_value=MagicMock())
+            mock_org_service.create_litellm_integration = AsyncMock(
+                return_value=self._settings()
+            )
+            mock_user_store.update_current_org = AsyncMock()
+
+            accepted = await OrgInvitationService.accept_pending_invitations_for_user(
+                user
+            )
+
+        assert accepted == [invitation]
+        mock_member_store.add_user_to_org.assert_awaited_once()
+        add_kwargs = mock_member_store.add_user_to_org.await_args.kwargs
+        assert add_kwargs['org_id'] == invitation.org_id
+        assert add_kwargs['role_id'] == invitation.role_id
+        mock_store.update_invitation_status.assert_awaited_once_with(
+            invitation.id,
+            OrgInvitation.STATUS_ACCEPTED,
+            accepted_by_user_id=user.id,
+        )
+        # Parked on personal workspace: land them in the newly joined org.
+        mock_user_store.update_current_org.assert_awaited_once_with(
+            str(user.id), invitation.org_id
+        )
+
+    @pytest.mark.asyncio
+    async def test_already_member_marks_invitation_accepted_without_adding(self):
+        """Auto-add can beat an invitation; the ghost pending row is cleared."""
+        user = self._user()
+        invitation = self._invitation()
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore'
+            ) as mock_store,
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore'
+            ) as mock_member_store,
+            patch(
+                'server.services.org_invitation_service.UserStore'
+            ) as mock_user_store,
+        ):
+            mock_store.get_pending_invitations_for_email = AsyncMock(
+                return_value=[invitation]
+            )
+            mock_store.is_token_expired = MagicMock(return_value=False)
+            mock_store.update_invitation_status = AsyncMock()
+            mock_member_store.get_org_member = AsyncMock(return_value=MagicMock())
+            mock_member_store.add_user_to_org = AsyncMock()
+            mock_user_store.update_current_org = AsyncMock()
+
+            accepted = await OrgInvitationService.accept_pending_invitations_for_user(
+                user
+            )
+
+        assert accepted == []
+        mock_member_store.add_user_to_org.assert_not_called()
+        mock_store.update_invitation_status.assert_awaited_once_with(
+            invitation.id,
+            OrgInvitation.STATUS_ACCEPTED,
+            accepted_by_user_id=user.id,
+        )
+        mock_user_store.update_current_org.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_expired_invitation_marked_expired_and_skipped(self):
+        user = self._user()
+        invitation = self._invitation()
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore'
+            ) as mock_store,
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore'
+            ) as mock_member_store,
+        ):
+            mock_store.get_pending_invitations_for_email = AsyncMock(
+                return_value=[invitation]
+            )
+            mock_store.is_token_expired = MagicMock(return_value=True)
+            mock_store.update_invitation_status = AsyncMock()
+            mock_member_store.add_user_to_org = AsyncMock()
+
+            accepted = await OrgInvitationService.accept_pending_invitations_for_user(
+                user
+            )
+
+        assert accepted == []
+        mock_store.update_invitation_status.assert_awaited_once_with(
+            invitation.id, OrgInvitation.STATUS_EXPIRED
+        )
+        mock_member_store.add_user_to_org.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_user_in_team_org_is_not_moved(self):
+        import uuid as uuid_mod
+
+        user = self._user()
+        user.current_org_id = uuid_mod.uuid4()  # deliberately in another team org
+        invitation = self._invitation()
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore'
+            ) as mock_store,
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore'
+            ) as mock_member_store,
+            patch('server.services.org_invitation_service.OrgStore') as mock_org_store,
+            patch(
+                'server.services.org_invitation_service.OrgService'
+            ) as mock_org_service,
+            patch(
+                'server.services.org_invitation_service.UserStore'
+            ) as mock_user_store,
+        ):
+            mock_store.get_pending_invitations_for_email = AsyncMock(
+                return_value=[invitation]
+            )
+            mock_store.is_token_expired = MagicMock(return_value=False)
+            mock_store.update_invitation_status = AsyncMock()
+            mock_member_store.get_org_member = AsyncMock(return_value=None)
+            mock_member_store.add_user_to_org = AsyncMock()
+            mock_org_store.get_org_by_id = AsyncMock(return_value=MagicMock())
+            mock_org_service.create_litellm_integration = AsyncMock(
+                return_value=self._settings()
+            )
+            mock_user_store.update_current_org = AsyncMock()
+
+            accepted = await OrgInvitationService.accept_pending_invitations_for_user(
+                user
+            )
+
+        assert len(accepted) == 1
+        mock_user_store.update_current_org.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_user_without_email_is_a_noop(self):
+        user = self._user(email=None)
+
+        with patch(
+            'server.services.org_invitation_service.OrgInvitationStore'
+        ) as mock_store:
+            mock_store.get_pending_invitations_for_email = AsyncMock()
+
+            accepted = await OrgInvitationService.accept_pending_invitations_for_user(
+                user
+            )
+
+        assert accepted == []
+        mock_store.get_pending_invitations_for_email.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_litellm_failure_skips_invitation_and_continues(self):
+        """A LiteLLM outage must not break login or consume the invitation."""
+        user = self._user()
+        failing = self._invitation(invitation_id=1)
+        succeeding = self._invitation(invitation_id=2)
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgInvitationStore'
+            ) as mock_store,
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore'
+            ) as mock_member_store,
+            patch('server.services.org_invitation_service.OrgStore') as mock_org_store,
+            patch(
+                'server.services.org_invitation_service.OrgService'
+            ) as mock_org_service,
+            patch(
+                'server.services.org_invitation_service.UserStore'
+            ) as mock_user_store,
+        ):
+            mock_store.get_pending_invitations_for_email = AsyncMock(
+                return_value=[failing, succeeding]
+            )
+            mock_store.is_token_expired = MagicMock(return_value=False)
+            mock_store.update_invitation_status = AsyncMock()
+            mock_member_store.get_org_member = AsyncMock(return_value=None)
+            mock_member_store.add_user_to_org = AsyncMock()
+            mock_org_store.get_org_by_id = AsyncMock(return_value=MagicMock())
+            mock_org_service.create_litellm_integration = AsyncMock(
+                side_effect=[Exception('LiteLLM unavailable'), self._settings()]
+            )
+            mock_user_store.update_current_org = AsyncMock()
+
+            accepted = await OrgInvitationService.accept_pending_invitations_for_user(
+                user
+            )
+
+        # The failing invitation is skipped (stays pending, retried at next
+        # sign-in); the rest of the batch still processes.
+        assert accepted == [succeeding]
+        mock_member_store.add_user_to_org.assert_awaited_once()
+        assert (
+            mock_member_store.add_user_to_org.await_args.kwargs['org_id']
+            == succeeding.org_id
+        )
+        mock_store.update_invitation_status.assert_awaited_once_with(
+            succeeding.id,
+            OrgInvitation.STATUS_ACCEPTED,
+            accepted_by_user_id=user.id,
+        )

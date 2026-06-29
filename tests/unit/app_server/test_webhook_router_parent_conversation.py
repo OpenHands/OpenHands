@@ -23,7 +23,7 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
 )
 from openhands.app_server.event_callback.webhook_router import on_conversation_update
 from openhands.app_server.integrations.provider import ProviderType
-from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxStatus
+from openhands.app_server.sandbox.sandbox_models import SandboxRecord
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
 from openhands.sdk.conversation import ConversationExecutionStatus
@@ -78,14 +78,11 @@ def app_conversation_info_service(
 
 
 @pytest.fixture
-def sandbox_info() -> SandboxInfo:
+def sandbox_record() -> SandboxRecord:
     """Create a test sandbox info."""
-    return SandboxInfo(
+    return SandboxRecord(
         id='sandbox_123',
-        status=SandboxStatus.RUNNING,
-        session_api_key='test_session_key',
         created_by_user_id='user_123',
-        sandbox_spec_id='spec_123',
     )
 
 
@@ -119,7 +116,7 @@ class TestOnConversationUpdateParentConversationId:
         self,
         async_session,
         app_conversation_info_service,
-        sandbox_info,
+        sandbox_record,
         mock_conversation_info,
     ):
         """Test that parent_conversation_id is preserved when it exists in existing conversation.
@@ -154,7 +151,7 @@ class TestOnConversationUpdateParentConversationId:
         ):
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
-                sandbox_info=sandbox_info,
+                sandbox_record=sandbox_record,
                 app_conversation_info_service=app_conversation_info_service,
             )
 
@@ -172,7 +169,7 @@ class TestOnConversationUpdateParentConversationId:
         self,
         async_session,
         app_conversation_info_service,
-        sandbox_info,
+        sandbox_record,
         mock_conversation_info,
     ):
         """Test that parent_conversation_id remains None when it doesn't exist.
@@ -204,7 +201,7 @@ class TestOnConversationUpdateParentConversationId:
         ):
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
-                sandbox_info=sandbox_info,
+                sandbox_record=sandbox_record,
                 app_conversation_info_service=app_conversation_info_service,
             )
 
@@ -221,7 +218,7 @@ class TestOnConversationUpdateParentConversationId:
     async def test_parent_conversation_id_none_for_new_conversation(
         self,
         app_conversation_info_service,
-        sandbox_info,
+        sandbox_record,
         mock_conversation_info,
     ):
         """Test that new conversations (stubs) have parent_conversation_id as None.
@@ -240,8 +237,8 @@ class TestOnConversationUpdateParentConversationId:
         # Create stub conversation (simulating valid_conversation for new conversation)
         stub_conv = AppConversationInfo(
             id=conversation_id,
-            sandbox_id=sandbox_info.id,
-            created_by_user_id=sandbox_info.created_by_user_id,
+            sandbox_id=sandbox_record.id,
+            created_by_user_id=sandbox_record.created_by_user_id,
         )
 
         # Act - call on_conversation_update directly with mocked valid_conversation
@@ -258,7 +255,7 @@ class TestOnConversationUpdateParentConversationId:
         ):
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
-                sandbox_info=sandbox_info,
+                sandbox_record=sandbox_record,
                 app_conversation_info_service=app_conversation_info_service,
             )
 
@@ -276,7 +273,7 @@ class TestOnConversationUpdateParentConversationId:
         self,
         async_session,
         app_conversation_info_service,
-        sandbox_info,
+        sandbox_record,
         mock_conversation_info,
     ):
         """Test that parent_conversation_id is preserved alongside other metadata.
@@ -314,7 +311,7 @@ class TestOnConversationUpdateParentConversationId:
         ):
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
-                sandbox_info=sandbox_info,
+                sandbox_record=sandbox_record,
                 app_conversation_info_service=app_conversation_info_service,
             )
 
@@ -341,7 +338,7 @@ class TestOnConversationUpdateParentConversationId:
         self,
         async_session,
         app_conversation_info_service,
-        sandbox_info,
+        sandbox_record,
         mock_conversation_info,
     ):
         """Test that parent_conversation_id remains stable across multiple updates.
@@ -386,7 +383,7 @@ class TestOnConversationUpdateParentConversationId:
             ):
                 result = await on_conversation_update(
                     conversation_info=mock_conversation_info,
-                    sandbox_info=sandbox_info,
+                    sandbox_record=sandbox_record,
                     app_conversation_info_service=app_conversation_info_service,
                 )
             assert isinstance(result, Success)
@@ -403,7 +400,7 @@ class TestOnConversationUpdateParentConversationId:
         self,
         async_session,
         app_conversation_info_service,
-        sandbox_info,
+        sandbox_record,
         mock_conversation_info,
     ):
         """Test that deleting conversations skips all updates including parent_conversation_id.
@@ -444,7 +441,7 @@ class TestOnConversationUpdateParentConversationId:
         ):
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
-                sandbox_info=sandbox_info,
+                sandbox_record=sandbox_record,
                 app_conversation_info_service=app_conversation_info_service,
             )
 
@@ -464,7 +461,7 @@ class TestOnConversationUpdateParentConversationId:
         self,
         async_session,
         app_conversation_info_service,
-        sandbox_info,
+        sandbox_record,
         mock_conversation_info,
     ):
         """Test that parent_conversation_id is preserved when title changes.
@@ -504,7 +501,7 @@ class TestOnConversationUpdateParentConversationId:
         ):
             result = await on_conversation_update(
                 conversation_info=mock_conversation_info,
-                sandbox_info=sandbox_info,
+                sandbox_record=sandbox_record,
                 app_conversation_info_service=app_conversation_info_service,
             )
 

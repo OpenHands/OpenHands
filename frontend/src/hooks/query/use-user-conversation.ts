@@ -3,6 +3,10 @@ import { Query, useQuery } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
+import {
+  getRateLimitRetryDelayMs,
+  isRateLimitError,
+} from "#/utils/rate-limit-retry";
 
 const FIVE_MINUTES = 1000 * 60 * 5;
 const FIFTEEN_MINUTES = 1000 * 60 * 15;
@@ -32,7 +36,8 @@ export const useUserConversation = (
       return results[0] ?? null;
     },
     enabled: !!cid && !cid.startsWith("task-"),
-    retry: false,
+    retry: (failureCount, error) => isRateLimitError(error) && failureCount < 3,
+    retryDelay: (_failureCount, error) => getRateLimitRetryDelayMs(error),
     refetchInterval,
     staleTime: FIVE_MINUTES,
     gcTime: FIFTEEN_MINUTES,

@@ -296,8 +296,7 @@ class TestGetPostAuthRedirect:
             )
 
         assert result == (
-            'https://example.com/onboarding'
-            '?returnTo=%2Fconversations%2Fabc%3Ffoo%3Dbar'
+            'https://example.com/onboarding?returnTo=%2Fconversations%2Fabc%3Ffoo%3Dbar'
         )
 
 
@@ -323,7 +322,7 @@ class TestBuildOnboardingRedirect:
             'https://example.com/foo?bar=baz&qux=1', 'https://example.com'
         )
         assert result == (
-            'https://example.com/onboarding' '?returnTo=%2Ffoo%3Fbar%3Dbaz%26qux%3D1'
+            'https://example.com/onboarding?returnTo=%2Ffoo%3Fbar%3Dbaz%26qux%3D1'
         )
 
     def test_skips_returnTo_for_bare_home_with_trailing_slash(self):
@@ -390,13 +389,10 @@ class TestBuildOnboardingRedirect:
         query-string layering goes wrong).
         """
         result = _build_onboarding_redirect(
-            'https://example.com/login?returnTo=%2Fsettings%2Fuser'
-            '&login_method=github',
+            'https://example.com/login?returnTo=%2Fsettings%2Fuser&login_method=github',
             'https://example.com',
         )
-        assert result == (
-            'https://example.com/onboarding' '?returnTo=%2Fsettings%2Fuser'
-        )
+        assert result == ('https://example.com/onboarding?returnTo=%2Fsettings%2Fuser')
 
     def test_unwraps_login_returnTo_with_inner_query_string(self):
         """Inner destinations with their own query string survive unwrap.
@@ -411,8 +407,7 @@ class TestBuildOnboardingRedirect:
             'https://example.com',
         )
         assert result == (
-            'https://example.com/onboarding'
-            '?returnTo=%2Fconversations%2Fabc%3Ffoo%3Dbar'
+            'https://example.com/onboarding?returnTo=%2Fconversations%2Fabc%3Ffoo%3Dbar'
         )
 
     def test_unwraps_login_returnTo_to_bare_home_skips_returnTo(self):
@@ -439,7 +434,7 @@ class TestBuildOnboardingRedirect:
             'https://example.com/foo?returnTo=%2Fbar', 'https://example.com'
         )
         assert result == (
-            'https://example.com/onboarding' '?returnTo=%2Ffoo%3FreturnTo%3D%252Fbar'
+            'https://example.com/onboarding?returnTo=%2Ffoo%3FreturnTo%3D%252Fbar'
         )
 
 

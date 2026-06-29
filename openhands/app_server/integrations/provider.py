@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping
 from types import MappingProxyType
 from typing import cast
@@ -543,9 +544,10 @@ class ProviderHandler:
         if domain:
             domain = domain.strip()
             domain = domain.replace('https://', '').replace('http://', '')
-            # Remove any trailing path like /api/v3 or /api/v4
-            if '/' in domain:
-                domain = domain.split('/')[0]
+            # Strip a trailing API path (e.g. /api/v3) but preserve any subpath
+            # that is part of the repo URL (e.g. Forgejo under myserver/forgejo).
+            domain = re.sub(r'/api/(?:v\d+|graphql)/?$', '', domain)
+            domain = domain.rstrip('/')
 
         # Try to use token if available, otherwise use public URL
         if self.provider_tokens and provider in self.provider_tokens:

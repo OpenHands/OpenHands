@@ -232,9 +232,9 @@ async def test_get_latest_token_returns_string_for_multiple_providers(
         (ProviderType.BITBUCKET, 'bitbucket_token'),
     ]:
         result = await resolver_context.get_latest_token(provider_type)
-        assert isinstance(
-            result, str
-        ), f'Expected str for {provider_type.name}, got {type(result).__name__}'
+        assert isinstance(result, str), (
+            f'Expected str for {provider_type.name}, got {type(result).__name__}'
+        )
         assert result == expected_token
 
 

@@ -23,6 +23,7 @@ AZURE_DEVOPS_CLIENT_ID = os.getenv('AZURE_DEVOPS_CLIENT_ID', '').strip()
 AZURE_DEVOPS_CLIENT_SECRET = os.getenv('AZURE_DEVOPS_CLIENT_SECRET', '').strip()
 AZURE_DEVOPS_TENANT_ID = os.getenv('AZURE_DEVOPS_TENANT_ID', '').strip()
 AZURE_DEVOPS_ORGANIZATION = os.getenv('AZURE_DEVOPS_ORGANIZATION', '').strip()
+AZURE_DEVOPS_WEBHOOK_SECRET = os.getenv('AZURE_DEVOPS_WEBHOOK_SECRET', '').strip()
 AZURE_DEVOPS_SCOPE = os.getenv(
     'AZURE_DEVOPS_SCOPE', 'https://app.vssps.visualstudio.com/.default'
 ).strip()
@@ -35,8 +36,11 @@ ENABLE_ENTERPRISE_SSO = os.getenv('ENABLE_ENTERPRISE_SSO', '').strip()
 ENABLE_JIRA = os.environ.get('ENABLE_JIRA', 'false') == 'true'
 ENABLE_JIRA_DC = os.environ.get('ENABLE_JIRA_DC', 'false') == 'true'
 ENABLE_LINEAR = os.environ.get('ENABLE_LINEAR', 'false') == 'true'
+ENABLE_AUTOMATIONS = os.environ.get('ENABLE_AUTOMATIONS', 'true') == 'true'
 JIRA_CLIENT_ID = os.getenv('JIRA_CLIENT_ID', '').strip()
 JIRA_CLIENT_SECRET = os.getenv('JIRA_CLIENT_SECRET', '').strip()
+# Timeout (s) for server-side calls to Jira Cloud; configurable, mirrors Jira DC.
+JIRA_HTTP_TIMEOUT = float(os.getenv('JIRA_HTTP_TIMEOUT', '30'))
 LINEAR_CLIENT_ID = os.getenv('LINEAR_CLIENT_ID', '').strip()
 LINEAR_CLIENT_SECRET = os.getenv('LINEAR_CLIENT_SECRET', '').strip()
 JIRA_DC_CLIENT_ID = os.getenv('JIRA_DC_CLIENT_ID', '').strip()
@@ -45,6 +49,8 @@ JIRA_DC_BASE_URL = os.getenv('JIRA_DC_BASE_URL', '').strip()
 JIRA_DC_ENABLE_OAUTH = os.getenv('JIRA_DC_ENABLE_OAUTH', '1') in ('1', 'true')
 JIRA_DC_SERVICE_ACCOUNT_EMAIL = os.getenv('JIRA_DC_SERVICE_ACCOUNT_EMAIL', '').strip()
 JIRA_DC_SERVICE_ACCOUNT_PAT = os.getenv('JIRA_DC_SERVICE_ACCOUNT_PAT', '').strip()
+# Timeout (s) for server-side calls to Jira DC; configurable for slow on-prem.
+JIRA_DC_HTTP_TIMEOUT = float(os.getenv('JIRA_DC_HTTP_TIMEOUT', '30'))
 AUTH_URL = os.getenv('AUTH_URL', '').rstrip('/')
 ROLE_CHECK_ENABLED = os.getenv('ROLE_CHECK_ENABLED', 'false').lower() in (
     '1',
@@ -71,6 +77,12 @@ BITBUCKET_DATA_CENTER_HOST = os.getenv('BITBUCKET_DATA_CENTER_HOST', '').strip()
 # own token.
 BITBUCKET_DATA_CENTER_BOT_TOKEN = os.getenv(
     'BITBUCKET_DATA_CENTER_BOT_TOKEN', ''
+).strip()
+# Username (slug) of the bot account whose PAT is set above. Lets us skip
+# webhook events the bot itself authored, so the agent's reply (posted via the
+# bot PAT) can't re-trigger a job. BBDC's stable author id is the slug, not email.
+BITBUCKET_DATA_CENTER_BOT_USERNAME = os.getenv(
+    'BITBUCKET_DATA_CENTER_BOT_USERNAME', ''
 ).strip()
 BITBUCKET_DATA_CENTER_TOKEN_URL = (
     f'https://{BITBUCKET_DATA_CENTER_HOST}/rest/oauth2/latest/token'

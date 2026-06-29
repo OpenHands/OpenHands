@@ -1,14 +1,18 @@
 import json
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import parse_qs, urlparse
 
+import httpx
 import pytest
 from fastapi import HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from integrations.jira_dc.jira_dc_service_account import JiraDcServiceAccount
-from pydantic import ValidationError
+from integrations.jira_dc.jira_dc_user_token import JiraDcUserToken
+from pydantic import SecretStr, ValidationError
 from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.integration.jira_dc import (
     JiraDcLinkCreate,
@@ -18,11 +22,85 @@ from server.routes.integration.jira_dc import (
     create_jira_dc_workspace,
     create_workspace_link,
     get_current_workspace_link,
+    get_jira_dc_secret_token,
     jira_dc_callback,
     jira_dc_connection_events,
     unlink_workspace,
     validate_workspace_integration,
 )
+
+
+def create_httpx_mock(post_response=None, get_response=None, get_responses=None):
+    """Create a mock for httpx.AsyncClient.
+
+    Args:
+        post_response: Response for POST requests. Can be a dict (JSON body) or
+            a MagicMock for full control.
+        get_response: Default response for GET requests. Can be a dict (JSON body) or
+            a MagicMock for full control.
+        get_responses: Dict of URL pattern -> response for conditional GET responses.
+            e.g. {'accessible-resources': {...}, '/myself': {...}}
+
+    Returns:
+        AsyncMock that can be used as httpx.AsyncClient context manager.
+    """
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {'access_token': 'token'}
+
+    if isinstance(post_response, dict):
+        mock_post_response = MagicMock()
+        mock_post_response.status_code = 200
+        mock_post_response.json.return_value = post_response
+    else:
+        mock_post_response = post_response or mock_response
+
+    # Create mock client with post/get methods
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_post_response)
+    mock_client.get = AsyncMock(return_value=mock_response)
+
+    # Set up conditional GET responses if provided
+    if get_responses:
+
+        async def mock_get(url, **kwargs):
+            for pattern, resp in get_responses.items():
+                if pattern in url:
+                    mock_resp = MagicMock()
+                    mock_resp.status_code = 200
+                    if isinstance(resp, dict):
+                        mock_resp.json.return_value = resp
+                    else:
+                        mock_resp = resp
+                    return mock_resp
+            # Default response for unmatched URLs
+            default_resp = MagicMock()
+            default_resp.status_code = 404
+            default_resp.json.return_value = {}
+            return default_resp
+
+        mock_client.get = AsyncMock(side_effect=mock_get)
+    elif isinstance(get_response, dict):
+        mock_get_response = MagicMock()
+        mock_get_response.status_code = 200
+        mock_get_response.json.return_value = get_response
+        mock_client.get = AsyncMock(return_value=mock_get_response)
+
+    # Create the AsyncClient context manager mock
+    @asynccontextmanager
+    async def mock_async_client():
+        yield mock_client
+
+    mock_httpx = AsyncMock()
+    mock_httpx.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_httpx.__aexit__ = AsyncMock(return_value=None)
+    return mock_httpx
+
+
+@pytest.fixture
+def mock_httpx_client():
+    """Fixture to provide httpx.AsyncClient mock."""
+    return create_httpx_mock
 
 
 @pytest.fixture
@@ -65,6 +143,52 @@ def mock_user_auth():
         '00000000-0000-0000-0000-000000000123'
     )
     return auth
+
+
+@pytest.mark.asyncio
+@patch(
+    'server.routes.integration.jira_dc.get_user_jira_dc_token', new_callable=AsyncMock
+)
+@patch('server.routes.integration.jira_dc.jira_dc_manager')
+async def test_get_jira_dc_secret_token_success(mock_manager, mock_get_token):
+    store = AsyncMock()
+    mock_manager.integration_store = store
+    store.get_workspace_by_id.return_value = SimpleNamespace(
+        id=7,
+        name='jira.example.com',
+        status='active',
+    )
+    store.get_active_user_by_keycloak_id_and_workspace.return_value = MagicMock()
+    mock_get_token.return_value = JiraDcUserToken(
+        access_token=SecretStr('plain-token'), expires_at=0
+    )
+    jwt_service = MagicMock()
+    jwt_service.verify_jws_token.return_value = {
+        'integration': 'jira_dc',
+        'secret_name': 'JIRA_DC_TOKEN',
+        'user_id': 'kc-user',
+        'workspace_id': 7,
+    }
+
+    with (
+        patch('server.routes.integration.jira_dc.JIRA_DC_ENABLE_OAUTH', True),
+        patch(
+            'server.routes.integration.jira_dc.JIRA_DC_BASE_URL',
+            'https://jira.example.com',
+        ),
+    ):
+        response = await get_jira_dc_secret_token(
+            access_token='signed-token',
+            jwt_service=jwt_service,
+        )
+
+    assert response.body == b'plain-token'
+    store.get_workspace_by_id.assert_awaited_once_with(7)
+    store.get_active_user_by_keycloak_id_and_workspace.assert_awaited_once_with(
+        'kc-user',
+        7,
+    )
+    mock_get_token.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -186,15 +310,13 @@ async def test_create_workspace_link_oauth_success(
 
 @pytest.mark.asyncio
 @patch('server.routes.integration.jira_dc.redis_client')
-@patch('requests.post')
-@patch('requests.get')
 @patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
 @patch(
     'server.routes.integration.jira_dc._handle_workspace_link_creation',
     new_callable=AsyncMock,
 )
 async def test_jira_dc_callback_workspace_integration_new_workspace(
-    mock_handle_link, mock_manager, mock_get, mock_post, mock_redis, mock_request
+    mock_handle_link, mock_manager, mock_redis, mock_request
 ):
     state = 'test_state'
     code = 'test_code'
@@ -209,28 +331,16 @@ async def test_jira_dc_callback_workspace_integration_new_workspace(
         'state': state,
     }
     mock_redis.get.return_value = json.dumps(session_data)
-    mock_post.return_value = MagicMock(
-        status_code=200, json=lambda: {'access_token': 'token'}
+
+    # Set up httpx mock with conditional GET responses
+    httpx_mock = create_httpx_mock(
+        post_response={'access_token': 'token'},
+        get_responses={
+            'accessible-resources': [{'url': 'https://test.atlassian.net'}],
+            '/myself': {'key': 'jira_user_123'},
+        },
     )
 
-    # Set up different responses for different GET requests
-    def mock_get_side_effect(url, **kwargs):
-        if 'accessible-resources' in url:
-            return MagicMock(
-                status_code=200,
-                json=lambda: [{'url': 'https://test.atlassian.net'}],
-                text='Success',
-            )
-        elif url.endswith('/myself') or 'api.atlassian.com/me' in url:
-            return MagicMock(
-                status_code=200,
-                json=lambda: {'key': 'jira_user_123'},
-                text='Success',
-            )
-        else:
-            return MagicMock(status_code=404, text='Not found')
-
-    mock_get.side_effect = mock_get_side_effect
     mock_manager.integration_store.get_workspace_by_name.return_value = None
     mock_workspace = MagicMock(id=1)
     mock_manager.integration_store.create_workspace.return_value = mock_workspace
@@ -240,21 +350,23 @@ async def test_jira_dc_callback_workspace_integration_new_workspace(
             'server.routes.integration.jira_dc.JIRA_DC_BASE_URL',
             'https://test.atlassian.net',
         ):
-            mock_token_manager.encrypt_text.side_effect = lambda x: f'enc_{x}'
-            response = await jira_dc_callback(mock_request, code, state)
+            with patch('httpx.AsyncClient', return_value=httpx_mock):
+                mock_token_manager.encrypt_text.side_effect = lambda x: f'enc_{x}'
+                response = await jira_dc_callback(mock_request, code, state)
 
-            assert isinstance(response, RedirectResponse)
-            assert response.status_code == status.HTTP_302_FOUND
-            mock_manager.integration_store.create_workspace.assert_called_once()
-            mock_handle_link.assert_called_once_with(
-                'user1', 'jira_user_123', 'test.atlassian.net'
-            )
+                assert isinstance(response, RedirectResponse)
+                assert response.status_code == status.HTTP_302_FOUND
+                mock_manager.integration_store.create_workspace.assert_called_once()
+                mock_handle_link.assert_called_once_with(
+                    'user1',
+                    'jira_user_123',
+                    'test.atlassian.net',
+                    replace_stale_active_link=True,
+                )
 
 
 @pytest.mark.asyncio
 @patch('server.routes.integration.jira_dc.redis_client')
-@patch('requests.post')
-@patch('requests.get')
 @patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
 @patch(
     'server.routes.integration.jira_dc._handle_workspace_link_creation',
@@ -268,8 +380,6 @@ async def test_jira_dc_callback_redirects_with_webhook_install_failure(
     mock_register_webhook,
     mock_handle_link,
     mock_manager,
-    mock_get,
-    mock_post,
     mock_redis,
     mock_request,
 ):
@@ -286,14 +396,13 @@ async def test_jira_dc_callback_redirects_with_webhook_install_failure(
         'state': state,
     }
     mock_redis.get.return_value = json.dumps(session_data)
-    mock_post.return_value = MagicMock(
-        status_code=200, json=lambda: {'access_token': 'token'}
+
+    # Set up httpx mock
+    httpx_mock = create_httpx_mock(
+        post_response={'access_token': 'token'},
+        get_response={'key': 'jira_user_123'},
     )
-    mock_get.return_value = MagicMock(
-        status_code=200,
-        json=lambda: {'key': 'jira_user_123'},
-        text='Success',
-    )
+
     mock_manager.integration_store.get_workspace_by_name.return_value = None
     mock_workspace = MagicMock(id=1)
     mock_manager.integration_store.create_workspace.return_value = mock_workspace
@@ -304,9 +413,9 @@ async def test_jira_dc_callback_redirects_with_webhook_install_failure(
             'server.routes.integration.jira_dc.JIRA_DC_BASE_URL',
             'https://test.atlassian.net',
         ):
-            mock_token_manager.encrypt_text.side_effect = lambda x: f'enc_{x}'
-
-            response = await jira_dc_callback(mock_request, 'code', state)
+            with patch('httpx.AsyncClient', return_value=httpx_mock):
+                mock_token_manager.encrypt_text.side_effect = lambda x: f'enc_{x}'
+                response = await jira_dc_callback(mock_request, 'code', state)
 
     assert isinstance(response, RedirectResponse)
     assert response.status_code == status.HTTP_302_FOUND
@@ -317,21 +426,22 @@ async def test_jira_dc_callback_redirects_with_webhook_install_failure(
         'bad-admin-pat', 'https://test.atlassian.net', 'secret', 1
     )
     mock_handle_link.assert_called_once_with(
-        'user1', 'jira_user_123', 'test.atlassian.net'
+        'user1',
+        'jira_user_123',
+        'test.atlassian.net',
+        replace_stale_active_link=True,
     )
 
 
 @pytest.mark.asyncio
 @patch('server.routes.integration.jira_dc.redis_client')
-@patch('requests.post')
-@patch('requests.get')
 @patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
 @patch(
     'server.routes.integration.jira_dc._handle_workspace_link_creation',
     new_callable=AsyncMock,
 )
 async def test_jira_dc_callback_token_exchange_uses_form_encoding(
-    mock_handle_link, mock_manager, mock_get, mock_post, mock_redis, mock_request
+    mock_handle_link, mock_manager, mock_redis, mock_request
 ):
     """Token exchange must POST `application/x-www-form-urlencoded`, not JSON.
 
@@ -354,28 +464,72 @@ async def test_jira_dc_callback_token_exchange_uses_form_encoding(
         'state': state,
     }
     mock_redis.get.return_value = json.dumps(session_data)
-    mock_post.return_value = MagicMock(
-        status_code=200, json=lambda: {'access_token': 'token'}
-    )
-    mock_get.return_value = MagicMock(
-        status_code=200, json=lambda: {'key': 'jira_user_123'}, text=''
-    )
     mock_manager.integration_store.get_workspace_by_name.return_value = None
+
+    # Create a mock that captures POST call arguments
+    mock_post_response = MagicMock()
+    mock_post_response.status_code = 200
+    mock_post_response.json.return_value = {'access_token': 'token'}
+    mock_post_response.text = ''
+
+    mock_get_response = MagicMock()
+    mock_get_response.status_code = 200
+    mock_get_response.json.return_value = {'key': 'jira_user_123'}
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_post_response)
+    mock_client.get = AsyncMock(return_value=mock_get_response)
+
+    mock_httpx = AsyncMock()
+    mock_httpx.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_httpx.__aexit__ = AsyncMock(return_value=None)
 
     with patch('server.routes.integration.jira_dc.token_manager') as mock_token_manager:
         with patch(
             'server.routes.integration.jira_dc.JIRA_DC_BASE_URL',
             'https://test.atlassian.net',
         ):
-            mock_token_manager.encrypt_text.side_effect = lambda x: f'enc_{x}'
+            with patch('httpx.AsyncClient', return_value=mock_httpx):
+                mock_token_manager.encrypt_text.side_effect = lambda x: f'enc_{x}'
 
-            # Act
-            await jira_dc_callback(mock_request, code, state)
+                # Act
+                await jira_dc_callback(mock_request, code, state)
 
     # Assert: token POST is form-encoded (data=), not JSON (json=).
-    kwargs = mock_post.call_args.kwargs
+    kwargs = mock_client.post.call_args.kwargs
     assert kwargs.get('data', {}).get('grant_type') == 'authorization_code'
     assert 'json' not in kwargs
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.redis_client')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+async def test_jira_dc_callback_token_endpoint_unreachable_returns_502(
+    mock_manager, mock_redis, mock_request
+):
+    """An unreachable token endpoint (wrong scheme / blocked egress) returns an
+    actionable 502, not a bare 500."""
+    state = 'test_state'
+    session_data = {
+        'operation_type': 'workspace_integration',
+        'keycloak_user_id': 'user1',
+        'target_workspace': 'test.atlassian.net',
+        'state': state,
+    }
+    mock_redis.get.return_value = json.dumps(session_data)
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(side_effect=httpx.ConnectTimeout('timed out'))
+    mock_httpx = AsyncMock()
+    mock_httpx.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_httpx.__aexit__ = AsyncMock(return_value=None)
+
+    with patch('httpx.AsyncClient', return_value=mock_httpx):
+        with pytest.raises(HTTPException) as exc_info:
+            await jira_dc_callback(mock_request, 'code', state)
+
+    assert exc_info.value.status_code == 502
+    assert 'Could not reach' in exc_info.value.detail
 
 
 @pytest.mark.asyncio
@@ -420,6 +574,46 @@ async def test_get_current_workspace_link_found(
     assert response.workspace.events_url.endswith(
         '/integration/jira-dc/connections/10/events'
     )
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.get_user_auth')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+@patch('server.routes.integration.jira_dc.JIRA_DC_ENABLE_OAUTH', True)
+@patch(
+    'server.routes.integration.jira_dc.JIRA_DC_BASE_URL', 'https://current-jira.test'
+)
+async def test_get_current_workspace_link_ignores_stale_configured_host_link(
+    mock_manager, mock_get_auth, mock_request, mock_user_auth
+):
+    mock_get_auth.return_value = mock_user_auth
+    mock_user = MagicMock(
+        id=1,
+        keycloak_user_id='test_user_id',
+        jira_dc_workspace_id=10,
+        status='active',
+    )
+    mock_user.created_at = datetime.now()
+    mock_user.updated_at = datetime.now()
+
+    mock_workspace = MagicMock(
+        id=10,
+        status='active',
+        admin_user_id='test_user_id',
+        svc_acc_email='svc@test.com',
+    )
+    mock_workspace.name = 'old-jira.test'
+    mock_workspace.created_at = datetime.now()
+    mock_workspace.updated_at = datetime.now()
+
+    mock_manager.integration_store.get_user_by_active_workspace.return_value = mock_user
+    mock_manager.integration_store.get_workspace_by_id.return_value = mock_workspace
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_current_workspace_link(mock_request)
+
+    assert exc_info.value.status_code == 404
+    assert 'configured Jira DC integration' in exc_info.value.detail
 
 
 @pytest.mark.asyncio
@@ -1180,99 +1374,115 @@ async def test_jira_dc_callback_state_mismatch(mock_redis, mock_request):
 
 @pytest.mark.asyncio
 @patch('server.routes.integration.jira_dc.redis_client')
-@patch('requests.post')
-async def test_jira_dc_callback_token_fetch_failure(
-    mock_post, mock_redis, mock_request
-):
+async def test_jira_dc_callback_token_fetch_failure(mock_redis, mock_request):
     session_data = {'state': 'test_state'}
     mock_redis.get.return_value = json.dumps(session_data)
-    mock_post.return_value = MagicMock(status_code=400, text='Token error')
 
-    with pytest.raises(HTTPException) as exc_info:
-        await jira_dc_callback(mock_request, 'code', 'test_state')
-    assert exc_info.value.status_code == 400
-    assert 'Error fetching token' in exc_info.value.detail
+    # Create httpx mock with failing POST response
+    mock_post_response = MagicMock()
+    mock_post_response.status_code = 400
+    mock_post_response.text = 'Token error'
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_post_response)
+
+    mock_httpx = AsyncMock()
+    mock_httpx.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_httpx.__aexit__ = AsyncMock(return_value=None)
+
+    with patch('httpx.AsyncClient', return_value=mock_httpx):
+        with pytest.raises(HTTPException) as exc_info:
+            await jira_dc_callback(mock_request, 'code', 'test_state')
+        assert exc_info.value.status_code == 400
+        assert 'Error fetching token' in exc_info.value.detail
 
 
 @pytest.mark.asyncio
 @patch('server.routes.integration.jira_dc.redis_client')
-@patch('requests.post')
-@patch('requests.get')
-async def test_jira_dc_callback_resources_fetch_failure(
-    mock_get, mock_post, mock_redis, mock_request
-):
+async def test_jira_dc_callback_resources_fetch_failure(mock_redis, mock_request):
     session_data = {'state': 'test_state'}
     mock_redis.get.return_value = json.dumps(session_data)
-    mock_post.return_value = MagicMock(
-        status_code=200, json=lambda: {'access_token': 'token'}
-    )
-    mock_get.return_value = MagicMock(status_code=400, text='Resources error')
 
-    with pytest.raises(HTTPException) as exc_info:
-        await jira_dc_callback(mock_request, 'code', 'test_state')
-    assert exc_info.value.status_code == 400
-    assert 'Error fetching user info: Resources error' in exc_info.value.detail
+    # Create httpx mock with successful POST but failing GET
+    mock_post_response = MagicMock()
+    mock_post_response.status_code = 200
+    mock_post_response.json.return_value = {'access_token': 'token'}
+
+    mock_get_response = MagicMock()
+    mock_get_response.status_code = 400
+    mock_get_response.text = 'Resources error'
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_post_response)
+    mock_client.get = AsyncMock(return_value=mock_get_response)
+
+    mock_httpx = AsyncMock()
+    mock_httpx.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_httpx.__aexit__ = AsyncMock(return_value=None)
+
+    with patch('httpx.AsyncClient', return_value=mock_httpx):
+        with pytest.raises(HTTPException) as exc_info:
+            await jira_dc_callback(mock_request, 'code', 'test_state')
+        assert exc_info.value.status_code == 400
+        assert 'Error fetching user info: Resources error' in exc_info.value.detail
 
 
 @pytest.mark.asyncio
 @patch('server.routes.integration.jira_dc.redis_client')
-@patch('requests.post')
-@patch('requests.get')
-async def test_jira_dc_callback_unauthorized_workspace(
-    mock_get, mock_post, mock_redis, mock_request
-):
+async def test_jira_dc_callback_unauthorized_workspace(mock_redis, mock_request):
     session_data = {
         'state': 'test_state',
         'target_workspace': 'target.atlassian.net',
         'keycloak_user_id': 'user1',
     }
     mock_redis.get.return_value = json.dumps(session_data)
-    mock_post.return_value = MagicMock(
-        status_code=200, json=lambda: {'access_token': 'token'}
-    )
 
-    # Set up different responses for different GET requests
-    def mock_get_side_effect(url, **kwargs):
+    # Create httpx mock with different URL for accessible-resources
+    mock_post_response = MagicMock()
+    mock_post_response.status_code = 200
+    mock_post_response.json.return_value = {'access_token': 'token'}
+
+    mock_get_response = MagicMock()
+    mock_get_response.status_code = 200
+    mock_get_response.json.return_value = [{'url': 'https://different.atlassian.net'}]
+
+    mock_get_user_response = MagicMock()
+    mock_get_user_response.status_code = 200
+    mock_get_user_response.json.return_value = {'key': 'jira_user_123'}
+
+    async def mock_get(url, **kwargs):
         if 'accessible-resources' in url:
-            return MagicMock(
-                status_code=200,
-                json=lambda: [{'url': 'https://different.atlassian.net'}],
-                text='Success',
-            )
-        elif (
-            'api.atlassian.com/me' in url or url.endswith('/myself') or 'myself' in url
-        ):
-            return MagicMock(
-                status_code=200,
-                json=lambda: {'key': 'jira_user_123'},
-                text='Success',
-            )
-        else:
-            return MagicMock(status_code=404, text='Not found')
+            return mock_get_response
+        return mock_get_user_response
 
-    mock_get.side_effect = mock_get_side_effect
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_post_response)
+    mock_client.get = AsyncMock(side_effect=mock_get)
+
+    mock_httpx = AsyncMock()
+    mock_httpx.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_httpx.__aexit__ = AsyncMock(return_value=None)
 
     with patch(
         'server.routes.integration.jira_dc.JIRA_DC_BASE_URL',
         'https://target.atlassian.net',
     ):
-        with pytest.raises(HTTPException) as exc_info:
-            await jira_dc_callback(mock_request, 'code', 'test_state')
-        assert exc_info.value.status_code == 400
-        assert 'Invalid operation type' in exc_info.value.detail
+        with patch('httpx.AsyncClient', return_value=mock_httpx):
+            with pytest.raises(HTTPException) as exc_info:
+                await jira_dc_callback(mock_request, 'code', 'test_state')
+            assert exc_info.value.status_code == 400
+            assert 'Invalid operation type' in exc_info.value.detail
 
 
 @pytest.mark.asyncio
 @patch('server.routes.integration.jira_dc.redis_client')
-@patch('requests.post')
-@patch('requests.get')
 @patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
 @patch(
     'server.routes.integration.jira_dc._handle_workspace_link_creation',
     new_callable=AsyncMock,
 )
 async def test_jira_dc_callback_workspace_integration_existing_workspace(
-    mock_handle_link, mock_manager, mock_get, mock_post, mock_redis, mock_request
+    mock_handle_link, mock_manager, mock_redis, mock_request
 ):
     state = 'test_state'
     session_data = {
@@ -1286,28 +1496,15 @@ async def test_jira_dc_callback_workspace_integration_existing_workspace(
         'state': state,
     }
     mock_redis.get.return_value = json.dumps(session_data)
-    mock_post.return_value = MagicMock(
-        status_code=200, json=lambda: {'access_token': 'token'}
+
+    # Set up httpx mock with conditional GET responses
+    httpx_mock = create_httpx_mock(
+        post_response={'access_token': 'token'},
+        get_responses={
+            'accessible-resources': [{'url': 'https://existing.atlassian.net'}],
+            '/myself': {'key': 'jira_user_123'},
+        },
     )
-
-    # Set up different responses for different GET requests
-    def mock_get_side_effect(url, **kwargs):
-        if 'accessible-resources' in url:
-            return MagicMock(
-                status_code=200,
-                json=lambda: [{'url': 'https://existing.atlassian.net'}],
-                text='Success',
-            )
-        elif 'api.atlassian.com/me' in url or url.endswith('/myself'):
-            return MagicMock(
-                status_code=200,
-                json=lambda: {'key': 'jira_user_123'},
-                text='Success',
-            )
-        else:
-            return MagicMock(status_code=404, text='Not found')
-
-    mock_get.side_effect = mock_get_side_effect
 
     # Mock existing workspace
     mock_workspace = MagicMock(id=1)
@@ -1319,67 +1516,55 @@ async def test_jira_dc_callback_workspace_integration_existing_workspace(
             'server.routes.integration.jira_dc.JIRA_DC_BASE_URL',
             'https://existing.atlassian.net',
         ):
-            with patch(
-                'server.routes.integration.jira_dc._validate_workspace_update_permissions'
-            ) as mock_validate:
-                mock_validate.return_value = mock_workspace
-                mock_token_manager.encrypt_text.side_effect = lambda x: f'enc_{x}'
+            with patch('httpx.AsyncClient', return_value=httpx_mock):
+                with patch(
+                    'server.routes.integration.jira_dc._validate_workspace_update_permissions'
+                ) as mock_validate:
+                    mock_validate.return_value = mock_workspace
+                    mock_token_manager.encrypt_text.side_effect = lambda x: f'enc_{x}'
 
-                response = await jira_dc_callback(mock_request, 'code', state)
+                    response = await jira_dc_callback(mock_request, 'code', state)
 
-                assert isinstance(response, RedirectResponse)
-                assert response.status_code == status.HTTP_302_FOUND
-                mock_manager.integration_store.update_workspace.assert_called_once()
-                mock_handle_link.assert_called_once_with(
-                    'user1', 'jira_user_123', 'existing.atlassian.net'
-                )
+                    assert isinstance(response, RedirectResponse)
+                    assert response.status_code == status.HTTP_302_FOUND
+                    mock_manager.integration_store.update_workspace.assert_called_once()
+                    mock_handle_link.assert_called_once_with(
+                        'user1',
+                        'jira_user_123',
+                        'existing.atlassian.net',
+                        replace_stale_active_link=True,
+                    )
 
 
 @pytest.mark.asyncio
 @patch('server.routes.integration.jira_dc.redis_client')
-@patch('requests.post')
-@patch('requests.get')
-async def test_jira_dc_callback_invalid_operation_type(
-    mock_get, mock_post, mock_redis, mock_request
-):
+async def test_jira_dc_callback_invalid_operation_type(mock_redis, mock_request):
     session_data = {
         'operation_type': 'invalid_operation',
         'target_workspace': 'test.atlassian.net',
-        'keycloak_user_id': 'user1',  # Add missing field
+        'keycloak_user_id': 'user1',
         'state': 'test_state',
     }
     mock_redis.get.return_value = json.dumps(session_data)
-    mock_post.return_value = MagicMock(
-        status_code=200, json=lambda: {'access_token': 'token'}
+
+    # Set up httpx mock (though it won't be called due to invalid operation type check)
+    httpx_mock = create_httpx_mock(
+        post_response={'access_token': 'token'},
+        get_responses={
+            'accessible-resources': [{'url': 'https://test.atlassian.net'}],
+            '/myself': {'key': 'jira_user_123'},
+        },
     )
-
-    # Set up different responses for different GET requests
-    def mock_get_side_effect(url, **kwargs):
-        if 'accessible-resources' in url:
-            return MagicMock(
-                status_code=200,
-                json=lambda: [{'url': 'https://test.atlassian.net'}],
-                text='Success',
-            )
-        elif 'api.atlassian.com/me' in url or url.endswith('/myself'):
-            return MagicMock(
-                status_code=200,
-                json=lambda: {'key': 'jira_user_123'},
-                text='Success',
-            )
-        else:
-            return MagicMock(status_code=404, text='Not found')
-
-    mock_get.side_effect = mock_get_side_effect
 
     with patch(
         'server.routes.integration.jira_dc.JIRA_DC_BASE_URL',
         'https://test.atlassian.net',
     ):
-        with pytest.raises(HTTPException) as exc_info:
-            await jira_dc_callback(mock_request, 'code', 'test_state')
-        assert exc_info.value.status_code == 400
-        assert 'Invalid operation type' in exc_info.value.detail
+        with patch('httpx.AsyncClient', return_value=httpx_mock):
+            with pytest.raises(HTTPException) as exc_info:
+                await jira_dc_callback(mock_request, 'code', 'test_state')
+            assert exc_info.value.status_code == 400
+            assert 'Invalid operation type' in exc_info.value.detail
 
 
 # Test get_current_workspace_link error scenarios
@@ -1681,6 +1866,34 @@ async def test_handle_workspace_link_creation_already_linked_different_workspace
 
 @pytest.mark.asyncio
 @patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+async def test_handle_workspace_link_creation_replaces_stale_active_link(
+    mock_manager,
+):
+    mock_workspace = MagicMock(id=2, status='active')
+
+    mock_manager.integration_store.get_workspace_by_name.return_value = mock_workspace
+    mock_manager.integration_store.get_user_by_active_workspace.return_value = None
+    mock_manager.integration_store.get_user_by_keycloak_id_and_workspace.return_value = None
+
+    await _handle_workspace_link_creation(
+        'user1',
+        'jira_user_123',
+        'current-workspace',
+        replace_stale_active_link=True,
+    )
+
+    mock_manager.integration_store.deactivate_user_links_except_workspace.assert_called_once_with(
+        'user1', 2
+    )
+    mock_manager.integration_store.create_workspace_link.assert_called_once_with(
+        keycloak_user_id='user1',
+        jira_dc_user_id='jira_user_123',
+        jira_dc_workspace_id=2,
+    )
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
 async def test_handle_workspace_link_creation_reactivate_existing_link(mock_manager):
     mock_workspace = MagicMock(id=1, status='active')
     mock_existing_link = MagicMock()
@@ -1843,3 +2056,163 @@ class TestJiraDcOAuthUrlEncoding:
         assert ' ' not in auth_url
         # Verify redirect_uri is properly encoded
         assert 'redirect_uri=https%3A%2F%2F' in auth_url
+
+
+# ---------------------------------------------------------------------------
+# Token persistence in the OAuth callback
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.redis_client')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+@patch(
+    'server.routes.integration.jira_dc._handle_workspace_link_creation',
+    new_callable=AsyncMock,
+)
+async def test_callback_workspace_integration_persists_tokens(
+    mock_handle_link, mock_manager, mock_redis, mock_request
+):
+    """workspace_integration callback must encrypt and store access + refresh tokens."""
+    state = 'test_state'
+    token_data = {
+        'access_token': 'at',
+        'refresh_token': 'rt',
+        'expires_in': 3600,
+        'refresh_token_expires_in': 86400,
+    }
+    session_data = {
+        'operation_type': 'workspace_integration',
+        'keycloak_user_id': 'user1',
+        'target_workspace': 'test.atlassian.net',
+        'webhook_secret': 'secret',
+        'svc_acc_email': 'svc@test.com',
+        'svc_acc_api_key': 'apikey',
+        'is_active': True,
+        'state': state,
+    }
+    mock_redis.get.return_value = json.dumps(session_data)
+    httpx_mock = create_httpx_mock(
+        post_response=token_data,
+        get_responses={
+            'accessible-resources': [{'url': 'https://test.atlassian.net'}],
+            '/myself': {'key': 'jira_user_1'},
+        },
+    )
+    mock_workspace = MagicMock(id=5)
+    mock_manager.integration_store.get_workspace_by_name.return_value = None
+    mock_manager.integration_store.create_workspace.return_value = mock_workspace
+
+    with patch('server.routes.integration.jira_dc.token_manager') as mock_tm:
+        with patch(
+            'server.routes.integration.jira_dc.JIRA_DC_BASE_URL',
+            'https://test.atlassian.net',
+        ):
+            mock_tm.encrypt_text.side_effect = lambda v: f'enc({v})'
+            with patch('httpx.AsyncClient', return_value=httpx_mock):
+                await jira_dc_callback(mock_request, 'code', state)
+
+    mock_manager.integration_store.update_user_oauth_tokens.assert_awaited_once()
+    kwargs = mock_manager.integration_store.update_user_oauth_tokens.call_args.kwargs
+    assert kwargs['keycloak_user_id'] == 'user1'
+    assert kwargs['workspace_id'] == 5
+    assert kwargs['encrypted_access_token'] == 'enc(at)'
+    assert kwargs['encrypted_refresh_token'] == 'enc(rt)'
+    assert kwargs['access_token_expires_at'] > 0
+    assert kwargs['refresh_token_expires_at'] > 0
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.redis_client')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+@patch(
+    'server.routes.integration.jira_dc._handle_workspace_link_creation',
+    new_callable=AsyncMock,
+)
+async def test_callback_workspace_integration_null_refresh_token_tolerated(
+    mock_handle_link, mock_manager, mock_redis, mock_request
+):
+    """Missing refresh_token in IdP response must be stored as NULL, not raise."""
+    state = 'test_state'
+    token_data = {'access_token': 'at'}  # no refresh_token, no expires_in
+    session_data = {
+        'operation_type': 'workspace_integration',
+        'keycloak_user_id': 'user1',
+        'target_workspace': 'test.atlassian.net',
+        'webhook_secret': 'secret',
+        'svc_acc_email': 'svc@test.com',
+        'svc_acc_api_key': 'apikey',
+        'is_active': True,
+        'state': state,
+    }
+    mock_redis.get.return_value = json.dumps(session_data)
+    httpx_mock = create_httpx_mock(
+        post_response=token_data,
+        get_responses={
+            'accessible-resources': [{'url': 'https://test.atlassian.net'}],
+            '/myself': {'key': 'jira_user_1'},
+        },
+    )
+    mock_workspace = MagicMock(id=7)
+    mock_manager.integration_store.get_workspace_by_name.return_value = None
+    mock_manager.integration_store.create_workspace.return_value = mock_workspace
+
+    with patch('server.routes.integration.jira_dc.token_manager') as mock_tm:
+        with patch(
+            'server.routes.integration.jira_dc.JIRA_DC_BASE_URL',
+            'https://test.atlassian.net',
+        ):
+            mock_tm.encrypt_text.side_effect = lambda v: f'enc({v})'
+            with patch('httpx.AsyncClient', return_value=httpx_mock):
+                await jira_dc_callback(mock_request, 'code', state)
+
+    kwargs = mock_manager.integration_store.update_user_oauth_tokens.call_args.kwargs
+    assert kwargs['encrypted_refresh_token'] is None
+    assert kwargs['access_token_expires_at'] == 0
+    assert kwargs['refresh_token_expires_at'] == 0
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.redis_client')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+@patch(
+    'server.routes.integration.jira_dc._handle_workspace_link_creation',
+    new_callable=AsyncMock,
+)
+async def test_callback_workspace_link_persists_tokens(
+    mock_handle_link, mock_manager, mock_redis, mock_request
+):
+    """workspace_link callback must also persist tokens."""
+    state = 'test_state'
+    token_data = {'access_token': 'at', 'refresh_token': 'rt', 'expires_in': 1800}
+    session_data = {
+        'operation_type': 'workspace_link',
+        'keycloak_user_id': 'user2',
+        'target_workspace': 'test.atlassian.net',
+        'state': state,
+    }
+    mock_redis.get.return_value = json.dumps(session_data)
+    httpx_mock = create_httpx_mock(
+        post_response=token_data,
+        get_responses={
+            'accessible-resources': [{'url': 'https://test.atlassian.net'}],
+            '/myself': {'key': 'jira_user_2'},
+        },
+    )
+    mock_workspace = MagicMock(id=9)
+    mock_manager.integration_store.get_workspace_by_name.return_value = mock_workspace
+
+    with patch('server.routes.integration.jira_dc.token_manager') as mock_tm:
+        with patch(
+            'server.routes.integration.jira_dc.JIRA_DC_BASE_URL',
+            'https://test.atlassian.net',
+        ):
+            mock_tm.encrypt_text.side_effect = lambda v: f'enc({v})'
+            with patch('httpx.AsyncClient', return_value=httpx_mock):
+                await jira_dc_callback(mock_request, 'code', state)
+
+    mock_manager.integration_store.update_user_oauth_tokens.assert_awaited_once()
+    kwargs = mock_manager.integration_store.update_user_oauth_tokens.call_args.kwargs
+    assert kwargs['keycloak_user_id'] == 'user2'
+    assert kwargs['workspace_id'] == 9
+    assert kwargs['encrypted_access_token'] == 'enc(at)'

@@ -29,7 +29,7 @@ class SaaSGitLabService(GitLabService):
         base_domain: str | None = None,
     ):
         logger.info(
-            f'SaaSGitLabService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {'set' if external_auth_token else 'None'}, gitlab_token {'set' if token else 'None'}, external_token_manager {external_token_manager}'
+            f'SaaSGitLabService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {"set" if external_auth_token else "None"}, gitlab_token {"set" if token else "None"}, external_token_manager {external_token_manager}'
         )
         super().__init__(
             user_id=user_id,
@@ -316,7 +316,7 @@ class SaaSGitLabService(GitLabService):
 
         # Store webhook and repository info
         if store_in_background:
-            asyncio.create_task(
+            _ = asyncio.create_task(
                 self.store_repository_data(users_personal_projects, repositories)
             )
         else:

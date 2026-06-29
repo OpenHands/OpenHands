@@ -219,7 +219,7 @@ async def search_custom_secrets(
         if name__contains and name__contains.lower() not in secret_name.lower():
             continue
         all_secrets.append(
-            CustomSecretWithoutValue(
+            CustomSecretWithoutValue.model_construct(
                 name=secret_name,
                 description=secret_value.description,
             )
@@ -251,14 +251,13 @@ async def create_custom_secret(
     incoming_secret: CustomSecretCreate,
     secrets_store: SecretsStore = Depends(get_secrets_store),
 ) -> EditResponse:
-    """Create a custom secret.
+    """Create or update a custom secret.
 
-    Creates a new custom secret for the authenticated user.
+    Creates a new custom secret, or overwrites it if it already exists.
 
     Returns:
-        201: Secret created successfully
-        400: Secret already exists
-        500: Error creating secret
+        201: Secret saved successfully
+        500: Error saving secret
     """
     existing_secrets = await secrets_store.load()
     custom_secrets = dict(existing_secrets.custom_secrets) if existing_secrets else {}
@@ -267,15 +266,14 @@ async def create_custom_secret(
     secret_value = incoming_secret.value
     secret_description = incoming_secret.description
 
-    if secret_name in custom_secrets:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f'Secret {secret_name} already exists',
-        )
-
+    existing_description = (
+        custom_secrets[secret_name].description if secret_name in custom_secrets else ''
+    )
     custom_secrets[secret_name] = CustomSecret(
         secret=secret_value,
-        description=secret_description or '',
+        description=secret_description
+        if secret_description is not None
+        else existing_description,
     )
 
     # Create a new Secrets that preserves provider tokens
@@ -308,37 +306,35 @@ async def update_custom_secret(
         500: Error updating secret
     """
     existing_secrets = await secrets_store.load()
-    if existing_secrets:
-        # Check if the secret to update exists
-        if secret_id not in existing_secrets.custom_secrets:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f'Secret with ID {secret_id} not found',
-            )
-
-        secret_name = incoming_secret.name
-        secret_description = incoming_secret.description
-
-        custom_secrets = dict(existing_secrets.custom_secrets)
-        existing_secret = custom_secrets.pop(secret_id)
-
-        if secret_name != secret_id and secret_name in custom_secrets:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f'Secret {secret_name} already exists',
-            )
-
-        custom_secrets[secret_name] = CustomSecret(
-            secret=existing_secret.secret,
-            description=secret_description or '',
+    if not existing_secrets or secret_id not in existing_secrets.custom_secrets:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Secret with ID {secret_id} not found',
         )
 
-        updated_secrets = Secrets(
-            custom_secrets=custom_secrets,  # type: ignore[arg-type]
-            provider_tokens=existing_secrets.provider_tokens,
+    secret_name = incoming_secret.name
+    secret_description = incoming_secret.description
+
+    custom_secrets = dict(existing_secrets.custom_secrets)
+    existing_secret = custom_secrets.pop(secret_id)
+
+    if secret_name != secret_id and secret_name in custom_secrets:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'Secret {secret_name} already exists',
         )
 
-        await secrets_store.store(updated_secrets)
+    custom_secrets[secret_name] = CustomSecret(
+        secret=existing_secret.secret,
+        description=secret_description or '',
+    )
+
+    updated_secrets = Secrets(
+        custom_secrets=custom_secrets,  # type: ignore[arg-type]
+        provider_tokens=existing_secrets.provider_tokens,
+    )
+
+    await secrets_store.store(updated_secrets)
 
     return EditResponse(
         message='Secret updated successfully',

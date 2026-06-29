@@ -52,11 +52,6 @@ vi.mock("#/hooks/use-invitation", () => ({
   }),
 }));
 
-// Mock feature flags - keep ENABLE_AUTOMATIONS for other tests
-vi.mock("#/utils/feature-flags", () => ({
-  ENABLE_AUTOMATIONS: () => false,
-}));
-
 function LoginStub() {
   const [searchParams] = useSearchParams();
   const emailVerificationRequired =

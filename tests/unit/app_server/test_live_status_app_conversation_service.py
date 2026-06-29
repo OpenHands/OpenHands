@@ -23,6 +23,11 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     ConversationTrigger,
 )
+from openhands.app_server.app_conversation.app_conversation_service import (
+    ConversationExportAlreadyRunning,
+    ConversationExportLockUnavailable,
+    ConversationExportTooLarge,
+)
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     LiveStatusAppConversationService,
 )
@@ -42,11 +47,33 @@ from openhands.app_server.settings.settings_models import (
     Settings,
 )
 from openhands.app_server.user.user_context import UserContext
-from openhands.sdk import Agent, Event
+from openhands.app_server.utils.redis_lock import RedisLockUnavailable
+from openhands.sdk import Agent, AgentContext, Event
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
+
+
+def _async_iter(items):
+    async def iter_items():
+        for item in items:
+            yield item
+
+    return iter_items()
+
+
+class _FakeExportLock:
+    def __init__(self):
+        self.name = 'fake-lock'
+        self.released = False
+        self.reacquired = False
+
+    async def reacquire(self):
+        self.reacquired = True
+
+    async def release(self):
+        self.released = True
 
 
 def _build_test_user_agent_settings(user: SimpleNamespace) -> OpenHandsAgentSettings:
@@ -183,6 +210,7 @@ class TestLiveStatusAppConversationService:
             search_api_key=None,
             mcp_config=None,
             disabled_skills=[],
+            git_full_clone=False,
         )
 
         # Mock sandbox
@@ -312,15 +340,21 @@ class TestLiveStatusAppConversationService:
     async def test_setup_secrets_for_git_providers_no_provider_tokens(self):
         """Test _setup_secrets_for_git_providers with no provider tokens."""
         # Arrange
-        base_secrets = {'existing': 'secret'}
+        # get_secrets returns StaticSecret objects (plain strings are not valid)
+        base_secrets = {
+            'existing': StaticSecret(value=SecretStr('secret'), description='')
+        }
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
+        self.mock_jwt_service.create_jws_token.return_value = 'test_access_token'
 
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
-        # Assert
-        assert result == base_secrets
+        # Assert — custom secrets are passed through as-is (no LookupSecret wrapping)
+        assert 'existing' in result
+        assert isinstance(result['existing'], StaticSecret)
+        assert result['existing'].description == ''
         self.mock_user_context.get_secrets.assert_called_once()
         self.mock_user_context.get_provider_tokens.assert_called_once()
 
@@ -543,23 +577,23 @@ class TestLiveStatusAppConversationService:
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
-        # Assert - verify custom secrets are preserved with their descriptions
+        # Assert — custom secrets are passed through as-is; descriptions preserved.
         assert 'CUSTOM_API_KEY' in result
         assert isinstance(result['CUSTOM_API_KEY'], StaticSecret)
+        assert (
+            result['CUSTOM_API_KEY'].value.get_secret_value() == 'custom_secret_value'
+        )
         assert (
             result['CUSTOM_API_KEY'].description
             == 'Custom API key for external service'
         )
-        assert (
-            result['CUSTOM_API_KEY'].value.get_secret_value() == 'custom_secret_value'
-        )
 
         assert 'ANOTHER_SECRET' in result
         assert isinstance(result['ANOTHER_SECRET'], StaticSecret)
-        assert result['ANOTHER_SECRET'].description is None
         assert (
             result['ANOTHER_SECRET'].value.get_secret_value() == 'another_secret_value'
         )
+        assert result['ANOTHER_SECRET'].description is None
 
         # Verify git provider token is also included
         assert 'GITHUB_TOKEN' in result
@@ -578,14 +612,14 @@ class TestLiveStatusAppConversationService:
         base_secrets = {'MY_SECRET': custom_secret_empty_desc}
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
+        self.mock_jwt_service.create_jws_token.return_value = 'test_access_token'
 
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
-        # Assert - empty description should be preserved as-is
+        # Assert — custom secrets are passed through as-is; empty description preserved
         assert 'MY_SECRET' in result
         assert isinstance(result['MY_SECRET'], StaticSecret)
-        # Empty string description is preserved
         assert result['MY_SECRET'].description == ''
 
     @pytest.mark.asyncio
@@ -637,6 +671,41 @@ class TestLiveStatusAppConversationService:
         assert llm.base_url == 'https://sdk-llm.example.com'
 
     @pytest.mark.asyncio
+    async def test_configure_llm_preserves_reasoning_effort(self):
+        """User-configured reasoning_effort must survive _configure_llm.
+
+        Previously _configure_llm created a bare LLM() which reset every
+        field to its Pydantic default (reasoning_effort='high').  Users who
+        set reasoning_effort=None (to disable thinking parameters for models
+        whose litellm version cannot handle them) had their override silently
+        discarded.
+        """
+        from pydantic import SecretStr as _SecretStr
+
+        user_llm = LLM(
+            model='anthropic/claude-opus-4-7',
+            api_key=_SecretStr('test-key'),
+            reasoning_effort=None,
+            extended_thinking_budget=None,
+        )
+        agent_settings = self.mock_user.agent_settings.model_copy(
+            update={'llm': user_llm}
+        )
+        self.mock_user.agent_settings = agent_settings
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, None, self.conversation_id
+        )
+
+        assert llm.model == 'anthropic/claude-opus-4-7'
+        assert llm.reasoning_effort is None, (
+            '_configure_llm must preserve reasoning_effort=None '
+            'instead of resetting it to the SDK default'
+        )
+        assert llm.extended_thinking_budget is None
+
+    @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_openhands_model_uses_user_base_url(
         self,
     ):
@@ -674,7 +743,7 @@ class TestLiveStatusAppConversationService:
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_openhands_model_no_base_urls(self):
-        """openhands/* model still uses the SDK proxy when no other URLs exist."""
+        """openhands/* model is kept public when no explicit base URL exists."""
         # Arrange
         self.mock_user.llm_model = 'openhands/default'
         self.mock_user.llm_base_url = None
@@ -687,30 +756,28 @@ class TestLiveStatusAppConversationService:
         )
 
         # Assert
-        assert llm.base_url == 'https://llm-proxy.app.all-hands.dev/'
+        assert llm.model == 'openhands/default'
+        assert llm.base_url is None
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_litellm_proxy_model_uses_provider_default(
+    async def test_configure_llm_and_mcp_litellm_proxy_model_keeps_empty_base_url(
         self,
     ):
-        """litellm_proxy/* model (inherited by sub-conversations) falls back to provider base URL."""
-        # Arrange — simulates a sub-conversation inheriting the SDK-transformed model name
+        """litellm_proxy/* is not treated as an OpenHands provider model."""
         self.mock_user.llm_base_url = None
         self.mock_user_context.get_mcp_api_key.return_value = None
 
-        # Act
         llm, _ = await self.service._configure_llm_and_mcp(
             self.mock_user, 'litellm_proxy/minimax-2.5', self.conversation_id
         )
 
-        # Assert
-        assert llm.base_url == 'https://provider.example.com'
+        assert llm.base_url is None
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_litellm_proxy_model_prefers_user_base_url(
+    async def test_configure_llm_and_mcp_litellm_proxy_model_preserves_user_base_url(
         self,
     ):
-        """litellm_proxy/* model uses user.llm_base_url when provided."""
+        """litellm_proxy/* model preserves an explicitly configured base_url."""
         # Arrange
         self.mock_user.llm_base_url = 'https://user-llm.example.com'
         self.mock_user_context.get_mcp_api_key.return_value = None
@@ -999,6 +1066,61 @@ class TestLiveStatusAppConversationService:
         self.service._configure_llm_and_mcp.assert_called_once_with(
             self.mock_user, 'gpt-4', test_conversation_id
         )
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_appends_shallow_clone_context(self, _mock_tools):
+        self.mock_user.git_full_clone = False
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix='Existing integration instructions.',
+            git_provider=ProviderType.GITHUB,
+            working_dir='/test/dir',
+            selected_repository='test/repo',
+        )
+
+        suffix = result.agent.agent_context.system_message_suffix
+        assert 'Existing integration instructions.' in suffix
+        assert '<GIT_WORKSPACE_CONTEXT>' in suffix
+        assert 'git fetch --unshallow' in suffix
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_omits_shallow_clone_context_for_full_clone(
+        self, _mock_tools
+    ):
+        self.mock_user.git_full_clone = True
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix='Existing integration instructions.',
+            git_provider=ProviderType.GITHUB,
+            working_dir='/test/dir',
+            selected_repository='test/repo',
+        )
+
+        suffix = result.agent.agent_context.system_message_suffix
+        assert 'Existing integration instructions.' in suffix
+        assert '<GIT_WORKSPACE_CONTEXT>' not in suffix
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_registered_agent_definitions'
@@ -1338,10 +1460,7 @@ class TestLiveStatusAppConversationService:
 
     async def test_export_conversation_success(self):
         """Test successful download of conversation trajectory."""
-        # Arrange
         conversation_id = uuid4()
-
-        # Mock conversation info
         mock_conversation_info = Mock(spec=AppConversationInfo)
         mock_conversation_info.id = conversation_id
         mock_conversation_info.title = 'Test Conversation'
@@ -1358,7 +1477,6 @@ class TestLiveStatusAppConversationService:
             return_value=mock_conversation_info
         )
 
-        # Mock events
         mock_event1 = Mock(spec=Event)
         mock_event1.id = uuid4()
         mock_event1.model_dump = Mock(
@@ -1371,87 +1489,121 @@ class TestLiveStatusAppConversationService:
             return_value={'id': str(mock_event2.id), 'type': 'observation'}
         )
 
-        # Mock event service search_events to return paginated results
-        mock_event_page1 = Mock()
-        mock_event_page1.items = [mock_event1]
-        mock_event_page1.next_page_id = 'page2'
-
-        mock_event_page2 = Mock()
-        mock_event_page2.items = [mock_event2]
-        mock_event_page2.next_page_id = None
-
-        self.mock_event_service.search_events = AsyncMock(
-            side_effect=[mock_event_page1, mock_event_page2]
+        self.mock_event_service.count_events = AsyncMock(return_value=2)
+        self.mock_event_service.iter_events_for_export = Mock(
+            return_value=_async_iter([mock_event1, mock_event2])
         )
+        self.mock_event_service.search_events = AsyncMock()
 
-        # Act
         result = await self.service.export_conversation(conversation_id)
 
-        # Assert
         assert result is not None
-        assert isinstance(result, bytes)  # Should be bytes
+        assert isinstance(result, bytes)
 
-        # Verify the zip file contents
         with zipfile.ZipFile(io.BytesIO(result), 'r') as zipf:
             file_list = zipf.namelist()
 
-            # Should contain meta.json and event files
             assert 'meta.json' in file_list
             assert any(
                 f.startswith('event_') and f.endswith('.json') for f in file_list
             )
 
-            # Check meta.json content
             with zipf.open('meta.json') as meta_file:
                 meta_content = meta_file.read().decode('utf-8')
                 assert '"id": "test"' in meta_content
                 assert '"title": "Test Conversation"' in meta_content
 
-            # Check event files
             event_files = [f for f in file_list if f.startswith('event_')]
-            assert len(event_files) == 2  # Should have 2 event files
+            assert len(event_files) == 2
 
-            # Verify event file content
             with zipf.open(event_files[0]) as event_file:
                 event_content = json.loads(event_file.read().decode('utf-8'))
                 assert 'id' in event_content
                 assert 'type' in event_content
 
-        # Verify service calls
         self.mock_app_conversation_info_service.get_app_conversation_info.assert_called_once_with(
             conversation_id
         )
-        assert self.mock_event_service.search_events.call_count == 2
+        self.mock_event_service.count_events.assert_awaited_once_with(conversation_id)
+        self.mock_event_service.iter_events_for_export.assert_called_once_with(
+            conversation_id
+        )
+        self.mock_event_service.search_events.assert_not_called()
         mock_conversation_info.model_dump_json.assert_called_once_with(indent=2)
+
+    async def test_export_conversation_writes_utf8_when_platform_default_cannot_encode(
+        self,
+    ):
+        """Test trajectory export writes JSON as UTF-8 regardless of platform default."""
+        conversation_id = uuid4()
+
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.title = 'Café 🔐'
+        mock_conversation_info.model_dump_json = Mock(
+            return_value='{"id": "test", "title": "Café 🔐"}'
+        )
+
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+
+        mock_event = Mock(spec=Event)
+        mock_event.id = uuid4()
+        mock_event.model_dump = Mock(
+            return_value={
+                'id': str(mock_event.id),
+                'type': 'observation',
+                'message': 'résumé 🔐',
+            }
+        )
+
+        self.mock_event_service.count_events = AsyncMock(return_value=1)
+        self.mock_event_service.iter_events_for_export = Mock(
+            return_value=_async_iter([mock_event])
+        )
+
+        result = await self.service.export_conversation(conversation_id)
+
+        with zipfile.ZipFile(io.BytesIO(result), 'r') as zipf:
+            with zipf.open('meta.json') as meta_file:
+                meta_content = meta_file.read().decode('utf-8')
+                assert '"title": "Café 🔐"' in meta_content
+
+            event_files = [
+                name for name in zipf.namelist() if name.startswith('event_')
+            ]
+            assert len(event_files) == 1
+            with zipf.open(event_files[0]) as event_file:
+                event_content = json.loads(event_file.read().decode('utf-8'))
+                assert event_content['message'] == 'résumé 🔐'
 
     @pytest.mark.asyncio
     async def test_export_conversation_conversation_not_found(self):
         """Test download when conversation is not found."""
-        # Arrange
         conversation_id = uuid4()
         self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
             return_value=None
         )
+        self.mock_event_service.count_events = AsyncMock()
+        self.mock_event_service.iter_events_for_export = Mock()
 
-        # Act & Assert
         with pytest.raises(
             ValueError, match=f'Conversation not found: {conversation_id}'
         ):
             await self.service.export_conversation(conversation_id)
 
-        # Verify service calls
         self.mock_app_conversation_info_service.get_app_conversation_info.assert_called_once_with(
             conversation_id
         )
-        self.mock_event_service.search_events.assert_not_called()
+        self.mock_event_service.count_events.assert_not_called()
+        self.mock_event_service.iter_events_for_export.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_export_conversation_empty_events(self):
         """Test download with conversation that has no events."""
-        # Arrange
         conversation_id = uuid4()
 
-        # Mock conversation info
         mock_conversation_info = Mock(spec=AppConversationInfo)
         mock_conversation_info.id = conversation_id
         mock_conversation_info.title = 'Empty Conversation'
@@ -1463,48 +1615,36 @@ class TestLiveStatusAppConversationService:
             return_value=mock_conversation_info
         )
 
-        # Mock empty event page
-        mock_event_page = Mock()
-        mock_event_page.items = []
-        mock_event_page.next_page_id = None
+        self.mock_event_service.count_events = AsyncMock(return_value=0)
+        self.mock_event_service.iter_events_for_export = Mock(
+            return_value=_async_iter([])
+        )
 
-        self.mock_event_service.search_events = AsyncMock(return_value=mock_event_page)
-
-        # Act
         result = await self.service.export_conversation(conversation_id)
 
-        # Assert
         assert result is not None
-        assert isinstance(result, bytes)  # Should be bytes
+        assert isinstance(result, bytes)
 
-        # Verify the zip file contents
         with zipfile.ZipFile(io.BytesIO(result), 'r') as zipf:
             file_list = zipf.namelist()
 
-            # Should only contain meta.json (no event files)
             assert 'meta.json' in file_list
             assert len([f for f in file_list if f.startswith('event_')]) == 0
 
-        # Verify service calls
         self.mock_app_conversation_info_service.get_app_conversation_info.assert_called_once_with(
             conversation_id
         )
-        self.mock_event_service.search_events.assert_called_once()
+        self.mock_event_service.count_events.assert_awaited_once_with(conversation_id)
+        self.mock_event_service.iter_events_for_export.assert_called_once_with(
+            conversation_id
+        )
 
     @pytest.mark.asyncio
-    async def test_export_conversation_calls_search_events_with_correct_parameter_name(
+    async def test_export_conversation_calls_iterator_with_conversation_id(
         self,
     ):
-        """Test that export_conversation calls search_events with 'conversation_id' parameter, not 'conversation_id__eq'.
-
-        This test verifies the fix for a bug where page_iterator was called with
-        conversation_id__eq instead of conversation_id, causing a TypeError since
-        the search_events method expects conversation_id as its parameter name.
-        """
-        # Arrange
+        """Test that export_conversation calls the export iterator with conversation_id."""
         conversation_id = uuid4()
-
-        # Mock conversation info
         mock_conversation_info = Mock(spec=AppConversationInfo)
         mock_conversation_info.id = conversation_id
         mock_conversation_info.model_dump_json = Mock(return_value='{}')
@@ -1513,35 +1653,23 @@ class TestLiveStatusAppConversationService:
             return_value=mock_conversation_info
         )
 
-        # Mock empty event page to simplify test
-        mock_event_page = Mock()
-        mock_event_page.items = []
-        mock_event_page.next_page_id = None
+        self.mock_event_service.count_events = AsyncMock(return_value=0)
+        self.mock_event_service.iter_events_for_export = Mock(
+            return_value=_async_iter([])
+        )
+        self.mock_event_service.search_events = AsyncMock()
 
-        self.mock_event_service.search_events = AsyncMock(return_value=mock_event_page)
-
-        # Act
         await self.service.export_conversation(conversation_id)
 
-        # Assert - Verify search_events was called with 'conversation_id', not 'conversation_id__eq'
-        self.mock_event_service.search_events.assert_called()
-        call_kwargs = self.mock_event_service.search_events.call_args[1]
-
-        assert 'conversation_id' in call_kwargs, (
-            "search_events should be called with 'conversation_id' parameter"
+        self.mock_event_service.iter_events_for_export.assert_called_once_with(
+            conversation_id
         )
-        assert 'conversation_id__eq' not in call_kwargs, (
-            "search_events should NOT be called with 'conversation_id__eq' parameter"
-        )
-        assert call_kwargs['conversation_id'] == conversation_id
+        self.mock_event_service.search_events.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_export_conversation_large_pagination(self):
-        """Test download with multiple pages of events."""
-        # Arrange
+    async def test_export_conversation_large_iterator(self):
+        """Test download with many events from one export iterator pass."""
         conversation_id = uuid4()
-
-        # Mock conversation info
         mock_conversation_info = Mock(spec=AppConversationInfo)
         mock_conversation_info.id = conversation_id
         mock_conversation_info.title = 'Large Conversation'
@@ -1553,64 +1681,171 @@ class TestLiveStatusAppConversationService:
             return_value=mock_conversation_info
         )
 
-        # Create multiple pages of events
-        events_per_page = 3
-        total_pages = 4
+        total_events = 12
         all_events = []
 
-        for page_num in range(total_pages):
-            page_events = []
-            for i in range(events_per_page):
-                mock_event = Mock(spec=Event)
-                mock_event.id = uuid4()
-                mock_event.model_dump = Mock(
-                    return_value={
-                        'id': str(mock_event.id),
-                        'type': f'event_page_{page_num}_item_{i}',
-                    }
-                )
-                page_events.append(mock_event)
-                all_events.append(mock_event)
-
-            mock_event_page = Mock()
-            mock_event_page.items = page_events
-            mock_event_page.next_page_id = (
-                f'page{page_num + 1}' if page_num < total_pages - 1 else None
+        for i in range(total_events):
+            mock_event = Mock(spec=Event)
+            mock_event.id = uuid4()
+            mock_event.model_dump = Mock(
+                return_value={
+                    'id': str(mock_event.id),
+                    'type': f'event_{i}',
+                }
             )
+            all_events.append(mock_event)
 
-            if page_num == 0:
-                first_page = mock_event_page
-            elif page_num == 1:
-                second_page = mock_event_page
-            elif page_num == 2:
-                third_page = mock_event_page
-            else:
-                fourth_page = mock_event_page
-
-        self.mock_event_service.search_events = AsyncMock(
-            side_effect=[first_page, second_page, third_page, fourth_page]
+        self.mock_event_service.count_events = AsyncMock(return_value=total_events)
+        self.mock_event_service.iter_events_for_export = Mock(
+            return_value=_async_iter(all_events)
         )
+        self.mock_event_service.search_events = AsyncMock()
 
-        # Act
         result = await self.service.export_conversation(conversation_id)
 
-        # Assert
         assert result is not None
-        assert isinstance(result, bytes)  # Should be bytes
+        assert isinstance(result, bytes)
 
-        # Verify the zip file contents
         with zipfile.ZipFile(io.BytesIO(result), 'r') as zipf:
             file_list = zipf.namelist()
 
-            # Should contain meta.json and all event files
             assert 'meta.json' in file_list
             event_files = [f for f in file_list if f.startswith('event_')]
-            assert (
-                len(event_files) == total_pages * events_per_page
-            )  # Should have all events
+            assert len(event_files) == total_events
 
-        # Verify service calls - should call search_events for each page
-        assert self.mock_event_service.search_events.call_count == total_pages
+        self.mock_event_service.iter_events_for_export.assert_called_once_with(
+            conversation_id
+        )
+        self.mock_event_service.search_events.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_open_conversation_export_streams_with_lock(self):
+        """Test streaming export acquires and releases the conversation export lock."""
+        conversation_id = uuid4()
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.model_dump_json = Mock(return_value='{}')
+
+        mock_event = Mock(spec=Event)
+        mock_event.id = uuid4()
+        mock_event.model_dump = Mock(return_value={'id': str(mock_event.id)})
+
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+        self.mock_event_service.count_events = AsyncMock(return_value=1)
+        self.mock_event_service.iter_events_for_export = Mock(
+            return_value=_async_iter([mock_event])
+        )
+
+        fake_lock = _FakeExportLock()
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.try_acquire_redis_lock',
+            new=AsyncMock(return_value=fake_lock),
+        ) as mock_acquire_lock:
+            stream = await self.service.open_conversation_export(conversation_id)
+            result = b''.join([chunk async for chunk in stream])
+
+        assert result
+        assert fake_lock.released is True
+        mock_acquire_lock.assert_awaited_once_with(
+            f'app_conversation_export:{conversation_id.hex}',
+            self.service.export_lock_ttl_seconds,
+        )
+
+    @pytest.mark.asyncio
+    async def test_open_conversation_export_rejects_duplicate_export(self):
+        """Test streaming export rejects duplicate export attempts."""
+        conversation_id = uuid4()
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.model_dump_json = Mock(return_value='{}')
+
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.try_acquire_redis_lock',
+            new=AsyncMock(return_value=None),
+        ):
+            with pytest.raises(ConversationExportAlreadyRunning):
+                await self.service.open_conversation_export(conversation_id)
+
+        self.mock_event_service.count_events.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_open_conversation_export_fails_closed_when_lock_unavailable(self):
+        """Test streaming export fails closed when Redis lock cannot be checked."""
+        conversation_id = uuid4()
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.model_dump_json = Mock(return_value='{}')
+
+        self.service.export_lock_required = True
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.try_acquire_redis_lock',
+            new=AsyncMock(side_effect=RedisLockUnavailable()),
+        ):
+            with pytest.raises(ConversationExportLockUnavailable):
+                await self.service.open_conversation_export(conversation_id)
+
+        self.mock_event_service.count_events.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_open_conversation_export_proceeds_when_lock_not_required(self):
+        """Test non-SaaS export proceeds without Redis when locking is best effort."""
+        conversation_id = uuid4()
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.model_dump_json = Mock(return_value='{}')
+
+        mock_event = Mock(spec=Event)
+        mock_event.id = uuid4()
+        mock_event.model_dump = Mock(return_value={'id': str(mock_event.id)})
+
+        self.service.export_lock_required = False
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+        self.mock_event_service.count_events = AsyncMock(return_value=1)
+        self.mock_event_service.iter_events_for_export = Mock(
+            return_value=_async_iter([mock_event])
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.try_acquire_redis_lock',
+            new=AsyncMock(side_effect=RedisLockUnavailable()),
+        ):
+            stream = await self.service.open_conversation_export(conversation_id)
+            result = b''.join([chunk async for chunk in stream])
+
+        assert result
+        self.mock_event_service.count_events.assert_awaited_once_with(conversation_id)
+
+    @pytest.mark.asyncio
+    async def test_export_conversation_rejects_too_many_events(self):
+        """Test export rejects conversations over the configured event limit."""
+        conversation_id = uuid4()
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.model_dump_json = Mock(return_value='{}')
+
+        self.service.export_max_events = 1
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+        self.mock_event_service.count_events = AsyncMock(return_value=2)
+        self.mock_event_service.iter_events_for_export = Mock()
+
+        with pytest.raises(ConversationExportTooLarge):
+            await self.service.export_conversation(conversation_id)
+
+        self.mock_event_service.iter_events_for_export.assert_not_called()
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
@@ -1713,6 +1948,99 @@ class TestLiveStatusAppConversationService:
             f'but got "{saved_info.title}"'
         )
         assert saved_info.id == conversation_id
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.ConversationInfo'
+    )
+    @pytest.mark.asyncio
+    async def test_start_app_conversation_stores_acp_model_as_llm_model(
+        self, mock_conversation_info_class, mock_remote_workspace_class
+    ):
+        """ACP conversations persist acp_model as llm_model in AppConversationInfo."""
+        from openhands.sdk.settings import ACPAgentSettings
+
+        conversation_id = uuid4()
+
+        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
+        acp_user = _TestUserInfo(
+            id='test_user_123',
+            llm_model='gpt-4',
+            sandbox_grouping_strategy=SandboxGroupingStrategy.NO_GROUPING,
+        )
+        acp_user.agent_settings = ACPAgentSettings(
+            acp_server='codex', acp_model='gpt-5.5/high'
+        )
+        self.mock_user_context.get_user_info = AsyncMock(return_value=acp_user)
+
+        mock_sandbox_spec = Mock(spec=SandboxSpecInfo)
+        mock_sandbox_spec.working_dir = '/test/workspace'
+        self.mock_sandbox.sandbox_spec_id = str(uuid4())
+        self.mock_sandbox.id = str(uuid4())
+        self.mock_sandbox.session_api_key = 'test_session_key'
+        exposed_url = ExposedUrl(
+            name=AGENT_SERVER, url='http://agent-server:8000', port=60000
+        )
+        self.mock_sandbox.exposed_urls = [exposed_url]
+
+        self.mock_sandbox_service.get_sandbox = AsyncMock(
+            return_value=self.mock_sandbox
+        )
+        self.mock_sandbox_spec_service.get_sandbox_spec = AsyncMock(
+            return_value=mock_sandbox_spec
+        )
+        mock_remote_workspace_class.return_value = Mock()
+
+        async def mock_wait_for_sandbox(task):
+            task.sandbox_id = self.mock_sandbox.id
+            yield task
+
+        async def mock_run_setup_scripts(task, sandbox, workspace, agent_server_url):
+            yield task
+
+        self.service._wait_for_sandbox_start = mock_wait_for_sandbox
+        self.service.run_setup_scripts = mock_run_setup_scripts
+        self.service._seed_sandbox_profiles = AsyncMock()
+
+        # ACP start request: agent_kind='acp', acp_model='gpt-5.5/high'
+        mock_acp_agent = Mock()
+        mock_acp_agent.agent_kind = 'acp'
+        mock_acp_agent.acp_model = 'gpt-5.5/high'
+        mock_start_request = Mock(spec=StartConversationRequest)
+        mock_start_request.agent = mock_acp_agent
+        mock_start_request.model_dump.return_value = {}
+
+        self.service._build_start_conversation_request_for_user = AsyncMock(
+            return_value=mock_start_request
+        )
+
+        mock_conversation_info = Mock()
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info_class.model_validate.return_value = (
+            mock_conversation_info
+        )
+
+        mock_response = Mock()
+        mock_response.json.return_value = {'id': str(conversation_id)}
+        mock_response.raise_for_status = Mock()
+        self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
+        self.mock_event_callback_service.save_event_callback = AsyncMock()
+        self.mock_app_conversation_info_service.save_app_conversation_info = AsyncMock()
+
+        async for _ in self.service._start_app_conversation(
+            AppConversationStartRequest()
+        ):
+            pass
+
+        self.mock_app_conversation_info_service.save_app_conversation_info.assert_called_once()
+        saved_info = self.mock_app_conversation_info_service.save_app_conversation_info.call_args[
+            0
+        ][0]
+        assert saved_info.llm_model == 'gpt-5.5/high'
+        assert saved_info.agent_kind == 'acp'
+        assert saved_info.tags.get('acpserver') == 'codex'
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_custom_remote_servers(self):
@@ -3219,11 +3547,11 @@ class TestAgentKindConversationUrl:
 
 
 class TestBuildAcpStartConversationRequestSecrets:
-    """Tests for user-secret injection in ``_build_acp_start_conversation_request``.
+    """Tests for secret injection in ``_build_acp_start_conversation_request``.
 
-    Covers issue #14167: secrets from the Secrets panel and git provider
-    tokens must be available to ACP subprocesses as environment variables,
-    mirroring how they flow into the regular OpenHands sandbox.
+    Secrets from the Secrets panel and git provider tokens flow through
+    ``request.secrets`` as the sole canonical channel.  ``llm.api_key`` is
+    never read for ACP (the CLI subprocess handles its own LLM calls).
     """
 
     @pytest.fixture
@@ -3250,7 +3578,9 @@ class TestBuildAcpStartConversationRequestSecrets:
             app_mode='test',
         )
 
-    def _make_acp_user(self, acp_server='claude-code', acp_env=None, api_key=None):
+    def _make_acp_user(
+        self, acp_server='claude-code', context_secrets=None, api_key=None
+    ):
         try:
             from openhands.sdk.settings import (
                 ACPAgentSettings,  # type: ignore[attr-defined]
@@ -3270,26 +3600,25 @@ class TestBuildAcpStartConversationRequestSecrets:
             mcp_config=None,
             disabled_skills=[],
         )
+        agent_context = (
+            AgentContext(secrets=context_secrets) if context_secrets else None
+        )
         user.agent_settings = ACPAgentSettings(
             acp_server=acp_server,  # type: ignore[arg-type]
             llm=LLM(
                 model='claude-sonnet-4-5',
                 api_key=SecretStr(api_key) if api_key else None,
             ),
-            acp_env=acp_env or {},
+            agent_context=agent_context,
         )
         return user
 
-    def _call_build(self, service, user, tmp_path):
+    def _call_build(self, service, user, tmp_path, *, secrets=None):
         """Wire user_context and call _build_acp_start_conversation_request."""
-        from openhands.agent_server.models import EventPage
-
         service.user_context.get_user_info = AsyncMock(return_value=user)
         service.user_context.get_user_email = AsyncMock(return_value=None)
-        # Fresh conversation — no prior events, so resume synthesis returns None.
-        service.event_service.search_events = AsyncMock(
-            return_value=EventPage(items=[], next_page_id=None)
-        )
+        service.user_context.get_secrets = AsyncMock(return_value=secrets or {})
+        service.user_context.get_provider_tokens = AsyncMock(return_value=None)
         sandbox = Mock(spec=SandboxInfo)
         return service._build_acp_start_conversation_request(
             sandbox=sandbox,
@@ -3300,835 +3629,178 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
 
     @pytest.mark.asyncio
-    async def test_secrets_passed_via_agent_context(self, service, tmp_path):
-        """Secrets are forwarded via agent_context.secrets as SecretSource objects."""
+    async def test_secrets_passed_via_request_secrets(self, service, tmp_path):
+        """Secrets are forwarded via request.secrets as SecretSource objects."""
         github_secret = StaticSecret(value=SecretStr('ghp_test123'))
         api_secret = StaticSecret(value=SecretStr('secret-value'))
         user = self._make_acp_user()
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'GITHUB_TOKEN': github_secret, 'MY_API_KEY': api_secret}
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'GITHUB_TOKEN': github_secret, 'MY_API_KEY': api_secret},
         )
 
-        request = await self._call_build(service, user, tmp_path)
-
-        assert request.agent.agent_context is not None
-        ctx = request.agent.agent_context.secrets
-        assert ctx.get('GITHUB_TOKEN') is github_secret
-        assert ctx.get('MY_API_KEY') is api_secret
+        assert request.secrets.get('GITHUB_TOKEN') is github_secret
+        assert request.secrets.get('MY_API_KEY') is api_secret
+        # Isolation is enabled regardless of whether secrets are present.
+        assert request.agent.acp_isolate_data_dir is True
 
     @pytest.mark.asyncio
     async def test_lookup_secret_forwarded_as_source(self, service, tmp_path):
-        """LookupSecrets are forwarded as-is; the SDK resolves them at start time."""
+        """LookupSecrets from user_context are forwarded as-is."""
         lookup = LookupSecret(url='https://example.com/token', headers={})
         user = self._make_acp_user()
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'GITHUB_TOKEN': lookup}
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'GITHUB_TOKEN': lookup},
         )
 
-        request = await self._call_build(service, user, tmp_path)
-
-        assert request.agent.agent_context is not None
-        assert request.agent.agent_context.secrets.get('GITHUB_TOKEN') is lookup
+        assert request.secrets.get('GITHUB_TOKEN') is lookup
 
     @pytest.mark.asyncio
-    async def test_explicit_acp_env_preserved(self, service, tmp_path):
-        """Explicit acp_env entries survive when secrets also present."""
-        user = self._make_acp_user(acp_env={'MY_TOKEN': 'explicit-override'})
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'OTHER': StaticSecret(value=SecretStr('other-value'))}
+    async def test_explicit_context_secret_preserved(self, service, tmp_path):
+        """Explicit agent_context.secrets entries survive when secrets also present."""
+        user = self._make_acp_user(context_secrets={'MY_TOKEN': 'explicit-override'})
+        other_secret = StaticSecret(value=SecretStr('other-value'))
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'OTHER': other_secret},
         )
 
-        request = await self._call_build(service, user, tmp_path)
-
-        assert request.agent.acp_env.get('MY_TOKEN') == 'explicit-override'
-
-    @pytest.mark.asyncio
-    async def test_provider_env_in_agent_context_not_acp_env(self, service, tmp_path):
-        """Provider cred lands in agent_context.secrets, not acp_env."""
-        user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
-        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
-
-        request = await self._call_build(service, user, tmp_path)
-
-        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') is None
-        assert request.agent.agent_context is not None
-        assert (
-            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY').get_value()
-            == 'sk-ui-key'
-        )
+        agent_ctx_secrets = (
+            request.agent.agent_context.secrets if request.agent.agent_context else {}
+        ) or {}
+        assert agent_ctx_secrets.get('MY_TOKEN') == 'explicit-override'
+        assert request.secrets.get('OTHER') is other_secret
 
     @pytest.mark.asyncio
-    async def test_no_secrets_no_agent_context(self, service, tmp_path):
-        """When there are no secrets, agent_context is not set."""
-        user = self._make_acp_user()
-        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
-
-        request = await self._call_build(service, user, tmp_path)
-
-        assert request.agent.agent_context is None
-
-    @pytest.mark.asyncio
-    async def test_acp_env_overrides_provider_env(self, service, tmp_path):
-        """Explicit acp_env entry beats the provider cred (acp_env > agent_context.secrets at launch)."""
-        user = self._make_acp_user(
-            acp_server='claude-code',
-            acp_env={'ANTHROPIC_API_KEY': 'sk-explicit-override'},
-            api_key='sk-ui-key',
-        )
-        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
-
-        request = await self._call_build(service, user, tmp_path)
-
-        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') == 'sk-explicit-override'
-        # Provider cred still lands in agent_context.secrets; acp_env wins at launch.
-        assert request.agent.agent_context is not None
-        assert (
-            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY').get_value()
-            == 'sk-ui-key'
-        )
-
-    @pytest.mark.asyncio
-    async def test_secrets_forwarded_via_agent_context(self, service, tmp_path):
-        """Panel secrets flow through agent_context.secrets; not pre-resolved into acp_env."""
-        gh_secret = StaticSecret(value=SecretStr('ghp_test123'))
-        user = self._make_acp_user()
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'GH_TOKEN': gh_secret}
-        )
-
-        request = await self._call_build(service, user, tmp_path)
-
-        assert request.agent.acp_env.get('GH_TOKEN') is None
-        assert request.agent.agent_context is not None
-        assert request.agent.agent_context.secrets.get('GH_TOKEN') is gh_secret
-
-    @pytest.mark.asyncio
-    async def test_panel_secret_overrides_provider_env_when_conflicting(
+    async def test_llm_api_key_not_forwarded_to_request_secrets(
         self, service, tmp_path
     ):
-        """Panel secret beats provider-derived cred when both name the same key.
+        """llm.api_key must not bleed into request.secrets for ACP.
 
-        SDK merge order: {**provider_secrets, **existing} → existing (panel) wins.
-        Priority is now panel > provider, reversed from the old workaround.
+        ACP does not use the SDK's LLM layer — the CLI subprocess handles its
+        own model calls.  Credentials must be supplied via the Secrets panel
+        (request.secrets channel), not via llm.api_key.
+        """
+        user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
+
+        request = await self._call_build(service, user, tmp_path)
+
+        agent_ctx_secrets = (
+            request.agent.agent_context.secrets if request.agent.agent_context else {}
+        ) or {}
+        assert 'ANTHROPIC_API_KEY' not in agent_ctx_secrets
+        assert 'ANTHROPIC_API_KEY' not in request.secrets
+
+    @pytest.mark.asyncio
+    async def test_no_secrets_request_secrets_empty(self, service, tmp_path):
+        """When there are no panel secrets, request.secrets is empty."""
+        user = self._make_acp_user()
+
+        request = await self._call_build(service, user, tmp_path)
+
+        assert request.secrets == {}
+
+    @pytest.mark.asyncio
+    async def test_isolate_data_dir_enabled(self, service, tmp_path):
+        """The cloud start path builds the ACP agent with data-dir isolation on
+        so the CLI session subtree lives on /workspace and the SDK self-resumes
+        across pause/resume (#1274)."""
+        user = self._make_acp_user()
+
+        request = await self._call_build(service, user, tmp_path)
+
+        assert request.agent.acp_isolate_data_dir is True
+
+    @pytest.mark.asyncio
+    async def test_context_secret_explicit_override(self, service, tmp_path):
+        """Explicit agent_context.secrets is independent of request.secrets — both preserved."""
+        user = self._make_acp_user(
+            acp_server='claude-code',
+            context_secrets={'ANTHROPIC_API_KEY': 'sk-explicit-override'},
+        )
+
+        request = await self._call_build(service, user, tmp_path)
+
+        agent_ctx_secrets = (
+            request.agent.agent_context.secrets if request.agent.agent_context else {}
+        ) or {}
+        assert agent_ctx_secrets.get('ANTHROPIC_API_KEY') == 'sk-explicit-override'
+        # No panel secrets → request.secrets is empty (agent_context.secrets is a separate channel).
+        assert 'ANTHROPIC_API_KEY' not in request.secrets
+
+    @pytest.mark.asyncio
+    async def test_secrets_forwarded_via_request_secrets(self, service, tmp_path):
+        """Panel secrets flow through request.secrets; not pre-resolved into agent_context."""
+        gh_secret = StaticSecret(value=SecretStr('ghp_test123'))
+        user = self._make_acp_user()
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'GH_TOKEN': gh_secret},
+        )
+
+        agent_ctx_secrets = (
+            request.agent.agent_context.secrets if request.agent.agent_context else {}
+        ) or {}
+        assert 'GH_TOKEN' not in agent_ctx_secrets
+        assert request.secrets.get('GH_TOKEN') is gh_secret
+
+    @pytest.mark.asyncio
+    async def test_panel_secret_is_sole_credentials_channel(self, service, tmp_path):
+        """Panel secret is the only credentials channel; llm.api_key is ignored.
+
+        When a panel secret and llm.api_key both target the same env var, only
+        the panel secret appears in request.secrets — llm.api_key is not read.
         """
         user = self._make_acp_user(acp_server='claude-code', api_key='sk-ui-key')
         panel_secret = StaticSecret(value=SecretStr('sk-from-secrets-panel'))
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'ANTHROPIC_API_KEY': panel_secret}
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'ANTHROPIC_API_KEY': panel_secret},
         )
 
-        request = await self._call_build(service, user, tmp_path)
-
-        assert request.agent.acp_env.get('ANTHROPIC_API_KEY') is None
-        assert request.agent.agent_context is not None
-        assert (
-            request.agent.agent_context.secrets.get('ANTHROPIC_API_KEY').get_value()
-            == 'sk-from-secrets-panel'
-        )
+        agent_ctx_secrets = (
+            request.agent.agent_context.secrets if request.agent.agent_context else {}
+        ) or {}
+        assert 'ANTHROPIC_API_KEY' not in agent_ctx_secrets
+        assert request.secrets.get('ANTHROPIC_API_KEY') is panel_secret
 
     @pytest.mark.asyncio
-    async def test_explicit_acp_env_wins_over_panel_secret(self, service, tmp_path):
-        """Same-named explicit acp_env overrides a panel secret of the same name."""
-        user = self._make_acp_user(acp_env={'GH_TOKEN': 'explicit-token'})
-        service._setup_secrets_for_git_providers = AsyncMock(
-            return_value={'GH_TOKEN': StaticSecret(value=SecretStr('panel-token'))}
-        )
-
-        request = await self._call_build(service, user, tmp_path)
-
-        assert request.agent.acp_env.get('GH_TOKEN') == 'explicit-token'
-
-
-class TestSynthesizeAcpResumeInitialMessage:
-    """Tests for _synthesize_acp_resume_initial_message (Solution A, issue #14260).
-
-    Verifies that bootstrap-prompt resume correctly converts the durable event
-    store into an initial_message for a fresh ACP new_session when the sandbox
-    is recycled and the agent's own session storage is gone.
-    """
-
-    @pytest.fixture
-    def service(self):
-        return LiveStatusAppConversationService(
-            init_git_in_empty_workspace=True,
-            user_context=Mock(spec=UserContext),
-            app_conversation_info_service=Mock(),
-            app_conversation_start_task_service=Mock(),
-            event_callback_service=Mock(),
-            event_service=Mock(),
-            sandbox_service=Mock(),
-            sandbox_spec_service=Mock(),
-            jwt_service=Mock(),
-            pending_message_service=Mock(),
-            sandbox_startup_timeout=30,
-            sandbox_startup_poll_frequency=1,
-            max_num_conversations_per_sandbox=20,
-            httpx_client=Mock(),
-            web_url=None,
-            openhands_provider_base_url=None,
-            access_token_hard_timeout=None,
-            app_mode='test',
-        )
-
-    def _make_empty_page(self):
-        from openhands.agent_server.models import EventPage
-
-        return EventPage(items=[], next_page_id=None)
-
-    def _make_page(self, items, next_page_id=None):
-        from openhands.agent_server.models import EventPage
-
-        return EventPage(items=items, next_page_id=next_page_id)
-
-    def _make_message_event(self, role, text):
-        from openhands.sdk import MessageEvent
-        from openhands.sdk.llm.message import Message
-        from openhands.sdk.llm.message import TextContent as MsgTextContent
-
-        msg = Message(role=role, content=[MsgTextContent(type='text', text=text)])
-        return MessageEvent(
-            source='user' if role == 'user' else 'agent', llm_message=msg
-        )
-
-    def _make_tool_event(
-        self,
-        title,
-        is_error=False,
-        status=None,
-        tool_call_id=None,
-        raw_input=None,
-        raw_output=None,
+    async def test_explicit_context_secret_and_panel_secret_coexist(
+        self, service, tmp_path
     ):
-        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
+        """agent_context.secrets and request.secrets are independent channels.
 
-        return ACPToolCallEvent(
-            source='agent',
-            tool_call_id=tool_call_id or f'tc-{title}',
-            title=title,
-            is_error=is_error,
-            status=status,
-            raw_input=raw_input or {},
-            raw_output=raw_output,
-        )
-
-    @pytest.mark.asyncio
-    async def test_no_events_returns_none(self, service):
-        """Fresh conversations have no prior events; nothing to synthesize."""
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_empty_page()
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_only_irrelevant_events_returns_none(self, service):
-        """Events that are neither MessageEvent nor ACPToolCallEvent → no resume."""
-        from openhands.sdk.event.conversation_state import ConversationStateUpdateEvent
-
-        state_event = ConversationStateUpdateEvent(
-            source='agent', key='status', value='running'
-        )
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_page([state_event])
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_message_events_produce_role_tagged_turns(self, service):
-        """MessageEvents are rendered as [USER] / [ASSISTANT] tagged lines."""
-        events = [
-            self._make_message_event('user', 'Please refactor the login module.'),
-            self._make_message_event('assistant', 'Sure, I will start now.'),
-        ]
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_page(events)
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is not None
-        assert result.role == 'user'
-        text = result.content[0].text
-        assert '<<RESUMED CONVERSATION>>' in text
-        assert '[USER]: Please refactor the login module.' in text
-        assert '[ASSISTANT]: Sure, I will start now.' in text
-
-    @pytest.mark.asyncio
-    async def test_tool_events_produce_tool_use_lines(self, service):
-        """ACPToolCallEvents appear as [TOOL USE: …] summary lines."""
-        events = [
-            self._make_tool_event(
-                'Write File',
-                is_error=False,
-                status='completed',
-                tool_call_id='tc-write',
-                raw_input={'content': 'x'},
-            ),
-            self._make_tool_event(
-                'Run Tests',
-                is_error=True,
-                tool_call_id='tc-run',
-                raw_input={'cmd': 'pytest'},
-            ),
-        ]
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_page(events)
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is not None
-        text = result.content[0].text
-        assert '[TOOL USE: Write File] (completed)' in text
-        assert '[TOOL USE: Run Tests] (failed)' in text
-
-    @pytest.mark.asyncio
-    async def test_mixed_events_preserve_order(self, service):
-        """Message and tool events appear in chronological order after DESC fetch + reverse."""
-        # search_events is called with TIMESTAMP_DESC (newest first); mock matches that order.
-        events = [
-            self._make_message_event('assistant', 'Done reading'),
-            self._make_tool_event('Read File', raw_input={'path': 'auth.py'}),
-            self._make_message_event('user', 'First message'),
-        ]
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_page(events)
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is not None
-        text = result.content[0].text
-        first_pos = text.index('[USER]: First message')
-        tool_pos = text.index('[TOOL USE: Read File]')
-        agent_pos = text.index('[ASSISTANT]: Done reading')
-        assert first_pos < tool_pos < agent_pos
-
-    @pytest.mark.asyncio
-    async def test_pagination_collects_all_events(self, service):
-        """All pages are fetched until next_page_id is None."""
-        from openhands.agent_server.models import EventPage
-
-        page1 = EventPage(
-            items=[self._make_message_event('user', 'Page 1 message')],
-            next_page_id='page2',
-        )
-        page2 = EventPage(
-            items=[self._make_message_event('assistant', 'Page 2 reply')],
-            next_page_id=None,
-        )
-        service.event_service.search_events = AsyncMock(side_effect=[page1, page2])
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is not None
-        text = result.content[0].text
-        assert '[USER]: Page 1 message' in text
-        assert '[ASSISTANT]: Page 2 reply' in text
-        assert service.event_service.search_events.call_count == 2
-
-    @pytest.mark.asyncio
-    async def test_no_prior_events_initial_message_unchanged(self, service):
-        """Fresh start: no events → initial_message flows through unchanged."""
-        try:
-            from openhands.sdk.settings import ACPAgentSettings
-        except ImportError:
-            pytest.skip('ACPAgentSettings not available in this SDK build')
-
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_empty_page()
-        )
-
-        user = _TestUserInfo(
-            id='u1',
-            llm_model='',
-            llm_base_url=None,
-            llm_api_key=None,
-            sandbox_grouping_strategy=SandboxGroupingStrategy.ADD_TO_ANY,
-            confirmation_mode=False,
-            security_analyzer=None,
-            search_api_key=None,
-            mcp_config=None,
-            disabled_skills=[],
-        )
-        user.agent_settings = ACPAgentSettings(
-            acp_server='codex',
-            llm=LLM(model='claude-sonnet-4-5'),
-            acp_env={},
-        )
-        service.user_context.get_user_info = AsyncMock(return_value=user)
-        service.user_context.get_user_email = AsyncMock(return_value=None)
-        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
-
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            user_msg = SendMessageRequest(
-                role='user', content=[TextContent(type='text', text='Brand new task')]
-            )
-            req = await service._build_acp_start_conversation_request(
-                sandbox=Mock(spec=SandboxInfo),
-                conversation_id=uuid4(),
-                initial_message=user_msg,
-                working_dir=tmp,
-            )
-
-        assert req.initial_message is not None
-        all_text = ' '.join(c.text for c in req.initial_message.content)
-        assert '<<RESUMED CONVERSATION>>' not in all_text
-        assert 'Brand new task' in all_text
-
-    @pytest.mark.asyncio
-    async def test_restart_no_user_message_uses_resume_as_initial(self, service):
-        """Restart with no new user message → synthesized history is initial_message."""
-        try:
-            from openhands.sdk.settings import ACPAgentSettings
-        except ImportError:
-            pytest.skip('ACPAgentSettings not available in this SDK build')
-
-        events = [
-            self._make_message_event('user', 'Original task'),
-            self._make_tool_event('Execute Code', raw_input={'cmd': 'python test.py'}),
-            self._make_message_event('assistant', 'All done'),
-        ]
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_page(events)
-        )
-
-        user = _TestUserInfo(
-            id='u1',
-            llm_model='',
-            llm_base_url=None,
-            llm_api_key=None,
-            sandbox_grouping_strategy=SandboxGroupingStrategy.ADD_TO_ANY,
-            confirmation_mode=False,
-            security_analyzer=None,
-            search_api_key=None,
-            mcp_config=None,
-            disabled_skills=[],
-        )
-        user.agent_settings = ACPAgentSettings(
-            acp_server='gemini-cli',
-            llm=LLM(model='claude-sonnet-4-5'),
-            acp_env={},
-        )
-        service.user_context.get_user_info = AsyncMock(return_value=user)
-        service.user_context.get_user_email = AsyncMock(return_value=None)
-        service._setup_secrets_for_git_providers = AsyncMock(return_value={})
-
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            req = await service._build_acp_start_conversation_request(
-                sandbox=Mock(spec=SandboxInfo),
-                conversation_id=uuid4(),
-                initial_message=None,
-                working_dir=tmp,
-            )
-
-        assert req.initial_message is not None
-        text = req.initial_message.content[0].text
-        assert '<<RESUMED CONVERSATION>>' in text
-        assert '[USER]: Original task' in text
-        assert '[TOOL USE: Execute Code]' in text
-        assert '[ASSISTANT]: All done' in text
-        assert '--- End of prior session ---' in text
-
-    @pytest.mark.asyncio
-    async def test_double_resume_guard(self, service):
-        """A message already starting with the marker is not re-wrapped."""
-        already_resumed = SendMessageRequest(
-            role='user',
-            content=[
-                TextContent(type='text', text='<<RESUMED CONVERSATION>>\nprior history')
-            ],
-        )
-        # search_events should never be called
-        service.event_service.search_events = AsyncMock()
-
-        result = await service._synthesize_acp_resume_initial_message(
-            uuid4(), already_resumed
-        )
-
-        assert result is already_resumed
-        service.event_service.search_events.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_event_fetch_error_returns_initial_message(self, service):
-        """If search_events raises, fall back to initial_message unchanged."""
-        service.event_service.search_events = AsyncMock(
-            side_effect=RuntimeError('storage unavailable')
-        )
-        original = SendMessageRequest(
-            role='user', content=[TextContent(type='text', text='My task')]
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4(), original)
-
-        assert result is original
-
-    @pytest.mark.asyncio
-    async def test_new_user_message_preserved_as_second_content_block(self, service):
-        """When a new user message accompanies prior events, both appear in content."""
-        events = [self._make_message_event('user', 'Prior task')]
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_page(events)
-        )
-        new_msg = SendMessageRequest(
-            role='user',
-            content=[TextContent(type='text', text='Now do the next step.')],
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4(), new_msg)
-
-        assert result is not None
-        assert len(result.content) == 2
-        assert '<<RESUMED CONVERSATION>>' in result.content[0].text
-        assert result.content[1].text == 'Now do the next step.'
-
-    @pytest.mark.asyncio
-    async def test_tool_events_include_raw_input_output(self, service):
-        """raw_input and raw_output are included in the tool summary."""
-        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
-
-        tool = ACPToolCallEvent(
-            source='agent',
-            tool_call_id='tc-99',
-            title='Edit File',
-            status='completed',
-            raw_input={'path': 'auth.py', 'content': 'def login(): pass'},
-            raw_output='ok',
-        )
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_page([tool])
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is not None
-        text = result.content[0].text
-        # New rendering: input/output on separate labelled lines, not as dict repr
-        assert 'input:' in text
-        assert 'path=auth.py' in text
-        assert 'output:' in text
-        assert 'ok' in text
-
-    @pytest.mark.asyncio
-    async def test_long_conversation_truncated_to_max_chars(self, service):
-        """Output is capped at _ACP_RESUME_CONTEXT_MAX_CHARS.
-
-        Tail-preserving: newest events survive and the footer is kept intact.
-        The oldest events are dropped (head of the body is truncated with '...').
+        An explicit agent_context.secrets entry is available to the subprocess,
+        while the panel secret still flows through request.secrets unchanged.
         """
-        from openhands.app_server.app_conversation.live_status_app_conversation_service import (
-            _ACP_RESUME_CONTEXT_MAX_CHARS,
+        panel_secret = StaticSecret(value=SecretStr('panel-token'))
+        user = self._make_acp_user(context_secrets={'GH_TOKEN': 'explicit-token'})
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'GH_TOKEN': panel_secret},
         )
 
-        long_text = 'x' * 10_000
-        # 10 events × 10k chars each far exceeds the 60k limit
-        events = [self._make_message_event('user', long_text) for _ in range(10)]
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_page(events)
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is not None
-        text = result.content[0].text
-        assert len(text) <= _ACP_RESUME_CONTEXT_MAX_CHARS
-        # Tail-preserving: footer survives instead of being cut off.
-        assert text.endswith('--- End of prior session ---')
-        # Body was head-truncated to fit; the cut marker appears somewhere.
-        assert '...' in text
-
-    @pytest.mark.asyncio
-    async def test_event_count_cap_stops_pagination(self, service):
-        """Pagination stops at _ACP_RESUME_MAX_EVENTS even if more pages exist."""
-        from openhands.agent_server.models import EventPage
-        from openhands.app_server.app_conversation.live_status_app_conversation_service import (
-            _ACP_RESUME_MAX_EVENTS,
-        )
-
-        # Each page has 100 events; cap is 200 so we should stop after 2 pages.
-        page_of_100 = EventPage(
-            items=[self._make_message_event('user', 'msg') for _ in range(100)],
-            next_page_id='more',
-        )
-        service.event_service.search_events = AsyncMock(return_value=page_of_100)
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is not None
-        assert (
-            service.event_service.search_events.call_count
-            == _ACP_RESUME_MAX_EVENTS // 100
-        )
-
-    @pytest.mark.asyncio
-    async def test_tool_dedup_shows_only_terminal_state(self, service):
-        """Multiple events for the same tool_call_id render only the terminal one.
-
-        ACP streams pending → pending → completed for a single tool call.
-        Only the completed entry (with raw_input + raw_output) should appear.
-        """
-        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
-
-        tc_id = 'tc-write-42'
-        placeholder = ACPToolCallEvent(
-            source='agent',
-            tool_call_id=tc_id,
-            title='Write',
-            status='pending',
-            raw_input={},
-        )
-        pending_with_input = ACPToolCallEvent(
-            source='agent',
-            tool_call_id=tc_id,
-            title='Write hello.py',
-            status='pending',
-            raw_input={'file_path': '/tmp/sandbox/hello.py', 'content': 'x\n'},
-        )
-        completed = ACPToolCallEvent(
-            source='agent',
-            tool_call_id=tc_id,
-            title='Write hello.py',
-            status='completed',
-            raw_input={'file_path': '/tmp/sandbox/hello.py', 'content': 'x\n'},
-            raw_output='File created successfully at: /tmp/sandbox/hello.py',
-        )
-        # search returns newest-first
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_page([completed, pending_with_input, placeholder])
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is not None
-        text = result.content[0].text
-        # Only the completed entry should appear — once, not three times.
-        assert text.count('[TOOL USE: Write') == 1
-        assert '(completed)' in text
-        assert '(pending)' not in text
-
-    @pytest.mark.asyncio
-    async def test_placeholder_tool_event_skipped(self, service):
-        """Tool events with no raw_input and no raw_output are not rendered.
-
-        These are ACP streaming artifacts emitted before Claude knows the params.
-        """
-        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
-
-        placeholder = ACPToolCallEvent(
-            source='agent',
-            tool_call_id='tc-orphan',
-            title='Write',
-            status='pending',
-            raw_input={},
-        )
-        real_msg = self._make_message_event('user', 'Do something')
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_page([placeholder, real_msg])
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is not None
-        text = result.content[0].text
-        assert '[TOOL USE:' not in text
-        assert '[USER]: Do something' in text
-
-    @pytest.mark.asyncio
-    async def test_absolute_paths_stripped_from_tool_details(self, service):
-        """Absolute sandbox paths in raw_input/raw_output are reduced to basename."""
-        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
-
-        tool = ACPToolCallEvent(
-            source='agent',
-            tool_call_id='tc-path',
-            title='Write hello.py',
-            status='completed',
-            raw_input={
-                'file_path': '/private/var/folders/tmp/sandbox-abc/hello.py',
-                'content': 'print("hi")\n',
-            },
-            raw_output='File created successfully at: /private/var/folders/tmp/sandbox-abc/hello.py',
-        )
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_page([tool])
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is not None
-        text = result.content[0].text
-        # Absolute path must not appear
-        assert '/private/var/folders' not in text
-        assert '/sandbox-abc' not in text
-        # Basename must still be present so the agent knows which file
-        assert 'hello.py' in text
-
-    @pytest.mark.asyncio
-    async def test_action_event_finish_message_rendered(self, service):
-        """FinishAction message is rendered as [AGENT]: summary after tool events."""
-        from openhands.sdk.event import ActionEvent
-
-        finish_ev = ActionEvent.model_validate(
-            {
-                'source': 'agent',
-                'thought': [],
-                'thinking_blocks': [],
-                'tool_name': 'finish',
-                'tool_call_id': 'fin-1',
-                'tool_call': {
-                    'id': 'fin-1',
-                    'name': 'finish',
-                    'arguments': '{"message": "All done. Created calculator.py and tests pass."}',
-                    'origin': 'completion',
-                },
-                'llm_response_id': 'resp-1',
-                'action': {
-                    'message': 'All done. Created calculator.py and tests pass.',
-                    'kind': 'FinishAction',
-                },
-            }
-        )
-        msg_ev = self._make_message_event('user', 'Write calculator.py')
-        # Newest-first order (DESC): finish event appears before user msg in page
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_page([finish_ev, msg_ev])
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is not None
-        text = result.content[0].text
-        assert '[AGENT]: All done. Created calculator.py and tests pass.' in text
-        # Agent summary should appear after user message in chronological order
-        user_pos = text.index('[USER]:')
-        agent_pos = text.index('[AGENT]:')
-        assert user_pos < agent_pos
-
-    @pytest.mark.asyncio
-    async def test_edit_diff_tool_shows_only_filename(self, service):
-        """Edit tools with old_string/new_string show only file=<name>, not the diff.
-
-        The diff is noise for a resumed agent — the file on the persistent
-        /workspace volume is the source of truth and can be re-read.
-        """
-        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
-
-        edit = ACPToolCallEvent(
-            source='agent',
-            tool_call_id='tc-edit',
-            title='Edit auth.py',
-            status='completed',
-            raw_input={
-                'file_path': 'auth.py',
-                'old_string': 'def old_func():\n    pass',
-                'new_string': 'def new_func():\n    return 42',
-                'replace_all': False,
-            },
-            raw_output='The file auth.py has been updated successfully.',
-        )
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_page([edit])
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is not None
-        text = result.content[0].text
-        assert 'auth.py' in text
-        # Diff content must not appear — too noisy
-        assert 'old_string' not in text
-        assert 'new_string' not in text
-        assert 'old_func' not in text
-        assert 'new_func' not in text
-
-    @pytest.mark.asyncio
-    async def test_terminal_boilerplate_stripped_from_output(self, service):
-        """pytest header lines are stripped; test results are kept."""
-        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
-
-        pytest_output = (
-            '============================= test session starts ==============================\n'
-            'platform linux -- Python 3.12.0, pytest-8.0.0, pluggy-1.5.0 -- /usr/bin/python\n'
-            'cachedir: .pytest_cache\n'
-            'rootdir: /sandbox-abc123\n'
-            'plugins: asyncio-0.23.0\n'
-            'asyncio: mode=Mode.STRICT\n'
-            'collecting ... collected 3 items\n'
-            '\n'
-            'test_foo.py::test_a PASSED                                     [ 33%]\n'
-            'test_foo.py::test_b PASSED                                     [ 66%]\n'
-            'test_foo.py::test_c PASSED                                     [100%]\n'
-            '\n'
-            '============================== 3 passed in 0.01s ==============================\n'
-        )
-        tool = ACPToolCallEvent(
-            source='agent',
-            tool_call_id='tc-term',
-            title='pytest',
-            status='completed',
-            raw_input={'command': 'pytest test_foo.py -v'},
-            raw_output=pytest_output,
-        )
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_page([tool])
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is not None
-        text = result.content[0].text
-        # Boilerplate stripped
-        assert 'platform linux' not in text
-        assert 'cachedir' not in text
-        assert 'rootdir' not in text
-        assert 'plugins' not in text
-        assert 'asyncio:' not in text
-        assert 'collecting' not in text
-        assert 'test session starts' not in text
-        # Results kept
-        assert 'test_a PASSED' in text
-        assert '3 passed in 0.01s' in text
-
-    @pytest.mark.asyncio
-    async def test_failed_terminal_output_shows_tail(self, service):
-        """For failed command output the tail (failure details) is shown, not the head."""
-        from openhands.sdk.event.acp_tool_call import ACPToolCallEvent
-
-        # Simulate a long output where failure is at the end
-        passing = '\n'.join(f'test_foo.py::test_{i} PASSED' for i in range(20))
-        failure = (
-            'test_foo.py::test_fail FAILED\n'
-            'AssertionError: expected 1 got 2\n'
-            '1 failed, 20 passed in 0.05s'
-        )
-        long_output = passing + '\n' + failure
-
-        tool = ACPToolCallEvent(
-            source='agent',
-            tool_call_id='tc-fail',
-            title='pytest',
-            status='pending',  # is_error drives tail logic
-            is_error=True,
-            raw_input={'command': 'pytest'},
-            raw_output=long_output,
-        )
-        service.event_service.search_events = AsyncMock(
-            return_value=self._make_page([tool])
-        )
-
-        result = await service._synthesize_acp_resume_initial_message(uuid4())
-
-        assert result is not None
-        text = result.content[0].text
-        # Failure details at the end must appear
-        assert 'AssertionError' in text
-        assert '1 failed, 20 passed' in text
+        agent_ctx_secrets = (
+            request.agent.agent_context.secrets if request.agent.agent_context else {}
+        ) or {}
+        assert agent_ctx_secrets.get('GH_TOKEN') == 'explicit-token'
+        assert request.secrets.get('GH_TOKEN') is panel_secret

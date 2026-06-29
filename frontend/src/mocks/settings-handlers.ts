@@ -531,6 +531,7 @@ export const SETTINGS_HANDLERS = [
         hide_billing_page: false,
         hide_integrations_page: false,
         enable_onboarding: false,
+        enable_automations: true,
       },
       providers_configured: [],
       maintenance_start_time: null,

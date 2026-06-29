@@ -16,10 +16,15 @@ from server.routes.org_models import (
     OrgUpdate,
     OrphanedUserError,
 )
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker
-from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
+from storage.lite_llm_manager import (
+    LiteLlmManager,
+    get_openhands_cloud_key_alias,
+    get_org_team_alias,
+)
 from storage.org import Org
 from storage.org_git_claim import OrgGitClaim
 from storage.org_invitation import OrgInvitation
@@ -39,7 +44,7 @@ from openhands.sdk.settings import (
     AgentSettingsConfig,
     ConversationSettings,
     OpenHandsAgentSettings,
-    validate_agent_settings,
+    apply_agent_settings_diff,
 )
 
 _ORG_SETTINGS_EXCLUDED_FIELDS = {
@@ -59,6 +64,17 @@ _ORG_SETTINGS_FIELDS = {
 
 class OrgStore:
     """Store for managing organizations."""
+
+    @staticmethod
+    async def _delete_litellm_user_best_effort(user_id: str, org_id: UUID) -> None:
+        """Delete the LiteLLM user record without blocking org deletion."""
+        try:
+            await LiteLlmManager.delete_user(user_id)
+        except Exception as exc:
+            logger.warning(
+                'Failed to delete LiteLLM user during org cascade cleanup',
+                extra={'org_id': str(org_id), 'user_id': user_id, 'error': str(exc)},
+            )
 
     @staticmethod
     def get_agent_settings_from_org(org: Org) -> AgentSettingsConfig:
@@ -117,6 +133,14 @@ class OrgStore:
         return await OrgStore._validate_org_version(org)
 
     @staticmethod
+    async def enable_byor_export(org_id: UUID) -> Org | None:
+        """Persist BYOR export enablement for an organization."""
+        return await OrgStore._update_org_kwargs(
+            org_id,
+            {'byor_export_enabled': True},
+        )
+
+    @staticmethod
     async def get_orgs_by_ids(org_ids: list[UUID]) -> list[Org]:
         """Get multiple organizations by IDs in a single query.
 
@@ -170,6 +194,61 @@ class OrgStore:
             result = await session.execute(select(Org).filter(Org.name == name))
             org = result.scalars().first()
         return await OrgStore._validate_org_version(org)
+
+    @staticmethod
+    async def get_default_org() -> Org | None:
+        """Get the org flagged as the install's bootstrapped default org."""
+        async with a_session_maker() as session:
+            result = await session.execute(select(Org).filter(Org.is_default))
+            org = result.scalars().first()
+        return await OrgStore._validate_org_version(org)
+
+    @staticmethod
+    async def mark_org_as_default(org_id: UUID) -> Org | None:
+        """Flag an org as the install's default org.
+
+        Returns the org on success (or if already flagged). Returns None if
+        the org does not exist or another org is already flagged (the partial
+        unique index allows at most one default org).
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(select(Org).filter(Org.id == org_id))
+            org = result.scalars().first()
+            if not org:
+                return None
+            if not org.is_default:
+                org.is_default = True
+                try:
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    return None
+        return org
+
+    @staticmethod
+    async def list_team_orgs(limit: int | None = None) -> list[Org]:
+        """List orgs that are not personal workspaces (see count_team_orgs)."""
+        async with a_session_maker() as session:
+            stmt = select(Org).where(~select(User.id).where(User.id == Org.id).exists())
+            if limit is not None:
+                stmt = stmt.limit(limit)
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    @staticmethod
+    async def count_team_orgs() -> int:
+        """Count orgs that are not personal workspaces.
+
+        A personal workspace shares its id with its user, so team orgs are
+        the orgs whose id has no matching user.
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(func.count())
+                .select_from(Org)
+                .where(~select(User.id).where(User.id == Org.id).exists())
+            )
+            return int(result.scalar() or 0)
 
     @staticmethod
     async def _validate_org_version(org: Org | None) -> Org | None:
@@ -262,30 +341,15 @@ class OrgStore:
         settings_diff: dict[str, Any],
         settings_type: type[OpenHandsAgentSettings] | type[ConversationSettings],
     ) -> AgentSettingsConfig | ConversationSettings:
-        """Deep-merge a sparse settings diff and validate the merged result.
+        """Apply a sparse settings diff to the persisted base and validate it.
 
-        The persisted base is routed through the SDK loader first so any
-        registered schema migrations are applied before the diff is merged.
-        Agent settings are validated against the discriminated union, so the
-        result is the correct variant (OpenHands or ACP) rather than a coerced
-        OpenHands shape.
+        Agent settings delegate to the SDK's :func:`apply_agent_settings_diff`,
+        which owns the discriminated-union merge (replace on ``agent_kind``
+        change, deep-merge within a variant) and returns the correct variant
+        (OpenHands or ACP) rather than a coerced OpenHands shape.
         """
         if settings_type is OpenHandsAgentSettings:
-            base_settings = _load_persisted_agent_settings(current_settings or {})
-            new_kind = settings_diff.get('agent_kind')
-            if new_kind and new_kind != base_settings.agent_kind:
-                # Variant switch: deep-merging the new kind's fields onto the
-                # outgoing kind's dump yields an invalid mongrel. Start from a
-                # fresh base and let the diff populate it.
-                merged_settings = {'agent_kind': new_kind, **settings_diff}
-            else:
-                merged_settings = deep_merge(
-                    base_settings.model_dump(
-                        mode='json', context={'expose_secrets': True}
-                    ),
-                    settings_diff,
-                )
-            return validate_agent_settings(merged_settings)
+            return apply_agent_settings_diff(current_settings or {}, settings_diff)
 
         base_settings = _load_persisted_conversation_settings(current_settings)  # type: ignore[assignment]
         merged_settings = deep_merge(
@@ -324,6 +388,8 @@ class OrgStore:
             org = result.scalars().first()
             if not org:
                 return None
+
+            old_name = org.name
 
             if 'id' in org_kwargs:
                 org_kwargs.pop('id')
@@ -391,6 +457,22 @@ class OrgStore:
 
             await session.commit()
             await session.refresh(org)
+
+            # Keep the LiteLLM team_alias in sync with the org's display name so
+            # the proxy dashboard stays readable after a rename. Best-effort —
+            # never fail an org update because the proxy is briefly unreachable.
+            if org.name != old_name:
+                try:
+                    await LiteLlmManager.update_team(
+                        str(org.id),
+                        get_org_team_alias(str(org.id), org.name, user_id),
+                        None,
+                    )
+                except Exception:
+                    logger.warning(
+                        'Failed to propagate org rename to LiteLLM team_alias',
+                        extra={'org_id': str(org.id)},
+                    )
             return org
 
     @staticmethod
@@ -691,6 +773,10 @@ class OrgStore:
                 )
                 await LiteLlmManager.delete_team(str(org_id))
 
+                if requester_orphan_ids:
+                    for user_id in requester_orphan_ids:
+                        await OrgStore._delete_litellm_user_best_effort(user_id, org_id)
+
                 # 7. Commit all changes only if everything succeeded
                 await session.commit()
 
@@ -764,18 +850,9 @@ class OrgStore:
         ):
             return existing_key_raw
 
-        if openhands_type:
-            logger.info(
-                'Generated managed LLM key for acting user on org-defaults save',
-                extra={'user_id': user_id, 'org_id': str(updated_org.id)},
-            )
-            return await LiteLlmManager.generate_key(
-                user_id,
-                str(updated_org.id),
-                None,
-                {'type': 'openhands'},
-            )
-
+        # One managed key per (user, org) under the same deterministic alias,
+        # deleting any prior key first — symmetric across openhands/* and BYOR
+        # defaults so switching between them never orphans a key.
         key_alias = get_openhands_cloud_key_alias(user_id, str(updated_org.id))
         await LiteLlmManager.delete_key_by_alias(key_alias=key_alias)
         logger.info(
@@ -786,7 +863,7 @@ class OrgStore:
             user_id,
             str(updated_org.id),
             key_alias,
-            None,
+            {'type': 'openhands'} if openhands_type else None,
         )
 
     @staticmethod
