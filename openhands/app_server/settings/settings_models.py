@@ -129,6 +129,7 @@ class Settings(BaseModel):
     email_verified: bool | None = None
     git_user_name: str | None = None
     git_user_email: str | None = None
+    git_full_clone: bool = False
     v1_enabled: bool = True
     agent_settings: AgentSettingsConfig = Field(default_factory=default_agent_settings)
     conversation_settings: ConversationSettings = Field(
@@ -137,6 +138,7 @@ class Settings(BaseModel):
     sandbox_grouping_strategy: SandboxGroupingStrategy = (
         SandboxGroupingStrategy.NO_GROUPING
     )
+    default_sandbox_spec_id: str | None = None
     llm_profiles: LLMProfiles = Field(
         default_factory=LLMProfiles,
         description=(
