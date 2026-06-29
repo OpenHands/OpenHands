@@ -1,7 +1,9 @@
 /* eslint-disable i18next/no-literal-string */
 import React, { useMemo, useState } from "react";
 import { useOrgConversationStats } from "#/hooks/query/use-org-conversation-stats";
+import { useOrgConversations } from "#/hooks/query/use-org-conversations";
 import { useOrgUsageStats } from "#/hooks/query/use-org-usage-stats";
+import { organizationService } from "#/api/organization-service/organization-service.api";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useOrganizations } from "#/hooks/query/use-organizations";
 
@@ -35,21 +37,6 @@ function ExportIcon() {
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
       <polyline points="7,10 12,15 17,10" />
       <line x1="12" y1="15" x2="12" y2="3" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-    >
-      <path d="M6 9l6 6 6-6" />
     </svg>
   );
 }
@@ -110,6 +97,7 @@ const formatShortDate = (dateStr: string) => {
 
 // Get number of days from time window string
 const getDaysFromTimeWindow = (timeWindow: string): number => {
+  if (timeWindow === "ytd") return 365;
   if (timeWindow === "90d") return 90;
   if (timeWindow === "30d") return 30;
   return 7;
@@ -123,273 +111,23 @@ const TIME_WINDOWS = [
   { label: "YTD", value: "ytd", days: 365 },
 ];
 
+// Format date/time
+const formatDateTime = (dateStr: string) => {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
 // Tabs
-const TABS = ["overview", "conversations", "users", "models"] as const;
+const TABS = ["overview", "users", "models", "conversations"] as const;
 type TabType = (typeof TABS)[number];
 
-// Sample model data (in real implementation, this would come from API)
-const SAMPLE_MODELS = [
-  {
-    model: "claude-sonnet-4-5",
-    provider: "Anthropic",
-    conversations: 1124,
-    tokensUsed: 84320000,
-    avgTokensPerConvo: 75000,
-    avgCostPerConvo: 1.64,
-    totalCost: 1842.66,
-  },
-  {
-    model: "claude-opus-4",
-    provider: "Anthropic",
-    conversations: 238,
-    tokensUsed: 21410000,
-    avgTokensPerConvo: 90000,
-    avgCostPerConvo: 2.7,
-    totalCost: 642.3,
-  },
-  {
-    model: "gpt-5",
-    provider: "OpenAI",
-    conversations: 302,
-    tokensUsed: 18120000,
-    avgTokensPerConvo: 60000,
-    avgCostPerConvo: 1.4,
-    totalCost: 423.18,
-  },
-  {
-    model: "gpt-5-mini",
-    provider: "OpenAI",
-    conversations: 108,
-    tokensUsed: 4240000,
-    avgTokensPerConvo: 39300,
-    avgCostPerConvo: 0.35,
-    totalCost: 38.16,
-  },
-  {
-    model: "gemini-2.5-pro",
-    provider: "Google",
-    conversations: 54,
-    tokensUsed: 3960000,
-    avgTokensPerConvo: 73300,
-    avgCostPerConvo: 1.47,
-    totalCost: 79.2,
-  },
-  {
-    model: "devstral-large",
-    provider: "Mistral",
-    conversations: 21,
-    tokensUsed: 1180000,
-    avgTokensPerConvo: 56200,
-    avgCostPerConvo: 0.67,
-    totalCost: 14.16,
-  },
-];
 
-// Sample conversation data for detailed view
-const SAMPLE_CONVERSATIONS = [
-  {
-    user: {
-      name: "Tom Bauer",
-      email: "tom.bauer@acme.com",
-      initials: "TB",
-      color: "bg-green-500",
-    },
-    tokens: "170.8K",
-    spend: "$3.39",
-    duration: "3h 31m",
-    started: "Jun 27",
-    lastUpdate: "Jun 27 11:36 PM",
-    pr: { text: "acme/infra#2448", linked: true },
-    merged: "Draft",
-    mergedType: "draft",
-    type: "Docs",
-    typeColor: "bg-teal-500/20 text-teal-400 border-teal-500/30",
-  },
-  {
-    user: {
-      name: "Leila Ahmadi",
-      email: "leila.ahmadi@acme.com",
-      initials: "LA",
-      color: "bg-purple-500",
-    },
-    tokens: "436.5K",
-    spend: "$4.17",
-    duration: "2h 39m",
-    started: "Jun 25",
-    lastUpdate: "Jun 25 6:52 PM",
-    pr: { text: "No PR", linked: false },
-    merged: "—",
-    mergedType: "none",
-    type: "Security",
-    typeColor: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-  },
-  {
-    user: {
-      name: "Priya Shah",
-      email: "priya.shah@acme.com",
-      initials: "PS",
-      color: "bg-amber-500",
-    },
-    tokens: "89.4K",
-    spend: "$2.83",
-    duration: "1h 30m",
-    started: "Jun 25",
-    lastUpdate: "Jun 25 4:21 PM",
-    pr: { text: "acme/docs#9618", linked: true },
-    merged: "Merged",
-    mergedType: "merged",
-    type: "Refactor",
-    typeColor: "bg-purple-500/20 text-purple-400 border-purple-500/30",
-  },
-  {
-    user: {
-      name: "Sam Osei",
-      email: "sam.osei@acme.com",
-      initials: "SO",
-      color: "bg-purple-500",
-    },
-    tokens: "391.2K",
-    spend: "$4.47",
-    duration: "1h 30m",
-    started: "Jun 25",
-    lastUpdate: "Jun 25 7:48 AM",
-    pr: { text: "acme/docs#2243", linked: true },
-    merged: "Draft",
-    mergedType: "draft",
-    type: "Docs",
-    typeColor: "bg-teal-500/20 text-teal-400 border-teal-500/30",
-  },
-  {
-    user: {
-      name: "DevOps Bot",
-      email: "devops-bot@acme.com",
-      initials: "DB",
-      color: "bg-blue-500",
-    },
-    tokens: "256.6K",
-    spend: "$2.62",
-    duration: "2h 32m",
-    started: "Jun 25",
-    lastUpdate: "Jun 25 7:15 AM",
-    pr: { text: "acme/web#8739", linked: true },
-    merged: "Draft",
-    mergedType: "draft",
-    type: "Docs",
-    typeColor: "bg-teal-500/20 text-teal-400 border-teal-500/30",
-  },
-  {
-    user: {
-      name: "Leila Ahmadi",
-      email: "leila.ahmadi@acme.com",
-      initials: "LA",
-      color: "bg-purple-500",
-    },
-    tokens: "111.7K",
-    spend: "$2.69",
-    duration: "1h 3m",
-    started: "Jun 19",
-    lastUpdate: "Jun 19 10:20 AM",
-    pr: { text: "No PR", linked: false },
-    merged: "—",
-    mergedType: "none",
-    type: "Security",
-    typeColor: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-  },
-  {
-    user: {
-      name: "Priya Shah",
-      email: "priya.shah@acme.com",
-      initials: "PS",
-      color: "bg-amber-500",
-    },
-    tokens: "222.7K",
-    spend: "$2.69",
-    duration: "3h 7m",
-    started: "Jun 17",
-    lastUpdate: "Jun 17 3:38 PM",
-    pr: { text: "No PR", linked: false },
-    merged: "—",
-    mergedType: "none",
-    type: "Refactor",
-    typeColor: "bg-purple-500/20 text-purple-400 border-purple-500/30",
-  },
-  {
-    user: {
-      name: "Sam Osei",
-      email: "sam.osei@acme.com",
-      initials: "SO",
-      color: "bg-purple-500",
-    },
-    tokens: "149.0K",
-    spend: "$1.58",
-    duration: "1h 10m",
-    started: "Jun 17",
-    lastUpdate: "Jun 17 6:04 AM",
-    pr: { text: "acme/mobile#8358", linked: true },
-    merged: "Open",
-    mergedType: "open",
-    type: "Refactor",
-    typeColor: "bg-purple-500/20 text-purple-400 border-purple-500/30",
-  },
-  {
-    user: {
-      name: "DevOps Bot",
-      email: "devops-bot@acme.com",
-      initials: "DB",
-      color: "bg-blue-500",
-    },
-    tokens: "32.5K",
-    spend: "$2.59",
-    duration: "1h 57m",
-    started: "Jun 17",
-    lastUpdate: "Jun 17 3:21 AM",
-    pr: { text: "acme/infra#4415", linked: true },
-    merged: "Draft",
-    mergedType: "draft",
-    type: "Refactor",
-    typeColor: "bg-purple-500/20 text-purple-400 border-purple-500/30",
-  },
-];
-
-// Merged status styles
-function MergedBadge({ status, type }: { status: string; type: string }) {
-  if (type === "none") {
-    return <span className="text-zinc-600">—</span>;
-  }
-  if (type === "merged") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30">
-        ✓ {status}
-      </span>
-    );
-  }
-  if (type === "draft") {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-500/20 text-orange-400 border border-orange-500/30">
-        {status}
-      </span>
-    );
-  }
-  if (type === "open") {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400 border border-blue-500/30">
-        {status}
-      </span>
-    );
-  }
-  return <span className="text-zinc-400">{status}</span>;
-}
-
-// Avatar component
-function Avatar({ initials, color }: { initials: string; color: string }) {
-  return (
-    <div
-      className={`w-8 h-8 rounded-full ${color} flex items-center justify-center text-xs font-medium text-white`}
-    >
-      {initials}
-    </div>
-  );
-}
 
 // KPI Card component
 function KPICard({
@@ -493,6 +231,10 @@ export function UsageDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [timeWindow, setTimeWindow] = useState("30d");
   const [modelSearch, setModelSearch] = useState("");
+  const [conversationSearch, setConversationSearch] = useState("");
+  const [conversationStatus, setConversationStatus] = useState("");
+  const [conversationPage, setConversationPage] = useState(1);
+  const [conversationPerPage, setConversationPerPage] = useState(20);
 
   const { organizationId } = useSelectedOrganizationId();
   const { data: orgData } = useOrganizations();
@@ -500,44 +242,90 @@ export function UsageDashboard() {
   const days = getDaysFromTimeWindow(timeWindow);
   const { data: stats } = useOrgConversationStats();
   const { data: usageStats } = useOrgUsageStats({ days });
+  const conversationTimeWindow = timeWindow === "ytd" ? "" : timeWindow;
+
+  const { data: conversationsData, isLoading: conversationsLoading } =
+    useOrgConversations({
+      page: conversationPage,
+      perPage: conversationPerPage,
+      search: conversationSearch,
+      executionStatus: conversationStatus,
+      timeWindow: conversationTimeWindow,
+    });
 
   const currentOrg = orgData?.organizations?.find(
     (org) => org.id === organizationId,
   );
 
-  // Calculate totals from stats for overview
-  const totalConversations = stats?.completed_30d ?? 1847;
-  const activeConversations = stats?.active_conversations ?? 23;
+  const totalConversations = usageStats?.agent_runs ?? 0;
+  const activeConversations = stats?.active_conversations ?? 0;
   const avgCostPerConversation =
-    stats && stats.completed_30d > 0
-      ? (stats.total_cost / stats.completed_30d).toFixed(2)
-      : "1.42";
-  const totalSpend = formatCost(stats?.total_cost ?? 2623.47);
+    totalConversations > 0
+      ? (usageStats?.estimated_spend ?? 0) / totalConversations
+      : 0;
+  const totalSpend = formatCost(usageStats?.estimated_spend ?? 0);
 
-  // Filter models based on search
-  const filteredModels = SAMPLE_MODELS.filter(
-    (m) =>
-      m.model.toLowerCase().includes(modelSearch.toLowerCase()) ||
-      m.provider.toLowerCase().includes(modelSearch.toLowerCase()),
-  );
+  const modelRows = useMemo(() => {
+    return (usageStats?.model_usage ?? []).map((model) => {
+      const avgTokens =
+        model.conversation_count > 0
+          ? Math.round(model.total_tokens / model.conversation_count)
+          : 0;
+      const avgCost =
+        model.conversation_count > 0
+          ? model.total_cost / model.conversation_count
+          : 0;
+      return {
+        ...model,
+        avgTokens,
+        avgCost,
+      };
+    });
+  }, [usageStats?.model_usage]);
 
-  // Generate chart data from usage stats
+  const filteredModels = useMemo(() => {
+    return modelRows.filter((model) =>
+      model.model_name.toLowerCase().includes(modelSearch.toLowerCase()),
+    );
+  }, [modelRows, modelSearch]);
+
   const chartData = useMemo(
     () =>
       (usageStats?.daily_usage ?? []).map((d) => ({
         date: d.date,
-        value: d.tokens,
+        value: d.conversations,
       })),
     [usageStats?.daily_usage],
   );
 
-  // Tab badge counts
   const tabCounts = {
     overview: null,
-    conversations: stats?.completed_30d ?? 1847,
-    users: usageStats?.active_users ?? 8,
-    models: SAMPLE_MODELS.length,
+    users: usageStats?.team_usage?.length ?? 0,
+    models: modelRows.length,
+    conversations: conversationsData?.total_items ?? 0,
   };
+
+  const timeWindowLabel = timeWindow === "ytd" ? "YTD" : timeWindow.toUpperCase();
+
+  const conversationTotalPages = conversationsData?.total_pages ?? 1;
+  const conversationTotalItems = conversationsData?.total_items ?? 0;
+
+
+
+  const exportUrl = useMemo(() => {
+    if (!organizationId) return "#";
+    return organizationService.exportConversationsUrl({
+      orgId: organizationId,
+      search: conversationSearch || undefined,
+      executionStatus: conversationStatus || undefined,
+      timeWindow: conversationTimeWindow || undefined,
+    });
+  }, [
+    organizationId,
+    conversationSearch,
+    conversationStatus,
+    conversationTimeWindow,
+  ]);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -559,7 +347,10 @@ export function UsageDashboard() {
               <button
                 key={tw.value}
                 type="button"
-                onClick={() => setTimeWindow(tw.value)}
+                onClick={() => {
+                  setTimeWindow(tw.value);
+                  setConversationPage(1);
+                }}
                 className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
                   timeWindow === tw.value
                     ? "bg-zinc-800 text-white"
@@ -606,26 +397,18 @@ export function UsageDashboard() {
               <KPICard
                 label="Total Conversations"
                 value={totalConversations.toLocaleString()}
-                trend="▲ 18.2% vs prev 30d"
-                trendUp
               />
               <KPICard
                 label="Active Conversations"
                 value={activeConversations.toLocaleString()}
-                trend="▲ 4 more than yesterday"
-                trendUp
               />
               <KPICard
                 label="Avg Cost / Conversation"
-                value={`$${avgCostPerConversation}`}
-                trend="▼ 6.1% vs prev 30d"
-                trendUp={false}
+                value={`$${avgCostPerConversation.toFixed(2)}`}
               />
               <KPICard
-                label="Total Spend (30d)"
+                label={`Total Spend (${timeWindowLabel})`}
                 value={totalSpend}
-                trend="▲ 11.4% vs prev 30d"
-                trendUp
               />
             </div>
 
@@ -637,7 +420,7 @@ export function UsageDashboard() {
                     Conversations per day
                   </h2>
                   <p className="text-sm text-zinc-500">
-                    Last 30 days · all users
+                    {timeWindowLabel} · all users
                   </p>
                 </div>
                 <button
@@ -648,45 +431,15 @@ export function UsageDashboard() {
                   Export CSV
                 </button>
               </div>
-              <AreaChart
-                data={
-                  chartData.length > 0
-                    ? chartData
-                    : [
-                        { date: "2024-05-31", value: 45 },
-                        { date: "2024-06-04", value: 52 },
-                        { date: "2024-06-08", value: 38 },
-                        { date: "2024-06-12", value: 65 },
-                        { date: "2024-06-16", value: 48 },
-                        { date: "2024-06-20", value: 55 },
-                        { date: "2024-06-24", value: 42 },
-                        { date: "2024-06-28", value: 58 },
-                      ]
-                }
-              />
+              {chartData.length > 0 ? (
+                <AreaChart data={chartData} />
+              ) : (
+                <div className="py-10 text-center text-sm text-zinc-500">
+                  No usage data available yet.
+                </div>
+              )}
             </div>
 
-            {/* ROI Row */}
-            <div className="grid grid-cols-3 gap-4">
-              <KPICard
-                label="Engineering Velocity Gained"
-                value="412h"
-                trend="est. dev-hours saved (30d)"
-                trendUp
-              />
-              <KPICard
-                label="Cost / Dev-Hour Saved"
-                value="$6.37"
-                trend="▲ 9.0× more efficient vs human"
-                trendUp
-              />
-              <KPICard
-                label="PRs Merged with OpenHands"
-                value="214"
-                trend="▲ 62% merge rate"
-                trendUp
-              />
-            </div>
           </div>
         )}
 
@@ -701,29 +454,38 @@ export function UsageDashboard() {
                 </span>
                 <input
                   type="text"
-                  placeholder="Search by user, repo, or PR..."
+                  placeholder="Search by title or user..."
+                  value={conversationSearch}
+                  onChange={(e) => {
+                    setConversationSearch(e.target.value);
+                    setConversationPage(1);
+                  }}
                   className="w-full pl-10 pr-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
                 />
               </div>
-              <div className="flex items-center gap-2">
-                {["Type: All", "Status: All", "User: All"].map((filter) => (
-                  <button
-                    key={filter}
-                    type="button"
-                    className="flex items-center gap-1 px-3 py-2 text-sm text-zinc-400 bg-zinc-900 border border-zinc-800 rounded-lg hover:text-white hover:border-zinc-700 transition-colors"
-                  >
-                    {filter}
-                    <ChevronDownIcon />
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
+              <select
+                value={conversationStatus}
+                onChange={(e) => {
+                  setConversationStatus(e.target.value);
+                  setConversationPage(1);
+                }}
+                className="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-sm text-zinc-400 focus:outline-none focus:border-zinc-700"
+              >
+                <option value="">All statuses</option>
+                <option value="running">Running</option>
+                <option value="idle">Idle</option>
+                <option value="paused">Paused</option>
+                <option value="finished">Finished</option>
+                <option value="error">Error</option>
+                <option value="stuck">Stuck</option>
+              </select>
+              <a
+                href={exportUrl}
                 className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-400 border border-zinc-700 rounded-lg hover:text-white hover:border-zinc-600 transition-colors"
               >
                 <ExportIcon />
                 Export CSV
-              </button>
+              </a>
             </div>
 
             {/* Conversations Table */}
@@ -732,97 +494,138 @@ export function UsageDashboard() {
                 <thead>
                   <tr className="border-b border-zinc-800">
                     <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Conversation
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                       User
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                      Tokens
+                      Model
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                      Spend
+                      Status
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                      Duration
+                      Updated
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                      Started
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                      Last Update
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                      Associated PR
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                      Merged?
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                      Type
+                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Tokens / Cost
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {SAMPLE_CONVERSATIONS.map((conv, i) => (
+                  {conversationsLoading && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-4 py-8 text-center text-zinc-500"
+                      >
+                        Loading conversations...
+                      </td>
+                    </tr>
+                  )}
+                  {!conversationsLoading &&
+                    (conversationsData?.items.length ?? 0) === 0 && (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="px-4 py-8 text-center text-zinc-500"
+                        >
+                          No conversations found for this time window.
+                        </td>
+                      </tr>
+                    )}
+                  {conversationsData?.items.map((conversation) => (
                     <tr
-                      key={i}
+                      key={conversation.id}
                       className="border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors"
                     >
                       <td className="px-4 py-4">
-                        <div className="flex items-center gap-3">
-                          <Avatar
-                            initials={conv.user.initials}
-                            color={conv.user.color}
-                          />
-                          <span className="text-zinc-400 text-sm">
-                            {conv.user.email}
-                          </span>
+                        <div className="text-white text-sm font-medium">
+                          {conversation.title || "Untitled conversation"}
+                        </div>
+                        <div className="text-xs text-zinc-500">
+                          {conversation.id}
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-white text-sm font-mono">
-                        {conv.tokens}
+                      <td className="px-4 py-4 text-sm text-zinc-400">
+                        {conversation.user_email || "Unknown"}
                       </td>
-                      <td className="px-4 py-4 text-white text-sm font-mono">
-                        {conv.spend}
+                      <td className="px-4 py-4 text-sm text-zinc-400">
+                        {conversation.llm_model || "-"}
                       </td>
-                      <td className="px-4 py-4 text-white text-sm">
-                        {conv.duration}
+                      <td className="px-4 py-4 text-sm text-zinc-400 capitalize">
+                        {conversation.execution_status || "unknown"}
                       </td>
-                      <td className="px-4 py-4 text-zinc-400 text-sm">
-                        {conv.started}
+                      <td className="px-4 py-4 text-sm text-zinc-400">
+                        {formatDateTime(conversation.updated_at)}
                       </td>
-                      <td className="px-4 py-4 text-zinc-400 text-sm">
-                        {conv.lastUpdate}
-                      </td>
-                      <td className="px-4 py-4">
-                        {conv.pr.linked ? (
-                          <button
-                            type="button"
-                            className="text-blue-400 hover:text-blue-300 text-sm"
-                          >
-                            {conv.pr.text}
-                          </button>
-                        ) : (
-                          <span className="text-zinc-600 text-sm">
-                            {conv.pr.text}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-4">
-                        <MergedBadge
-                          status={conv.merged}
-                          type={conv.mergedType}
-                        />
-                      </td>
-                      <td className="px-4 py-4">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${conv.typeColor}`}
-                        >
-                          {conv.type}
-                        </span>
+                      <td className="px-4 py-4 text-right">
+                        <div className="text-white text-sm font-mono">
+                          {formatTokens(conversation.total_tokens)}
+                        </div>
+                        <div className="text-zinc-400 text-xs">
+                          ${conversation.accumulated_cost.toFixed(2)}
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setConversationPage((prev) => Math.max(1, prev - 1))
+                    }
+                    disabled={conversationPage <= 1}
+                    className={`flex items-center gap-1 px-2 py-1 text-sm rounded transition-colors ${
+                      conversationPage <= 1
+                        ? "text-zinc-600 cursor-not-allowed"
+                        : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                    }`}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setConversationPage((prev) =>
+                        Math.min(conversationTotalPages, prev + 1),
+                      )
+                    }
+                    disabled={conversationPage >= conversationTotalPages}
+                    className={`flex items-center gap-1 px-2 py-1 text-sm rounded transition-colors ${
+                      conversationPage >= conversationTotalPages
+                        ? "text-zinc-600 cursor-not-allowed"
+                        : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                    }`}
+                  >
+                    Next
+                  </button>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-zinc-500 text-sm">Per page</span>
+                    <select
+                      value={conversationPerPage}
+                      onChange={(e) => {
+                        setConversationPerPage(Number(e.target.value));
+                        setConversationPage(1);
+                      }}
+                      className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-sm text-white focus:outline-none"
+                    >
+                      <option value="10">10</option>
+                      <option value="20">20</option>
+                      <option value="50">50</option>
+                    </select>
+                  </div>
+                  <span className="text-zinc-500 text-sm">
+                    Page {conversationPage} of {conversationTotalPages} · {conversationTotalItems} conversations
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -835,46 +638,8 @@ export function UsageDashboard() {
                 Team Usage Breakdown
               </h2>
               <div className="space-y-4">
-                {(
-                  usageStats?.team_usage ?? [
-                    {
-                      user_name: "Tom Bauer",
-                      user_email: "tom.bauer@acme.com",
-                      conversation_count: 342,
-                      total_tokens: 45230000,
-                      percentage: 38.2,
-                    },
-                    {
-                      user_name: "Leila Ahmadi",
-                      user_email: "leila.ahmadi@acme.com",
-                      conversation_count: 256,
-                      total_tokens: 32100000,
-                      percentage: 27.1,
-                    },
-                    {
-                      user_name: "Priya Shah",
-                      user_email: "priya.shah@acme.com",
-                      conversation_count: 189,
-                      total_tokens: 18750000,
-                      percentage: 15.8,
-                    },
-                    {
-                      user_name: "Sam Osei",
-                      user_email: "sam.osei@acme.com",
-                      conversation_count: 134,
-                      total_tokens: 14320000,
-                      percentage: 12.1,
-                    },
-                    {
-                      user_name: "DevOps Bot",
-                      user_email: "devops-bot@acme.com",
-                      conversation_count: 89,
-                      total_tokens: 8230000,
-                      percentage: 6.8,
-                    },
-                  ]
-                ).map((user, i) => (
-                  <div key={i} className="flex items-center gap-4">
+                {(usageStats?.team_usage ?? []).map((user) => (
+                  <div key={user.user_id} className="flex items-center gap-4">
                     <div className="w-32">
                       <div className="text-white text-sm font-medium truncate">
                         {user.user_name ??
@@ -908,6 +673,11 @@ export function UsageDashboard() {
                     </div>
                   </div>
                 ))}
+                {(usageStats?.team_usage?.length ?? 0) === 0 && (
+                  <div className="py-6 text-center text-sm text-zinc-500">
+                    No user usage data available for this time window.
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -965,36 +735,45 @@ export function UsageDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredModels.map((model, i) => (
+                  {filteredModels.map((model) => (
                     <tr
-                      key={i}
+                      key={model.model_name}
                       className="border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors"
                     >
                       <td className="px-4 py-5">
                         <div className="text-white font-medium">
-                          {model.model}
-                        </div>
-                        <div className="text-zinc-500 text-sm">
-                          {model.provider}
+                          {model.model_name}
                         </div>
                       </td>
                       <td className="px-4 py-5 text-white text-sm font-mono text-right">
-                        {model.conversations.toLocaleString()}
+                        {model.conversation_count.toLocaleString()}
                       </td>
                       <td className="px-4 py-5 text-white text-sm font-mono text-right">
-                        {formatTokens(model.tokensUsed)}
+                        {formatTokens(model.total_tokens)}
                       </td>
                       <td className="px-4 py-5 text-white text-sm font-mono text-right">
-                        {formatTokens(model.avgTokensPerConvo)}
+                        {formatTokens(model.avgTokens)}
                       </td>
                       <td className="px-4 py-5 text-white text-sm font-mono text-right">
-                        ${model.avgCostPerConvo.toFixed(2)}
+                        ${model.avgCost.toFixed(2)}
                       </td>
                       <td className="px-4 py-5 text-white text-sm font-mono text-right font-medium">
-                        ${model.totalCost.toFixed(2)}
+                        ${model.total_cost.toFixed(2)}
                       </td>
                     </tr>
                   ))}
+
+                  {filteredModels.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-4 py-8 text-center text-zinc-500"
+                      >
+                        No model usage data available for this time window.
+                      </td>
+                    </tr>
+                  )}
+
                 </tbody>
               </table>
             </div>

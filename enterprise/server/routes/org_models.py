@@ -721,6 +721,89 @@ class OrgMemberFinancialPage(BaseModel):
     next_page_id: str | None = None
 
 
+
+class OrgBudgetThresholdResponse(BaseModel):
+    id: int
+    percentage: int
+    email_enabled: bool
+    slack_enabled: bool
+
+
+class OrgBudgetThresholdUpdate(BaseModel):
+    percentage: int = Field(gt=0, le=100)
+    email_enabled: bool = True
+    slack_enabled: bool = False
+
+
+class OrgBudgetUserResponse(BaseModel):
+    user_id: str
+    user_email: str | None = None
+    user_name: str | None = None
+    current_spend: float = 0.0
+    monthly_limit: float | None = None
+    effective_monthly_limit: float | None = None
+    is_disabled: bool = False
+    is_override: bool = False
+
+
+class OrgBudgetSettingsResponse(BaseModel):
+    enabled: bool
+    monthly_limit: float | None = None
+    reset_day: int
+    slack_channel: str | None = None
+    slack_team_id: str | None = None
+    default_user_monthly_limit: float | None = None
+    cycle_start_at: datetime
+    cycle_end_at: datetime
+    current_spend: float = 0.0
+    current_spend_percentage: float = 0.0
+    thresholds: list[OrgBudgetThresholdResponse] = Field(default_factory=list)
+    users: list[OrgBudgetUserResponse] = Field(default_factory=list)
+
+
+class OrgBudgetSettingsUpdate(BaseModel):
+    enabled: bool | None = None
+    monthly_limit: float | None = Field(default=None, gt=0)
+    reset_day: int | None = None
+    default_user_monthly_limit: float | None = Field(default=None, gt=0)
+    slack_channel: str | None = None
+    slack_team_id: str | None = None
+    thresholds: list[OrgBudgetThresholdUpdate] | None = None
+
+    @field_validator('reset_day')
+    @classmethod
+    def _validate_reset_day(cls, value: int | None) -> int | None:
+        if value is None:
+            return value
+        if value not in (1, 15):
+            raise ValueError('reset_day must be 1 or 15')
+        return value
+
+    @model_validator(mode='after')
+    def _validate_thresholds(self) -> 'OrgBudgetSettingsUpdate':
+        if not self.thresholds:
+            return self
+        seen = set()
+        for threshold in self.thresholds:
+            if threshold.percentage in seen:
+                raise ValueError('threshold percentages must be unique')
+            seen.add(threshold.percentage)
+        return self
+
+
+class OrgBudgetUserOverrideUpdate(BaseModel):
+    monthly_limit: float | None = Field(default=None, gt=0)
+    is_disabled: bool = False
+
+    @model_validator(mode='after')
+    def _validate_override(self) -> 'OrgBudgetUserOverrideUpdate':
+        if self.is_disabled and self.monthly_limit is not None:
+            raise ValueError('monthly_limit must be unset when override is disabled')
+        if not self.is_disabled and self.monthly_limit is None:
+            raise ValueError('monthly_limit is required when override is enabled')
+        return self
+
+
 class OrgConversationResponse(BaseModel):
     """Response model for a single conversation in an organization."""
 
@@ -804,6 +887,17 @@ class TeamUsageData(BaseModel):
     percentage: float = 0.0
 
 
+
+
+class ModelUsageData(BaseModel):
+    """Usage data for a single model."""
+
+    model_name: str
+    conversation_count: int = 0
+    total_tokens: int = 0
+    total_cost: float = 0.0
+
+
 class OrgUsageStats(BaseModel):
     """Detailed usage statistics for organization dashboard."""
 
@@ -818,3 +912,6 @@ class OrgUsageStats(BaseModel):
 
     # Team breakdown (by user)
     team_usage: list[TeamUsageData] = Field(default_factory=list)
+
+    # Model breakdown
+    model_usage: list[ModelUsageData] = Field(default_factory=list)
