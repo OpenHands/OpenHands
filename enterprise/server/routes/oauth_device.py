@@ -1,18 +1,22 @@
 """OAuth 2.0 Device Flow endpoints for CLI authentication."""
 
 from datetime import UTC, datetime, timedelta
-from typing import Optional
+from typing import Annotated, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from server.utils.url_utils import get_web_url
-from storage.api_key_store import ApiKeyStore
-from storage.device_code_store import DeviceCodeStore
-
 from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.user_auth import get_user_id
 from openhands.app_server.utils.logger import openhands_logger as logger
+from pydantic import BaseModel
+
+from server.utils.url_utils import get_web_url
+from storage.api_key_store import ApiKeyStore
+from storage.device_code_store import DeviceCodeStore
+from storage.org_member_store import OrgMemberStore
+from storage.org_store import OrgStore
+from storage.user_store import UserStore
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -50,6 +54,17 @@ class DeviceTokenErrorResponse(BaseModel):
     interval: Optional[int] = None  # Required for slow_down error
 
 
+class DeviceOrgOption(BaseModel):
+    id: str
+    name: str
+    is_personal: bool = False
+
+
+class DeviceOrgsResponse(BaseModel):
+    items: list[DeviceOrgOption]
+    current_org_id: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Router + stores
 # ---------------------------------------------------------------------------
@@ -78,6 +93,35 @@ def _oauth_error(
             interval=interval,
         ).model_dump(),
     )
+
+
+async def _resolve_device_org(
+    user_id: str, raw_org_id: str | None
+) -> tuple[UUID | None, Optional[str]]:
+    """Validate the requested org for a device verification.
+
+    Returns (org_id, error_code). On success ``error_code`` is ``None``; on
+    failure ``org_id`` is ``None`` and ``error_code`` names the failure mode
+    so the caller can surface it as a 400 response.
+    """
+    if raw_org_id is None or raw_org_id.strip() == '':
+        return None, None
+
+    try:
+        org_id = UUID(raw_org_id)
+    except (ValueError, AttributeError):
+        return None, 'invalid_org_id'
+
+    user_uuid = UUID(user_id)
+    org = await OrgStore.get_org_by_id(org_id)
+    if org is None:
+        return None, 'org_not_found'
+
+    membership = await OrgMemberStore.get_org_member(org_id, user_uuid)
+    if membership is None:
+        return None, 'not_a_member'
+
+    return org_id, None
 
 
 # ---------------------------------------------------------------------------
@@ -239,9 +283,73 @@ async def device_token(device_code: str = Form(...)):
         )
 
 
+@oauth_device_router.get('/orgs', response_model=DeviceOrgsResponse)
+async def list_device_orgs(
+    user_id: str = Depends(get_user_id),
+) -> DeviceOrgsResponse:
+    """List organizations the authenticated user belongs to.
+
+    Used by the device verification page to populate the org dropdown so users
+    can pick which org the minted API key should be bound to. When the user
+    only belongs to one org, the frontend can skip the dropdown entirely.
+    """
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Authentication required',
+        )
+
+    try:
+        user_uuid = UUID(user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Invalid user id',
+        )
+
+    orgs, _ = await OrgStore.get_user_orgs_paginated(
+        user_id=user_uuid, page_id=None, limit=100
+    )
+
+    items = [
+        DeviceOrgOption(
+            id=str(org.id),
+            name=org.name,
+            is_personal=str(org.id) == user_id,
+        )
+        for org in orgs
+    ]
+
+    user_row = await UserStore.get_user_by_id(user_id)
+    current_org_id = (
+        str(user_row.current_org_id) if user_row and user_row.current_org_id else None
+    )
+
+    logger.info(
+        'Listed orgs for device verification',
+        extra={
+            'user_id': user_id,
+            'org_count': len(items),
+            'current_org_id': current_org_id,
+        },
+    )
+
+    return DeviceOrgsResponse(items=items, current_org_id=current_org_id)
+
+
 @oauth_device_router.post('/verify-authenticated')
 async def device_verification_authenticated(
     user_code: str = Form(...),
+    org_id: Annotated[
+        str | None,
+        Form(
+            description=(
+                'Optional org id to bind the minted API key to. Must be an org '
+                'the authenticated user belongs to. If omitted, the user\u2019s '
+                'current org is used.'
+            ),
+        ),
+    ] = None,
     user_id: str = Depends(get_user_id),
 ):
     """Process device verification for authenticated users (called by frontend)."""
@@ -266,10 +374,22 @@ async def device_verification_authenticated(
                 detail='This device code has already been processed.',
             )
 
+        # Validate the requested org (if any) before we persist anything.
+        resolved_org_id, org_error = await _resolve_device_org(user_id, org_id)
+        if org_error is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    'code': org_error,
+                    'message': 'The selected organization is not available.',
+                },
+            )
+
         # First, authorize the device code
         success = await device_code_store.authorize_device_code(
             user_code=user_code,
             user_id=user_id,
+            org_id=resolved_org_id,
         )
 
         if not success:
@@ -291,10 +411,15 @@ async def device_verification_authenticated(
                 user_id,
                 name=device_key_name,
                 expires_at=datetime.now(UTC) + KEY_EXPIRATION_TIME,
+                org_id=resolved_org_id,
             )
             logger.info(
                 'Created new device API key for user after successful authorization',
-                extra={'user_id': user_id, 'user_code': user_code},
+                extra={
+                    'user_id': user_id,
+                    'user_code': user_code,
+                    'org_id': str(resolved_org_id) if resolved_org_id else None,
+                },
             )
         except Exception as e:
             logger.exception(
@@ -322,7 +447,11 @@ async def device_verification_authenticated(
 
         logger.info(
             'Device code authorized with API key successfully',
-            extra={'user_code': user_code, 'user_id': user_id},
+            extra={
+                'user_code': user_code,
+                'user_id': user_id,
+                'org_id': str(resolved_org_id) if resolved_org_id else None,
+            },
         )
 
         # Server-side identity tracking for device auth flow
@@ -331,12 +460,14 @@ async def device_verification_authenticated(
             try:
                 ctx = await resolve_analytics_context(user_id)
 
-                # Load current org name for identify_user
-                from storage.org_store import OrgStore
-
+                # Load org name for identify_user; prefer the requested org if
+                # one was supplied, otherwise fall back to the user's current org.
+                analytics_org_id = resolved_org_id or (
+                    ctx.user.current_org_id if ctx.user else None
+                )
                 current_org = (
-                    await OrgStore.get_org_by_id(ctx.user.current_org_id)
-                    if ctx.user and ctx.user.current_org_id
+                    await OrgStore.get_org_by_id(analytics_org_id)
+                    if analytics_org_id
                     else None
                 )
 

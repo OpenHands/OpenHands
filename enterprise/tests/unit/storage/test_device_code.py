@@ -1,8 +1,10 @@
 """Unit tests for DeviceCode model."""
 
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 import pytest
+
 from storage.device_code import DeviceCode, DeviceCodeStatus
 
 
@@ -67,8 +69,20 @@ class TestDeviceCode:
 
         assert device_code.status == DeviceCodeStatus.AUTHORIZED.value
         assert device_code.keycloak_user_id == user_id
+        assert device_code.org_id is None
         assert device_code.authorized_at is not None
         assert isinstance(device_code.authorized_at, datetime)
+
+    def test_authorize_with_org_id(self, device_code):
+        """Authorization persists the requested org_id so the minted API key can be bound to it."""
+        user_id = 'test-user-123'
+        org_id = UUID('00000000-0000-0000-0000-000000000999')
+
+        device_code.authorize(user_id, org_id=org_id)
+
+        assert device_code.status == DeviceCodeStatus.AUTHORIZED.value
+        assert device_code.keycloak_user_id == user_id
+        assert device_code.org_id == org_id
 
     @pytest.mark.parametrize(
         'method,expected_status',

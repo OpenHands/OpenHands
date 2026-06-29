@@ -2,9 +2,11 @@
 
 from datetime import datetime, timezone
 from enum import Enum
+from uuid import UUID
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
+
 from storage.base import Base
 
 
@@ -40,6 +42,10 @@ class DeviceCode(Base):
     # Keycloak user ID who authorized the device (set during verification)
     keycloak_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # Org the minted API key should be bound to. NULL means "use the user's
+    # current_org_id" at API key creation time (legacy behaviour).
+    org_id: Mapped[UUID | None] = mapped_column(ForeignKey('org.id'), nullable=True)
+
     # Timestamps
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
@@ -74,10 +80,11 @@ class DeviceCode(Base):
         """Check if the device code has been authorized."""
         return self.status == DeviceCodeStatus.AUTHORIZED.value
 
-    def authorize(self, user_id: str) -> None:
+    def authorize(self, user_id: str, org_id: UUID | None = None) -> None:
         """Mark the device code as authorized."""
         self.status = DeviceCodeStatus.AUTHORIZED.value
         self.keycloak_user_id = user_id  # Set the Keycloak user ID during authorization
+        self.org_id = org_id
         self.authorized_at = datetime.now(timezone.utc)
 
     def deny(self) -> None:

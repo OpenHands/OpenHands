@@ -5,9 +5,11 @@ from __future__ import annotations
 import secrets
 import string
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+
 from storage.database import a_session_maker
 from storage.device_code import DeviceCode
 
@@ -88,12 +90,20 @@ class DeviceCodeStore:
             )
             return result.scalars().first()
 
-    async def authorize_device_code(self, user_code: str, user_id: str) -> bool:
+    async def authorize_device_code(
+        self,
+        user_code: str,
+        user_id: str,
+        org_id: UUID | None = None,
+    ) -> bool:
         """Authorize a device code.
 
         Args:
             user_code: The user code to authorize
             user_id: The user ID from Keycloak
+            org_id: Optional org to bind the minted API key to. Must be an org
+                the user is a member of; otherwise the authorization should
+                not be accepted (caller validates membership).
 
         Returns:
             True if authorization was successful, False otherwise
@@ -110,7 +120,7 @@ class DeviceCodeStore:
             if not device_code_entry.is_pending():
                 return False
 
-            device_code_entry.authorize(user_id)
+            device_code_entry.authorize(user_id, org_id=org_id)
             await session.commit()
 
             return True

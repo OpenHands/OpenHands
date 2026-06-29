@@ -2,14 +2,17 @@
 
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID
 
 import pytest
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
+
 from server.routes.oauth_device import (
     device_authorization,
     device_token,
     device_verification_authenticated,
+    list_device_orgs,
 )
 from storage.device_code import DeviceCode
 
@@ -232,8 +235,9 @@ class TestDeviceVerificationAuthenticated:
         mock_api_key_store.create_api_key.assert_called_once()
         call_args = mock_api_key_store.create_api_key.call_args
         assert call_args[1]['name'] == 'Device Link Access Key (ABC12345)'
+        assert call_args[1]['org_id'] is None
         mock_store.authorize_device_code.assert_called_once_with(
-            user_code='ABC12345', user_id='user-123'
+            user_code='ABC12345', user_id='user-123', org_id=None
         )
 
     @patch('server.routes.oauth_device.ApiKeyStore')
@@ -520,7 +524,7 @@ class TestDeviceVerificationTransactionIntegrity:
         # API key should NOT be created since authorization failed
         mock_api_key_store.create_api_key.assert_not_called()
         mock_store.authorize_device_code.assert_called_once_with(
-            user_code='ABC12345', user_id='user-123'
+            user_code='ABC12345', user_id='user-123', org_id=None
         )
 
     @patch('server.routes.oauth_device.ApiKeyStore')
@@ -556,7 +560,7 @@ class TestDeviceVerificationTransactionIntegrity:
 
         # Authorization should have been attempted first
         mock_store.authorize_device_code.assert_called_once_with(
-            user_code='ABC12345', user_id='user-123'
+            user_code='ABC12345', user_id='user-123', org_id=None
         )
 
         # API key creation should have been attempted after authorization
@@ -632,9 +636,221 @@ class TestDeviceVerificationTransactionIntegrity:
 
         # Verify the order: authorization first, then API key creation
         mock_store.authorize_device_code.assert_called_once_with(
-            user_code='ABC12345', user_id='user-123'
+            user_code='ABC12345', user_id='user-123', org_id=None
         )
         mock_api_key_store.create_api_key.assert_called_once()
 
         # No cleanup should be needed in successful case
         mock_store.deny_device_code.assert_not_called()
+
+
+class TestDeviceOrgsEndpoint:
+    """Tests for GET /oauth/device/orgs (the org dropdown endpoint)."""
+
+    async def test_unauthenticated_user_rejected(self):
+        with pytest.raises(HTTPException) as exc_info:
+            await list_device_orgs(user_id=None)
+        assert exc_info.value.status_code == 401
+
+    async def test_invalid_user_id_rejected(self):
+        with pytest.raises(HTTPException) as exc_info:
+            await list_device_orgs(user_id='not-a-uuid')
+        assert exc_info.value.status_code == 400
+
+    @patch('server.routes.oauth_device.UserStore')
+    @patch('server.routes.oauth_device.OrgStore')
+    async def test_returns_user_orgs_and_current(
+        self, mock_org_store_class, mock_user_store_class
+    ):
+        user_id = '00000000-0000-0000-0000-000000000123'
+        team_org_id = UUID('00000000-0000-0000-0000-000000000456')
+        personal_org_id = UUID(user_id)
+
+        team_org = MagicMock()
+        team_org.id = team_org_id
+        team_org.name = 'Acme'
+        personal_org = MagicMock()
+        personal_org.id = personal_org_id
+        personal_org.name = 'Personal'
+
+        mock_org_store_class.get_user_orgs_paginated = AsyncMock(
+            return_value=([team_org, personal_org], None)
+        )
+        user_row = MagicMock()
+        user_row.current_org_id = team_org_id
+        mock_user_store_class.get_user_by_id = AsyncMock(return_value=user_row)
+
+        response = await list_device_orgs(user_id=user_id)
+
+        assert {item.id for item in response.items} == {
+            str(team_org_id),
+            str(personal_org_id),
+        }
+        # Personal workspace should be flagged via is_personal
+        personal_item = next(
+            item for item in response.items if item.id == str(personal_org_id)
+        )
+        assert personal_item.is_personal is True
+        team_item = next(item for item in response.items if item.id == str(team_org_id))
+        assert team_item.is_personal is False
+        assert response.current_org_id == str(team_org_id)
+
+    @patch('server.routes.oauth_device.UserStore')
+    @patch('server.routes.oauth_device.OrgStore')
+    async def test_handles_no_current_org(
+        self, mock_org_store_class, mock_user_store_class
+    ):
+        user_id = '00000000-0000-0000-0000-000000000123'
+        org_id = UUID('00000000-0000-0000-0000-000000000456')
+
+        org = MagicMock()
+        org.id = org_id
+        org.name = 'Acme'
+        mock_org_store_class.get_user_orgs_paginated = AsyncMock(
+            return_value=([org], None)
+        )
+        user_row = MagicMock()
+        user_row.current_org_id = None
+        mock_user_store_class.get_user_by_id = AsyncMock(return_value=user_row)
+
+        response = await list_device_orgs(user_id=user_id)
+
+        assert response.current_org_id is None
+        assert len(response.items) == 1
+
+
+class TestDeviceVerificationOrgSelection:
+    """Tests for the org_id form field on /oauth/device/verify-authenticated."""
+
+    @patch('server.routes.oauth_device.ApiKeyStore')
+    @patch('server.routes.oauth_device.OrgMemberStore')
+    @patch('server.routes.oauth_device.OrgStore')
+    @patch('server.routes.oauth_device.device_code_store')
+    async def test_org_id_binds_api_key_to_that_org(
+        self,
+        mock_store,
+        mock_org_store_class,
+        mock_org_member_store_class,
+        mock_api_key_class,
+    ):
+        """When a valid org_id is supplied, the API key is bound to it."""
+        user_id = '00000000-0000-0000-0000-000000000123'
+        org_id = UUID('00000000-0000-0000-0000-000000000999')
+
+        mock_device = MagicMock()
+        mock_device.is_pending.return_value = True
+        mock_store.get_by_user_code = AsyncMock(return_value=mock_device)
+        mock_store.authorize_device_code = AsyncMock(return_value=True)
+
+        org = MagicMock()
+        org.id = org_id
+        mock_org_store_class.get_org_by_id = AsyncMock(return_value=org)
+        mock_org_member_store_class.get_org_member = AsyncMock(return_value=MagicMock())
+
+        mock_api_key_store = MagicMock()
+        mock_api_key_store.create_api_key = AsyncMock()
+        mock_api_key_class.get_instance.return_value = mock_api_key_store
+
+        result = await device_verification_authenticated(
+            user_code='ABC12345', user_id=user_id, org_id=str(org_id)
+        )
+
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == 200
+        mock_store.authorize_device_code.assert_called_once_with(
+            user_code='ABC12345', user_id=user_id, org_id=org_id
+        )
+        mock_api_key_store.create_api_key.assert_called_once()
+        create_kwargs = mock_api_key_store.create_api_key.call_args[1]
+        assert create_kwargs['org_id'] == org_id
+
+    @patch('server.routes.oauth_device.ApiKeyStore')
+    @patch('server.routes.oauth_device.OrgMemberStore')
+    @patch('server.routes.oauth_device.OrgStore')
+    @patch('server.routes.oauth_device.device_code_store')
+    async def test_invalid_org_id_rejected(
+        self,
+        mock_store,
+        mock_org_store_class,
+        mock_org_member_store_class,
+        mock_api_key_class,
+    ):
+        """Garbage org_id is rejected before any side effects occur."""
+        mock_device = MagicMock()
+        mock_device.is_pending.return_value = True
+        mock_store.get_by_user_code = AsyncMock(return_value=mock_device)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await device_verification_authenticated(
+                user_code='ABC12345', user_id='user-123', org_id='not-a-uuid'
+            )
+
+        assert exc_info.value.status_code == 400
+        mock_store.authorize_device_code.assert_not_called()
+        mock_api_key_class.get_instance.assert_not_called()
+
+    @patch('server.routes.oauth_device.ApiKeyStore')
+    @patch('server.routes.oauth_device.OrgMemberStore')
+    @patch('server.routes.oauth_device.OrgStore')
+    @patch('server.routes.oauth_device.device_code_store')
+    async def test_org_user_not_member_of_rejected(
+        self,
+        mock_store,
+        mock_org_store_class,
+        mock_org_member_store_class,
+        mock_api_key_class,
+    ):
+        """A user can't mint a token against an org they don't belong to."""
+        user_id = '00000000-0000-0000-0000-000000000123'
+        foreign_org_id = UUID('00000000-0000-0000-0000-000000000999')
+
+        mock_device = MagicMock()
+        mock_device.is_pending.return_value = True
+        mock_store.get_by_user_code = AsyncMock(return_value=mock_device)
+
+        org = MagicMock()
+        org.id = foreign_org_id
+        mock_org_store_class.get_org_by_id = AsyncMock(return_value=org)
+        mock_org_member_store_class.get_org_member = AsyncMock(return_value=None)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await device_verification_authenticated(
+                user_code='ABC12345', user_id=user_id, org_id=str(foreign_org_id)
+            )
+
+        assert exc_info.value.status_code == 400
+        mock_store.authorize_device_code.assert_not_called()
+
+    @patch('server.routes.oauth_device.ApiKeyStore')
+    @patch('server.routes.oauth_device.OrgMemberStore')
+    @patch('server.routes.oauth_device.OrgStore')
+    @patch('server.routes.oauth_device.device_code_store')
+    async def test_omitted_org_id_falls_back_to_user_default(
+        self,
+        mock_store,
+        mock_org_store_class,
+        mock_org_member_store_class,
+        mock_api_key_class,
+    ):
+        """Without org_id the device_code is authorized without one and the
+        API key store is told to fall back to the user's default."""
+        mock_device = MagicMock()
+        mock_device.is_pending.return_value = True
+        mock_store.get_by_user_code = AsyncMock(return_value=mock_device)
+        mock_store.authorize_device_code = AsyncMock(return_value=True)
+
+        mock_api_key_store = MagicMock()
+        mock_api_key_store.create_api_key = AsyncMock()
+        mock_api_key_class.get_instance.return_value = mock_api_key_store
+
+        result = await device_verification_authenticated(
+            user_code='ABC12345', user_id='user-123'
+        )
+
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == 200
+        mock_store.authorize_device_code.assert_called_once_with(
+            user_code='ABC12345', user_id='user-123', org_id=None
+        )
+        mock_api_key_store.create_api_key.assert_called_once()
+        assert mock_api_key_store.create_api_key.call_args[1]['org_id'] is None

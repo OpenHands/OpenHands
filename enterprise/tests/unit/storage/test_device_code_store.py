@@ -1,9 +1,11 @@
 """Unit tests for DeviceCodeStore."""
 
 from unittest.mock import patch
+from uuid import UUID
 
 import pytest
 from sqlalchemy import select
+
 from storage.device_code import DeviceCode
 from storage.device_code_store import DeviceCodeStore
 
@@ -180,6 +182,29 @@ class TestDeviceCodeStore:
             device_code = result_db.scalars().first()
             assert device_code.status == 'authorized'
             assert device_code.keycloak_user_id == user_id
+
+    @pytest.mark.asyncio
+    async def test_authorize_device_code_persists_org_id(
+        self, device_code_store, async_session_maker
+    ):
+        """Org_id passed to authorize_device_code should round-trip into the row."""
+        user_id = 'test-user-123'
+        org_id = UUID('00000000-0000-0000-0000-000000000999')
+
+        with patch('storage.device_code_store.a_session_maker', async_session_maker):
+            created = await device_code_store.create_device_code(expires_in=600)
+            result = await device_code_store.authorize_device_code(
+                created.user_code, user_id, org_id=org_id
+            )
+
+        assert result is True
+
+        async with async_session_maker() as session:
+            result_db = await session.execute(
+                select(DeviceCode).filter(DeviceCode.user_code == created.user_code)
+            )
+            device_code = result_db.scalars().first()
+            assert device_code.org_id == org_id
 
     @pytest.mark.asyncio
     async def test_authorize_device_code_not_found(
