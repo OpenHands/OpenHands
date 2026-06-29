@@ -2043,8 +2043,8 @@ class TestArchiveWorkspaceHelper:
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
         # Archive blobs are streamed from a tempfile via write_from_path (the OOM
         # fix); record them too so blob-path assertions still see the .patch/.tar.gz.
-        store.write_from_path.side_effect = (
-            lambda path, src: writes.__setitem__(path, open(src, 'rb').read())
+        store.write_from_path.side_effect = lambda path, src: writes.__setitem__(
+            path, open(src, 'rb').read()
         )
 
         with patch.object(
@@ -2086,8 +2086,8 @@ class TestArchiveWorkspaceHelper:
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
         # Archive blobs are streamed from a tempfile via write_from_path (the OOM
         # fix); record them too so blob-path assertions still see the .patch/.tar.gz.
-        store.write_from_path.side_effect = (
-            lambda path, src: writes.__setitem__(path, open(src, 'rb').read())
+        store.write_from_path.side_effect = lambda path, src: writes.__setitem__(
+            path, open(src, 'rb').read()
         )
 
         with patch.object(
@@ -2289,8 +2289,8 @@ class TestArchiveWorkspaceHelper:
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
         # Archive blobs are streamed from a tempfile via write_from_path (the OOM
         # fix); record them too so blob-path assertions still see the .patch/.tar.gz.
-        store.write_from_path.side_effect = (
-            lambda path, src: writes.__setitem__(path, open(src, 'rb').read())
+        store.write_from_path.side_effect = lambda path, src: writes.__setitem__(
+            path, open(src, 'rb').read()
         )
 
         with patch.object(
@@ -2364,8 +2364,8 @@ class TestArchiveWorkspaceHelper:
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
         # Archive blobs are streamed from a tempfile via write_from_path (the OOM
         # fix); record them too so blob-path assertions still see the .patch/.tar.gz.
-        store.write_from_path.side_effect = (
-            lambda path, src: writes.__setitem__(path, open(src, 'rb').read())
+        store.write_from_path.side_effect = lambda path, src: writes.__setitem__(
+            path, open(src, 'rb').read()
         )
 
         with patch.object(
@@ -2443,8 +2443,8 @@ class TestArchiveInitialWorkspaceHelper:
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
         # Archive blobs are streamed from a tempfile via write_from_path (the OOM
         # fix); record them too so blob-path assertions still see the .patch/.tar.gz.
-        store.write_from_path.side_effect = (
-            lambda path, src: writes.__setitem__(path, open(src, 'rb').read())
+        store.write_from_path.side_effect = lambda path, src: writes.__setitem__(
+            path, open(src, 'rb').read()
         )
 
         with patch.object(
