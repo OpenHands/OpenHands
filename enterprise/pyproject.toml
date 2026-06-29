@@ -22,39 +22,39 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.12,<3.14"
 openhands-ai = { path = "../", develop = true }
-authlib = ">=1.6.12,<1.7"
+authlib = ">=1.6.12,<1.8"
 gspread = "^6.1.4"
 alembic = "^1.14.1"
 cloud-sql-python-connector = "^1.16.0"
 psycopg2-binary = "^2.9.10"
 pg8000 = "^1.31.2"
-stripe = "^11.5.0"
-python-json-logger = "^3.2.1"
-python-keycloak = "^5.3.1"
-asyncpg = "^0.30.0"
+stripe = ">=11.5,<16.0"
+python-json-logger = ">=3.2.1,<5.0.0"
+python-keycloak = ">=5.3.1,<8.0.0"
+asyncpg = ">=0.30,<0.32"
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 resend = "^2.7.0"
 tenacity = "^9.1.2"
 slack-sdk = "^3.35.0"
-ddtrace = "3.13.0"                                           #pin to avoid yanked version 3.12.4
+ddtrace = "4.10.5"                                           #pin to avoid yanked version 3.12.4
 posthog = "^7.0.0"
 limits = "^5.2.0"
-coredis = "^4.22.0"
+coredis = ">=4.22,<6.0"
 httpx = "*"
 scikit-learn = "^1.7.0"
-shap = "^0.48.0"
+shap = ">=0.48,<0.53"
 google-cloud-recaptcha-enterprise = "^1.24.0"
 # Dependencies previously only in Dockerfile, now managed via poetry.lock
-prometheus-client = "^0.24.0"
-pandas = "^2.2.0"
+prometheus-client = ">=0.24,<0.26"
+pandas = ">=2.2,<4.0"
 numpy = "^2.2.0"
 mcp = "^1.10.0"
 pillow = "^12.1.1"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "0.8.3"
-mypy = "1.13.0"
-pre-commit = "4.1.0"
+ruff = "0.15.18"
+mypy = "2.1.0"
+pre-commit = "4.6.0"
 build = "*"
 types-requests = "^2.32.4.20250611"
 
@@ -70,7 +70,7 @@ openai = "*"
 opencv-python = "*"
 pandas = "*"
 reportlab = "*"
-gevent = ">=24.2.1,<26.0.0"
+gevent = ">=24.2.1,<27.0.0"
 
 [tool.poetry-dynamic-versioning]
 enable = true
