@@ -54,7 +54,9 @@ def resolve_profile_llm(
                 model=profile_llm.model,
                 base_url=profile_llm.base_url,
                 managed_proxy_url=managed_proxy_url,
-            )
+            ),
+            # Force streaming on (profiles default to the SDK's stream=False).
+            'stream': True,
         }
     )
     if not has_real_api_key(resolved.api_key) and has_real_api_key(fallback_api_key):
