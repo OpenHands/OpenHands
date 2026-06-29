@@ -1240,6 +1240,70 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             }
         )
 
+
+    async def _maybe_refresh_managed_llm_key(
+        self, user: UserInfo, llm: LLM
+    ) -> LLM:
+        """Best-effort refresh for stale SaaS managed LiteLLM keys.
+
+        This intentionally only runs for SaaS managed LiteLLM keys that are the
+        current member's stored managed key. BYOK/custom keys and OSS/local
+        deployments are left untouched.
+        """
+        if self.app_mode != 'saas' or not user.id or not llm.api_key:
+            return llm
+
+        try:
+            from server.routes.api_keys import (  # type: ignore[import-not-found]
+                get_managed_llm_key_from_db,
+                refresh_managed_llm_api_key,
+            )
+            from storage.lite_llm_manager import (  # type: ignore[import-not-found]
+                LiteLlmManager,
+            )
+
+            from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
+        except Exception:
+            return llm
+
+        if (llm.base_url or '').rstrip('/') != LITE_LLM_API_URL.rstrip('/'):
+            return llm
+
+        key = (
+            llm.api_key.get_secret_value()
+            if isinstance(llm.api_key, SecretStr)
+            else str(llm.api_key)
+        )
+        if not key or key == '**********':
+            return llm
+
+        get_effective_org_id = getattr(self.user_context, 'get_effective_org_id', None)
+        if get_effective_org_id is None:
+            return llm
+
+        try:
+            org_id = await get_effective_org_id()
+            if org_id is None:
+                return llm
+
+            managed_key = await get_managed_llm_key_from_db(user.id, org_id)
+            if managed_key != key:
+                return llm
+
+            if await LiteLlmManager.verify_key(key, user.id):
+                return llm
+
+            await refresh_managed_llm_api_key(user_id=user.id, effective_org_id=org_id)
+            refreshed_key = await get_managed_llm_key_from_db(user.id, org_id)
+            if refreshed_key:
+                return llm.model_copy(update={'api_key': SecretStr(refreshed_key)})
+        except Exception:
+            _logger.warning(
+                'Failed to refresh stale managed LLM key before conversation startup',
+                exc_info=True,
+            )
+        return llm
+
     async def _add_system_mcp_servers(
         self, mcp_servers: dict[str, Any], conversation_id: UUID
     ) -> None:
@@ -1322,6 +1386,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         """
         # Configure LLM
         llm = self._configure_llm(user, llm_model)
+        llm = await self._maybe_refresh_managed_llm_key(user, llm)
 
         # Configure MCP - SDK expects format: {'mcpServers': {'server_name': {...}}}
         mcp_servers: dict[str, Any] = {}
