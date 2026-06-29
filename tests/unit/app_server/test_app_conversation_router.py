@@ -1116,7 +1116,7 @@ class TestFinalizeSandboxDelete:
         # Workspace captured first (conversation-scoped), then the sandbox torn
         # down sandbox-scoped — note delete_sandbox takes no conversation_id.
         sandbox_service.archive_conversation_workspace.assert_awaited_once_with(
-            'sbx-1', conversation_id=conv.hex
+            'sbx-1', conversation_id=conv.hex, workspace_path=None
         )
         sandbox_service.delete_sandbox.assert_awaited_once_with('sbx-1')
         db_session.commit.assert_awaited_once()
@@ -1130,7 +1130,7 @@ class TestFinalizeSandboxDelete:
         )
         # Shared sandbox: still capture this conversation, but don't tear it down.
         sandbox_service.archive_conversation_workspace.assert_awaited_once_with(
-            'sbx-1', conversation_id=conv.hex
+            'sbx-1', conversation_id=conv.hex, workspace_path=None
         )
         sandbox_service.delete_sandbox.assert_not_called()
 
@@ -1148,3 +1148,23 @@ class TestFinalizeSandboxDelete:
         sandbox_service.archive_conversation_workspace.assert_awaited_once()
         info_service.count_conversations_by_sandbox_id.assert_not_called()
         sandbox_service.delete_sandbox.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_forwards_pinned_workspace_path(self):
+        sandbox_service, info_service, db_session, httpx_client = self._deps(0)
+        conv = uuid4()
+        await _finalize_sandbox_delete(
+            sandbox_service,
+            info_service,
+            'sbx-1',
+            db_session,
+            httpx_client,
+            conv,
+            workspace_path='/home/openhands/workspace/' + conv.hex,
+        )
+        # The path pinned at creation is forwarded to the capture verbatim.
+        sandbox_service.archive_conversation_workspace.assert_awaited_once_with(
+            'sbx-1',
+            conversation_id=conv.hex,
+            workspace_path='/home/openhands/workspace/' + conv.hex,
+        )

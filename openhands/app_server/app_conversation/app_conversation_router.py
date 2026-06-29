@@ -23,6 +23,7 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
     AppConversationInfoService,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
+    ARCHIVE_WORKSPACE_PATH_TAG_KEY,
     AppConversation,
     AppConversationInfo,
     AppConversationPage,
@@ -872,6 +873,7 @@ async def _finalize_sandbox_delete(
     db_session: AsyncSession,
     httpx_client: httpx.AsyncClient,
     conversation_id: UUID | None = None,
+    workspace_path: str | None = None,
 ) -> None:
     """Archive the conversation's workspace, then delete the sandbox if unreferenced.
 
@@ -888,6 +890,7 @@ async def _finalize_sandbox_delete(
         archived = await sandbox_service.archive_conversation_workspace(
             sandbox_id,
             conversation_id=conversation_id.hex if conversation_id else None,
+            workspace_path=workspace_path,
         )
         if not archived:
             # REQUIRED archive failed: keep the sandbox + running runtime for the
@@ -995,6 +998,8 @@ async def delete_app_conversation(
 
     # Delete the sandbox in the background if no other conversations reference it
     if sandbox_id:
+        # Path pinned at creation; the finalizer archives exactly this directory.
+        workspace_path = app_conversation_info.tags.get(ARCHIVE_WORKSPACE_PATH_TAG_KEY)
         asyncio.create_task(
             _finalize_sandbox_delete(
                 sandbox_service,
@@ -1003,6 +1008,7 @@ async def delete_app_conversation(
                 db_session,
                 httpx_client,
                 conversation_id=conversation_uuid,
+                workspace_path=workspace_path,
             )
         )
 

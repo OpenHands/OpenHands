@@ -24,17 +24,11 @@ from typing import Any
 from openhands.agent_server.utils import utc_now
 from openhands.app_server.file_store import get_file_store
 from openhands.app_server.file_store.files import FileStore
-from openhands.app_server.settings.settings_models import (
-    SandboxGroupingStrategy,
-    grouped_workspace_dir,
-)
 
 _logger = logging.getLogger(__name__)
 
-# Only the formats the SDK GET /api/file/archive producer accepts
-# (ArchiveFormat = git-delta | tar.gz). Anything else (e.g. the long-removed
-# 'zip') is rejected by the producer with a 422, so it must not be advertised
-# here — see _supported_format() which validates before issuing the request.
+# Formats the SDK GET /api/file/archive producer accepts (git-delta | tar.gz);
+# anything else 422s, so validate before issuing the request.
 _ARCHIVE_SUFFIX = {'git-delta': 'patch', 'tar.gz': 'tar.gz'}
 
 
@@ -97,33 +91,6 @@ def _formats_to_capture() -> list[str] | None:
     return None
 
 
-def _archive_base_path() -> str:
-    # The workspace base. A repo-backed conversation clones the repo into a
-    # {base}/{repo_name} subdirectory, so this base is usually not itself a git
-    # repo — the agent-server archive endpoint auto-descends to the actual repo
-    # beneath the given path (software-agent-sdk _resolve_git_repo_root), so we
-    # only need to point it at the (possibly grouped) workspace base here.
-    return os.getenv('RUNTIME_FILE_ARCHIVE_PATH', '/workspace/project')
-
-
-def _archive_path(
-    grouping_strategy: SandboxGroupingStrategy,
-    conversation_id_hex: str,
-) -> str:
-    """Path of the workspace to archive (the agent-server resolves the repo).
-
-    Mirrors the relocation applied at conversation start in
-    live_status_app_conversation_service (working_dir → grouped_workspace_dir):
-    NO_GROUPING keeps the bare base dir, any grouping nests it under the
-    conversation id. The agent-server then descends from this base to the
-    cloned repo ({base}/[{hex}/]{repo_name}); hardcoding the base without the
-    grouping nesting would point at the wrong conversation's directory.
-    """
-    return grouped_workspace_dir(
-        _archive_base_path(), grouping_strategy, conversation_id_hex
-    )
-
-
 def _float_env(name: str, default: float) -> float:
     """Parse a float env var, falling back to default on a non-numeric value.
 
@@ -156,7 +123,9 @@ def _archive_timeout() -> float:
 
 
 def _archive_store_type() -> str:
-    # Default to GCS to preserve current behavior; local/s3/memory also work.
+    # Default to GCS to preserve current behavior; local/s3 also work. NOT
+    # 'memory' — it is text-only (read() returns str) and would corrupt the
+    # binary archive (see InMemoryFileStore).
     return os.getenv('RUNTIME_FILE_ARCHIVE_STORE_TYPE', 'google_cloud')
 
 
@@ -209,19 +178,23 @@ async def archive_workspace(
     httpx_client: Any,
     runtime: dict[str, Any],
     sandbox_id: str,
+    *,
+    archive_path: str,
     conversation_id: str | None = None,
-    grouping_strategy: SandboxGroupingStrategy = SandboxGroupingStrategy.NO_GROUPING,
 ) -> bool:
-    """Archive the sandbox's workspace; return whether deletion may proceed.
+    """Archive the workspace at ``archive_path``; return whether delete may proceed.
 
-    Returns True when the workspace was archived, when there is nothing to
-    archive (the agent-server reports the path missing/not a git repo, or the key
-    is rejected — a 400/401/404), or when archiving failed but is not required
-    (best-effort). Returns False only when archiving is required and hit a
-    genuinely transient failure (5xx / network / a retryable 4xx such as 422/429),
-    so the caller can leave the sandbox intact for a later retry (an explicit
-    re-delete, or the runtime-api primary path at the eventual idle reap).
-    Never raises.
+    ``archive_path`` is resolved by the caller — the path pinned at conversation
+    creation, NOT re-derived here from live settings — so a capture can never be
+    misrouted to the wrong directory. The agent-server descends from it to the
+    cloned repo.
+
+    Returns True when the workspace was archived, when the path holds nothing to
+    archive (agent-server 400: not a directory / not a git repo), or when
+    archiving failed but is not required (best-effort). Returns False when
+    archiving is required and either hit a transient failure (5xx / network /
+    422 / 429) or could not confirm a capture (401 auth / 404 missing path), so
+    the caller leaves the sandbox intact for the idle-reap retry. Never raises.
 
     A pure configuration error (unsupported RUNTIME_FILE_ARCHIVE_FORMAT, or
     RUNTIME_FILE_ARCHIVE_BUCKET unset) cannot be fixed by retrying, so it is
@@ -264,10 +237,8 @@ async def archive_workspace(
         return True
 
     headers = {'X-Session-API-Key': session_api_key} if session_api_key else {}
-    # Conversation id keys the archive and locates the (possibly grouped) repo.
     # For cloud conversations the sandbox id is the conversation_id.hex.
     conversation_key = conversation_id or sandbox_id
-    archive_path = _archive_path(grouping_strategy, conversation_key)
     ts = utc_now().strftime('%Y%m%dT%H%M%SZ')
     base_path = f'{_archive_prefix()}/{sandbox_id}/{ts}'
 
@@ -278,6 +249,10 @@ async def archive_workspace(
     # by a partially-failed prior attempt becomes an orphan reaped by the bucket
     # lifecycle policy (we favor capture completeness over upload dedup).
     retryable_failure = False
+    # A capture we could not confirm happened (401 auth / 404 missing path):
+    # under REQUIRED this must NOT permit teardown — it is the misrouted-path
+    # symptom this feature most needs to guard against, not "nothing to archive".
+    unconfirmed_capture = False
     base_commit = ''
     # One store per call (not per format) — building it lazily spins up a client.
     store = _get_archive_file_store()
@@ -294,29 +269,29 @@ async def archive_workspace(
                 timeout=_archive_timeout(),
             ) as response:
                 if response.status_code != 200:
-                    # 400 (not a directory / not a git repo / bad base_ref) or 404
-                    # (path missing) means there is genuinely nothing to capture
-                    # for this format. 401 means the runtime's session key is
-                    # rejected — a call-site bug, not a transient blip; retrying
-                    # the same key can't fix it. All three are permanent: log and
-                    # do NOT block a REQUIRED delete. Everything else (422, 429,
-                    # any 5xx) is retryable.
-                    permanent = response.status_code in (400, 401, 404)
-                    if response.status_code == 401:
-                        detail = 'auth rejected (stale session key); proceeding'
-                    elif permanent:
+                    code = response.status_code
+                    if code == 400:
+                        # Path exists but holds no archivable repo (not a git
+                        # repo / not a directory). A positive "nothing here" —
+                        # safe to skip this format and proceed.
                         detail = 'nothing to archive'
+                    elif code in (401, 404):
+                        # 401 auth rejected / 404 path missing: the capture did
+                        # NOT happen and this is not a confirmed-empty workspace,
+                        # so it must block a REQUIRED delete (idle reap retries).
+                        unconfirmed_capture = True
+                        detail = 'capture unconfirmed (auth/path)'
                     else:
+                        # 422 / 429 / 5xx — transient.
+                        retryable_failure = True
                         detail = 'retryable failure'
                     _logger.warning(
                         'Workspace archive (%s) for %s: agent-server returned %s; %s',
                         fmt,
                         sandbox_id,
-                        response.status_code,
+                        code,
                         detail,
                     )
-                    if not permanent:
-                        retryable_failure = True
                     continue
                 header_base = response.headers.get('X-Archive-Base-Commit', '')
                 if header_base:
@@ -369,9 +344,10 @@ async def archive_workspace(
         finally:
             _cleanup_tempfile(tmp_path)
 
-    # Deletion may proceed unless archiving is REQUIRED and a retryable failure
-    # left us short of the data we were meant to capture.
-    if archive_required() and retryable_failure:
+    # Deletion may proceed unless archiving is REQUIRED and we either hit a
+    # retryable failure or could not confirm a capture (401/404) — both leave us
+    # short of the data we were meant to preserve.
+    if archive_required() and (retryable_failure or unconfirmed_capture):
         return False
     return True
 
@@ -390,18 +366,18 @@ def initial_archive_enabled() -> bool:
 
 
 def initial_archive_deadline() -> float:
-    """Max seconds the (inline, pre-setup) initial snapshot may delay startup.
+    """Hard ceiling (seconds) on how long the inline, pre-setup initial snapshot
+    may delay conversation startup.
 
-    Must cover the agent-server's tar.gz build for a freshly-cloned repo or larger
-    repos are always cancelled and silently never captured — the exact workspace
-    starting-state this snapshot exists to record. A fresh clone has no agent
-    changes yet, so its tar.gz is just the repo tree (much cheaper than the
-    final-state ~660s git build), but a large monorepo can still exceed a minute;
-    default high enough to capture it. ``wait_for`` only charges the time actually
-    spent, so a fast snapshot adds no latency — this is a ceiling, not a fixed
-    cost. A genuine overrun is logged (not silent) and startup proceeds.
+    The snapshot is awaited before setup.sh so it captures the repo exactly as
+    cloned, with no concurrent mutation. ``wait_for`` only charges the time
+    actually spent, so a fast snapshot adds no latency; this caps the worst case
+    (a large repo or a hung endpoint) so it can never dominate startup. An overrun
+    is logged and startup proceeds without the snapshot. A fresh clone's tar.gz is
+    just the repo tree, so the default comfortably covers typical repos; raise it
+    for a very large monorepo.
     """
-    return _float_env('RUNTIME_FILE_ARCHIVE_INITIAL_DEADLINE', 300.0)
+    return _float_env('RUNTIME_FILE_ARCHIVE_INITIAL_DEADLINE', 120.0)
 
 
 def _initial_archive_format() -> str:

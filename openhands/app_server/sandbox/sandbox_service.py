@@ -207,14 +207,16 @@ class SandboxService(ABC):
         self,
         sandbox_id: str,
         conversation_id: str | None = None,
+        workspace_path: str | None = None,
     ) -> bool:
         """Archive one conversation's workspace; return whether delete may proceed.
 
         Default no-op (returns True) for backends that do not archive; overridden
         by RemoteSandboxService. The conversation-delete finalizer calls this
         before ``delete_sandbox`` so the workspace is captured while the runtime is
-        still up. Returns False only when archiving is REQUIRED and failed, so the
-        caller leaves the sandbox up for a later (idle-reap) capture.
+        still up. ``workspace_path`` is the path pinned at creation. Returns False
+        only when archiving is REQUIRED and failed, so the caller leaves the
+        sandbox up for a later (idle-reap) capture.
         """
         return True
 

@@ -28,6 +28,7 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     ACP_SERVER_TAG_KEY,
+    ARCHIVE_WORKSPACE_PATH_TAG_KEY,
     AgentType,
     AppConversation,
     AppConversationInfo,
@@ -489,6 +490,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             # the same agent back through the AgentBase discriminator.
             request_agent = start_conversation_request.agent
             tags: dict[str, str] = {}
+            # Pin where the workspace was actually created so the delete-time
+            # archive captures the right directory without re-deriving the path
+            # from settings (e.g. grouping) that may change before delete.
+            tags[ARCHIVE_WORKSPACE_PATH_TAG_KEY] = working_dir
             if request_agent.agent_kind == 'acp':
                 llm_model = request_agent.acp_model
                 agent_kind = 'acp'

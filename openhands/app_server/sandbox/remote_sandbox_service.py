@@ -49,9 +49,12 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
     resolve_sandbox_spec,
 )
 from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.settings.settings_models import SandboxGroupingStrategy
+from openhands.app_server.settings.settings_models import grouped_workspace_dir
 from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext
+from openhands.app_server.utils.docker_utils import (
+    replace_localhost_hostname_for_docker,
+)
 from openhands.app_server.utils.sql_utils import Base, UtcDateTime
 from openhands.sdk.utils.paging import page_iterator
 
@@ -587,23 +590,26 @@ class RemoteSandboxService(SandboxService):
         (router -> 503) and keeps the row + runtime for a retry — so a live sandbox
         is never reported as 404.
 
-        Security: the session_api_key_hash is dropped atomically with the row
-        delete (it lives on the row), NOT up front — a sandbox kept alive on a
-        transient error stays fully functional (its webhook callbacks, VSCode
-        token, and user reconnects keep authenticating) instead of 401ing until
-        the idle reaper pauses it.
+        Security: the session_api_key_hash is invalidated UP FRONT (mirroring
+        ``pause_sandbox``) so a delete — commonly a revoke of a leaked key —
+        kills it promptly. On a transient stop failure the row is kept for retry,
+        but the key invalidation is committed first so the caller's rollback
+        cannot resurrect the just-revoked key.
         """
+        had_key = False
         try:
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
             if not stored_sandbox:
                 return False
+            # Security: drop the key now, before the (fallible) runtime stop.
+            had_key = stored_sandbox.session_api_key_hash is not None
+            stored_sandbox.session_api_key_hash = None
             try:
                 runtime_data = await self._get_runtime(sandbox_id)
             except httpx.HTTPStatusError as e:
                 if e.response.status_code != 404:
                     raise
-                # Runtime already gone: nothing to stop. Delete the record (which
-                # drops its session_api_key_hash) so it is not orphaned.
+                # Runtime already gone: nothing to stop. Delete the orphaned row.
                 _logger.info(
                     f'Runtime for sandbox {sandbox_id} already gone (404); '
                     'deleting record'
@@ -618,62 +624,88 @@ class RemoteSandboxService(SandboxService):
             )
             if response.status_code != 404:
                 response.raise_for_status()
-            # Row deleted last (taking its session_api_key_hash with it) so a stop
-            # failure above leaves the sandbox — and its still-valid key — intact
-            # for retry. The key dies here, atomically with the row, only once the
-            # delete actually succeeds.
             await self.db_session.delete(stored_sandbox)
             return True
         except httpx.HTTPError as e:
-            # Transient runtime lookup/stop failure: the sandbox still exists, so
-            # keep the row + runtime and signal retryable (503) — never a 404.
+            # Transient runtime lookup/stop failure: keep the row + runtime and
+            # signal retryable (503) — never a 404. Persist the key invalidation
+            # now: the caller rolls back on this raise, which would otherwise
+            # restore the hash and leave a just-revoked key valid.
             _logger.error(f'Error deleting sandbox {sandbox_id}: {e}')
+            if had_key:
+                await self.db_session.commit()
             raise SandboxDeleteRetryError(
                 f'Could not complete delete for sandbox {sandbox_id}: {e}'
             ) from e
 
-    async def _get_archive_grouping_strategy(self) -> SandboxGroupingStrategy:
-        """Sandbox grouping strategy for archive path resolution.
+    async def _resolve_archive_path(
+        self,
+        stored_sandbox: StoredRemoteSandbox,
+        conversation_id: str | None,
+        workspace_path: str | None,
+    ) -> str:
+        """Path to archive: the value pinned at conversation creation if present,
+        else rebuilt from the SAME base the clone used (the sandbox spec's
+        ``working_dir``) plus the grouping nesting.
 
-        Mirrors the conversation-start layout
-        (live_status _get_sandbox_grouping_strategy). Propagates on failure so the
-        caller fails the archive rather than silently writing to the wrong
-        (ungrouped) path and losing/clobbering the workspace.
+        Pre-pinning conversations have no pinned path; the legacy fallback re-reads
+        the live grouping strategy, which can disagree with creation if the user
+        toggled it — but a resulting 404 no longer silently tears the sandbox down
+        under REQUIRED (it blocks for the idle reap). Raises if the layout cannot
+        be resolved, so the caller never archives to the wrong path.
         """
-        user_info = await self.user_context.get_user_info()
-        return user_info.sandbox_grouping_strategy
+        if workspace_path:
+            return workspace_path
+        # For cloud conversations the sandbox id is the conversation_id.hex.
+        conversation_key = conversation_id or stored_sandbox.id
+        sandbox_spec = await self.sandbox_spec_service.get_sandbox_spec(
+            stored_sandbox.sandbox_spec_id
+        )
+        if sandbox_spec is None:
+            raise SandboxError(
+                f'No sandbox spec {stored_sandbox.sandbox_spec_id} for archive'
+            )
+        grouping = (await self.user_context.get_user_info()).sandbox_grouping_strategy
+        return grouped_workspace_dir(
+            sandbox_spec.working_dir, grouping, conversation_key
+        )
 
     async def _archive_workspace(
         self,
-        sandbox_id: str,
+        stored_sandbox: StoredRemoteSandbox,
         conversation_id: str | None,
         runtime_data: dict,
+        workspace_path: str | None,
     ) -> bool:
         """Archive one workspace via the in-pod agent-server; return may-proceed.
 
         Returns True when the workspace was captured, when there was nothing to
         capture, or when archiving failed but is not REQUIRED. Returns False only
-        when archiving is REQUIRED and hit a retryable failure (the caller decides
-        whether to block + retry). Never raises.
+        when archiving is REQUIRED and could not confirm a capture (the caller
+        decides whether to block + retry). Never raises.
         """
         try:
-            # The grouping strategy decides the (possibly relocated) workspace
-            # repo path. The sandbox id is the conversation_id.hex for cloud
-            # conversations.
-            grouping_strategy = await self._get_archive_grouping_strategy()
+            archive_path = await self._resolve_archive_path(
+                stored_sandbox, conversation_id, workspace_path
+            )
+            # The runtime url is raw (localhost in Docker/local); transform it the
+            # same way every other agent-server URL resolution does.
+            runtime = dict(runtime_data)
+            url = runtime.get('url')
+            if url:
+                runtime['url'] = replace_localhost_hostname_for_docker(url)
             return await workspace_archive.archive_workspace(
                 self.httpx_client,
-                runtime_data,
-                sandbox_id,
+                runtime,
+                stored_sandbox.id,
+                archive_path=archive_path,
                 conversation_id=conversation_id,
-                grouping_strategy=grouping_strategy,
             )
         except Exception:
             # Could not resolve the workspace layout: never archive to the wrong
-            # (ungrouped) path. Honor REQUIRED (block + retry) vs best-effort
-            # (proceed without a capture).
+            # path. Honor REQUIRED (block + retry) vs best-effort (proceed).
             _logger.exception(
-                'Could not resolve grouping for archive of %s', sandbox_id
+                'Could not resolve archive path for %s', stored_sandbox.id
             )
             return not workspace_archive.archive_required()
 
@@ -681,6 +713,7 @@ class RemoteSandboxService(SandboxService):
         self,
         sandbox_id: str,
         conversation_id: str | None = None,
+        workspace_path: str | None = None,
     ) -> bool:
         """Archive ONE conversation's workspace; return whether delete may proceed.
 
@@ -691,12 +724,15 @@ class RemoteSandboxService(SandboxService):
         repo, and means no grouped conversation's work is lost when a sibling later
         triggers the sandbox delete.
 
+        ``workspace_path`` is the path pinned at conversation creation; when given
+        the capture uses it verbatim instead of re-deriving the layout.
+
         Returns True when the workspace was captured, when there was nothing to
         capture (runtime already gone, or no repo at the path), or when archiving
         failed but is not REQUIRED. Returns False only when archiving is REQUIRED
-        and hit a retryable failure, so the finalizer keeps the sandbox + running
-        runtime for the runtime-api idle reap (the durability backstop). Never
-        raises. No-op (returns True) unless archiving is enabled.
+        and could not confirm a capture, so the finalizer keeps the sandbox +
+        running runtime for the runtime-api idle reap (the durability backstop).
+        Never raises. No-op (returns True) unless archiving is enabled.
         """
         if not workspace_archive.archive_enabled():
             return True
@@ -725,7 +761,7 @@ class RemoteSandboxService(SandboxService):
             )
             return not workspace_archive.archive_required()
         archived = await self._archive_workspace(
-            sandbox_id, conversation_id, runtime_data
+            stored_sandbox, conversation_id, runtime_data, workspace_path
         )
         if not archived:
             _logger.warning(

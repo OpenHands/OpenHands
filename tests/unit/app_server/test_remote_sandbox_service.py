@@ -800,13 +800,13 @@ class TestSandboxLifecycle:
         remote_sandbox_service.db_session.delete.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_delete_sandbox_transient_error_preserves_session_key(
+    async def test_delete_sandbox_transient_error_invalidates_session_key(
         self, remote_sandbox_service
     ):
-        """A transient runtime error keeps the row + running runtime for retry and
-        leaves the session key VALID — the live sandbox must keep serving its
-        webhooks / VSCode / reconnects, so the key is only dropped (with the row)
-        once the delete actually succeeds, never up front."""
+        """A transient runtime error keeps the row + running runtime for retry, but
+        the session key is invalidated UP FRONT and committed — a delete is often a
+        revoke of a leaked key, so the key must die promptly and the caller's
+        rollback on the raised error must not be able to resurrect it."""
         stored_sandbox = create_stored_sandbox(session_api_key_hash='live-hash')
 
         remote_sandbox_service._get_stored_sandbox = AsyncMock(
@@ -820,16 +820,16 @@ class TestSandboxLifecycle:
             )
         )
         remote_sandbox_service.db_session.delete = AsyncMock()
-        remote_sandbox_service.db_session.add = MagicMock()
         remote_sandbox_service.db_session.commit = AsyncMock()
 
         with pytest.raises(SandboxDeleteRetryError):
             await remote_sandbox_service.delete_sandbox('test-sandbox-123')
 
-        # Row kept for retry, key untouched (no clear, no commit of a cleared key).
+        # Row kept for retry, but the key is dead and that has been persisted so a
+        # rollback cannot bring it back.
         remote_sandbox_service.db_session.delete.assert_not_called()
-        assert stored_sandbox.session_api_key_hash == 'live-hash'
-        remote_sandbox_service.db_session.commit.assert_not_awaited()
+        assert stored_sandbox.session_api_key_hash is None
+        remote_sandbox_service.db_session.commit.assert_awaited_once()
 
 
 class TestSandboxSearch:
@@ -1950,9 +1950,6 @@ class TestArchiveConversationWorkspace:
         )
         remote_sandbox_service.db_session.delete = AsyncMock()
         remote_sandbox_service.httpx_client.request = AsyncMock()
-        remote_sandbox_service._get_archive_grouping_strategy = AsyncMock(
-            return_value=SandboxGroupingStrategy.NO_GROUPING
-        )
 
         with (
             patch(
@@ -1980,9 +1977,6 @@ class TestArchiveConversationWorkspace:
         remote_sandbox_service._get_stored_sandbox = AsyncMock(return_value=stored)
         remote_sandbox_service._get_runtime = AsyncMock(
             return_value=create_runtime_data()
-        )
-        remote_sandbox_service._get_archive_grouping_strategy = AsyncMock(
-            return_value=SandboxGroupingStrategy.NO_GROUPING
         )
 
         with (
@@ -2022,6 +2016,78 @@ class TestArchiveConversationWorkspace:
             )
         assert ok is True
 
+    @pytest.mark.asyncio
+    async def test_pinned_path_forwarded_to_archive(self, remote_sandbox_service):
+        """A pinned workspace_path is forwarded to archive_workspace verbatim and
+        no grouping/spec re-derivation happens."""
+        stored = create_stored_sandbox()
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(return_value=stored)
+        remote_sandbox_service._get_runtime = AsyncMock(
+            return_value=create_runtime_data()
+        )
+        with (
+            patch(
+                'openhands.app_server.sandbox.workspace_archive.archive_enabled',
+                return_value=True,
+            ),
+            patch(
+                'openhands.app_server.sandbox.workspace_archive.archive_workspace',
+                new=AsyncMock(return_value=True),
+            ) as mock_archive,
+        ):
+            ok = await remote_sandbox_service.archive_conversation_workspace(
+                'test-sandbox-123',
+                conversation_id='conv-1',
+                workspace_path='/home/openhands/workspace/conv-1',
+            )
+        assert ok is True
+        _, kwargs = mock_archive.call_args
+        assert kwargs['archive_path'] == '/home/openhands/workspace/conv-1'
+        remote_sandbox_service.sandbox_spec_service.get_sandbox_spec.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_resolve_archive_path_uses_pinned(self, remote_sandbox_service):
+        """A pinned path is returned verbatim — no spec/settings lookup, so a
+        grouping toggle since creation can never misroute the capture."""
+        stored = create_stored_sandbox()
+        path = await remote_sandbox_service._resolve_archive_path(
+            stored, 'conv-1', '/home/openhands/workspace/conv-1'
+        )
+        assert path == '/home/openhands/workspace/conv-1'
+        remote_sandbox_service.sandbox_spec_service.get_sandbox_spec.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_resolve_archive_path_legacy_grouped(self, remote_sandbox_service):
+        """No pinned path (pre-pinning conversation): rebuilt from the sandbox
+        spec's working_dir nested under the conversation id."""
+        stored = create_stored_sandbox()
+        remote_sandbox_service.user_context.get_user_info = AsyncMock(
+            return_value=MagicMock(
+                sandbox_grouping_strategy=SandboxGroupingStrategy.GROUP_BY_NEWEST
+            )
+        )
+        path = await remote_sandbox_service._resolve_archive_path(
+            stored, 'deadbeef', None
+        )
+        # mock_sandbox_spec_service fixture pins working_dir='/workspace/project'.
+        assert path == '/workspace/project/deadbeef'
+
+    @pytest.mark.asyncio
+    async def test_resolve_archive_path_legacy_no_grouping(
+        self, remote_sandbox_service
+    ):
+        """NO_GROUPING fallback keeps the bare spec working_dir."""
+        stored = create_stored_sandbox()
+        remote_sandbox_service.user_context.get_user_info = AsyncMock(
+            return_value=MagicMock(
+                sandbox_grouping_strategy=SandboxGroupingStrategy.NO_GROUPING
+            )
+        )
+        path = await remote_sandbox_service._resolve_archive_path(
+            stored, 'deadbeef', None
+        )
+        assert path == '/workspace/project'
+
 
 class TestArchiveWorkspaceHelper:
     """Unit tests for the workspace_archive helper."""
@@ -2054,11 +2120,12 @@ class TestArchiveWorkspaceHelper:
                 client,
                 create_runtime_data(),
                 'sandbox-1',
+                archive_path='/workspace/project',
                 conversation_id='conv-1',
             )
 
         assert ok is True
-        # session key forwarded; default path is the git repo, format passed.
+        # session key forwarded; the given archive_path is used, format passed.
         _, kwargs = client.stream.call_args
         assert kwargs['headers']['X-Session-API-Key'] == 'test-session-key'
         assert kwargs['params'] == {
@@ -2094,7 +2161,10 @@ class TestArchiveWorkspaceHelper:
             workspace_archive, '_get_archive_file_store', return_value=store
         ):
             ok = await workspace_archive.archive_workspace(
-                client, create_runtime_data(), 'sandbox-1'
+                client,
+                create_runtime_data(),
+                'sandbox-1',
+                archive_path='/workspace/project',
             )
 
         assert ok is True
@@ -2115,7 +2185,10 @@ class TestArchiveWorkspaceHelper:
         client = _stream_client(_make_stream_response(500))
 
         ok = await workspace_archive.archive_workspace(
-            client, create_runtime_data(), 'sandbox-1'
+            client,
+            create_runtime_data(),
+            'sandbox-1',
+            archive_path='/workspace/project',
         )
         # Not required -> best-effort -> deletion may proceed.
         assert ok is True
@@ -2130,7 +2203,10 @@ class TestArchiveWorkspaceHelper:
         client = _stream_client(_make_stream_response(500))
 
         ok = await workspace_archive.archive_workspace(
-            client, create_runtime_data(), 'sandbox-1'
+            client,
+            create_runtime_data(),
+            'sandbox-1',
+            archive_path='/workspace/project',
         )
         # Required -> a failure blocks deletion.
         assert ok is False
@@ -2144,7 +2220,10 @@ class TestArchiveWorkspaceHelper:
         client = AsyncMock()
 
         ok = await workspace_archive.archive_workspace(
-            client, create_runtime_data(url=''), 'sandbox-1'
+            client,
+            create_runtime_data(url=''),
+            'sandbox-1',
+            archive_path='/workspace/project',
         )
         assert ok is True
         client.stream.assert_not_called()
@@ -2162,14 +2241,19 @@ class TestArchiveWorkspaceHelper:
         client = _stream_client(_make_stream_response(400))
 
         ok = await workspace_archive.archive_workspace(
-            client, create_runtime_data(), 'sandbox-1'
+            client,
+            create_runtime_data(),
+            'sandbox-1',
+            archive_path='/workspace/project',
         )
         # Permanent 4xx -> nothing to lose -> deletion proceeds despite REQUIRED.
         assert ok is True
 
     @pytest.mark.asyncio
-    async def test_archive_404_required_allows_delete(self, monkeypatch):
-        """A 404 (directory not found) is also permanent and never blocks."""
+    async def test_archive_404_required_blocks_delete(self, monkeypatch):
+        """A 404 (path missing) is the misrouted-path symptom, NOT a confirmed-empty
+        workspace: under REQUIRED it must block the delete (keep for the idle reap)
+        rather than silently tearing the sandbox down uncaptured."""
         from openhands.app_server.sandbox import workspace_archive
 
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
@@ -2178,9 +2262,12 @@ class TestArchiveWorkspaceHelper:
         client = _stream_client(_make_stream_response(404))
 
         ok = await workspace_archive.archive_workspace(
-            client, create_runtime_data(), 'sandbox-1'
+            client,
+            create_runtime_data(),
+            'sandbox-1',
+            archive_path='/workspace/project',
         )
-        assert ok is True
+        assert ok is False
 
     @pytest.mark.asyncio
     async def test_archive_500_required_blocks_delete(self, monkeypatch):
@@ -2194,7 +2281,10 @@ class TestArchiveWorkspaceHelper:
         client = _stream_client(_make_stream_response(500))
 
         ok = await workspace_archive.archive_workspace(
-            client, create_runtime_data(), 'sandbox-1'
+            client,
+            create_runtime_data(),
+            'sandbox-1',
+            archive_path='/workspace/project',
         )
         assert ok is False
 
@@ -2211,15 +2301,18 @@ class TestArchiveWorkspaceHelper:
         client = _stream_client(_make_stream_response(422))
 
         ok = await workspace_archive.archive_workspace(
-            client, create_runtime_data(), 'sandbox-1'
+            client,
+            create_runtime_data(),
+            'sandbox-1',
+            archive_path='/workspace/project',
         )
         assert ok is False
 
     @pytest.mark.asyncio
-    async def test_archive_401_required_proceeds(self, monkeypatch):
-        """A 401 means the runtime's session key is rejected — a call-site bug,
-        not a transient blip. Retrying the same key can't fix it, so it is
-        permanent: the delete proceeds even under REQUIRED rather than wedging."""
+    async def test_archive_401_required_blocks_delete(self, monkeypatch):
+        """A 401 (session key rejected) means the capture did NOT happen and is not
+        a confirmed-empty workspace, so under REQUIRED it must block the delete
+        (keep for the idle reap) rather than tear the sandbox down uncaptured."""
         from openhands.app_server.sandbox import workspace_archive
 
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
@@ -2228,9 +2321,12 @@ class TestArchiveWorkspaceHelper:
         client = _stream_client(_make_stream_response(401))
 
         ok = await workspace_archive.archive_workspace(
-            client, create_runtime_data(), 'sandbox-1'
+            client,
+            create_runtime_data(),
+            'sandbox-1',
+            archive_path='/workspace/project',
         )
-        assert ok is True
+        assert ok is False
 
     @pytest.mark.asyncio
     async def test_archive_unsupported_format_proceeds_and_skips_request(
@@ -2250,7 +2346,10 @@ class TestArchiveWorkspaceHelper:
         client = AsyncMock()
 
         ok = await workspace_archive.archive_workspace(
-            client, create_runtime_data(), 'sandbox-1'
+            client,
+            create_runtime_data(),
+            'sandbox-1',
+            archive_path='/workspace/project',
         )
         assert ok is True
         client.stream.assert_not_called()
@@ -2266,7 +2365,10 @@ class TestArchiveWorkspaceHelper:
         client = AsyncMock()
 
         ok = await workspace_archive.archive_workspace(
-            client, create_runtime_data(), 'sandbox-1'
+            client,
+            create_runtime_data(),
+            'sandbox-1',
+            archive_path='/workspace/project',
         )
         assert ok is True
         client.stream.assert_not_called()
@@ -2284,19 +2386,20 @@ class TestArchiveWorkspaceHelper:
         client = AsyncMock()
 
         ok = await workspace_archive.archive_workspace(
-            client, create_runtime_data(), 'sandbox-1'
+            client,
+            create_runtime_data(),
+            'sandbox-1',
+            archive_path='/workspace/project',
         )
         assert ok is True
         client.stream.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_archive_grouped_path_includes_conversation_id(self, monkeypatch):
-        """Under sandbox grouping the archived repo path is relocated to
-        {base}/{conversation_id.hex}; the default path is unchanged (BUG 4)."""
+    async def test_archive_uses_given_path_verbatim(self, monkeypatch):
+        """archive_workspace targets the caller-resolved archive_path exactly (the
+        path was pinned at creation; the grouping nesting is resolved upstream in
+        RemoteSandboxService._resolve_archive_path)."""
         from openhands.app_server.sandbox import workspace_archive
-        from openhands.app_server.settings.settings_models import (
-            SandboxGroupingStrategy,
-        )
 
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'git-delta')
@@ -2305,8 +2408,6 @@ class TestArchiveWorkspaceHelper:
         store = MagicMock()
         writes: dict[str, bytes] = {}
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
-        # Archive blobs are streamed from a tempfile via write_from_path (the OOM
-        # fix); record them too so blob-path assertions still see the .patch/.tar.gz.
         store.write_from_path.side_effect = lambda path, src: writes.__setitem__(
             path, open(src, 'rb').read()
         )
@@ -2318,47 +2419,17 @@ class TestArchiveWorkspaceHelper:
                 client,
                 create_runtime_data(),
                 'sandbox-1',
+                archive_path='/workspace/project/deadbeef',
                 conversation_id='deadbeef',
-                grouping_strategy=SandboxGroupingStrategy.GROUP_BY_NEWEST,
             )
 
         assert ok is True
         _, kwargs = client.stream.call_args
-        # Grouped: repo nested under the conversation id, not the bare base.
         assert kwargs['params']['path'] == '/workspace/project/deadbeef'
         manifest_path = next(p for p in writes if p.endswith('.manifest.json'))
         manifest = json.loads(writes[manifest_path])
         assert manifest['source_path'] == '/workspace/project/deadbeef'
         assert manifest['conversation_id'] == 'deadbeef'
-
-    @pytest.mark.asyncio
-    async def test_archive_no_grouping_path_is_default(self, monkeypatch):
-        """NO_GROUPING (the default) keeps the bare base repo path (BUG 4)."""
-        from openhands.app_server.sandbox import workspace_archive
-        from openhands.app_server.settings.settings_models import (
-            SandboxGroupingStrategy,
-        )
-
-        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
-        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'git-delta')
-
-        client = _stream_client(_make_stream_response(200, b'patch-bytes', {}))
-        store = MagicMock()
-
-        with patch.object(
-            workspace_archive, '_get_archive_file_store', return_value=store
-        ):
-            ok = await workspace_archive.archive_workspace(
-                client,
-                create_runtime_data(),
-                'sandbox-1',
-                conversation_id='deadbeef',
-                grouping_strategy=SandboxGroupingStrategy.NO_GROUPING,
-            )
-
-        assert ok is True
-        _, kwargs = client.stream.call_args
-        assert kwargs['params']['path'] == '/workspace/project'
 
     @pytest.mark.asyncio
     async def test_archive_both_uploads_delta_and_targz(self, monkeypatch):
@@ -2393,6 +2464,7 @@ class TestArchiveWorkspaceHelper:
                 client,
                 create_runtime_data(),
                 'sandbox-1',
+                archive_path='/workspace/project',
                 conversation_id='conv-1',
             )
 
@@ -2438,7 +2510,10 @@ class TestArchiveWorkspaceHelper:
             workspace_archive, '_get_archive_file_store', return_value=store
         ):
             ok = await workspace_archive.archive_workspace(
-                client, create_runtime_data(), 'sandbox-1'
+                client,
+                create_runtime_data(),
+                'sandbox-1',
+                archive_path='/workspace/project',
             )
 
         # tar.gz 500 is retryable + REQUIRED -> block the delete for a retry.
@@ -2562,12 +2637,11 @@ class TestArchiveInitialWorkspaceHelper:
 
 
 class TestDeleteSandboxKeyHandling:
-    """The session_api_key_hash is invalidated atomically with the row delete on a
-    SUCCESSFUL delete, NOT up front. A sandbox kept alive for retry (transient
-    error / REQUIRED archive failure) must keep a working key so its webhook
-    callbacks, VSCode token, and user reconnects don't 401 until it is actually
-    torn down. Backed by a real SQLite session so persistence is provable across a
-    rollback."""
+    """The session_api_key_hash is invalidated UP FRONT on delete (a delete is
+    often a revoke of a leaked key). When a transient error keeps the row for
+    retry, the invalidation is committed first so the DELETE route's rollback
+    cannot resurrect the key. Backed by a real SQLite session so persistence is
+    provable across a rollback."""
 
     @pytest.fixture
     async def async_engine(self):
@@ -2616,7 +2690,7 @@ class TestDeleteSandboxKeyHandling:
         )
 
     @pytest.mark.asyncio
-    async def test_session_key_preserved_when_kept_for_retry(
+    async def test_session_key_invalidated_and_survives_rollback(
         self, service_with_real_db, real_session
     ):
         # Seed a running sandbox with a live session key hash.
@@ -2641,12 +2715,12 @@ class TestDeleteSandboxKeyHandling:
         await real_session.rollback()
         real_session.expire_all()
 
-        # Kept alive for retry: the key must stay VALID so the live sandbox keeps
-        # serving its webhooks / VSCode / reconnects (regression test for the
-        # null-key 401s that the up-front clear used to cause).
+        # Row kept for retry, but the key is DEAD and the rollback could not bring
+        # it back — delete_sandbox committed the invalidation before raising. This
+        # is the security fix: a leaked key is revoked even when the stop fails.
         refreshed = await service_with_real_db._get_stored_sandbox('test-sandbox-123')
         assert refreshed is not None
-        assert refreshed.session_api_key_hash == 'live-hash'
+        assert refreshed.session_api_key_hash is None
 
     @pytest.mark.asyncio
     async def test_session_key_cleared_on_successful_delete(
