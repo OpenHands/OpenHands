@@ -24,7 +24,6 @@ from storage.user_store import UserStore
 
 from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.settings.settings_models import (
-    MarketplaceRegistration,
     Settings,
 )
 from openhands.app_server.settings.settings_store import SettingsStore
@@ -576,7 +575,7 @@ class SaasSettingsStore(SettingsStore):
 
             if org.registered_marketplaces:
                 # Normalize: use 'org' scope for legacy data without scope
-                normalized = []
+                normalized: list[dict[str, Any]] = []
                 for mp in org.registered_marketplaces:
                     if isinstance(mp, dict):
                         # Set scope='org' if missing (backward compatibility)
@@ -585,7 +584,10 @@ class SaasSettingsStore(SettingsStore):
                         # Ensure auto_load defaults to False if missing
                         if 'auto_load' not in mp:
                             mp = {**mp, 'auto_load': False}
-                    normalized.append(mp)
+                        normalized.append(mp)
+                    else:
+                        # Convert MarketplaceRegistration to dict
+                        normalized.append(mp.model_dump())
                 return normalized
             return []
         except Exception as e:
