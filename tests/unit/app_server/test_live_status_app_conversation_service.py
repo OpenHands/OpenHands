@@ -1531,6 +1531,202 @@ class TestLiveStatusAppConversationService:
         self.mock_event_service.search_events.assert_not_called()
         mock_conversation_info.model_dump_json.assert_called_once_with(indent=2)
 
+    async def test_export_conversation_includes_evidence_gate_receipts(self):
+        """Test trajectory export includes reviewer-facing action receipts."""
+        conversation_id = uuid4()
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.model_dump_json = Mock(
+            return_value='{"id": "test", "title": "Test Conversation"}'
+        )
+
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+
+        action_event = Mock(spec=Event)
+        action_event.id = 'action-1'
+        action_event.timestamp = '2026-06-01T00:00:00'
+        action_event.kind = 'ActionEvent'
+        action_event.tool_name = 'execute_bash'
+        action_event.tool_call_id = 'tool-call-1'
+        action_event.security_risk = 'HIGH'
+        action_event.model_dump = Mock(
+            return_value={
+                'id': 'action-1',
+                'timestamp': action_event.timestamp,
+                'kind': 'ActionEvent',
+                'tool_name': action_event.tool_name,
+                'tool_call_id': action_event.tool_call_id,
+                'security_risk': action_event.security_risk,
+            }
+        )
+
+        observation_event = Mock(spec=Event)
+        observation_event.id = 'observation-1'
+        observation_event.kind = 'ObservationEvent'
+        observation_event.action_id = 'action-1'
+        observation_event.tool_call_id = 'tool-call-1'
+        observation_event.model_dump = Mock(
+            return_value={
+                'id': 'observation-1',
+                'kind': 'ObservationEvent',
+                'action_id': 'action-1',
+                'tool_call_id': 'tool-call-1',
+            }
+        )
+
+        self.mock_event_service.count_events = AsyncMock(return_value=2)
+        self.mock_event_service.iter_events_for_export = Mock(
+            return_value=_async_iter([action_event, observation_event])
+        )
+
+        result = await self.service.export_conversation(conversation_id)
+
+        with zipfile.ZipFile(io.BytesIO(result), 'r') as zipf:
+            assert 'evidence_gate_receipts.json' in zipf.namelist()
+            receipts = json.loads(
+                zipf.read('evidence_gate_receipts.json').decode('utf-8')
+            )
+
+        assert receipts['schema_version'] == 'openhands.evidence_gate_receipts.v1'
+        assert receipts['conversation_id'] == str(conversation_id)
+        assert receipts['receipts'] == [
+            {
+                'action_id': 'action-1',
+                'action_event_id': 'action-1',
+                'tool_name': 'execute_bash',
+                'tool_call_id': 'tool-call-1',
+                'decision': 'ESCALATE',
+                'decision_source': 'export_projection:security_risk_and_hooks',
+                'reason': 'security_risk:HIGH',
+                'decision_evidence': {
+                    'security_risk': 'HIGH',
+                    'pre_tool_hook_event_ids': [],
+                    'blocked_by_hook_event_ids': [],
+                },
+                'verification': {
+                    'observation_event_ids': ['observation-1'],
+                    'post_tool_hook_event_ids': [],
+                },
+            }
+        ]
+
+    async def test_export_conversation_receipts_include_hook_decisions(self):
+        """Test receipts preserve hook blocks and post-tool verification links."""
+        conversation_id = uuid4()
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.model_dump_json = Mock(return_value='{}')
+
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+
+        blocked_pre_hook = Mock(spec=Event)
+        blocked_pre_hook.id = 'hook-block-1'
+        blocked_pre_hook.kind = 'HookExecutionEvent'
+        blocked_pre_hook.model_dump = Mock(
+            return_value={
+                'id': 'hook-block-1',
+                'kind': 'HookExecutionEvent',
+                'hook_event_type': 'PreToolUse',
+                'action_id': 'blocked-action',
+                'blocked': True,
+                'reason': 'outside declared scope',
+            }
+        )
+
+        blocked_action = Mock(spec=Event)
+        blocked_action.id = 'blocked-action'
+        blocked_action.kind = 'ActionEvent'
+        blocked_action.model_dump = Mock(
+            return_value={
+                'id': 'blocked-action',
+                'kind': 'ActionEvent',
+                'tool_name': 'str_replace_editor',
+                'tool_call_id': 'blocked-call',
+                'security_risk': 'LOW',
+            }
+        )
+
+        allowed_action = Mock(spec=Event)
+        allowed_action.id = 'allowed-action'
+        allowed_action.kind = 'ActionEvent'
+        allowed_action.model_dump = Mock(
+            return_value={
+                'id': 'allowed-action',
+                'kind': 'ActionEvent',
+                'tool_name': 'execute_bash',
+                'tool_call_id': 'allowed-call',
+                'security_risk': 'LOW',
+            }
+        )
+
+        allowed_observation = Mock(spec=Event)
+        allowed_observation.id = 'allowed-observation'
+        allowed_observation.kind = 'ObservationEvent'
+        allowed_observation.model_dump = Mock(
+            return_value={
+                'id': 'allowed-observation',
+                'kind': 'ObservationEvent',
+                'action_id': 'allowed-action',
+                'tool_call_id': 'allowed-call',
+            }
+        )
+
+        allowed_post_hook = Mock(spec=Event)
+        allowed_post_hook.id = 'allowed-post-hook'
+        allowed_post_hook.kind = 'HookExecutionEvent'
+        allowed_post_hook.model_dump = Mock(
+            return_value={
+                'id': 'allowed-post-hook',
+                'kind': 'HookExecutionEvent',
+                'hook_event_type': 'PostToolUse',
+                'action_id': 'allowed-action',
+                'blocked': False,
+            }
+        )
+
+        self.mock_event_service.count_events = AsyncMock(return_value=5)
+        self.mock_event_service.iter_events_for_export = Mock(
+            return_value=_async_iter(
+                [
+                    blocked_pre_hook,
+                    blocked_action,
+                    allowed_action,
+                    allowed_observation,
+                    allowed_post_hook,
+                ]
+            )
+        )
+
+        result = await self.service.export_conversation(conversation_id)
+
+        with zipfile.ZipFile(io.BytesIO(result), 'r') as zipf:
+            receipts = json.loads(
+                zipf.read('evidence_gate_receipts.json').decode('utf-8')
+            )['receipts']
+
+        receipts_by_action = {receipt['action_id']: receipt for receipt in receipts}
+        assert receipts_by_action['blocked-action']['decision'] == 'BLOCK'
+        assert (
+            receipts_by_action['blocked-action']['reason'] == 'outside declared scope'
+        )
+        assert receipts_by_action['blocked-action']['decision_evidence'][
+            'pre_tool_hook_event_ids'
+        ] == ['hook-block-1']
+        assert receipts_by_action['blocked-action']['decision_evidence'][
+            'blocked_by_hook_event_ids'
+        ] == ['hook-block-1']
+
+        assert receipts_by_action['allowed-action']['decision'] == 'ALLOW'
+        assert receipts_by_action['allowed-action']['reason'] == 'security_risk:LOW'
+        assert receipts_by_action['allowed-action']['verification'] == {
+            'observation_event_ids': ['allowed-observation'],
+            'post_tool_hook_event_ids': ['allowed-post-hook'],
+        }
+
     async def test_export_conversation_writes_utf8_when_platform_default_cannot_encode(
         self,
     ):

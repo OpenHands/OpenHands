@@ -142,6 +142,117 @@ _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
 
 _EXPORT_LOCK_KEY_PREFIX = 'app_conversation_export'
+_EVIDENCE_GATE_RECEIPTS_SCHEMA_VERSION = 'openhands.evidence_gate_receipts.v1'
+
+
+def _new_evidence_gate_context() -> dict[str, Any]:
+    return {
+        'pre_tool_hook_event_ids': [],
+        'blocked_by_hook_event_ids': [],
+        'blocked_reasons': [],
+        'observation_event_ids': [],
+        'post_tool_hook_event_ids': [],
+    }
+
+
+def _security_risk_value(value: Any) -> str:
+    if value is None:
+        return 'UNKNOWN'
+    return str(getattr(value, 'value', value))
+
+
+def _record_event_for_evidence_gate_receipts(
+    contexts: dict[str, dict[str, Any]], event_data: Mapping[str, Any]
+) -> None:
+    kind = event_data.get('kind')
+    if kind == 'ActionEvent':
+        action_id = str(event_data.get('id') or '')
+        if not action_id:
+            return
+        context = contexts.setdefault(action_id, _new_evidence_gate_context())
+        context['action_event_id'] = action_id
+        context['tool_name'] = event_data.get('tool_name')
+        context['tool_call_id'] = event_data.get('tool_call_id')
+        context['security_risk'] = _security_risk_value(event_data.get('security_risk'))
+        return
+
+    action_id_value = event_data.get('action_id')
+    if not action_id_value:
+        return
+
+    action_id = str(action_id_value)
+    context = contexts.setdefault(action_id, _new_evidence_gate_context())
+    event_id = str(event_data.get('id') or '')
+    if not event_id:
+        return
+
+    if kind == 'ObservationEvent':
+        context['observation_event_ids'].append(event_id)
+    elif kind == 'HookExecutionEvent':
+        hook_event_type = event_data.get('hook_event_type')
+        if hook_event_type == 'PreToolUse':
+            context['pre_tool_hook_event_ids'].append(event_id)
+            if event_data.get('blocked'):
+                context['blocked_by_hook_event_ids'].append(event_id)
+                if event_data.get('reason'):
+                    context['blocked_reasons'].append(str(event_data['reason']))
+        elif hook_event_type == 'PostToolUse':
+            context['post_tool_hook_event_ids'].append(event_id)
+
+
+def _evidence_gate_decision(context: Mapping[str, Any]) -> tuple[str, str]:
+    blocked_reasons = context.get('blocked_reasons') or []
+    if context.get('blocked_by_hook_event_ids'):
+        reason = blocked_reasons[0] if blocked_reasons else 'pre_tool_hook_blocked'
+        return 'BLOCK', reason
+
+    security_risk = _security_risk_value(context.get('security_risk'))
+    if security_risk == 'HIGH':
+        return 'ESCALATE', f'security_risk:{security_risk}'
+
+    return 'ALLOW', f'security_risk:{security_risk}'
+
+
+def _build_evidence_gate_receipts(
+    conversation_id: UUID, contexts: Mapping[str, Mapping[str, Any]]
+) -> dict[str, Any]:
+    receipts = []
+    for action_id, context in contexts.items():
+        if not context.get('action_event_id'):
+            continue
+        decision, reason = _evidence_gate_decision(context)
+        receipts.append(
+            {
+                'action_id': action_id,
+                'action_event_id': context['action_event_id'],
+                'tool_name': context.get('tool_name'),
+                'tool_call_id': context.get('tool_call_id'),
+                'decision': decision,
+                'decision_source': 'export_projection:security_risk_and_hooks',
+                'reason': reason,
+                'decision_evidence': {
+                    'security_risk': _security_risk_value(context.get('security_risk')),
+                    'pre_tool_hook_event_ids': context.get(
+                        'pre_tool_hook_event_ids', []
+                    ),
+                    'blocked_by_hook_event_ids': context.get(
+                        'blocked_by_hook_event_ids', []
+                    ),
+                },
+                'verification': {
+                    'observation_event_ids': context.get('observation_event_ids', []),
+                    'post_tool_hook_event_ids': context.get(
+                        'post_tool_hook_event_ids', []
+                    ),
+                },
+            }
+        )
+
+    return {
+        'schema_version': _EVIDENCE_GATE_RECEIPTS_SCHEMA_VERSION,
+        'conversation_id': str(conversation_id),
+        'receipts': receipts,
+    }
 
 
 class _StreamingZipBuffer(io.RawIOBase):
@@ -2361,6 +2472,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         self, conversation_id: UUID, conversation_info: AppConversationInfo
     ) -> AsyncGenerator[bytes, None]:
         zip_buffer = _StreamingZipBuffer()
+        evidence_gate_contexts: dict[str, dict[str, Any]] = {}
         with zipfile.ZipFile(
             cast(BinaryIO, zip_buffer), 'w', zipfile.ZIP_DEFLATED
         ) as zipf:
@@ -2374,11 +2486,24 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             ):
                 event_filename = f'event_{i:06d}_{event.id}.json'
                 event_data = event.model_dump(mode='json')
+                _record_event_for_evidence_gate_receipts(
+                    evidence_gate_contexts, event_data
+                )
                 event_json = json.dumps(event_data, indent=2)
                 zipf.writestr(event_filename, event_json)
                 for chunk in zip_buffer.drain():
                     yield chunk
                 i += 1
+
+            evidence_gate_receipts = _build_evidence_gate_receipts(
+                conversation_id, evidence_gate_contexts
+            )
+            zipf.writestr(
+                'evidence_gate_receipts.json',
+                json.dumps(evidence_gate_receipts, indent=2),
+            )
+            for chunk in zip_buffer.drain():
+                yield chunk
 
         for chunk in zip_buffer.drain():
             yield chunk
