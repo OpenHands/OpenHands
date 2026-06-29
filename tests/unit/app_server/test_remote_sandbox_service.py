@@ -2563,10 +2563,11 @@ class TestArchiveInitialWorkspaceHelper:
             'format': 'tar.gz',
             'use_default_excludes': 'false',
         }
-        # Archive nests under /initial/ so it can never collide with the final
-        # capture (which writes to {prefix}/{sandbox_id}/{ts}).
+        # Keyed by conversation and nested under /initial/ so it can never collide
+        # with a sibling or with this conversation's final capture (which writes to
+        # {prefix}/{sandbox_id}/{conversation_key}/{ts}).
         archive_path = next(p for p in writes if p.endswith('.tar.gz'))
-        assert '/sandbox-1/initial/' in archive_path
+        assert '/sandbox-1/conv-1/initial/' in archive_path
         manifest_path = next(p for p in writes if p.endswith('.manifest.json'))
         # Shared contract: manifest = blob + '.manifest.json' (keeps the suffix).
         assert manifest_path == archive_path + '.manifest.json'
@@ -2576,6 +2577,96 @@ class TestArchiveInitialWorkspaceHelper:
         assert manifest['conversation_id'] == 'conv-1'
         assert manifest['format'] == 'tar.gz'
         assert manifest['source_path'] == '/workspace/project/repo'
+
+    @pytest.mark.asyncio
+    async def test_archive_sibling_conversations_distinct_keys(self, monkeypatch):
+        """Two sibling conversations on the SAME grouped sandbox, captured in the
+        same second, must land at distinct blob keys: the conversation id is in the
+        object path, not just the manifest body (regression — same-second overwrite
+        silently dropped one conversation's archive)."""
+        from datetime import datetime, timezone
+
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'git-delta')
+        # Pin the timestamp so both captures compute the SAME {ts}; only the
+        # conversation segment can keep them apart.
+        fixed = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        monkeypatch.setattr(workspace_archive, 'utc_now', lambda: fixed)
+
+        writes: dict[str, bytes] = {}
+        store = MagicMock()
+        store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
+        store.write_from_path.side_effect = lambda path, src: writes.__setitem__(
+            path, open(src, 'rb').read()
+        )
+
+        with patch.object(
+            workspace_archive, '_get_archive_file_store', return_value=store
+        ):
+            for conv in ('conva', 'convb'):
+                client = _stream_client(_make_stream_response(200, b'patch-bytes', {}))
+                ok = await workspace_archive.archive_workspace(
+                    client,
+                    create_runtime_data(),
+                    'shared-sandbox',
+                    archive_path=f'/workspace/project/{conv}',
+                    conversation_id=conv,
+                )
+                assert ok is True
+
+        # Both artifacts AND both manifests survive — nothing overwritten.
+        patch_blobs = [p for p in writes if p.endswith('.patch')]
+        manifests = [p for p in writes if p.endswith('.manifest.json')]
+        assert len(patch_blobs) == 2
+        assert len(manifests) == 2
+        assert any('/shared-sandbox/conva/' in p for p in patch_blobs)
+        assert any('/shared-sandbox/convb/' in p for p in patch_blobs)
+
+    @pytest.mark.asyncio
+    async def test_initial_archive_sibling_conversations_distinct_keys(
+        self, monkeypatch
+    ):
+        """Same same-second path-collision guard for the initial snapshot under
+        grouping: sibling initial captures land at distinct keys."""
+        from datetime import datetime, timezone
+
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', 'true')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        fixed = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        monkeypatch.setattr(workspace_archive, 'utc_now', lambda: fixed)
+
+        writes: dict[str, bytes] = {}
+        store = MagicMock()
+        store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
+        store.write_from_path.side_effect = lambda path, src: writes.__setitem__(
+            path, open(src, 'rb').read()
+        )
+
+        with patch.object(
+            workspace_archive, '_get_archive_file_store', return_value=store
+        ):
+            for conv in ('conva', 'convb'):
+                client = _stream_client(_make_stream_response(200, b'tar-bytes', {}))
+                ok = await workspace_archive.archive_initial_workspace(
+                    client,
+                    agent_server_url='https://sandbox.example.com',
+                    session_api_key='sk',
+                    project_dir=f'/workspace/project/{conv}',
+                    sandbox_id='shared-sandbox',
+                    conversation_id=conv,
+                )
+                assert ok is True
+
+        tarballs = [p for p in writes if p.endswith('.tar.gz')]
+        manifests = [p for p in writes if p.endswith('.manifest.json')]
+        assert len(tarballs) == 2
+        assert len(manifests) == 2
+        assert any('/shared-sandbox/conva/initial/' in p for p in tarballs)
+        assert any('/shared-sandbox/convb/initial/' in p for p in tarballs)
 
     @pytest.mark.asyncio
     async def test_initial_archive_disabled_is_noop(self, monkeypatch):

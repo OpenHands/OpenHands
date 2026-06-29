@@ -590,11 +590,13 @@ class RemoteSandboxService(SandboxService):
         (router -> 503) and keeps the row + runtime for a retry — so a live sandbox
         is never reported as 404.
 
-        Security: the session_api_key_hash is invalidated UP FRONT (mirroring
-        ``pause_sandbox``) so a delete — commonly a revoke of a leaked key —
-        kills it promptly. On a transient stop failure the row is kept for retry,
-        but the key invalidation is committed first so the caller's rollback
-        cannot resurrect the just-revoked key.
+        Security: the session_api_key_hash is invalidated UP FRONT (like
+        ``pause_sandbox`` clears it before pausing) so a delete — commonly a
+        revoke of a leaked key — kills it promptly. This goes further than pause:
+        on a transient stop failure the invalidation is committed before raising,
+        so the caller's rollback cannot resurrect the just-revoked key (pause does
+        not commit, so its clear can still be rolled back). The row is kept for
+        retry.
         """
         had_key = False
         try:

@@ -46,7 +46,9 @@ class SandboxError(OpenHandsError):
 class SandboxDeleteRetryError(OpenHandsError):
     """The sandbox exists but its delete could not complete and was kept for retry.
 
-    Raised when a REQUIRED archive or the runtime /stop hits a transient failure.
+    Raised by ``delete_sandbox`` when the runtime /stop or lookup hits a transient
+    failure. (Archiving never raises — it returns False from
+    ``archive_conversation_workspace`` to signal a REQUIRED capture should block.)
     503 (vs 404) so a client distinguishes "still here, try again" from "not
     found" and keeps retrying.
     """

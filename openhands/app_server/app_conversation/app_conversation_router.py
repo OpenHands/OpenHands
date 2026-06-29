@@ -910,10 +910,13 @@ async def _finalize_sandbox_delete(
                 await sandbox_service.delete_sandbox(sandbox_id)
         await db_session.commit()
     except Exception:
-        # A transient stop/lookup error: do NOT commit a half-done delete, so no
+        # Any failure in the finalizer (a transient stop/lookup error, the count
+        # query, the commit itself): do NOT commit a half-done delete, so no
         # orphaned row is left; the row + running runtime stay for the runtime-api
         # idle reap to capture + reap.
-        logger.exception('Deferred sandbox delete for %s; kept for retry', sandbox_id)
+        logger.exception(
+            'Deferred sandbox cleanup failed for %s; kept for retry', sandbox_id
+        )
         await db_session.rollback()
     finally:
         await asyncio.gather(

@@ -21,6 +21,8 @@ import os
 import tempfile
 from typing import Any
 
+import httpx
+
 from openhands.agent_server.utils import utc_now
 from openhands.app_server.file_store import get_file_store
 from openhands.app_server.file_store.files import FileStore
@@ -175,7 +177,7 @@ def _write_file_to_store(store: FileStore, name: str, path: str) -> None:
 
 
 async def archive_workspace(
-    httpx_client: Any,
+    httpx_client: httpx.AsyncClient,
     runtime: dict[str, Any],
     sandbox_id: str,
     *,
@@ -240,7 +242,10 @@ async def archive_workspace(
     # For cloud conversations the sandbox id is the conversation_id.hex.
     conversation_key = conversation_id or sandbox_id
     ts = utc_now().strftime('%Y%m%dT%H%M%SZ')
-    base_path = f'{_archive_prefix()}/{sandbox_id}/{ts}'
+    # Key by conversation, not just sandbox: under grouping a sandbox is shared by
+    # siblings, and the 1s ts is not unique — without the conversation segment two
+    # sibling captures in the same second overwrite each other at the object level.
+    base_path = f'{_archive_prefix()}/{sandbox_id}/{conversation_key}/{ts}'
 
     # 'both' uploads each format under its own suffix ({ts}.patch + {ts}.tar.gz),
     # each with its own manifest. base_commit only rides the git-delta response
@@ -392,7 +397,7 @@ def _initial_archive_format() -> str:
 
 
 async def archive_initial_workspace(
-    httpx_client: Any,
+    httpx_client: httpx.AsyncClient,
     *,
     agent_server_url: str | None,
     session_api_key: str | None,
@@ -480,9 +485,12 @@ async def archive_initial_workspace(
         store = _get_archive_file_store()
         ts = utc_now().strftime('%Y%m%dT%H%M%SZ')
         conversation_key = conversation_id or sandbox_id
-        # Nest under /initial/ so it never collides with the final capture, which
-        # writes to {prefix}/{sandbox_id}/{ts}.
-        blob_name = f'{_archive_prefix()}/{sandbox_id}/initial/{ts}.{suffix}'
+        # Key by conversation (siblings share a grouped sandbox) and nest under
+        # /initial/ so it never collides with that conversation's final capture
+        # ({prefix}/{sandbox_id}/{conversation_key}/{ts}).
+        blob_name = (
+            f'{_archive_prefix()}/{sandbox_id}/{conversation_key}/initial/{ts}.{suffix}'
+        )
         await asyncio.to_thread(_write_file_to_store, store, blob_name, tmp_path)
         manifest = json.dumps(
             {
