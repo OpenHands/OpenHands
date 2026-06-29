@@ -4963,6 +4963,23 @@
     "uk": "Використання та моніторинг",
     "ca": "Ús i monitoratge"
   },
+  "SETTINGS$NAV_BUDGETS": {
+    "en": "Budgets",
+    "ja": "予算",
+    "zh-CN": "预算",
+    "zh-TW": "預算",
+    "ko-KR": "예산",
+    "no": "Budjetter",
+    "it": "Budget",
+    "pt": "Orçamentos",
+    "es": "Presupuestos",
+    "ar": "الميزانيات",
+    "fr": "Budgets",
+    "tr": "Bütçeler",
+    "de": "Budgets",
+    "uk": "Бюджети",
+    "ca": "Pressupostos"
+  },
   "SETTINGS$NAV_ORG_MEMBERS": {
     "en": "Org Members",
     "ja": "組織メンバー",
