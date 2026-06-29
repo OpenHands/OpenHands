@@ -86,6 +86,7 @@ export function InviteOrganizationMemberModal({
         primaryButtonText={t(I18nKey.BUTTON$CLOSE)}
         onPrimaryClick={() => onClose()}
         onClose={onClose}
+        hideSecondaryButton
       >
         <div className="flex flex-col gap-2" data-testid="invite-links-list">
           {/* With email configured the modal only stays open to show failures;

@@ -1,5 +1,7 @@
 import { openHands } from "../open-hands-axios";
 import {
+  AzureDevOpsWebhookStatus,
+  AzureDevOpsWebhookInstallationResult,
   BitbucketDCResourcesResponse,
   BitbucketDCWebhookEnrollmentResult,
   BitbucketDCWebhookIdUpdateResult,
@@ -125,4 +127,38 @@ export const integrationService = {
     );
     return data;
   },
+
+  /**
+   * Get the org-wide Azure DevOps resolver hook installation status.
+   */
+  getAzureDevOpsResources: async (): Promise<AzureDevOpsWebhookStatus> => {
+    const { data } = await openHands.get<AzureDevOpsWebhookStatus>(
+      "/integration/azure-devops/resources",
+    );
+    return data;
+  },
+
+  /**
+   * Install or reinstall the org-wide Azure DevOps resolver Service Hooks.
+   */
+  reinstallAzureDevOpsWebhook:
+    async (): Promise<AzureDevOpsWebhookInstallationResult> => {
+      const { data } =
+        await openHands.post<AzureDevOpsWebhookInstallationResult>(
+          "/integration/azure-devops/reinstall-webhook",
+        );
+      return data;
+    },
+
+  /**
+   * Delete the org-wide Azure DevOps resolver Service Hooks.
+   */
+  uninstallAzureDevOpsWebhook:
+    async (): Promise<AzureDevOpsWebhookInstallationResult> => {
+      const { data } =
+        await openHands.post<AzureDevOpsWebhookInstallationResult>(
+          "/integration/azure-devops/uninstall-webhook",
+        );
+      return data;
+    },
 };

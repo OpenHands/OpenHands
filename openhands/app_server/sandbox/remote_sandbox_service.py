@@ -44,7 +44,10 @@ from openhands.app_server.sandbox.sandbox_service import (
     SandboxServiceInjector,
 )
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
-from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
+from openhands.app_server.sandbox.sandbox_spec_service import (
+    SandboxSpecService,
+    resolve_sandbox_spec,
+)
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.settings.settings_models import SandboxGroupingStrategy
 from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
@@ -427,17 +430,13 @@ class RemoteSandboxService(SandboxService):
             await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
 
             # Get sandbox spec
-            if sandbox_spec_id is None:
-                sandbox_spec = (
-                    await self.sandbox_spec_service.get_default_sandbox_spec()
-                )
-            else:
-                sandbox_spec_maybe = await self.sandbox_spec_service.get_sandbox_spec(
-                    sandbox_spec_id
-                )
-                if sandbox_spec_maybe is None:
-                    raise ValueError('Sandbox Spec not found')
-                sandbox_spec = sandbox_spec_maybe
+            user_default_spec_id = await self.user_context.get_default_sandbox_spec_id()
+            sandbox_spec = await resolve_sandbox_spec(
+                sandbox_spec_id,
+                user_default_spec_id,
+                self.sandbox_spec_service,
+                _logger,
+            )
 
             if sandbox_id is None:
                 sandbox_id = base62.encodebytes(os.urandom(16))

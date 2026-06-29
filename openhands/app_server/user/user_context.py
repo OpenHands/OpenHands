@@ -81,6 +81,10 @@ class UserContext(ABC):
     async def get_user_git_info(self) -> UserGitInfo | None:
         """Get an User Meta"""
 
+    @abstractmethod
+    async def get_default_sandbox_spec_id(self) -> str | None:
+        """Get the user's preferred default sandbox spec ID, or None to use the global default."""
+
     async def get_provider_handler(self) -> ProviderHandler:
         """Get a ProviderHandler bound to this user's provider tokens.
 
