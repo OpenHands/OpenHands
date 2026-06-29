@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import shlex
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
-from typing import Annotated
+from types import MappingProxyType
+from typing import Annotated, cast
 
 import yaml
 from fastapi import APIRouter, HTTPException, Query
@@ -12,7 +15,10 @@ from pydantic import BaseModel
 
 import openhands
 from openhands.app_server.config import depends_user_context
-from openhands.app_server.integrations.provider import ProviderHandler
+from openhands.app_server.integrations.provider import (
+    PROVIDER_TOKEN_TYPE,
+    ProviderHandler,
+)
 from openhands.app_server.settings.settings_models import MarketplaceRegistration
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import get_dependencies
@@ -25,8 +31,12 @@ user_context_dependency = depends_user_context()
 GLOBAL_SKILLS_DIR = Path(openhands.__file__).parent.parent / 'skills'
 USER_SKILLS_DIR = Path.home() / '.openhands' / 'microagents'
 
-# Temporary directory for cloning marketplace repos
-TEMP_CLONE_DIR = Path(tempfile.gettempdir()) / 'openhands_marketplace_clone'
+# Rate limiting: cache for marketplace skills results (5 minute TTL)
+# Format: {cache_key: (result, timestamp)}
+_MARKETPLACE_SKILLS_CACHE: dict[
+    str, tuple[MarketplaceSkillsPreviewResponse, float]
+] = {}
+_CACHE_TTL_SECONDS = 300  # 5 minutes
 
 
 class SkillInfo(BaseModel):
@@ -239,27 +249,11 @@ async def _clone_marketplace_repo(
     Returns:
         Tuple of (cloned_path or None, error_message or '')
     """
-    import shlex
-    from types import MappingProxyType
-    from typing import cast
-
-    from openhands.app_server.integrations.provider import PROVIDER_TOKEN_TYPE
-    from openhands.app_server.integrations.service_types import ProviderType
-
     provider, repo_path = _parse_marketplace_source(marketplace.source)
 
     # Validate repo path format
     if not repo_path or '/' not in repo_path:
         return None, f'Invalid repository path: {repo_path}'
-
-    # Map provider string to ProviderType enum
-    provider_type_map = {
-        'github': ProviderType.GITHUB,
-        'gitlab': ProviderType.GITLAB,
-        'bitbucket': ProviderType.BITBUCKET,
-        'azure-devops': ProviderType.AZURE_DEVOPS,
-    }
-    provider_type_map.get(provider, ProviderType.GITHUB)
 
     # Build fallback URLs for public repositories
     provider_domain_map = {
@@ -295,15 +289,11 @@ async def _clone_marketplace_repo(
     # Use authenticated URL if available, otherwise fallback to public URL
     clone_url = authenticated_url or fallback_url
 
-    # Create temporary directory for this clone
-    import uuid
-
-    clone_id = uuid.uuid4().hex[:8]
-    clone_dir = TEMP_CLONE_DIR / f'{marketplace.name}_{clone_id}'
-
+    # Create unique temporary directory for this clone using tempfile.mkdtemp
     try:
-        # Ensure parent directory exists
-        TEMP_CLONE_DIR.mkdir(parents=True, exist_ok=True)
+        clone_dir = Path(
+            tempfile.mkdtemp(prefix=f'openhands_marketplace_{marketplace.name}_')
+        )
 
         # Build git clone command
         clone_cmd = f'git clone {shlex.quote(clone_url)} {shlex.quote(str(clone_dir))}'
@@ -318,6 +308,7 @@ async def _clone_marketplace_repo(
         )
 
         if result.returncode != 0:
+            _cleanup_clone_dir(clone_dir)
             return None, f'Git clone failed: {result.stderr}'
 
         # Checkout ref if specified
@@ -331,12 +322,14 @@ async def _clone_marketplace_repo(
                 timeout=60,
             )
             if checkout_result.returncode != 0:
+                _cleanup_clone_dir(clone_dir)
                 return None, f'Git checkout failed: {checkout_result.stderr}'
 
         # Navigate to repo_path if specified
         if marketplace.repo_path:
             skills_path = clone_dir / marketplace.repo_path
             if not skills_path.exists():
+                _cleanup_clone_dir(clone_dir)
                 return None, f'Repo path not found: {marketplace.repo_path}'
             return skills_path, ''
 
@@ -353,8 +346,8 @@ def _cleanup_clone_dir(clone_dir: Path) -> None:
     try:
         if clone_dir.exists():
             shutil.rmtree(clone_dir)
-    except Exception:
-        pass  # Best effort cleanup
+    except Exception as e:
+        logger.debug(f'Failed to clean up clone directory {clone_dir}: {e}')
 
 
 @router.post(
@@ -371,12 +364,26 @@ async def get_marketplace_skills(
     without requiring an active sandbox session. Useful for previewing what
     skills a marketplace provides before or after adding it.
 
+    Results are cached for 5 minutes to prevent resource exhaustion from
+    repeated requests for the same marketplace.
+
     Args:
         marketplaces: List of marketplace registrations to fetch skills from.
 
     Returns:
         MarketplaceSkillsPreviewResponse with skill metadata and any errors.
     """
+    # Generate cache key from marketplace sources
+    cache_key = '|'.join(sorted(m.source for m in marketplaces))
+    current_time = time.time()
+
+    # Check cache
+    if cache_key in _MARKETPLACE_SKILLS_CACHE:
+        cached_result, cached_time = _MARKETPLACE_SKILLS_CACHE[cache_key]
+        if current_time - cached_time < _CACHE_TTL_SECONDS:
+            logger.debug(f'Returning cached marketplace skills for: {cache_key}')
+            return cached_result
+
     all_skills: list[SkillInfo] = []
     marketplace_skills: dict[str, list[str]] = {}
     errors: list[str] = []
@@ -452,8 +459,20 @@ async def get_marketplace_skills(
         for clone_dir in cloned_dirs:
             _cleanup_clone_dir(clone_dir)
 
-    return MarketplaceSkillsPreviewResponse(
+    result = MarketplaceSkillsPreviewResponse(
         skills=all_skills,
         marketplace_skills=marketplace_skills,
         errors=errors,
     )
+
+    # Cache the result
+    _MARKETPLACE_SKILLS_CACHE[cache_key] = (result, current_time)
+
+    # Clean up old cache entries (simple eviction)
+    # Remove entries older than 2x TTL to prevent memory bloat
+    for key in list(_MARKETPLACE_SKILLS_CACHE.keys()):
+        _, cached_time = _MARKETPLACE_SKILLS_CACHE[key]
+        if current_time - cached_time > _CACHE_TTL_SECONDS * 2:
+            del _MARKETPLACE_SKILLS_CACHE[key]
+
+    return result

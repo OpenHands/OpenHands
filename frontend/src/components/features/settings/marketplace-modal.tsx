@@ -77,7 +77,7 @@ export function MarketplaceModal({
       source: source.trim(),
       ref: ref.trim() || undefined,
       repo_path: repoPath.trim() || undefined,
-      auto_load: autoLoad || undefined,
+      auto_load: autoLoad,
     });
   };
 

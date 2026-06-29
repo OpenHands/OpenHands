@@ -4,6 +4,7 @@ This module provides the V1 API routes for user settings under /api/v1/settings.
 """
 
 import asyncio
+import json
 import os
 from collections import defaultdict
 from typing import Annotated, Any
@@ -70,8 +71,6 @@ def _get_instance_default_marketplaces() -> list[dict[str, Any]]:
     Each parsed marketplace is validated using MarketplaceRegistration model.
     Invalid entries are logged and skipped.
     """
-    import json
-
     env_value = os.environ.get('INSTANCE_DEFAULT_MARKETPLACES', '')
     if not env_value:
         return []

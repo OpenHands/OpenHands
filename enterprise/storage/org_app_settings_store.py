@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import timezone
 from uuid import UUID
@@ -11,7 +12,10 @@ from server.constants import (
     get_default_llm_base_url,
     get_default_llm_model,
 )
-from server.routes.org_models import OrgAppSettingsUpdate
+from server.routes.org_models import (
+    OrgAppSettingsUpdate,
+    OrgConcurrentModificationError,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from storage.org import Org
@@ -111,10 +115,6 @@ class OrgAppSettingsStore:
         Raises:
             OrgConcurrentModificationError: If optimistic locking detects a conflict
         """
-        import logging
-
-        from server.routes.org_models import OrgConcurrentModificationError
-
         logger = logging.getLogger(__name__)
 
         result = await self.db_session.execute(
@@ -163,7 +163,7 @@ class OrgAppSettingsStore:
 
             # Inject scope='org' for all marketplaces saved at org level
             marketplaces = update_dict.pop('registered_marketplaces')
-            validated_marketplaces = []
+            validated_marketplaces: list[MarketplaceRegistration] = []
             for mp in marketplaces:
                 if isinstance(mp, dict):
                     # Strip scope from incoming request - backend will set it
@@ -173,16 +173,17 @@ class OrgAppSettingsStore:
                         mp_dict['auto_load'] = False
                     mp_obj = MarketplaceRegistration.model_validate(mp_dict)
                     mp_obj.scope = MarketplaceScope.ORG
-                    validated_marketplaces.append(mp_obj.model_dump())
+                    validated_marketplaces.append(mp_obj)
                 elif isinstance(mp, MarketplaceRegistration):
                     mp.scope = MarketplaceScope.ORG
-                    validated_marketplaces.append(mp.model_dump())
-                else:
-                    # Already validated dict from DB
-                    mp['scope'] = 'org'
-                    if 'auto_load' not in mp:
-                        mp['auto_load'] = False
                     validated_marketplaces.append(mp)
+                else:
+                    # Already validated dict from DB - reconstruct as MarketplaceRegistration
+                    db_mp = dict(mp)  # Copy to avoid mutation
+                    db_mp['scope'] = MarketplaceScope.ORG
+                    if 'auto_load' not in db_mp:
+                        db_mp['auto_load'] = False
+                    validated_marketplaces.append(MarketplaceRegistration.model_validate(db_mp))
             org.registered_marketplaces = validated_marketplaces
 
         # Update regular org fields

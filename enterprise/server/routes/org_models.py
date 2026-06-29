@@ -20,6 +20,7 @@ from openhands.app_server.settings.settings_models import (
     MarketplaceRegistration,
     _load_persisted_agent_settings,
     _load_persisted_conversation_settings,
+    validate_and_convert_marketplaces,
 )
 from openhands.app_server.utils.llm import MASKED_API_KEY, resolve_llm_base_url
 from openhands.sdk.settings import (
@@ -104,6 +105,9 @@ class OrgConcurrentModificationError(Exception):
     This occurs when optimistic locking detects that the resource was modified
     by another request between when the client read it and when they attempted
     to update it. The client should re-fetch the latest data and retry.
+
+    Note: Timestamp comparison relies on server clock. If client/server clocks
+    are significantly out of sync, legitimate updates may be rejected.
     """
 
     def __init__(
@@ -596,10 +600,6 @@ class OrgAppSettingsResponse(BaseModel):
         Returns:
             OrgAppSettingsResponse with app settings
         """
-        from openhands.app_server.settings.settings_models import (
-            validate_and_convert_marketplaces,
-        )
-
         # Get registered_marketplaces from dedicated column
         marketplaces = validate_and_convert_marketplaces(
             org.registered_marketplaces,
@@ -623,7 +623,8 @@ class OrgAppSettingsUpdate(BaseModel):
     max_budget_per_task: float | None = None
     registered_marketplaces: list[MarketplaceRegistration] | None = None
     # Optimistic locking: client must provide the last_known_updated_at they read
-    # If this doesn't match DB, someone else modified the record and an error is raised
+    # If this doesn't match DB, someone else modified the record and an error is raised.
+    # Note: Ensure client and server clocks are synchronized to avoid false conflicts.
     last_known_updated_at: datetime | None = None
 
     @field_validator('max_budget_per_task')
