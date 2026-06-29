@@ -668,9 +668,9 @@ class TestSandboxLifecycle:
         # Verify
         assert result is True
         remote_sandbox_service.db_session.delete.assert_called_once_with(stored_sandbox)
-        # The only commit inside delete_sandbox is the eager session-key
-        # invalidation; the row deletion is committed by the caller.
-        remote_sandbox_service.db_session.commit.assert_awaited_once()
+        # delete_sandbox no longer commits internally: the session key is dropped
+        # atomically with the row delete, which the caller commits.
+        remote_sandbox_service.db_session.commit.assert_not_awaited()
         remote_sandbox_service.httpx_client.request.assert_called_once_with(
             'POST',
             'https://api.example.com/stop',
@@ -679,49 +679,50 @@ class TestSandboxLifecycle:
         )
 
     @pytest.mark.asyncio
-    async def test_delete_sandbox_archives_before_stop_before_delete(
+    async def test_archive_conversation_workspace_archives_without_stopping(
         self, remote_sandbox_service
     ):
-        """Live runtime + archiving enabled: archive, then /stop, then delete."""
+        """A grouped, non-terminal conversation's workspace is captured without
+        stopping the shared sandbox (no /stop, no row delete)."""
         stored_sandbox = create_stored_sandbox()
         runtime_data = create_runtime_data()
-
         remote_sandbox_service._get_stored_sandbox = AsyncMock(
             return_value=stored_sandbox
         )
         remote_sandbox_service._get_runtime = AsyncMock(return_value=runtime_data)
-
-        order: list[str] = []
-
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.raise_for_status.return_value = None
-
-        async def record_request(*args, **kwargs):
-            order.append('stop')
-            return mock_response
-
-        async def record_archive(*args, **kwargs):
-            order.append('archive')
-            return True
-
-        async def record_delete(obj):
-            order.append('delete')
-
-        remote_sandbox_service.httpx_client.request = AsyncMock(
-            side_effect=record_request
-        )
-        remote_sandbox_service.db_session.delete = AsyncMock(side_effect=record_delete)
+        remote_sandbox_service.db_session.delete = AsyncMock()
+        remote_sandbox_service.httpx_client.request = AsyncMock()
 
         with patch(
             'openhands.app_server.sandbox.remote_sandbox_service.workspace_archive'
         ) as mock_wa:
             mock_wa.archive_enabled.return_value = True
-            mock_wa.archive_workspace = AsyncMock(side_effect=record_archive)
-            result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+            mock_wa.archive_workspace = AsyncMock(return_value=True)
+            ok = await remote_sandbox_service.archive_conversation_workspace(
+                'test-sandbox-123', conversation_id='conv-1'
+            )
 
-        assert result is True
-        assert order == ['archive', 'stop', 'delete']
+        assert ok is True
+        mock_wa.archive_workspace.assert_awaited_once()
+        # Captured, but the shared sandbox was neither stopped nor deleted.
+        remote_sandbox_service.httpx_client.request.assert_not_called()
+        remote_sandbox_service.db_session.delete.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_archive_conversation_workspace_noop_when_disabled(
+        self, remote_sandbox_service
+    ):
+        """No-op (returns True) when archiving is disabled — no lookups at all."""
+        remote_sandbox_service._get_stored_sandbox = AsyncMock()
+        with patch(
+            'openhands.app_server.sandbox.remote_sandbox_service.workspace_archive'
+        ) as mock_wa:
+            mock_wa.archive_enabled.return_value = False
+            ok = await remote_sandbox_service.archive_conversation_workspace(
+                'test-sandbox-123', conversation_id='conv-1'
+            )
+        assert ok is True
+        remote_sandbox_service._get_stored_sandbox.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_delete_sandbox_runtime_not_found_ignored(
@@ -799,13 +800,14 @@ class TestSandboxLifecycle:
         remote_sandbox_service.db_session.delete.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_delete_sandbox_transient_error_invalidates_session_key(
+    async def test_delete_sandbox_transient_error_preserves_session_key(
         self, remote_sandbox_service
     ):
-        """A transient runtime error keeps the row for retry but still clears AND
-        commits the session key hash, so a leaked key cannot outlive the delete
-        even if the request's session later rolls back (security, BUG 1)."""
-        stored_sandbox = create_stored_sandbox(session_api_key_hash='leaked-hash')
+        """A transient runtime error keeps the row + running runtime for retry and
+        leaves the session key VALID — the live sandbox must keep serving its
+        webhooks / VSCode / reconnects, so the key is only dropped (with the row)
+        once the delete actually succeeds, never up front."""
+        stored_sandbox = create_stored_sandbox(session_api_key_hash='live-hash')
 
         remote_sandbox_service._get_stored_sandbox = AsyncMock(
             return_value=stored_sandbox
@@ -824,14 +826,10 @@ class TestSandboxLifecycle:
         with pytest.raises(SandboxDeleteRetryError):
             await remote_sandbox_service.delete_sandbox('test-sandbox-123')
 
+        # Row kept for retry, key untouched (no clear, no commit of a cleared key).
         remote_sandbox_service.db_session.delete.assert_not_called()
-        assert stored_sandbox.session_api_key_hash is None
-        # The invalidation was persisted up front (committed before the
-        # failure-prone runtime call), so it survives a later rollback.
-        remote_sandbox_service.db_session.add.assert_called_once_with(stored_sandbox)
-        remote_sandbox_service.db_session.commit.assert_awaited_once()
-        # The commit happened while the hash was already cleared.
-        assert stored_sandbox.session_api_key_hash is None
+        assert stored_sandbox.session_api_key_hash == 'live-hash'
+        remote_sandbox_service.db_session.commit.assert_not_awaited()
 
 
 class TestSandboxSearch:
@@ -1934,79 +1932,24 @@ class TestBatchGetSandboxes:
         assert results[0].status == SandboxStatus.MISSING
 
 
-class TestDeleteSandboxArchive:
-    """Archive-before-delete behavior of delete_sandbox (APP-2403)."""
-
-    def _ok_archive_response(self):
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.content = b'archive-bytes'
-        return resp
+class TestArchiveConversationWorkspace:
+    """archive_conversation_workspace contract (APP-2403): the sole app-server
+    capture path, run by the conversation-delete finalizer BEFORE delete_sandbox
+    (which is now purely sandbox-scoped). Its bool return gates the finalizer —
+    False (REQUIRED + retryable failure) keeps the sandbox for the idle reap; True
+    lets the delete proceed. It never stops the runtime or deletes the row."""
 
     @pytest.mark.asyncio
-    async def test_delete_without_archive_when_disabled(self, remote_sandbox_service):
-        """With archiving disabled, delete stops the runtime and removes the row."""
-        stored = create_stored_sandbox()
-        remote_sandbox_service._get_stored_sandbox = AsyncMock(return_value=stored)
-        remote_sandbox_service._get_runtime = AsyncMock(
-            return_value=create_runtime_data()
-        )
-        stop_response = MagicMock()
-        stop_response.status_code = 200
-        remote_sandbox_service.httpx_client.request.return_value = stop_response
-        remote_sandbox_service.db_session.delete = AsyncMock()
-
-        with patch(
-            'openhands.app_server.sandbox.workspace_archive.archive_enabled',
-            return_value=False,
-        ):
-            result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
-
-        assert result is True
-        remote_sandbox_service.db_session.delete.assert_awaited_once_with(stored)
-
-    @pytest.mark.asyncio
-    async def test_delete_archives_before_stop_and_delete(self, remote_sandbox_service):
-        """With archiving enabled, the workspace is archived, then /stop, then row delete."""
-        stored = create_stored_sandbox()
-        remote_sandbox_service._get_stored_sandbox = AsyncMock(return_value=stored)
-        remote_sandbox_service._get_runtime = AsyncMock(
-            return_value=create_runtime_data()
-        )
-        stop_response = MagicMock()
-        stop_response.status_code = 200
-        remote_sandbox_service.httpx_client.request.return_value = stop_response
-        remote_sandbox_service.db_session.delete = AsyncMock()
-
-        with (
-            patch(
-                'openhands.app_server.sandbox.workspace_archive.archive_enabled',
-                return_value=True,
-            ),
-            patch(
-                'openhands.app_server.sandbox.workspace_archive.archive_workspace',
-                new=AsyncMock(return_value=True),
-            ) as mock_archive,
-        ):
-            result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
-
-        assert result is True
-        mock_archive.assert_awaited_once()
-        # runtime data was passed to the archiver
-        assert mock_archive.await_args.args[2] == 'test-sandbox-123'
-        remote_sandbox_service.httpx_client.request.assert_called_once()
-        remote_sandbox_service.db_session.delete.assert_awaited_once_with(stored)
-
-    @pytest.mark.asyncio
-    async def test_delete_blocked_when_archive_fails(self, remote_sandbox_service):
-        """A failed (required) archive must not stop the runtime or delete the row;
-        the sandbox still exists, so it raises (router 503) rather than 404ing."""
+    async def test_required_failure_returns_false(self, remote_sandbox_service):
+        """A REQUIRED archive failure returns False (and never stops/deletes), so
+        the finalizer keeps the sandbox + runtime for the idle reap."""
         stored = create_stored_sandbox()
         remote_sandbox_service._get_stored_sandbox = AsyncMock(return_value=stored)
         remote_sandbox_service._get_runtime = AsyncMock(
             return_value=create_runtime_data()
         )
         remote_sandbox_service.db_session.delete = AsyncMock()
+        remote_sandbox_service.httpx_client.request = AsyncMock()
         remote_sandbox_service._get_archive_grouping_strategy = AsyncMock(
             return_value=SandboxGroupingStrategy.NO_GROUPING
         )
@@ -2021,50 +1964,63 @@ class TestDeleteSandboxArchive:
                 new=AsyncMock(return_value=False),
             ),
         ):
-            with pytest.raises(SandboxDeleteRetryError):
-                await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+            ok = await remote_sandbox_service.archive_conversation_workspace(
+                'test-sandbox-123', conversation_id='conv-1'
+            )
 
-        # Neither /stop nor the row deletion happened.
+        assert ok is False
         remote_sandbox_service.httpx_client.request.assert_not_called()
         remote_sandbox_service.db_session.delete.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_delete_proceeds_when_nothing_to_archive(
-        self, remote_sandbox_service, monkeypatch
-    ):
-        """No git repo to capture (agent-server 400) must NOT orphan the sandbox
-        even when archiving is required: archive is satisfied, /stop and the row
-        delete proceed so the runtime is freed and the user can't get stuck (BUG 2)."""
-        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_ENABLED', 'true')
-        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
-        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
-
+    async def test_nothing_to_archive_returns_true(self, remote_sandbox_service):
+        """Nothing to capture (archive_workspace returns True for a 400/404) lets
+        the delete proceed even under REQUIRED, so the sandbox is never orphaned."""
         stored = create_stored_sandbox()
         remote_sandbox_service._get_stored_sandbox = AsyncMock(return_value=stored)
         remote_sandbox_service._get_runtime = AsyncMock(
             return_value=create_runtime_data()
         )
-        remote_sandbox_service.db_session.delete = AsyncMock()
-        remote_sandbox_service.db_session.add = MagicMock()
-        remote_sandbox_service.db_session.commit = AsyncMock()
         remote_sandbox_service._get_archive_grouping_strategy = AsyncMock(
             return_value=SandboxGroupingStrategy.NO_GROUPING
         )
 
-        # Archive endpoint reports no git repo (permanent 400); /stop returns 200.
-        remote_sandbox_service.httpx_client.stream = _stream_client(
-            _make_stream_response(400)
-        ).stream
-        stop_resp = MagicMock()
-        stop_resp.status_code = 200
-        remote_sandbox_service.httpx_client.request = AsyncMock(return_value=stop_resp)
+        with (
+            patch(
+                'openhands.app_server.sandbox.workspace_archive.archive_enabled',
+                return_value=True,
+            ),
+            patch(
+                'openhands.app_server.sandbox.workspace_archive.archive_workspace',
+                new=AsyncMock(return_value=True),
+            ),
+        ):
+            ok = await remote_sandbox_service.archive_conversation_workspace(
+                'test-sandbox-123', conversation_id='conv-1'
+            )
 
-        result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+        assert ok is True
 
-        assert result is True
-        # Runtime was stopped and the row removed (not orphaned forever).
-        remote_sandbox_service.httpx_client.request.assert_called_once()
-        remote_sandbox_service.db_session.delete.assert_awaited_once_with(stored)
+    @pytest.mark.asyncio
+    async def test_runtime_already_gone_returns_true(self, remote_sandbox_service):
+        """Runtime already gone (404): nothing to capture, so the delete proceeds."""
+        stored = create_stored_sandbox()
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(return_value=stored)
+        remote_sandbox_service._get_runtime = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                'gone',
+                request=httpx.Request('GET', 'https://api.example.com/x'),
+                response=httpx.Response(404),
+            )
+        )
+        with patch(
+            'openhands.app_server.sandbox.workspace_archive.archive_enabled',
+            return_value=True,
+        ):
+            ok = await remote_sandbox_service.archive_conversation_workspace(
+                'test-sandbox-123', conversation_id='conv-1'
+            )
+        assert ok is True
 
 
 class TestArchiveWorkspaceHelper:
@@ -2085,6 +2041,11 @@ class TestArchiveWorkspaceHelper:
         store = MagicMock()
         writes: dict[str, bytes] = {}
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
+        # Archive blobs are streamed from a tempfile via write_from_path (the OOM
+        # fix); record them too so blob-path assertions still see the .patch/.tar.gz.
+        store.write_from_path.side_effect = (
+            lambda path, src: writes.__setitem__(path, open(src, 'rb').read())
+        )
 
         with patch.object(
             workspace_archive, '_get_archive_file_store', return_value=store
@@ -2123,6 +2084,11 @@ class TestArchiveWorkspaceHelper:
         store = MagicMock()
         writes: dict[str, bytes] = {}
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
+        # Archive blobs are streamed from a tempfile via write_from_path (the OOM
+        # fix); record them too so blob-path assertions still see the .patch/.tar.gz.
+        store.write_from_path.side_effect = (
+            lambda path, src: writes.__setitem__(path, open(src, 'rb').read())
+        )
 
         with patch.object(
             workspace_archive, '_get_archive_file_store', return_value=store
@@ -2321,6 +2287,11 @@ class TestArchiveWorkspaceHelper:
         store = MagicMock()
         writes: dict[str, bytes] = {}
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
+        # Archive blobs are streamed from a tempfile via write_from_path (the OOM
+        # fix); record them too so blob-path assertions still see the .patch/.tar.gz.
+        store.write_from_path.side_effect = (
+            lambda path, src: writes.__setitem__(path, open(src, 'rb').read())
+        )
 
         with patch.object(
             workspace_archive, '_get_archive_file_store', return_value=store
@@ -2391,6 +2362,11 @@ class TestArchiveWorkspaceHelper:
         store = MagicMock()
         writes: dict[str, bytes] = {}
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
+        # Archive blobs are streamed from a tempfile via write_from_path (the OOM
+        # fix); record them too so blob-path assertions still see the .patch/.tar.gz.
+        store.write_from_path.side_effect = (
+            lambda path, src: writes.__setitem__(path, open(src, 'rb').read())
+        )
 
         with patch.object(
             workspace_archive, '_get_archive_file_store', return_value=store
@@ -2438,6 +2414,7 @@ class TestArchiveWorkspaceHelper:
         client = _stream_client(responses)
         store = MagicMock()
         store.write.side_effect = lambda path, data: None
+        store.write_from_path.side_effect = lambda path, src: None
 
         with patch.object(
             workspace_archive, '_get_archive_file_store', return_value=store
@@ -2464,6 +2441,11 @@ class TestArchiveInitialWorkspaceHelper:
         store = MagicMock()
         writes: dict[str, bytes] = {}
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
+        # Archive blobs are streamed from a tempfile via write_from_path (the OOM
+        # fix); record them too so blob-path assertions still see the .patch/.tar.gz.
+        store.write_from_path.side_effect = (
+            lambda path, src: writes.__setitem__(path, open(src, 'rb').read())
+        )
 
         with patch.object(
             workspace_archive, '_get_archive_file_store', return_value=store
@@ -2482,9 +2464,11 @@ class TestArchiveInitialWorkspaceHelper:
         # tar.gz requested at the (already-resolved) project dir; key forwarded.
         _, kwargs = client.stream.call_args
         assert kwargs['headers']['X-Session-API-Key'] == 'sk'
+        # tar.gz is the full capture, so default excludes are disabled.
         assert kwargs['params'] == {
             'path': '/workspace/project/repo',
             'format': 'tar.gz',
+            'use_default_excludes': 'false',
         }
         # Archive nests under /initial/ so it can never collide with the final
         # capture (which writes to {prefix}/{sandbox_id}/{ts}).
@@ -2559,11 +2543,13 @@ class TestArchiveInitialWorkspaceHelper:
         client.stream.assert_not_called()
 
 
-class TestDeleteSandboxInvalidationPersistence:
-    """BUG 1: the session-key invalidation must be durably committed up front, so
-    it survives even if the request's session is later rolled back on a failed
-    delete. Backed by a real SQLite session rather than a mock so we can prove
-    the cleared hash is actually persisted (re-queryable after a rollback)."""
+class TestDeleteSandboxKeyHandling:
+    """The session_api_key_hash is invalidated atomically with the row delete on a
+    SUCCESSFUL delete, NOT up front. A sandbox kept alive for retry (transient
+    error / REQUIRED archive failure) must keep a working key so its webhook
+    callbacks, VSCode token, and user reconnects don't 401 until it is actually
+    torn down. Backed by a real SQLite session so persistence is provable across a
+    rollback."""
 
     @pytest.fixture
     async def async_engine(self):
@@ -2612,16 +2598,16 @@ class TestDeleteSandboxInvalidationPersistence:
         )
 
     @pytest.mark.asyncio
-    async def test_invalidation_survives_rollback_on_transient_error(
+    async def test_session_key_preserved_when_kept_for_retry(
         self, service_with_real_db, real_session
     ):
-        # Seed a row with a (leaked) session key hash.
-        row = create_stored_sandbox(session_api_key_hash='leaked-hash')
+        # Seed a running sandbox with a live session key hash.
+        row = create_stored_sandbox(session_api_key_hash='live-hash')
         real_session.add(row)
         await real_session.commit()
 
         # Transient (non-404) runtime error -> delete_sandbox raises (keeps the
-        # row for retry) without deleting the row.
+        # row + running runtime for retry) without deleting the row.
         service_with_real_db._get_runtime = AsyncMock(
             side_effect=httpx.HTTPStatusError(
                 'Server Error',
@@ -2637,7 +2623,109 @@ class TestDeleteSandboxInvalidationPersistence:
         await real_session.rollback()
         real_session.expire_all()
 
-        # The invalidation was committed up front, so the leaked key stays dead.
+        # Kept alive for retry: the key must stay VALID so the live sandbox keeps
+        # serving its webhooks / VSCode / reconnects (regression test for the
+        # null-key 401s that the up-front clear used to cause).
         refreshed = await service_with_real_db._get_stored_sandbox('test-sandbox-123')
         assert refreshed is not None
-        assert refreshed.session_api_key_hash is None
+        assert refreshed.session_api_key_hash == 'live-hash'
+
+    @pytest.mark.asyncio
+    async def test_session_key_cleared_on_successful_delete(
+        self, service_with_real_db, real_session, monkeypatch
+    ):
+        # Archiving off -> a clean delete goes straight to /stop + row delete.
+        monkeypatch.delenv('RUNTIME_FILE_ARCHIVE_ENABLED', raising=False)
+        row = create_stored_sandbox(session_api_key_hash='live-hash')
+        real_session.add(row)
+        await real_session.commit()
+
+        service_with_real_db._get_runtime = AsyncMock(
+            return_value={'runtime_id': 'rt-123'}
+        )
+        stop_response = MagicMock()
+        stop_response.status_code = 200
+        stop_response.raise_for_status.return_value = None
+        service_with_real_db._send_runtime_api_request = AsyncMock(
+            return_value=stop_response
+        )
+
+        assert await service_with_real_db.delete_sandbox('test-sandbox-123') is True
+        await real_session.commit()
+        real_session.expire_all()
+
+        # The row — and with it the session key — is gone after a clean delete.
+        refreshed = await service_with_real_db._get_stored_sandbox('test-sandbox-123')
+        assert refreshed is None
+
+
+class TestArchiveEnvToggles:
+    """Per OpenHands/AGENTS.md, env enable-toggles must accept '1' as well as
+    'true' (older Helm charts default these to '1'). A regression to == 'true'
+    would silently disable the entire workspace-archive capture, so pin both."""
+
+    @pytest.mark.parametrize('value', ['1', 'true', 'TRUE', 'True'])
+    def test_archive_enabled_truthy(self, monkeypatch, value):
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_ENABLED', value)
+        assert workspace_archive.archive_enabled() is True
+
+    @pytest.mark.parametrize('value', ['0', 'false', '', 'no'])
+    def test_archive_enabled_falsy(self, monkeypatch, value):
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_ENABLED', value)
+        assert workspace_archive.archive_enabled() is False
+
+    @pytest.mark.parametrize('value', ['1', 'true'])
+    def test_archive_required_truthy(self, monkeypatch, value):
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', value)
+        assert workspace_archive.archive_required() is True
+
+    @pytest.mark.parametrize('value', ['1', 'true'])
+    def test_initial_archive_enabled_truthy(self, monkeypatch, value):
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', value)
+        assert workspace_archive.initial_archive_enabled() is True
+
+    def test_toggles_default_off(self, monkeypatch):
+        from openhands.app_server.sandbox import workspace_archive
+
+        for var in (
+            'RUNTIME_FILE_ARCHIVE_ENABLED',
+            'RUNTIME_FILE_ARCHIVE_REQUIRED',
+            'RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED',
+        ):
+            monkeypatch.delenv(var, raising=False)
+        assert workspace_archive.archive_enabled() is False
+        assert workspace_archive.archive_required() is False
+        assert workspace_archive.initial_archive_enabled() is False
+
+
+class TestArchiveRequestParams:
+    """The tar.gz is the self-contained full capture, so it disables the
+    endpoint's default excludes; git-delta stays compact (keeps them)."""
+
+    def test_tar_gz_disables_default_excludes(self):
+        from openhands.app_server.sandbox import workspace_archive
+
+        params = workspace_archive._archive_request_params(
+            '/workspace/project', 'tar.gz'
+        )
+        assert params == {
+            'path': '/workspace/project',
+            'format': 'tar.gz',
+            'use_default_excludes': 'false',
+        }
+
+    def test_git_delta_keeps_default_excludes(self):
+        from openhands.app_server.sandbox import workspace_archive
+
+        params = workspace_archive._archive_request_params(
+            '/workspace/project', 'git-delta'
+        )
+        assert params == {'path': '/workspace/project', 'format': 'git-delta'}

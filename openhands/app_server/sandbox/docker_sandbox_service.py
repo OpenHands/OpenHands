@@ -548,16 +548,8 @@ class DockerSandboxService(SandboxService):
         except (NotFound, APIError):
             return False
 
-    async def delete_sandbox(
-        self,
-        sandbox_id: str,
-        conversation_id: str | None = None,
-    ) -> bool:
-        """Delete a sandbox.
-
-        ``conversation_id`` is accepted for parity with ``RemoteSandboxService``
-        (which uses it for archive metadata) but is unused here.
-        """
+    async def delete_sandbox(self, sandbox_id: str) -> bool:
+        """Delete a sandbox."""
         try:
             if not sandbox_id.startswith(self.container_name_prefix):
                 return False

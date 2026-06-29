@@ -269,7 +269,8 @@ class AppConversationServiceBase(AppConversationService, ABC):
         )
 
         # Snapshot the INITIAL workspace (repo exactly as cloned, before setup.sh)
-        # for eval/dataset creation. Awaited HERE — before any mutating step — so
+        # for downstream dataset/eval creation. Awaited HERE — before any
+        # mutating step — so
         # the capture is deterministic and can't race setup.sh writing the same
         # tree. Best-effort and bounded so it never fails or unduly delays startup.
         try:
@@ -315,12 +316,12 @@ class AppConversationServiceBase(AppConversationService, ABC):
         project_dir: str,
         conversation_id: UUID,
     ) -> None:
-        """Snapshot the initial (as-cloned) workspace for evals — best-effort.
+        """Snapshot the initial (as-cloned) workspace state — best-effort.
 
         Awaited before setup.sh, so it captures the repo exactly as cloned with no
         concurrent mutation, keyed to the real conversation id. No-op unless
         ``RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED`` is set and a repository was
-        actually cloned (an empty workspace is not a useful eval starting state).
+        actually cloned (an empty workspace is not a useful starting state).
         Every failure is swallowed so this can never break conversation startup.
         """
         try:

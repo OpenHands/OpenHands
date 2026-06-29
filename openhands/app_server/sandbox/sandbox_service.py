@@ -194,17 +194,29 @@ class SandboxService(ABC):
         """
 
     @abstractmethod
-    async def delete_sandbox(
+    async def delete_sandbox(self, sandbox_id: str) -> bool:
+        """Begin the process of deleting a sandbox (which may involve stopping it).
+
+        Return False if the sandbox did not exist. Purely sandbox-scoped (stop the
+        runtime, delete the record); workspace capture is a separate
+        conversation-scoped step (``archive_conversation_workspace``) the
+        conversation-delete finalizer runs before the sandbox is torn down.
+        """
+
+    async def archive_conversation_workspace(
         self,
         sandbox_id: str,
         conversation_id: str | None = None,
     ) -> bool:
-        """Begin the process of deleting a sandbox (which may involve stopping it).
+        """Archive one conversation's workspace; return whether delete may proceed.
 
-        Return False if the sandbox did not exist. ``conversation_id`` is honored
-        by backends that archive the workspace before delete (see
-        RemoteSandboxService); others ignore it.
+        Default no-op (returns True) for backends that do not archive; overridden
+        by RemoteSandboxService. The conversation-delete finalizer calls this
+        before ``delete_sandbox`` so the workspace is captured while the runtime is
+        still up. Returns False only when archiving is REQUIRED and failed, so the
+        caller leaves the sandbox up for a later (idle-reap) capture.
         """
+        return True
 
     async def pause_old_sandboxes(self, max_num_sandboxes: int) -> list[str]:
         """Pause the oldest sandboxes if there are more than max_num_sandboxes running.

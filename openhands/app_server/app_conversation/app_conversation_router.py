@@ -873,31 +873,43 @@ async def _finalize_sandbox_delete(
     httpx_client: httpx.AsyncClient,
     conversation_id: UUID | None = None,
 ) -> None:
-    """Delete sandbox if no other conversations reference it, then close connections.
+    """Archive the conversation's workspace, then delete the sandbox if unreferenced.
 
-    This runs detached (background task) AFTER the delete response was already
-    returned, so a SandboxDeleteRetryError 503 cannot reach the client here. We
-    still honor the RUNTIME_FILE_ARCHIVE_REQUIRED env: on a REQUIRED archive
-    failure delete_sandbox raises, which we log and roll back, keeping the row +
-    still-running runtime so the runtime-api idle reap captures the workspace
-    later (the eval-durability backstop). Non-REQUIRED stays best-effort.
+    Runs detached (background task) AFTER the delete response was already returned.
+    The workspace is captured FIRST — a conversation-scoped step, while the runtime
+    is still up — and only if that succeeds (or archiving is not REQUIRED) is the
+    sandbox torn down, and only when no other conversation still references it
+    (under grouping a sibling conversation keeps it alive). When archiving is
+    REQUIRED and fails, the sandbox + running runtime are kept so the runtime-api
+    idle reap captures the workspace later (the durability backstop). delete_sandbox
+    is sandbox-scoped (stop + delete) and knows nothing about conversations.
     """
     try:
-        conversation_count = (
-            await app_conversation_info_service.count_conversations_by_sandbox_id(
-                sandbox_id
-            )
+        archived = await sandbox_service.archive_conversation_workspace(
+            sandbox_id,
+            conversation_id=conversation_id.hex if conversation_id else None,
         )
-        if conversation_count == 0:
-            await sandbox_service.delete_sandbox(
+        if not archived:
+            # REQUIRED archive failed: keep the sandbox + running runtime for the
+            # runtime-api idle reap to capture (the durability backstop).
+            logger.warning(
+                'Workspace archive required but failed for %s; leaving the '
+                'sandbox + runtime for the idle reap',
                 sandbox_id,
-                conversation_id=conversation_id.hex if conversation_id else None,
             )
+        else:
+            conversation_count = (
+                await app_conversation_info_service.count_conversations_by_sandbox_id(
+                    sandbox_id
+                )
+            )
+            if conversation_count == 0:
+                await sandbox_service.delete_sandbox(sandbox_id)
         await db_session.commit()
     except Exception:
-        # REQUIRED-archive failure (or a transient stop/lookup error): do NOT
-        # commit a half-done delete, so no orphaned row is left; the row +
-        # running runtime stay for the runtime-api idle reap to capture + reap.
+        # A transient stop/lookup error: do NOT commit a half-done delete, so no
+        # orphaned row is left; the row + running runtime stay for the runtime-api
+        # idle reap to capture + reap.
         logger.exception('Deferred sandbox delete for %s; kept for retry', sandbox_id)
         await db_session.rollback()
     finally:

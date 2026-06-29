@@ -3,8 +3,9 @@
 This is the app-server side of the archive-before-delete flow (APP-2403). It
 pulls a workspace archive from the in-pod agent-server endpoint
 (``GET /api/file/archive``, added in software-agent-sdk AGE-1871) and stores it,
-plus a small manifest, in object storage so the agent's work survives sandbox
-deletion and can feed eval/dataset creation.
+plus a small manifest, in object storage so the agent's work — production
+OpenHands Cloud workspace state — survives sandbox deletion and is preserved for
+downstream use (e.g. dataset/eval creation).
 
 It covers the *explicit-delete-while-running* path. The dominant idle/expiry
 reap is handled separately in runtime-api at pause time (PLTF-3112), because
@@ -36,6 +37,22 @@ _logger = logging.getLogger(__name__)
 # 'zip') is rejected by the producer with a 422, so it must not be advertised
 # here — see _supported_format() which validates before issuing the request.
 _ARCHIVE_SUFFIX = {'git-delta': 'patch', 'tar.gz': 'tar.gz'}
+
+
+def _archive_request_params(path: str, fmt: str) -> dict[str, str]:
+    """Query params for GET /api/file/archive.
+
+    The tar.gz is the SELF-CONTAINED full capture, so disable the endpoint's
+    default excludes for it: otherwise agent output under dist/build/node_modules
+    and the repo's .git history are dropped and it is no more complete than the
+    git-delta (defeating the whole point of capturing 'both'). Credential-bearing
+    git internals are still scrubbed server-side even with excludes off. git-delta
+    keeps the defaults — it is the compact companion, not the full capture.
+    """
+    params = {'path': path, 'format': fmt}
+    if fmt == 'tar.gz':
+        params['use_default_excludes'] = 'false'
+    return params
 
 
 def archive_enabled() -> bool:
@@ -173,9 +190,14 @@ async def _stream_to_tempfile(response: Any) -> tuple[str, int]:
 
 
 def _write_file_to_store(store: FileStore, name: str, path: str) -> None:
-    """Upload a temp file via the generic store API (bounds peak to one copy)."""
-    with open(path, 'rb') as f:
-        store.write(name, f.read())
+    """Stream a temp file to the store, never buffering the whole archive in RAM.
+
+    The download was streamed to a tempfile precisely to avoid holding the
+    archive in memory (see ``_stream_to_tempfile``); ``write_from_path`` keeps
+    that guarantee on upload (GCS/local/S3 stream from disk) instead of reading
+    the whole file back with ``store.write(name, f.read())``.
+    """
+    store.write_from_path(name, path)
 
 
 async def archive_workspace(
@@ -255,7 +277,7 @@ async def archive_workspace(
             async with httpx_client.stream(
                 'GET',
                 f'{agent_server_url}/api/file/archive',
-                params={'path': archive_path, 'format': fmt},
+                params=_archive_request_params(archive_path, fmt),
                 headers=headers,
                 timeout=_archive_timeout(),
             ) as response:
@@ -348,8 +370,18 @@ def initial_archive_enabled() -> bool:
 
 
 def initial_archive_deadline() -> float:
-    """Max seconds the (now inline, pre-setup) initial snapshot may delay startup."""
-    return _float_env('RUNTIME_FILE_ARCHIVE_INITIAL_DEADLINE', 60.0)
+    """Max seconds the (inline, pre-setup) initial snapshot may delay startup.
+
+    Must cover the agent-server's tar.gz build for a freshly-cloned repo or larger
+    repos are always cancelled and silently never captured — the exact workspace
+    starting-state this snapshot exists to record. A fresh clone has no agent
+    changes yet, so its tar.gz is just the repo tree (much cheaper than the
+    final-state ~660s git build), but a large monorepo can still exceed a minute;
+    default high enough to capture it. ``wait_for`` only charges the time actually
+    spent, so a fast snapshot adds no latency — this is a ceiling, not a fixed
+    cost. A genuine overrun is logged (not silent) and startup proceeds.
+    """
+    return _float_env('RUNTIME_FILE_ARCHIVE_INITIAL_DEADLINE', 300.0)
 
 
 def _initial_archive_format() -> str:
@@ -377,8 +409,8 @@ async def archive_initial_workspace(
 
     Captures the repo exactly as cloned (option A — the pre- vs post-setup choice
     is the open design question tracked in All-Hands-AI/infra#1444) as a
-    self-contained ``tar.gz`` plus a ``phase=initial`` manifest, so evals have the
-    true starting state even if the source repo later disappears.
+    self-contained ``tar.gz`` plus a ``phase=initial`` manifest, so the snapshot
+    records the true starting state even if the source repo later disappears.
 
     This is strictly best-effort: it never raises and never blocks conversation
     startup. A failure (feature off, misconfig, agent-server hiccup) just means no
@@ -420,7 +452,7 @@ async def archive_initial_workspace(
         async with httpx_client.stream(
             'GET',
             f'{agent_server_url}/api/file/archive',
-            params={'path': project_dir, 'format': fmt},
+            params=_archive_request_params(project_dir, fmt),
             headers=headers,
             timeout=_archive_timeout(),
         ) as response:
