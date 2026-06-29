@@ -576,7 +576,7 @@ class SaasSettingsStore(SettingsStore):
 
             if org.registered_marketplaces:
                 # Normalize: use 'org' scope for legacy data without scope
-                normalized: list[dict[str, Any]] = []
+                normalized = []
                 for mp in org.registered_marketplaces:
                     if isinstance(mp, dict):
                         # Set scope='org' if missing (backward compatibility)
@@ -585,10 +585,7 @@ class SaasSettingsStore(SettingsStore):
                         # Ensure auto_load defaults to False if missing
                         if 'auto_load' not in mp:
                             mp = {**mp, 'auto_load': False}
-                        normalized.append(mp)
-                    else:
-                        # Convert MarketplaceRegistration to dict
-                        normalized.append(mp.model_dump())
+                    normalized.append(mp)
                 return normalized
             return []
         except Exception as e:
