@@ -1,18 +1,17 @@
 """Archive a remote sandbox's workspace to object storage before deletion.
 
-This is the app-server side of the archive-before-delete flow (APP-2403). It
-pulls a workspace archive from the in-pod agent-server endpoint
-(``GET /api/file/archive``, added in software-agent-sdk AGE-1871) and stores it,
-plus a small manifest, in object storage so the agent's work — production
-OpenHands Cloud workspace state — survives sandbox deletion and is preserved for
-downstream use (e.g. dataset/eval creation).
+Pulls a workspace archive from the in-pod agent-server endpoint
+(``GET /api/file/archive``) and stores it, plus a small manifest, in object
+storage so the agent's work — production OpenHands Cloud workspace state —
+survives sandbox deletion and is preserved for downstream use (e.g. dataset/eval
+creation).
 
 It covers the *explicit-delete-while-running* path. The dominant idle/expiry
-reap is handled separately in runtime-api at pause time (PLTF-3112), because
-that deletion never reaches the app-server.
+reap is handled separately in runtime-api at pause time, because that deletion
+never reaches the app-server.
 
-Configuration is environment-driven (wired by APP-2405) and the feature is a
-no-op unless ``RUNTIME_FILE_ARCHIVE_ENABLED`` is set.
+Configuration is environment-driven and the feature is a no-op unless
+``RUNTIME_FILE_ARCHIVE_ENABLED`` is set.
 """
 
 import asyncio
@@ -135,10 +134,16 @@ def _float_env(name: str, default: float) -> float:
     if not raw:
         return default
     try:
-        return float(raw)
+        value = float(raw)
     except ValueError:
         _logger.warning('Invalid %s=%r; using %s', name, raw, default)
         return default
+    if value <= 0:
+        # A non-positive timeout/deadline would make httpx raise on every archive
+        # (the wedge this guard exists to prevent); fall back to the safe default.
+        _logger.warning('Non-positive %s=%r; using %s', name, raw, default)
+        return default
+    return value
 
 
 def _archive_timeout() -> float:
@@ -210,10 +215,10 @@ async def archive_workspace(
     """Archive the sandbox's workspace; return whether deletion may proceed.
 
     Returns True when the workspace was archived, when there is nothing to
-    archive (the agent-server reports the path is missing or not a git repo —
-    a 400/404), or when archiving failed but is not required (best-effort).
-    Returns False only when archiving is required and hit a genuinely transient
-    failure (5xx / network / a non-"nothing-to-capture" 4xx such as 401/422),
+    archive (the agent-server reports the path missing/not a git repo, or the key
+    is rejected — a 400/401/404), or when archiving failed but is not required
+    (best-effort). Returns False only when archiving is required and hit a
+    genuinely transient failure (5xx / network / a retryable 4xx such as 422/429),
     so the caller can leave the sandbox intact for a later retry (an explicit
     re-delete, or the runtime-api primary path at the eventual idle reap).
     Never raises.
@@ -244,17 +249,19 @@ async def archive_workspace(
 
     formats = _formats_to_capture()
     if formats is None:
-        # The SDK producer would 422 this; treat it as a hard config error
-        # (mirrors runtime-api._validate_archive_format) rather than letting the
-        # 4xx be misread as "nothing to archive" and silently deleting.
+        # Unsupported RUNTIME_FILE_ARCHIVE_FORMAT is a pure config error, exactly
+        # like the unset bucket above: no retry makes a valid format appear, so
+        # proceed loudly rather than wedging every REQUIRED delete forever (the
+        # app-server has no idle-reap backstop). Validated here so a bad format
+        # never reaches the producer (which would 422 it).
         _logger.error(
             'Workspace archive for %s: unsupported RUNTIME_FILE_ARCHIVE_FORMAT '
-            '%r (valid: %s); skipping archive',
+            '%r (valid: %s); proceeding with delete (fix the config to capture)',
             sandbox_id,
             _archive_format(),
             ['git-delta', 'tar.gz', 'both'],
         )
-        return not archive_required()
+        return True
 
     headers = {'X-Session-API-Key': session_api_key} if session_api_key else {}
     # Conversation id keys the archive and locates the (possibly grouped) repo.
@@ -267,8 +274,13 @@ async def archive_workspace(
     # 'both' uploads each format under its own suffix ({ts}.patch + {ts}.tar.gz),
     # each with its own manifest. base_commit only rides the git-delta response
     # header, so capture it there and reuse it for the tar.gz manifest.
+    # A retry under REQUIRED re-uploads under a fresh {ts}; any blob/manifest left
+    # by a partially-failed prior attempt becomes an orphan reaped by the bucket
+    # lifecycle policy (we favor capture completeness over upload dedup).
     retryable_failure = False
     base_commit = ''
+    # One store per call (not per format) — building it lazily spins up a client.
+    store = _get_archive_file_store()
     for fmt in formats:
         suffix = _ARCHIVE_SUFFIX[fmt]
         tmp_path: str | None = None
@@ -284,15 +296,24 @@ async def archive_workspace(
                 if response.status_code != 200:
                     # 400 (not a directory / not a git repo / bad base_ref) or 404
                     # (path missing) means there is genuinely nothing to capture
-                    # for this format — permanent, so it must not block a REQUIRED
-                    # delete. Every OTHER status (401, 422, 429, any 5xx) retries.
-                    permanent = response.status_code in (400, 404)
+                    # for this format. 401 means the runtime's session key is
+                    # rejected — a call-site bug, not a transient blip; retrying
+                    # the same key can't fix it. All three are permanent: log and
+                    # do NOT block a REQUIRED delete. Everything else (422, 429,
+                    # any 5xx) is retryable.
+                    permanent = response.status_code in (400, 401, 404)
+                    if response.status_code == 401:
+                        detail = 'auth rejected (stale session key); proceeding'
+                    elif permanent:
+                        detail = 'nothing to archive'
+                    else:
+                        detail = 'retryable failure'
                     _logger.warning(
                         'Workspace archive (%s) for %s: agent-server returned %s; %s',
                         fmt,
                         sandbox_id,
                         response.status_code,
-                        'nothing to archive' if permanent else 'retryable failure',
+                        detail,
                     )
                     if not permanent:
                         retryable_failure = True
@@ -313,7 +334,6 @@ async def archive_workspace(
 
         assert tmp_path is not None  # set on the 200 path above
         try:
-            store = _get_archive_file_store()
             await asyncio.to_thread(
                 _write_file_to_store, store, f'{base_path}.{suffix}', tmp_path
             )

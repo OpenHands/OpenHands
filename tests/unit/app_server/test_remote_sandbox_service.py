@@ -2200,9 +2200,9 @@ class TestArchiveWorkspaceHelper:
 
     @pytest.mark.asyncio
     async def test_archive_422_required_blocks_delete(self, monkeypatch):
-        """A 422 (malformed request, e.g. an unsupported format reaching the
-        producer) is NOT "nothing to archive" — under REQUIRED it must block the
-        delete instead of being misread as permanent (infra#1444 M1)."""
+        """A 422 (malformed request from the producer) is NOT "nothing to archive"
+        — under REQUIRED it is treated as retryable and must block the delete
+        instead of being misread as permanent (infra#1444 M1)."""
         from openhands.app_server.sandbox import workspace_archive
 
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
@@ -2216,13 +2216,31 @@ class TestArchiveWorkspaceHelper:
         assert ok is False
 
     @pytest.mark.asyncio
-    async def test_archive_unsupported_format_blocks_required_and_skips_request(
+    async def test_archive_401_required_proceeds(self, monkeypatch):
+        """A 401 means the runtime's session key is rejected — a call-site bug,
+        not a transient blip. Retrying the same key can't fix it, so it is
+        permanent: the delete proceeds even under REQUIRED rather than wedging."""
+        from openhands.app_server.sandbox import workspace_archive
+
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
+        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'true')
+
+        client = _stream_client(_make_stream_response(401))
+
+        ok = await workspace_archive.archive_workspace(
+            client, create_runtime_data(), 'sandbox-1'
+        )
+        assert ok is True
+
+    @pytest.mark.asyncio
+    async def test_archive_unsupported_format_proceeds_and_skips_request(
         self, monkeypatch
     ):
-        """An unsupported RUNTIME_FILE_ARCHIVE_FORMAT (e.g. the removed 'zip')
-        is a config error caught up front: no request is issued, and under
-        REQUIRED the delete is blocked rather than silently proceeding
-        (infra#1444 M1)."""
+        """An unsupported RUNTIME_FILE_ARCHIVE_FORMAT (e.g. the removed 'zip') is a
+        pure config error caught up front: no request is issued, and the delete
+        PROCEEDS even under REQUIRED. Like an unset bucket, no retry makes a valid
+        format appear, so blocking would wedge every delete forever with no
+        app-server backstop; the producer never sees the bad format."""
         from openhands.app_server.sandbox import workspace_archive
 
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
@@ -2234,7 +2252,7 @@ class TestArchiveWorkspaceHelper:
         ok = await workspace_archive.archive_workspace(
             client, create_runtime_data(), 'sandbox-1'
         )
-        assert ok is False
+        assert ok is True
         client.stream.assert_not_called()
 
     @pytest.mark.asyncio
