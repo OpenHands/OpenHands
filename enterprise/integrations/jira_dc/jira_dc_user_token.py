@@ -10,6 +10,7 @@ from server.auth.constants import (
     JIRA_DC_BASE_URL,
     JIRA_DC_CLIENT_ID,
     JIRA_DC_CLIENT_SECRET,
+    JIRA_DC_HTTP_TIMEOUT,
 )
 from server.auth.token_manager import TokenManager
 from storage.jira_dc_integration_store import JiraDcIntegrationStore
@@ -81,7 +82,7 @@ async def get_user_jira_dc_token(
     refresh_token = token_manager.decrypt_text(enc_refresh)
     try:
         async with httpx.AsyncClient(
-            verify=httpx_verify_option(), timeout=30.0
+            verify=httpx_verify_option(), timeout=JIRA_DC_HTTP_TIMEOUT
         ) as client:
             response = await client.post(
                 JIRA_DC_TOKEN_URL,

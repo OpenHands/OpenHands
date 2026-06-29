@@ -36,6 +36,7 @@ from integrations.utils import (
     get_session_expired_message,
 )
 from jinja2 import Environment, FileSystemLoader
+from server.auth.constants import JIRA_HTTP_TIMEOUT
 from server.auth.saas_user_auth import get_user_auth_from_keycloak_id
 from server.auth.token_manager import TokenManager
 from storage.jira_integration_store import JiraIntegrationStore
@@ -343,7 +344,9 @@ class JiraManager(Manager[JiraViewInterface]):
             f'{JIRA_CLOUD_API_URL}/{jira_cloud_id}/rest/api/2/issue/{issue_key}/comment'
         )
         data = format_jira_comment_body(message)
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=JIRA_HTTP_TIMEOUT
+        ) as client:
             response = await client.post(
                 url, auth=(svc_acc_email, svc_acc_api_key), json=data
             )
