@@ -254,7 +254,8 @@ export default function DeviceVerify() {
               <button
                 type="button"
                 onClick={() => processDeviceVerification(userCode)}
-                className="flex-1 px-4 py-2 bg-primary text-[#0D0F11] rounded-md hover:opacity-80"
+                disabled={isSwitchingOrg}
+                className="flex-1 px-4 py-2 bg-primary text-[#0D0F11] rounded-md hover:opacity-80 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 {t(I18nKey.DEVICE$AUTHORIZE)}
               </button>
