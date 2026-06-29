@@ -6,7 +6,6 @@ import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useOrganizations } from "#/hooks/query/use-organizations";
 import { useOrgConversationStats } from "#/hooks/query/use-org-conversation-stats";
 import { useOrgConversations } from "#/hooks/query/use-org-conversations";
-import { useOrgUsageStats } from "#/hooks/query/use-org-usage-stats";
 import { useStopConversation } from "#/hooks/mutation/use-stop-conversation";
 import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { organizationService } from "#/api/organization-service/organization-service.api";
@@ -24,9 +23,7 @@ const TERMINAL_EXECUTION_STATUSES = new Set([
 const isStoppable = (status: string | null | undefined) =>
   !TERMINAL_EXECUTION_STATUSES.has((status ?? "").toLowerCase());
 
-// Admin Dashboard tabs - keep Conversations tab here, delegate Usage to UsageDashboard
-type AdminTab = "usage" | "conversations";
-
+// Dashboard tabs - keep Conversations tab here, delegate Usage to UsageDashboard
 // Icons as inline SVGs for simplicity
 function SearchIcon() {
   return (
@@ -316,13 +313,6 @@ const copyToClipboard = (text: string) => {
   navigator.clipboard.writeText(text);
 };
 
-// Get number of days from time window string
-const getDaysFromTimeWindow = (timeWindow: string): number => {
-  if (timeWindow === "90d") return 90;
-  if (timeWindow === "30d") return 30;
-  return 7;
-};
-
 export function AdminDashboard() {
   const { organizationId } = useSelectedOrganizationId();
   const { data: orgData } = useOrganizations();
@@ -351,11 +341,6 @@ export function AdminDashboard() {
 
   // Fetch stats
   const { data: stats } = useOrgConversationStats();
-
-  // Fetch usage stats for Usage tab
-  const { data: usageStats } = useOrgUsageStats({
-    days: getDaysFromTimeWindow(timeWindow),
-  });
 
   // Fetch conversations
   const { data: conversationsData, isLoading: conversationsLoading } =
@@ -462,7 +447,7 @@ export function AdminDashboard() {
   if (!orgId) {
     return (
       <div className="p-8 text-center text-[#8C8C8C]">
-        Please select an organization to view usage & monitoring.
+        Please select an organization to view Usage & Monitoring.
       </div>
     );
   }
@@ -473,7 +458,7 @@ export function AdminDashboard() {
       <header className="border-b border-white/10 px-6 py-4">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-white font-bold text-lg">Admin dashboard</h1>
+            <h1 className="text-white font-bold text-lg">Usage & Monitoring</h1>
             <p className="text-[#888888] text-sm mt-1">
               {currentOrg?.name || "your organization"}
             </p>

@@ -1,8 +1,6 @@
 /* eslint-disable i18next/no-literal-string */
 import React, { useMemo, useState } from "react";
-import { useSearchParams } from "react-router";
 import { useOrgConversationStats } from "#/hooks/query/use-org-conversation-stats";
-import { useOrgConversations } from "#/hooks/query/use-org-conversations";
 import { useOrgUsageStats } from "#/hooks/query/use-org-usage-stats";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useOrganizations } from "#/hooks/query/use-organizations";
@@ -101,18 +99,6 @@ const formatCost = (cost: number) => {
   return `$${cost.toFixed(2)}`;
 };
 
-// Format date
-const formatDate = (dateStr: string) => {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-};
-
 // Format short date
 const formatShortDate = (dateStr: string) => {
   const date = new Date(dateStr);
@@ -202,7 +188,12 @@ const SAMPLE_MODELS = [
 // Sample conversation data for detailed view
 const SAMPLE_CONVERSATIONS = [
   {
-    user: { name: "Tom Bauer", email: "tom.bauer@acme.com", initials: "TB", color: "bg-green-500" },
+    user: {
+      name: "Tom Bauer",
+      email: "tom.bauer@acme.com",
+      initials: "TB",
+      color: "bg-green-500",
+    },
     tokens: "170.8K",
     spend: "$3.39",
     duration: "3h 31m",
@@ -215,7 +206,12 @@ const SAMPLE_CONVERSATIONS = [
     typeColor: "bg-teal-500/20 text-teal-400 border-teal-500/30",
   },
   {
-    user: { name: "Leila Ahmadi", email: "leila.ahmadi@acme.com", initials: "LA", color: "bg-purple-500" },
+    user: {
+      name: "Leila Ahmadi",
+      email: "leila.ahmadi@acme.com",
+      initials: "LA",
+      color: "bg-purple-500",
+    },
     tokens: "436.5K",
     spend: "$4.17",
     duration: "2h 39m",
@@ -228,7 +224,12 @@ const SAMPLE_CONVERSATIONS = [
     typeColor: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
   },
   {
-    user: { name: "Priya Shah", email: "priya.shah@acme.com", initials: "PS", color: "bg-amber-500" },
+    user: {
+      name: "Priya Shah",
+      email: "priya.shah@acme.com",
+      initials: "PS",
+      color: "bg-amber-500",
+    },
     tokens: "89.4K",
     spend: "$2.83",
     duration: "1h 30m",
@@ -241,7 +242,12 @@ const SAMPLE_CONVERSATIONS = [
     typeColor: "bg-purple-500/20 text-purple-400 border-purple-500/30",
   },
   {
-    user: { name: "Sam Osei", email: "sam.osei@acme.com", initials: "SO", color: "bg-purple-500" },
+    user: {
+      name: "Sam Osei",
+      email: "sam.osei@acme.com",
+      initials: "SO",
+      color: "bg-purple-500",
+    },
     tokens: "391.2K",
     spend: "$4.47",
     duration: "1h 30m",
@@ -254,7 +260,12 @@ const SAMPLE_CONVERSATIONS = [
     typeColor: "bg-teal-500/20 text-teal-400 border-teal-500/30",
   },
   {
-    user: { name: "DevOps Bot", email: "devops-bot@acme.com", initials: "DB", color: "bg-blue-500" },
+    user: {
+      name: "DevOps Bot",
+      email: "devops-bot@acme.com",
+      initials: "DB",
+      color: "bg-blue-500",
+    },
     tokens: "256.6K",
     spend: "$2.62",
     duration: "2h 32m",
@@ -267,7 +278,12 @@ const SAMPLE_CONVERSATIONS = [
     typeColor: "bg-teal-500/20 text-teal-400 border-teal-500/30",
   },
   {
-    user: { name: "Leila Ahmadi", email: "leila.ahmadi@acme.com", initials: "LA", color: "bg-purple-500" },
+    user: {
+      name: "Leila Ahmadi",
+      email: "leila.ahmadi@acme.com",
+      initials: "LA",
+      color: "bg-purple-500",
+    },
     tokens: "111.7K",
     spend: "$2.69",
     duration: "1h 3m",
@@ -280,7 +296,12 @@ const SAMPLE_CONVERSATIONS = [
     typeColor: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
   },
   {
-    user: { name: "Priya Shah", email: "priya.shah@acme.com", initials: "PS", color: "bg-amber-500" },
+    user: {
+      name: "Priya Shah",
+      email: "priya.shah@acme.com",
+      initials: "PS",
+      color: "bg-amber-500",
+    },
     tokens: "222.7K",
     spend: "$2.69",
     duration: "3h 7m",
@@ -293,7 +314,12 @@ const SAMPLE_CONVERSATIONS = [
     typeColor: "bg-purple-500/20 text-purple-400 border-purple-500/30",
   },
   {
-    user: { name: "Sam Osei", email: "sam.osei@acme.com", initials: "SO", color: "bg-purple-500" },
+    user: {
+      name: "Sam Osei",
+      email: "sam.osei@acme.com",
+      initials: "SO",
+      color: "bg-purple-500",
+    },
     tokens: "149.0K",
     spend: "$1.58",
     duration: "1h 10m",
@@ -306,7 +332,12 @@ const SAMPLE_CONVERSATIONS = [
     typeColor: "bg-purple-500/20 text-purple-400 border-purple-500/30",
   },
   {
-    user: { name: "DevOps Bot", email: "devops-bot@acme.com", initials: "DB", color: "bg-blue-500" },
+    user: {
+      name: "DevOps Bot",
+      email: "devops-bot@acme.com",
+      initials: "DB",
+      color: "bg-blue-500",
+    },
     tokens: "32.5K",
     spend: "$2.59",
     duration: "1h 57m",
@@ -321,7 +352,7 @@ const SAMPLE_CONVERSATIONS = [
 ];
 
 // Merged status styles
-function MergedBadge({ status }: { status: string; type: string }) {
+function MergedBadge({ status, type }: { status: string; type: string }) {
   if (type === "none") {
     return <span className="text-zinc-600">—</span>;
   }
@@ -352,7 +383,9 @@ function MergedBadge({ status }: { status: string; type: string }) {
 // Avatar component
 function Avatar({ initials, color }: { initials: string; color: string }) {
   return (
-    <div className={`w-8 h-8 rounded-full ${color} flex items-center justify-center text-xs font-medium text-white`}>
+    <div
+      className={`w-8 h-8 rounded-full ${color} flex items-center justify-center text-xs font-medium text-white`}
+    >
       {initials}
     </div>
   );
@@ -377,7 +410,9 @@ function KPICard({
       </span>
       <div className="text-white text-2xl font-bold mt-2">{value}</div>
       {trend && (
-        <div className={`flex items-center gap-1 mt-2 text-xs ${trendUp ? "text-green-400" : "text-red-400"}`}>
+        <div
+          className={`flex items-center gap-1 mt-2 text-xs ${trendUp ? "text-green-400" : "text-red-400"}`}
+        >
           {trendUp ? <TrendUpIcon /> : <TrendDownIcon />}
           {trend}
         </div>
@@ -407,7 +442,11 @@ function AreaChart({ data }: { data: { date: string; value: number }[] }) {
 
   return (
     <div className="relative h-48 w-full">
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full" preserveAspectRatio="none">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full h-full"
+        preserveAspectRatio="none"
+      >
         {/* Grid lines */}
         {[0, 25, 50, 75, 100].map((pct) => (
           <line
@@ -440,9 +479,11 @@ function AreaChart({ data }: { data: { date: string; value: number }[] }) {
       </div>
       {/* X-axis labels */}
       <div className="absolute bottom-0 left-0 right-0 flex justify-between text-xs text-zinc-600 mt-2">
-        {data.filter((_, i) => i % Math.ceil(data.length / 7) === 0).map((d) => (
-          <span key={d.date}>{formatShortDate(d.date)}</span>
-        ))}
+        {data
+          .filter((_, i) => i % Math.ceil(data.length / 7) === 0)
+          .map((d) => (
+            <span key={d.date}>{formatShortDate(d.date)}</span>
+          ))}
       </div>
     </div>
   );
@@ -451,7 +492,6 @@ function AreaChart({ data }: { data: { date: string; value: number }[] }) {
 export function UsageDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [timeWindow, setTimeWindow] = useState("30d");
-  const [searchParams, setSearchParams] = useSearchParams();
   const [modelSearch, setModelSearch] = useState("");
 
   const { organizationId } = useSelectedOrganizationId();
@@ -461,30 +501,35 @@ export function UsageDashboard() {
   const { data: stats } = useOrgConversationStats();
   const { data: usageStats } = useOrgUsageStats({ days });
 
-  const currentOrg = orgData?.organizations?.find((org) => org.id === organizationId);
+  const currentOrg = orgData?.organizations?.find(
+    (org) => org.id === organizationId,
+  );
 
   // Calculate totals from stats for overview
   const totalConversations = stats?.completed_30d ?? 1847;
   const activeConversations = stats?.active_conversations ?? 23;
-  const avgCostPerConversation = stats && stats.completed_30d > 0
-    ? (stats.total_cost / stats.completed_30d).toFixed(2)
-    : "1.42";
+  const avgCostPerConversation =
+    stats && stats.completed_30d > 0
+      ? (stats.total_cost / stats.completed_30d).toFixed(2)
+      : "1.42";
   const totalSpend = formatCost(stats?.total_cost ?? 2623.47);
 
   // Filter models based on search
   const filteredModels = SAMPLE_MODELS.filter(
     (m) =>
       m.model.toLowerCase().includes(modelSearch.toLowerCase()) ||
-      m.provider.toLowerCase().includes(modelSearch.toLowerCase())
+      m.provider.toLowerCase().includes(modelSearch.toLowerCase()),
   );
 
   // Generate chart data from usage stats
-  const chartData = useMemo(() => {
-    return (usageStats?.daily_usage ?? []).map((d) => ({
-      date: d.date,
-      value: d.tokens,
-    }));
-  }, [usageStats?.daily_usage]);
+  const chartData = useMemo(
+    () =>
+      (usageStats?.daily_usage ?? []).map((d) => ({
+        date: d.date,
+        value: d.tokens,
+      })),
+    [usageStats?.daily_usage],
+  );
 
   // Tab badge counts
   const tabCounts = {
@@ -500,9 +545,12 @@ export function UsageDashboard() {
       <div className="px-8 py-6 border-b border-zinc-800">
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-white mb-1">Usage Dashboard</h1>
+            <h1 className="text-2xl font-bold text-white mb-1">
+              Usage Dashboard
+            </h1>
             <p className="text-zinc-400">
-              Monitor adoption, spend, and ROI across your organization.
+              Monitor adoption, spend, and ROI across{" "}
+              {currentOrg?.name || "your organization"}.
             </p>
           </div>
           {/* Time window selector */}
@@ -557,25 +605,25 @@ export function UsageDashboard() {
             <div className="grid grid-cols-4 gap-4">
               <KPICard
                 label="Total Conversations"
-                value="1,847"
+                value={totalConversations.toLocaleString()}
                 trend="▲ 18.2% vs prev 30d"
                 trendUp
               />
               <KPICard
                 label="Active Conversations"
-                value="23"
+                value={activeConversations.toLocaleString()}
                 trend="▲ 4 more than yesterday"
                 trendUp
               />
               <KPICard
                 label="Avg Cost / Conversation"
-                value="$1.42"
+                value={`$${avgCostPerConversation}`}
                 trend="▼ 6.1% vs prev 30d"
                 trendUp={false}
               />
               <KPICard
                 label="Total Spend (30d)"
-                value="$2,623.47"
+                value={totalSpend}
                 trend="▲ 11.4% vs prev 30d"
                 trendUp
               />
@@ -585,8 +633,12 @@ export function UsageDashboard() {
             <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
               <div className="flex items-start justify-between mb-6">
                 <div>
-                  <h2 className="text-lg font-medium text-white">Conversations per day</h2>
-                  <p className="text-sm text-zinc-500">Last 30 days · all users</p>
+                  <h2 className="text-lg font-medium text-white">
+                    Conversations per day
+                  </h2>
+                  <p className="text-sm text-zinc-500">
+                    Last 30 days · all users
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -596,16 +648,22 @@ export function UsageDashboard() {
                   Export CSV
                 </button>
               </div>
-              <AreaChart data={chartData.length > 0 ? chartData : [
-                { date: "2024-05-31", value: 45 },
-                { date: "2024-06-04", value: 52 },
-                { date: "2024-06-08", value: 38 },
-                { date: "2024-06-12", value: 65 },
-                { date: "2024-06-16", value: 48 },
-                { date: "2024-06-20", value: 55 },
-                { date: "2024-06-24", value: 42 },
-                { date: "2024-06-28", value: 58 },
-              ]} />
+              <AreaChart
+                data={
+                  chartData.length > 0
+                    ? chartData
+                    : [
+                        { date: "2024-05-31", value: 45 },
+                        { date: "2024-06-04", value: 52 },
+                        { date: "2024-06-08", value: 38 },
+                        { date: "2024-06-12", value: 65 },
+                        { date: "2024-06-16", value: 48 },
+                        { date: "2024-06-20", value: 55 },
+                        { date: "2024-06-24", value: 42 },
+                        { date: "2024-06-28", value: 58 },
+                      ]
+                }
+              />
             </div>
 
             {/* ROI Row */}
@@ -673,45 +731,91 @@ export function UsageDashboard() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-zinc-800">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">User</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Tokens</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Spend</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Duration</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Started</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Last Update</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Associated PR</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Merged?</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      User
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Tokens
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Spend
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Duration
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Started
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Last Update
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Associated PR
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Merged?
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Type
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {SAMPLE_CONVERSATIONS.map((conv, i) => (
-                    <tr key={i} className="border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors">
+                    <tr
+                      key={i}
+                      className="border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors"
+                    >
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-3">
-                          <Avatar initials={conv.user.initials} color={conv.user.color} />
-                          <span className="text-zinc-400 text-sm">{conv.user.email}</span>
+                          <Avatar
+                            initials={conv.user.initials}
+                            color={conv.user.color}
+                          />
+                          <span className="text-zinc-400 text-sm">
+                            {conv.user.email}
+                          </span>
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-white text-sm font-mono">{conv.tokens}</td>
-                      <td className="px-4 py-4 text-white text-sm font-mono">{conv.spend}</td>
-                      <td className="px-4 py-4 text-white text-sm">{conv.duration}</td>
-                      <td className="px-4 py-4 text-zinc-400 text-sm">{conv.started}</td>
-                      <td className="px-4 py-4 text-zinc-400 text-sm">{conv.lastUpdate}</td>
+                      <td className="px-4 py-4 text-white text-sm font-mono">
+                        {conv.tokens}
+                      </td>
+                      <td className="px-4 py-4 text-white text-sm font-mono">
+                        {conv.spend}
+                      </td>
+                      <td className="px-4 py-4 text-white text-sm">
+                        {conv.duration}
+                      </td>
+                      <td className="px-4 py-4 text-zinc-400 text-sm">
+                        {conv.started}
+                      </td>
+                      <td className="px-4 py-4 text-zinc-400 text-sm">
+                        {conv.lastUpdate}
+                      </td>
                       <td className="px-4 py-4">
                         {conv.pr.linked ? (
-                          <a href="#" className="text-blue-400 hover:text-blue-300 text-sm">
+                          <button
+                            type="button"
+                            className="text-blue-400 hover:text-blue-300 text-sm"
+                          >
                             {conv.pr.text}
-                          </a>
+                          </button>
                         ) : (
-                          <span className="text-zinc-600 text-sm">{conv.pr.text}</span>
+                          <span className="text-zinc-600 text-sm">
+                            {conv.pr.text}
+                          </span>
                         )}
                       </td>
                       <td className="px-4 py-4">
-                        <MergedBadge status={conv.merged} type={conv.mergedType} />
+                        <MergedBadge
+                          status={conv.merged}
+                          type={conv.mergedType}
+                        />
                       </td>
                       <td className="px-4 py-4">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${conv.typeColor}`}>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${conv.typeColor}`}
+                        >
                           {conv.type}
                         </span>
                       </td>
@@ -727,21 +831,59 @@ export function UsageDashboard() {
         {activeTab === "users" && (
           <div className="space-y-4">
             <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
-              <h2 className="text-lg font-medium text-white mb-6">Team Usage Breakdown</h2>
+              <h2 className="text-lg font-medium text-white mb-6">
+                Team Usage Breakdown
+              </h2>
               <div className="space-y-4">
-                {(usageStats?.team_usage ?? [
-                  { user_name: "Tom Bauer", user_email: "tom.bauer@acme.com", conversation_count: 342, total_tokens: 45230000, percentage: 38.2 },
-                  { user_name: "Leila Ahmadi", user_email: "leila.ahmadi@acme.com", conversation_count: 256, total_tokens: 32100000, percentage: 27.1 },
-                  { user_name: "Priya Shah", user_email: "priya.shah@acme.com", conversation_count: 189, total_tokens: 18750000, percentage: 15.8 },
-                  { user_name: "Sam Osei", user_email: "sam.osei@acme.com", conversation_count: 134, total_tokens: 14320000, percentage: 12.1 },
-                  { user_name: "DevOps Bot", user_email: "devops-bot@acme.com", conversation_count: 89, total_tokens: 8230000, percentage: 6.8 },
-                ]).map((user, i) => (
+                {(
+                  usageStats?.team_usage ?? [
+                    {
+                      user_name: "Tom Bauer",
+                      user_email: "tom.bauer@acme.com",
+                      conversation_count: 342,
+                      total_tokens: 45230000,
+                      percentage: 38.2,
+                    },
+                    {
+                      user_name: "Leila Ahmadi",
+                      user_email: "leila.ahmadi@acme.com",
+                      conversation_count: 256,
+                      total_tokens: 32100000,
+                      percentage: 27.1,
+                    },
+                    {
+                      user_name: "Priya Shah",
+                      user_email: "priya.shah@acme.com",
+                      conversation_count: 189,
+                      total_tokens: 18750000,
+                      percentage: 15.8,
+                    },
+                    {
+                      user_name: "Sam Osei",
+                      user_email: "sam.osei@acme.com",
+                      conversation_count: 134,
+                      total_tokens: 14320000,
+                      percentage: 12.1,
+                    },
+                    {
+                      user_name: "DevOps Bot",
+                      user_email: "devops-bot@acme.com",
+                      conversation_count: 89,
+                      total_tokens: 8230000,
+                      percentage: 6.8,
+                    },
+                  ]
+                ).map((user, i) => (
                   <div key={i} className="flex items-center gap-4">
                     <div className="w-32">
                       <div className="text-white text-sm font-medium truncate">
-                        {user.user_name ?? user.user_email?.split("@")[0] ?? "Unknown"}
+                        {user.user_name ??
+                          user.user_email?.split("@")[0] ??
+                          "Unknown"}
                       </div>
-                      <div className="text-zinc-500 text-xs truncate">{user.user_email}</div>
+                      <div className="text-zinc-500 text-xs truncate">
+                        {user.user_email}
+                      </div>
                     </div>
                     <div className="flex-1">
                       <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
@@ -752,11 +894,17 @@ export function UsageDashboard() {
                       </div>
                     </div>
                     <div className="w-24 text-right">
-                      <div className="text-white text-sm">{formatTokens(user.total_tokens)}</div>
-                      <div className="text-zinc-500 text-xs">{user.conversation_count} convos</div>
+                      <div className="text-white text-sm">
+                        {formatTokens(user.total_tokens)}
+                      </div>
+                      <div className="text-zinc-500 text-xs">
+                        {user.conversation_count} convos
+                      </div>
                     </div>
                     <div className="w-16 text-right">
-                      <span className="text-zinc-400 text-sm">{user.percentage}%</span>
+                      <span className="text-zinc-400 text-sm">
+                        {user.percentage}%
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -796,26 +944,55 @@ export function UsageDashboard() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-zinc-800">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Model</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">Conversations</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">Tokens Used</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">Avg Tokens / Convo</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">Avg Cost / Convo</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">Total Cost</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Model
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Conversations
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Tokens Used
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Avg Tokens / Convo
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Avg Cost / Convo
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Total Cost
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredModels.map((model, i) => (
-                    <tr key={i} className="border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors">
+                    <tr
+                      key={i}
+                      className="border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors"
+                    >
                       <td className="px-4 py-5">
-                        <div className="text-white font-medium">{model.model}</div>
-                        <div className="text-zinc-500 text-sm">{model.provider}</div>
+                        <div className="text-white font-medium">
+                          {model.model}
+                        </div>
+                        <div className="text-zinc-500 text-sm">
+                          {model.provider}
+                        </div>
                       </td>
-                      <td className="px-4 py-5 text-white text-sm font-mono text-right">{model.conversations.toLocaleString()}</td>
-                      <td className="px-4 py-5 text-white text-sm font-mono text-right">{formatTokens(model.tokensUsed)}</td>
-                      <td className="px-4 py-5 text-white text-sm font-mono text-right">{formatTokens(model.avgTokensPerConvo)}</td>
-                      <td className="px-4 py-5 text-white text-sm font-mono text-right">${model.avgCostPerConvo.toFixed(2)}</td>
-                      <td className="px-4 py-5 text-white text-sm font-mono text-right font-medium">${model.totalCost.toFixed(2)}</td>
+                      <td className="px-4 py-5 text-white text-sm font-mono text-right">
+                        {model.conversations.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-5 text-white text-sm font-mono text-right">
+                        {formatTokens(model.tokensUsed)}
+                      </td>
+                      <td className="px-4 py-5 text-white text-sm font-mono text-right">
+                        {formatTokens(model.avgTokensPerConvo)}
+                      </td>
+                      <td className="px-4 py-5 text-white text-sm font-mono text-right">
+                        ${model.avgCostPerConvo.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-5 text-white text-sm font-mono text-right font-medium">
+                        ${model.totalCost.toFixed(2)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

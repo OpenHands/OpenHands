@@ -18,22 +18,6 @@ function SearchIcon() {
   );
 }
 
-function DollarIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-    >
-      <line x1="12" y1="1" x2="12" y2="23" />
-      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-    </svg>
-  );
-}
-
 function EmailIcon() {
   return (
     <svg
@@ -110,15 +94,18 @@ function HashIcon() {
 function Toggle({
   enabled,
   onChange,
+  label,
 }: {
   enabled: boolean;
   onChange: (value: boolean) => void;
+  label: string;
 }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={enabled}
+      aria-label={label}
       onClick={() => onChange(!enabled)}
       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
         enabled ? "bg-blue-500" : "bg-[#262626]"
@@ -167,8 +154,10 @@ function SpendMeter({
   showTicks?: boolean;
 }) {
   const getBarColor = () => {
-    if (percentage >= 90) return "bg-gradient-to-r from-green-500 via-yellow-500 to-red-500";
-    if (percentage >= 80) return "bg-gradient-to-r from-green-500 via-yellow-500 to-orange-500";
+    if (percentage >= 90)
+      return "bg-gradient-to-r from-green-500 via-yellow-500 to-red-500";
+    if (percentage >= 80)
+      return "bg-gradient-to-r from-green-500 via-yellow-500 to-orange-500";
     return "bg-gradient-to-r from-green-500 to-yellow-500";
   };
 
@@ -209,12 +198,11 @@ function UserProgressBar({
   status: "green" | "yellow" | "red";
 }) {
   const percentage = (value / max) * 100;
-  const colorClass =
-    status === "red"
-      ? "bg-red-500"
-      : status === "yellow"
-        ? "bg-yellow-500"
-        : "bg-green-500";
+  const colorClass = {
+    red: "bg-red-500",
+    yellow: "bg-yellow-500",
+    green: "bg-green-500",
+  }[status];
 
   return (
     <div className="w-full">
@@ -224,19 +212,15 @@ function UserProgressBar({
           style={{ width: `${Math.min(percentage, 100)}%` }}
         />
       </div>
-      <div className="text-xs text-[#8C8C8C] mt-1">${value.toLocaleString()} / ${max.toLocaleString()}</div>
+      <div className="text-xs text-[#8C8C8C] mt-1">
+        ${value.toLocaleString()} / ${max.toLocaleString()}
+      </div>
     </div>
   );
 }
 
 // Avatar component
-function Avatar({
-  name,
-  size = "md",
-}: {
-  name: string;
-  size?: "sm" | "md";
-}) {
+function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
   const initials = name
     .split(" ")
     .map((n) => n[0])
@@ -390,7 +374,9 @@ export function Budgets() {
   const [billingCycle, setBillingCycle] = useState("1st");
   const [slackChannel, setSlackChannel] = useState("finance-alerts");
   const [thresholds, setThresholds] = useState(SAMPLE_THRESHOLDS);
-  const [budgetType, setBudgetType] = useState<"lifetime" | "monthly">("lifetime");
+  const [budgetType, setBudgetType] = useState<"lifetime" | "monthly">(
+    "lifetime",
+  );
   const [defaultAmount, setDefaultAmount] = useState("500");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -459,6 +445,7 @@ export function Budgets() {
             <Toggle
               enabled={orgBudgetEnabled}
               onChange={setOrgBudgetEnabled}
+              label="Enable organization budget"
             />
           </div>
         </div>
@@ -468,7 +455,8 @@ export function Budgets() {
           <div className="flex items-baseline justify-between mb-3">
             <div>
               <span className="text-3xl font-bold text-white">
-                ${currentSpend.toLocaleString("en-US", {
+                $
+                {currentSpend.toLocaleString("en-US", {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}
@@ -487,7 +475,10 @@ export function Budgets() {
         {/* Inputs */}
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
-            <label className="block text-sm text-[#8C8C8C] mb-2">
+            <label
+              htmlFor="org-monthly-limit"
+              className="block text-sm text-[#8C8C8C] mb-2"
+            >
               Monthly limit
             </label>
             <div className="relative">
@@ -495,6 +486,7 @@ export function Budgets() {
                 $
               </span>
               <input
+                id="org-monthly-limit"
                 type="number"
                 value={monthlyLimit}
                 onChange={(e) => setMonthlyLimit(e.target.value)}
@@ -503,10 +495,14 @@ export function Budgets() {
             </div>
           </div>
           <div>
-            <label className="block text-sm text-[#8C8C8C] mb-2">
+            <label
+              htmlFor="org-billing-cycle"
+              className="block text-sm text-[#8C8C8C] mb-2"
+            >
               Billing cycle resets
             </label>
             <select
+              id="org-billing-cycle"
               value={billingCycle}
               onChange={(e) => setBillingCycle(e.target.value)}
               className="w-full px-4 py-2 bg-[#0B0F17] border border-[#262626] rounded-lg text-white focus:outline-none focus:border-blue-500"
@@ -592,7 +588,10 @@ export function Budgets() {
 
         {/* Slack Integration Footer */}
         <div className="mb-6 p-4 bg-[#0B0F17] rounded-lg border border-[#262626]">
-          <label className="block text-sm text-[#8C8C8C] mb-2">
+          <label
+            htmlFor="slack-channel"
+            className="block text-sm text-[#8C8C8C] mb-2"
+          >
             Slack channel
           </label>
           <div className="relative">
@@ -600,6 +599,7 @@ export function Budgets() {
               <HashIcon />
             </span>
             <input
+              id="slack-channel"
               type="text"
               value={slackChannel}
               onChange={(e) => setSlackChannel(e.target.value)}
@@ -642,9 +642,7 @@ export function Budgets() {
 
         <div className="grid grid-cols-2 gap-6">
           <div>
-            <label className="block text-sm text-[#8C8C8C] mb-2">
-              Budget type
-            </label>
+            <div className="block text-sm text-[#8C8C8C] mb-2">Budget type</div>
             <div className="flex bg-[#0B0F17] border border-[#262626] rounded-lg p-1">
               <button
                 type="button"
@@ -671,7 +669,10 @@ export function Budgets() {
             </div>
           </div>
           <div>
-            <label className="block text-sm text-[#8C8C8C] mb-2">
+            <label
+              htmlFor="default-budget-amount"
+              className="block text-sm text-[#8C8C8C] mb-2"
+            >
               Default amount
             </label>
             <div className="relative">
@@ -679,6 +680,7 @@ export function Budgets() {
                 $
               </span>
               <input
+                id="default-budget-amount"
                 type="number"
                 value={defaultAmount}
                 onChange={(e) => setDefaultAmount(e.target.value)}
@@ -690,11 +692,10 @@ export function Budgets() {
 
         {/* Preview */}
         <div className="mt-6">
-          <label className="block text-sm text-[#8C8C8C] mb-2">Preview</label>
+          <div className="block text-sm text-[#8C8C8C] mb-2">Preview</div>
           <div className="p-4 bg-[#0B0F17] rounded-lg border border-[#262626]">
             <p className="text-sm text-[#8C8C8C]">
-              New users get up to $
-              {parseFloat(defaultAmount).toLocaleString()}{" "}
+              New users get up to ${parseFloat(defaultAmount).toLocaleString()}{" "}
               {budgetType === "lifetime" ? "total" : "per month"} before
               requiring an increase.
             </p>

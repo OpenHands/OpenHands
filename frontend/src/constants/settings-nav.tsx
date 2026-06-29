@@ -1,4 +1,9 @@
-import { FiUsers, FiBriefcase, FiBarChart2, FiDollarSign } from "react-icons/fi";
+import {
+  FiUsers,
+  FiBriefcase,
+  FiBarChart2,
+  FiDollarSign,
+} from "react-icons/fi";
 import CreditCardIcon from "#/icons/credit-card.svg?react";
 import KeyIcon from "#/icons/key.svg?react";
 import LightbulbIcon from "#/icons/lightbulb.svg?react";
