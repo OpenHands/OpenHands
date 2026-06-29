@@ -1,5 +1,8 @@
 /* eslint-disable i18next/no-literal-string */
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { organizationService } from "#/api/organization-service/organization-service.api";
+import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 
 // Icons as inline SVGs
 function SearchIcon() {
@@ -197,7 +200,7 @@ function UserProgressBar({
   max: number;
   status: "green" | "yellow" | "red";
 }) {
-  const percentage = (value / max) * 100;
+  const percentage = max > 0 ? (value / max) * 100 : 0;
   const colorClass = {
     red: "bg-red-500",
     yellow: "bg-yellow-500",
@@ -266,124 +269,171 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-// Sample data
-const SAMPLE_THRESHOLDS = [
-  {
-    percentage: 80,
-    amount: 8000,
-    emailActive: true,
-    slackActive: false,
-  },
-  {
-    percentage: 90,
-    amount: 9000,
-    emailActive: true,
-    slackActive: true,
-  },
-  {
-    percentage: 100,
-    amount: 10000,
-    emailActive: true,
-    slackActive: true,
-  },
-];
-
-const SAMPLE_USERS = [
-  {
-    name: "Alice Chen",
-    email: "alice@acme.com",
-    budget: "$500 lifetime",
-    budgetNote: "Inherits default",
-    isOverride: false,
-    usage: 412,
-    maxUsage: 500,
-    status: "> 80% used",
-    statusColor: "yellow" as const,
-  },
-  {
-    name: "Bob Martinez",
-    email: "bob@acme.com",
-    budget: "$1,000 monthly",
-    budgetNote: "Override",
-    isOverride: true,
-    usage: 952,
-    maxUsage: 1000,
-    status: "> 90% used",
-    statusColor: "red" as const,
-  },
-  {
-    name: "Chen Wei",
-    email: "chen@acme.com",
-    budget: "$500 lifetime",
-    budgetNote: "Inherits default",
-    isOverride: false,
-    usage: 88,
-    maxUsage: 500,
-    status: "Inherits default",
-    statusColor: "green" as const,
-  },
-  {
-    name: "Dana Park",
-    email: "dana@acme.com",
-    budget: "$2,000 monthly",
-    budgetNote: "Override",
-    isOverride: true,
-    usage: 1611,
-    maxUsage: 2000,
-    status: "> 80% used",
-    statusColor: "yellow" as const,
-  },
-  {
-    name: "Eli Brooks",
-    email: "eli@acme.com",
-    budget: "$500 lifetime",
-    budgetNote: "Inherits default",
-    isOverride: false,
-    usage: 510,
-    maxUsage: 500,
-    status: "Over cap",
-    statusColor: "red" as const,
-  },
-  {
-    name: "Farah Idris",
-    email: "farah@acme.com",
-    budget: "$750 monthly",
-    budgetNote: "Override",
-    isOverride: true,
-    usage: 220,
-    maxUsage: 750,
-    status: "On track",
-    statusColor: "green" as const,
-  },
-  {
-    name: "Greg Thompson",
-    email: "greg@acme.com",
-    budget: "$500 lifetime",
-    budgetNote: "Inherits default",
-    isOverride: false,
-    usage: 460,
-    maxUsage: 500,
-    status: "> 90% used",
-    statusColor: "red" as const,
-  },
-];
 
 export function Budgets() {
-  const [orgBudgetEnabled, setOrgBudgetEnabled] = useState(true);
-  const [monthlyLimit, setMonthlyLimit] = useState("10000");
+  const { organizationId } = useSelectedOrganizationId();
+  const queryClient = useQueryClient();
+
+  const { data: budgetData, isLoading } = useQuery({
+    queryKey: ["organizations", "budgets", organizationId],
+    queryFn: () => organizationService.getBudgetSettings({ orgId: organizationId! }),
+    enabled: !!organizationId,
+  });
+
+  const updateBudgets = useMutation({
+    mutationFn: (payload: {
+      enabled?: boolean | null;
+      monthly_limit?: number | null;
+      reset_day?: number | null;
+      default_user_monthly_limit?: number | null;
+      slack_channel?: string | null;
+      slack_team_id?: string | null;
+      thresholds?: {
+        percentage: number;
+        email_enabled: boolean;
+        slack_enabled: boolean;
+      }[] | null;
+    }) =>
+      organizationService.updateBudgetSettings({
+        orgId: organizationId!,
+        payload,
+      }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", "budgets", organizationId],
+      }),
+  });
+
+  const upsertOverride = useMutation({
+    mutationFn: (params: {
+      userId: string;
+      payload: { monthly_limit?: number | null; is_disabled: boolean };
+    }) =>
+      organizationService.upsertBudgetOverride({
+        orgId: organizationId!,
+        userId: params.userId,
+        payload: params.payload,
+      }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", "budgets", organizationId],
+      }),
+  });
+
+  const deleteOverride = useMutation({
+    mutationFn: (userId: string) =>
+      organizationService.deleteBudgetOverride({
+        orgId: organizationId!,
+        userId,
+      }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", "budgets", organizationId],
+      }),
+  });
+
+  const [orgBudgetEnabled, setOrgBudgetEnabled] = useState(false);
+  const [monthlyLimit, setMonthlyLimit] = useState("");
   const [billingCycle, setBillingCycle] = useState("1st");
-  const [slackChannel, setSlackChannel] = useState("finance-alerts");
-  const [thresholds, setThresholds] = useState(SAMPLE_THRESHOLDS);
-  const [budgetType, setBudgetType] = useState<"lifetime" | "monthly">(
-    "lifetime",
-  );
-  const [defaultAmount, setDefaultAmount] = useState("500");
+  const [slackChannel, setSlackChannel] = useState("");
+  const [thresholds, setThresholds] = useState<
+    { percentage: number; email_enabled: boolean; slack_enabled: boolean }[]
+  >([]);
+  const [defaultAmount, setDefaultAmount] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [users] = useState(SAMPLE_USERS);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [overrideAmount, setOverrideAmount] = useState("");
+  const [overrideDisabled, setOverrideDisabled] = useState(false);
 
-  const currentSpend = 8213.42;
-  const percentage = (currentSpend / parseFloat(monthlyLimit || "1")) * 100;
+  useEffect(() => {
+    if (!budgetData) return;
+    setOrgBudgetEnabled(budgetData.enabled);
+    setMonthlyLimit(
+      budgetData.monthly_limit ? budgetData.monthly_limit.toString() : "",
+    );
+    setBillingCycle(budgetData.reset_day === 15 ? "15th" : "1st");
+    setSlackChannel(budgetData.slack_channel ?? "");
+    setThresholds(
+      budgetData.thresholds.map((threshold) => ({
+        percentage: threshold.percentage,
+        email_enabled: threshold.email_enabled,
+        slack_enabled: threshold.slack_enabled,
+      })),
+    );
+    setDefaultAmount(
+      budgetData.default_user_monthly_limit
+        ? budgetData.default_user_monthly_limit.toString()
+        : "",
+    );
+  }, [budgetData]);
+
+  const monthlyLimitValue = monthlyLimit ? Number(monthlyLimit) : null;
+  const currentSpend = budgetData?.current_spend ?? 0;
+  const percentage = budgetData?.current_spend_percentage ?? 0;
+  const cycleLabel = budgetData?.cycle_start_at
+    ? new Date(budgetData.cycle_start_at).toLocaleDateString("en-US", {
+        month: "long",
+      })
+    : "this cycle";
+  const defaultUserLimit = budgetData?.default_user_monthly_limit ?? null;
+
+  const handleReset = () => {
+    if (!budgetData) return;
+    setOrgBudgetEnabled(budgetData.enabled);
+    setMonthlyLimit(
+      budgetData.monthly_limit ? budgetData.monthly_limit.toString() : "",
+    );
+    setBillingCycle(budgetData.reset_day === 15 ? "15th" : "1st");
+    setSlackChannel(budgetData.slack_channel ?? "");
+    setThresholds(
+      budgetData.thresholds.map((threshold) => ({
+        percentage: threshold.percentage,
+        email_enabled: threshold.email_enabled,
+        slack_enabled: threshold.slack_enabled,
+      })),
+    );
+    setDefaultAmount(
+      budgetData.default_user_monthly_limit
+        ? budgetData.default_user_monthly_limit.toString()
+        : "",
+    );
+  };
+
+  const handleSaveOrgBudget = () => {
+    if (!organizationId) return;
+    updateBudgets.mutate({
+      enabled: orgBudgetEnabled,
+      monthly_limit: monthlyLimitValue,
+      reset_day: billingCycle === "15th" ? 15 : 1,
+      slack_channel: slackChannel ? slackChannel.trim() : null,
+      thresholds: thresholds.map((threshold) => ({
+        percentage: threshold.percentage,
+        email_enabled: threshold.email_enabled,
+        slack_enabled: threshold.slack_enabled,
+      })),
+    });
+  };
+
+  const handleSaveDefault = () => {
+    if (!organizationId) return;
+    const defaultValue = defaultAmount ? Number(defaultAmount) : null;
+    updateBudgets.mutate({
+      default_user_monthly_limit: defaultValue,
+    });
+  };
+
+  const handleAddThreshold = () => {
+    const used = new Set(thresholds.map((t) => t.percentage));
+    const candidates = [50, 60, 70, 75, 85, 95];
+    const next = candidates.find((value) => !used.has(value));
+    if (!next) return;
+    setThresholds((prev) =>
+      [...prev, { percentage: next, email_enabled: true, slack_enabled: false }].sort(
+        (a, b) => a.percentage - b.percentage,
+      ),
+    );
+  };
 
   const handleDeleteThreshold = (index: number) => {
     setThresholds(thresholds.filter((_, i) => i !== index));
@@ -392,7 +442,7 @@ export function Budgets() {
   const handleToggleEmail = (index: number) => {
     setThresholds(
       thresholds.map((t, i) =>
-        i === index ? { ...t, emailActive: !t.emailActive } : t,
+        i === index ? { ...t, email_enabled: !t.email_enabled } : t,
       ),
     );
   };
@@ -400,23 +450,123 @@ export function Budgets() {
   const handleToggleSlack = (index: number) => {
     setThresholds(
       thresholds.map((t, i) =>
-        i === index ? { ...t, slackActive: !t.slackActive } : t,
+        i === index ? { ...t, slack_enabled: !t.slack_enabled } : t,
       ),
     );
   };
 
-  const filteredUsers = users.filter((user) => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus =
-      statusFilter === "all" ||
-      (statusFilter === "over80" &&
-        (user.status.includes("> 80%") || user.status.includes("Over cap"))) ||
-      (statusFilter === "onTrack" && user.status.includes("On track")) ||
-      (statusFilter === "inherited" && user.status.includes("Inherits"));
-    return matchesSearch && matchesStatus;
-  });
+  const userRows = useMemo(() => {
+    return (budgetData?.users ?? []).map((user) => {
+      const limit = user.is_disabled ? null : user.effective_monthly_limit;
+      const hasLimit = typeof limit === "number" && limit > 0;
+      const usagePercent = hasLimit ? (user.current_spend / limit) * 100 : 0;
+      let status = "No cap";
+      let statusColor: "green" | "yellow" | "red" = "green";
+      if (user.is_disabled) {
+        status = "Disabled";
+      } else if (hasLimit) {
+        if (usagePercent > 100) {
+          status = "Over cap";
+          statusColor = "red";
+        } else if (usagePercent >= 90) {
+          status = "> 90% used";
+          statusColor = "red";
+        } else if (usagePercent >= 80) {
+          status = "> 80% used";
+          statusColor = "yellow";
+        } else {
+          status = "On track";
+          statusColor = "green";
+        }
+      }
+
+      const budgetLabel = user.is_disabled
+        ? "Disabled"
+        : hasLimit
+          ? `$${limit.toLocaleString()} / month`
+          : "No limit";
+      const budgetNote = user.is_override
+        ? "Override"
+        : defaultUserLimit
+          ? "Inherits default"
+          : "No default";
+
+      return {
+        ...user,
+        name: user.user_name || user.user_email || "Unknown user",
+        email: user.user_email || "",
+        hasLimit,
+        budgetLabel,
+        budgetNote,
+        status,
+        statusColor,
+        usage: user.current_spend,
+        maxUsage: limit ?? 0,
+      };
+    });
+  }, [budgetData, defaultUserLimit]);
+
+  const filteredUsers = useMemo(() => {
+    return userRows.filter((user) => {
+      const matchesSearch =
+        user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "over80" &&
+          (user.status.includes("> 80%") || user.status.includes("> 90%") ||
+            user.status.includes("Over cap"))) ||
+        (statusFilter === "over90" &&
+          (user.status.includes("> 90%") || user.status.includes("Over cap"))) ||
+        (statusFilter === "overCap" && user.status.includes("Over cap")) ||
+        (statusFilter === "onTrack" && user.status.includes("On track")) ||
+        (statusFilter === "noCap" && user.status.includes("No cap")) ||
+        (statusFilter === "disabled" && user.status.includes("Disabled"));
+      return matchesSearch && matchesStatus;
+    });
+  }, [userRows, searchQuery, statusFilter]);
+
+  const startEditingUser = (user: (typeof userRows)[number]) => {
+    setEditingUserId(user.user_id);
+    setOverrideDisabled(user.is_disabled);
+    setOverrideAmount(
+      user.effective_monthly_limit ? user.effective_monthly_limit.toString() : "",
+    );
+  };
+
+  const cancelEditing = () => {
+    setEditingUserId(null);
+    setOverrideAmount("");
+    setOverrideDisabled(false);
+  };
+
+  const saveOverride = (userId: string) => {
+    if (!organizationId) return;
+    const overrideValue = overrideAmount ? Number(overrideAmount) : null;
+    upsertOverride.mutate({
+      userId,
+      payload: {
+        monthly_limit: overrideDisabled ? null : overrideValue,
+        is_disabled: overrideDisabled,
+      },
+    });
+    cancelEditing();
+  };
+
+  const removeOverride = (userId: string) => {
+    if (!organizationId) return;
+    deleteOverride.mutate(userId);
+  };
+
+  if (!organizationId) {
+    return (
+      <div className="text-[#8C8C8C]">Select an organization to manage budgets.</div>
+    );
+  }
+
+  if (isLoading) {
+    return <div className="text-[#8C8C8C]">Loading budgets...</div>;
+  }
 
   return (
     <div className="space-y-8">
@@ -462,11 +612,13 @@ export function Budgets() {
                 })}
               </span>
               <span className="text-[#8C8C8C] ml-2">
-                of ${parseFloat(monthlyLimit).toLocaleString()} spent in June
+                {monthlyLimitValue
+                  ? `of $${monthlyLimitValue.toLocaleString()} spent in ${cycleLabel}`
+                  : `spent in ${cycleLabel}`}
               </span>
             </div>
             <span className="text-xl font-semibold text-yellow-400">
-              {percentage.toFixed(1)}%
+              {monthlyLimitValue ? `${percentage.toFixed(1)}%` : "—"}
             </span>
           </div>
           <SpendMeter percentage={percentage} />
@@ -527,6 +679,7 @@ export function Budgets() {
             </div>
             <button
               type="button"
+              onClick={handleAddThreshold}
               className="px-3 py-1.5 text-sm text-blue-400 border border-blue-400/30 rounded-lg hover:bg-blue-500/10 transition-colors"
             >
               + Add threshold
@@ -535,54 +688,61 @@ export function Budgets() {
 
           {/* Threshold rows */}
           <div className="space-y-3">
-            {thresholds.map((threshold, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-4 p-3 bg-[#0B0F17] rounded-lg border border-[#262626]"
-              >
-                <div className="w-16">
-                  <span className="text-white font-medium">
-                    {threshold.percentage}%
-                  </span>
-                </div>
-                <div className="w-28">
-                  <span className="text-[#8C8C8C] text-sm">
-                    Triggers at ${threshold.amount.toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 flex-1">
-                  <button
-                    type="button"
-                    onClick={() => handleToggleEmail(index)}
-                    className="flex items-center gap-1.5"
-                  >
-                    <PillBadge
-                      active={threshold.emailActive}
-                      icon={<EmailIcon />}
-                      label="Email org admins"
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleSlack(index)}
-                    className="flex items-center gap-1.5"
-                  >
-                    <PillBadge
-                      active={threshold.slackActive}
-                      icon={<SlackIcon />}
-                      label="# Post to Slack"
-                    />
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteThreshold(index)}
-                  className="p-1.5 text-[#6B6B6B] hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+            {thresholds.map((threshold, index) => {
+              const thresholdAmount = monthlyLimitValue
+                ? (monthlyLimitValue * threshold.percentage) / 100
+                : null;
+              return (
+                <div
+                  key={threshold.percentage}
+                  className="flex items-center gap-4 p-3 bg-[#0B0F17] rounded-lg border border-[#262626]"
                 >
-                  <TrashIcon />
-                </button>
-              </div>
-            ))}
+                  <div className="w-16">
+                    <span className="text-white font-medium">
+                      {threshold.percentage}%
+                    </span>
+                  </div>
+                  <div className="w-28">
+                    <span className="text-[#8C8C8C] text-sm">
+                      {thresholdAmount !== null
+                        ? `Triggers at $${thresholdAmount.toLocaleString()}`
+                        : "Set a monthly limit to calculate"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleEmail(index)}
+                      className="flex items-center gap-1.5"
+                    >
+                      <PillBadge
+                        active={threshold.email_enabled}
+                        icon={<EmailIcon />}
+                        label="Email org admins"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSlack(index)}
+                      className="flex items-center gap-1.5"
+                    >
+                      <PillBadge
+                        active={threshold.slack_enabled}
+                        icon={<SlackIcon />}
+                        label="# Post to Slack"
+                      />
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteThreshold(index)}
+                    className="p-1.5 text-[#6B6B6B] hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                  >
+                    <TrashIcon />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -615,13 +775,16 @@ export function Budgets() {
         <div className="flex justify-end gap-3">
           <button
             type="button"
+            onClick={handleReset}
             className="px-4 py-2 text-sm text-[#8C8C8C] bg-[#0B0F17] border border-[#262626] rounded-lg hover:bg-[#1E1E1E] transition-colors"
           >
             Reset
           </button>
           <button
             type="button"
-            className="px-4 py-2 text-sm text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors"
+            onClick={handleSaveOrgBudget}
+            disabled={updateBudgets.isPending}
+            className="px-4 py-2 text-sm text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-60"
           >
             Save changes
           </button>
@@ -635,37 +798,16 @@ export function Budgets() {
             Default budget for new users
           </h2>
           <p className="text-sm text-[#8C8C8C]">
-            Applied automatically when a user joins Acme Inc. Existing users
-            keep their current budgets.
+            Applied automatically when a user joins your organization. Existing
+            users keep their current budgets.
           </p>
         </div>
 
         <div className="grid grid-cols-2 gap-6">
           <div>
-            <div className="block text-sm text-[#8C8C8C] mb-2">Budget type</div>
-            <div className="flex bg-[#0B0F17] border border-[#262626] rounded-lg p-1">
-              <button
-                type="button"
-                onClick={() => setBudgetType("lifetime")}
-                className={`flex-1 px-4 py-2 text-sm rounded-md transition-colors ${
-                  budgetType === "lifetime"
-                    ? "bg-[#262626] text-white"
-                    : "text-[#6B6B6B] hover:text-white"
-                }`}
-              >
-                Lifetime
-              </button>
-              <button
-                type="button"
-                onClick={() => setBudgetType("monthly")}
-                className={`flex-1 px-4 py-2 text-sm rounded-md transition-colors ${
-                  budgetType === "monthly"
-                    ? "bg-[#262626] text-white"
-                    : "text-[#6B6B6B] hover:text-white"
-                }`}
-              >
-                Monthly
-              </button>
+            <div className="block text-sm text-[#8C8C8C] mb-2">Budget cadence</div>
+            <div className="px-4 py-2 bg-[#0B0F17] border border-[#262626] rounded-lg text-sm text-white">
+              Monthly
             </div>
           </div>
           <div>
@@ -695,9 +837,9 @@ export function Budgets() {
           <div className="block text-sm text-[#8C8C8C] mb-2">Preview</div>
           <div className="p-4 bg-[#0B0F17] rounded-lg border border-[#262626]">
             <p className="text-sm text-[#8C8C8C]">
-              New users get up to ${parseFloat(defaultAmount).toLocaleString()}{" "}
-              {budgetType === "lifetime" ? "total" : "per month"} before
-              requiring an increase.
+              New users get up to ${
+                defaultAmount ? parseFloat(defaultAmount).toLocaleString() : "0"
+              } per month before requiring an increase.
             </p>
           </div>
         </div>
@@ -706,7 +848,9 @@ export function Budgets() {
         <div className="flex justify-end mt-6">
           <button
             type="button"
-            className="px-4 py-2 text-sm text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors"
+            onClick={handleSaveDefault}
+            disabled={updateBudgets.isPending}
+            className="px-4 py-2 text-sm text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-60"
           >
             Save default
           </button>
@@ -725,12 +869,6 @@ export function Budgets() {
               disable.
             </p>
           </div>
-          <button
-            type="button"
-            className="px-3 py-1.5 text-sm text-blue-400 border border-blue-400/30 rounded-lg hover:bg-blue-500/10 transition-colors"
-          >
-            + Add override
-          </button>
         </div>
 
         {/* Search and Filter Bar */}
@@ -754,8 +892,11 @@ export function Budgets() {
           >
             <option value="all">All statuses</option>
             <option value="over80">Over 80%</option>
+            <option value="over90">Over 90%</option>
+            <option value="overCap">Over cap</option>
             <option value="onTrack">On track</option>
-            <option value="inherited">Inherits default</option>
+            <option value="noCap">No cap</option>
+            <option value="disabled">Disabled</option>
           </select>
         </div>
 
@@ -782,53 +923,143 @@ export function Budgets() {
               </tr>
             </thead>
             <tbody>
-              {filteredUsers.map((user, index) => (
-                <tr
-                  key={index}
-                  className="border-b border-[#262626] hover:bg-[#1E1E1E]/50 transition-colors"
-                >
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-3">
-                      <Avatar name={user.name} />
-                      <div>
-                        <div className="text-white font-medium">
-                          {user.name}
-                        </div>
-                        <div className="text-sm text-[#6B6B6B]">
-                          {user.email}
+              {filteredUsers.map((user) => {
+                const isEditing = editingUserId === user.user_id;
+                const overrideValue = Number(overrideAmount);
+                const canSaveOverride =
+                  overrideDisabled ||
+                  (!!overrideAmount && !Number.isNaN(overrideValue) && overrideValue > 0);
+
+                return (
+                  <tr
+                    key={user.user_id}
+                    className="border-b border-[#262626] hover:bg-[#1E1E1E]/50 transition-colors"
+                  >
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar name={user.name} />
+                        <div>
+                          <div className="text-white font-medium">
+                            {user.name}
+                          </div>
+                          <div className="text-sm text-[#6B6B6B]">
+                            {user.email || "-"}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="text-white">{user.budget}</div>
-                    <div className="flex items-center gap-1.5 text-xs text-[#6B6B6B]">
-                      {user.isOverride && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                    </td>
+                    <td className="px-4 py-4">
+                      {isEditing ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[#6B6B6B]">$</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={overrideAmount}
+                              onChange={(e) => setOverrideAmount(e.target.value)}
+                              disabled={overrideDisabled}
+                              className="w-28 px-2 py-1 bg-[#0B0F17] border border-[#262626] rounded text-white focus:outline-none focus:border-blue-500 disabled:opacity-60"
+                            />
+                            <span className="text-xs text-[#6B6B6B]">/ month</span>
+                          </div>
+                          <label className="flex items-center gap-2 text-xs text-[#8C8C8C]">
+                            <input
+                              type="checkbox"
+                              checked={overrideDisabled}
+                              onChange={(e) => setOverrideDisabled(e.target.checked)}
+                              className="accent-blue-500"
+                            />
+                            Disable budget for this user
+                          </label>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-white">{user.budgetLabel}</div>
+                          <div className="flex items-center gap-1.5 text-xs text-[#6B6B6B]">
+                            {user.is_override && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                            )}
+                            {user.budgetNote}
+                          </div>
+                        </>
                       )}
-                      {user.budgetNote}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 min-w-[180px]">
-                    <UserProgressBar
-                      value={user.usage}
-                      max={user.maxUsage}
-                      status={user.statusColor}
-                    />
-                  </td>
-                  <td className="px-4 py-4">
-                    <StatusPill status={user.status} />
-                  </td>
-                  <td className="px-4 py-4 text-right">
-                    <button
-                      type="button"
-                      className="px-3 py-1.5 text-sm text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors"
-                    >
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-4 py-4 min-w-[180px]">
+                      {user.hasLimit ? (
+                        <div>
+                          <UserProgressBar
+                            value={user.usage}
+                            max={user.maxUsage}
+                            status={user.statusColor}
+                          />
+                          <div className="mt-1 text-xs text-[#6B6B6B]">
+                            ${user.usage.toLocaleString("en-US", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })} of ${user.maxUsage.toLocaleString("en-US", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-[#8C8C8C]">
+                          ${user.usage.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })} spent
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-4">
+                      <StatusPill status={user.status} />
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      {isEditing ? (
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => saveOverride(user.user_id)}
+                            disabled={!canSaveOverride || upsertOverride.isPending}
+                            className="px-3 py-1.5 text-sm text-white bg-blue-500 rounded hover:bg-blue-600 transition-colors disabled:opacity-60"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEditing}
+                            className="px-3 py-1.5 text-sm text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startEditingUser(user)}
+                            className="px-3 py-1.5 text-sm text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors"
+                          >
+                            Edit
+                          </button>
+                          {user.is_override && (
+                            <button
+                              type="button"
+                              onClick={() => removeOverride(user.user_id)}
+                              disabled={deleteOverride.isPending}
+                              className="p-1.5 text-[#6B6B6B] hover:text-red-400 hover:bg-red-500/10 rounded transition-colors disabled:opacity-60"
+                            >
+                              <TrashIcon />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

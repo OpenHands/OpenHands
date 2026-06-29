@@ -27,6 +27,11 @@ from server.routes.org_models import (
     OrgAppSettingsResponse,
     OrgAppSettingsUpdate,
     OrgAuthorizationError,
+    OrgBudgetSettingsResponse,
+    OrgBudgetSettingsUpdate,
+    OrgBudgetThresholdResponse,
+    OrgBudgetUserOverrideUpdate,
+    OrgBudgetUserResponse,
     OrgConcurrentModificationError,
     OrgConversationPage,
     OrgConversationResponse,
@@ -52,6 +57,10 @@ from server.services.org_app_settings_service import (
     OrgAppSettingsService,
     OrgAppSettingsServiceInjector,
 )
+from server.services.org_budget_service import (
+    OrgBudgetService,
+    OrgBudgetServiceInjector,
+)
 from server.services.org_conversation_service import (
     OrgConversationFilterError,
     OrgConversationService,
@@ -75,6 +84,10 @@ org_router = APIRouter(
     tags=['Orgs'],
     dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
+
+
+_org_budget_service_injector = OrgBudgetServiceInjector()
+org_budget_service_dependency = Depends(_org_budget_service_injector.depends)
 
 # Create injector instance and dependency at module level
 _org_app_settings_injector = OrgAppSettingsServiceInjector()
@@ -1089,6 +1102,134 @@ async def get_org_members_financial(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve member financial data',
         )
+
+
+
+def _build_budget_response(state: dict) -> OrgBudgetSettingsResponse:
+    settings = state['settings']
+    thresholds = state['thresholds']
+    cycle = state['cycle']
+    current_spend = state['current_spend']
+    monthly_limit = settings.monthly_limit or 0
+    percentage = (current_spend / monthly_limit * 100) if monthly_limit else 0.0
+
+    return OrgBudgetSettingsResponse(
+        enabled=settings.enabled,
+        monthly_limit=settings.monthly_limit,
+        reset_day=settings.reset_day,
+        slack_channel=settings.slack_channel,
+        slack_team_id=settings.slack_team_id,
+        default_user_monthly_limit=settings.default_user_monthly_limit,
+        cycle_start_at=cycle.start_at,
+        cycle_end_at=cycle.end_at,
+        current_spend=current_spend,
+        current_spend_percentage=round(percentage, 1),
+        thresholds=[
+            OrgBudgetThresholdResponse(
+                id=threshold.id,
+                percentage=threshold.percentage,
+                email_enabled=threshold.email_enabled,
+                slack_enabled=threshold.slack_enabled,
+            )
+            for threshold in thresholds
+        ],
+        users=[OrgBudgetUserResponse(**user) for user in state['users']],
+    )
+
+
+@org_router.get(
+    '/{org_id}/budgets',
+    response_model=OrgBudgetSettingsResponse,
+)
+async def get_org_budget_settings(
+    org_id: UUID,
+    user_id: str = Depends(require_financial_data_access),
+    budget_service: OrgBudgetService = org_budget_service_dependency,
+) -> OrgBudgetSettingsResponse:
+    logger.info(
+        'Getting org budget settings',
+        extra={'org_id': str(org_id), 'user_id': user_id},
+    )
+    state = await budget_service.get_budget_state(org_id)
+    return _build_budget_response(state)
+
+
+@org_router.patch(
+    '/{org_id}/budgets',
+    response_model=OrgBudgetSettingsResponse,
+)
+async def update_org_budget_settings(
+    org_id: UUID,
+    update: OrgBudgetSettingsUpdate,
+    user_id: str = Depends(require_financial_data_access),
+    budget_service: OrgBudgetService = org_budget_service_dependency,
+) -> OrgBudgetSettingsResponse:
+    logger.info(
+        'Updating org budget settings',
+        extra={'org_id': str(org_id), 'user_id': user_id},
+    )
+    state = await budget_service.update_budget_settings(org_id, update)
+    return _build_budget_response(state)
+
+
+@org_router.put(
+    '/{org_id}/budgets/overrides/{user_id}',
+    response_model=OrgBudgetUserResponse,
+)
+async def upsert_org_budget_override(
+    org_id: UUID,
+    user_id: str,
+    update: OrgBudgetUserOverrideUpdate,
+    current_user_id: str = Depends(require_financial_data_access),
+    budget_service: OrgBudgetService = org_budget_service_dependency,
+) -> OrgBudgetUserResponse:
+    logger.info(
+        'Updating org budget override',
+        extra={
+            'org_id': str(org_id),
+            'user_id': user_id,
+            'actor_id': current_user_id,
+        },
+    )
+    await budget_service.upsert_user_override(
+        org_id,
+        UUID(user_id),
+        monthly_limit=update.monthly_limit,
+        is_disabled=update.is_disabled,
+    )
+    state = await budget_service.get_budget_state(org_id)
+    user_row = next(
+        (user for user in state['users'] if user['user_id'] == user_id),
+        None,
+    )
+    if not user_row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='User not found in organization',
+        )
+    return OrgBudgetUserResponse(**user_row)
+
+
+@org_router.delete(
+    '/{org_id}/budgets/overrides/{user_id}',
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_org_budget_override(
+    org_id: UUID,
+    user_id: str,
+    current_user_id: str = Depends(require_financial_data_access),
+    budget_service: OrgBudgetService = org_budget_service_dependency,
+) -> None:
+    logger.info(
+        'Deleting org budget override',
+        extra={
+            'org_id': str(org_id),
+            'user_id': user_id,
+            'actor_id': current_user_id,
+        },
+    )
+    await budget_service.delete_user_override(org_id, UUID(user_id))
+    return None
 
 
 @org_router.delete(

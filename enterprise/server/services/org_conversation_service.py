@@ -15,6 +15,7 @@ from uuid import UUID
 from fastapi import Request
 from server.routes.org_models import (
     DailyUsageData,
+    ModelUsageData,
     OrgConversationPage,
     OrgConversationResponse,
     OrgConversationStats,
@@ -643,6 +644,49 @@ class OrgConversationService:
                 )
             )
 
+        # 6. Model usage (by model)
+        model_query = (
+            select(
+                StoredConversationMetadata.llm_model,
+                func.count(StoredConversationMetadata.conversation_id).label(
+                    'conv_count'
+                ),
+                func.coalesce(
+                    func.sum(
+                        StoredConversationMetadata.prompt_tokens
+                        + StoredConversationMetadata.completion_tokens
+                    ),
+                    0,
+                ).label('token_count'),
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.accumulated_cost), 0
+                ).label('total_cost'),
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationMetadata.created_at >= cutoff)
+            .group_by(StoredConversationMetadata.llm_model)
+            .order_by(func.coalesce(func.sum(StoredConversationMetadata.accumulated_cost), 0).desc())
+        )
+        result = await self.db_session.execute(model_query)
+        model_rows = result.all()
+        model_usage = []
+        for row in model_rows:
+            model_usage.append(
+                ModelUsageData(
+                    model_name=row.llm_model or 'Unknown',
+                    conversation_count=int(row.conv_count or 0),
+                    total_tokens=int(row.token_count or 0),
+                    total_cost=float(row.total_cost or 0.0),
+                )
+            )
+
+
         return OrgUsageStats(
             active_users=int(active_users),
             agent_runs=int(agent_runs),
@@ -651,6 +695,7 @@ class OrgConversationService:
             estimated_spend=float(total_cost or 0),
             daily_usage=daily_usage,
             team_usage=team_usage,
+            model_usage=model_usage,
         )
 
     async def get_org_conversation(

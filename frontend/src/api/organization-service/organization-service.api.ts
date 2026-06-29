@@ -305,6 +305,56 @@ export const organizationService = {
     return data;
   },
 
+  getBudgetSettings: async ({ orgId }: { orgId: string }) => {
+    const { data } = await openHands.get<OrgBudgetSettings>(
+      `/api/organizations/${orgId}/budgets`,
+    );
+    return data;
+  },
+
+  updateBudgetSettings: async ({
+    orgId,
+    payload,
+  }: {
+    orgId: string;
+    payload: OrgBudgetSettingsUpdate;
+  }) => {
+    const { data } = await openHands.patch<OrgBudgetSettings>(
+      `/api/organizations/${orgId}/budgets`,
+      payload,
+    );
+    return data;
+  },
+
+  upsertBudgetOverride: async ({
+    orgId,
+    userId,
+    payload,
+  }: {
+    orgId: string;
+    userId: string;
+    payload: OrgBudgetUserOverrideUpdate;
+  }) => {
+    const { data } = await openHands.put<OrgBudgetUser>(
+      `/api/organizations/${orgId}/budgets/overrides/${userId}`,
+      payload,
+    );
+    return data;
+  },
+
+  deleteBudgetOverride: async ({
+    orgId,
+    userId,
+  }: {
+    orgId: string;
+    userId: string;
+  }) => {
+    await openHands.delete(
+      `/api/organizations/${orgId}/budgets/overrides/${userId}`,
+    );
+  },
+
+
   getConversations: async ({
     orgId,
     page = 1,
@@ -397,6 +447,8 @@ export const organizationService = {
     params.set("sort_order", sortOrder);
     if (search) params.set("search", search);
     if (executionStatus) params.set("execution_status", executionStatus);
+
+
     if (sandboxStatus) params.set("sandbox_status", sandboxStatus);
     if (timeWindow) params.set("time_window", timeWindow);
     return `/api/organizations/${orgId}/conversations/export?${params.toString()}`;
@@ -431,6 +483,13 @@ interface TeamUsageData {
   percentage: number;
 }
 
+interface ModelUsageData {
+  model_name: string;
+  conversation_count: number;
+  total_tokens: number;
+  total_cost: number;
+}
+
 interface OrgUsageStats {
   active_users: number;
   agent_runs: number;
@@ -438,7 +497,61 @@ interface OrgUsageStats {
   estimated_spend: number;
   daily_usage: DailyUsageData[];
   team_usage: TeamUsageData[];
+  model_usage: ModelUsageData[];
 }
+
+interface OrgBudgetThreshold {
+  id: number;
+  percentage: number;
+  email_enabled: boolean;
+  slack_enabled: boolean;
+}
+
+interface OrgBudgetUser {
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+  current_spend: number;
+  monthly_limit: number | null;
+  effective_monthly_limit: number | null;
+  is_disabled: boolean;
+  is_override: boolean;
+}
+
+interface OrgBudgetSettings {
+  enabled: boolean;
+  monthly_limit: number | null;
+  reset_day: number;
+  slack_channel: string | null;
+  slack_team_id: string | null;
+  default_user_monthly_limit: number | null;
+  cycle_start_at: string;
+  cycle_end_at: string;
+  current_spend: number;
+  current_spend_percentage: number;
+  thresholds: OrgBudgetThreshold[];
+  users: OrgBudgetUser[];
+}
+
+interface OrgBudgetSettingsUpdate {
+  enabled?: boolean | null;
+  monthly_limit?: number | null;
+  reset_day?: number | null;
+  default_user_monthly_limit?: number | null;
+  slack_channel?: string | null;
+  slack_team_id?: string | null;
+  thresholds?: {
+    percentage: number;
+    email_enabled: boolean;
+    slack_enabled: boolean;
+  }[] | null;
+}
+
+interface OrgBudgetUserOverrideUpdate {
+  monthly_limit?: number | null;
+  is_disabled: boolean;
+}
+
 
 interface OrgConversationResponse {
   id: string;

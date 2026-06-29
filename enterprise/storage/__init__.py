@@ -18,9 +18,12 @@ from storage.linear_workspace import LinearWorkspace
 from storage.maintenance_task import MaintenanceTask, MaintenanceTaskStatus
 from storage.openhands_pr import OpenhandsPR
 from storage.org import Org
+from storage.org_budget_settings import OrgBudgetSettings
+from storage.org_budget_threshold import OrgBudgetThreshold
 from storage.org_git_claim import OrgGitClaim
 from storage.org_invitation import OrgInvitation
 from storage.org_member import OrgMember
+from storage.org_user_budget_override import OrgUserBudgetOverride
 from storage.proactive_convos import ProactiveConversation
 from storage.resend_synced_user import ResendSyncedUser
 from storage.role import Role
@@ -63,9 +66,12 @@ __all__ = [
     'MaintenanceTaskStatus',
     'OpenhandsPR',
     'Org',
+    'OrgBudgetSettings',
+    'OrgBudgetThreshold',
     'OrgGitClaim',
     'OrgInvitation',
     'OrgMember',
+    'OrgUserBudgetOverride',
     'ProactiveConversation',
     'ResendSyncedUser',
     'Role',

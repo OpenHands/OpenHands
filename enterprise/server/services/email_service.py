@@ -153,4 +153,58 @@ class EmailService:
                     'error': str(e),
                 },
             )
+
+
+    @staticmethod
+    def send_budget_alert_email(
+        to_emails: list[str],
+        org_name: str,
+        percentage: float,
+        current_spend: float,
+        monthly_limit: float,
+        threshold: int,
+    ) -> None:
+        if not EmailService._get_resend_client():
+            return
+
+        from_email = os.environ.get('RESEND_FROM_EMAIL', DEFAULT_FROM_EMAIL)
+        subject = (
+            f'OpenHands budget alert: {org_name} reached {threshold}% of its limit'
+        )
+        body = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <p>Hi,</p>
+            <p><strong>{org_name}</strong> has reached <strong>{percentage:.1f}%</strong>
+            of its monthly budget.</p>
+            <p><strong>Current spend:</strong> ${current_spend:,.2f}<br />
+            <strong>Monthly limit:</strong> ${monthly_limit:,.2f}<br />
+            <strong>Threshold:</strong> {threshold}%</p>
+            <p>Please review your Usage & Monitoring dashboard for more details.</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+            <p style="color: #999; font-size: 12px;">Best,<br>The OpenHands Team</p>
+        </div>
+        """
+
+        params = {
+            'from': from_email,
+            'to': to_emails,
+            'subject': subject,
+            'html': body,
+        }
+
+        try:
+            response = resend.Emails.send(params)
+            logger.info(
+                'Budget alert email sent',
+                extra={
+                    'org_name': org_name,
+                    'recipient_count': len(to_emails),
+                    'response_id': response.get('id') if response else None,
+                },
+            )
+        except Exception as e:
+            logger.error(
+                'Failed to send budget alert email',
+                extra={'org_name': org_name, 'error': str(e)},
+            )
             raise
