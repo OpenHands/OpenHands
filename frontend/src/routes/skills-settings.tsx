@@ -1,110 +1,86 @@
-import React from "react";
+import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import { AxiosError } from "axios";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { Typography } from "#/ui/typography";
-import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { MarketplaceModal } from "#/components/features/settings/marketplace-modal";
 import { DeleteConfirmationModal } from "#/components/features/settings/delete-confirmation-modal";
-import { Toggle } from "#/components/shared/toggle/toggle";
 import { useSettings } from "#/hooks/query/use-settings";
-import {
-  SETTINGS_QUERY_KEYS,
-  ORGANIZATION_APP_SETTINGS_KEYS,
-} from "#/hooks/query/query-keys";
+import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { useSkills } from "#/hooks/query/use-skills";
 import { useMe } from "#/hooks/query/use-me";
-import { useMarketplaceSkills } from "#/hooks/mutation/use-get-marketplace-skills";
-import { useSaveOrgAppSettings } from "#/hooks/mutation/use-save-org-app-settings";
 import { useOrganizationAppSettings } from "#/hooks/query/use-organization-app-settings";
 import { useOrganization } from "#/hooks/query/use-organization";
-import {
-  MarketplaceRegistration,
-  MarketplaceWithScope,
-  SkillWithState,
-} from "#/types/settings";
-import {
-  displayErrorToast,
-  displaySuccessToast,
-} from "#/utils/custom-toast-handlers";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
+import { useMarketplaceMutations } from "#/hooks/mutation/use-marketplace-mutations";
+import { useSkillMutations } from "#/hooks/mutation/use-skill-mutations";
+import { MarketplaceTable } from "#/components/features/settings/skills-settings/marketplace-table";
+import { SkillsTable } from "#/components/features/settings/skills-settings/skills-table";
+import { MarketplaceRegistration, MarketplaceWithScope, SkillWithState } from "#/types/settings";
 import { I18nKey } from "#/i18n/declaration";
-import SettingsService from "#/api/settings-service/settings-service.api";
-import { organizationService } from "#/api/organization-service/organization-service.api";
 import SkillsService from "#/api/skills-service";
-import EditIcon from "#/icons/u-edit.svg?react";
-import DeleteIcon from "#/icons/u-delete.svg?react";
-import { getSelectedOrganizationIdFromStore } from "#/stores/selected-organization-store";
-import { cn } from "#/utils/utils";
-
-function ScopeBadge({ scope }: { scope: "instance" | "org" | "personal" }) {
-  const { t } = useTranslation();
-  const label = {
-    instance: t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_INSTANCE),
-    org: t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_ORG),
-    personal: t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_PERSONAL),
-  }[scope];
-
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
-        scope === "instance" && "bg-tertiary text-tertiary-alt",
-        scope === "org" && "bg-blue-900/30 text-blue-400",
-        scope === "personal" && "bg-green-900/30 text-green-400",
-      )}
-    >
-      {label}
-    </span>
-  );
-}
 
 function SkillsSettingsScreen() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
-  // Get the selected org ID from the store
-  const selectedOrgId = getSelectedOrganizationIdFromStore();
-
-  // User data for permission checks
+  // Query data
   const { data: user } = useMe();
   const { data: settings, isLoading: settingsLoading } = useSettings();
   const { data: skills, isLoading: skillsLoading } = useSkills();
-
-  // Fetch org app settings with updated_at for optimistic locking using the hook
   const { data: orgAppSettings } = useOrganizationAppSettings();
-
-  // Get current organization data to determine scope
   const { data: currentOrganization } = useOrganization();
 
-  // Determine user role and permissions
+  // Permissions
   const userRole = user?.role ?? "member";
   const isAdminOrOwner = userRole === "admin" || userRole === "owner";
 
-  // Determine the scope based on the active organization's is_personal flag
-  const getActiveScope = (): "org" | "personal" => {
-    // If no org selected or it's a personal org, use personal scope
+  // Active scope derived from current organization
+  const activeScope = useMemo((): "org" | "personal" => {
     if (!currentOrganization || currentOrganization.is_personal) {
       return "personal";
     }
-    // Otherwise it's a commercial/org scope
     return "org";
-  };
+  }, [currentOrganization]);
 
-  // Skills state with marketplace information
-  const [skillsState, setSkillsState] = React.useState<SkillWithState[]>([]);
+  // State for skills
+  const [skillsState, setSkillsState] = useState<SkillWithState[]>([]);
+  const originalSkillsRef = useRef<SkillWithState[]>([]);
 
-  // Track original skills state for change detection (ref to avoid re-renders)
-  const originalSkillsRef = React.useRef<SkillWithState[]>([]);
+  // State for marketplaces
+  const [allMarketplaces, setAllMarketplaces] = useState<MarketplaceWithScope[]>([]);
+  const originalMarketplacesRef = useRef<MarketplaceWithScope[]>([]);
+  const [lastKnownUpdatedAt, setLastKnownUpdatedAt] = useState<string | null>(null);
 
-  // Derive hasSkillChanges by comparing current vs original skills
-  const hasSkillChanges = React.useMemo(() => {
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"add" | "edit">("add");
+  const [selectedMarketplace, setSelectedMarketplace] = useState<MarketplaceWithScope | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [marketplaceToDelete, setMarketplaceToDelete] = useState<MarketplaceWithScope | null>(null);
+
+  // Filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [selectedRepository, setSelectedRepository] = useState<string | null>(null);
+
+  // Mutations from hooks
+  const marketplaceMutations = useMarketplaceMutations();
+  const skillMutations = useSkillMutations();
+
+  // Derive saving state from mutations
+  const isSaving =
+    marketplaceMutations.savePersonal.isPending ||
+    marketplaceMutations.saveOrg.isPending ||
+    skillMutations.saveDisabledSkills.isPending;
+
+  const isDeleting =
+    marketplaceMutations.deletePersonal.isPending ||
+    marketplaceMutations.deleteOrg.isPending;
+
+  // Change detection
+  const hasSkillChanges = useMemo(() => {
     const original = originalSkillsRef.current;
-    if (skillsState.length !== original.length) {
-      return false;
-    }
-    // Compare by id (skill name) to handle array reordering safely
+    if (skillsState.length !== original.length) return false;
     const originalById = new Map(original.map((s) => [s.id, s]));
     return skillsState.some((skill) => {
       const orig = originalById.get(skill.id);
@@ -112,92 +88,28 @@ function SkillsSettingsScreen() {
     });
   }, [skillsState]);
 
-  // All marketplaces (instance + org + personal) - single source of truth
-  const [allMarketplaces, setAllMarketplaces] = React.useState<
-    MarketplaceWithScope[]
-  >([]);
-
-  // Track original marketplace state for change detection (ref to avoid re-renders)
-  const originalMarketplacesRef = React.useRef<MarketplaceWithScope[]>([]);
-
-  // Derive hasMarketplaceChanges by comparing current vs original
-  const hasMarketplaceChanges = React.useMemo(() => {
+  const hasMarketplaceChanges = useMemo(() => {
     const original = originalMarketplacesRef.current;
-    if (allMarketplaces.length !== original.length) {
-      console.log("[DEBUG] hasMarketplaceChanges: length mismatch", {
-        currentLength: allMarketplaces.length,
-        originalLength: original.length,
-      });
-      return false;
-    }
-    // Compare by source to handle array reordering safely
+    if (allMarketplaces.length !== original.length) return false;
     const originalBySource = new Map(original.map((mp) => [mp.source, mp]));
-    const result = allMarketplaces.some((mp) => {
-      // Only editable scopes (personal/org) can have changes
+    return allMarketplaces.some((mp) => {
       if (mp.scope === "instance") return false;
       const orig = originalBySource.get(mp.source);
-      // Normalize to boolean for comparison (handles null/undefined/true/false)
-      const hasChange = Boolean(mp.auto_load) !== Boolean(orig?.auto_load);
-      if (hasChange) {
-        console.log("[DEBUG] hasMarketplaceChanges: found change", {
-          source: mp.source,
-          currentAutoLoad: mp.auto_load,
-          originalAutoLoad: orig?.auto_load,
-        });
-      }
-      return hasChange;
+      return Boolean(mp.auto_load) !== Boolean(orig?.auto_load);
     });
-    console.log("[DEBUG] hasMarketplaceChanges:", {
-      result,
-      allMarketplaces,
-      original,
-    });
-    return result;
   }, [allMarketplaces]);
 
-  // Track last_known_updated_at for optimistic locking
-  const [lastKnownUpdatedAt, setLastKnownUpdatedAt] = React.useState<
-    string | null
-  >(null);
-
-  // Marketplace modal state
-  const [isModalOpen, setIsModalOpen] = React.useState(false);
-  const [modalMode, setModalMode] = React.useState<"add" | "edit">("add");
-  const [selectedMarketplace, setSelectedMarketplace] =
-    React.useState<MarketplaceWithScope | null>(null);
-
-  // Delete confirmation modal state
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
-  const [marketplaceToDelete, setMarketplaceToDelete] =
-    React.useState<MarketplaceWithScope | null>(null);
-
-  // Save mutations
-  const [isSavingPersonal, setIsSavingPersonal] = React.useState(false);
-  const [isSavingOrg, setIsSavingOrg] = React.useState(false);
-  const [isDeleting, setIsDeleting] = React.useState(false);
-
-  // Marketplace skills mutation for validation
-  const marketplaceSkillsMutation = useMarketplaceSkills();
-
-  // Save org app settings mutation
-  const saveOrgAppSettingsMutation = useSaveOrgAppSettings();
-
-  // Skills filters
-  const [searchQuery, setSearchQuery] = React.useState("");
-  const [selectedType, setSelectedType] = React.useState<string | null>(null);
-  const [selectedRepository, setSelectedRepository] = React.useState<
-    string | null
-  >(null);
-
-  React.useEffect(() => {
+  // Update lastKnownUpdatedAt when orgAppSettings changes
+  useEffect(() => {
     if (orgAppSettings?.updated_at) {
       setLastKnownUpdatedAt(orgAppSettings.updated_at);
     }
   }, [orgAppSettings?.updated_at]);
 
-  React.useEffect(() => {
+  // Data loading effect
+  useEffect(() => {
     if (settings && skills) {
-      // Build marketplace maps
+      // Build all marketplaces for display (deduplicated by source)
       const personalMap = new Map(
         (settings.registered_marketplaces || []).map((mp) => [mp.source, mp]),
       );
@@ -231,27 +143,16 @@ function SkillsSettingsScreen() {
         allBySource.set(mp.source, { ...mp, scope: "personal" });
       }
       const all = Array.from(allBySource.values());
-      console.log("[DEBUG] useEffect: setting marketplaces", {
-        all,
-        prevOriginal: originalMarketplacesRef.current,
-      });
       setAllMarketplaces(all);
-      // Store original state for change detection
       originalMarketplacesRef.current = all;
-      console.log("[DEBUG] useEffect: synced originalRef", {
-        originalRef: originalMarketplacesRef.current,
-      });
 
-      // Build combined marketplace lookup for skills
-      const marketplaceMap = new Map<string, MarketplaceRegistration>();
-      for (const [source, mp] of personalMap) {
-        marketplaceMap.set(source, mp);
+      // Build marketplace lookup for skills
+      const marketplaceMap = new Map<string, { auto_load?: boolean; scope: string }>();
+      for (const mp of settings.registered_marketplaces || []) {
+        marketplaceMap.set(mp.source, { auto_load: mp.auto_load, scope: "personal" });
       }
-      for (const [source, mp] of orgMap) {
-        marketplaceMap.set(source, mp);
-      }
-      for (const [source, mp] of instanceMap) {
-        marketplaceMap.set(source, mp);
+      for (const mp of orgAppSettings?.registered_marketplaces || []) {
+        marketplaceMap.set(mp.source, { auto_load: mp.auto_load, scope: "org" });
       }
 
       // Map skills with marketplace info
@@ -377,7 +278,7 @@ function SkillsSettingsScreen() {
     }
   }, [settings, skills, orgAppSettings]);
 
-  const filteredSkills = React.useMemo(
+  const filteredSkills = useMemo(
     () =>
       skillsState.filter((skill) => {
         const matchesSearch =
@@ -396,7 +297,7 @@ function SkillsSettingsScreen() {
     [skillsState, searchQuery, selectedType, selectedRepository],
   );
 
-  const typeOptions = React.useMemo(() => {
+  const typeOptions = useMemo(() => {
     const types = new Set(skillsState.map((s) => s.type));
     return [
       { key: "all", label: t(I18nKey.SETTINGS$ALL_TYPES) },
@@ -407,7 +308,7 @@ function SkillsSettingsScreen() {
     ];
   }, [skillsState, t]);
 
-  const repositoryOptions = React.useMemo(() => {
+  const repositoryOptions = useMemo(() => {
     const repos = new Set(skillsState.map((s) => s.repository));
     return [
       { key: "all", label: t(I18nKey.SETTINGS$ALL_REPOSITORIES) },
@@ -418,182 +319,92 @@ function SkillsSettingsScreen() {
     ];
   }, [skillsState, t]);
 
-  // Toggle handlers with permission checks
-  const handleToggleEnabled = (skillId: string) => {
-    const skill = skillsState.find((s) => s.id === skillId);
-    if (!skill) return;
-
-    // Permission check: Org requires admin/owner, Personal requires active user
-    const canToggle =
-      skill.scope === "instance" ||
-      (skill.scope === "org" && isAdminOrOwner) ||
-      skill.scope === "personal";
-
-    if (!canToggle) return;
-
-    // Update skills state - hasSkillChanges is derived via useMemo
+  // Handlers with useCallback
+  const handleToggleSkillEnabled = useCallback((skillId: string) => {
     setSkillsState((prev) =>
       prev.map((s) =>
         s.id === skillId ? { ...s, isEnabled: !s.isEnabled } : s,
       ),
     );
-  };
+  }, []);
 
-  // Save skill changes (disabled_skills)
-  const handleSaveSkillChanges = async () => {
+  const handleSaveSkillChanges = useCallback(() => {
     const disabledSkills = skillsState
       .filter((s) => !s.isEnabled)
       .map((s) => s.name);
 
-    setIsSavingPersonal(true);
-    try {
-      await SettingsService.saveSettings({ disabled_skills: disabledSkills });
-      displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-      // Sync original state after successful save
-      originalSkillsRef.current = skillsState;
-      queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
-    } catch (error) {
-      const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
-      displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
-    } finally {
-      setIsSavingPersonal(false);
-    }
-  };
-
-  // Save marketplace changes (auto_load toggles)
-  const handleSaveMarketplaceChanges = async () => {
-    console.log("[DEBUG] handleSaveMarketplaceChanges: starting", {
-      allMarketplaces,
-      originalRef: originalMarketplacesRef.current,
+    skillMutations.saveDisabledSkills.mutate(disabledSkills, {
+      onSuccess: () => {
+        originalSkillsRef.current = skillsState;
+      },
     });
-    setIsSavingPersonal(true);
-    setIsSavingOrg(true);
+  }, [skillsState, skillMutations]);
 
-    try {
-      // Extract personal and org marketplaces from unified state
-      const personalToSave = allMarketplaces
-        .filter((mp) => mp.scope === "personal")
-        .map(({ name, source, ref, repo_path, auto_load }) => ({
-          name,
-          source,
-          ref,
-          repo_path,
-          auto_load,
-        }));
-      const orgToSave = allMarketplaces
-        .filter((mp) => mp.scope === "org")
-        .map(({ name, source, ref, repo_path, auto_load }) => ({
-          name,
-          source,
-          ref,
-          repo_path,
-          auto_load,
-        }));
+  const handleToggleMarketplaceAutoLoad = useCallback((source: string) => {
+    setAllMarketplaces((prev) =>
+      prev.map((m) =>
+        m.source === source ? { ...m, auto_load: !m.auto_load } : m,
+      ),
+    );
+  }, []);
 
-      // Save personal marketplaces
-      await SettingsService.saveSettings({
-        registered_marketplaces: personalToSave,
-      });
+  const handleSaveMarketplaceChanges = useCallback(() => {
+    const personal = allMarketplaces
+      .filter((mp) => mp.scope === "personal")
+      .map(({ name, source, ref, repo_path, auto_load }) => ({
+        name, source, ref, repo_path, auto_load,
+      }));
 
-      // Save org marketplaces
-      await saveOrgAppSettingsMutation.mutateAsync({
-        registered_marketplaces: orgToSave,
-        last_known_updated_at: lastKnownUpdatedAt,
-      });
+    const org = allMarketplaces
+      .filter((mp) => mp.scope === "org")
+      .map(({ name, source, ref, repo_path, auto_load }) => ({
+        name, source, ref, repo_path, auto_load,
+      }));
 
-      displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-      // Update original state after successful save
-      console.log("[DEBUG] handleSaveMarketplaceChanges: syncing originalRef", {
-        before: originalMarketplacesRef.current,
-        after: allMarketplaces,
-      });
-      originalMarketplacesRef.current = allMarketplaces;
-      queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
-      queryClient.invalidateQueries({
-        queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
-      });
-    } catch (error) {
-      if ((error as AxiosError).response?.status === 409) {
-        // Concurrent modification detected - fetch latest settings and retry once
-        queryClient.invalidateQueries({
-          queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
-        });
-        const latestSettings = await queryClient.ensureQueryData({
-          queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
-          queryFn: () => organizationService.getOrganizationAppSettings(),
-        });
-
-        if (latestSettings?.updated_at) {
-          setLastKnownUpdatedAt(latestSettings.updated_at);
-        }
-
-        // Recalculate orgToSave for retry
-        const orgToSaveRetry = allMarketplaces
-          .filter((mp) => mp.scope === "org")
-          .map(({ name, source, ref, repo_path, auto_load }) => ({
-            name,
-            source,
-            ref,
-            repo_path,
-            auto_load,
-          }));
-
-        // Retry the save with fresh timestamp
-        try {
-          await saveOrgAppSettingsMutation.mutateAsync({
-            registered_marketplaces: orgToSaveRetry,
-            last_known_updated_at: latestSettings?.updated_at || null,
-          });
-          displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
+    if (personal.length > 0) {
+      marketplaceMutations.savePersonal.mutate(personal, {
+        onSuccess: () => {
           originalMarketplacesRef.current = allMarketplaces;
-          queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
-        } catch (retryError) {
-          const errorMessage = retrieveAxiosErrorMessage(
-            retryError as AxiosError,
-          );
-          displayErrorToast(
-            errorMessage ||
-              "Failed to save settings. Please refresh and try again.",
-          );
-        }
-      } else {
-        const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
-        displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
-      }
-    } finally {
-      setIsSavingPersonal(false);
-      setIsSavingOrg(false);
+        },
+      });
     }
-  };
 
-  // Marketplace modal handlers
-  const openAddModal = () => {
+    if (org.length > 0) {
+      marketplaceMutations.saveOrg.mutate(
+        { marketplaces: org, lastKnownUpdatedAt },
+        {
+          onSuccess: () => {
+            originalMarketplacesRef.current = allMarketplaces;
+          },
+        },
+      );
+    }
+  }, [allMarketplaces, lastKnownUpdatedAt, marketplaceMutations]);
+
+  const openAddModal = useCallback(() => {
     setModalMode("add");
     setSelectedMarketplace(null);
     setIsModalOpen(true);
-  };
+  }, []);
 
-  const openEditModal = (marketplace: MarketplaceWithScope) => {
+  const openEditModal = useCallback((marketplace: MarketplaceWithScope) => {
     setModalMode("edit");
     setSelectedMarketplace(marketplace);
     setIsModalOpen(true);
-  };
+  }, []);
 
-  const openDeleteModal = (marketplace: MarketplaceWithScope) => {
+  const openDeleteModal = useCallback((marketplace: MarketplaceWithScope) => {
     setMarketplaceToDelete(marketplace);
     setIsDeleteModalOpen(true);
-  };
+  }, []);
 
-  const handleSaveMarketplace = async (data: {
+  const handleSaveMarketplace = useCallback((data: {
     name: string;
     source: string;
     ref?: string;
     repo_path?: string;
     auto_load?: boolean;
   }) => {
-    // Determine scope based on active organization
-    const scope = getActiveScope();
-
     const newMarketplace: MarketplaceRegistration = {
       name: data.name,
       source: data.source,
@@ -602,356 +413,57 @@ function SkillsSettingsScreen() {
       auto_load: data.auto_load,
     };
 
-    if (scope === "org") {
-      // Save to org settings using the active selectedOrgId
-      if (!selectedOrgId) {
-        displayErrorToast("No organization selected");
-        return;
-      }
+    if (activeScope === "org") {
+      const existing = allMarketplaces.filter((mp) => mp.scope === "org");
+      const index = existing.findIndex((mp) => mp.source === data.source);
+      const updated = index >= 0
+        ? existing.map((mp, i) => i === index ? newMarketplace : mp)
+        : [...existing, newMarketplace];
 
-      // Get org-specific marketplaces
-      const existingOrgMarketplaces = allMarketplaces.filter(
-        (mp) => mp.scope === "org",
+      marketplaceMutations.saveOrg.mutate(
+        { marketplaces: updated, lastKnownUpdatedAt },
+        { onSuccess: () => setIsModalOpen(false) },
       );
-      const existingIndex = existingOrgMarketplaces.findIndex(
-        (mp) => mp.source === data.source,
-      );
-      let updated: MarketplaceRegistration[];
-      if (existingIndex >= 0) {
-        updated = [...existingOrgMarketplaces];
-        updated[existingIndex] = newMarketplace;
-      } else {
-        updated = [...existingOrgMarketplaces, newMarketplace];
-      }
-
-      // Update allMarketplaces with the new org marketplace
-      setAllMarketplaces((prev) => {
-        const withoutNew = prev.filter(
-          (mp) => mp.scope !== "org" || mp.source !== data.source,
-        );
-        return [...withoutNew, { ...newMarketplace, scope: "org" as const }];
-      });
-
-      try {
-        // Validate marketplace by fetching skills first
-        const preview = await marketplaceSkillsMutation.mutateAsync([
-          newMarketplace,
-        ]);
-
-        // Check for errors - don't save if validation fails
-        if (preview.errors && preview.errors.length > 0) {
-          displayErrorToast(
-            `Failed to validate marketplace: ${preview.errors.join(", ")}`,
-          );
-          setIsSavingOrg(false);
-          return;
-        }
-
-        // Only save to BE if validation passes
-        await saveOrgAppSettingsMutation.mutateAsync({
-          registered_marketplaces: updated,
-          last_known_updated_at: lastKnownUpdatedAt,
-        });
-        displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-        queryClient.invalidateQueries({
-          queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
-        });
-
-        // Skills will be loaded by the useEffect on next render
-        // This prevents duplicate skills when page is refreshed
-
-        setIsModalOpen(false);
-      } catch (error) {
-        if ((error as AxiosError).response?.status === 409) {
-          // Concurrent modification detected - fetch latest settings and retry once
-          queryClient.invalidateQueries({
-            queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
-          });
-          const latestSettings = await queryClient.ensureQueryData({
-            queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
-            queryFn: () => organizationService.getOrganizationAppSettings(),
-          });
-
-          if (latestSettings?.updated_at) {
-            setLastKnownUpdatedAt(latestSettings.updated_at);
-          }
-
-          // Retry the save with fresh timestamp
-          try {
-            await saveOrgAppSettingsMutation.mutateAsync({
-              registered_marketplaces: updated,
-              last_known_updated_at: latestSettings?.updated_at || null,
-            });
-            displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-            setIsModalOpen(false);
-          } catch (retryError) {
-            const errorMessage = retrieveAxiosErrorMessage(
-              retryError as AxiosError,
-            );
-            displayErrorToast(
-              errorMessage ||
-                "Failed to save settings. Please refresh and try again.",
-            );
-          }
-        } else {
-          const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
-          displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
-        }
-      } finally {
-        setIsSavingOrg(false);
-      }
     } else {
-      // Save to personal settings
-      setIsSavingPersonal(true);
-      const existingPersonalMarketplaces = allMarketplaces.filter(
-        (mp) => mp.scope === "personal",
-      );
-      const existingIndex = existingPersonalMarketplaces.findIndex(
-        (mp) => mp.source === data.source,
-      );
-      let updated: MarketplaceRegistration[];
-      if (existingIndex >= 0) {
-        updated = [...existingPersonalMarketplaces];
-        updated[existingIndex] = newMarketplace;
-      } else {
-        updated = [...existingPersonalMarketplaces, newMarketplace];
-      }
+      const existing = allMarketplaces.filter((mp) => mp.scope === "personal");
+      const index = existing.findIndex((mp) => mp.source === data.source);
+      const updated = index >= 0
+        ? existing.map((mp, i) => i === index ? newMarketplace : mp)
+        : [...existing, newMarketplace];
 
-      // Update allMarketplaces with the new personal marketplace
-      setAllMarketplaces((prev) => {
-        const withoutNew = prev.filter(
-          (mp) => mp.scope !== "personal" || mp.source !== data.source,
-        );
-        return [
-          ...withoutNew,
-          { ...newMarketplace, scope: "personal" as const },
-        ];
+      marketplaceMutations.savePersonal.mutate(updated, {
+        onSuccess: () => setIsModalOpen(false),
       });
-
-      try {
-        // Validate marketplace by fetching skills first
-        const preview = await marketplaceSkillsMutation.mutateAsync([
-          newMarketplace,
-        ]);
-
-        // Check for errors - don't save if validation fails
-        if (preview.errors && preview.errors.length > 0) {
-          displayErrorToast(
-            `Failed to validate marketplace: ${preview.errors.join(", ")}`,
-          );
-          setIsSavingPersonal(false);
-          return;
-        }
-
-        // Only save to BE if validation passes
-        await SettingsService.saveSettings({
-          registered_marketplaces: updated,
-        });
-        displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-        queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
-
-        // Skills will be loaded by the useEffect on next render
-        // This prevents duplicate skills when page is refreshed
-
-        setIsModalOpen(false);
-      } catch (error) {
-        const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
-        displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
-      } finally {
-        setIsSavingPersonal(false);
-      }
     }
-  };
+  }, [activeScope, allMarketplaces, lastKnownUpdatedAt, marketplaceMutations]);
 
-  const handleDeleteMarketplace = async () => {
+  const handleDeleteMarketplace = useCallback(() => {
     if (!marketplaceToDelete) return;
 
-    setIsDeleting(true);
-
-    // Optimistically update allMarketplaces and skillsState
-    setAllMarketplaces((prev) =>
-      prev.filter((mp) => mp.source !== marketplaceToDelete.source),
-    );
-    setSkillsState((prev) =>
-      prev.filter(
-        (skill) =>
-          !(
-            skill.repository === marketplaceToDelete.source &&
-            skill.scope === marketplaceToDelete.scope
-          ),
-      ),
-    );
-
     if (marketplaceToDelete.scope === "org") {
-      // Delete from org settings
-      const updated = allMarketplaces
-        .filter(
-          (mp) =>
-            mp.scope === "org" && mp.source !== marketplaceToDelete.source,
-        )
-        .map(({ name, source, ref, repo_path, auto_load }) => ({
-          name,
-          source,
-          ref,
-          repo_path,
-          auto_load,
-        }));
-
-      try {
-        await saveOrgAppSettingsMutation.mutateAsync({
-          registered_marketplaces: updated,
-          last_known_updated_at: lastKnownUpdatedAt,
-        });
-        displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-
-        queryClient.invalidateQueries({
-          queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
-        });
-        setIsDeleteModalOpen(false);
-        setMarketplaceToDelete(null);
-      } catch (error) {
-        // Revert on error
-        if ((error as AxiosError).response?.status === 409) {
-          // Concurrent modification detected - fetch latest settings and retry once
-          queryClient.invalidateQueries({
-            queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
-          });
-          const latestSettings = await queryClient.ensureQueryData({
-            queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(selectedOrgId),
-            queryFn: () => organizationService.getOrganizationAppSettings(),
-          });
-
-          if (latestSettings?.updated_at) {
-            setLastKnownUpdatedAt(latestSettings.updated_at);
-          }
-
-          // Retry the delete with fresh timestamp
-          try {
-            await saveOrgAppSettingsMutation.mutateAsync({
-              registered_marketplaces: updated,
-              last_known_updated_at: latestSettings?.updated_at || null,
-            });
-            displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-            setIsDeleteModalOpen(false);
-            setMarketplaceToDelete(null);
-          } catch (retryError) {
-            const errorMessage = retrieveAxiosErrorMessage(
-              retryError as AxiosError,
-            );
-            displayErrorToast(
-              errorMessage ||
-                "Failed to delete marketplace. Please refresh and try again.",
-            );
-            // Reload data to revert optimistic update
-            queryClient.invalidateQueries({
-              queryKey: SETTINGS_QUERY_KEYS.all,
-            });
-            setIsDeleting(false);
-          }
-        } else {
-          const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
-          displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
-          // Reload data to revert optimistic update
-          queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
-          setIsDeleting(false);
-        }
-      }
-    } else if (marketplaceToDelete.scope === "personal") {
-      // Delete from personal settings
-      const updated = allMarketplaces
-        .filter(
-          (mp) =>
-            mp.scope === "personal" && mp.source !== marketplaceToDelete.source,
-        )
-        .map(({ name, source, ref, repo_path, auto_load }) => ({
-          name,
-          source,
-          ref,
-          repo_path,
-          auto_load,
-        }));
-
-      try {
-        await SettingsService.saveSettings({
-          registered_marketplaces: updated,
-        });
-        displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-
-        queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
-        setIsDeleteModalOpen(false);
-        setMarketplaceToDelete(null);
-      } catch (error) {
-        // Revert on error
-        const errorMessage = retrieveAxiosErrorMessage(error as AxiosError);
-        displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
-        // Reload data to revert optimistic update
-        queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
-        setIsDeleting(false);
-      }
-    } else {
-      setIsDeleting(false);
-    }
-  };
-
-  // Check if user can edit/delete a marketplace
-  const canEditMarketplace = (mp: MarketplaceWithScope) => {
-    if (mp.scope === "instance") return false; // Always disabled
-    if (mp.scope === "org") return isAdminOrOwner;
-    if (mp.scope === "personal") return true; // Active user owns their personal
-    return false;
-  };
-
-  // Get tooltip for disabled actions
-  const getDisabledTooltip = (mp: MarketplaceWithScope) => {
-    if (mp.scope === "instance") {
-      return t(I18nKey.SETTINGS$MARKETPLACE_INSTANCE_READONLY);
-    }
-    if (mp.scope === "org" && !isAdminOrOwner) {
-      return t(I18nKey.SETTINGS$MARKETPLACE_ORG_REQUIRES_ADMIN);
-    }
-    return "";
-  };
-
-  // Get title for auto_load toggle
-  const getAutoLoadToggleTitle = (scope: "instance" | "org" | "personal") => {
-    if (scope === "instance") {
-      return t(I18nKey.SETTINGS$MARKETPLACE_INSTANCE_READONLY);
-    }
-    if (scope === "org" && !isAdminOrOwner) {
-      return t(I18nKey.SETTINGS$MARKETPLACE_ORG_REQUIRES_ADMIN);
-    }
-    return undefined;
-  };
-
-  // Handle marketplace auto_load toggle (persists via Save Changes button)
-  const handleToggleMarketplaceAutoLoad = (source: string) => {
-    const mp = allMarketplaces.find((m) => m.source === source);
-    console.log("[DEBUG] Toggle auto_load:", {
-      source,
-      beforeAutoLoad: mp?.auto_load,
-    });
-    // Toggle auto_load in allMarketplaces - useMemo handles change detection
-    setAllMarketplaces((prev) => {
-      const after = prev.map((m) =>
-        m.source === source ? { ...m, auto_load: !m.auto_load } : m,
+      marketplaceMutations.deleteOrg.mutate(
+        { marketplaceSource: marketplaceToDelete.source, lastKnownUpdatedAt },
+        { onSuccess: () => { setIsDeleteModalOpen(false); setMarketplaceToDelete(null); } },
       );
-      const changedMp = after.find((m) => m.source === source);
-      console.log("[DEBUG] After toggle:", {
-        afterAutoLoad: changedMp?.auto_load,
-        allMarketplaces: after,
-        originalRef: originalMarketplacesRef.current,
+    } else if (marketplaceToDelete.scope === "personal") {
+      marketplaceMutations.deletePersonal.mutate(marketplaceToDelete.source, {
+        onSuccess: () => { setIsDeleteModalOpen(false); setMarketplaceToDelete(null); },
       });
-      return after;
-    });
-  };
-
-  // Check if skill toggles should be disabled
-  const isSkillToggleDisabled = (skill: SkillWithState) => {
-    if (skill.scope === "org") {
-      return !isAdminOrOwner;
     }
-    return false; // Instance and Personal are always allowed
-  };
+  }, [marketplaceToDelete, lastKnownUpdatedAt, marketplaceMutations]);
+
+  // Permission helpers
+  const canEditMarketplace = useCallback((mp: MarketplaceWithScope) => {
+    if (mp.scope === "instance") return false;
+    if (mp.scope === "org") return isAdminOrOwner;
+    return true;
+  }, [isAdminOrOwner]);
+
+  const getAutoLoadToggleTitle = useCallback((scope: "instance" | "org" | "personal") => {
+    if (scope === "instance") return t(I18nKey.SETTINGS$MARKETPLACE_INSTANCE_READONLY);
+    if (scope === "org" && !isAdminOrOwner) return t(I18nKey.SETTINGS$MARKETPLACE_ORG_REQUIRES_ADMIN);
+    return undefined;
+  }, [isAdminOrOwner, t]);
 
   const isLoading = settingsLoading || skillsLoading || !settings;
 
@@ -1005,116 +517,15 @@ function SkillsSettingsScreen() {
           </Typography.Paragraph>
         </div>
 
-        <div className="border border-tertiary rounded-md overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-base-secondary">
-              <tr className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-4 items-center">
-                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                  {t(I18nKey.SETTINGS$MARKETPLACE_NAME)}
-                </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                  {t(I18nKey.SETTINGS$MARKETPLACE_SOURCE)}
-                </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                  {t(I18nKey.SETTINGS$MARKETPLACE_REF)}
-                </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                  {t(I18nKey.SETTINGS$MARKETPLACE_REPO_PATH)}
-                </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                  {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_LABEL)}
-                </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                  {t(I18nKey.SETTINGS$AUTO_LOAD)}
-                </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                  {t(I18nKey.SETTINGS$ACTIONS)}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {allMarketplaces.map((mp) => (
-                <tr
-                  key={mp.source}
-                  className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-4 items-center border-t border-tertiary"
-                >
-                  <td className="p-3 text-sm text-content-2 truncate min-w-0">
-                    {mp.name}
-                  </td>
-                  <td className="p-3 text-sm text-tertiary-alt truncate">
-                    {mp.source}
-                  </td>
-                  <td className="p-3 text-sm text-tertiary-alt truncate">
-                    {mp.ref || "-"}
-                  </td>
-                  <td className="p-3 text-sm text-tertiary-alt truncate">
-                    {mp.repo_path || "-"}
-                  </td>
-                  <td className="p-3">
-                    <ScopeBadge scope={mp.scope} />
-                  </td>
-                  <td className="p-3">
-                    <Toggle
-                      checked={!!mp.auto_load}
-                      disabled={
-                        mp.scope === "instance" ||
-                        (mp.scope === "org" && !isAdminOrOwner)
-                      }
-                      onClick={
-                        mp.scope !== "instance" &&
-                        (mp.scope === "personal" || isAdminOrOwner)
-                          ? () => handleToggleMarketplaceAutoLoad(mp.source)
-                          : undefined
-                      }
-                      title={getAutoLoadToggleTitle(mp.scope)}
-                      aria-label={`Toggle auto-load for ${mp.source}`}
-                    />
-                  </td>
-                  <td className="p-3 flex gap-2 justify-center">
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(mp)}
-                      disabled={!canEditMarketplace(mp)}
-                      title={getDisabledTooltip(mp) || t(I18nKey.BUTTON$EDIT)}
-                      className={cn(
-                        "p-1.5 rounded-sm",
-                        canEditMarketplace(mp)
-                          ? "text-content-2 hover:bg-white/20"
-                          : "text-tertiary-alt cursor-not-allowed opacity-50",
-                      )}
-                    >
-                      <EditIcon width={16} height={16} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openDeleteModal(mp)}
-                      disabled={!canEditMarketplace(mp)}
-                      title={getDisabledTooltip(mp) || t(I18nKey.BUTTON$DELETE)}
-                      className={cn(
-                        "p-1.5 rounded-sm",
-                        canEditMarketplace(mp)
-                          ? "text-red-400 hover:bg-red-900/20"
-                          : "text-tertiary-alt cursor-not-allowed opacity-50",
-                      )}
-                    >
-                      <DeleteIcon width={16} height={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {allMarketplaces.length === 0 && (
-                <tr className="border-t border-tertiary">
-                  <td
-                    colSpan={7}
-                    className="p-3 text-sm text-center text-tertiary-alt"
-                  >
-                    {t(I18nKey.SETTINGS$MARKETPLACE_ADD_FIRST)}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <MarketplaceTable
+          marketplaces={allMarketplaces}
+          onToggleAutoLoad={handleToggleMarketplaceAutoLoad}
+          onEdit={openEditModal}
+          onDelete={openDeleteModal}
+          canEdit={canEditMarketplace}
+          getAutoLoadTitle={getAutoLoadToggleTitle}
+          isAdminOrOwner={isAdminOrOwner}
+        />
       </section>
 
       <div className="border-t border-tertiary my-6" />
@@ -1130,115 +541,18 @@ function SkillsSettingsScreen() {
           </Typography.Paragraph>
         </div>
 
-        <div className="flex items-stretch gap-4 justify-center">
-          <div className="flex-1 flex flex-col gap-2.5">
-            <div className="h-5" />
-            <input
-              data-testid="search-skills-input"
-              type="text"
-              placeholder={t(I18nKey.SETTINGS$SEARCH_PLACEHOLDER)}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt"
-            />
-          </div>
-          <div className="flex-1">
-            <SettingsDropdownInput
-              testId="type-filter-dropdown"
-              name="type-filter"
-              label="TYPE"
-              items={typeOptions}
-              defaultSelectedKey="all"
-              onSelectionChange={(key) =>
-                setSelectedType(key?.toString() ?? null)
-              }
-              placeholder={t(I18nKey.SETTINGS$ALL_TYPES)}
-            />
-          </div>
-          <div className="flex-1">
-            <SettingsDropdownInput
-              testId="repository-filter-dropdown"
-              name="repository-filter"
-              label="REPOSITORY"
-              items={repositoryOptions}
-              defaultSelectedKey="all"
-              onSelectionChange={(key) =>
-                setSelectedRepository(key?.toString() ?? null)
-              }
-              placeholder={t(I18nKey.SETTINGS$ALL_REPOSITORIES)}
-            />
-          </div>
-        </div>
-
-        <div className="border border-tertiary rounded-md overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-base-secondary">
-              <tr className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr] gap-4 items-start">
-                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                  {t(I18nKey.SETTINGS$NAME)}
-                </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                  {t(I18nKey.SETTINGS$MARKETPLACE_SOURCE)}
-                </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                  {t(I18nKey.SETTINGS$TYPE)}
-                </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                  {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_LABEL)}
-                </th>
-                <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                  {t(I18nKey.SETTINGS$ENABLED)}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredSkills.map((skill) => (
-                <tr
-                  key={skill.id}
-                  className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr] gap-4 items-center border-t border-tertiary"
-                >
-                  <td className="p-3 text-sm text-content-2 truncate min-w-0">
-                    {skill.name}
-                  </td>
-                  <td className="p-3 text-sm text-tertiary-alt truncate">
-                    {skill.repository}
-                  </td>
-                  <td className="p-3">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-base-secondary text-tertiary-alt">
-                      {skill.type}
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    <ScopeBadge scope={skill.scope} />
-                  </td>
-                  <td className="p-3">
-                    <Toggle
-                      checked={skill.isEnabled}
-                      disabled={isSkillToggleDisabled(skill)}
-                      onClick={() => handleToggleEnabled(skill.id)}
-                      title={
-                        isSkillToggleDisabled(skill) && skill.scope === "org"
-                          ? t(I18nKey.SETTINGS$MARKETPLACE_ORG_REQUIRES_ADMIN)
-                          : undefined
-                      }
-                      aria-label={`Toggle enabled for ${skill.name}`}
-                    />
-                  </td>
-                </tr>
-              ))}
-              {filteredSkills.length === 0 && (
-                <tr className="border-t border-tertiary">
-                  <td
-                    colSpan={5}
-                    className="p-3 text-sm text-center text-[rgb(140,140,140)]"
-                  >
-                    {t(I18nKey.SETTINGS$NO_SKILLS_MATCH_FILTERS)}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <SkillsTable
+          skills={filteredSkills}
+          onToggle={handleToggleSkillEnabled}
+          typeOptions={typeOptions}
+          repositoryOptions={repositoryOptions}
+          searchQuery={searchQuery}
+          selectedType={selectedType}
+          selectedRepository={selectedRepository}
+          onSearchChange={setSearchQuery}
+          onTypeChange={setSelectedType}
+          onRepositoryChange={setSelectedRepository}
+        />
       </section>
 
       <div className="flex gap-6 p-6 justify-end border-t border-tertiary/50 mt-4">
@@ -1247,19 +561,15 @@ function SkillsSettingsScreen() {
           variant="primary"
           type="button"
           isDisabled={
-            isSavingPersonal ||
-            isSavingOrg ||
+            isSaving ||
             (!hasSkillChanges && !hasMarketplaceChanges)
           }
-          onClick={async () => {
-            if (hasSkillChanges) await handleSaveSkillChanges();
-            if (hasMarketplaceChanges) await handleSaveMarketplaceChanges();
+          onClick={() => {
+            if (hasSkillChanges) handleSaveSkillChanges();
+            if (hasMarketplaceChanges) handleSaveMarketplaceChanges();
           }}
         >
-          {(isSavingPersonal || isSavingOrg) && t(I18nKey.SETTINGS$SAVING)}
-          {!isSavingPersonal &&
-            !isSavingOrg &&
-            t(I18nKey.SETTINGS$SAVE_CHANGES)}
+          {isSaving ? t(I18nKey.SETTINGS$SAVING) : t(I18nKey.SETTINGS$SAVE_CHANGES)}
         </BrandButton>
       </div>
 
@@ -1280,7 +590,10 @@ function SkillsSettingsScreen() {
         }
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveMarketplace}
-        isSaving={isSavingOrg || isSavingPersonal}
+        isSaving={
+          marketplaceMutations.saveOrg.isPending ||
+          marketplaceMutations.savePersonal.isPending
+        }
       />
 
       {/* Delete Confirmation Modal */}

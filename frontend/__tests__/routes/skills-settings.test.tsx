@@ -11,6 +11,22 @@ import { organizationService } from "#/api/organization-service/organization-ser
 import { MOCK_PERSONAL_ORG, MOCK_TEAM_ORG_ACME } from "#/mocks/org-handlers";
 import type { WebClientConfig } from "#/api/option-service/option.types";
 
+// Mock hooks
+vi.mock("#/hooks/mutation/use-marketplace-mutations", () => ({
+  useMarketplaceMutations: () => ({
+    savePersonal: { mutate: vi.fn(), isPending: false },
+    saveOrg: { mutate: vi.fn(), isPending: false },
+    deletePersonal: { mutate: vi.fn(), isPending: false },
+    deleteOrg: { mutate: vi.fn(), isPending: false },
+  }),
+}));
+
+vi.mock("#/hooks/mutation/use-skill-mutations", () => ({
+  useSkillMutations: () => ({
+    saveDisabledSkills: { mutate: vi.fn(), isPending: false },
+  }),
+}));
+
 const mockConfig: WebClientConfig = {
   app_mode: "oss",
   posthog_client_key: null,
