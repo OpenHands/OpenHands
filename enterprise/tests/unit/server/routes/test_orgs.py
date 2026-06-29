@@ -49,7 +49,6 @@ from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
 
 # Test user ID constant (must be a valid UUID string)
 TEST_USER_ID = str(uuid.uuid4())
-TEST_ORG_ID = str(uuid.uuid4())
 
 
 @pytest.fixture
@@ -3305,7 +3304,7 @@ async def test_get_org_app_settings_success(
 ):
     """
     GIVEN: Authenticated user with MANAGE_APPLICATION_SETTINGS permission
-    WHEN: GET /api/organizations/{org_id}/app-settings is called
+    WHEN: GET /api/organizations/app is called
     THEN: App settings are returned with 200 status
     """
     # Arrange
@@ -3327,7 +3326,7 @@ async def test_get_org_app_settings_success(
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get(f'/api/organizations/{TEST_ORG_ID}/app-settings')
+        response = client.get('/api/organizations/app')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -3342,7 +3341,7 @@ async def test_get_org_app_settings_with_null_values(
 ):
     """
     GIVEN: Organization has null app settings values
-    WHEN: GET /api/organizations/{org_id}/app-settings is called
+    WHEN: GET /api/organizations/app is called
     THEN: Default values are returned where applicable
     """
     # Arrange
@@ -3365,7 +3364,7 @@ async def test_get_org_app_settings_with_null_values(
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get(f'/api/organizations/{TEST_ORG_ID}/app-settings')
+        response = client.get('/api/organizations/app')
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -3381,7 +3380,7 @@ async def test_get_org_app_settings_not_found(
 ):
     """
     GIVEN: User has no current organization
-    WHEN: GET /api/organizations/{org_id}/app-settings is called
+    WHEN: GET /api/organizations/app is called
     THEN: 404 Not Found error is returned
     """
     # Arrange
@@ -3398,7 +3397,7 @@ async def test_get_org_app_settings_not_found(
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get(f'/api/organizations/{TEST_ORG_ID}/app-settings')
+        response = client.get('/api/organizations/app')
 
         # Assert
         assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -3409,7 +3408,7 @@ async def test_get_org_app_settings_not_found(
 async def test_get_org_app_settings_user_not_member(mock_app_with_get_user_id):
     """
     GIVEN: User is not a member of any organization
-    WHEN: GET /api/organizations/{org_id}/app-settings is called
+    WHEN: GET /api/organizations/app is called
     THEN: 403 Forbidden error is returned
     """
     # Arrange - user has no role (not a member)
@@ -3420,7 +3419,7 @@ async def test_get_org_app_settings_user_not_member(mock_app_with_get_user_id):
         client = TestClient(mock_app_with_get_user_id)
 
         # Act
-        response = client.get(f'/api/organizations/{TEST_ORG_ID}/app-settings')
+        response = client.get('/api/organizations/app')
 
         # Assert
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -3433,7 +3432,7 @@ async def test_update_org_app_settings_success(
 ):
     """
     GIVEN: Valid update data and authenticated user
-    WHEN: POST /api/organizations/{org_id}/app-settings is called
+    WHEN: POST /api/organizations/app is called
     THEN: Updated app settings are returned with 200 status
     """
     # Arrange
@@ -3456,7 +3455,7 @@ async def test_update_org_app_settings_success(
 
         # Act
         response = client.post(
-            f'/api/organizations/{TEST_ORG_ID}/app-settings',
+            '/api/organizations/app',
             json={
                 'enable_proactive_conversation_starters': False,
                 'max_budget_per_task': 25.0,
@@ -3477,7 +3476,7 @@ async def test_update_org_app_settings_partial_update(
 ):
     """
     GIVEN: Partial update data (only some fields)
-    WHEN: POST /api/organizations/{org_id}/app-settings is called
+    WHEN: POST /api/organizations/app is called
     THEN: Only specified fields are updated
     """
     # Arrange
@@ -3500,7 +3499,7 @@ async def test_update_org_app_settings_partial_update(
 
         # Act - only updating one field
         response = client.post(
-            f'/api/organizations/{TEST_ORG_ID}/app-settings',
+            '/api/organizations/app',
             json={'enable_proactive_conversation_starters': False},
         )
 
@@ -3519,7 +3518,7 @@ async def test_update_org_app_settings_set_null(
 ):
     """
     GIVEN: Request to set max_budget_per_task to null
-    WHEN: POST /api/organizations/{org_id}/app-settings is called
+    WHEN: POST /api/organizations/app is called
     THEN: The field is set to null successfully
     """
     # Arrange
@@ -3542,7 +3541,7 @@ async def test_update_org_app_settings_set_null(
 
         # Act - explicitly setting max_budget_per_task to null
         response = client.post(
-            f'/api/organizations/{TEST_ORG_ID}/app-settings',
+            '/api/organizations/app',
             json={'max_budget_per_task': None},
         )
 
@@ -3558,7 +3557,7 @@ async def test_update_org_app_settings_invalid_max_budget(
 ):
     """
     GIVEN: Invalid max_budget_per_task value (zero or negative)
-    WHEN: POST /api/organizations/{org_id}/app-settings is called
+    WHEN: POST /api/organizations/app is called
     THEN: 422 Validation error is returned
     """
     # Arrange
@@ -3570,7 +3569,7 @@ async def test_update_org_app_settings_invalid_max_budget(
 
         # Act - negative value
         response = client.post(
-            f'/api/organizations/{TEST_ORG_ID}/app-settings',
+            '/api/organizations/app',
             json={'max_budget_per_task': -5.0},
         )
 
@@ -3584,7 +3583,7 @@ async def test_update_org_app_settings_zero_max_budget(
 ):
     """
     GIVEN: max_budget_per_task is set to zero
-    WHEN: POST /api/organizations/{org_id}/app-settings is called
+    WHEN: POST /api/organizations/app is called
     THEN: 422 Validation error is returned (must be greater than 0)
     """
     # Arrange
@@ -3596,7 +3595,7 @@ async def test_update_org_app_settings_zero_max_budget(
 
         # Act - zero value
         response = client.post(
-            f'/api/organizations/{TEST_ORG_ID}/app-settings',
+            '/api/organizations/app',
             json={'max_budget_per_task': 0},
         )
 
@@ -3610,7 +3609,7 @@ async def test_update_org_app_settings_not_found(
 ):
     """
     GIVEN: User has no current organization
-    WHEN: POST /api/organizations/{org_id}/app-settings is called
+    WHEN: POST /api/organizations/app is called
     THEN: 404 Not Found error is returned
     """
     # Arrange
@@ -3628,7 +3627,7 @@ async def test_update_org_app_settings_not_found(
 
         # Act
         response = client.post(
-            f'/api/organizations/{TEST_ORG_ID}/app-settings',
+            '/api/organizations/app',
             json={'enable_proactive_conversation_starters': False},
         )
 
@@ -3643,7 +3642,7 @@ async def test_update_org_app_settings_database_error(
 ):
     """
     GIVEN: Database update fails
-    WHEN: POST /api/organizations/{org_id}/app-settings is called
+    WHEN: POST /api/organizations/app is called
     THEN: 500 Internal Server Error is returned
     """
     # Arrange
@@ -3661,7 +3660,7 @@ async def test_update_org_app_settings_database_error(
 
         # Act
         response = client.post(
-            f'/api/organizations/{TEST_ORG_ID}/app-settings',
+            '/api/organizations/app',
             json={'enable_proactive_conversation_starters': False},
         )
 
@@ -3674,7 +3673,7 @@ async def test_update_org_app_settings_database_error(
 async def test_update_org_app_settings_user_not_member(mock_app_with_get_user_id):
     """
     GIVEN: User is not a member of any organization
-    WHEN: POST /api/organizations/{org_id}/app-settings is called
+    WHEN: POST /api/organizations/app is called
     THEN: 403 Forbidden error is returned
     """
     # Arrange - user has no role (not a member)
@@ -3686,7 +3685,7 @@ async def test_update_org_app_settings_user_not_member(mock_app_with_get_user_id
 
         # Act
         response = client.post(
-            f'/api/organizations/{TEST_ORG_ID}/app-settings',
+            '/api/organizations/app',
             json={'enable_proactive_conversation_starters': False},
         )
 
