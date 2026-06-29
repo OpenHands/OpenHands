@@ -120,11 +120,8 @@ export type MarketplaceRegistration = {
   source: string;
   ref?: string;
   repo_path?: string;
-  auto_load?: boolean;
-};
-
-export type MarketplaceWithScope = MarketplaceRegistration & {
-  scope: "instance" | "org" | "personal";
+  auto_load?: boolean; // Optional in requests (defaults to false), always boolean in responses
+  scope: "instance" | "org" | "personal"; // Set by backend, present in all API responses
 };
 
 export interface SkillWithState extends SkillInfo {
@@ -171,7 +168,7 @@ export type Settings = {
   conversation_settings?: Record<string, SettingsValue> | null;
   sandbox_grouping_strategy?: SandboxGroupingStrategy;
   registered_marketplaces?: MarketplaceRegistration[];
-  inherited_marketplaces?: MarketplaceWithScope[];
+  inherited_marketplaces?: MarketplaceRegistration[];
   /** For optimistic locking - timestamp of last modification */
   updated_at?: string;
   default_sandbox_spec_id?: string | null;

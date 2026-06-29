@@ -72,8 +72,6 @@ def _get_instance_default_marketplaces() -> list[dict[str, Any]]:
     """
     import json
 
-    from openhands.app_server.settings.settings_models import MarketplaceRegistration
-
     env_value = os.environ.get('INSTANCE_DEFAULT_MARKETPLACES', '')
     if not env_value:
         return []
@@ -120,6 +118,9 @@ def _get_instance_default_marketplaces() -> list[dict[str, Any]]:
     # Validate each marketplace using MarketplaceRegistration model
     validated_marketplaces = []
     for mp_dict in parsed_marketplaces:
+        # Add scope for instance defaults
+        mp_dict.setdefault('scope', 'instance')
+
         # Auto-generate name from source if not provided
         if 'name' not in mp_dict or not mp_dict['name']:
             source = mp_dict.get('source', '')
@@ -273,6 +274,7 @@ async def load_settings(
     settings_store: SettingsStore = Depends(get_user_settings_store),
     settings: Settings = Depends(get_user_settings),
     secrets_store: SecretsStore = Depends(get_secrets_store),
+    user_id: str | None = Depends(get_user_id),
 ) -> GETSettingsModel | JSONResponse:
     """Load user settings.
 
@@ -335,9 +337,8 @@ async def load_settings(
         settings_with_token_data.sandbox_api_key = None
 
         # Marketplace composition: Instance -> Org -> User
-        user_id: str | None = getattr(settings, 'user_id', None)
         instance_defaults = _get_instance_default_marketplaces()
-        org_marketplaces = await settings_store.get_org_marketplaces(user_id or '')
+        org_marketplaces = await settings_store.get_org_marketplaces(user_id)
         user_marketplaces = [
             mp.model_dump() for mp in (settings.registered_marketplaces or [])
         ]

@@ -231,7 +231,19 @@ class SaasSettingsStore(SettingsStore):
         # Load personal registered_marketplaces from user_settings table
         user_settings = await self._get_user_settings_by_keycloak_id_async(self.user_id)
         if user_settings and user_settings.registered_marketplaces:
-            kwargs['registered_marketplaces'] = user_settings.registered_marketplaces
+            # Normalize marketplaces: use 'personal' scope for legacy data without scope
+            # The merge function will override with the correct scope value
+            normalized_mps = []
+            for mp in user_settings.registered_marketplaces:
+                if isinstance(mp, dict):
+                    if mp.get('scope') is None:
+                        mp = {**mp, 'scope': 'personal'}
+                        normalized_mps.append(mp)
+                    else:
+                        normalized_mps.append(mp)
+                else:
+                    normalized_mps.append(mp)
+            kwargs['registered_marketplaces'] = normalized_mps
         # Profiles in SaaS live on the org (managed via
         # /api/organizations/{org_id}/profiles). Surface them through
         # Settings.llm_profiles so the chat-layer endpoints
@@ -524,12 +536,15 @@ class SaasSettingsStore(SettingsStore):
         logger.debug(f'saas_settings_store.get_instance::{user_id}')
         return SaasSettingsStore(user_id, effective_org_id=effective_org_id)
 
-    async def get_org_marketplaces(self, user_id: str) -> list[dict]:
+    async def get_org_marketplaces(self, user_id: str | None) -> list[dict]:
         """Get organization-level marketplaces from the org's registered_marketplaces.
 
         Uses the effective_org_id if set, otherwise resolves via user.current_org_id.
         Returns empty list if no org or org has no registered marketplaces.
         """
+        if not user_id:
+            return []
+
         try:
             user = await UserStore.get_user_by_id(user_id)
             if not user:
@@ -558,7 +573,18 @@ class SaasSettingsStore(SettingsStore):
                 return []
 
             if org.registered_marketplaces:
-                return list(org.registered_marketplaces)  # type: ignore[arg-type]
+                # Normalize: use 'org' scope for legacy data without scope
+                normalized = []
+                for mp in org.registered_marketplaces:
+                    if isinstance(mp, dict):
+                        # Set scope='org' if missing (backward compatibility)
+                        if mp.get('scope') is None:
+                            mp = {**mp, 'scope': 'org'}
+                        # Ensure auto_load defaults to False if missing
+                        if 'auto_load' not in mp:
+                            mp = {**mp, 'auto_load': False}
+                    normalized.append(mp)
+                return normalized
             return []
         except Exception as e:
             logger.error(f'Error fetching org marketplaces: {e}')

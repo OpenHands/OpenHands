@@ -2,14 +2,18 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { AxiosError } from "axios";
 import SettingsService from "#/api/settings-service/settings-service.api";
-import { displaySuccessToast } from "#/utils/custom-toast-handlers";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import {
+  displaySuccessToast,
+  displayErrorToast,
+} from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { I18nKey } from "#/i18n/declaration";
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 export interface UseSkillMutationsReturn {
-  saveDisabledSkills: ReturnType<typeof useMutation<unknown, AxiosError, string[]>>;
+  saveDisabledSkills: ReturnType<
+    typeof useMutation<unknown, AxiosError, string[]>
+  >;
 }
 
 /**

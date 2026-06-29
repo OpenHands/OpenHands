@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { MarketplaceWithScope } from "#/types/settings";
+import { MarketplaceRegistration } from "#/types/settings";
 import { Toggle } from "#/components/shared/toggle/toggle";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
@@ -8,12 +8,14 @@ import EditIcon from "#/icons/u-edit.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
 
 interface MarketplaceTableProps {
-  marketplaces: MarketplaceWithScope[];
+  marketplaces: MarketplaceRegistration[];
   onToggleAutoLoad: (source: string) => void;
-  onEdit: (marketplace: MarketplaceWithScope) => void;
-  onDelete: (marketplace: MarketplaceWithScope) => void;
-  canEdit: (marketplace: MarketplaceWithScope) => boolean;
-  getAutoLoadTitle: (scope: "instance" | "org" | "personal") => string | undefined;
+  onEdit: (marketplace: MarketplaceRegistration) => void;
+  onDelete: (marketplace: MarketplaceRegistration) => void;
+  canEdit: (marketplace: MarketplaceRegistration) => boolean;
+  getAutoLoadTitle: (
+    scope: "instance" | "org" | "personal",
+  ) => string | undefined;
   isAdminOrOwner: boolean;
 }
 

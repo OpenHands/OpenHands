@@ -106,9 +106,21 @@ class UserSettings(Base):
             validate_and_convert_marketplaces,
         )
 
+        # Normalize marketplace data: ensure scope='personal' for legacy data
+        normalized_marketplaces = []
+        for mp in self.registered_marketplaces or []:
+            if isinstance(mp, dict):
+                # Set scope='personal' if missing (backward compatibility)
+                if mp.get('scope') is None:
+                    mp = {**mp, 'scope': 'personal'}
+                # Ensure auto_load defaults to False if missing
+                if 'auto_load' not in mp:
+                    mp = {**mp, 'auto_load': False}
+            normalized_marketplaces.append(mp)
+
         # Validate marketplace data using shared utility
         marketplaces = validate_and_convert_marketplaces(
-            self.registered_marketplaces,
+            normalized_marketplaces,
             source_name='user settings',
         )
 

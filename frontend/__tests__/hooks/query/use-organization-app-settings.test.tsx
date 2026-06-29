@@ -37,6 +37,7 @@ const mockResponse = {
       name: "test-marketplace",
       source: "github:owner/repo",
       auto_load: true,
+      scope: "org" as const,
     },
   ],
   updated_at: "2024-01-01T00:00:00Z",
@@ -103,7 +104,7 @@ describe("useOrganizationAppSettings", () => {
     vi.mocked(useSelectedOrganizationId).mockReturnValue({ organizationId: "org-123", setOrganizationId: vi.fn() });
     vi.mocked(organizationService.getOrganizationAppSettings).mockResolvedValue({
       ...mockResponse,
-      registered_marketplaces: [{ name: "marketplace-123", source: "github:org/123", auto_load: true }],
+      registered_marketplaces: [{ name: "marketplace-123", source: "github:org/123", auto_load: true, scope: "org" as const }],
     });
 
     const wrapper1 = ({ children }: { children: ReactNode }) => (
@@ -122,7 +123,7 @@ describe("useOrganizationAppSettings", () => {
     vi.mocked(useSelectedOrganizationId).mockReturnValue({ organizationId: "org-456", setOrganizationId: vi.fn() });
     vi.mocked(organizationService.getOrganizationAppSettings).mockResolvedValue({
       ...mockResponse,
-      registered_marketplaces: [{ name: "marketplace-456", source: "github:org/456", auto_load: true }],
+      registered_marketplaces: [{ name: "marketplace-456", source: "github:org/456", auto_load: true, scope: "org" as const }],
     });
     rerender();
 

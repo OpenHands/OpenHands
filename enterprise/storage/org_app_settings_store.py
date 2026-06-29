@@ -156,7 +156,34 @@ class OrgAppSettingsStore:
             exclude={'last_known_updated_at'},  # Don't save this field
         )
         if 'registered_marketplaces' in update_dict:
-            org.registered_marketplaces = update_dict.pop('registered_marketplaces')
+            from openhands.app_server.settings.settings_models import (
+                MarketplaceRegistration,
+                MarketplaceScope,
+            )
+
+            # Inject scope='org' for all marketplaces saved at org level
+            marketplaces = update_dict.pop('registered_marketplaces')
+            validated_marketplaces = []
+            for mp in marketplaces:
+                if isinstance(mp, dict):
+                    # Strip scope from incoming request - backend will set it
+                    mp_dict = {k: v for k, v in mp.items() if k != 'scope'}
+                    # Ensure auto_load defaults to False if not provided
+                    if 'auto_load' not in mp_dict:
+                        mp_dict['auto_load'] = False
+                    mp_obj = MarketplaceRegistration.model_validate(mp_dict)
+                    mp_obj.scope = MarketplaceScope.ORG
+                    validated_marketplaces.append(mp_obj.model_dump())
+                elif isinstance(mp, MarketplaceRegistration):
+                    mp.scope = MarketplaceScope.ORG
+                    validated_marketplaces.append(mp.model_dump())
+                else:
+                    # Already validated dict from DB
+                    mp['scope'] = 'org'
+                    if 'auto_load' not in mp:
+                        mp['auto_load'] = False
+                    validated_marketplaces.append(mp)
+            org.registered_marketplaces = validated_marketplaces
 
         # Update regular org fields
         for field, value in update_dict.items():

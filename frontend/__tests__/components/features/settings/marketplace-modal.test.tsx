@@ -162,6 +162,7 @@ describe("MarketplaceModal", () => {
         marketplace={{
           name: "test-marketplace",
           source: "github:owner/repo",
+          scope: "personal",
         }}
       />,
     );

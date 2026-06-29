@@ -23,10 +23,27 @@ export interface MarketplaceMutationsOptions {
 }
 
 export interface UseMarketplaceMutationsReturn {
-  savePersonal: ReturnType<typeof useMutation<unknown, Error, MarketplaceRegistration[]>>;
-  saveOrg: ReturnType<typeof useMutation<unknown, AxiosError, { marketplaces: MarketplaceRegistration[]; lastKnownUpdatedAt: string | null }>>;
+  savePersonal: ReturnType<
+    typeof useMutation<unknown, Error, MarketplaceRegistration[]>
+  >;
+  saveOrg: ReturnType<
+    typeof useMutation<
+      unknown,
+      AxiosError,
+      {
+        marketplaces: MarketplaceRegistration[];
+        lastKnownUpdatedAt: string | null;
+      }
+    >
+  >;
   deletePersonal: ReturnType<typeof useMutation<unknown, Error, string>>;
-  deleteOrg: ReturnType<typeof useMutation<unknown, AxiosError, { marketplaceSource: string; lastKnownUpdatedAt: string | null }>>;
+  deleteOrg: ReturnType<
+    typeof useMutation<
+      unknown,
+      AxiosError,
+      { marketplaceSource: string; lastKnownUpdatedAt: string | null }
+    >
+  >;
 }
 
 /**
@@ -47,11 +64,13 @@ export function useMarketplaceMutations(
     mutationFn: async (marketplaces: MarketplaceRegistration[]) => {
       // Validate marketplace before saving
       if (marketplaces.length > 0) {
-        const preview = await marketplaceSkillsMutation.mutateAsync(marketplaces);
+        const preview =
+          await marketplaceSkillsMutation.mutateAsync(marketplaces);
         if (preview.errors?.length) {
           throw new Error(`Validation failed: ${preview.errors.join(", ")}`);
         }
       }
+      // Backend will automatically set scope='personal' for user settings
       await SettingsService.saveSettings({
         registered_marketplaces: marketplaces,
       });
@@ -80,11 +99,13 @@ export function useMarketplaceMutations(
     }) => {
       // Validate marketplace before saving
       if (marketplaces.length > 0) {
-        const preview = await marketplaceSkillsMutation.mutateAsync(marketplaces);
+        const preview =
+          await marketplaceSkillsMutation.mutateAsync(marketplaces);
         if (preview.errors?.length) {
           throw new Error(`Validation failed: ${preview.errors.join(", ")}`);
         }
       }
+      // Backend will automatically set scope='org' for org settings
       return organizationService.saveOrganizationAppSettings({
         registered_marketplaces: marketplaces,
         last_known_updated_at: lastKnownUpdatedAt,
@@ -92,9 +113,11 @@ export function useMarketplaceMutations(
     },
     onSuccess: () => {
       displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
+      // Invalidate both org settings and user settings (which has inherited_marketplaces)
       queryClient.invalidateQueries({
         queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(organizationId),
       });
+      queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
       queryClient.invalidateQueries({ queryKey: ["skills"] });
       options.onSuccess?.();
     },
@@ -104,6 +127,7 @@ export function useMarketplaceMutations(
         queryClient.invalidateQueries({
           queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(organizationId),
         });
+        queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
         displayErrorToast("Settings were modified. Please retry.");
       } else {
         displayErrorToast(
@@ -123,6 +147,7 @@ export function useMarketplaceMutations(
       const updated = (settings.registered_marketplaces || []).filter(
         (mp) => mp.source !== marketplaceSource,
       );
+      // Backend will automatically set scope='personal' for user settings
       await SettingsService.saveSettings({
         registered_marketplaces: updated,
       });
@@ -154,6 +179,7 @@ export function useMarketplaceMutations(
       const updated = (settings.registered_marketplaces || []).filter(
         (mp) => mp.source !== marketplaceSource,
       );
+      // Backend will automatically set scope='org' for org settings
       return organizationService.saveOrganizationAppSettings({
         registered_marketplaces: updated,
         last_known_updated_at: lastKnownUpdatedAt,
@@ -161,9 +187,11 @@ export function useMarketplaceMutations(
     },
     onSuccess: () => {
       displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
+      // Invalidate both org settings and user settings (which has inherited_marketplaces)
       queryClient.invalidateQueries({
         queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(organizationId),
       });
+      queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
       queryClient.invalidateQueries({ queryKey: ["skills"] });
       options.onSuccess?.();
     },
@@ -172,6 +200,7 @@ export function useMarketplaceMutations(
         queryClient.invalidateQueries({
           queryKey: ORGANIZATION_APP_SETTINGS_KEYS.byOrg(organizationId),
         });
+        queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEYS.all });
         displayErrorToast("Settings were modified. Please retry.");
       } else {
         displayErrorToast(

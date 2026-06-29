@@ -37,6 +37,7 @@ const mockResponse = {
       name: "test-marketplace",
       source: "github:owner/repo",
       auto_load: true,
+      scope: "org" as const,
     },
   ],
   updated_at: "2024-01-01T00:00:00Z",
@@ -59,7 +60,7 @@ describe("useSaveOrgAppSettings", () => {
 
     result.current.mutate({
       registered_marketplaces: [
-        { name: "test", source: "github:owner/repo" },
+        { name: "test", source: "github:owner/repo", scope: "org" as const },
       ],
     });
 
@@ -68,7 +69,7 @@ describe("useSaveOrgAppSettings", () => {
     expect(
       organizationService.saveOrganizationAppSettings,
     ).toHaveBeenCalledWith({
-      registered_marketplaces: [{ name: "test", source: "github:owner/repo" }],
+      registered_marketplaces: [{ name: "test", source: "github:owner/repo", scope: "org" as const }],
     });
   });
 

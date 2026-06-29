@@ -12,8 +12,6 @@ interface SkillsTableProps {
   typeOptions: { key: string; label: string }[];
   repositoryOptions: { key: string; label: string }[];
   searchQuery: string;
-  selectedType: string | null;
-  selectedRepository: string | null;
   onSearchChange: (query: string) => void;
   onTypeChange: (type: string | null) => void;
   onRepositoryChange: (repo: string | null) => void;
@@ -47,8 +45,6 @@ export function SkillsTable({
   typeOptions,
   repositoryOptions,
   searchQuery,
-  selectedType,
-  selectedRepository,
   onSearchChange,
   onTypeChange,
   onRepositoryChange,
@@ -88,7 +84,9 @@ export function SkillsTable({
             label="REPOSITORY"
             items={repositoryOptions}
             defaultSelectedKey="all"
-            onSelectionChange={(key) => onRepositoryChange(key?.toString() ?? null)}
+            onSelectionChange={(key) =>
+              onRepositoryChange(key?.toString() ?? null)
+            }
             placeholder={t(I18nKey.SETTINGS$ALL_REPOSITORIES)}
           />
         </div>

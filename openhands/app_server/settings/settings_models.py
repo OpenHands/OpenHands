@@ -56,6 +56,14 @@ _GIT_URL_PATTERN = re.compile(
 _LOCAL_PATH_PATTERN = re.compile(r'^[a-zA-Z0-9_][a-zA-Z0-9_./-]*$')
 
 
+class MarketplaceScope(str, Enum):
+    """Scope of a marketplace registration."""
+
+    INSTANCE = 'instance'
+    ORG = 'org'
+    PERSONAL = 'personal'
+
+
 class MarketplaceRegistration(BaseModel):
     """Registration for a plugin marketplace.
 
@@ -102,12 +110,22 @@ class MarketplaceRegistration(BaseModel):
             'Only relevant for git sources, not local paths.'
         ),
     )
-    auto_load: bool | None = Field(
-        default=None,
+    auto_load: bool = Field(
+        default=False,
         description=(
             'Auto-load behavior for this marketplace. '
             'True = load all plugins at conversation start. '
-            'None = registered for resolution but not auto-loaded.'
+            'False = registered for resolution but not auto-loaded.'
+        ),
+    )
+    scope: 'MarketplaceScope | None' = Field(
+        default=None,
+        description=(
+            'Scope of this marketplace registration. '
+            'Set automatically by backend based on storage layer: '
+            '"instance" for system defaults, "org" for organization-level, '
+            '"personal" for user-level. '
+            'Frontend should NOT send this field in save requests.'
         ),
     )
 
@@ -501,10 +519,18 @@ class Settings(BaseModel):
                     for i, mp in enumerate(value):
                         try:
                             if isinstance(mp, dict):
-                                validated.append(
-                                    MarketplaceRegistration.model_validate(mp)
-                                )
+                                # Strip scope from incoming request - backend will set it
+                                mp_dict = {k: v for k, v in mp.items() if k != 'scope'}
+                                # Ensure auto_load defaults to False if not provided
+                                if 'auto_load' not in mp_dict:
+                                    mp_dict['auto_load'] = False
+                                mp_obj = MarketplaceRegistration.model_validate(mp_dict)
+                                # Set scope='personal' for user-level settings
+                                mp_obj.scope = MarketplaceScope.PERSONAL
+                                validated.append(mp_obj)
                             elif isinstance(mp, MarketplaceRegistration):
+                                # Set scope='personal' for user-level settings
+                                mp.scope = MarketplaceScope.PERSONAL
                                 validated.append(mp)
                             else:
                                 raise ValueError(

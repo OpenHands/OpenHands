@@ -36,10 +36,10 @@ class SettingsStore(ABC):
         """
 
     @abstractmethod
-    async def get_org_marketplaces(self, user_id: str) -> list[dict]:
+    async def get_org_marketplaces(self, user_id: str | None) -> list[dict]:
         """Get organization-level marketplaces.
 
         Returns:
             List of marketplace dictionaries from the org's registered_marketplaces.
-            Returns empty list if no org marketplaces are available (OSS mode).
+            Returns empty list if no org marketplaces are available (OSS mode) or if user_id is None.
         """

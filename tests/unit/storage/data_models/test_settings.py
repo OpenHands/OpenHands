@@ -551,7 +551,7 @@ class TestMarketplaceRegistration:
         assert reg.source == 'github:owner/repo'
         assert reg.ref is None
         assert reg.repo_path is None
-        assert reg.auto_load is None
+        assert reg.auto_load is False  # Defaults to False, not None
 
     def test_registration_with_auto_load(self):
         """Test registration with auto_load=True."""
@@ -711,9 +711,11 @@ class TestSettingsRegisteredMarketplaces:
 
         assert len(settings.registered_marketplaces) == 2
         assert settings.registered_marketplaces[0].name == 'public'
-        assert settings.registered_marketplaces[0].auto_load
+        assert settings.registered_marketplaces[0].auto_load is True
         assert settings.registered_marketplaces[1].name == 'team'
-        assert settings.registered_marketplaces[1].auto_load is None
+        assert (
+            settings.registered_marketplaces[1].auto_load is False
+        )  # Defaults to False
 
     def test_settings_serialization_with_registered_marketplaces(self):
         """Test Settings serialization includes registered_marketplaces."""
@@ -797,11 +799,11 @@ class TestSettingsRegisteredMarketplaces:
         assert full.repo_path == 'marketplaces/internal'
         assert full.auto_load
 
-        # Verify minimal marketplace has None for optional fields
+        # Verify minimal marketplace has None for optional fields and False for auto_load
         minimal = settings.registered_marketplaces[1]
         assert minimal.ref is None
         assert minimal.repo_path is None
-        assert minimal.auto_load is None
+        assert minimal.auto_load is False  # Defaults to False, not None
 
     def test_settings_registered_marketplaces_serialization_roundtrip(self):
         """Test that marketplace data survives serialization roundtrip."""

@@ -131,12 +131,13 @@ class TestMergeMarketplaces:
         instance = [
             {'source': 'github:OpenHands/skills', 'ref': 'main', 'auto_load': True}
         ]
-        org = [{'source': 'github:OpenHands/skills', 'ref': 'v2', 'auto_load': None}]
+        org = [{'source': 'github:OpenHands/skills', 'ref': 'v2', 'auto_load': False}]
         inherited, personal = _merge_marketplaces(instance, org, [])
         assert len(inherited) == 1
         # Org should override instance values
         assert inherited[0]['ref'] == 'v2'
         assert inherited[0]['scope'] == 'org'
+        assert inherited[0]['auto_load'] is False
 
     def test_user_adds_new_marketplace(self):
         """Test that user can add new marketplace."""
@@ -160,14 +161,14 @@ class TestMergeMarketplaces:
         instance = [
             {'source': 'github:OpenHands/skills', 'ref': 'main', 'auto_load': True}
         ]
-        user = [{'source': 'github:OpenHands/skills', 'ref': 'v2', 'auto_load': None}]
+        user = [{'source': 'github:OpenHands/skills', 'ref': 'v2', 'auto_load': False}]
         inherited, personal = _merge_marketplaces(instance, [], user)
         # Instance marketplace remains unchanged
         assert len(inherited) == 1
         assert inherited[0]['source'] == 'github:OpenHands/skills'
         assert inherited[0]['scope'] == 'instance'
         assert inherited[0]['ref'] == 'main'
-        assert inherited[0]['auto_load']
+        assert inherited[0]['auto_load'] is True
         # User's attempt is ignored - not added to personal
         assert len(personal) == 0
 
@@ -178,14 +179,14 @@ class TestMergeMarketplaces:
         or override org marketplace settings.
         """
         org = [{'source': 'github:myorg/plugins', 'ref': 'main', 'auto_load': True}]
-        user = [{'source': 'github:myorg/plugins', 'ref': 'v2', 'auto_load': None}]
+        user = [{'source': 'github:myorg/plugins', 'ref': 'v2', 'auto_load': False}]
         inherited, personal = _merge_marketplaces([], org, user)
         # Org marketplace remains unchanged
         assert len(inherited) == 1
         assert inherited[0]['source'] == 'github:myorg/plugins'
         assert inherited[0]['scope'] == 'org'
         assert inherited[0]['ref'] == 'main'
-        assert inherited[0]['auto_load']
+        assert inherited[0]['auto_load'] is True
         # User's attempt is ignored - not added to personal
         assert len(personal) == 0
 
@@ -210,7 +211,7 @@ class TestMergeMarketplaces:
             },  # attempts to override org - IGNORED
             {
                 'source': 'github:myorg/plugins',
-                'auto_load': None,
+                'auto_load': False,
             },  # attempts to override org - IGNORED
             {
                 'source': 'github:user/custom',
@@ -290,14 +291,14 @@ class TestMergeMarketplaces:
             }
         ]
         # User tries to change auto_load
-        user = [{'source': 'github:OpenHands/skills', 'auto_load': None}]
+        user = [{'source': 'github:OpenHands/skills', 'auto_load': False}]
         inherited, personal = _merge_marketplaces(instance, [], user)
 
         # Instance marketplace remains unchanged
         assert len(inherited) == 1
         assert inherited[0]['name'] == 'original-name'
         assert inherited[0]['ref'] == 'main'
-        assert inherited[0]['auto_load']  # Not modified by user
+        assert inherited[0]['auto_load'] is True  # Not modified by user
         assert inherited[0]['scope'] == 'instance'
 
         # User's attempt is ignored
@@ -442,7 +443,7 @@ class TestMarketplaceCompositionIntegration:
         org = [
             {
                 'source': 'github:openhands/default-plugins',
-                'auto_load': None,  # Org disables auto-load
+                'auto_load': False,  # Org disables auto-load
             },
             {
                 'source': 'github:acme/company-plugins',
@@ -462,7 +463,8 @@ class TestMarketplaceCompositionIntegration:
         # default-plugins should be org scope with disabled auto_load
         assert inherited_by_source['github:openhands/default-plugins']['scope'] == 'org'
         assert (
-            inherited_by_source['github:openhands/default-plugins']['auto_load'] is None
+            inherited_by_source['github:openhands/default-plugins']['auto_load']
+            is False
         )
         assert (
             'overridden' not in inherited_by_source['github:openhands/default-plugins']
@@ -517,7 +519,7 @@ class TestMarketplaceCompositionIntegration:
         user = [
             {
                 'source': 'github:acme/company-plugins',
-                'auto_load': None,  # User tries to disable - should be ignored
+                'auto_load': False,  # User tries to disable - should be ignored
             }
         ]
 
@@ -526,7 +528,7 @@ class TestMarketplaceCompositionIntegration:
         # Org marketplace remains unchanged - user override is blocked
         assert len(inherited) == 1
         assert inherited[0]['scope'] == 'org'
-        assert inherited[0]['auto_load']  # Still True from org
+        assert inherited[0]['auto_load'] is True  # Still True from org
 
         # User's attempt is ignored - not added to personal
         assert len(personal) == 0
