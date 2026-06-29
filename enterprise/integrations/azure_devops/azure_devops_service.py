@@ -5,8 +5,12 @@ from server.auth.token_manager import TokenManager
 from openhands.app_server.integrations.azure_devops.azure_devops_service import (
     AzureDevOpsService,
 )
-from openhands.app_server.integrations.service_types import ProviderType
+from openhands.app_server.integrations.service_types import ProviderType, RequestMethod
 from openhands.app_server.utils.logger import openhands_logger as logger
+
+# Git Repositories security namespace + GenericContribute (write) permission bit.
+GIT_REPOSITORIES_NAMESPACE_ID = '2e9eb7ed-3c0a-47d4-87c1-0ffdd275fd87'
+GENERIC_CONTRIBUTE_PERMISSION = 4
 
 
 class SaaSAzureDevOpsService(AzureDevOpsService):
@@ -122,3 +126,41 @@ class SaaSAzureDevOpsService(AzureDevOpsService):
             installation_id=installation_id,
             query=query,
         )
+
+    async def has_contribute_access(self, project_id: str, repository_id: str) -> bool:
+        """Whether the caller has GenericContribute (write) on the repo.
+
+        Fails closed: missing ids or any error returns False.
+        """
+        if not project_id or not repository_id:
+            return False
+
+        url = (
+            f'{self.base_url}/_apis/security/permissionevaluationbatch'
+            '?api-version=7.1-preview.1'
+        )
+        payload = {
+            'evaluations': [
+                {
+                    'securityNamespaceId': GIT_REPOSITORIES_NAMESPACE_ID,
+                    'token': f'repoV2/{project_id}/{repository_id}',
+                    'permissions': GENERIC_CONTRIBUTE_PERMISSION,
+                }
+            ]
+        }
+        try:
+            response, _ = await self._make_request(
+                url=url, params=payload, method=RequestMethod.POST
+            )
+            evaluations = response.get('evaluations') or []
+            return bool(evaluations and evaluations[0].get('value'))
+        except Exception as e:
+            logger.warning(f'[Azure DevOps] permission check failed: {e}')
+            return False
+
+    async def get_project_repositories(self, project: str) -> list[dict]:
+        """List a project's Git repositories as raw API dicts."""
+        project_enc = self._encode_url_component(project)
+        url = f'{self.base_url}/{project_enc}/_apis/git/repositories?api-version=7.1'
+        response, _ = await self._make_request(url)
+        return response.get('value') or []

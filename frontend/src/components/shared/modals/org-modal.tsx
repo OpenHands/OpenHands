@@ -20,6 +20,7 @@ interface OrgModalProps {
   asForm?: boolean;
   formAction?: (formData: FormData) => void;
   fullWidthButtons?: boolean;
+  hideSecondaryButton?: boolean;
 }
 
 export function OrgModal({
@@ -39,6 +40,7 @@ export function OrgModal({
   asForm = false,
   formAction,
   fullWidthButtons = false,
+  hideSecondaryButton = false,
 }: OrgModalProps) {
   const content = (
     <>
@@ -59,6 +61,7 @@ export function OrgModal({
         primaryTestId={primaryButtonTestId}
         secondaryTestId={secondaryButtonTestId}
         fullWidth={fullWidthButtons}
+        hideSecondaryButton={hideSecondaryButton}
       />
     </>
   );

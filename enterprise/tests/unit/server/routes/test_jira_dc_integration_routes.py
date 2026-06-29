@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import parse_qs, urlparse
 
+import httpx
 import pytest
 from fastapi import HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -498,6 +499,37 @@ async def test_jira_dc_callback_token_exchange_uses_form_encoding(
     kwargs = mock_client.post.call_args.kwargs
     assert kwargs.get('data', {}).get('grant_type') == 'authorization_code'
     assert 'json' not in kwargs
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.redis_client')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+async def test_jira_dc_callback_token_endpoint_unreachable_returns_502(
+    mock_manager, mock_redis, mock_request
+):
+    """An unreachable token endpoint (wrong scheme / blocked egress) returns an
+    actionable 502, not a bare 500."""
+    state = 'test_state'
+    session_data = {
+        'operation_type': 'workspace_integration',
+        'keycloak_user_id': 'user1',
+        'target_workspace': 'test.atlassian.net',
+        'state': state,
+    }
+    mock_redis.get.return_value = json.dumps(session_data)
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(side_effect=httpx.ConnectTimeout('timed out'))
+    mock_httpx = AsyncMock()
+    mock_httpx.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_httpx.__aexit__ = AsyncMock(return_value=None)
+
+    with patch('httpx.AsyncClient', return_value=mock_httpx):
+        with pytest.raises(HTTPException) as exc_info:
+            await jira_dc_callback(mock_request, 'code', state)
+
+    assert exc_info.value.status_code == 502
+    assert 'Could not reach' in exc_info.value.detail
 
 
 @pytest.mark.asyncio

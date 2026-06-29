@@ -384,8 +384,14 @@ class TestDynamicRemoteSandboxSpecServiceInjector:
         assert svc.default_spec_name == 'nightly'
         assert svc.cache_ttl_seconds == 30
 
-    async def test_inject_yields_fresh_service_each_call(self):
-        """Each call to inject() must produce a new service instance."""
+    async def test_inject_returns_same_service_each_call(self):
+        """inject() must return the same service instance on every call.
+
+        The injector is a long-lived singleton. Re-using the same
+        DynamicRemoteSandboxSpecService instance is what allows the TTL
+        cache to survive across requests; creating a new instance each time
+        would silently discard the cache.
+        """
         injector = DynamicRemoteSandboxSpecServiceInjector(
             api_url='https://rt.example.com', api_key='k'
         )
@@ -399,4 +405,4 @@ class TestDynamicRemoteSandboxSpecServiceInjector:
         async for svc in injector.inject(state):
             second = svc
 
-        assert first is not second
+        assert first is second

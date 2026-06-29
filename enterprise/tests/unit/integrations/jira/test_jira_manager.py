@@ -280,6 +280,26 @@ class TestSendMessage:
             assert result == {'id': 'comment_id'}
             mock_response.raise_for_status.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_send_message_uses_configured_timeout(self, jira_manager):
+        """Server-side Jira Cloud calls use the configured timeout, not httpx's 5s default."""
+        from server.auth.constants import JIRA_HTTP_TIMEOUT
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {'id': 'comment_id'}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_client.return_value.__aenter__.return_value.post = AsyncMock(
+                return_value=mock_response
+            )
+
+            await jira_manager.send_message(
+                'Test message', 'PROJ-123', 'cloud-123', 'service@test.com', 'api_key'
+            )
+
+            assert mock_client.call_args.kwargs['timeout'] == JIRA_HTTP_TIMEOUT
+
 
 class TestSendErrorFromPayload:
     """Test error comment sending from payload."""

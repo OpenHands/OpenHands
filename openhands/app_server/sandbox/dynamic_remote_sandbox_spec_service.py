@@ -7,7 +7,7 @@ from typing import AsyncGenerator
 
 import httpx
 from fastapi import Request
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_spec_models import (
@@ -133,12 +133,18 @@ class DynamicRemoteSandboxSpecServiceInjector(SandboxSpecServiceInjector):
         description='Seconds to cache the warm runtime config list before re-fetching.',
     )
 
+    # Shared across all requests — the injector is a long-lived singleton in the
+    # global config, so this attribute persists and the TTL cache actually works.
+    _service: DynamicRemoteSandboxSpecService | None = PrivateAttr(default=None)
+
     async def inject(
         self, state: InjectorState, request: Request | None = None
     ) -> AsyncGenerator[SandboxSpecService, None]:
-        yield DynamicRemoteSandboxSpecService(
-            api_url=self.api_url,
-            api_key=self.api_key,
-            default_spec_name=self.default_spec_name,
-            cache_ttl_seconds=self.cache_ttl_seconds,
-        )
+        if self._service is None:
+            self._service = DynamicRemoteSandboxSpecService(
+                api_url=self.api_url,
+                api_key=self.api_key,
+                default_spec_name=self.default_spec_name,
+                cache_ttl_seconds=self.cache_ttl_seconds,
+            )
+        yield self._service

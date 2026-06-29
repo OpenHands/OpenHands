@@ -23,6 +23,7 @@ AZURE_DEVOPS_CLIENT_ID = os.getenv('AZURE_DEVOPS_CLIENT_ID', '').strip()
 AZURE_DEVOPS_CLIENT_SECRET = os.getenv('AZURE_DEVOPS_CLIENT_SECRET', '').strip()
 AZURE_DEVOPS_TENANT_ID = os.getenv('AZURE_DEVOPS_TENANT_ID', '').strip()
 AZURE_DEVOPS_ORGANIZATION = os.getenv('AZURE_DEVOPS_ORGANIZATION', '').strip()
+AZURE_DEVOPS_WEBHOOK_SECRET = os.getenv('AZURE_DEVOPS_WEBHOOK_SECRET', '').strip()
 AZURE_DEVOPS_SCOPE = os.getenv(
     'AZURE_DEVOPS_SCOPE', 'https://app.vssps.visualstudio.com/.default'
 ).strip()
@@ -38,6 +39,8 @@ ENABLE_LINEAR = os.environ.get('ENABLE_LINEAR', 'false') == 'true'
 ENABLE_AUTOMATIONS = os.environ.get('ENABLE_AUTOMATIONS', 'true') == 'true'
 JIRA_CLIENT_ID = os.getenv('JIRA_CLIENT_ID', '').strip()
 JIRA_CLIENT_SECRET = os.getenv('JIRA_CLIENT_SECRET', '').strip()
+# Timeout (s) for server-side calls to Jira Cloud; configurable, mirrors Jira DC.
+JIRA_HTTP_TIMEOUT = float(os.getenv('JIRA_HTTP_TIMEOUT', '30'))
 LINEAR_CLIENT_ID = os.getenv('LINEAR_CLIENT_ID', '').strip()
 LINEAR_CLIENT_SECRET = os.getenv('LINEAR_CLIENT_SECRET', '').strip()
 JIRA_DC_CLIENT_ID = os.getenv('JIRA_DC_CLIENT_ID', '').strip()
@@ -46,6 +49,8 @@ JIRA_DC_BASE_URL = os.getenv('JIRA_DC_BASE_URL', '').strip()
 JIRA_DC_ENABLE_OAUTH = os.getenv('JIRA_DC_ENABLE_OAUTH', '1') in ('1', 'true')
 JIRA_DC_SERVICE_ACCOUNT_EMAIL = os.getenv('JIRA_DC_SERVICE_ACCOUNT_EMAIL', '').strip()
 JIRA_DC_SERVICE_ACCOUNT_PAT = os.getenv('JIRA_DC_SERVICE_ACCOUNT_PAT', '').strip()
+# Timeout (s) for server-side calls to Jira DC; configurable for slow on-prem.
+JIRA_DC_HTTP_TIMEOUT = float(os.getenv('JIRA_DC_HTTP_TIMEOUT', '30'))
 AUTH_URL = os.getenv('AUTH_URL', '').rstrip('/')
 ROLE_CHECK_ENABLED = os.getenv('ROLE_CHECK_ENABLED', 'false').lower() in (
     '1',
