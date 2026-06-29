@@ -912,8 +912,21 @@ async def jira_dc_callback(request: Request, code: str, state: str):
         'code': code,
         'redirect_uri': JIRA_DC_REDIRECT_URI,
     }
-    async with httpx.AsyncClient() as client:
-        response = await client.post(JIRA_DC_TOKEN_URL, data=token_payload)
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(JIRA_DC_TOKEN_URL, data=token_payload)
+    except httpx.RequestError as e:
+        # Token endpoint unreachable -- almost always JIRA_DC_BASE_URL using the
+        # wrong scheme (http vs https) or blocked egress to the Jira server.
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f'Could not reach the Jira Data Center token endpoint '
+                f'({JIRA_DC_TOKEN_URL}): {type(e).__name__}. Check that the Jira '
+                f'Base URL uses the correct https scheme and that OpenHands can '
+                f'reach the Jira server.'
+            ),
+        ) from e
     if response.status_code != 200:
         raise HTTPException(
             status_code=400, detail=f'Error fetching token: {response.text}'
@@ -938,8 +951,20 @@ async def jira_dc_callback(request: Request, code: str, state: str):
     if target_workspace != urlparse(JIRA_DC_BASE_URL).hostname:
         raise HTTPException(status_code=400, detail='Target workspace mismatch.')
 
-    async with httpx.AsyncClient() as client:
-        jira_dc_user_response = await client.get(JIRA_DC_USER_INFO_URL, headers=headers)
+    try:
+        async with httpx.AsyncClient() as client:
+            jira_dc_user_response = await client.get(
+                JIRA_DC_USER_INFO_URL, headers=headers
+            )
+    except httpx.RequestError as e:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f'Could not reach the Jira Data Center server '
+                f'({JIRA_DC_USER_INFO_URL}): {type(e).__name__}. Check that the '
+                f'Jira Base URL and network egress are correct.'
+            ),
+        ) from e
     if jira_dc_user_response.status_code != 200:
         raise HTTPException(
             status_code=400,

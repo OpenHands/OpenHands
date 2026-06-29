@@ -52,6 +52,17 @@ describe("useSwitchLlmProfileAndLog", () => {
     );
   });
 
+  it("no-ops for a `task-` placeholder id (no call, no error toast) during startup", async () => {
+    const { result } = renderTestHook();
+    act(() => result.current.switchAndLog("task-abc-123", "gpt-5"));
+    // Give any pending mutation a tick to fire (it shouldn't).
+    await new Promise((r) => {
+      setTimeout(r, 0);
+    });
+    expect(mockSwitchProfile).not.toHaveBeenCalled();
+    expect(mockDisplayErrorToast).not.toHaveBeenCalled();
+  });
+
   it("records a switch entry on success, anchored to the latest rendered v1 event", async () => {
     useEventStore.setState({
       events: [],

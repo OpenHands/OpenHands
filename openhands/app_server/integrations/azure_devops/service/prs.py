@@ -12,12 +12,6 @@ from openhands.app_server.utils.logger import openhands_logger as logger
 class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
     """Mixin for Azure DevOps pull request operations."""
 
-    def _truncate_comment(self, comment: str, max_length: int = 1000) -> str:
-        """Truncate comment to max length."""
-        if len(comment) <= max_length:
-            return comment
-        return comment[:max_length] + '...'
-
     async def add_pr_thread(
         self,
         repository: str,
@@ -46,15 +40,10 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         """
         org, project, repo = self._parse_repository(repository)
 
-        # URL-encode components to handle spaces and special characters
-        org_enc = self._encode_url_component(org)
-        project_enc = self._encode_url_component(project)
         repo_enc = self._encode_url_component(repo)
 
-        url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads?api-version=7.1'
+        url = f'{self._project_base_url(org, project)}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads?api-version=7.1'
 
-        # Create thread payload with a comment
-        # Reference: https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-threads/create
         payload = {
             'comments': [
                 {
@@ -98,12 +87,9 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         """
         org, project, repo = self._parse_repository(repository)
 
-        # URL-encode components to handle spaces and special characters
-        org_enc = self._encode_url_component(org)
-        project_enc = self._encode_url_component(project)
         repo_enc = self._encode_url_component(repo)
 
-        url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads/{thread_id}/comments?api-version=7.1'
+        url = f'{self._project_base_url(org, project)}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads/{thread_id}/comments?api-version=7.1'
 
         payload = {
             'content': comment_text,
@@ -137,12 +123,9 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         """
         org, project, repo = self._parse_repository(repository)
 
-        # URL-encode components to handle spaces and special characters
-        org_enc = self._encode_url_component(org)
-        project_enc = self._encode_url_component(project)
         repo_enc = self._encode_url_component(repo)
 
-        url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads?api-version=7.1'
+        url = f'{self._project_base_url(org, project)}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads?api-version=7.1'
 
         response, _ = await self._make_request(url)
 
@@ -243,7 +226,6 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         project = parts[1]
         repo = parts[2]
 
-        # URL-encode components to handle spaces and special characters
         org_enc = self._encode_url_component(org)
         project_enc = self._encode_url_component(project)
         repo_enc = self._encode_url_component(repo)
@@ -282,12 +264,9 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         """
         org, project, repo = self._parse_repository(repository)
 
-        # URL-encode components to handle spaces and special characters
-        org_enc = self._encode_url_component(org)
-        project_enc = self._encode_url_component(project)
         repo_enc = self._encode_url_component(repo)
 
-        url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}?api-version=7.1'
+        url = f'{self._project_base_url(org, project)}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}?api-version=7.1'
 
         response, _ = await self._make_request(url)
         return response

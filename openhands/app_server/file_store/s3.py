@@ -75,6 +75,24 @@ class S3FileStore(FileStore):
                 f"Error: Failed to write to bucket '{self._get_bucket_name()}' at path {path}: {e}"
             )
 
+    def write_from_path(self, path: str, source_path: str) -> None:
+        # upload_file streams the file from disk in parts; never buffers the whole
+        # object in RAM (unlike put_object with Body=f.read()).
+        try:
+            self.client.upload_file(source_path, self._get_bucket_name(), path)
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == 'AccessDenied':
+                raise FileNotFoundError(
+                    f"Error: Access denied to bucket '{self._get_bucket_name()}'."
+                )
+            elif e.response['Error']['Code'] == 'NoSuchBucket':
+                raise FileNotFoundError(
+                    f"Error: The bucket '{self._get_bucket_name()}' does not exist."
+                )
+            raise FileNotFoundError(
+                f"Error: Failed to write to bucket '{self._get_bucket_name()}' at path {path}: {e}"
+            )
+
     def read(self, path: str) -> str:
         try:
             response: GetObjectOutputDict = self.client.get_object(

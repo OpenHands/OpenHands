@@ -2,7 +2,7 @@
 // This file contains API methods for /api/v1/sandboxes endpoints.
 
 import { openHands } from "../open-hands-axios";
-import type { V1SandboxInfo } from "./sandbox-service.types";
+import type { V1SandboxInfo, V1SandboxSpecPage } from "./sandbox-service.types";
 
 export class SandboxService {
   /**
@@ -25,6 +25,17 @@ export class SandboxService {
     const { data } = await openHands.post<{ success: boolean }>(
       `/api/v1/sandboxes/${sandboxId}/resume`,
       {},
+    );
+    return data;
+  }
+
+  /**
+   * Search / list available sandbox specs
+   * Calls the /api/v1/sandbox-specs/search endpoint
+   */
+  static async searchSandboxSpecs(): Promise<V1SandboxSpecPage> {
+    const { data } = await openHands.get<V1SandboxSpecPage>(
+      `/api/v1/sandbox-specs/search`,
     );
     return data;
   }

@@ -120,6 +120,27 @@ PERMITTED_CORS_ORIGINS = [
 # Controls whether new orgs/users default to V1 API (env: DEFAULT_V1_ENABLED)
 DEFAULT_V1_ENABLED = os.getenv('DEFAULT_V1_ENABLED', '1').lower() in ('1', 'true')
 
+# Controls whether the admin POST /api/organizations/provision-user endpoint
+# is registered on the SaaS app (env: USER_PROVISIONING_ENABLED). Defaults to
+# off in staging and production via the Helm chart; deliberately env-gated so
+# the privileged route can be rolled out per-environment via Helm values.
+# Accepts both ``'true'`` and ``'1'`` because older Helm chart versions emit
+# the latter and would otherwise silently keep the feature disabled.
+USER_PROVISIONING_ENABLED = os.getenv('USER_PROVISIONING_ENABLED', 'false').lower() in (
+    'true',
+    '1',
+)
+
+# Controls whether any authenticated user is allowed to create an organization
+# via POST /api/organizations (env: OPEN_ORG_CREATION_ENABLED). When disabled
+# (the default), org creation remains restricted to @openhands.dev admin users.
+# Accepts both ``'true'`` and ``'1'`` because older Helm chart versions emit
+# the latter and would otherwise silently keep the feature disabled.
+OPEN_ORG_CREATION_ENABLED = os.getenv('OPEN_ORG_CREATION_ENABLED', 'false').lower() in (
+    'true',
+    '1',
+)
+
 
 def build_litellm_proxy_model_path(model_name: str) -> str:
     """Build the LiteLLM proxy model path based on model name.

@@ -28,6 +28,7 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     ACP_SERVER_TAG_KEY,
+    ARCHIVE_WORKSPACE_PATH_TAG_KEY,
     AgentType,
     AppConversation,
     AppConversationInfo,
@@ -97,6 +98,7 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.settings.llm_profiles import resolve_profile_llm
+from openhands.app_server.settings.settings_models import grouped_workspace_dir
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.utils.docker_utils import (
@@ -195,6 +197,18 @@ After you finalize the plan in PLAN.md:
 Your role ends when the plan is finalized. Implementation is handled by the code agent.
 </IMPORTANT_PLANNING_BOUNDARIES>"""
 
+GIT_SHALLOW_CLONE_CONTEXT = """<GIT_WORKSPACE_CONTEXT>
+The selected repository was cloned as a shallow clone. Git history may be incomplete. Before using operations that depend on full history, tags, merge bases, historical blame, or arbitrary commit checkout, run `git rev-parse --is-shallow-repository`. If full history is needed, run `git fetch --unshallow` or `git fetch --deepen=<n>`.
+</GIT_WORKSPACE_CONTEXT>"""
+
+
+def append_system_context(existing: str | None, block: str) -> str:
+    if not existing:
+        return block
+    if block in existing:
+        return existing
+    return f'{existing.rstrip()}\n\n{block}'
+
 
 @dataclass
 class LiveStatusAppConversationService(AppConversationServiceBase):
@@ -224,6 +238,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     export_lock_ttl_seconds: int = 3600
     export_lock_refresh_interval_seconds: int = 30
     export_lock_required: bool | None = None
+
+    def _maybe_append_shallow_clone_context(
+        self,
+        user: UserInfo,
+        selected_repository: str | None,
+        system_message_suffix: str | None,
+    ) -> str | None:
+        if selected_repository and not bool(getattr(user, 'git_full_clone', False)):
+            return append_system_context(
+                system_message_suffix, GIT_SHALLOW_CLONE_CONTEXT
+            )
+        return system_message_suffix
 
     async def _get_sandbox_grouping_strategy(self) -> SandboxGroupingStrategy:
         """Get the sandbox grouping strategy from user settings."""
@@ -371,10 +397,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             conversation_id = request.conversation_id or uuid4()
 
             # Setup working dir based on grouping
-            working_dir = sandbox_spec.working_dir
             sandbox_grouping_strategy = await self._get_sandbox_grouping_strategy()
-            if sandbox_grouping_strategy != SandboxGroupingStrategy.NO_GROUPING:
-                working_dir = f'{working_dir}/{conversation_id.hex}'
+            working_dir = grouped_workspace_dir(
+                sandbox_spec.working_dir,
+                sandbox_grouping_strategy,
+                conversation_id.hex,
+            )
 
             # Run setup scripts
             remote_workspace = AsyncRemoteWorkspace(
@@ -383,7 +411,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 working_dir=working_dir,
             )
             async for updated_task in self.run_setup_scripts(
-                task, sandbox, remote_workspace, agent_server_url
+                task, sandbox, remote_workspace, agent_server_url, conversation_id
             ):
                 yield updated_task
 
@@ -462,6 +490,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             # the same agent back through the AgentBase discriminator.
             request_agent = start_conversation_request.agent
             tags: dict[str, str] = {}
+            # Pin where the workspace was actually created so the delete-time
+            # archive captures the right directory without re-deriving the path
+            # from settings (e.g. grouping) that may change before delete.
+            tags[ARCHIVE_WORKSPACE_PATH_TAG_KEY] = working_dir
             if request_agent.agent_kind == 'acp':
                 llm_model = request_agent.acp_model
                 agent_kind = 'acp'
@@ -1584,6 +1616,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     )
                 secrets[name] = StaticSecret(value=value)
 
+        system_message_suffix = self._maybe_append_shallow_clone_context(
+            user, selected_repository, system_message_suffix
+        )
+
         # --- LLM + MCP -----------------------------------------------------
         llm, mcp_config = await self._configure_llm_and_mcp(
             user, llm_model, conversation_id
@@ -1793,8 +1829,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         values are never materialised in this process.  In OSS mode (no
         ``web_url``) they remain ``StaticSecret``.  Secrets are passed
         directly as ``secrets=`` to ``create_request()``; no ``AgentContext``
-        relay is needed.  This avoids the deprecated ``acp_env`` channel
-        (software-agent-sdk #3464; OpenHands/agent-canvas#1039).
+        relay is needed (software-agent-sdk #3464;
+        OpenHands/agent-canvas#1039).
 
         Args:
             sandbox: Sandbox information
@@ -1867,6 +1903,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                         'API-provided secret %r overrides existing secret', name
                     )
                 secrets[name] = StaticSecret(value=value)
+
+        system_message_suffix = self._maybe_append_shallow_clone_context(
+            user, selected_repository, system_message_suffix
+        )
 
         # --- build the ACP agent ------------------------------------------
         acp_settings = user.agent_settings  # already verified to be ACPAgentSettings
