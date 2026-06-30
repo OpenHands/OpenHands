@@ -1903,8 +1903,15 @@ async def get_org_conversation_stats(
 )
 async def get_org_conversation_usage_stats(
     org_id: UUID,
-    days: int = Query(
-        default=7, ge=1, le=90, description='Number of days to look back'
+    time_window: Annotated[
+        str | None,
+        Query(
+            title='Time window filter',
+            description='Options: 7d, 30d, 90d, ytd (overrides days when provided)',
+        ),
+    ] = None,
+    days: int | None = Query(
+        default=None, ge=1, description='Number of days to look back'
     ),
     user_id: str = Depends(require_permission(Permission.VIEW_ORG_CONVERSATIONS)),
     service: OrgConversationService = org_conversation_service_dependency,
@@ -1918,25 +1925,47 @@ async def get_org_conversation_usage_stats(
 
     Args:
         org_id: The organization ID
-        days: Number of days to look back (1-90, default 7)
+        time_window: Time window filter (7d, 30d, 90d, ytd)
+        days: Number of days to look back (default 7)
 
     Returns:
         OrgUsageStats: Detailed usage statistics for the org
     """
+    now = datetime.now(timezone.utc)
+    resolved_days = days or 7
+
+    if time_window:
+        if time_window == 'ytd':
+            start_of_year = datetime(now.year, 1, 1, tzinfo=timezone.utc)
+            resolved_days = max(1, (now - start_of_year).days + 1)
+        elif time_window in {'7d', '30d', '90d'}:
+            resolved_days = int(time_window[:-1])
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='Invalid time_window. Use 7d, 30d, 90d, or ytd.',
+            )
+
     logger.info(
         'Getting organization conversation usage stats',
-        extra={'user_id': user_id, 'org_id': str(org_id), 'days': days},
+        extra={
+            'user_id': user_id,
+            'org_id': str(org_id),
+            'days': resolved_days,
+            'time_window': time_window,
+        },
     )
 
     try:
-        stats = await service.get_usage_stats(org_id=org_id, days=days)
+        stats = await service.get_usage_stats(org_id=org_id, days=resolved_days)
 
         logger.info(
             'Successfully retrieved organization conversation usage stats',
             extra={
                 'user_id': user_id,
                 'org_id': str(org_id),
-                'days': days,
+                'days': resolved_days,
+                'time_window': time_window,
                 'active_users': stats.active_users,
                 'agent_runs': stats.agent_runs,
                 'total_tokens': stats.total_tokens,
