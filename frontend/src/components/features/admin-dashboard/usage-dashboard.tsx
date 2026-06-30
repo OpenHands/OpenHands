@@ -1,11 +1,14 @@
 /* eslint-disable i18next/no-literal-string */
 import React, { useMemo, useState } from "react";
+import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
+import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { useStopConversation } from "#/hooks/mutation/use-stop-conversation";
 import { useOrgConversationStats } from "#/hooks/query/use-org-conversation-stats";
 import { useOrgConversations } from "#/hooks/query/use-org-conversations";
 import { useOrgUsageStats } from "#/hooks/query/use-org-usage-stats";
-import { organizationService } from "#/api/organization-service/organization-service.api";
-import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { useOrgUserUsage } from "#/hooks/query/use-org-user-usage";
 import { useOrganizations } from "#/hooks/query/use-organizations";
+import { organizationService } from "#/api/organization-service/organization-service.api";
 
 // Icons as inline SVGs
 function SearchIcon() {
@@ -40,6 +43,23 @@ function ExportIcon() {
     </svg>
   );
 }
+
+function StopIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <rect x="9" y="9" width="6" height="6" />
+    </svg>
+  );
+}
+
 
 function TrendUpIcon() {
   return (
@@ -122,6 +142,57 @@ const formatDateTime = (dateStr: string) => {
     minute: "2-digit",
   });
 };
+
+const formatDateTimeOrDash = (value?: string | null) =>
+  value ? formatDateTime(value) : "-";
+
+const formatDuration = (start?: string | null, end?: string | null) => {
+  if (!start || !end) return "-";
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end).getTime();
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) return "-";
+  const diffMs = Math.max(0, endMs - startMs);
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const totalHours = Math.floor(totalMinutes / 60);
+  if (totalHours >= 24) {
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    return `${days}d ${hours}h`;
+  }
+  if (totalHours > 0) {
+    return `${totalHours}h ${totalMinutes % 60}m`;
+  }
+  return `${totalMinutes}m`;
+};
+
+const formatAssociatedPr = (conversation: {
+  pr_number?: number[];
+  selected_repository?: string | null;
+}) => {
+  const prNumbers = conversation.pr_number ?? [];
+  if (prNumbers.length === 0) return "-";
+  const repo = conversation.selected_repository;
+  return prNumbers
+    .map((pr) => (repo ? `${repo}#${pr}` : `#${pr}`))
+    .join(", ");
+};
+
+const formatBudget = (user: {
+  budget_monthly_limit?: number | null;
+  budget_is_disabled?: boolean;
+}) => {
+  if (user.budget_is_disabled) return "Disabled";
+  if (user.budget_monthly_limit == null) return "-";
+  return formatCost(user.budget_monthly_limit);
+};
+
+const formatMergedStatus = (merged?: boolean | null) => {
+  if (merged === true) return "Yes";
+  if (merged === false) return "No";
+  return "-";
+};
+
+
 
 // Tabs
 const TABS = ["overview", "users", "models", "conversations"] as const;
@@ -232,7 +303,7 @@ export function UsageDashboard() {
   const [timeWindow, setTimeWindow] = useState("30d");
   const [modelSearch, setModelSearch] = useState("");
   const [conversationSearch, setConversationSearch] = useState("");
-  const [conversationStatus, setConversationStatus] = useState("");
+  const [conversationStatus, setConversationStatus] = useState("running");
   const [conversationPage, setConversationPage] = useState(1);
   const [conversationPerPage, setConversationPerPage] = useState(20);
 
@@ -242,6 +313,8 @@ export function UsageDashboard() {
   const days = getDaysFromTimeWindow(timeWindow);
   const { data: stats } = useOrgConversationStats();
   const { data: usageStats } = useOrgUsageStats({ days });
+  const { data: userUsage, isLoading: userUsageLoading } = useOrgUserUsage();
+
   const conversationTimeWindow = timeWindow === "ytd" ? "" : timeWindow;
 
   const { data: conversationsData, isLoading: conversationsLoading } =
@@ -252,6 +325,46 @@ export function UsageDashboard() {
       executionStatus: conversationStatus,
       timeWindow: conversationTimeWindow,
     });
+
+  const [stoppingIds, setStoppingIds] = useState<Set<string>>(new Set());
+  const [pendingStop, setPendingStop] = useState<{
+    id: string;
+    title: string | null;
+  } | null>(null);
+  const stopConversation = useStopConversation();
+
+  const handleStop = (conversation: { id: string; title: string | null }) => {
+    setPendingStop(conversation);
+  };
+
+  const confirmStop = () => {
+    if (!pendingStop) return;
+    const conversation = pendingStop;
+    setPendingStop(null);
+    setStoppingIds((prev) => {
+      const next = new Set(prev);
+      next.add(conversation.id);
+      return next;
+    });
+    stopConversation.mutate(
+      { conversationId: conversation.id },
+      {
+        onSettled: () => {
+          setStoppingIds((prev) => {
+            if (!prev.has(conversation.id)) return prev;
+            const next = new Set(prev);
+            next.delete(conversation.id);
+            return next;
+          });
+        },
+      },
+    );
+  };
+
+  const cancelStop = () => {
+    setPendingStop(null);
+  };
+
 
   const currentOrg = orgData?.organizations?.find(
     (org) => org.id === organizationId,
@@ -300,7 +413,7 @@ export function UsageDashboard() {
 
   const tabCounts = {
     overview: null,
-    users: usageStats?.team_usage?.length ?? 0,
+    users: userUsage?.items.length ?? 0,
     models: modelRows.length,
     conversations: conversationsData?.total_items ?? 0,
   };
@@ -309,6 +422,12 @@ export function UsageDashboard() {
 
   const conversationTotalPages = conversationsData?.total_pages ?? 1;
   const conversationTotalItems = conversationsData?.total_items ?? 0;
+
+  const pendingStopLabel = pendingStop?.title?.trim();
+  const stopConfirmationText = pendingStopLabel
+    ? `Stop "${pendingStopLabel}"? This will cancel any in-progress agent run.`
+    : "Stop this conversation? This will cancel any in-progress agent run.";
+
 
 
 
@@ -494,22 +613,34 @@ export function UsageDashboard() {
                 <thead>
                   <tr className="border-b border-zinc-800">
                     <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                      Conversation
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                       User
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                      Model
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                      Updated
+                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Tokens
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                      Tokens / Cost
+                      Spend
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Duration
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Started
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Last update
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Associated PR
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Merged?
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Type
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Stop
                     </th>
                   </tr>
                 </thead>
@@ -517,7 +648,7 @@ export function UsageDashboard() {
                   {conversationsLoading && (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={10}
                         className="px-4 py-8 text-center text-zinc-500"
                       >
                         Loading conversations...
@@ -528,48 +659,81 @@ export function UsageDashboard() {
                     (conversationsData?.items.length ?? 0) === 0 && (
                       <tr>
                         <td
-                          colSpan={6}
+                          colSpan={10}
                           className="px-4 py-8 text-center text-zinc-500"
                         >
                           No conversations found for this time window.
                         </td>
                       </tr>
                     )}
-                  {conversationsData?.items.map((conversation) => (
-                    <tr
-                      key={conversation.id}
-                      className="border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors"
-                    >
-                      <td className="px-4 py-4">
-                        <div className="text-white text-sm font-medium">
-                          {conversation.title || "Untitled conversation"}
-                        </div>
-                        <div className="text-xs text-zinc-500">
-                          {conversation.id}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-sm text-zinc-400">
-                        {conversation.user_email || "Unknown"}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-zinc-400">
-                        {conversation.llm_model || "-"}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-zinc-400 capitalize">
-                        {conversation.execution_status || "unknown"}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-zinc-400">
-                        {formatDateTime(conversation.updated_at)}
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="text-white text-sm font-mono">
+                  {conversationsData?.items.map((conversation) => {
+                    const isRunning =
+                      conversation.execution_status?.toLowerCase() === "running";
+                    return (
+                      <tr
+                        key={conversation.id}
+                        className="border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors"
+                      >
+                        <td className="px-4 py-4">
+                          <div className="text-white text-sm font-medium">
+                            {conversation.user_email?.split("@")[0] || "Unknown"}
+                          </div>
+                          <div className="text-xs text-zinc-500">
+                            {conversation.user_email || "-"}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-right text-sm font-mono text-white">
                           {formatTokens(conversation.total_tokens)}
-                        </div>
-                        <div className="text-zinc-400 text-xs">
-                          ${conversation.accumulated_cost.toFixed(2)}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-4 py-4 text-right text-sm text-white">
+                          {formatCost(conversation.accumulated_cost)}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-zinc-400">
+                          {formatDuration(
+                            conversation.created_at,
+                            conversation.updated_at,
+                          )}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-zinc-400">
+                          {formatDateTimeOrDash(conversation.created_at)}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-zinc-400">
+                          {formatDateTimeOrDash(conversation.updated_at)}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-zinc-400">
+                          {formatAssociatedPr(conversation)}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-zinc-400">
+                          {formatMergedStatus(conversation.pr_merged)}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-zinc-400 capitalize">
+                          {conversation.trigger || conversation.agent_kind || "-"}
+                        </td>
+                        <td className="px-4 py-4 text-right text-sm">
+                          {isRunning && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleStop({
+                                  id: conversation.id,
+                                  title: conversation.title ?? null,
+                                })
+                              }
+                              disabled={stoppingIds.has(conversation.id)}
+                              className="inline-flex items-center gap-1.5 px-2 py-1 text-xs text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400 disabled:cursor-not-allowed"
+                              title="Stop conversation"
+                              aria-label="Stop conversation"
+                            >
+                              <StopIcon />
+                              {stoppingIds.has(conversation.id)
+                                ? "Stopping…"
+                                : "Stop"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-800">
@@ -627,58 +791,130 @@ export function UsageDashboard() {
                 </div>
               </div>
             </div>
+
+            {pendingStop && (
+              <ConfirmationModal
+                text={stopConfirmationText}
+                onConfirm={confirmStop}
+                onCancel={cancelStop}
+              />
+            )}
+
           </div>
         )}
 
         {/* Users Tab */}
         {activeTab === "users" && (
           <div className="space-y-4">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
-              <h2 className="text-lg font-medium text-white mb-6">
-                Team Usage Breakdown
-              </h2>
-              <div className="space-y-4">
-                {(usageStats?.team_usage ?? []).map((user) => (
-                  <div key={user.user_id} className="flex items-center gap-4">
-                    <div className="w-32">
-                      <div className="text-white text-sm font-medium truncate">
-                        {user.user_name ??
-                          user.user_email?.split("@")[0] ??
-                          "Unknown"}
-                      </div>
-                      <div className="text-zinc-500 text-xs truncate">
-                        {user.user_email}
-                      </div>
-                    </div>
-                    <div className="flex-1">
-                      <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-blue-500 rounded-full"
-                          style={{ width: `${user.percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                    <div className="w-24 text-right">
-                      <div className="text-white text-sm">
-                        {formatTokens(user.total_tokens)}
-                      </div>
-                      <div className="text-zinc-500 text-xs">
-                        {user.conversation_count} convos
-                      </div>
-                    </div>
-                    <div className="w-16 text-right">
-                      <span className="text-zinc-400 text-sm">
-                        {user.percentage}%
-                      </span>
-                    </div>
-                  </div>
-                ))}
-                {(usageStats?.team_usage?.length ?? 0) === 0 && (
-                  <div className="py-6 text-center text-sm text-zinc-500">
-                    No user usage data available for this time window.
-                  </div>
-                )}
-              </div>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-zinc-800">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      User
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Convos
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      First convo
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Last convo
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      First login
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Last login
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Spend MTD
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Spend YTD
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Lifetime
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Budget
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      PRs merged
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {userUsageLoading && (
+                    <tr>
+                      <td
+                        colSpan={11}
+                        className="px-4 py-8 text-center text-zinc-500"
+                      >
+                        Loading user usage...
+                      </td>
+                    </tr>
+                  )}
+                  {!userUsageLoading && (userUsage?.items.length ?? 0) === 0 && (
+                    <tr>
+                      <td
+                        colSpan={11}
+                        className="px-4 py-8 text-center text-zinc-500"
+                      >
+                        No user usage data available yet.
+                      </td>
+                    </tr>
+                  )}
+                  {userUsage?.items.map((user) => (
+                    <tr
+                      key={user.user_id}
+                      className="border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors"
+                    >
+                      <td className="px-4 py-4">
+                        <div className="text-white text-sm font-medium">
+                          {user.user_name ??
+                            user.user_email?.split("@")[0] ??
+                            "Unknown"}
+                        </div>
+                        <div className="text-xs text-zinc-500">
+                          {user.user_email || "-"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-right text-sm text-white">
+                        {user.conversation_count.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-zinc-400">
+                        {formatDateTimeOrDash(user.first_conversation_at)}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-zinc-400">
+                        {formatDateTimeOrDash(user.last_conversation_at)}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-zinc-400">
+                        {formatDateTimeOrDash(user.first_login_at)}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-zinc-400">
+                        {formatDateTimeOrDash(user.last_login_at)}
+                      </td>
+                      <td className="px-4 py-4 text-right text-sm text-white">
+                        {formatCost(user.spend_mtd)}
+                      </td>
+                      <td className="px-4 py-4 text-right text-sm text-white">
+                        {formatCost(user.spend_ytd)}
+                      </td>
+                      <td className="px-4 py-4 text-right text-sm text-white">
+                        {formatCost(user.spend_lifetime)}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-zinc-400">
+                        {formatBudget(user)}
+                      </td>
+                      <td className="px-4 py-4 text-right text-sm text-zinc-400">
+                        {user.prs_merged ?? "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

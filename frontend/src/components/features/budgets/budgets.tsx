@@ -1,8 +1,10 @@
 /* eslint-disable i18next/no-literal-string */
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { useConfig } from "#/hooks/query/use-config";
 
 // Icons as inline SVGs
 function SearchIcon() {
@@ -128,18 +130,20 @@ function PillBadge({
   active,
   icon,
   label,
+  disabled = false,
 }: {
   active: boolean;
   icon: React.ReactNode;
   label: string;
+  disabled?: boolean;
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors cursor-pointer ${
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
         active
           ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
           : "bg-[#151D2A] text-[#6B6B6B] border-[#262626]"
-      }`}
+      } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
     >
       {active && <span className="text-blue-400">✓</span>}
       {icon}
@@ -274,6 +278,11 @@ export function Budgets() {
   const { organizationId } = useSelectedOrganizationId();
   const queryClient = useQueryClient();
 
+  const { data: config } = useConfig();
+  const slackIntegrationEnabled = Boolean(config?.slack_enabled);
+  const emailIntegrationEnabled = Boolean(config?.email_enabled);
+
+
   const { data: budgetData, isLoading } = useQuery({
     queryKey: ["organizations", "budgets", organizationId],
     queryFn: () => organizationService.getBudgetSettings({ orgId: organizationId! }),
@@ -406,11 +415,11 @@ export function Budgets() {
       enabled: orgBudgetEnabled,
       monthly_limit: monthlyLimitValue,
       reset_day: billingCycle === "15th" ? 15 : 1,
-      slack_channel: slackChannel ? slackChannel.trim() : null,
+      slack_channel: slackIntegrationEnabled ? slackChannel.trim() || null : null,
       thresholds: thresholds.map((threshold) => ({
         percentage: threshold.percentage,
-        email_enabled: threshold.email_enabled,
-        slack_enabled: threshold.slack_enabled,
+        email_enabled: emailIntegrationEnabled ? threshold.email_enabled : false,
+        slack_enabled: slackIntegrationEnabled ? threshold.slack_enabled : false,
       })),
     });
   };
@@ -440,6 +449,7 @@ export function Budgets() {
   };
 
   const handleToggleEmail = (index: number) => {
+    if (!emailIntegrationEnabled) return;
     setThresholds(
       thresholds.map((t, i) =>
         i === index ? { ...t, email_enabled: !t.email_enabled } : t,
@@ -448,6 +458,7 @@ export function Budgets() {
   };
 
   const handleToggleSlack = (index: number) => {
+    if (!slackIntegrationEnabled) return;
     setThresholds(
       thresholds.map((t, i) =>
         i === index ? { ...t, slack_enabled: !t.slack_enabled } : t,
@@ -676,6 +687,35 @@ export function Budgets() {
                 Add one or more thresholds. Each can email admins, post to
                 Slack, or both.
               </p>
+              {(!emailIntegrationEnabled || !slackIntegrationEnabled) && (
+                <div className="mt-2 space-y-1 text-xs text-amber-400">
+                  {!emailIntegrationEnabled && (
+                    <p>
+                      Email alerts require RESEND_API_KEY. Add it in{" "}
+                      <Link
+                        to="/settings/secrets"
+                        className="underline underline-offset-2"
+                      >
+                        Settings → Secrets
+                      </Link>
+                      .
+                    </p>
+                  )}
+                  {!slackIntegrationEnabled && (
+                    <p>
+                      Slack alerts are disabled. Please integrate Slack in{" "}
+                      <Link
+                        to="/settings/integrations"
+                        className="underline underline-offset-2"
+                      >
+                        Settings → Integrations
+                      </Link>
+                      .
+                    </p>
+                  )}
+                </div>
+              )}
+
             </div>
             <button
               type="button"
@@ -713,23 +753,37 @@ export function Budgets() {
                     <button
                       type="button"
                       onClick={() => handleToggleEmail(index)}
-                      className="flex items-center gap-1.5"
+                      disabled={!emailIntegrationEnabled}
+                      className="flex items-center gap-1.5 disabled:cursor-not-allowed"
+                      title={
+                        emailIntegrationEnabled
+                          ? "Email org admins"
+                          : "Email alerts require RESEND_API_KEY"
+                      }
                     >
                       <PillBadge
-                        active={threshold.email_enabled}
+                        active={emailIntegrationEnabled && threshold.email_enabled}
                         icon={<EmailIcon />}
                         label="Email org admins"
+                        disabled={!emailIntegrationEnabled}
                       />
                     </button>
                     <button
                       type="button"
                       onClick={() => handleToggleSlack(index)}
-                      className="flex items-center gap-1.5"
+                      disabled={!slackIntegrationEnabled}
+                      className="flex items-center gap-1.5 disabled:cursor-not-allowed"
+                      title={
+                        slackIntegrationEnabled
+                          ? "Post to Slack"
+                          : "Please integrate Slack"
+                      }
                     >
                       <PillBadge
-                        active={threshold.slack_enabled}
+                        active={slackIntegrationEnabled && threshold.slack_enabled}
                         icon={<SlackIcon />}
                         label="# Post to Slack"
+                        disabled={!slackIntegrationEnabled}
                       />
                     </button>
                   </div>
@@ -762,13 +816,29 @@ export function Budgets() {
               id="slack-channel"
               type="text"
               value={slackChannel}
-              onChange={(e) => setSlackChannel(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-[#151D2A] border border-[#262626] rounded-lg text-white focus:outline-none focus:border-blue-500"
+              onChange={(e) => {
+                if (!slackIntegrationEnabled) return;
+                setSlackChannel(e.target.value);
+              }}
+              disabled={!slackIntegrationEnabled}
+              placeholder={
+                slackIntegrationEnabled
+                  ? "#budget-alerts"
+                  : "Connect Slack to set a channel"
+              }
+              className="w-full pl-9 pr-4 py-2 bg-[#151D2A] border border-[#262626] rounded-lg text-white focus:outline-none focus:border-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
             />
           </div>
-          <p className="text-xs text-[#6B6B6B] mt-2">
-            Used by any threshold with &apos;Post to Slack&apos; enabled.
-          </p>
+          {slackIntegrationEnabled ? (
+            <p className="text-xs text-[#6B6B6B] mt-2">
+              Used by any threshold with &apos;Post to Slack&apos; enabled.
+            </p>
+          ) : (
+            <p className="text-xs text-amber-400 mt-2">
+              Slack alerts are disabled. Please integrate Slack to select a
+              channel.
+            </p>
+          )}
         </div>
 
         {/* Action Buttons */}
