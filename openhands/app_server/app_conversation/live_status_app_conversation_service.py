@@ -1517,6 +1517,20 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             httpx_client=self.httpx_client,
         )
 
+    @staticmethod
+    async def _resolve_head_commit(
+        remote_workspace: AsyncRemoteWorkspace, project_dir: str
+    ) -> str:
+        """Best-effort post-clone HEAD sha for the Laminar trace; '' on failure."""
+        try:
+            result = await remote_workspace.execute_command(
+                'git rev-parse HEAD', project_dir
+            )
+        except Exception as e:
+            _logger.debug('HEAD commit lookup for trace metadata failed: %s', e)
+            return ''
+        return result.stdout.strip() if not result.exit_code else ''
+
     async def _build_start_conversation_request_for_user(
         self,
         sandbox: SandboxInfo,
@@ -1765,15 +1779,21 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # fallback.
         laminar_user_id = await self.user_context.get_user_email() or user.id
         # Repo identity on the Laminar trace so trajectories are searchable by
-        # repo / branch (the trace UI has no DB to join against). Omitted for a
+        # repo / branch / commit (the trace UI has no DB to join against).
+        # repo/branch/provider are request inputs; commit is the post-clone HEAD,
+        # resolved best-effort from the (already-cloned) workspace. Omitted for a
         # repo-less conversation; forwarded into the request's
         # observability_metadata, which the agent-server attaches to the span.
+        commit = ''
+        if selected_repository and remote_workspace is not None:
+            commit = await self._resolve_head_commit(remote_workspace, project_dir)
         observability_metadata = {
             key: value
             for key, value in (
                 ('repo', selected_repository),
                 ('branch', selected_branch),
                 ('git_provider', git_provider.value if git_provider else None),
+                ('commit', commit),
             )
             if value
         }

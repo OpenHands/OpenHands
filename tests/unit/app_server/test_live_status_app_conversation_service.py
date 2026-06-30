@@ -1074,7 +1074,8 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_build_request_populates_observability_metadata(self, _mock_tools):
         """Repo / branch / provider land on the request's observability_metadata
-        so the agent-server attaches them to the Laminar trace."""
+        so the agent-server attaches them to the Laminar trace. With no
+        remote_workspace the commit can't be resolved, so it is omitted."""
         self.mock_user_context.get_user_info.return_value = self.mock_user
         self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
         self.service._configure_llm_and_mcp = AsyncMock(
@@ -1098,6 +1099,83 @@ class TestLiveStatusAppConversationService:
             'branch': 'feature-x',
             'git_provider': 'github',
         }
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_observability_metadata_includes_commit(
+        self, _mock_tools
+    ):
+        """The post-clone HEAD sha is resolved from the workspace and added."""
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('k'))
+        mock_agent = Mock(spec=Agent)
+        mock_agent.llm = real_llm
+        mock_agent.condenser = None
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+        self.service._load_skills_and_update_agent = AsyncMock(return_value=mock_agent)
+
+        remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        remote_workspace.execute_command = AsyncMock(
+            return_value=SimpleNamespace(exit_code=0, stdout='abc123sha\n')
+        )
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=ProviderType.GITHUB,
+            working_dir='/test/dir',
+            remote_workspace=remote_workspace,
+            selected_repository='test/repo',
+            selected_branch='feature-x',
+        )
+
+        assert result.observability_metadata == {
+            'repo': 'test/repo',
+            'branch': 'feature-x',
+            'git_provider': 'github',
+            'commit': 'abc123sha',
+        }
+        remote_workspace.execute_command.assert_awaited_once_with(
+            'git rev-parse HEAD', '/test/dir/repo'
+        )
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_commit_resolution_is_best_effort(self, _mock_tools):
+        """A failed HEAD lookup leaves commit out without breaking the build."""
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('k'))
+        mock_agent = Mock(spec=Agent)
+        mock_agent.llm = real_llm
+        mock_agent.condenser = None
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+        self.service._load_skills_and_update_agent = AsyncMock(return_value=mock_agent)
+
+        remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        remote_workspace.execute_command = AsyncMock(side_effect=RuntimeError('boom'))
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            remote_workspace=remote_workspace,
+            selected_repository='test/repo',
+        )
+
+        assert result.observability_metadata == {'repo': 'test/repo'}
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
