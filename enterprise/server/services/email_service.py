@@ -154,7 +154,6 @@ class EmailService:
                 },
             )
 
-
     @staticmethod
     def send_budget_alert_email(
         to_emails: list[str],

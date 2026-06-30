@@ -12,7 +12,7 @@ export const useOrgUsageStats = ({
   timeWindow,
 }: UseOrgUsageStatsParams = {}) => {
   const { organizationId } = useSelectedOrganizationId();
-  const resolvedDays = timeWindow ? undefined : days ?? 7;
+  const resolvedDays = timeWindow ? undefined : (days ?? 7);
 
   return useQuery({
     queryKey: [

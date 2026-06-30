@@ -6,8 +6,6 @@ from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import Request
-from openhands.app_server.services.injector import Injector, InjectorState
-from openhands.app_server.utils.logger import openhands_logger as logger
 from server.auth.authorization import RoleName
 from server.services.email_service import EmailService
 from sqlalchemy import func, select
@@ -23,6 +21,9 @@ from storage.slack_team import SlackTeam
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.user import User
+
+from openhands.app_server.services.injector import Injector, InjectorState
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 try:
     from slack_sdk.web.async_client import AsyncWebClient
@@ -264,9 +265,7 @@ class OrgBudgetService:
 
     async def _get_overrides(self, org_id: UUID) -> list[OrgUserBudgetOverride]:
         result = await self.db_session.execute(
-            select(OrgUserBudgetOverride).where(
-                OrgUserBudgetOverride.org_id == org_id
-            )
+            select(OrgUserBudgetOverride).where(OrgUserBudgetOverride.org_id == org_id)
         )
         return list(result.scalars().all())
 
@@ -326,7 +325,9 @@ class OrgBudgetService:
         self, org_id: UUID, cycle_start: datetime
     ) -> tuple[float, dict[str, float]]:
         total_query = (
-            select(func.coalesce(func.sum(StoredConversationMetadata.accumulated_cost), 0))
+            select(
+                func.coalesce(func.sum(StoredConversationMetadata.accumulated_cost), 0)
+            )
             .select_from(StoredConversationMetadata)
             .join(
                 StoredConversationMetadataSaas,
@@ -550,9 +551,7 @@ class OrgBudgetService:
             )
 
     async def _get_org_name(self, org_id: UUID) -> str:
-        result = await self.db_session.execute(
-            select(Org.name).where(Org.id == org_id)
-        )
+        result = await self.db_session.execute(select(Org.name).where(Org.id == org_id))
         return result.scalar_one_or_none() or 'your organization'
 
     async def _get_admin_emails(self, org_id: UUID) -> list[str]:
@@ -607,9 +606,7 @@ class OrgBudgetService:
                 extra={'error': str(e), 'team_id': team_id},
             )
 
-    async def _resolve_slack_team_id(
-        self, settings: OrgBudgetSettings
-    ) -> str | None:
+    async def _resolve_slack_team_id(self, settings: OrgBudgetSettings) -> str | None:
         if settings.slack_team_id:
             return settings.slack_team_id
         result = await self.db_session.execute(select(SlackTeam.team_id))

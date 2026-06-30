@@ -172,9 +172,9 @@ class OrgConversationService:
             OpenhandsPR.pr_number,
             OpenhandsPR.merged,
         ).where(
-            tuple_(OpenhandsPR.provider, OpenhandsPR.repo_name, OpenhandsPR.pr_number).in_(
-                pr_keys
-            )
+            tuple_(
+                OpenhandsPR.provider, OpenhandsPR.repo_name, OpenhandsPR.pr_number
+            ).in_(pr_keys)
         )
         result = await self.db_session.execute(query)
         return {
@@ -361,7 +361,6 @@ class OrgConversationService:
                         'Failed to fetch sandbox info for org conversations',
                         extra={'org_id': str(org_id), 'error': str(e)},
                     )
-
 
         pr_keys: set[tuple[str, str, int]] = set()
         for metadata, _, _ in rows:
@@ -745,7 +744,11 @@ class OrgConversationService:
             .where(*base_filter)
             .where(StoredConversationMetadata.created_at >= cutoff)
             .group_by(StoredConversationMetadata.llm_model)
-            .order_by(func.coalesce(func.sum(StoredConversationMetadata.accumulated_cost), 0).desc())
+            .order_by(
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.accumulated_cost), 0
+                ).desc()
+            )
         )
         result = await self.db_session.execute(model_query)
         model_rows = result.all()
@@ -759,7 +762,6 @@ class OrgConversationService:
                     total_cost=float(row.total_cost or 0.0),
                 )
             )
-
 
         return OrgUsageStats(
             active_users=int(active_users),
@@ -775,7 +777,9 @@ class OrgConversationService:
     async def get_user_usage_stats(self, org_id: UUID) -> OrgUserUsageStats:
         now = datetime.now(UTC)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        year_start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        year_start = now.replace(
+            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+        )
 
         base_filter = [
             StoredConversationMetadata.conversation_version == 'V1',
@@ -842,7 +846,9 @@ class OrgConversationService:
                 User.last_login_at,
             )
             .order_by(
-                func.coalesce(func.sum(StoredConversationMetadata.accumulated_cost), 0).desc()
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.accumulated_cost), 0
+                ).desc()
             )
         )
 
@@ -858,8 +864,7 @@ class OrgConversationService:
             select(OrgUserBudgetOverride).where(OrgUserBudgetOverride.org_id == org_id)
         )
         override_map = {
-            override.user_id: override
-            for override in overrides_result.scalars().all()
+            override.user_id: override for override in overrides_result.scalars().all()
         }
 
         pr_rows_result = await self.db_session.execute(
@@ -975,7 +980,11 @@ class OrgConversationService:
         metadata, saas_metadata, user = row
 
         pr_keys: set[tuple[str, str, int]] = set()
-        if metadata.pr_number and metadata.selected_repository and metadata.git_provider:
+        if (
+            metadata.pr_number
+            and metadata.selected_repository
+            and metadata.git_provider
+        ):
             for pr_number in metadata.pr_number:
                 pr_keys.add(
                     (metadata.git_provider, metadata.selected_repository, pr_number)

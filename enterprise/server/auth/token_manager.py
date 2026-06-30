@@ -7,12 +7,29 @@ from urllib.parse import parse_qs
 import httpx
 import jwt
 from jwt.exceptions import DecodeError
-from keycloak.exceptions import (
-    KeycloakAuthenticationError,
-    KeycloakConnectionError,
-    KeycloakError,
-    KeycloakPostError,
-)
+
+try:
+    from keycloak.exceptions import (
+        KeycloakAuthenticationError,
+        KeycloakConnectionError,
+        KeycloakError,
+        KeycloakPostError,
+    )
+except ModuleNotFoundError:  # pragma: no cover - optional dependency in OSS tests
+
+    class KeycloakError(Exception):
+        pass
+
+    class KeycloakAuthenticationError(KeycloakError):
+        pass
+
+    class KeycloakConnectionError(KeycloakError):
+        pass
+
+    class KeycloakPostError(KeycloakError):
+        pass
+
+
 from pydantic import BaseModel
 from server.auth.auth_error import ExpiredError
 from server.auth.constants import (
