@@ -22,7 +22,7 @@ class FilesystemEventService(EventServiceBase):
 
     def _load_event(self, path: Path) -> Event | None:
         try:
-            content = path.read_text()
+            content = path.read_text(encoding='utf-8')
             content = Event.model_validate_json(content)  # type: ignore[assignment]
             return content  # type: ignore[return-value]
         except Exception:
@@ -33,7 +33,7 @@ class FilesystemEventService(EventServiceBase):
     def _store_event(self, path: Path, event: Event):
         path.parent.mkdir(parents=True, exist_ok=True)
         content = event.model_dump_json(indent=2)
-        path.write_text(content)
+        path.write_text(content, encoding='utf-8')
 
     def _search_paths(self, prefix: Path, page_id: str | None = None) -> list[Path]:
         search_path = f'{prefix}/*'

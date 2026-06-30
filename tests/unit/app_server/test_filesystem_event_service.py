@@ -8,6 +8,7 @@ import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
+from unittest import mock
 from uuid import uuid4
 
 import pytest
@@ -467,3 +468,54 @@ class TestFilesystemEventServiceIntegration:
 
         result = await service.search_events(conversation_id)
         assert len(result.items) == 3
+
+
+class TestFilesystemEventServiceEncoding:
+    """Regression tests for UTF-8 persistence on non-UTF-8 default-encoding hosts."""
+
+    @pytest.mark.asyncio
+    async def test_non_ascii_event_round_trips_on_non_utf8_host(
+        self, service: FilesystemEventService
+    ):
+        """Events with non-ASCII text must round-trip even when the host's default
+        text encoding is not UTF-8 (Windows cp1252/cp936, POSIX 'ascii' locale).
+
+        Regression: _store_event / _load_event omitted encoding='utf-8', so
+        non-ASCII payloads raised UnicodeEncodeError on write and were silently
+        dropped on read. The default encoding is simulated deterministically so
+        the test also fails on a UTF-8 CI host without the fix.
+        """
+        from openhands.sdk import Message, MessageEvent, TextContent
+
+        real_write, real_read = Path.write_text, Path.read_text
+
+        def fake_write(self, data, encoding=None, errors=None, newline=None):
+            return real_write(
+                self,
+                data,
+                encoding=encoding or 'cp1252',
+                errors=errors,
+                newline=newline,
+            )
+
+        def fake_read(self, encoding=None, errors=None):
+            return real_read(self, encoding=encoding or 'cp1252', errors=errors)
+
+        conversation_id = uuid4()
+        event = MessageEvent(
+            source='user',
+            llm_message=Message(
+                role='user', content=[TextContent(text='café 日本語 😀')]
+            ),
+        )
+
+        with (
+            mock.patch.object(Path, 'write_text', fake_write),
+            mock.patch.object(Path, 'read_text', fake_read),
+        ):
+            # Without the fix this raises UnicodeEncodeError on the emoji.
+            await service.save_event(conversation_id, event)
+            result = await service.search_events(conversation_id)
+
+        assert len(result.items) == 1
+        assert result.items[0].id == event.id
