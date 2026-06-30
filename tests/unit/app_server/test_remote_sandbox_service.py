@@ -1629,6 +1629,116 @@ class TestPollAgentServersSessionScoping:
         conv_service.save_app_conversation_info.assert_awaited()
 
     @pytest.mark.asyncio
+    async def test_poll_agent_servers_reads_in_bounded_batches(self):
+        """poll_agent_servers must page the read and release the session per batch.
+
+        With ``batch_size`` set and the search returning multiple pages, the read
+        must be issued one page at a time, the DB session must be released between
+        batches (never more than one session open at any instant), and no session
+        may be held during network I/O.
+        """
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            poll_agent_servers,
+        )
+
+        tracker = _SessionTracker()
+        network_open_counts: list[int] = []
+
+        # Two conversations on two running sandboxes, returned across two pages.
+        conv1 = self._app_conv('sandbox-1')
+        conv2 = self._app_conv('sandbox-2')
+        list_payload = {
+            'runtimes': [
+                {
+                    'session_id': 'sandbox-1',
+                    'status': 'running',
+                    'url': 'https://sandbox1.example.com',
+                    'session_api_key': 'key1',
+                },
+                {
+                    'session_id': 'sandbox-2',
+                    'status': 'running',
+                    'url': 'https://sandbox2.example.com',
+                    'session_api_key': 'key2',
+                },
+            ]
+        }
+
+        async def probe_get(url, *args, **kwargs):
+            network_open_counts.append(tracker.open)
+            resp = MagicMock()
+            resp.raise_for_status = MagicMock()
+            resp.json.return_value = list_payload if url.endswith('/list') else {}
+            return resp
+
+        httpx_client = AsyncMock()
+        httpx_client.get.side_effect = probe_get
+
+        conv_service = AsyncMock()
+        # Page 1 -> conv1 (more to come), Page 2 -> conv2 (last page).
+        conv_service.search_app_conversation_info = AsyncMock(
+            side_effect=[
+                _make_page([conv1], 'page-2'),
+                _make_page([conv2], None),
+            ]
+        )
+        conv_service.save_app_conversation_info = AsyncMock()
+        event_service = AsyncMock()
+        event_service.get_event = AsyncMock(return_value=None)
+        callback_service = AsyncMock()
+
+        patches = self._patches(
+            tracker,
+            httpx_client,
+            conv_service,
+            event_service,
+            callback_service,
+            self._validated_conv(),
+            # One empty event page per refreshed conversation (two refreshes).
+            event_pages=[_make_page([], None), _make_page([], None)],
+        )
+        with ExitStack() as stack:
+            for patch_cm in patches:
+                stack.enter_context(patch_cm)
+            task = asyncio.create_task(
+                poll_agent_servers(
+                    api_url='https://api.example.com',
+                    api_key='test-key',
+                    sleep_interval=3600,  # long, so cancellation ends the loop
+                    batch_size=1,
+                )
+            )
+            await asyncio.sleep(0.1)
+            task.cancel()
+            await task
+
+        # The read was paged: one search call per page, advancing the cursor and
+        # honoring the configured batch_size as the page limit.
+        assert conv_service.search_app_conversation_info.await_count == 2
+        first_call, second_call = conv_service.search_app_conversation_info.await_args_list
+        assert first_call.kwargs == {'page_id': None, 'limit': 1}
+        assert second_call.kwargs == {'page_id': 'page-2', 'limit': 1}
+
+        # Both pages' conversations were matched and refreshed.
+        assert conv_service.save_app_conversation_info.await_count == 2
+
+        # No DB session may be open during any network call.
+        assert network_open_counts, 'expected agent-server network calls to fire'
+        assert all(count == 0 for count in network_open_counts), (
+            'DB session held during network I/O (idle-in-transaction risk); '
+            f'observed open-session counts at network calls: {network_open_counts}'
+        )
+        # The session is released between batches: at most one is ever open, so
+        # batches do not accumulate sessions (peak is bounded, not O(batches)).
+        assert tracker.max_open <= 1, (
+            'more than one DB session open at once; the per-batch read session '
+            'is not being released before the next batch'
+        )
+        # Non-vacuous: a read session per page (2) plus write sessions opened.
+        assert tracker.enter_count >= 3
+        assert tracker.open == 0, 'all DB sessions must be released after polling'
+
+    @pytest.mark.asyncio
     async def test_refresh_conversation_acquires_own_db_session(self):
         """refresh_conversation must open its own short-lived write sessions."""
         from openhands.app_server.sandbox.remote_sandbox_service import (

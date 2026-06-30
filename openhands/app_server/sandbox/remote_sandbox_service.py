@@ -858,7 +858,9 @@ def _build_service_url(url: str, service_name: str, runtime_id: str) -> str:
         return f'{scheme}://{service_name}-{netloc}{path}'
 
 
-async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):
+async def poll_agent_servers(
+    api_url: str, api_key: str, sleep_interval: int, batch_size: int = 100
+):
     """When the app server does not have a public facing url, we poll the agent
     servers for the most recent data.
 
@@ -868,6 +870,10 @@ async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):
     network I/O. Services are imported locally inside the function bodies to
     ensure they are resolved in the correct context. We use a
     "fetch -> release -> network -> re-acquire -> write" pattern.
+
+    The conversation read is paged in fixed-size batches of ``batch_size`` so peak
+    memory stays flat (~one batch) regardless of the number of active
+    conversations, instead of buffering the entire list for the whole poll tick.
     """
     from openhands.app_server.config import (
         get_app_conversation_info_service,
@@ -898,42 +904,53 @@ async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):
                         if runtime['status'] == 'running'
                     }
 
-                # Phase 1: Read - fetch all conversations into a list with a short DB session
-                # This releases the DB session before any network I/O
-                conversations_to_refresh: list[AppConversationInfo] = []
-                async with (
-                    get_app_conversation_info_service(
-                        state
-                    ) as app_conversation_info_service,
-                    get_db_session(state) as _db_session,
-                ):
-                    async for app_conversation_info in page_iterator(
-                        app_conversation_info_service.search_app_conversation_info
-                    ):
-                        conversations_to_refresh.append(app_conversation_info)
+                # Read conversations in fixed-size batches so peak memory stays
+                # flat (~one batch) regardless of the number of active
+                # conversations. Each batch keeps the
+                # "fetch -> release -> network -> re-acquire -> write" pattern:
+                # the read session is released before any agent-server network
+                # I/O, exactly as the single-shot read did (see PR #14637).
+                page_id: str | None = None
+                total_conversations = 0
+                matches = 0
+                async with get_httpx_client(state) as httpx_client:
+                    while True:
+                        # Phase 1: Read one batch with a short DB session, then
+                        # release it before any network I/O.
+                        async with (
+                            get_app_conversation_info_service(
+                                state
+                            ) as app_conversation_info_service,
+                            get_db_session(state) as _db_session,
+                        ):
+                            page = await app_conversation_info_service.search_app_conversation_info(
+                                page_id=page_id, limit=batch_size
+                            )
+
+                        # Phase 2: Network I/O for this batch WITHOUT any DB
+                        # session held.
+                        for app_conversation_info in page.items:
+                            total_conversations += 1
+                            runtime = runtimes_by_sandbox_id.get(
+                                app_conversation_info.sandbox_id
+                            )
+                            if runtime:
+                                matches += 1
+                                await refresh_conversation(
+                                    app_conversation_info=app_conversation_info,
+                                    runtime=runtime,
+                                    httpx_client=httpx_client,
+                                )
+
+                        page_id = page.next_page_id
+                        if not page_id:
+                            break
 
                 _logger.debug(
-                    f'Found {len(conversations_to_refresh)} conversations to check'
+                    f'Checked {total_conversations} conversations; matched '
+                    f'{len(runtimes_by_sandbox_id)} runtimes with {matches} '
+                    f'conversations.'
                 )
-
-                # Phase 2: Network I/O - fetch httpx client and do all network operations
-                # WITHOUT any DB session held
-                async with get_httpx_client(state) as httpx_client:
-                    matches = 0
-                    for app_conversation_info in conversations_to_refresh:
-                        runtime = runtimes_by_sandbox_id.get(
-                            app_conversation_info.sandbox_id
-                        )
-                        if runtime:
-                            matches += 1
-                            await refresh_conversation(
-                                app_conversation_info=app_conversation_info,
-                                runtime=runtime,
-                                httpx_client=httpx_client,
-                            )
-                    _logger.debug(
-                        f'Matched {len(runtimes_by_sandbox_id)} Runtimes with {matches} Conversations.'
-                    )
 
             except Exception as exc:
                 _logger.exception(
@@ -1063,6 +1080,15 @@ class RemoteSandboxServiceInjector(SandboxServiceInjector):
             'no public facing web_url'
         ),
     )
+    poll_batch_size: int = Field(
+        default=100,
+        gt=0,
+        description=(
+            'Number of conversations read per batch when polling agent servers. '
+            'Bounds peak memory to ~one batch regardless of the number of active '
+            'conversations.'
+        ),
+    )
     resource_factor: int = Field(
         default=1,
         description='Factor by which to scale resources in sandbox: 1, 2, 4, or 8',
@@ -1107,6 +1133,7 @@ class RemoteSandboxServiceInjector(SandboxServiceInjector):
                         api_url=self.api_url,
                         api_key=self.api_key,
                         sleep_interval=self.polling_interval,
+                        batch_size=self.poll_batch_size,
                     )
                 )
         async with (
