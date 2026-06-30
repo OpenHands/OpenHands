@@ -22,6 +22,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.12,<3.14"
 openhands-ai = { path = "../", develop = true }
+authlib = ">=1.6.12,<1.7"
 gspread = "^6.1.4"
 alembic = "^1.14.1"
 cloud-sql-python-connector = "^1.16.0"
@@ -96,3 +97,7 @@ asyncio_default_fixture_loop_scope = "function"
 [tool.coverage.run]
 relative_files = true
 omit = [ "tests/*" ]
+
+[tool.uv]
+exclude-newer = "7 days"
+exclude-newer-package = { openhands-agent-server = false, openhands-sdk = false, openhands-tools = false }

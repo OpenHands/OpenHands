@@ -26,6 +26,7 @@ from integrations.utils import (
     infer_repo_from_message,
 )
 from jinja2 import Environment
+from server.auth.constants import JIRA_HTTP_TIMEOUT
 from storage.jira_conversation import JiraConversation
 from storage.jira_integration_store import JiraIntegrationStore
 from storage.jira_user import JiraUser
@@ -90,7 +91,9 @@ class JiraNewConversationView(JiraViewInterface):
 
         try:
             url = f'{JIRA_CLOUD_API_URL}/{self.jira_workspace.jira_cloud_id}/rest/api/2/issue/{self.payload.issue_key}'
-            async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+            async with httpx.AsyncClient(
+                verify=httpx_verify_option(), timeout=JIRA_HTTP_TIMEOUT
+            ) as client:
                 response = await client.get(
                     url,
                     auth=(

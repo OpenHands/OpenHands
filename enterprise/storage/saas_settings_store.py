@@ -127,7 +127,13 @@ class SaasSettingsStore(SettingsStore):
     ) -> SecretStr | None:
         if org_member.has_custom_llm_api_key:
             return org_member.llm_api_key
-        return org.llm_api_key or org_member.llm_api_key
+        if org.llm_api_key:
+            return org.llm_api_key
+        # Managed keys are stored on the member row (has_custom=False); fall back to
+        # it, but only decrypt when actually set to avoid the empty-value error (#14898).
+        if org_member._llm_api_key:
+            return org_member.llm_api_key
+        return None
 
     @staticmethod
     def _get_persisted_agent_settings(item: Settings) -> dict[str, Any]:
@@ -215,6 +221,9 @@ class SaasSettingsStore(SettingsStore):
         # Apply default if sandbox_grouping_strategy is None in the database
         if kwargs.get('sandbox_grouping_strategy') is None:
             kwargs.pop('sandbox_grouping_strategy', None)
+        # Apply default if git_full_clone is None in the database (pre-existing rows)
+        if kwargs.get('git_full_clone') is None:
+            kwargs.pop('git_full_clone', None)
         # Profiles in SaaS live on the org (managed via
         # /api/organizations/{org_id}/profiles). Surface them through
         # Settings.llm_profiles so the chat-layer endpoints

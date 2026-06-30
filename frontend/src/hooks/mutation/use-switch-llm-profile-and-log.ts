@@ -17,6 +17,11 @@ export function useSwitchLlmProfileAndLog() {
   // Stable identity so the /model interceptor's outer useCallback doesn't bust each render.
   const switchAndLog = useCallback(
     (conversationId: string, profileName: string) => {
+      // During chat startup the id is the placeholder `task-<uuid>` (the real
+      // conversation UUID doesn't exist yet); the switch endpoint types its
+      // path param as a UUID and would 422. No-op until the UUID is live.
+      if (conversationId.startsWith("task-")) return;
+
       const last = getRenderedV1Events(useEventStore.getState().uiEvents).at(
         -1,
       );

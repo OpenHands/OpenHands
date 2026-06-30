@@ -62,12 +62,32 @@ def other_org_id():
     return uuid.uuid4()
 
 
-async def _seed_minimal(session_maker, user_id_str, current_org_id, *extra_org_ids):
-    """Create a role, org(s), user, and org_member rows in the in-memory DB."""
+async def _seed_minimal(
+    session_maker,
+    user_id_str,
+    current_org_id,
+    *extra_org_ids,
+    super_role_name: str | None = None,
+):
+    """Create a role, org(s), user, and org_member rows in the in-memory DB.
+
+    When ``super_role_name`` is provided, also seed a separate role row
+    with that name and assign it to the user via ``User.role_id``. This
+    is what ``get_user_super_role`` consults; any non-None value flips
+    the user into a "super" role for tests that exercise the super-role
+    bypass in :meth:`SaasUserAuth._resolve_org_id`.
+    """
     async with session_maker() as session:
         role = Role(name='member', rank=3)
         session.add(role)
         await session.flush()
+
+        super_role_id: int | None = None
+        if super_role_name is not None:
+            super_role = Role(name=super_role_name, rank=0)
+            session.add(super_role)
+            await session.flush()
+            super_role_id = super_role.id
 
         all_org_ids = [current_org_id, *extra_org_ids]
         for o in all_org_ids:
@@ -86,6 +106,7 @@ async def _seed_minimal(session_maker, user_id_str, current_org_id, *extra_org_i
                 id=uuid.UUID(user_id_str),
                 current_org_id=current_org_id,
                 user_consents_to_analytics=True,
+                role_id=super_role_id,
             )
         )
         await session.flush()
@@ -181,6 +202,34 @@ class TestGetEffectiveOrgId:
         assert exc_info.value.status_code == 403
 
     @pytest.mark.asyncio
+    async def test_server_side_override_non_member_403_even_for_super_user(
+        self, async_session_maker, user_id, org_id, other_org_id
+    ):
+        """The override path is for trusted server-side resolver code.
+
+        Its membership check is defense-in-depth against buggy resolver
+        contexts setting a wrong override; the super-role bypass only
+        applies to the client-driven ``X-Org-Id`` header. This test
+        pins that design so the two paths can't drift.
+        """
+        await _seed_minimal(
+            async_session_maker,
+            user_id,
+            org_id,
+            super_role_name='owner',
+        )
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('mock'),
+            effective_org_id_override=other_org_id,
+        )
+        with _stores_patched(async_session_maker)[2]:
+            with pytest.raises(HTTPException) as exc_info:
+                await user_auth.get_effective_org_id()
+
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
     async def test_server_side_override_api_key_org_mismatch_raises_403(
         self, user_id, org_id, other_org_id
     ):
@@ -264,6 +313,88 @@ class TestGetEffectiveOrgId:
         assert exc_info.value.status_code == 403
 
     @pytest.mark.asyncio
+    async def test_header_non_member_super_role_bypasses_membership_check(
+        self, async_session_maker, user_id, org_id, other_org_id
+    ):
+        """Regression for the super-role / EFFECTIVE_ORG_ID inconsistency.
+
+        A user with a super role (``user.role_id`` set) that targets a
+        non-member org via ``X-Org-Id`` must get the org id back. The
+        route's ``require_permission`` dependency is the authoritative
+        check for the actual permission; this resolver should not 403
+        such requests at the coarse membership gate.
+        """
+        # Seed user as member of ``org_id`` and as a super-role holder.
+        await _seed_minimal(
+            async_session_maker,
+            user_id,
+            org_id,
+            super_role_name='owner',
+        )
+        # Add ``other_org_id`` as a real org the user is *not* a member of.
+        async with async_session_maker() as session:
+            session.add(
+                Org(
+                    id=other_org_id,
+                    name='Outside Org',
+                    org_version=1,
+                    enable_proactive_conversation_starters=True,
+                )
+            )
+            await session.commit()
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('mock'),
+            _x_org_id_header=str(other_org_id),
+        )
+        with (
+            _stores_patched(async_session_maker)[0],
+            _stores_patched(async_session_maker)[2],
+            _stores_patched(async_session_maker)[3],
+        ):
+            effective = await user_auth.get_effective_org_id()
+
+        assert effective == other_org_id
+
+    @pytest.mark.asyncio
+    async def test_header_non_member_without_super_role_still_403(
+        self, async_session_maker, user_id, org_id, other_org_id
+    ):
+        """Ensure the super-role bypass is opt-in: regular users still 403.
+
+        Mirrors :meth:`test_header_with_non_member_org_raises_403` but
+        is named to make the intent of the bypass explicit -- the gate
+        is only relaxed when ``user.role_id`` is set.
+        """
+        await _seed_minimal(async_session_maker, user_id, org_id)
+        async with async_session_maker() as session:
+            session.add(
+                Org(
+                    id=other_org_id,
+                    name='Outside Org',
+                    org_version=1,
+                    enable_proactive_conversation_starters=True,
+                )
+            )
+            await session.commit()
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('mock'),
+            _x_org_id_header=str(other_org_id),
+        )
+        with (
+            _stores_patched(async_session_maker)[0],
+            _stores_patched(async_session_maker)[2],
+            _stores_patched(async_session_maker)[3],
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await user_auth.get_effective_org_id()
+
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
     async def test_malformed_header_raises_400(self, async_session_maker, user_id):
         user_auth = SaasUserAuth(
             user_id=user_id,
@@ -338,3 +469,116 @@ class TestGetEffectiveOrgId:
         second = await user_auth.get_effective_org_id()
         assert first == second == other_org_id
         assert user_auth._effective_org_id_resolved is True
+
+
+class TestGetTargetOrgIdForPermissionCheck:
+    """Tests for ``SaasUserAuth.get_target_org_id_for_permission_check``.
+
+    Resolution must mirror ``get_effective_org_id`` for API-key binding
+    and header parsing, but **must not** verify that the user is an
+    ``org_member`` of the resolved org -- super-role users need to be
+    able to target orgs they have not joined.
+    """
+
+    @pytest.mark.asyncio
+    async def test_header_targets_non_member_org_without_403(
+        self, async_session_maker, user_id, org_id, other_org_id
+    ):
+        # Seed the user as a member of `org_id` only, not `other_org_id`.
+        await _seed_minimal(async_session_maker, user_id, org_id)
+        async with async_session_maker() as session:
+            session.add(
+                Org(
+                    id=other_org_id,
+                    name='Outside Org',
+                    org_version=1,
+                    enable_proactive_conversation_starters=True,
+                )
+            )
+            await session.commit()
+
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('mock'),
+            _x_org_id_header=str(other_org_id),
+        )
+        with (
+            _stores_patched(async_session_maker)[0],
+            _stores_patched(async_session_maker)[2],
+        ):
+            target = await user_auth.get_target_org_id_for_permission_check()
+
+        # Non-member header value must still be returned -- the caller
+        # (require_permission) decides via the org/super role fallback.
+        assert target == other_org_id
+
+    @pytest.mark.asyncio
+    async def test_no_header_falls_back_to_current_org(
+        self, async_session_maker, user_id, org_id
+    ):
+        await _seed_minimal(async_session_maker, user_id, org_id)
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('mock'),
+        )
+        with _stores_patched(async_session_maker)[0]:
+            target = await user_auth.get_target_org_id_for_permission_check()
+
+        assert target == org_id
+
+    @pytest.mark.asyncio
+    async def test_malformed_header_still_raises_400(self, user_id):
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('mock'),
+            _x_org_id_header='not-a-uuid',
+        )
+        with pytest.raises(HTTPException) as exc_info:
+            await user_auth.get_target_org_id_for_permission_check()
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_api_key_header_mismatch_still_raises_403(
+        self, user_id, org_id, other_org_id
+    ):
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('mock'),
+            api_key_org_id=org_id,
+            _x_org_id_header=str(other_org_id),
+        )
+        with pytest.raises(HTTPException) as exc_info:
+            await user_auth.get_target_org_id_for_permission_check()
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_api_key_pins_org_when_no_header(
+        self, async_session_maker, user_id, org_id, other_org_id
+    ):
+        await _seed_minimal(async_session_maker, user_id, org_id)
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('mock'),
+            api_key_org_id=other_org_id,
+        )
+        target = await user_auth.get_target_org_id_for_permission_check()
+        assert target == other_org_id
+
+    @pytest.mark.asyncio
+    async def test_server_side_override_still_requires_membership(
+        self, async_session_maker, user_id, org_id, other_org_id
+    ):
+        # ``effective_org_id_override`` is a trusted server-side
+        # mechanism with its own membership check -- super-role bypass
+        # only applies to client-supplied X-Org-Id headers, not to
+        # the override path.
+        await _seed_minimal(async_session_maker, user_id, org_id)
+        user_auth = SaasUserAuth(
+            user_id=user_id,
+            refresh_token=SecretStr('mock'),
+            effective_org_id_override=other_org_id,
+        )
+        with _stores_patched(async_session_maker)[2]:
+            with pytest.raises(HTTPException) as exc_info:
+                await user_auth.get_target_org_id_for_permission_check()
+        assert exc_info.value.status_code == 403

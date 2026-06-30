@@ -11,7 +11,6 @@ import httpx
 import pytest
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.testclient import TestClient
-from server.email_validation import get_admin_user_id
 from server.routes.org_models import (
     CannotModifySelfError,
     InsufficientPermissionError,
@@ -53,21 +52,51 @@ TEST_USER_ID = str(uuid.uuid4())
 
 @pytest.fixture
 def mock_app():
-    """Create a test FastAPI app with organization routes and mocked auth."""
+    """Create a test FastAPI app with organization routes and ``get_user_id`` mocked.
+
+    Routes that go through ``require_permission`` rely on the autouse
+    ``_default_no_super_role`` fixture in ``conftest.py`` to default the
+    super-role lookup to ``None``. Tests that need a specific super or
+    org role stack their own ``patch`` on top.
+    """
     app = FastAPI()
     app.include_router(org_router)
-
-    # Override the auth dependency to return a test user
-    def mock_get_admin_user_id():
-        return TEST_USER_ID
 
     def mock_get_user_id():
         return TEST_USER_ID
 
-    app.dependency_overrides[get_admin_user_id] = mock_get_admin_user_id
     app.dependency_overrides[get_user_id] = mock_get_user_id
 
     return app
+
+
+@pytest.fixture
+def grant_create_organization():
+    """Make ``CREATE_ORGANIZATION`` succeed by faking a ``superadmin`` role.
+
+    The create-org route is gated by
+    ``require_permission(Permission.CREATE_ORGANIZATION)``, which is only
+    granted via a super role. ``require_permission`` always looks up the
+    org-scoped role first via ``get_user_org_role`` -- without a patch
+    that call hits ``OrgMemberStore`` against a bare in-memory SQLite DB
+    that has no ``org_member`` table. This fixture short-circuits the
+    org-role lookup to ``None`` and stacks a ``superadmin`` patch over
+    the conftest-level ``get_user_super_role -> None`` default so the
+    success path of the create-org route works without per-test plumbing.
+    """
+    superadmin = MagicMock()
+    superadmin.name = 'admin'
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            'server.auth.authorization.get_user_super_role',
+            AsyncMock(return_value=superadmin),
+        ),
+    ):
+        yield
 
 
 @pytest.fixture
@@ -96,7 +125,7 @@ def target_user_id():
 
 
 @pytest.mark.asyncio
-async def test_create_org_success(mock_app):
+async def test_create_org_success(mock_app, grant_create_organization):
     """
     GIVEN: Valid organization creation request
     WHEN: POST /api/organizations is called
@@ -126,7 +155,7 @@ async def test_create_org_success(mock_app):
         patch(
             'server.routes.orgs.OrgService.create_org_with_owner',
             AsyncMock(return_value=mock_org),
-        ),
+        ) as create_org_mock,
         patch(
             'server.routes.orgs.OrgService.get_org_credits',
             AsyncMock(return_value=100.0),
@@ -139,6 +168,13 @@ async def test_create_org_success(mock_app):
 
         # Assert
         assert response.status_code == status.HTTP_201_CREATED
+        create_org_mock.assert_awaited_once_with(
+            name='Test Organization',
+            contact_name='John Doe',
+            contact_email='john@example.com',
+            user_id=TEST_USER_ID,
+            add_creator_as_owner=False,
+        )
         response_data = response.json()
         assert response_data['name'] == 'Test Organization'
         assert response_data['contact_name'] == 'John Doe'
@@ -152,7 +188,7 @@ async def test_create_org_success(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_create_org_invalid_email(mock_app):
+async def test_create_org_invalid_email(mock_app, grant_create_organization):
     """
     GIVEN: Request with invalid email format
     WHEN: POST /api/organizations is called
@@ -175,7 +211,7 @@ async def test_create_org_invalid_email(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_create_org_empty_name(mock_app):
+async def test_create_org_empty_name(mock_app, grant_create_organization):
     """
     GIVEN: Request with empty organization name
     WHEN: POST /api/organizations is called
@@ -198,7 +234,7 @@ async def test_create_org_empty_name(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_create_org_duplicate_name(mock_app):
+async def test_create_org_duplicate_name(mock_app, grant_create_organization):
     """
     GIVEN: Organization name already exists
     WHEN: POST /api/organizations is called
@@ -226,7 +262,7 @@ async def test_create_org_duplicate_name(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_create_org_litellm_failure(mock_app):
+async def test_create_org_litellm_failure(mock_app, grant_create_organization):
     """
     GIVEN: LiteLLM integration fails
     WHEN: POST /api/organizations is called
@@ -254,7 +290,7 @@ async def test_create_org_litellm_failure(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_create_org_database_failure(mock_app):
+async def test_create_org_database_failure(mock_app, grant_create_organization):
     """
     GIVEN: Database operation fails
     WHEN: POST /api/organizations is called
@@ -282,7 +318,7 @@ async def test_create_org_database_failure(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_create_org_unexpected_error(mock_app):
+async def test_create_org_unexpected_error(mock_app, grant_create_organization):
     """
     GIVEN: Unexpected error occurs
     WHEN: POST /api/organizations is called
@@ -314,17 +350,19 @@ async def test_create_org_unauthorized():
     """
     GIVEN: User is not authenticated
     WHEN: POST /api/organizations is called
-    THEN: 401 Unauthorized error is returned
+    THEN: 401 Unauthorized error is returned by the
+          ``require_permission`` dependency
     """
     # Arrange
     app = FastAPI()
     app.include_router(org_router)
 
-    # Override to simulate unauthenticated user
-    async def mock_unauthenticated():
-        raise HTTPException(status_code=401, detail='User not authenticated')
+    # ``require_permission`` reads ``get_user_id``; returning ``None``
+    # makes it raise 401 before any role lookup runs.
+    def mock_unauthenticated():
+        return None
 
-    app.dependency_overrides[get_admin_user_id] = mock_unauthenticated
+    app.dependency_overrides[get_user_id] = mock_unauthenticated
 
     request_data = {
         'name': 'Test Organization',
@@ -342,23 +380,25 @@ async def test_create_org_unauthorized():
 
 
 @pytest.mark.asyncio
-async def test_create_org_forbidden_non_openhands_email():
+async def test_create_org_forbidden_lacks_create_organization():
     """
-    GIVEN: User email is not @openhands.dev
+    GIVEN: An authenticated user who holds neither an org-scoped role
+           with ``CREATE_ORGANIZATION`` (none do) nor a super role that
+           grants it (only explicit instance-level super roles do)
     WHEN: POST /api/organizations is called
-    THEN: 403 Forbidden error is returned
+    THEN: 403 Forbidden is returned. ``require_permission`` raises with
+          the "not a member of this organization" detail when the
+          authenticated user is not a member of the target org and has
+          no super role granting the permission.
     """
     # Arrange
     app = FastAPI()
     app.include_router(org_router)
 
-    # Override to simulate non-@openhands.dev user
-    async def mock_forbidden():
-        raise HTTPException(
-            status_code=403, detail='Access restricted to @openhands.dev users'
-        )
+    def mock_get_user_id():
+        return TEST_USER_ID
 
-    app.dependency_overrides[get_admin_user_id] = mock_forbidden
+    app.dependency_overrides[get_user_id] = mock_get_user_id
 
     request_data = {
         'name': 'Test Organization',
@@ -366,18 +406,170 @@ async def test_create_org_forbidden_non_openhands_email():
         'contact_email': 'john@example.com',
     }
 
-    client = TestClient(app)
-
-    # Act
-    response = client.post('/api/organizations', json=request_data)
+    # No org role and no super role -> CREATE_ORGANIZATION cannot be granted.
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            'server.auth.authorization.get_user_super_role',
+            AsyncMock(return_value=None),
+        ),
+    ):
+        client = TestClient(app)
+        response = client.post('/api/organizations', json=request_data)
 
     # Assert
     assert response.status_code == status.HTTP_403_FORBIDDEN
-    assert 'openhands.dev' in response.json()['detail'].lower()
+    assert 'not a member' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
-async def test_create_org_is_not_personal(mock_app):
+async def test_create_org_forbidden_for_supermember():
+    """
+    GIVEN: An authenticated user whose super role is ``supermember``
+           (which does NOT grant ``CREATE_ORGANIZATION``)
+    WHEN: POST /api/organizations is called
+    THEN: 403 Forbidden is returned -- only explicit instance-level
+          super roles may create organizations.
+          ``require_permission`` raises with the "not a member of this
+          organization" detail because the user has no org membership
+          either.
+    """
+    app = FastAPI()
+    app.include_router(org_router)
+
+    def mock_get_user_id():
+        return TEST_USER_ID
+
+    app.dependency_overrides[get_user_id] = mock_get_user_id
+
+    supermember = MagicMock()
+    supermember.name = 'member'
+
+    request_data = {
+        'name': 'Test Organization',
+        'contact_name': 'John Doe',
+        'contact_email': 'john@example.com',
+    }
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            'server.auth.authorization.get_user_super_role',
+            AsyncMock(return_value=supermember),
+        ),
+    ):
+        client = TestClient(app)
+        response = client.post('/api/organizations', json=request_data)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert 'not a member' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_create_org_allowed_for_superadmin():
+    """
+    GIVEN: An authenticated user whose super role is ``superadmin``
+    WHEN: POST /api/organizations is called
+    THEN: The request is authorized and 201 Created is returned.
+    """
+    app = FastAPI()
+    app.include_router(org_router)
+
+    def mock_get_user_id():
+        return TEST_USER_ID
+
+    app.dependency_overrides[get_user_id] = mock_get_user_id
+
+    super_role = MagicMock()
+    super_role.name = 'admin'
+
+    org_id = uuid.uuid4()
+    mock_org = Org(
+        id=org_id,
+        name='Test Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+        org_version=5,
+    )
+
+    request_data = {
+        'name': 'Test Organization',
+        'contact_name': 'John Doe',
+        'contact_email': 'john@example.com',
+    }
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            'server.auth.authorization.get_user_super_role',
+            AsyncMock(return_value=super_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgService.create_org_with_owner',
+            AsyncMock(return_value=mock_org),
+        ),
+        patch(
+            'server.routes.orgs.OrgService.get_org_credits',
+            AsyncMock(return_value=0.0),
+        ),
+    ):
+        client = TestClient(app)
+        response = client.post('/api/organizations', json=request_data)
+
+    assert response.status_code == status.HTTP_201_CREATED
+
+
+@pytest.mark.asyncio
+async def test_create_org_forbidden_for_superowner():
+    """
+    GIVEN: An authenticated user whose user.role_id points to owner
+    WHEN: POST /api/organizations is called
+    THEN: The request is forbidden because superowner is not functional yet.
+    """
+    app = FastAPI()
+    app.include_router(org_router)
+
+    def mock_get_user_id():
+        return TEST_USER_ID
+
+    app.dependency_overrides[get_user_id] = mock_get_user_id
+
+    super_role = MagicMock()
+    super_role.name = 'owner'
+
+    request_data = {
+        'name': 'Test Organization',
+        'contact_name': 'John Doe',
+        'contact_email': 'john@example.com',
+    }
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            'server.auth.authorization.get_user_super_role',
+            AsyncMock(return_value=super_role),
+        ),
+    ):
+        client = TestClient(app)
+        response = client.post('/api/organizations', json=request_data)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_create_org_is_not_personal(mock_app, grant_create_organization):
     """
     GIVEN: Admin creates a new team organization
     WHEN: POST /api/organizations is called
@@ -421,7 +613,9 @@ async def test_create_org_is_not_personal(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_create_org_sensitive_fields_not_exposed(mock_app):
+async def test_create_org_sensitive_fields_not_exposed(
+    mock_app, grant_create_organization
+):
     """
     GIVEN: Organization is created successfully
     WHEN: Response is returned

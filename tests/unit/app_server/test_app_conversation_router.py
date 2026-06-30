@@ -21,6 +21,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 )
 from openhands.app_server.app_conversation.app_conversation_router import (
     AgentServerContext,
+    _finalize_sandbox_delete,
     batch_get_app_conversations,
     count_app_conversations,
     get_conversation_git_changes,
@@ -658,6 +659,7 @@ class TestSwitchConversationProfile:
         post_kwargs = client.post.await_args.kwargs
         assert post_kwargs['json']['llm']['model'] == new_model
         assert post_kwargs['json']['llm']['usage_id'].startswith('profile:gpt-5:')
+        assert post_kwargs['json']['llm']['stream'] is True
 
     async def test_falls_back_to_settings_api_key_when_profile_has_none(self):
         """SaaS: managed profiles persist no key, so the switch must source the
@@ -1082,3 +1084,88 @@ class TestGitProxyEndpoints:
 
         assert exc_info.value.status_code == status.HTTP_409_CONFLICT
         assert 'paused' in exc_info.value.detail.lower()
+
+
+class TestFinalizeSandboxDelete:
+    """The detached finalizer captures THIS conversation's workspace first
+    (archive_conversation_workspace, while the runtime is still up), then tears the
+    sandbox down only when no other conversation still references it (count == 0).
+    delete_sandbox is sandbox-scoped — no conversation_id. A REQUIRED archive
+    failure (archive returns False) keeps the sandbox for the idle reap."""
+
+    def _deps(self, conversation_count: int, archived: bool = True):
+        info_service = MagicMock()
+        info_service.count_conversations_by_sandbox_id = AsyncMock(
+            return_value=conversation_count
+        )
+        sandbox_service = MagicMock()
+        sandbox_service.delete_sandbox = AsyncMock(return_value=True)
+        sandbox_service.archive_conversation_workspace = AsyncMock(
+            return_value=archived
+        )
+        db_session = AsyncMock()
+        httpx_client = AsyncMock()
+        return sandbox_service, info_service, db_session, httpx_client
+
+    @pytest.mark.asyncio
+    async def test_archives_then_deletes_when_unreferenced(self):
+        sandbox_service, info_service, db_session, httpx_client = self._deps(0)
+        conv = uuid4()
+        await _finalize_sandbox_delete(
+            sandbox_service, info_service, 'sbx-1', db_session, httpx_client, conv
+        )
+        # Workspace captured first (conversation-scoped), then the sandbox torn
+        # down sandbox-scoped — note delete_sandbox takes no conversation_id.
+        sandbox_service.archive_conversation_workspace.assert_awaited_once_with(
+            'sbx-1', conversation_id=conv.hex, workspace_path=None
+        )
+        sandbox_service.delete_sandbox.assert_awaited_once_with('sbx-1')
+        db_session.commit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_archives_but_keeps_shared_sandbox(self):
+        sandbox_service, info_service, db_session, httpx_client = self._deps(2)
+        conv = uuid4()
+        await _finalize_sandbox_delete(
+            sandbox_service, info_service, 'sbx-1', db_session, httpx_client, conv
+        )
+        # Shared sandbox: still capture this conversation, but don't tear it down.
+        sandbox_service.archive_conversation_workspace.assert_awaited_once_with(
+            'sbx-1', conversation_id=conv.hex, workspace_path=None
+        )
+        sandbox_service.delete_sandbox.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_required_archive_failure_keeps_sandbox(self):
+        # archive_conversation_workspace returns False (REQUIRED archive failed).
+        sandbox_service, info_service, db_session, httpx_client = self._deps(
+            0, archived=False
+        )
+        conv = uuid4()
+        await _finalize_sandbox_delete(
+            sandbox_service, info_service, 'sbx-1', db_session, httpx_client, conv
+        )
+        # Sandbox + runtime kept for the idle reap: no count check, no delete.
+        sandbox_service.archive_conversation_workspace.assert_awaited_once()
+        info_service.count_conversations_by_sandbox_id.assert_not_called()
+        sandbox_service.delete_sandbox.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_forwards_pinned_workspace_path(self):
+        sandbox_service, info_service, db_session, httpx_client = self._deps(0)
+        conv = uuid4()
+        await _finalize_sandbox_delete(
+            sandbox_service,
+            info_service,
+            'sbx-1',
+            db_session,
+            httpx_client,
+            conv,
+            workspace_path='/home/openhands/workspace/' + conv.hex,
+        )
+        # The path pinned at creation is forwarded to the capture verbatim.
+        sandbox_service.archive_conversation_workspace.assert_awaited_once_with(
+            'sbx-1',
+            conversation_id=conv.hex,
+            workspace_path='/home/openhands/workspace/' + conv.hex,
+        )
