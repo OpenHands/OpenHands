@@ -205,7 +205,12 @@ class AutomationEventService:
         if not git_org_name:
             logger.warning(
                 f'[AutomationEventService] No repository owner in '
-                f'{provider.value} payload, skipping'
+                f'{provider.value} payload, skipping',
+                extra={
+                    'event_outcome': 'skipped',
+                    'error_type': 'client_payload',
+                    'provider': provider.value,
+                },
             )
             return None
 
@@ -228,9 +233,13 @@ class AutomationEventService:
             org_id = await self._resolve_default_org_fallback(provider, git_org_name)
 
         if not org_id:
-            logger.warning(
+            logger.info(
                 f'[AutomationEventService] {provider.value} org {git_org_name} '
-                f'not claimed and no personal org found, skipping'
+                f'not claimed and no personal org found, skipping',
+                extra={
+                    'event_outcome': 'skipped',
+                    'provider': provider.value,
+                },
             )
             return None
 

@@ -153,7 +153,10 @@ async def verify_jira_signature(body: bytes, signature: str, payload: dict):
         logger.warning(
             '[Jira] No workspace name found in webhook payload',
             extra={
-                'payload': payload,
+                'event_outcome': 'rejected',
+                'error_type': 'client_payload',
+                'provider': 'jira',
+                'http.status_code': 403,
             },
         )
         raise HTTPException(

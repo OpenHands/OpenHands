@@ -492,8 +492,13 @@ class TestForwardEvent:
             )
 
             mock_send.assert_not_called()
-            mock_logger.warning.assert_called()
+            mock_logger.warning.assert_called_once()
             assert 'No repository owner' in str(mock_logger.warning.call_args)
+            assert mock_logger.warning.call_args.kwargs['extra'] == {
+                'event_outcome': 'skipped',
+                'error_type': 'client_payload',
+                'provider': ProviderType.GITHUB.value,
+            }
 
     @pytest.mark.asyncio
     async def test_forward_event_org_not_claimed_and_not_personal(
@@ -502,7 +507,7 @@ class TestForwardEvent:
         """
         GIVEN: A GitHub event from an org that isn't claimed (and isn't personal)
         WHEN: forward_event is called
-        THEN: Event is skipped with warning log
+        THEN: Event is skipped with info log
         """
         from server.services.automation_event_service import AutomationEventService
 
@@ -532,8 +537,13 @@ class TestForwardEvent:
             )
 
             mock_send.assert_not_called()
-            mock_logger.warning.assert_called()
-            assert 'not claimed' in str(mock_logger.warning.call_args)
+            mock_logger.warning.assert_not_called()
+            mock_logger.info.assert_called_once()
+            assert 'not claimed' in str(mock_logger.info.call_args)
+            assert mock_logger.info.call_args.kwargs['extra'] == {
+                'event_outcome': 'skipped',
+                'provider': ProviderType.GITHUB.value,
+            }
 
     @pytest.mark.asyncio
     async def test_forward_bitbucket_dc_project_event_success(

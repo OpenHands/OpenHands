@@ -530,11 +530,22 @@ class TestVerifyJiraSignature:
         mock_manager.get_workspace_name_from_payload.return_value = None
         body = json.dumps(payload).encode()
 
-        with pytest.raises(HTTPException) as exc_info:
+        with (
+            patch('server.routes.integration.jira.logger') as mock_logger,
+            pytest.raises(HTTPException) as exc_info,
+        ):
             await verify_jira_signature(body, 'valid_signature', payload)
 
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail == 'Workspace name not found in payload'
+        mock_logger.warning.assert_called_once()
+        assert 'No workspace name found' in str(mock_logger.warning.call_args)
+        assert mock_logger.warning.call_args.kwargs['extra'] == {
+            'event_outcome': 'rejected',
+            'error_type': 'client_payload',
+            'provider': 'jira',
+            'http.status_code': 403,
+        }
 
     @pytest.mark.asyncio
     @patch('server.routes.integration.jira.jira_manager')
