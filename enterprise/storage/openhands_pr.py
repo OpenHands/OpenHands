@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from integrations.types import PRStatus
-from sqlalchemy import DateTime, Enum, Identity, String, text
+from sqlalchemy import DateTime, Enum, Identity, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 
@@ -12,6 +12,21 @@ class OpenhandsPR(Base):
     """
 
     __tablename__ = 'openhands_prs'
+
+    __table_args__ = (
+        # get_unprocessed_prs filters on (provider, processed) and orders by
+        # updated_at DESC, but only repo_id / pr_number / status were indexed, so
+        # the enrichment worker full-scanned all ~648K rows every tick (4th-heaviest
+        # sequential-scan table in prod: ~72K seq scans / 13.9B rows read, INC-95).
+        # This composite index covers that query path: provider/processed equality
+        # then updated_at for the ordered LIMIT.
+        Index(
+            'ix_openhands_prs_provider_processed_updated_at',
+            'provider',
+            'processed',
+            'updated_at',
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Identity(), primary_key=True)
     repo_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
