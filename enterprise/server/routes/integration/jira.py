@@ -150,10 +150,16 @@ async def verify_jira_signature(body: bytes, signature: str, payload: dict):
 
     workspace_name = jira_manager.get_workspace_name_from_payload(payload)
     if workspace_name is None:
+        # Unauthorized/malformed webhook that we reject with 403. Keep at WARNING
+        # but tag it as a client-input rejection (not an application failure) and
+        # avoid dumping the full, unredacted payload at warning severity.
         logger.warning(
             '[Jira] No workspace name found in webhook payload',
             extra={
-                'payload': payload,
+                'event_outcome': 'rejected',
+                'error_type': 'client_payload',
+                'provider': 'jira',
+                'http.status_code': 403,
             },
         )
         raise HTTPException(

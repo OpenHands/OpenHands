@@ -203,9 +203,17 @@ class AutomationEventService:
         git_org_name, owner_type, owner_id = self._extract_owner_info(provider, payload)
 
         if not git_org_name:
+            # Malformed payload we can't route: keep at WARNING but tag it as a
+            # client-input issue so app-failure monitors can exclude it by field
+            # instead of by string match.
             logger.warning(
                 f'[AutomationEventService] No repository owner in '
-                f'{provider.value} payload, skipping'
+                f'{provider.value} payload, skipping',
+                extra={
+                    'event_outcome': 'skipped',
+                    'error_type': 'client_payload',
+                    'provider': provider.value,
+                },
             )
             return None
 
@@ -228,9 +236,16 @@ class AutomationEventService:
             org_id = await self._resolve_default_org_fallback(provider, git_org_name)
 
         if not org_id:
-            logger.warning(
+            # Expected routing miss: the app is behaving as designed when a repo's
+            # org isn't claimed and there's no personal-org fallback. Log at INFO so
+            # it isn't surfaced as an application failure.
+            logger.info(
                 f'[AutomationEventService] {provider.value} org {git_org_name} '
-                f'not claimed and no personal org found, skipping'
+                f'not claimed and no personal org found, skipping',
+                extra={
+                    'event_outcome': 'skipped',
+                    'provider': provider.value,
+                },
             )
             return None
 

@@ -524,9 +524,15 @@ class TestVerifyJiraSignature:
             'empty_payload',
         ],
     )
+    @patch('server.routes.integration.jira.logger')
     @patch('server.routes.integration.jira.jira_manager')
-    async def test_workspace_name_not_found(self, mock_manager, payload):
-        """Test that missing workspace name in payload raises HTTPException."""
+    async def test_workspace_name_not_found(self, mock_manager, mock_logger, payload):
+        """Test that missing workspace name in payload raises HTTPException.
+
+        The rejection is logged at WARNING with structured fields (so app-failure
+        monitors can exclude it as a client-input rejection) and must NOT dump the
+        full webhook payload.
+        """
         mock_manager.get_workspace_name_from_payload.return_value = None
         body = json.dumps(payload).encode()
 
@@ -535,6 +541,18 @@ class TestVerifyJiraSignature:
 
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail == 'Workspace name not found in payload'
+
+        mock_logger.warning.assert_called_once()
+        assert 'No workspace name found' in str(mock_logger.warning.call_args)
+        extra = mock_logger.warning.call_args.kwargs['extra']
+        assert extra == {
+            'event_outcome': 'rejected',
+            'error_type': 'client_payload',
+            'provider': 'jira',
+            'http.status_code': 403,
+        }
+        # The full webhook payload must not be logged at warning severity.
+        assert 'payload' not in extra
 
     @pytest.mark.asyncio
     @patch('server.routes.integration.jira.jira_manager')
