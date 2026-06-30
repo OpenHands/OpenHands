@@ -13,7 +13,6 @@ export function StepOption({ id, label, selected, onClick }: StepOptionProps) {
     <button
       data-testid={`step-option-${id}`}
       type="button"
-      tabIndex={0}
       onClick={onClick}
       className={cn(
         "min-h-10 w-full rounded-md border text-left px-4 py-2.5 transition-colors text-white cursor-pointer",
