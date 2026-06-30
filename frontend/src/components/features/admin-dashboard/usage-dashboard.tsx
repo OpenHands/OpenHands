@@ -60,7 +60,6 @@ function StopIcon() {
   );
 }
 
-
 function TrendUpIcon() {
   return (
     <svg
@@ -164,9 +163,7 @@ const formatAssociatedPr = (conversation: {
   const prNumbers = conversation.pr_number ?? [];
   if (prNumbers.length === 0) return "-";
   const repo = conversation.selected_repository;
-  return prNumbers
-    .map((pr) => (repo ? `${repo}#${pr}` : `#${pr}`))
-    .join(", ");
+  return prNumbers.map((pr) => (repo ? `${repo}#${pr}` : `#${pr}`)).join(", ");
 };
 
 const formatBudget = (user: {
@@ -184,13 +181,9 @@ const formatMergedStatus = (merged?: boolean | null) => {
   return "-";
 };
 
-
-
 // Tabs
 const TABS = ["overview", "users", "models", "conversations"] as const;
 type TabType = (typeof TABS)[number];
-
-
 
 // KPI Card component
 function KPICard({
@@ -356,7 +349,6 @@ export function UsageDashboard() {
     setPendingStop(null);
   };
 
-
   const currentOrg = orgData?.organizations?.find(
     (org) => org.id === organizationId,
   );
@@ -409,7 +401,8 @@ export function UsageDashboard() {
     conversations: conversationsData?.total_items ?? 0,
   };
 
-  const timeWindowLabel = timeWindow === "ytd" ? "YTD" : timeWindow.toUpperCase();
+  const timeWindowLabel =
+    timeWindow === "ytd" ? "YTD" : timeWindow.toUpperCase();
 
   const conversationTotalPages = conversationsData?.total_pages ?? 1;
   const conversationTotalItems = conversationsData?.total_items ?? 0;
@@ -418,9 +411,6 @@ export function UsageDashboard() {
   const stopConfirmationText = pendingStopLabel
     ? `Stop "${pendingStopLabel}"? This will cancel any in-progress agent run.`
     : "Stop this conversation? This will cancel any in-progress agent run.";
-
-
-
 
   const exportUrl = useMemo(() => {
     if (!organizationId) return "#";
@@ -549,7 +539,6 @@ export function UsageDashboard() {
                 </div>
               )}
             </div>
-
           </div>
         )}
 
@@ -659,7 +648,8 @@ export function UsageDashboard() {
                     )}
                   {conversationsData?.items.map((conversation) => {
                     const isRunning =
-                      conversation.execution_status?.toLowerCase() === "running";
+                      conversation.execution_status?.toLowerCase() ===
+                      "running";
                     return (
                       <tr
                         key={conversation.id}
@@ -667,7 +657,8 @@ export function UsageDashboard() {
                       >
                         <td className="px-4 py-4">
                           <div className="text-white text-sm font-medium">
-                            {conversation.user_email?.split("@")[0] || "Unknown"}
+                            {conversation.user_email?.split("@")[0] ||
+                              "Unknown"}
                           </div>
                           <div className="text-xs text-zinc-500">
                             {conversation.user_email || "-"}
@@ -698,7 +689,9 @@ export function UsageDashboard() {
                           {formatMergedStatus(conversation.pr_merged)}
                         </td>
                         <td className="px-4 py-4 text-sm text-zinc-400 capitalize">
-                          {conversation.trigger || conversation.agent_kind || "-"}
+                          {conversation.trigger ||
+                            conversation.agent_kind ||
+                            "-"}
                         </td>
                         <td className="px-4 py-4 text-right text-sm">
                           {isRunning && (
@@ -777,7 +770,8 @@ export function UsageDashboard() {
                     </select>
                   </div>
                   <span className="text-zinc-500 text-sm">
-                    Page {conversationPage} of {conversationTotalPages} · {conversationTotalItems} conversations
+                    Page {conversationPage} of {conversationTotalPages} ·{" "}
+                    {conversationTotalItems} conversations
                   </span>
                 </div>
               </div>
@@ -790,7 +784,6 @@ export function UsageDashboard() {
                 onCancel={cancelStop}
               />
             )}
-
           </div>
         )}
 
@@ -847,16 +840,17 @@ export function UsageDashboard() {
                       </td>
                     </tr>
                   )}
-                  {!userUsageLoading && (userUsage?.items.length ?? 0) === 0 && (
-                    <tr>
-                      <td
-                        colSpan={11}
-                        className="px-4 py-8 text-center text-zinc-500"
-                      >
-                        No user usage data available yet.
-                      </td>
-                    </tr>
-                  )}
+                  {!userUsageLoading &&
+                    (userUsage?.items.length ?? 0) === 0 && (
+                      <tr>
+                        <td
+                          colSpan={11}
+                          className="px-4 py-8 text-center text-zinc-500"
+                        >
+                          No user usage data available yet.
+                        </td>
+                      </tr>
+                    )}
                   {userUsage?.items.map((user) => (
                     <tr
                       key={user.user_id}
@@ -1000,7 +994,6 @@ export function UsageDashboard() {
                       </td>
                     </tr>
                   )}
-
                 </tbody>
               </table>
             </div>

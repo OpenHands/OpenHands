@@ -316,7 +316,6 @@ export const organizationService = {
     return data;
   },
 
-
   getUserUsageStats: async ({ orgId }: { orgId: string }) => {
     const { data } = await openHands.get<OrgUserUsageStats>(
       `/api/organizations/${orgId}/conversations/user-usage`,
@@ -372,7 +371,6 @@ export const organizationService = {
       `/api/organizations/${orgId}/budgets/overrides/${userId}`,
     );
   },
-
 
   getConversations: async ({
     orgId,
@@ -467,7 +465,6 @@ export const organizationService = {
     if (search) params.set("search", search);
     if (executionStatus) params.set("execution_status", executionStatus);
 
-
     if (sandboxStatus) params.set("sandbox_status", sandboxStatus);
     if (timeWindow) params.set("time_window", timeWindow);
     return `/api/organizations/${orgId}/conversations/export?${params.toString()}`;
@@ -501,7 +498,6 @@ interface TeamUsageData {
   total_tokens: number;
   percentage: number;
 }
-
 
 interface OrgUserUsageRow {
   user_id: string;
@@ -581,18 +577,19 @@ interface OrgBudgetSettingsUpdate {
   default_user_monthly_limit?: number | null;
   slack_channel?: string | null;
   slack_team_id?: string | null;
-  thresholds?: {
-    percentage: number;
-    email_enabled: boolean;
-    slack_enabled: boolean;
-  }[] | null;
+  thresholds?:
+    | {
+        percentage: number;
+        email_enabled: boolean;
+        slack_enabled: boolean;
+      }[]
+    | null;
 }
 
 interface OrgBudgetUserOverrideUpdate {
   monthly_limit?: number | null;
   is_disabled: boolean;
 }
-
 
 interface OrgConversationResponse {
   id: string;
