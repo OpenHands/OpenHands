@@ -33,6 +33,12 @@ __all__ = ['SandboxGroupingStrategy']
 # The typed ``AppConversationInfo.acp_server`` field is a projection of this tag.
 ACP_SERVER_TAG_KEY = 'acpserver'
 
+# Conversation-tag key pinning the resolved (grouped) workspace path at creation
+# so the delete-time archive captures the right directory without re-deriving it
+# from settings that may have changed. Must satisfy the SDK ^[a-z0-9]+$ tag-key
+# rule — no underscores.
+ARCHIVE_WORKSPACE_PATH_TAG_KEY = 'archiveworkspacepath'
+
 
 class ConversationTrigger(Enum):
     RESOLVER = 'resolver'

@@ -25,7 +25,7 @@ dependencies = [
   "anthropic[vertex]",
   "anyio==4.9",
   "asyncpg>=0.30",
-  "authlib>=1.6.9",
+  "authlib>=1.6.12,!=1.7.0",
   "bashlex>=0.18",
   "binaryornot>=0.5.0,<1",
   "boto3",
@@ -158,7 +158,7 @@ include = [
 
 [tool.poetry.dependencies]
 python = "^3.12,<3.14"
-authlib = ">=1.6.9"                                # CVE-2026-27962 (fixed in 1.6.9)
+authlib = ">=1.6.12,!=1.7.0"                       # CVE-2026-44681 (fixed in 1.6.12 and 1.7.1; 1.7.0 is vulnerable)
 orjson = ">=3.11.6"                                # Pinned to fix CVE-2025-67221
 litellm = "1.84.1"                                 # Exact pin to the verified 1.84.1 release; bump explicitly when upgrading (rather than a floor) to ensure only the tested version is used
 openai = "2.33.0"                                  # Pin because litellm 1.84.1 requires 2.33.0 and is incompatible with >=1.100.0 (BerriAI/litellm#13711)

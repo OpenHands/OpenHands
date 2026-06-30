@@ -1,8 +1,8 @@
-"""Add dependency_repos_cloned column to app_conversation_start_task table
+"""Add execution_status column to conversation_metadata
 
 Revision ID: 013
 Revises: 012
-Create Date: 2026-06-26 00:00:00.000000
+Create Date: 2026-06-16 00:00:00.000000
 """
 
 from typing import Sequence
@@ -17,22 +17,29 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Add dependency_repos_cloned column to app_conversation_start_task.
+    """Add execution_status column to conversation_metadata table.
 
-    Stores the absolute sandbox paths of any dependency repositories cloned
-    for the conversation. Existing rows default to an empty list.
+    This column stores the current execution status of conversations
+    (idle, running, paused, finished, error, stuck, deleting) for
+    org-wide dashboard queries without requiring agent server calls.
     """
-    with op.batch_alter_table('app_conversation_start_task') as batch_op:
+    with op.batch_alter_table('conversation_metadata') as batch_op:
         batch_op.add_column(
             sa.Column(
-                'dependency_repos_cloned',
-                sa.JSON(),
-                nullable=False,
-                server_default='[]',
+                'execution_status',
+                sa.String(),
+                nullable=True,
             )
+        )
+        # Create index for efficient dashboard queries
+        batch_op.create_index(
+            'ix_conversation_metadata_execution_status',
+            'execution_status',
+            unique=False,
         )
 
 
 def downgrade() -> None:
-    with op.batch_alter_table('app_conversation_start_task') as batch_op:
-        batch_op.drop_column('dependency_repos_cloned')
+    with op.batch_alter_table('conversation_metadata') as batch_op:
+        batch_op.drop_index('ix_conversation_metadata_execution_status')
+        batch_op.drop_column('execution_status')

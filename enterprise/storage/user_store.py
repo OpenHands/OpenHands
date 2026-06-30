@@ -16,6 +16,7 @@ from server.constants import (
 )
 from server.logger import logger
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from storage.database import a_session_maker
 from storage.encrypt_utils import (
@@ -70,16 +71,36 @@ class UserStore:
         on the old values.
         """
         async with a_session_maker() as session:
-            # create personal org
-            org = Org(
-                id=uuid.UUID(user_id),
-                name=f'user_{user_id}_org',
-                contact_name=resolve_display_name(user_info)
-                or user_info.get('preferred_username', ''),
-                contact_email=user_info['email'],
-                v1_enabled=True,
+            user_uuid = uuid.UUID(user_id)
+            result = await session.execute(
+                select(User)
+                .options(selectinload(User.org_members))
+                .filter(User.id == user_uuid)
             )
-            session.add(org)
+            existing_user = result.scalars().first()
+            if existing_user:
+                return existing_user
+
+            org = await session.get(Org, user_uuid)
+            org_created = False
+            if not org:
+                org = Org(
+                    id=user_uuid,
+                    name=f'user_{user_id}_org',
+                    contact_name=resolve_display_name(user_info)
+                    or user_info.get('preferred_username', ''),
+                    contact_email=user_info['email'],
+                    v1_enabled=True,
+                )
+                session.add(org)
+                org_created = True
+            else:
+                if not org.contact_name:
+                    org.contact_name = resolve_display_name(user_info) or user_info.get(
+                        'preferred_username', ''
+                    )
+                if not org.contact_email:
+                    org.contact_email = user_info.get('email')
 
             settings = await UserStore.create_default_settings(
                 org_id=str(org.id), user_id=user_id
@@ -88,16 +109,17 @@ class UserStore:
             if not settings:
                 return None
 
-            from storage.org_store import OrgStore
+            if org_created:
+                from storage.org_store import OrgStore
 
-            org_kwargs = OrgStore.get_kwargs_from_settings(settings)
-            for key, value in org_kwargs.items():
-                if hasattr(org, key):
-                    setattr(org, key, value)
+                org_kwargs = OrgStore.get_kwargs_from_settings(settings)
+                for key, value in org_kwargs.items():
+                    if hasattr(org, key):
+                        setattr(org, key, value)
 
             user_kwargs = UserStore.get_kwargs_from_settings(settings)
             user = User(
-                id=uuid.UUID(user_id),
+                id=user_uuid,
                 current_org_id=org.id,
                 role_id=role_id,
                 **user_kwargs,
@@ -121,7 +143,23 @@ class UserStore:
                 **org_member_kwargs,
             )
             session.add(org_member)
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                logger.warning(
+                    'user_store:create_user:integrity_error',
+                    extra={'user_id': user_id},
+                )
+                result = await session.execute(
+                    select(User)
+                    .options(selectinload(User.org_members))
+                    .filter(User.id == user_uuid)
+                )
+                existing_user = result.scalars().first()
+                if existing_user:
+                    return existing_user
+                raise
             await session.refresh(user)
             await session.refresh(user, ['org_members'])  # load org_members
             return user

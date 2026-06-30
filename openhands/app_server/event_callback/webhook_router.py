@@ -496,6 +496,7 @@ async def on_event(
                 await app_conversation_info_service.save_app_conversation_info(info)
 
         # Analytics: conversation terminal state detection
+        # Also persist execution status to database for dashboard queries
         for event in events:
             if not isinstance(event, ConversationStateUpdateEvent):
                 continue
@@ -503,6 +504,10 @@ async def on_event(
                 continue
             try:
                 exec_status = ConversationExecutionStatus(event.value)
+                # Persist execution status for org-wide dashboard
+                await app_conversation_info_service.update_execution_status(
+                    conversation_id, exec_status.value
+                )
                 if exec_status.is_terminal():
                     await _track_conversation_terminal(
                         conversation_id, app_conversation_info, events, exec_status

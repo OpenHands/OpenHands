@@ -1044,11 +1044,11 @@ class TestSendToAutomationService:
             mock_logger.warning.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_send_4xx_logs_warning(self, mock_token_manager):
+    async def test_send_4xx_logs_error(self, mock_token_manager):
         """
         GIVEN: Automation service returns 4xx (client error)
         WHEN: _send_to_automation_service is called
-        THEN: Warning is logged (contract/client problem, not downstream outage)
+        THEN: Error is logged because the event was not delivered
         """
         org_id = uuid.UUID('12345678-1234-5678-1234-567812345678')
         payload = {'organization': {'git_org': 'test'}, 'payload': {}}
@@ -1084,9 +1084,9 @@ class TestSendToAutomationService:
                 ProviderType.GITHUB, org_id, payload
             )
 
-            mock_logger.warning.assert_called()
-            assert '400' in str(mock_logger.warning.call_args)
-            mock_logger.error.assert_not_called()
+            mock_logger.error.assert_called()
+            assert '400' in str(mock_logger.error.call_args)
+            mock_logger.warning.assert_not_called()
 
 
 class TestSignPayload:

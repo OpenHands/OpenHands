@@ -122,6 +122,7 @@ class AppConversationService(ABC):
         sandbox: SandboxInfo,
         workspace: AsyncRemoteWorkspace,
         agent_server_url: str,
+        conversation_id: UUID,
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         """Run the setup scripts for the project and yield status updates"""
         yield task
