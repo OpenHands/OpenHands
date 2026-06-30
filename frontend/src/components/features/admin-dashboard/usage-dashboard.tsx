@@ -115,20 +115,12 @@ const formatShortDate = (dateStr: string) => {
   });
 };
 
-// Get number of days from time window string
-const getDaysFromTimeWindow = (timeWindow: string): number => {
-  if (timeWindow === "ytd") return 365;
-  if (timeWindow === "90d") return 90;
-  if (timeWindow === "30d") return 30;
-  return 7;
-};
-
 // Time window options
 const TIME_WINDOWS = [
-  { label: "7d", value: "7d", days: 7 },
-  { label: "30d", value: "30d", days: 30 },
-  { label: "90d", value: "90d", days: 90 },
-  { label: "YTD", value: "ytd", days: 365 },
+  { label: "7d", value: "7d" },
+  { label: "30d", value: "30d" },
+  { label: "90d", value: "90d" },
+  { label: "YTD", value: "ytd" },
 ];
 
 // Format date/time
@@ -310,9 +302,8 @@ export function UsageDashboard() {
   const { organizationId } = useSelectedOrganizationId();
   const { data: orgData } = useOrganizations();
 
-  const days = getDaysFromTimeWindow(timeWindow);
   const { data: stats } = useOrgConversationStats();
-  const { data: usageStats } = useOrgUsageStats({ days });
+  const { data: usageStats } = useOrgUsageStats({ timeWindow });
   const { data: userUsage, isLoading: userUsageLoading } = useOrgUserUsage();
 
   const conversationTimeWindow = timeWindow === "ytd" ? "" : timeWindow;

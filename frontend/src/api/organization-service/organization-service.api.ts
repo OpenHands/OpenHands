@@ -293,14 +293,25 @@ export const organizationService = {
 
   getUsageStats: async ({
     orgId,
-    days = 7,
+    days,
+    timeWindow,
   }: {
     orgId: string;
     days?: number;
+    timeWindow?: string;
   }) => {
+    const resolvedDays =
+      typeof days === "number" ? days : timeWindow ? undefined : 7;
+    const params: Record<string, number | string> = {};
+    if (typeof resolvedDays === "number") {
+      params.days = resolvedDays;
+    }
+    if (timeWindow) {
+      params.time_window = timeWindow;
+    }
     const { data } = await openHands.get<OrgUsageStats>(
       `/api/organizations/${orgId}/conversations/usage-stats`,
-      { params: { days } },
+      { params },
     );
     return data;
   },
