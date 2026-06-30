@@ -2,12 +2,12 @@ import asyncio
 import base64
 import json
 import time
+from typing import TYPE_CHECKING
 from urllib.parse import parse_qs
 
 import httpx
 import jwt
 from jwt.exceptions import DecodeError
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from keycloak.exceptions import (
