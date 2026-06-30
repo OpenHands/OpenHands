@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import (
     ARRAY,
     DateTime,
+    Index,
     String,
     Text,
     text,
@@ -27,6 +28,14 @@ class GitlabWebhook(Base):
     """
 
     __tablename__ = 'gitlab_webhook'
+
+    __table_args__ = (
+        # Webhook lookups filter by project_id or group_id (gitlab_webhook_store
+        # get/update/delete/reset by resource), but the table had no non-PK index,
+        # so every lookup full-scanned it (~77K seq scans / 395M rows read, INC-95).
+        Index('ix_gitlab_webhook_project_id', 'project_id'),
+        Index('ix_gitlab_webhook_group_id', 'group_id'),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     group_id: Mapped[str | None] = mapped_column(String, nullable=True)
