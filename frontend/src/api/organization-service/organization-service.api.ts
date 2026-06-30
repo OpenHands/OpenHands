@@ -305,6 +305,14 @@ export const organizationService = {
     return data;
   },
 
+
+  getUserUsageStats: async ({ orgId }: { orgId: string }) => {
+    const { data } = await openHands.get<OrgUserUsageStats>(
+      `/api/organizations/${orgId}/conversations/user-usage`,
+    );
+    return data;
+  },
+
   getBudgetSettings: async ({ orgId }: { orgId: string }) => {
     const { data } = await openHands.get<OrgBudgetSettings>(
       `/api/organizations/${orgId}/budgets`,
@@ -483,6 +491,28 @@ interface TeamUsageData {
   percentage: number;
 }
 
+
+interface OrgUserUsageRow {
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+  conversation_count: number;
+  first_conversation_at: string | null;
+  last_conversation_at: string | null;
+  first_login_at: string | null;
+  last_login_at: string | null;
+  spend_mtd: number;
+  spend_ytd: number;
+  spend_lifetime: number;
+  budget_monthly_limit: number | null;
+  budget_is_disabled: boolean;
+  prs_merged: number | null;
+}
+
+interface OrgUserUsageStats {
+  items: OrgUserUsageRow[];
+}
+
 interface ModelUsageData {
   model_name: string;
   conversation_count: number;
@@ -568,7 +598,10 @@ interface OrgConversationResponse {
   execution_status: string | null;
   selected_repository: string | null;
   selected_branch: string | null;
+  git_provider: string | null;
   trigger: string | null;
+  pr_number: number[];
+  pr_merged: boolean | null;
   tags: Record<string, string>;
   accumulated_cost: number;
   prompt_tokens: number;

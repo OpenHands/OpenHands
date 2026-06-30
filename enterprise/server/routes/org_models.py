@@ -823,7 +823,10 @@ class OrgConversationResponse(BaseModel):
     )
     selected_repository: str | None = None
     selected_branch: str | None = None
+    git_provider: str | None = None
     trigger: str | None = None
+    pr_number: list[int] = Field(default_factory=list)
+    pr_merged: bool | None = None
     tags: dict[str, str] = Field(default_factory=dict)
     # Cost and token metrics
     accumulated_cost: float = 0.0
@@ -885,6 +888,32 @@ class TeamUsageData(BaseModel):
     conversation_count: int = 0
     total_tokens: int = 0
     percentage: float = 0.0
+
+
+class OrgUserUsageRow(BaseModel):
+    """Usage summary for a single user."""
+
+    user_id: str
+    user_email: str | None = None
+    user_name: str | None = None
+    conversation_count: int = 0
+    first_conversation_at: datetime | None = None
+    last_conversation_at: datetime | None = None
+    first_login_at: datetime | None = None
+    last_login_at: datetime | None = None
+    spend_mtd: float = 0.0
+    spend_ytd: float = 0.0
+    spend_lifetime: float = 0.0
+    budget_monthly_limit: float | None = None
+    budget_is_disabled: bool = False
+    prs_merged: int | None = None
+
+
+class OrgUserUsageStats(BaseModel):
+    """Detailed usage stats by user for the admin dashboard."""
+
+    items: list[OrgUserUsageRow] = Field(default_factory=list)
+
 
 
 

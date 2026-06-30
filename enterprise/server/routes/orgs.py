@@ -50,6 +50,7 @@ from server.routes.org_models import (
     OrgResponse,
     OrgUpdate,
     OrgUsageStats,
+    OrgUserUsageStats,
     OrphanedUserError,
     RoleNotFoundError,
 )
@@ -1953,6 +1954,52 @@ async def get_org_conversation_usage_stats(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve organization conversation usage stats',
         )
+
+
+@org_router.get(
+    '/{org_id}/conversations/user-usage',
+    response_model=OrgUserUsageStats,
+)
+async def get_org_conversation_user_usage_stats(
+    org_id: UUID,
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_CONVERSATIONS)),
+    service: OrgConversationService = org_conversation_service_dependency,
+) -> OrgUserUsageStats:
+    """Get per-user usage metrics for organization dashboard.
+
+    **Access Control**: Requires VIEW_ORG_CONVERSATIONS permission (Admin or Owner role).
+
+    Args:
+        org_id: The organization ID
+
+    Returns:
+        OrgUserUsageStats: Usage statistics aggregated by user
+    """
+    logger.info(
+        'Getting organization user usage stats',
+        extra={'user_id': user_id, 'org_id': str(org_id)},
+    )
+
+    try:
+        stats = await service.get_user_usage_stats(org_id=org_id)
+
+        logger.info(
+            'Successfully retrieved organization user usage stats',
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+        )
+
+        return stats
+
+    except Exception as e:
+        logger.exception(
+            'Unexpected error getting organization user usage stats',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve organization user usage stats',
+        )
+
 
 
 @org_router.get(

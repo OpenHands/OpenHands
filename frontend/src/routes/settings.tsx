@@ -240,7 +240,7 @@ function SettingsScreen() {
   return (
     <main data-testid="settings-screen" className="h-full">
       <SettingsLayout navigationItems={navItems}>
-        <div className="flex flex-col gap-6 h-full">
+        <div className="flex flex-col gap-6 h-full min-h-0">
           {!shouldHideTitle && (
             <div className="flex items-center gap-3 flex-wrap">
               <Typography.H2>{t(currentSectionTitle)}</Typography.H2>
@@ -249,7 +249,7 @@ function SettingsScreen() {
               )}
             </div>
           )}
-          <div className="flex-1 overflow-auto custom-scrollbar-always">
+          <div className="flex-1 min-h-0 overflow-auto custom-scrollbar-always">
             <Outlet />
           </div>
         </div>
