@@ -1715,7 +1715,9 @@ class TestPollAgentServersSessionScoping:
         # The read was paged: one search call per page, advancing the cursor and
         # honoring the configured batch_size as the page limit.
         assert conv_service.search_app_conversation_info.await_count == 2
-        first_call, second_call = conv_service.search_app_conversation_info.await_args_list
+        first_call, second_call = (
+            conv_service.search_app_conversation_info.await_args_list
+        )
         assert first_call.kwargs == {'page_id': None, 'limit': 1}
         assert second_call.kwargs == {'page_id': 'page-2', 'limit': 1}
 
