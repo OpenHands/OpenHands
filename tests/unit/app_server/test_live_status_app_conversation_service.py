@@ -1142,7 +1142,7 @@ class TestLiveStatusAppConversationService:
             'commit': 'abc123sha',
         }
         remote_workspace.execute_command.assert_awaited_once_with(
-            'git rev-parse HEAD', '/test/dir/repo'
+            'git rev-parse --verify --quiet HEAD', '/test/dir/repo', timeout=10.0
         )
 
     @patch(

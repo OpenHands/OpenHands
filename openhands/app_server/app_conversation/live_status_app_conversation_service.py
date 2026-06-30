@@ -1521,10 +1521,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     async def _resolve_head_commit(
         remote_workspace: AsyncRemoteWorkspace, project_dir: str
     ) -> str:
-        """Best-effort post-clone HEAD sha for the Laminar trace; '' on failure."""
+        """Best-effort post-clone HEAD sha for the Laminar trace; '' on failure.
+
+        ``--verify --quiet`` guarantees stdout is a validated object id (never
+        the literal ``HEAD`` an unborn repo would echo) and fails silently
+        rather than logging a ``fatal:`` line. The short timeout keeps this
+        trace-only lookup from delaying conversation startup if the workspace is
+        unresponsive — the metadata is simply dropped instead.
+        """
         try:
             result = await remote_workspace.execute_command(
-                'git rev-parse HEAD', project_dir
+                'git rev-parse --verify --quiet HEAD', project_dir, timeout=10.0
             )
         except Exception as e:
             _logger.debug('HEAD commit lookup for trace metadata failed: %s', e)
