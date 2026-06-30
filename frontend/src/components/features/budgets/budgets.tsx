@@ -750,19 +750,15 @@ export function Budgets() {
                 <div className="mt-2 space-y-1 text-xs text-amber-400">
                   {!emailIntegrationEnabled && (
                     <p>
-                      Email alerts require RESEND_API_KEY. Add it in{" "}
-                      <Link
-                        to="/settings/secrets"
-                        className="underline underline-offset-2"
-                      >
-                        Settings → Secrets
-                      </Link>
-                      .
+                      Email alerts require RESEND_API_KEY set in the deployment
+                      environment and a restart.
                     </p>
                   )}
                   {!slackIntegrationEnabled && (
                     <p>
-                      Slack alerts are disabled. Please integrate Slack in{" "}
+                      Slack alerts require the Slack app to be configured in the
+                      deployment (SLACK_* env vars). After a restart, connect it
+                      in{" "}
                       <Link
                         to="/settings/integrations"
                         className="underline underline-offset-2"
@@ -816,7 +812,7 @@ export function Budgets() {
                       title={
                         emailIntegrationEnabled
                           ? "Email org admins"
-                          : "Email alerts require RESEND_API_KEY"
+                          : "Email alerts require RESEND_API_KEY in deployment (restart required)"
                       }
                     >
                       <PillBadge
@@ -836,7 +832,7 @@ export function Budgets() {
                       title={
                         slackIntegrationEnabled
                           ? "Post to Slack"
-                          : "Please integrate Slack"
+                          : "Slack integration must be configured in deployment (restart required)"
                       }
                     >
                       <PillBadge
