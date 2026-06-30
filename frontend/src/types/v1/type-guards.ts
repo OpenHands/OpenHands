@@ -24,6 +24,7 @@ import {
 } from "./core/events/conversation-state-event";
 import { HookExecutionEvent } from "./core/events/hook-execution-event";
 import { ACPToolCallEvent } from "./core/events/acp-tool-call-event";
+import { StreamingDeltaEvent } from "./core/events/streaming-delta-event";
 import { SystemPromptEvent } from "./core/events/system-event";
 import type { OpenHandsParsedEvent } from "../core/index";
 
@@ -236,6 +237,15 @@ export const isACPToolCallEvent = (
   event: OpenHandsEvent,
 ): event is ACPToolCallEvent =>
   "kind" in event && event.kind === "ACPToolCallEvent";
+
+/**
+ * Type guard function to check if an event is a streaming token delta event
+ * (a transient LLM token chunk emitted while the response streams).
+ */
+export const isStreamingDeltaEvent = (
+  event: OpenHandsEvent,
+): event is StreamingDeltaEvent =>
+  "kind" in event && event.kind === "StreamingDeltaEvent";
 
 // =============================================================================
 // TEMPORARY COMPATIBILITY TYPE GUARDS

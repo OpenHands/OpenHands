@@ -730,6 +730,23 @@
     "uk": "Невідома подія",
     "ca": "Esdeveniment desconegut"
   },
+  "EVENT$THINKING": {
+    "en": "Thinking",
+    "ja": "思考中",
+    "zh-CN": "思考中",
+    "zh-TW": "思考中",
+    "ko-KR": "생각 중",
+    "no": "Tenker",
+    "it": "Ragionamento",
+    "pt": "Raciocínio",
+    "es": "Razonamiento",
+    "ar": "التفكير",
+    "fr": "Réflexion",
+    "tr": "Düşünme",
+    "de": "Nachdenken",
+    "uk": "Міркування",
+    "ca": "Raonament"
+  },
   "OBSERVATION$COMMAND_NO_OUTPUT": {
     "en": "[Command finished execution with no output]",
     "ja": "[コマンドは出力なしで実行を終了しました]",
