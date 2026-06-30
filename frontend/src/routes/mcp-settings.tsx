@@ -7,6 +7,7 @@ import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { useDeleteMcpServer } from "#/hooks/mutation/use-delete-mcp-server";
 import { useAddMcpServer } from "#/hooks/mutation/use-add-mcp-server";
 import { useUpdateMcpServer } from "#/hooks/mutation/use-update-mcp-server";
+import { useTestMcpServer } from "#/hooks/mutation/use-test-mcp-server";
 import { I18nKey } from "#/i18n/declaration";
 
 import { MCPServerList } from "#/components/features/settings/mcp-settings/mcp-server-list";
@@ -53,6 +54,7 @@ function MCPSettingsScreen() {
   const { mutate: deleteMcpServer } = useDeleteMcpServer();
   const { mutate: addMcpServer } = useAddMcpServer();
   const { mutate: updateMcpServer } = useUpdateMcpServer();
+  const { mutate: startMcpServerTest } = useTestMcpServer();
 
   const [view, setView] = useState<"list" | "add" | "edit">("list");
   const [editingServer, setEditingServer] = useState<MCPServerConfig | null>(
@@ -63,6 +65,9 @@ function MCPSettingsScreen() {
   const [confirmationModalIsVisible, setConfirmationModalIsVisible] =
     useState(false);
   const [serverToDelete, setServerToDelete] = useState<string | null>(null);
+  const [pendingTestsByServerId, setPendingTestsByServerId] = useState<
+    Record<string, string>
+  >({});
 
   const isSaasMode = config?.app_mode === "saas";
 
@@ -74,6 +79,7 @@ function MCPSettingsScreen() {
     ...mcpConfig.sse_servers.map((server, index) => ({
       id: `sse-${index}`,
       type: "sse" as const,
+      name: typeof server === "object" ? server.name : undefined,
       url: typeof server === "string" ? server : server.url,
       api_key: typeof server === "object" ? server.api_key : undefined,
     })),
@@ -88,6 +94,7 @@ function MCPSettingsScreen() {
     ...mcpConfig.shttp_servers.map((server, index) => ({
       id: `shttp-${index}`,
       type: "shttp" as const,
+      name: typeof server === "object" ? server.name : undefined,
       url: typeof server === "string" ? server : server.url,
       api_key: typeof server === "object" ? server.api_key : undefined,
       timeout: typeof server === "object" ? server.timeout : undefined,
@@ -99,23 +106,55 @@ function MCPSettingsScreen() {
     setSearchApiKeyDirty(false);
   }, [settings?.search_api_key]);
 
-  const handleAddServer = (serverConfig: MCPServerConfig) => {
-    addMcpServer(serverConfig, {
-      onSuccess: () => {
+  const startConnectionTestAndReturnToList = (storageKey: string) => {
+    startMcpServerTest(storageKey, {
+      onSuccess: (response) => {
+        setPendingTestsByServerId((current) => ({
+          ...current,
+          [storageKey]: response.test_id,
+        }));
+        setView("list");
+      },
+      onError: () => {
         setView("list");
       },
     });
   };
 
-  const handleEditServer = (serverConfig: MCPServerConfig) => {
+  const handleAddServer = (
+    serverConfig: MCPServerConfig,
+    { testConnection }: { testConnection: boolean },
+  ) => {
+    addMcpServer(serverConfig, {
+      onSuccess: (storageKey) => {
+        displaySuccessToast(t(I18nKey.SETTINGS$MCP_SERVER_SAVED));
+        if (testConnection) {
+          startConnectionTestAndReturnToList(storageKey);
+        } else {
+          setView("list");
+        }
+      },
+    });
+  };
+
+  const handleEditServer = (
+    serverConfig: MCPServerConfig,
+    { testConnection }: { testConnection: boolean },
+  ) => {
     updateMcpServer(
       {
         serverId: serverConfig.id,
         server: serverConfig,
       },
       {
-        onSuccess: () => {
-          setView("list");
+        onSuccess: (storageKey) => {
+          displaySuccessToast(t(I18nKey.SETTINGS$MCP_SERVER_SAVED));
+          setEditingServer(null);
+          if (testConnection) {
+            startConnectionTestAndReturnToList(storageKey);
+          } else {
+            setView("list");
+          }
         },
       },
     );
@@ -124,6 +163,7 @@ function MCPSettingsScreen() {
   const handleDeleteServer = (serverId: string) => {
     deleteMcpServer(serverId, {
       onSuccess: () => {
+        displaySuccessToast(t(I18nKey.SETTINGS$MCP_SERVER_DELETED));
         setConfirmationModalIsVisible(false);
       },
     });
@@ -218,6 +258,14 @@ function MCPSettingsScreen() {
 
       <MCPServerList
         servers={allServers}
+        pendingTestsByServerId={pendingTestsByServerId}
+        onPendingTestComplete={(serverId) => {
+          setPendingTestsByServerId((current) => {
+            const next = { ...current };
+            delete next[serverId];
+            return next;
+          });
+        }}
         onEdit={handleEditClick}
         onDelete={handleDeleteClick}
       />

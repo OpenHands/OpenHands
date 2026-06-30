@@ -39,6 +39,10 @@ from openhands.app_server.event_callback.event_callback_service import (
 )
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.file_store.local import LocalFileStore
+from openhands.app_server.mcp.mcp_test_run_service import (
+    McpServerTestRunService,
+    McpServerTestRunServiceInjector,
+)
 from openhands.app_server.pending_messages.pending_message_service import (
     PendingMessageService,
     PendingMessageServiceInjector,
@@ -219,6 +223,7 @@ class AppServerConfig(OpenHandsModel):
     sandbox_spec: SandboxSpecServiceInjector | None = None
     app_conversation_info: AppConversationInfoServiceInjector | None = None
     app_conversation_start_task: AppConversationStartTaskServiceInjector | None = None
+    mcp_test_run: McpServerTestRunServiceInjector | None = None
     app_conversation: AppConversationServiceInjector | None = None
     pending_message: PendingMessageServiceInjector | None = None
     user: UserContextInjector | None = None
@@ -259,6 +264,9 @@ def config_from_env() -> AppServerConfig:
     )
     from openhands.app_server.event_callback.sql_event_callback_service import (
         SQLEventCallbackServiceInjector,
+    )
+    from openhands.app_server.mcp.sql_mcp_test_run_service import (
+        SQLMcpServerTestRunServiceInjector,
     )
     from openhands.app_server.sandbox.docker_sandbox_service import (
         DockerSandboxServiceInjector,
@@ -401,6 +409,9 @@ def config_from_env() -> AppServerConfig:
             SQLAppConversationStartTaskServiceInjector()
         )
 
+    if config.mcp_test_run is None:
+        config.mcp_test_run = SQLMcpServerTestRunServiceInjector()
+
     if config.app_conversation is None:
         config.app_conversation = LiveStatusAppConversationServiceInjector()
 
@@ -481,6 +492,14 @@ def get_app_conversation_start_task_service(
     return injector.context(state, request)
 
 
+def get_mcp_test_run_service(
+    state: InjectorState, request: Request | None = None
+) -> AsyncContextManager[McpServerTestRunService]:
+    injector = get_global_config().mcp_test_run
+    assert injector is not None
+    return injector.context(state, request)
+
+
 def get_app_conversation_service(
     state: InjectorState, request: Request | None = None
 ) -> AsyncContextManager[AppConversationService]:
@@ -556,6 +575,12 @@ def depends_app_conversation_info_service():
 
 def depends_app_conversation_start_task_service():
     injector = get_global_config().app_conversation_start_task
+    assert injector is not None
+    return Depends(injector.depends)
+
+
+def depends_mcp_test_run_service():
+    injector = get_global_config().mcp_test_run
     assert injector is not None
     return Depends(injector.depends)
 

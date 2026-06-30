@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MCPServerList } from "#/components/features/settings/mcp-settings/mcp-server-list";
+import { useMcpServerHealth } from "#/hooks/query/use-mcp-server-health";
 
 // Mock react-i18next
 vi.mock("react-i18next", () => ({
@@ -8,6 +10,39 @@ vi.mock("react-i18next", () => ({
     t: (key: string) => key,
   }),
 }));
+
+vi.mock("#/hooks/mutation/use-test-mcp-server", () => ({
+  useTestMcpServer: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+}));
+
+vi.mock("#/hooks/query/use-mcp-server-health", () => ({
+  useMcpServerHealth: vi.fn(() => ({ data: undefined })),
+}));
+
+vi.mock("#/hooks/query/use-mcp-test-run", () => ({
+  useMcpTestRun: () => ({ data: undefined }),
+}));
+
+function renderList(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  return render(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
+}
+
+beforeEach(() => {
+  vi.mocked(useMcpServerHealth).mockReturnValue({
+    data: undefined,
+  } as ReturnType<typeof useMcpServerHealth>);
+});
 
 const mockServers = [
   {
@@ -29,7 +64,7 @@ describe("MCPServerList", () => {
     const mockOnEdit = vi.fn();
     const mockOnDelete = vi.fn();
 
-    render(
+    renderList(
       <MCPServerList
         servers={mockServers}
         onEdit={mockOnEdit}
@@ -57,7 +92,7 @@ describe("MCPServerList", () => {
     const mockOnEdit = vi.fn();
     const mockOnDelete = vi.fn();
 
-    render(
+    renderList(
       <MCPServerList
         servers={[]}
         onEdit={mockOnEdit}
@@ -78,7 +113,7 @@ describe("MCPServerList", () => {
     const mockOnEdit = vi.fn();
     const mockOnDelete = vi.fn();
 
-    render(
+    renderList(
       <MCPServerList
         servers={[longUrlServer]}
         onEdit={mockOnEdit}
@@ -115,7 +150,7 @@ describe("MCPServerList", () => {
     const mockOnEdit = vi.fn();
     const mockOnDelete = vi.fn();
 
-    render(
+    renderList(
       <MCPServerList
         servers={[stdioServer]}
         onEdit={mockOnEdit}
@@ -139,7 +174,7 @@ describe("MCPServerList", () => {
     const mockOnEdit = vi.fn();
     const mockOnDelete = vi.fn();
 
-    render(
+    renderList(
       <MCPServerList
         servers={[stdioServer]}
         onEdit={mockOnEdit}
@@ -154,5 +189,65 @@ describe("MCPServerList", () => {
 
     const fallbackTextElements = screen.getAllByText("fallback-server");
     expect(fallbackTextElements).toHaveLength(2);
+  });
+
+  it("should display last tested time from the latest test run", () => {
+    const mockOnEdit = vi.fn();
+    const mockOnDelete = vi.fn();
+    const testedAt = new Date(Date.now() - 60_000).toISOString();
+
+    vi.mocked(useMcpServerHealth).mockReturnValue({
+      data: {
+        server_id: "https://example.com",
+        status: "healthy",
+        tested_at: testedAt,
+      },
+    } as ReturnType<typeof useMcpServerHealth>);
+
+    renderList(
+      <MCPServerList
+        servers={[
+          {
+            id: "sse-0",
+            type: "sse",
+            url: "https://example.com",
+          },
+        ]}
+        onEdit={mockOnEdit}
+        onDelete={mockOnDelete}
+      />,
+    );
+
+    expect(screen.getByTestId("mcp-server-last-tested")).toHaveTextContent(
+      "1m CONVERSATION$AGO",
+    );
+  });
+
+  it("should show a placeholder when no test run exists", () => {
+    const mockOnEdit = vi.fn();
+    const mockOnDelete = vi.fn();
+
+    vi.mocked(useMcpServerHealth).mockReturnValue({
+      data: {
+        server_id: "https://example.com",
+        status: "unknown",
+      },
+    } as ReturnType<typeof useMcpServerHealth>);
+
+    renderList(
+      <MCPServerList
+        servers={[
+          {
+            id: "sse-0",
+            type: "sse",
+            url: "https://example.com",
+          },
+        ]}
+        onEdit={mockOnEdit}
+        onDelete={mockOnDelete}
+      />,
+    );
+
+    expect(screen.getByTestId("mcp-server-last-tested")).toHaveTextContent("—");
   });
 });

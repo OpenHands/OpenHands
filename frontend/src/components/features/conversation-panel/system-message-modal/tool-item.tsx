@@ -19,6 +19,7 @@ interface ToolData {
   // V1 format
   title?: string;
   kind?: string;
+  mcp_tool?: FunctionData;
   annotations?: {
     title?: string;
   };
@@ -38,6 +39,8 @@ export function ToolItem({ tool, index, isExpanded, onToggle }: ToolItemProps) {
 
   // Extract tool name/title - support both V0 and V1 formats
   const name =
+    // V1 MCP tools: name lives on mcp_tool
+    toolData.mcp_tool?.name ||
     // V1 format: check for title field (root level or in annotations)
     toolData.title ||
     toolData.annotations?.title ||
@@ -57,6 +60,10 @@ export function ToolItem({ tool, index, isExpanded, onToggle }: ToolItemProps) {
 
   // Extract parameters - support both V0 and V1 formats
   const parameters =
+    // V1 MCP tools: schema lives on mcp_tool.inputSchema
+    toolData.mcp_tool?.parameters ||
+    (toolData.mcp_tool as { inputSchema?: Record<string, unknown> } | undefined)
+      ?.inputSchema ||
     // V0 format: parameters in function object
     functionData.parameters ||
     (toolData.type === "function" && toolData.function?.parameters) ||

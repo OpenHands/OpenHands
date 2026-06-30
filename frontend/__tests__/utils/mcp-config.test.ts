@@ -1,6 +1,95 @@
 import { describe, it, expect } from "vitest";
-import { parseMcpConfig, toSdkMcpConfig } from "#/utils/mcp-config";
+import {
+  getAddedMcpServerStorageKey,
+  getMcpServerStorageKeyForEntry,
+  listCustomMcpServers,
+  mcpServerConfigsEqual,
+  parseMcpConfig,
+  toSdkMcpConfig,
+} from "#/utils/mcp-config";
 import { MCPConfig } from "#/types/settings";
+
+describe("mcpServerConfigsEqual", () => {
+  it("treats blank api_key as unchanged for remote servers", () => {
+    const original = {
+      type: "sse" as const,
+      url: "https://example.com",
+      api_key: "secret",
+    };
+
+    expect(
+      mcpServerConfigsEqual(original, {
+        type: "sse",
+        url: "https://example.com",
+      }),
+    ).toBe(true);
+  });
+
+  it("detects api_key changes", () => {
+    expect(
+      mcpServerConfigsEqual(
+        {
+          type: "sse",
+          url: "https://example.com",
+          api_key: "secret",
+        },
+        {
+          type: "sse",
+          url: "https://example.com",
+          api_key: "new-secret",
+        },
+      ),
+    ).toBe(false);
+  });
+
+  it("compares stdio args and env regardless of ordering", () => {
+    expect(
+      mcpServerConfigsEqual(
+        {
+          type: "stdio",
+          name: "demo",
+          command: "npx",
+          args: ["a", "b"],
+          env: { B: "2", A: "1" },
+        },
+        {
+          type: "stdio",
+          name: "demo",
+          command: "npx",
+          args: ["a", "b"],
+          env: { A: "1", B: "2" },
+        },
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("MCP server storage keys", () => {
+  it("resolves the storage key for a list entry index", () => {
+    const config = parseMcpConfig({
+      mcpServers: {
+        myserver: { url: "https://example.com", transport: "sse" },
+      },
+    });
+
+    expect(getMcpServerStorageKeyForEntry(config, "sse", 0)).toBe("myserver");
+  });
+
+  it("returns the newly added server storage key", () => {
+    const before: MCPConfig = {
+      sse_servers: [],
+      stdio_servers: [],
+      shttp_servers: [],
+    };
+    const after: MCPConfig = {
+      sse_servers: ["https://new.example.com"],
+      stdio_servers: [],
+      shttp_servers: [],
+    };
+
+    expect(getAddedMcpServerStorageKey(before, after)).toBe("sse");
+  });
+});
 
 describe("parseMcpConfig", () => {
   it("should return empty config for null/undefined input", () => {
@@ -487,5 +576,20 @@ describe("edge cases", () => {
     expect(names).toContain("myserver");
     expect(names).toContain("myserver_1");
     expect(names).toHaveLength(2);
+  });
+});
+
+describe("listCustomMcpServers", () => {
+  it("returns configured servers and excludes the system default", () => {
+    const config: MCPConfig = {
+      sse_servers: [{ name: "default", url: "https://system.example.com" }],
+      stdio_servers: [{ name: "jira", command: "mcp-jira" }],
+      shttp_servers: [],
+    };
+
+    const servers = listCustomMcpServers(config);
+
+    expect(servers).toHaveLength(1);
+    expect(servers[0].name).toBe("jira");
   });
 });

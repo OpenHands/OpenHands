@@ -1,10 +1,21 @@
 import React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
+import { useTestMcpServer } from "#/hooks/mutation/use-test-mcp-server";
+import { useMcpServerHealth } from "#/hooks/query/use-mcp-server-health";
+import { useMcpTestRun } from "#/hooks/query/use-mcp-test-run";
+import { getMcpServerId } from "#/utils/mcp-server-id";
+import {
+  buildComparableMcpServerFromForm,
+  mcpServerConfigsEqual,
+  parseMcpEnvironmentVariables,
+} from "#/utils/mcp-config";
 import { SettingsInput } from "../settings-input";
 import { SettingsDropdownInput } from "../settings-dropdown-input";
 import { BrandButton } from "../brand-button";
 import { OptionalTag } from "../optional-tag";
+import { McpServerHealthBadge } from "./mcp-server-health-badge";
 import { cn } from "#/utils/utils";
 
 type MCPServerType = "sse" | "stdio" | "shttp";
@@ -25,7 +36,10 @@ interface MCPServerFormProps {
   mode: "add" | "edit";
   server?: MCPServerConfig;
   existingServers?: MCPServerConfig[];
-  onSubmit: (server: MCPServerConfig) => void;
+  onSubmit: (
+    server: MCPServerConfig,
+    options: { testConnection: boolean },
+  ) => void;
   onCancel: () => void;
 }
 
@@ -37,10 +51,63 @@ export function MCPServerForm({
   onCancel,
 }: MCPServerFormProps) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [serverType, setServerType] = React.useState<MCPServerType>(
     server?.type || "sse",
   );
   const [error, setError] = React.useState<string | null>(null);
+  const [activeTestId, setActiveTestId] = React.useState<string | null>(null);
+  const [isDirty, setIsDirty] = React.useState(mode === "add");
+  const formRef = React.useRef<HTMLFormElement>(null);
+
+  const serverId = server ? getMcpServerId(server) : null;
+  const { data: health } = useMcpServerHealth(serverId, mode === "edit");
+  const { data: testRun } = useMcpTestRun(activeTestId, mode === "edit");
+  const { mutate: startTest, isPending: isStartingTest } = useTestMcpServer();
+
+  React.useEffect(() => {
+    if (
+      testRun &&
+      ["succeeded", "failed", "cancelled"].includes(testRun.status)
+    ) {
+      if (serverId) {
+        queryClient.invalidateQueries({
+          queryKey: ["mcp-server-health", serverId],
+        });
+      }
+      setActiveTestId(null);
+    }
+  }, [testRun, serverId, queryClient]);
+
+  const isTesting =
+    isStartingTest ||
+    (!!activeTestId && testRun?.status === "running") ||
+    health?.status === "testing";
+
+  const formBadgeStatus = (() => {
+    if (isTesting) return "testing" as const;
+    if (testRun?.status === "succeeded") return "healthy" as const;
+    if (testRun?.status === "failed") return "unhealthy" as const;
+    return health?.status ?? "unknown";
+  })();
+
+  const formBadgeCategory = testRun?.category ?? health?.category;
+  const formBadgeMessage = testRun?.message ?? health?.message;
+
+  const updateDirtyState = React.useCallback(() => {
+    if (mode !== "edit" || !server || !formRef.current) {
+      setIsDirty(mode === "add");
+      return;
+    }
+
+    const formData = new FormData(formRef.current);
+    const comparable = buildComparableMcpServerFromForm(formData, serverType);
+    setIsDirty(!mcpServerConfigsEqual(server, comparable));
+  }, [mode, server, serverType]);
+
+  React.useEffect(() => {
+    updateDirtyState();
+  }, [updateDirtyState]);
 
   const serverTypeOptions = [
     { key: "sse", label: t(I18nKey.SETTINGS$MCP_SERVER_TYPE_SSE) },
@@ -183,29 +250,13 @@ export function MCPServerForm({
     return null;
   };
 
-  const parseEnvironmentVariables = (
-    envString: string,
-  ): Record<string, string> => {
-    const env: Record<string, string> = {};
-    const input = envString.trim();
-    if (!input) return env;
+  const parseEnvironmentVariables = parseMcpEnvironmentVariables;
 
-    for (const line of input.split("\n")) {
-      const trimmed = line.trim();
-      const eq = trimmed.indexOf("=");
-      const key = eq >= 0 ? trimmed.substring(0, eq).trim() : "";
-      if (trimmed && eq !== -1 && key) {
-        env[key] = trimmed.substring(eq + 1).trim();
-      }
-    }
-    return env;
-  };
-
-  const formatEnvironmentVariables = (env?: Record<string, string>): string => {
-    if (!env) return "";
-    return Object.entries(env)
-      .map(([key, value]) => `${key}=${value}`)
-      .join("\n");
+  const submitServerConfig = (
+    serverConfig: MCPServerConfig,
+    testConnection: boolean,
+  ) => {
+    onSubmit(serverConfig, { testConnection });
   };
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -217,6 +268,10 @@ export function MCPServerForm({
 
     if (validationError) {
       setError(validationError);
+      return;
+    }
+
+    if (mode === "edit" && server && !isDirty) {
       return;
     }
 
@@ -244,7 +299,7 @@ export function MCPServerForm({
         }
       }
 
-      onSubmit(serverConfig);
+      submitServerConfig(serverConfig, mode === "add" || isDirty);
     } else if (serverType === "stdio") {
       const name = formData.get("name")?.toString().trim();
       const command = formData.get("command")?.toString().trim();
@@ -259,14 +314,24 @@ export function MCPServerForm({
         : [];
       const env = parseEnvironmentVariables(envString || "");
 
-      onSubmit({
-        ...baseConfig,
-        name: name!,
-        command: command!,
-        ...(args.length > 0 && { args }),
-        ...(Object.keys(env).length > 0 && { env }),
-      });
+      submitServerConfig(
+        {
+          ...baseConfig,
+          name: name!,
+          command: command!,
+          ...(args.length > 0 && { args }),
+          ...(Object.keys(env).length > 0 && { env }),
+        },
+        mode === "add" || isDirty,
+      );
     }
+  };
+
+  const formatEnvironmentVariables = (env?: Record<string, string>): string => {
+    if (!env) return "";
+    return Object.entries(env)
+      .map(([key, value]) => `${key}=${value}`)
+      .join("\n");
   };
 
   const formTestId =
@@ -274,8 +339,10 @@ export function MCPServerForm({
 
   return (
     <form
+      ref={formRef}
       data-testid={formTestId}
       onSubmit={handleSubmit}
+      onChange={updateDirtyState}
       className="flex flex-col items-start gap-6"
     >
       {mode === "add" && (
@@ -408,6 +475,32 @@ export function MCPServerForm({
         </>
       )}
 
+      {mode === "edit" && server && (
+        <div className="flex flex-col gap-3 max-w-[680px]">
+          <div className="flex items-center gap-3">
+            <BrandButton
+              testId="test-connection-button"
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                if (!serverId) return;
+                startTest(serverId, {
+                  onSuccess: (response) => setActiveTestId(response.test_id),
+                });
+              }}
+              isDisabled={isTesting}
+            >
+              {t(I18nKey.SETTINGS$MCP_TEST_CONNECTION)}
+            </BrandButton>
+            <McpServerHealthBadge
+              status={formBadgeStatus}
+              category={formBadgeCategory}
+              message={formBadgeMessage}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-4">
         <BrandButton
           testId="cancel-button"
@@ -417,7 +510,12 @@ export function MCPServerForm({
         >
           {t(I18nKey.BUTTON$CANCEL)}
         </BrandButton>
-        <BrandButton testId="submit-button" type="submit" variant="primary">
+        <BrandButton
+          testId="submit-button"
+          type="submit"
+          variant="primary"
+          isDisabled={mode === "edit" && !isDirty}
+        >
           {mode === "add" && t(I18nKey.SETTINGS$MCP_ADD_SERVER)}
           {mode === "edit" && t(I18nKey.SETTINGS$MCP_SAVE_SERVER)}
         </BrandButton>

@@ -6,7 +6,11 @@ import {
   MCPSSEServer,
   MCPStdioServer,
 } from "#/types/settings";
-import { parseMcpConfig, toSdkMcpConfig } from "#/utils/mcp-config";
+import {
+  getAddedMcpServerStorageKey,
+  parseMcpConfig,
+  toSdkMcpConfig,
+} from "#/utils/mcp-config";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 
@@ -28,7 +32,7 @@ export function useAddMcpServer() {
   const { organizationId } = useSelectedOrganizationId();
 
   return useMutation({
-    mutationFn: async (server: MCPServerConfig): Promise<void> => {
+    mutationFn: async (server: MCPServerConfig): Promise<string> => {
       // Fetch fresh settings at mutation time to avoid stale closure issues
       const settings = await SettingsService.getSettings();
 
@@ -69,7 +73,12 @@ export function useAddMcpServer() {
         agent_settings_diff: { mcp_config: toSdkMcpConfig(newConfig) },
       };
 
+      const storageKey = getAddedMcpServerStorageKey(currentConfig, newConfig);
       await SettingsService.saveSettings(payload);
+      if (!storageKey) {
+        throw new Error("Failed to resolve MCP server storage key after add");
+      }
+      return storageKey;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({

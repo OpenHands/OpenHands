@@ -1,6 +1,19 @@
 import { render, screen, fireEvent } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, it, expect, vi } from "vitest";
 import { MCPServerForm } from "#/components/features/settings/mcp-settings/mcp-server-form";
+
+function renderForm(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  return render(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 // i18n mock
 vi.mock("react-i18next", () => ({
@@ -9,13 +22,28 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+vi.mock("#/hooks/mutation/use-test-mcp-server", () => ({
+  useTestMcpServer: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+}));
+
+vi.mock("#/hooks/query/use-mcp-server-health", () => ({
+  useMcpServerHealth: () => ({ data: undefined }),
+}));
+
+vi.mock("#/hooks/query/use-mcp-test-run", () => ({
+  useMcpTestRun: () => ({ data: undefined }),
+}));
+
 describe("MCPServerForm validation", () => {
   const noop = () => {};
 
   it("rejects invalid env var lines and allows blank lines", () => {
     const onSubmit = vi.fn();
 
-    render(
+    renderForm(
       <MCPServerForm
         mode="add"
         server={{ id: "tmp", type: "stdio" }}
@@ -64,7 +92,7 @@ describe("MCPServerForm validation", () => {
       { id: "shttp-1", type: "shttp" as const, url: "https://x.example.com" },
     ];
 
-    const r1 = render(
+    const r1 = renderForm(
       <MCPServerForm
         mode="add"
         server={{ id: "tmp", type: "sse" }}
@@ -86,7 +114,7 @@ describe("MCPServerForm validation", () => {
     // Unmount first form, then check shttp duplicate
     r1.unmount();
 
-    const r2 = render(
+    const r2 = renderForm(
       <MCPServerForm
         mode="add"
         server={{ id: "tmp2", type: "shttp" }}
@@ -106,5 +134,34 @@ describe("MCPServerForm validation", () => {
     ).toBeInTheDocument();
 
     r2.unmount();
+  });
+
+  it("disables save on edit when the form is unchanged", () => {
+    const onSubmit = vi.fn();
+    const existingServer = {
+      id: "sse-0",
+      type: "sse" as const,
+      name: "myserver",
+      url: "https://api.example.com",
+      api_key: "secret",
+    };
+
+    renderForm(
+      <MCPServerForm
+        mode="edit"
+        server={existingServer}
+        existingServers={[existingServer]}
+        onSubmit={onSubmit}
+        onCancel={noop}
+      />,
+    );
+
+    expect(screen.getByTestId("submit-button")).toBeDisabled();
+
+    fireEvent.change(screen.getByTestId("url-input"), {
+      target: { value: "https://api.example.com/changed" },
+    });
+
+    expect(screen.getByTestId("submit-button")).not.toBeDisabled();
   });
 });

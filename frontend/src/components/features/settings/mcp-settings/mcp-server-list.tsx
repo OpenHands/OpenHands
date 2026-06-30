@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { MCPServerListItem } from "./mcp-server-list-item";
 import { I18nKey } from "#/i18n/declaration";
+import { getMcpServerId } from "#/utils/mcp-server-id";
 
 interface MCPServerConfig {
   id: string;
@@ -16,12 +17,16 @@ interface MCPServerConfig {
 
 interface MCPServerListProps {
   servers: MCPServerConfig[];
+  pendingTestsByServerId?: Record<string, string>;
+  onPendingTestComplete?: (serverId: string) => void;
   onEdit: (server: MCPServerConfig) => void;
   onDelete: (serverId: string) => void;
 }
 
 export function MCPServerList({
   servers,
+  pendingTestsByServerId,
+  onPendingTestComplete,
   onEdit,
   onDelete,
 }: MCPServerListProps) {
@@ -41,7 +46,7 @@ export function MCPServerList({
     <div className="border border-tertiary rounded-md overflow-hidden">
       <table className="w-full">
         <thead className="bg-base-tertiary">
-          <tr className="grid grid-cols-[minmax(0,0.25fr)_120px_minmax(0,1fr)_120px] gap-4 items-start">
+          <tr className="grid grid-cols-[minmax(0,0.2fr)_100px_minmax(0,1fr)_120px_120px_160px] gap-4 items-start">
             <th className="text-left p-3 text-sm font-medium">
               {t(I18nKey.SETTINGS$NAME)}
             </th>
@@ -51,20 +56,35 @@ export function MCPServerList({
             <th className="text-left p-3 text-sm font-medium">
               {t(I18nKey.SETTINGS$MCP_SERVER_DETAILS)}
             </th>
+            <th className="text-left p-3 text-sm font-medium">
+              {t(I18nKey.SETTINGS$MCP_HEALTH_STATUS)}
+            </th>
+            <th className="text-left p-3 text-sm font-medium">
+              {t(I18nKey.SETTINGS$MCP_LAST_TESTED)}
+            </th>
             <th className="text-right p-3 text-sm font-medium">
               {t(I18nKey.SETTINGS$ACTIONS)}
             </th>
           </tr>
         </thead>
         <tbody>
-          {servers.map((server) => (
-            <MCPServerListItem
-              key={server.id}
-              server={server}
-              onEdit={() => onEdit(server)}
-              onDelete={() => onDelete(server.id)}
-            />
-          ))}
+          {servers.map((server) => {
+            const serverId = getMcpServerId(server);
+            return (
+              <MCPServerListItem
+                key={server.id}
+                server={server}
+                pendingTestId={pendingTestsByServerId?.[serverId] ?? null}
+                onPendingTestComplete={
+                  onPendingTestComplete
+                    ? () => onPendingTestComplete(serverId)
+                    : undefined
+                }
+                onEdit={() => onEdit(server)}
+                onDelete={() => onDelete(server.id)}
+              />
+            );
+          })}
         </tbody>
       </table>
     </div>

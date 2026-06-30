@@ -35,6 +35,7 @@ import { getStatusColor, getStatusText } from "#/utils/utils";
 import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
 import { I18nKey } from "#/i18n/declaration";
 import { ArchivedBanner } from "./archived-banner";
+import { McpUnavailableBanner } from "./mcp-unavailable-banner";
 import { useModelStore } from "#/stores/model-store";
 
 export function ChatInterface() {
@@ -305,6 +306,8 @@ export function ChatInterface() {
               onDismiss={removeErrorMessage}
             />
           )}
+
+          <McpUnavailableBanner conversationId={params.conversationId} />
 
           {isArchived && <ArchivedBanner />}
 

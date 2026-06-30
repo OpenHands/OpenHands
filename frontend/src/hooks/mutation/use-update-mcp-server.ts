@@ -6,7 +6,12 @@ import {
   MCPSSEServer,
   MCPStdioServer,
 } from "#/types/settings";
-import { parseMcpConfig, toSdkMcpConfig } from "#/utils/mcp-config";
+import {
+  getMcpServerStorageKeyForEntry,
+  McpServerType,
+  parseMcpConfig,
+  toSdkMcpConfig,
+} from "#/utils/mcp-config";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 
@@ -34,7 +39,7 @@ export function useUpdateMcpServer() {
     }: {
       serverId: string;
       server: MCPServerConfig;
-    }): Promise<void> => {
+    }): Promise<string> => {
       // Fetch fresh settings at mutation time to avoid stale closure issues
       const settings = await SettingsService.getSettings();
 
@@ -51,8 +56,11 @@ export function useUpdateMcpServer() {
       const index = parseInt(indexStr, 10);
 
       if (serverType === "sse") {
+        const existing = currentConfig.sse_servers[index];
         const sseServer: MCPSSEServer = {
           url: server.url!,
+          ...(typeof existing === "object" &&
+            existing.name && { name: existing.name }),
           ...(server.api_key && { api_key: server.api_key }),
         };
         newConfig.sse_servers[index] = sseServer;
@@ -65,8 +73,11 @@ export function useUpdateMcpServer() {
         };
         newConfig.stdio_servers[index] = stdioServer;
       } else if (serverType === "shttp") {
+        const existing = currentConfig.shttp_servers[index];
         const shttpServer: MCPSHTTPServer = {
           url: server.url!,
+          ...(typeof existing === "object" &&
+            existing.name && { name: existing.name }),
           ...(server.api_key && { api_key: server.api_key }),
           ...(server.timeout !== undefined && { timeout: server.timeout }),
         };
@@ -77,7 +88,18 @@ export function useUpdateMcpServer() {
         agent_settings_diff: { mcp_config: toSdkMcpConfig(newConfig) },
       };
 
+      const storageKey = getMcpServerStorageKeyForEntry(
+        newConfig,
+        serverType as McpServerType,
+        index,
+      );
       await SettingsService.saveSettings(payload);
+      if (!storageKey) {
+        throw new Error(
+          "Failed to resolve MCP server storage key after update",
+        );
+      }
+      return storageKey;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({

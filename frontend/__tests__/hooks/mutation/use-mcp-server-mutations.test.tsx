@@ -56,6 +56,7 @@ describe("MCP Server Mutation Hooks", () => {
         expect(result.current.isSuccess).toBe(true);
       });
 
+      expect(result.current.data).toBe("sse");
       expect(getSettingsSpy).toHaveBeenCalledTimes(1);
       expect(saveSettingsSpy).toHaveBeenCalledWith({
         agent_settings_diff: {
@@ -247,6 +248,7 @@ describe("MCP Server Mutation Hooks", () => {
         (s) => s.url,
       );
       expect(serverUrls).toContain("https://new-url.com");
+      expect(result.current.data).toBe("myserver");
     });
   });
 

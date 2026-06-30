@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
+import McpTestService from "#/api/mcp-test-service/mcp-test-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import {
   MOCK_DEFAULT_USER_SETTINGS,
@@ -177,6 +178,59 @@ describe("MCPSettingsScreen", () => {
 
     await waitFor(() => {
       expect(screen.queryAllByTestId("mcp-server-item")).toHaveLength(0);
+    });
+  });
+
+  it("starts a connection test after adding a new MCP server", async () => {
+    let persistedSettings = buildSettings();
+
+    vi.spyOn(SettingsService, "getSettings").mockImplementation(async () =>
+      structuredClone(persistedSettings),
+    );
+    vi.spyOn(SettingsService, "saveSettings").mockImplementation(
+      async (payload) => {
+        const nextSettings = structuredClone(persistedSettings) as Record<
+          string,
+          unknown
+        >;
+        const agentSettingsPatch = (payload as Record<string, unknown>)
+          .agent_settings_diff as Record<string, unknown> | undefined;
+
+        if (agentSettingsPatch) {
+          nextSettings.agent_settings = deepMerge(
+            (nextSettings.agent_settings ?? {}) as Record<string, unknown>,
+            agentSettingsPatch,
+          );
+        }
+
+        persistedSettings = buildSettings(nextSettings as Partial<Settings>);
+        return true;
+      },
+    );
+
+    const startTestSpy = vi
+      .spyOn(McpTestService, "startTest")
+      .mockResolvedValue({ test_id: "test-1", status: "running" });
+
+    renderMcpSettingsScreen();
+
+    await screen.findByText("SETTINGS$MCP_NO_SERVERS");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "SETTINGS$MCP_ADD_SERVER" }),
+    );
+    await userEvent.type(
+      await screen.findByTestId("url-input"),
+      "https://mcp.example.com/sse",
+    );
+    await userEvent.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() => {
+      expect(startTestSpy).toHaveBeenCalledWith("sse");
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("mcp-server-item")).toHaveLength(1);
     });
   });
 });
