@@ -146,12 +146,24 @@ def downgrade() -> None:
         'org_user_budget_override',
         type_='unique',
     )
-    op.drop_index('ix_org_user_budget_override_user_id', table_name='org_user_budget_override')
-    op.drop_index('ix_org_user_budget_override_org_id', table_name='org_user_budget_override')
+    op.drop_index(
+        'ix_org_user_budget_override_user_id',
+        table_name='org_user_budget_override',
+    )
+    op.drop_index(
+        'ix_org_user_budget_override_org_id',
+        table_name='org_user_budget_override',
+    )
     op.drop_table('org_user_budget_override')
 
-    op.drop_index('ix_org_budget_threshold_org_id', table_name='org_budget_threshold')
+    op.drop_index(
+        'ix_org_budget_threshold_org_id',
+        table_name='org_budget_threshold',
+    )
     op.drop_table('org_budget_threshold')
 
-    op.drop_index('ix_org_budget_settings_org_id', table_name='org_budget_settings')
+    op.drop_index(
+        'ix_org_budget_settings_org_id',
+        table_name='org_budget_settings',
+    )
     op.drop_table('org_budget_settings')

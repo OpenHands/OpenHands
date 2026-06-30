@@ -285,7 +285,10 @@ export function Budgets() {
 
   const { data: budgetData, isLoading } = useQuery({
     queryKey: ["organizations", "budgets", organizationId],
-    queryFn: () => organizationService.getBudgetSettings({ orgId: organizationId! }),
+    queryFn: () =>
+      organizationService.getBudgetSettings({
+        orgId: organizationId!,
+      }),
     enabled: !!organizationId,
   });
 
@@ -297,11 +300,13 @@ export function Budgets() {
       default_user_monthly_limit?: number | null;
       slack_channel?: string | null;
       slack_team_id?: string | null;
-      thresholds?: {
-        percentage: number;
-        email_enabled: boolean;
-        slack_enabled: boolean;
-      }[] | null;
+      thresholds?:
+        | {
+            percentage: number;
+            email_enabled: boolean;
+            slack_enabled: boolean;
+          }[]
+        | null;
     }) =>
       organizationService.updateBudgetSettings({
         orgId: organizationId!,
@@ -387,6 +392,11 @@ export function Budgets() {
     : "this cycle";
   const defaultUserLimit = budgetData?.default_user_monthly_limit ?? null;
 
+  const defaultAmountLabel = defaultAmount
+    ? parseFloat(defaultAmount).toLocaleString()
+    : "0";
+
+
   const handleReset = () => {
     if (!budgetData) return;
     setOrgBudgetEnabled(budgetData.enabled);
@@ -415,11 +425,17 @@ export function Budgets() {
       enabled: orgBudgetEnabled,
       monthly_limit: monthlyLimitValue,
       reset_day: billingCycle === "15th" ? 15 : 1,
-      slack_channel: slackIntegrationEnabled ? slackChannel.trim() || null : null,
+      slack_channel: slackIntegrationEnabled
+        ? slackChannel.trim() || null
+        : null,
       thresholds: thresholds.map((threshold) => ({
         percentage: threshold.percentage,
-        email_enabled: emailIntegrationEnabled ? threshold.email_enabled : false,
-        slack_enabled: slackIntegrationEnabled ? threshold.slack_enabled : false,
+        email_enabled: emailIntegrationEnabled
+          ? threshold.email_enabled
+          : false,
+        slack_enabled: slackIntegrationEnabled
+          ? threshold.slack_enabled
+          : false,
       })),
     });
   };
@@ -438,9 +454,10 @@ export function Budgets() {
     const next = candidates.find((value) => !used.has(value));
     if (!next) return;
     setThresholds((prev) =>
-      [...prev, { percentage: next, email_enabled: true, slack_enabled: false }].sort(
-        (a, b) => a.percentage - b.percentage,
-      ),
+      [
+        ...prev,
+        { percentage: next, email_enabled: true, slack_enabled: false },
+      ].sort((a, b) => a.percentage - b.percentage),
     );
   };
 
@@ -466,82 +483,94 @@ export function Budgets() {
     );
   };
 
-  const userRows = useMemo(() => {
-    return (budgetData?.users ?? []).map((user) => {
-      const limit = user.is_disabled ? null : user.effective_monthly_limit;
-      const hasLimit = typeof limit === "number" && limit > 0;
-      const usagePercent = hasLimit ? (user.current_spend / limit) * 100 : 0;
-      let status = "No cap";
-      let statusColor: "green" | "yellow" | "red" = "green";
-      if (user.is_disabled) {
-        status = "Disabled";
-      } else if (hasLimit) {
-        if (usagePercent > 100) {
-          status = "Over cap";
-          statusColor = "red";
-        } else if (usagePercent >= 90) {
-          status = "> 90% used";
-          statusColor = "red";
-        } else if (usagePercent >= 80) {
-          status = "> 80% used";
-          statusColor = "yellow";
-        } else {
-          status = "On track";
-          statusColor = "green";
+  const userRows = useMemo(
+    () =>
+      (budgetData?.users ?? []).map((user) => {
+        const limit = user.is_disabled ? null : user.effective_monthly_limit;
+        const hasLimit = typeof limit === "number" && limit > 0;
+        const usagePercent = hasLimit ? (user.current_spend / limit) * 100 : 0;
+        let status = "No cap";
+        let statusColor: "green" | "yellow" | "red" = "green";
+
+        if (user.is_disabled) {
+          status = "Disabled";
+        } else if (hasLimit) {
+          if (usagePercent > 100) {
+            status = "Over cap";
+            statusColor = "red";
+          } else if (usagePercent >= 90) {
+            status = "> 90% used";
+            statusColor = "red";
+          } else if (usagePercent >= 80) {
+            status = "> 80% used";
+            statusColor = "yellow";
+          } else {
+            status = "On track";
+            statusColor = "green";
+          }
         }
-      }
 
-      const budgetLabel = user.is_disabled
-        ? "Disabled"
-        : hasLimit
-          ? `$${limit.toLocaleString()} / month`
-          : "No limit";
-      const budgetNote = user.is_override
-        ? "Override"
-        : defaultUserLimit
-          ? "Inherits default"
-          : "No default";
+        let budgetLabel = "No limit";
+        if (user.is_disabled) {
+          budgetLabel = "Disabled";
+        } else if (hasLimit) {
+          budgetLabel = `$${limit.toLocaleString()} / month`;
+        }
 
-      return {
-        ...user,
-        name: user.user_name || user.user_email || "Unknown user",
-        email: user.user_email || "",
-        hasLimit,
-        budgetLabel,
-        budgetNote,
-        status,
-        statusColor,
-        usage: user.current_spend,
-        maxUsage: limit ?? 0,
-      };
-    });
-  }, [budgetData, defaultUserLimit]);
+        let budgetNote = "No default";
+        if (user.is_override) {
+          budgetNote = "Override";
+        } else if (defaultUserLimit) {
+          budgetNote = "Inherits default";
+        }
 
-  const filteredUsers = useMemo(() => {
-    return userRows.filter((user) => {
-      const matchesSearch =
-        user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "over80" &&
-          (user.status.includes("> 80%") || user.status.includes("> 90%") ||
-            user.status.includes("Over cap"))) ||
-        (statusFilter === "over90" &&
-          (user.status.includes("> 90%") || user.status.includes("Over cap"))) ||
-        (statusFilter === "overCap" && user.status.includes("Over cap")) ||
-        (statusFilter === "onTrack" && user.status.includes("On track")) ||
-        (statusFilter === "noCap" && user.status.includes("No cap")) ||
-        (statusFilter === "disabled" && user.status.includes("Disabled"));
-      return matchesSearch && matchesStatus;
-    });
-  }, [userRows, searchQuery, statusFilter]);
+        return {
+          ...user,
+          name: user.user_name || user.user_email || "Unknown user",
+          email: user.user_email || "",
+          hasLimit,
+          budgetLabel,
+          budgetNote,
+          status,
+          statusColor,
+          usage: user.current_spend,
+          maxUsage: limit ?? 0,
+        };
+      }),
+    [budgetData, defaultUserLimit],
+  );
+
+  const filteredUsers = useMemo(
+    () =>
+      userRows.filter((user) => {
+        const matchesSearch =
+          user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          user.email.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesStatus =
+          statusFilter === "all" ||
+          (statusFilter === "over80" &&
+            (user.status.includes("> 80%") ||
+              user.status.includes("> 90%") ||
+              user.status.includes("Over cap"))) ||
+          (statusFilter === "over90" &&
+            (user.status.includes("> 90%") ||
+              user.status.includes("Over cap"))) ||
+          (statusFilter === "overCap" && user.status.includes("Over cap")) ||
+          (statusFilter === "onTrack" && user.status.includes("On track")) ||
+          (statusFilter === "noCap" && user.status.includes("No cap")) ||
+          (statusFilter === "disabled" && user.status.includes("Disabled"));
+        return matchesSearch && matchesStatus;
+      }),
+    [userRows, searchQuery, statusFilter],
+  );
 
   const startEditingUser = (user: (typeof userRows)[number]) => {
     setEditingUserId(user.user_id);
     setOverrideDisabled(user.is_disabled);
     setOverrideAmount(
-      user.effective_monthly_limit ? user.effective_monthly_limit.toString() : "",
+      user.effective_monthly_limit
+        ? user.effective_monthly_limit.toString()
+        : "",
     );
   };
 
@@ -571,7 +600,9 @@ export function Budgets() {
 
   if (!organizationId) {
     return (
-      <div className="text-[#8C8C8C]">Select an organization to manage budgets.</div>
+      <div className="text-[#8C8C8C]">
+        Select an organization to manage budgets.
+      </div>
     );
   }
 
@@ -715,7 +746,6 @@ export function Budgets() {
                   )}
                 </div>
               )}
-
             </div>
             <button
               type="button"
@@ -762,7 +792,9 @@ export function Budgets() {
                       }
                     >
                       <PillBadge
-                        active={emailIntegrationEnabled && threshold.email_enabled}
+                        active={
+                          emailIntegrationEnabled && threshold.email_enabled
+                        }
                         icon={<EmailIcon />}
                         label="Email org admins"
                         disabled={!emailIntegrationEnabled}
@@ -780,7 +812,9 @@ export function Budgets() {
                       }
                     >
                       <PillBadge
-                        active={slackIntegrationEnabled && threshold.slack_enabled}
+                        active={
+                          slackIntegrationEnabled && threshold.slack_enabled
+                        }
                         icon={<SlackIcon />}
                         label="# Post to Slack"
                         disabled={!slackIntegrationEnabled}
@@ -875,7 +909,9 @@ export function Budgets() {
 
         <div className="grid grid-cols-2 gap-6">
           <div>
-            <div className="block text-sm text-[#8C8C8C] mb-2">Budget cadence</div>
+            <div className="block text-sm text-[#8C8C8C] mb-2">
+              Budget cadence
+            </div>
             <div className="px-4 py-2 bg-[#0B0F17] border border-[#262626] rounded-lg text-sm text-white">
               Monthly
             </div>
@@ -907,9 +943,8 @@ export function Budgets() {
           <div className="block text-sm text-[#8C8C8C] mb-2">Preview</div>
           <div className="p-4 bg-[#0B0F17] rounded-lg border border-[#262626]">
             <p className="text-sm text-[#8C8C8C]">
-              New users get up to ${
-                defaultAmount ? parseFloat(defaultAmount).toLocaleString() : "0"
-              } per month before requiring an increase.
+              New users get up to {"$"}
+              {defaultAmountLabel} per month before requiring an increase.
             </p>
           </div>
         </div>
@@ -998,7 +1033,9 @@ export function Budgets() {
                 const overrideValue = Number(overrideAmount);
                 const canSaveOverride =
                   overrideDisabled ||
-                  (!!overrideAmount && !Number.isNaN(overrideValue) && overrideValue > 0);
+                  (!!overrideAmount &&
+                    !Number.isNaN(overrideValue) &&
+                    overrideValue > 0);
 
                 return (
                   <tr
@@ -1028,7 +1065,9 @@ export function Budgets() {
                               min="0"
                               step="0.01"
                               value={overrideAmount}
-                              onChange={(e) => setOverrideAmount(e.target.value)}
+                              onChange={(e) =>
+                                setOverrideAmount(e.target.value)
+                              }
                               disabled={overrideDisabled}
                               className="w-28 px-2 py-1 bg-[#0B0F17] border border-[#262626] rounded text-white focus:outline-none focus:border-blue-500 disabled:opacity-60"
                             />
@@ -1038,7 +1077,9 @@ export function Budgets() {
                             <input
                               type="checkbox"
                               checked={overrideDisabled}
-                              onChange={(e) => setOverrideDisabled(e.target.checked)}
+                              onChange={(e) =>
+                                setOverrideDisabled(e.target.checked)
+                              }
                               className="accent-blue-500"
                             />
                             Disable budget for this user
@@ -1065,10 +1106,13 @@ export function Budgets() {
                             status={user.statusColor}
                           />
                           <div className="mt-1 text-xs text-[#6B6B6B]">
-                            ${user.usage.toLocaleString("en-US", {
+                            {"$"}
+                            {user.usage.toLocaleString("en-US", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
-                            })} of ${user.maxUsage.toLocaleString("en-US", {
+                            })}{" "}
+                            of {"$"}
+                            {user.maxUsage.toLocaleString("en-US", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
                             })}
@@ -1076,7 +1120,8 @@ export function Budgets() {
                         </div>
                       ) : (
                         <div className="text-sm text-[#8C8C8C]">
-                          ${user.usage.toLocaleString("en-US", {
+                          {"$"}
+                          {user.usage.toLocaleString("en-US", {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })} spent

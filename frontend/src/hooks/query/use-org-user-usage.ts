@@ -7,7 +7,10 @@ export const useOrgUserUsage = () => {
 
   return useQuery({
     queryKey: ["organizations", "user-usage", organizationId],
-    queryFn: () => organizationService.getUserUsageStats({ orgId: organizationId! }),
+    queryFn: () =>
+      organizationService.getUserUsageStats({
+        orgId: organizationId!,
+      }),
     enabled: !!organizationId,
   });
 };
