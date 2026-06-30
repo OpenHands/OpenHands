@@ -361,29 +361,33 @@ export function UsageDashboard() {
       : 0;
   const totalSpend = formatCost(usageStats?.estimated_spend ?? 0);
 
-  const modelRows = useMemo(() => {
-    return (usageStats?.model_usage ?? []).map((model) => {
-      const avgTokens =
-        model.conversation_count > 0
-          ? Math.round(model.total_tokens / model.conversation_count)
-          : 0;
-      const avgCost =
-        model.conversation_count > 0
-          ? model.total_cost / model.conversation_count
-          : 0;
-      return {
-        ...model,
-        avgTokens,
-        avgCost,
-      };
-    });
-  }, [usageStats?.model_usage]);
+  const modelRows = useMemo(
+    () =>
+      (usageStats?.model_usage ?? []).map((model) => {
+        const avgTokens =
+          model.conversation_count > 0
+            ? Math.round(model.total_tokens / model.conversation_count)
+            : 0;
+        const avgCost =
+          model.conversation_count > 0
+            ? model.total_cost / model.conversation_count
+            : 0;
+        return {
+          ...model,
+          avgTokens,
+          avgCost,
+        };
+      }),
+    [usageStats?.model_usage],
+  );
 
-  const filteredModels = useMemo(() => {
-    return modelRows.filter((model) =>
-      model.model_name.toLowerCase().includes(modelSearch.toLowerCase()),
-    );
-  }, [modelRows, modelSearch]);
+  const filteredModels = useMemo(
+    () =>
+      modelRows.filter((model) =>
+        model.model_name.toLowerCase().includes(modelSearch.toLowerCase()),
+      ),
+    [modelRows, modelSearch],
+  );
 
   const chartData = useMemo(
     () =>

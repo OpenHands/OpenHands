@@ -300,8 +300,12 @@ export const organizationService = {
     days?: number;
     timeWindow?: string;
   }) => {
-    const resolvedDays =
-      typeof days === "number" ? days : timeWindow ? undefined : 7;
+    let resolvedDays: number | undefined;
+    if (typeof days === "number") {
+      resolvedDays = days;
+    } else if (!timeWindow) {
+      resolvedDays = 7;
+    }
     const params: Record<string, number | string> = {};
     if (typeof resolvedDays === "number") {
       params.days = resolvedDays;

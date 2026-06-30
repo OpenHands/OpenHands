@@ -967,8 +967,7 @@ export function Budgets() {
             <div className="block text-sm text-[#8C8C8C] mb-2">Preview</div>
             <div className="p-4 bg-[#0B0F17] rounded-lg border border-[#262626]">
               <p className="text-sm text-[#8C8C8C]">
-                New users get up to {"$"}
-                {defaultAmountLabel} per month before requiring an increase.
+                {`New users get up to $${defaultAmountLabel} per month before requiring an increase.`}
               </p>
             </div>
           </div>
@@ -1133,26 +1132,21 @@ export function Budgets() {
                               status={user.statusColor}
                             />
                             <div className="mt-1 text-xs text-[#6B6B6B]">
-                              {"$"}
-                              {user.usage.toLocaleString("en-US", {
+                              {`$${user.usage.toLocaleString("en-US", {
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2,
-                              })}{" "}
-                              of {"$"}
-                              {user.maxUsage.toLocaleString("en-US", {
+                              })} of $${user.maxUsage.toLocaleString("en-US", {
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2,
-                              })}
+                              })}`}
                             </div>
                           </div>
                         ) : (
                           <div className="text-sm text-[#8C8C8C]">
-                            {"$"}
-                            {user.usage.toLocaleString("en-US", {
+                            {`$${user.usage.toLocaleString("en-US", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
-                            })}{" "}
-                            spent
+                            })} spent`}
                           </div>
                         )}
                       </td>
