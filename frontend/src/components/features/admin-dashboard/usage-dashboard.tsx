@@ -453,7 +453,7 @@ export function UsageDashboard() {
         <div className="flex items-start justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-white mb-1">
-              Usage Dashboard
+              Usage & Monitoring
             </h1>
             <p className="text-zinc-400">
               Monitor adoption, spend, and ROI across{" "}

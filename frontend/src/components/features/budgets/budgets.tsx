@@ -273,6 +273,13 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+const BUDGET_TABS = [
+  { value: "organization", label: "Organization budget" },
+  { value: "defaults", label: "Default budgets" },
+  { value: "overrides", label: "User overrides" },
+] as const;
+
+type BudgetTab = (typeof BUDGET_TABS)[number]["value"];
 
 export function Budgets() {
   const { organizationId } = useSelectedOrganizationId();
@@ -282,6 +289,7 @@ export function Budgets() {
   const slackIntegrationEnabled = Boolean(config?.slack_enabled);
   const emailIntegrationEnabled = Boolean(config?.email_enabled);
 
+  const [activeTab, setActiveTab] = useState<BudgetTab>("organization");
 
   const { data: budgetData, isLoading } = useQuery({
     queryKey: ["organizations", "budgets", organizationId],
@@ -613,15 +621,35 @@ export function Budgets() {
   return (
     <div className="space-y-8">
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-white mb-1">Budgets</h1>
-        <p className="text-[#8C8C8C]">
-          Control your AI spend at the organization and user level.
-        </p>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold text-white mb-1">
+            Budget settings
+          </h1>
+          <p className="text-[#8C8C8C]">
+            Control your AI spend at the organization and user level.
+          </p>
+        </div>
+        <div className="flex gap-6 border-b border-[#262626]">
+          {BUDGET_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => setActiveTab(tab.value)}
+              className={`flex items-center px-1 py-3 text-sm font-medium transition-colors border-b-2 ${
+                activeTab === tab.value
+                  ? "border-blue-500 text-white"
+                  : "border-transparent text-[#8C8C8C] hover:text-white"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Section 1: Organization Monthly Budget */}
-      <div className="bg-[#151D2A] border border-[#262626] rounded-lg p-6">
+      {activeTab === "organization" && (
+        <div className="bg-[#151D2A] border border-[#262626] rounded-lg p-6">
         <div className="flex items-start justify-between mb-6">
           <div>
             <h2 className="text-lg font-medium text-white mb-1">
@@ -894,9 +922,10 @@ export function Budgets() {
           </button>
         </div>
       </div>
+      )}
 
-      {/* Section 2: Default Budget for New Users */}
-      <div className="bg-[#151D2A] border border-[#262626] rounded-lg p-6">
+      {activeTab === "defaults" && (
+        <div className="bg-[#151D2A] border border-[#262626] rounded-lg p-6">
         <div className="mb-6">
           <h2 className="text-lg font-medium text-white mb-1">
             Default budget for new users
@@ -961,9 +990,10 @@ export function Budgets() {
           </button>
         </div>
       </div>
+      )}
 
-      {/* Section 3: User Budget Overrides */}
-      <div className="bg-[#151D2A] border border-[#262626] rounded-lg p-6">
+      {activeTab === "overrides" && (
+        <div className="bg-[#151D2A] border border-[#262626] rounded-lg p-6">
         <div className="flex items-start justify-between mb-6">
           <div>
             <h2 className="text-lg font-medium text-white mb-1">
@@ -1185,6 +1215,7 @@ export function Budgets() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
