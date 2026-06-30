@@ -496,7 +496,7 @@ export function UsageDashboard() {
               }`}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              {tabCounts[tab] && (
+              {typeof tabCounts[tab] === "number" && (
                 <span className="px-2 py-0.5 text-xs bg-zinc-800 text-zinc-400 rounded-full">
                   {tabCounts[tab].toLocaleString()}
                 </span>
