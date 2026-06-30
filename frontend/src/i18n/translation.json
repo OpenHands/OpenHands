@@ -24921,6 +24921,23 @@
     "uk": "Будь ласка, увійдіть, щоб авторизувати свій пристрій.",
     "ca": "Inicieu sessió per autoritzar el vostre dispositiu."
   },
+  "DEVICE$WORKSPACE_SWITCH_FAILED": {
+    "en": "Could not switch workspace. Please try selecting a different workspace.",
+    "ja": "ワークスペースを切り替えられませんでした。別のワークスペースを選択してください。",
+    "zh-CN": "无法切换工作区。请尝试选择其他工作区。",
+    "zh-TW": "無法切換工作區。請嘗試選擇其他工作區。",
+    "ko-KR": "작업 공간을 전환할 수 없습니다. 다른 작업 공간을 선택해 주세요.",
+    "no": "Kunne ikke bytte arbeidsområde. Prøv å velge et annet arbeidsområde.",
+    "ar": "تعذر تبديل مساحة العمل. يرجى تجربة تحديد مساحة عمل مختلفة.",
+    "de": "Arbeitsbereich konnte nicht gewechselt werden. Bitte wählen Sie einen anderen Arbeitsbereich.",
+    "fr": "Impossible de changer d'espace de travail. Veuillez essayer de sélectionner un autre espace de travail.",
+    "it": "Impossibile cambiare area di lavoro. Prova a selezionare un'area di lavoro diversa.",
+    "pt": "Não foi possível mudar o espaço de trabalho. Tente selecionar um espaço de trabalho diferente.",
+    "es": "No se pudo cambiar el espacio de trabajo. Intenta seleccionar otro espacio de trabajo.",
+    "tr": "Çalışma alanı değiştirilemedi. Lütfen farklı bir çalışma alanı seçmeyi deneyin.",
+    "uk": "Не вдалося переключити робочий простір. Будь ласка, виберіть інший робочий простір.",
+    "ca": "No s'ha pogut canviar l'espai de treball. Proveu de seleccionar un altre espai de treball."
+  },
   "CTA$ENTERPRISE_TITLE": {
     "en": "Get OpenHands For Enterprise",
     "ja": "エンタープライズ向けOpenHandsを入手",

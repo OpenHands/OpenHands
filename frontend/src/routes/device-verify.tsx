@@ -8,6 +8,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { H1 } from "#/ui/typography";
 import WarningIcon from "#/icons/u-warning.svg?react";
 import { useAppMode } from "#/hooks/use-app-mode";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useOrganizations } from "#/hooks/query/use-organizations";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useSwitchOrganization } from "#/hooks/mutation/use-switch-organization";
@@ -32,6 +33,10 @@ export default function DeviceVerify() {
   const { mutate: switchOrganization, isPending: isSwitchingOrg } =
     useSwitchOrganization();
   const shouldHideOrgSelector = useShouldHideOrgSelector();
+
+  // Tracks the most recent failed workspace switch so Authorize stays disabled
+  // until the user picks a different workspace. Cleared on the next onChange.
+  const [switchFailed, setSwitchFailed] = useState(false);
 
   const organizations = orgData?.organizations;
   const getOrgDisplayName = React.useCallback(
@@ -230,14 +235,27 @@ export default function DeviceVerify() {
                     }
                     onChange={(item) => {
                       if (!item || item.value === selectedOrgId) return;
+                      // Clear any stale failure from a prior attempt so the
+                      // Authorize button re-enables while the new switch runs.
+                      setSwitchFailed(false);
                       const org = organizations?.find(
                         (o) => o.id === item.value,
                       );
-                      switchOrganization({
-                        orgId: item.value,
-                        orgName: item.label,
-                        isPersonal: org?.is_personal ?? false,
-                      });
+                      switchOrganization(
+                        {
+                          orgId: item.value,
+                          orgName: item.label,
+                          isPersonal: org?.is_personal ?? false,
+                        },
+                        {
+                          onError: () => {
+                            displayErrorToast(
+                              t(I18nKey.DEVICE$WORKSPACE_SWITCH_FAILED),
+                            );
+                            setSwitchFailed(true);
+                          },
+                        },
+                      );
                     }}
                   />
                 </label>
@@ -254,7 +272,7 @@ export default function DeviceVerify() {
               <button
                 type="button"
                 onClick={() => processDeviceVerification(userCode)}
-                disabled={isSwitchingOrg}
+                disabled={isSwitchingOrg || switchFailed}
                 className="flex-1 px-4 py-2 bg-primary text-[#0D0F11] rounded-md hover:opacity-80 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 {t(I18nKey.DEVICE$AUTHORIZE)}
