@@ -7,6 +7,10 @@ from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class InMemoryFileStore(FileStore):
+    # Text-only by design: this store is part of the env-parsed FileStore config
+    # union (so the value type must stay a primitive) and read() returns str, so
+    # it cannot round-trip a binary archive. Not a valid RUNTIME_FILE_ARCHIVE
+    # store — see workspace_archive._archive_store_type.
     files: dict[str, str] = Field(default_factory=dict)
 
     def write(self, path: str, contents: str | bytes) -> None:
