@@ -429,6 +429,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     trigger=request.trigger,
                     remote_workspace=remote_workspace,
                     selected_repository=request.selected_repository,
+                    selected_branch=request.selected_branch,
                     plugins=request.plugins,
                     api_secrets=request.secrets,
                 )
@@ -1529,6 +1530,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         trigger: ConversationTrigger | None = None,
         remote_workspace: AsyncRemoteWorkspace | None = None,
         selected_repository: str | None = None,
+        selected_branch: str | None = None,
         plugins: list[PluginSpec] | None = None,
         api_secrets: dict[str, SecretStr] | None = None,
     ) -> StartConversationRequest:
@@ -1762,8 +1764,24 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # injects it directly into the JSON body as a forward-compatible
         # fallback.
         laminar_user_id = await self.user_context.get_user_email() or user.id
+        # Repo identity on the Laminar trace so trajectories are searchable by
+        # repo / branch (the trace UI has no DB to join against). Omitted for a
+        # repo-less conversation; forwarded into the request's
+        # observability_metadata, which the agent-server attaches to the span.
+        observability_metadata = {
+            key: value
+            for key, value in (
+                ('repo', selected_repository),
+                ('branch', selected_branch),
+                ('git_provider', git_provider.value if git_provider else None),
+            )
+            if value
+        }
+        create_kwargs: dict[str, Any] = {'agent': agent, 'user_id': laminar_user_id}
+        if observability_metadata:
+            create_kwargs['observability_metadata'] = observability_metadata
         request = conv_settings.create_request(
-            StartConversationRequest, agent=agent, user_id=laminar_user_id
+            StartConversationRequest, **create_kwargs
         )
 
         # --- skills (require remote workspace) ------------------------------
