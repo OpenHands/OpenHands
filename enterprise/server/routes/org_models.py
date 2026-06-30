@@ -504,6 +504,9 @@ class MeResponse(BaseModel):
     user_id: str
     email: str
     role: str
+    # The caller's role-derived permissions, so clients can gate UI off a
+    # server-defined permission instead of re-deriving the role mapping.
+    permissions: list[str] = Field(default_factory=list)
     llm_api_key: str
     llm_api_key_for_byor: str | None = None
     agent_settings_diff: dict[str, Any] = Field(default_factory=dict)
@@ -530,6 +533,10 @@ class MeResponse(BaseModel):
         email: str,
     ) -> 'MeResponse':
         """Create a MeResponse from an OrgMember, Role, and user email."""
+        # Imported lazily: a module-level import would cycle
+        # (org_models -> authorization -> storage.org_member_store -> org_models).
+        from server.auth.authorization import get_role_permissions
+
         # Only access member.llm_api_key when has_custom_llm_api_key is True
         # to avoid decryption errors when the key is not set
         llm_api_key = (
@@ -540,6 +547,9 @@ class MeResponse(BaseModel):
             user_id=str(member.user_id),
             email=email,
             role=role.name,
+            permissions=sorted(
+                permission.value for permission in get_role_permissions(role.name)
+            ),
             llm_api_key=llm_api_key,
             llm_api_key_for_byor=cls._mask_key(member.llm_api_key_for_byor) or None,
             agent_settings_diff=dict(member.agent_settings_diff or {}),
