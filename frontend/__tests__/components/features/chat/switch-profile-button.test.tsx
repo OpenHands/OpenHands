@@ -13,6 +13,7 @@ import type { LlmProfileSummary } from "#/api/settings-service/profiles-service.
 const mockUseLlmProfiles = vi.hoisted(() => vi.fn());
 const mockUseActiveConversation = vi.hoisted(() => vi.fn());
 const mockSwitchAndLog = vi.hoisted(() => vi.fn());
+const mockConversationId = vi.hoisted(() => ({ value: "conv-1" }));
 const mockModelStore = vi.hoisted(() => ({
   activeProfileByConversation: {} as Record<string, string>,
 }));
@@ -34,7 +35,7 @@ vi.mock("#/hooks/mutation/use-switch-llm-profile-and-log", () => ({
 }));
 
 vi.mock("#/hooks/use-conversation-id", () => ({
-  useConversationId: () => ({ conversationId: "conv-1" }),
+  useConversationId: () => ({ conversationId: mockConversationId.value }),
 }));
 
 vi.mock("#/stores/model-store", () => ({
@@ -102,6 +103,7 @@ const setupHooks = (
 describe("SwitchProfileButton", () => {
   beforeEach(() => {
     mockSwitchAndLog.mockReset();
+    mockConversationId.value = "conv-1";
   });
 
   afterEach(() => {
@@ -203,6 +205,13 @@ describe("SwitchProfileButton", () => {
     await user.click(screen.getByTestId("switch-profile-button"));
     await user.click(screen.getByTestId("switch-profile-option-default"));
     expect(mockSwitchAndLog).toHaveBeenCalledWith("conv-1", "default");
+  });
+
+  it("is disabled while the conversation id is still the `task-` placeholder", () => {
+    mockConversationId.value = "task-abc-123";
+    setupHooks({ conversationModel: "openai/gpt-5" });
+    renderButton();
+    expect(screen.getByTestId("switch-profile-button")).toBeDisabled();
   });
 
   it("does not call switchAndLog when the already-active profile is selected", async () => {

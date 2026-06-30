@@ -618,9 +618,9 @@ class AutomationEventService:
                             f'{resp.status} for {source} org {org_id}: {body}'
                         )
                     elif resp.status >= 400:
-                        # 4xx = client/contract problem, not a downstream outage
+                        # 4xx = contract/auth problem; the event was not delivered.
                         body = await self._read_response_body(resp)
-                        logger.warning(
+                        logger.error(
                             f'[AutomationEventService] Automation service returned '
                             f'{resp.status} for {source} org {org_id}: {body}'
                         )

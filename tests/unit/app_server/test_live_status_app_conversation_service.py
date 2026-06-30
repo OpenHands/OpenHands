@@ -1893,7 +1893,9 @@ class TestLiveStatusAppConversationService:
             task.sandbox_id = self.mock_sandbox.id
             yield task
 
-        async def mock_run_setup_scripts(task, sandbox, workspace, agent_server_url):
+        async def mock_run_setup_scripts(
+            task, sandbox, workspace, agent_server_url, conversation_id
+        ):
             yield task
 
         self.service._wait_for_sandbox_start = mock_wait_for_sandbox
@@ -1997,7 +1999,9 @@ class TestLiveStatusAppConversationService:
             task.sandbox_id = self.mock_sandbox.id
             yield task
 
-        async def mock_run_setup_scripts(task, sandbox, workspace, agent_server_url):
+        async def mock_run_setup_scripts(
+            task, sandbox, workspace, agent_server_url, conversation_id
+        ):
             yield task
 
         self.service._wait_for_sandbox_start = mock_wait_for_sandbox

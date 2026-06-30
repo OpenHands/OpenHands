@@ -449,7 +449,10 @@ class ProviderHandler:
             log_fn(
                 f'Failed to access repository {repository}: Unknown error (no providers tried, no errors recorded)'
             )
-        raise AuthenticationError(f'Unable to access repo {repository}')
+        # Keep the underlying provider error(s) in the message so callers can
+        # log why (e.g. 404 vs 401) instead of an opaque failure.
+        detail = f': {"; ".join(errors)}' if errors else ''
+        raise AuthenticationError(f'Unable to access repo {repository}{detail}')
 
     async def get_branches(
         self,

@@ -90,6 +90,12 @@ async def _workspace_matches_context(
     workspace_org_id = getattr(workspace, 'org_id', None)
     if workspace_org_id is None:
         return True
+    # A workspace stamped with its creator's *personal* org (org_id == the
+    # admin's own user id) is an instance-wide integration, not a tenant
+    # boundary, so don't org-gate it. Real team/default orgs keep enforcing.
+    admin_user_id = getattr(workspace, 'admin_user_id', None)
+    if admin_user_id is not None and str(workspace_org_id) == str(admin_user_id):
+        return True
     return await _effective_org_matches(
         workspace_id=workspace.id,
         workspace_org_id=workspace_org_id,

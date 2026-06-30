@@ -111,6 +111,11 @@ class StoredConversationMetadata(Base):
     )
     public: Mapped[bool | None] = mapped_column(nullable=True, index=True)
 
+    # Execution status: idle, running, paused, finished, error, stuck, deleting
+    execution_status: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
+
     # Tags for conversation metadata (e.g., automation context, skills used)
     tags: Mapped[dict[str, str] | None] = mapped_column(
         create_json_type_decorator(dict[str, str]), nullable=True
@@ -510,6 +515,35 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                 conversation_id,
                 stack_info=True,
             )
+
+    async def update_execution_status(
+        self,
+        conversation_id: UUID,
+        execution_status: str,
+    ) -> None:
+        """Update the execution status for a conversation.
+
+        Args:
+            conversation_id: The ID of the conversation to update
+            execution_status: The new execution status value
+        """
+        query = await self._secure_select()
+        query = query.where(
+            StoredConversationMetadata.conversation_id == str(conversation_id)
+        )
+        result = await self.db_session.execute(query)
+        stored = result.scalar_one_or_none()
+
+        if not stored:
+            logger.debug(
+                'Conversation %s not found or not accessible, skipping execution status update',
+                conversation_id,
+            )
+            return
+
+        stored.execution_status = execution_status
+        stored.last_updated_at = utc_now()
+        await self.db_session.commit()
 
     async def _secure_select(self):
         query = select(StoredConversationMetadata).where(

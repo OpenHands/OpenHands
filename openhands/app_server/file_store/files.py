@@ -17,6 +17,18 @@ class FileStore(DiscriminatedUnionMixin, ABC):
     def write(self, path: str, contents: str | bytes) -> None:
         pass
 
+    def write_from_path(self, path: str, source_path: str) -> None:
+        """Store the object at ``path`` from a local file at ``source_path``.
+
+        The default reads the whole file into memory and delegates to ``write``;
+        backends that can stream from disk override this to bound peak memory.
+        Callers uploading large blobs (e.g. multi-GB workspace archives, where
+        buffering one whole copy in RAM under concurrent deletes risks
+        OOM-killing the pod) should prefer this over ``write(path, f.read())``.
+        """
+        with open(source_path, 'rb') as f:
+            self.write(path, f.read())
+
     @abstractmethod
     def read(self, path: str) -> str:
         pass
