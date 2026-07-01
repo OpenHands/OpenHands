@@ -225,6 +225,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         selected_repository: str | None,
         project_dir: str,
         disabled_skills: list[str] | None = None,
+        registered_marketplaces: list[MarketplaceRegistration] | None = None,
     ):
         """Load all skills and update agent with them.
 
@@ -234,6 +235,8 @@ class AppConversationServiceBase(AppConversationService, ABC):
             selected_repository: Repository name or None (used for org config)
             project_dir: Project root directory (already resolved via get_project_dir).
             disabled_skills: Optional list of skill names to exclude
+            registered_marketplaces: Optional composed marketplaces (instance +
+                org + user) whose auto_load plugins the agent-server should load.
 
         Returns:
             Updated agent with skills loaded into context
@@ -244,6 +247,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
             selected_repository,
             project_dir,
             agent_server_url,
+            registered_marketplaces=registered_marketplaces,
         )
 
         # Filter out disabled skills

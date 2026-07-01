@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from pydantic import SecretStr
@@ -92,13 +92,6 @@ class UserSettings(Base):
     registered_marketplaces: Mapped[
         list[dict[str, Any] | MarketplaceRegistration] | None
     ] = mapped_column(JSON, nullable=True)
-    # Timestamp for optimistic locking - tracks last modification
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
-        nullable=False,
-    )
 
     def to_settings(self):
         from openhands.app_server.settings.settings_models import (

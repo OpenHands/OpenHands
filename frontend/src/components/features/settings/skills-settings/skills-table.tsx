@@ -28,16 +28,20 @@ function ScopeBadge({ scope }: { scope: "instance" | "org" | "personal" }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
-        scope === "instance" && "bg-tertiary text-tertiary-alt",
-        scope === "org" && "bg-blue-900/30 text-blue-400",
-        scope === "personal" && "bg-green-900/30 text-green-400",
+        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+        scope === "instance" && "bg-tertiary/60 text-tertiary-light",
+        scope === "org" && "bg-blue-500/15 text-blue-300",
+        scope === "personal" && "bg-success/15 text-success",
       )}
     >
       {label}
     </span>
   );
 }
+
+const HEADER_CLASS =
+  "px-4 py-3 text-left text-xs font-medium text-tertiary-alt whitespace-nowrap";
+const CELL_CLASS = "px-4 py-3 align-middle";
 
 export function SkillsTable({
   skills,
@@ -52,36 +56,34 @@ export function SkillsTable({
   const { t } = useTranslation();
 
   return (
-    <>
+    <div className="flex flex-col gap-4">
       {/* Filters */}
-      <div className="flex items-stretch gap-4 justify-center">
-        <div className="flex-1 flex flex-col gap-2.5">
-          <div className="h-5" />
-          <input
-            data-testid="search-skills-input"
-            type="text"
-            placeholder={t(I18nKey.SETTINGS$SEARCH_PLACEHOLDER)}
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt"
-          />
-        </div>
-        <div className="flex-1">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <input
+          data-testid="search-skills-input"
+          type="text"
+          placeholder={t(I18nKey.SETTINGS$SEARCH_PLACEHOLDER)}
+          aria-label={t(I18nKey.SETTINGS$SEARCH_PLACEHOLDER)}
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="h-10 w-full flex-1 rounded-sm border border-[#717888] bg-tertiary p-2 placeholder:italic placeholder:text-tertiary-alt focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+        />
+        <div className="w-full sm:w-52">
           <SettingsDropdownInput
             testId="type-filter-dropdown"
             name="type-filter"
-            label="TYPE"
+            label={t(I18nKey.SETTINGS$TYPE)}
             items={typeOptions}
             defaultSelectedKey="all"
             onSelectionChange={(key) => onTypeChange(key?.toString() ?? null)}
             placeholder={t(I18nKey.SETTINGS$ALL_TYPES)}
           />
         </div>
-        <div className="flex-1">
+        <div className="w-full sm:w-52">
           <SettingsDropdownInput
             testId="repository-filter-dropdown"
             name="repository-filter"
-            label="REPOSITORY"
+            label={t(I18nKey.SETTINGS$REPOSITORY)}
             items={repositoryOptions}
             defaultSelectedKey="all"
             onSelectionChange={(key) =>
@@ -93,69 +95,77 @@ export function SkillsTable({
       </div>
 
       {/* Table */}
-      <div className="border border-tertiary rounded-md overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-base-secondary">
-            <tr className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr] gap-4 items-start">
-              <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                {t(I18nKey.SETTINGS$NAME)}
-              </th>
-              <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                {t(I18nKey.SETTINGS$MARKETPLACE_SOURCE)}
-              </th>
-              <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                {t(I18nKey.SETTINGS$TYPE)}
-              </th>
-              <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_LABEL)}
-              </th>
-              <th className="text-left p-3 text-sm font-medium uppercase text-tertiary-alt">
-                {t(I18nKey.SETTINGS$ENABLED)}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {skills.map((skill) => (
-              <tr
-                key={skill.id}
-                className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr] gap-4 items-center border-t border-tertiary"
-              >
-                <td className="p-3 text-sm text-content-2 truncate min-w-0">
-                  {skill.name}
-                </td>
-                <td className="p-3 text-sm text-tertiary-alt truncate">
-                  {skill.repository}
-                </td>
-                <td className="p-3">
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-base-secondary text-tertiary-alt">
-                    {skill.type}
-                  </span>
-                </td>
-                <td className="p-3">
-                  <ScopeBadge scope={skill.scope} />
-                </td>
-                <td className="p-3">
-                  <Toggle
-                    checked={skill.isEnabled}
-                    onClick={() => onToggle(skill.id)}
-                    aria-label={`Toggle enabled for ${skill.name}`}
-                  />
-                </td>
+      <div className="overflow-hidden rounded-xl border border-tertiary bg-base-secondary/20 table-box-shadow">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] table-fixed border-collapse text-sm">
+            <colgroup>
+              <col className="w-[28%]" />
+              <col className="w-[30%]" />
+              <col className="w-[16%]" />
+              <col className="w-[16%]" />
+              <col className="w-[10%]" />
+            </colgroup>
+            <thead>
+              <tr className="border-b border-tertiary bg-base-secondary/50">
+                <th className={HEADER_CLASS}>{t(I18nKey.SETTINGS$NAME)}</th>
+                <th className={HEADER_CLASS}>
+                  {t(I18nKey.SETTINGS$MARKETPLACE_SOURCE)}
+                </th>
+                <th className={HEADER_CLASS}>{t(I18nKey.SETTINGS$TYPE)}</th>
+                <th className={HEADER_CLASS}>
+                  {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_LABEL)}
+                </th>
+                <th className={HEADER_CLASS}>{t(I18nKey.SETTINGS$ENABLED)}</th>
               </tr>
-            ))}
-            {skills.length === 0 && (
-              <tr className="border-t border-tertiary">
-                <td
-                  colSpan={5}
-                  className="p-3 text-sm text-center text-[rgb(140,140,140)]"
+            </thead>
+            <tbody>
+              {skills.map((skill) => (
+                <tr
+                  key={skill.id}
+                  className="border-t border-tertiary/60 transition-colors hover:bg-base-secondary/40"
                 >
-                  {t(I18nKey.SETTINGS$NO_SKILLS_MATCH_FILTERS)}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                  <td
+                    className={cn(CELL_CLASS, "font-medium text-content-2")}
+                    title={skill.name}
+                  >
+                    <span className="block truncate">{skill.name}</span>
+                  </td>
+                  <td className={cn(CELL_CLASS, "text-tertiary-alt")}>
+                    <span className="block truncate" title={skill.repository}>
+                      {skill.repository}
+                    </span>
+                  </td>
+                  <td className={CELL_CLASS}>
+                    <span className="inline-flex items-center rounded-full bg-tertiary/60 px-2.5 py-0.5 text-xs font-medium text-tertiary-light">
+                      {skill.type}
+                    </span>
+                  </td>
+                  <td className={CELL_CLASS}>
+                    <ScopeBadge scope={skill.scope} />
+                  </td>
+                  <td className={CELL_CLASS}>
+                    <Toggle
+                      checked={skill.isEnabled}
+                      onClick={() => onToggle(skill.id)}
+                      aria-label={`Toggle enabled for ${skill.name}`}
+                    />
+                  </td>
+                </tr>
+              ))}
+              {skills.length === 0 && (
+                <tr className="border-t border-tertiary/60">
+                  <td
+                    colSpan={5}
+                    className="px-4 py-10 text-center text-sm text-tertiary-alt"
+                  >
+                    {t(I18nKey.SETTINGS$NO_SKILLS_MATCH_FILTERS)}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </>
+    </div>
   );
 }

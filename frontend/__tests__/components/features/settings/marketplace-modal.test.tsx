@@ -12,7 +12,6 @@ const baseProps = {
   onClose,
   onSave,
   isSaving: false,
-  isDeleting: false,
 };
 
 beforeEach(() => {
@@ -36,7 +35,9 @@ describe("MarketplaceModal", () => {
     expect(screen.getByText("SETTINGS$MARKETPLACE_NAME")).toBeInTheDocument();
     expect(screen.getByText("SETTINGS$MARKETPLACE_SOURCE")).toBeInTheDocument();
     expect(screen.getByText("SETTINGS$MARKETPLACE_REF")).toBeInTheDocument();
-    expect(screen.getByText("SETTINGS$MARKETPLACE_REPO_PATH")).toBeInTheDocument();
+    expect(
+      screen.getByText("SETTINGS$MARKETPLACE_REPO_PATH"),
+    ).toBeInTheDocument();
   });
 
   it("shows name required error when name is empty", async () => {
@@ -46,7 +47,9 @@ describe("MarketplaceModal", () => {
     // Click save without entering anything
     await user.click(screen.getByTestId("marketplace-save-button"));
 
-    expect(screen.getByText("SETTINGS$MARKETPLACE_NAME_REQUIRED")).toBeInTheDocument();
+    expect(
+      screen.getByText("SETTINGS$MARKETPLACE_NAME_REQUIRED"),
+    ).toBeInTheDocument();
     expect(onSave).not.toHaveBeenCalled();
   });
 
@@ -59,7 +62,9 @@ describe("MarketplaceModal", () => {
     await user.type(nameInput, "123-invalid");
     await user.click(screen.getByTestId("marketplace-save-button"));
 
-    expect(screen.getByText("SETTINGS$MARKETPLACE_NAME_INVALID")).toBeInTheDocument();
+    expect(
+      screen.getByText("SETTINGS$MARKETPLACE_NAME_INVALID"),
+    ).toBeInTheDocument();
     expect(onSave).not.toHaveBeenCalled();
   });
 
@@ -82,14 +87,18 @@ describe("MarketplaceModal", () => {
 
     // Trigger name required error
     await user.click(screen.getByTestId("marketplace-save-button"));
-    expect(screen.getByText("SETTINGS$MARKETPLACE_NAME_REQUIRED")).toBeInTheDocument();
+    expect(
+      screen.getByText("SETTINGS$MARKETPLACE_NAME_REQUIRED"),
+    ).toBeInTheDocument();
 
     // Start typing in name field
     const nameInput = screen.getByPlaceholderText("e.g., my-skills");
     await user.type(nameInput, "a");
 
     // Error should be cleared
-    expect(screen.queryByText("SETTINGS$MARKETPLACE_NAME_REQUIRED")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("SETTINGS$MARKETPLACE_NAME_REQUIRED"),
+    ).not.toBeInTheDocument();
   });
 
   it("validates source before calling onSave", async () => {
@@ -116,8 +125,14 @@ describe("MarketplaceModal", () => {
     render(<MarketplaceModal {...baseProps} />);
     const user = userEvent.setup();
 
-    await user.type(screen.getByPlaceholderText("e.g., my-skills"), "my-marketplace");
-    await user.type(screen.getByPlaceholderText("github:owner/repo"), "github:owner/repo");
+    await user.type(
+      screen.getByPlaceholderText("e.g., my-skills"),
+      "my-marketplace",
+    );
+    await user.type(
+      screen.getByPlaceholderText("github:owner/repo"),
+      "github:owner/repo",
+    );
     await user.click(screen.getByTestId("marketplace-save-button"));
 
     expect(onSave).toHaveBeenCalledWith({
@@ -129,20 +144,90 @@ describe("MarketplaceModal", () => {
     });
   });
 
-  it("does not render scope selector in add mode", () => {
-    render(
-      <MarketplaceModal
-        {...baseProps}
-      />,
-    );
+  it("rejects a URL entered in the repository path field", async () => {
+    render(<MarketplaceModal {...baseProps} />);
+    const user = userEvent.setup();
 
-    expect(screen.queryByText("SETTINGS$MARKETPLACE_SCOPE_LABEL")).not.toBeInTheDocument();
+    await user.type(
+      screen.getByPlaceholderText("e.g., my-skills"),
+      "oh-extensions",
+    );
+    await user.type(
+      screen.getByPlaceholderText("github:owner/repo"),
+      "github:OpenHands/extensions",
+    );
+    await user.type(
+      screen.getByPlaceholderText("e.g., marketplaces/internal"),
+      "https://github.com/OpenHands/extensions",
+    );
+    await user.click(screen.getByTestId("marketplace-save-button"));
+
+    expect(
+      screen.getByText("SETTINGS$MARKETPLACE_REPO_PATH_INVALID"),
+    ).toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("accepts a relative subdirectory as the repository path", async () => {
+    render(<MarketplaceModal {...baseProps} />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByPlaceholderText("e.g., my-skills"), "team");
+    await user.type(
+      screen.getByPlaceholderText("github:owner/repo"),
+      "github:acme/monorepo",
+    );
+    await user.type(
+      screen.getByPlaceholderText("e.g., marketplaces/internal"),
+      "marketplaces/internal",
+    );
+    await user.click(screen.getByTestId("marketplace-save-button"));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ repo_path: "marketplaces/internal" }),
+    );
+  });
+
+  it("does not render scope selector unless scope selection is allowed", () => {
+    render(<MarketplaceModal {...baseProps} />);
+
+    expect(
+      screen.queryByTestId("marketplace-scope-select"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders scope selector when scope selection is allowed (add mode)", () => {
+    render(<MarketplaceModal {...baseProps} allowScopeSelection />);
+
+    expect(screen.getByTestId("marketplace-scope-select")).toBeInTheDocument();
+  });
+
+  it("includes the chosen scope in onSave when scope selection is allowed", async () => {
+    render(<MarketplaceModal {...baseProps} allowScopeSelection />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByPlaceholderText("e.g., my-skills"), "team");
+    await user.type(
+      screen.getByPlaceholderText("github:owner/repo"),
+      "github:owner/repo",
+    );
+    await user.selectOptions(
+      screen.getByTestId("marketplace-scope-select"),
+      "org",
+    );
+    await user.click(screen.getByTestId("marketplace-save-button"));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "team", scope: "org" }),
+    );
   });
 
   it("calls onClose when cancel is clicked", async () => {
     render(<MarketplaceModal {...baseProps} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "BUTTON$CANCEL" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "BUTTON$CANCEL" }),
+    );
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -151,7 +236,9 @@ describe("MarketplaceModal", () => {
     render(<MarketplaceModal {...baseProps} isSaving={true} />);
 
     expect(screen.getByTestId("marketplace-save-button")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "BUTTON$CANCEL" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "BUTTON$CANCEL" }),
+    ).toBeDisabled();
   });
 
   it("renders in edit mode with read-only source", () => {
@@ -170,6 +257,8 @@ describe("MarketplaceModal", () => {
     // Source field should be disabled in edit mode
     const sourceInput = screen.getByDisplayValue("github:owner/repo");
     expect(sourceInput).toBeDisabled();
-    expect(screen.getByText("SETTINGS$MARKETPLACE_SOURCE_READONLY")).toBeInTheDocument();
+    expect(
+      screen.getByText("SETTINGS$MARKETPLACE_SOURCE_READONLY"),
+    ).toBeInTheDocument();
   });
 });

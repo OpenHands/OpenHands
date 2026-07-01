@@ -71,6 +71,19 @@ class MarketplaceRegistration(BaseModel):
     Marketplaces can be auto-loaded (plugins loaded at conversation start)
     or registered only (available for explicit plugin references).
 
+    Wire-compatible with ``openhands.sdk.marketplace.MarketplaceRegistration``
+    (the model the agent-server ``/api/skills`` endpoint consumes): dumping this
+    model with ``exclude={'scope'}`` yields exactly the SDK model's fields
+    (``name``/``source``/``ref``/``repo_path``/``auto_load``), and our ``bool``
+    ``auto_load`` and stricter field validators are a subset of what the SDK
+    accepts, so any value we produce validates upstream.
+
+    This is intentionally kept as a separate model rather than importing the SDK
+    one, because it carries a backend-only ``scope`` (set per storage layer for
+    API responses/UI, stripped at the wire boundary and re-derived during
+    composition) and enforces input validation the SDK model does not (source /
+    ``repo_path`` traversal guards, name format).
+
     Examples:
         >>> # Auto-load all plugins from a marketplace
         >>> MarketplaceRegistration(
@@ -129,11 +142,6 @@ class MarketplaceRegistration(BaseModel):
         ),
     )
 
-    def model_dump(self, **kwargs) -> dict:
-        """Serialize to dict, converting enums to values and stripping None."""
-        data = super().model_dump(mode='json', **kwargs)
-        return {k: v for k, v in data.items() if v is not None}
-
     @field_validator('name')
     @classmethod
     def validate_name(cls, v: str) -> str:
@@ -181,6 +189,12 @@ class MarketplaceRegistration(BaseModel):
         """Validate repo_path is a safe relative path within the repository."""
         if v is None:
             return v
+        # A common mistake is pasting the repository URL here; repo_path is a
+        # subdirectory *within* the already-specified source repository.
+        if '://' in v:
+            raise ValueError(
+                'repo_path must be a subdirectory within the repository, not a URL'
+            )
         # Must be relative (no absolute paths)
         if v.startswith('/'):
             raise ValueError('repo_path must be relative, not absolute')
@@ -385,42 +399,11 @@ class Settings(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    @model_validator(mode='after')
-    def validate_unique_marketplace_names(self) -> 'Settings':
-        """Ensure marketplace names are unique across all scopes.
-
-        Checks for duplicate names between:
-        - inherited_marketplaces (instance/org level)
-        - registered_marketplaces (user level)
-        """
-        # Collect all marketplace names from all scopes
-        all_names = []
-
-        # Helper to extract name from dict or object
-        def get_name(mp):
-            if isinstance(mp, dict):
-                return mp.get('name')
-            return mp.name
-
-        # Add inherited (from instance/org)
-        for mp in self.inherited_marketplaces:
-            name = get_name(mp)
-            if name:
-                all_names.append(name)
-
-        # Add personal (user level)
-        for mp in self.registered_marketplaces:
-            name = get_name(mp)
-            if name:
-                all_names.append(name)
-
-        # Check for duplicates
-        duplicates = {name for name in all_names if all_names.count(name) > 1}
-        if duplicates:
-            raise ValueError(
-                f'Duplicate marketplace names are not allowed: {sorted(duplicates)}'
-            )
-        return self
+    # NOTE: marketplace name uniqueness is enforced on the write paths (personal
+    # settings + org store) and deduplicated defensively during composition
+    # (``marketplace_composition``). It is intentionally NOT a model validator:
+    # validating on construction would run on every ``load()`` and could lock a
+    # user out of settings entirely if legacy stored data contained a duplicate.
 
     def __init__(self, **data: Any):
         # Import Secrets here to avoid circular imports

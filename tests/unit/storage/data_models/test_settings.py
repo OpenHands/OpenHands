@@ -598,8 +598,17 @@ class TestMarketplaceRegistration:
                 repo_path='../escape/path',
             )
 
+    def test_repo_path_validation_rejects_url(self):
+        """A repository URL pasted into repo_path is rejected (not a subdir)."""
+        with pytest.raises(ValidationError, match='not a URL'):
+            MarketplaceRegistration(
+                name='test',
+                source='github:OpenHands/extensions',
+                repo_path='https://github.com/OpenHands/extensions',
+            )
+
     def test_serialization(self):
-        """Test that MarketplaceRegistration serializes correctly."""
+        """Test that MarketplaceRegistration serializes with standard pydantic."""
         reg = MarketplaceRegistration(
             name='test',
             source='github:owner/repo',
@@ -614,6 +623,16 @@ class TestMarketplaceRegistration:
             'ref': 'main',
             'repo_path': 'plugins',
             'auto_load': True,
+            'scope': None,
+        }
+
+    def test_serialization_excludes_none_for_wire_payload(self):
+        """exclude_none drops unset optional fields (as sent to the agent-server)."""
+        reg = MarketplaceRegistration(name='test', source='github:owner/repo')
+        assert reg.model_dump(exclude_none=True, exclude={'scope'}) == {
+            'name': 'test',
+            'source': 'github:owner/repo',
+            'auto_load': False,
         }
 
     # --- Name validation tests ---
@@ -893,25 +912,23 @@ class TestMarketplaceRegistrationValidationEdgeCases:
 
 
 class TestSettingsDuplicateMarketplaceNames:
-    """Tests for duplicate marketplace name validation in Settings."""
+    """Settings construction and marketplace name handling.
 
-    def test_settings_rejects_duplicate_marketplace_names(self):
-        """Test that Settings rejects duplicate marketplace names."""
-        from pydantic import ValidationError
+    Uniqueness is enforced on the write paths (not on model construction), so a
+    legacy row with duplicate names can never lock a user out of settings.
+    """
 
-        with pytest.raises(ValidationError, match='Duplicate marketplace names'):
-            Settings(
-                registered_marketplaces=[
-                    MarketplaceRegistration(
-                        name='plugins',
-                        source='github:owner/repo1',
-                    ),
-                    MarketplaceRegistration(
-                        name='plugins',  # Duplicate name
-                        source='github:owner/repo2',
-                    ),
-                ]
-            )
+    def test_settings_tolerates_duplicate_marketplace_names(self):
+        """Constructing Settings from duplicate stored names must not raise."""
+        # Arrange / Act - duplicate names (e.g. legacy data) must load cleanly.
+        settings = Settings(
+            registered_marketplaces=[
+                MarketplaceRegistration(name='plugins', source='github:owner/repo1'),
+                MarketplaceRegistration(name='plugins', source='github:owner/repo2'),
+            ]
+        )
+        # Assert
+        assert len(settings.registered_marketplaces) == 2
 
     def test_settings_allows_same_source_different_names(self):
         """Test that same source with different names is allowed."""

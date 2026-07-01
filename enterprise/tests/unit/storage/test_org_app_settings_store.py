@@ -15,6 +15,8 @@ from storage.org import Org
 from storage.org_app_settings_store import OrgAppSettingsStore
 from storage.user import User
 
+from openhands.app_server.settings.settings_models import MarketplaceRegistration
+
 
 @pytest.fixture
 async def async_engine():
@@ -342,3 +344,65 @@ async def test_optimistic_lock_with_timezone_aware_dates(async_session_maker):
     # Assert
     assert result is not None
     assert result.enable_proactive_conversation_starters is False
+
+
+@pytest.mark.asyncio
+async def test_update_persists_marketplaces_with_org_scope(async_session_maker):
+    """
+    GIVEN: An organization exists
+    WHEN: update_org_app_settings persists marketplaces
+    THEN: They are stored as JSON with scope forced to 'org'
+    """
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.commit()
+        org_id = org.id
+
+        update_data = OrgAppSettingsUpdate(
+            registered_marketplaces=[
+                MarketplaceRegistration(
+                    name='team', source='github:o/team', auto_load=True
+                ),
+            ]
+        )
+
+        # Act
+        store = OrgAppSettingsStore(db_session=session)
+        result = await store.update_org_app_settings(org_id, update_data)
+
+    # Assert
+    assert result is not None
+    assert len(result.registered_marketplaces) == 1
+    stored = result.registered_marketplaces[0]
+    assert stored['name'] == 'team'
+    assert stored['scope'] == 'org'
+    assert stored['auto_load'] is True
+
+
+@pytest.mark.asyncio
+async def test_update_rejects_duplicate_marketplace_names(async_session_maker):
+    """
+    GIVEN: An organization exists
+    WHEN: update_org_app_settings is given marketplaces with duplicate names
+    THEN: A ValueError is raised before persisting
+    """
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.commit()
+        org_id = org.id
+
+        update_data = OrgAppSettingsUpdate(
+            registered_marketplaces=[
+                MarketplaceRegistration(name='dup', source='github:o/a'),
+                MarketplaceRegistration(name='dup', source='github:o/b'),
+            ]
+        )
+
+        # Act & Assert
+        store = OrgAppSettingsStore(db_session=session)
+        with pytest.raises(ValueError, match='Duplicate marketplace name'):
+            await store.update_org_app_settings(org_id, update_data)

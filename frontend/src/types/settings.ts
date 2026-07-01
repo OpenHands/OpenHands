@@ -121,7 +121,9 @@ export type MarketplaceRegistration = {
   ref?: string;
   repo_path?: string;
   auto_load?: boolean;
-  scope: "instance" | "org" | "personal";
+  // Backend-derived; present on reads, omitted from write payloads (the backend
+  // sets scope per storage layer). Optional so save payloads need not include it.
+  scope?: "instance" | "org" | "personal";
 };
 
 export interface SkillWithState extends SkillInfo {

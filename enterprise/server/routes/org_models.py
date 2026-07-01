@@ -106,8 +106,9 @@ class OrgConcurrentModificationError(Exception):
     by another request between when the client read it and when they attempted
     to update it. The client should re-fetch the latest data and retry.
 
-    Note: Timestamp comparison relies on server clock. If client/server clocks
-    are significantly out of sync, legitimate updates may be rejected.
+    Note: The compared timestamp is generated and stored server-side; the client
+    only echoes back the value it last read, so client/server clock skew does not
+    affect conflict detection.
     """
 
     def __init__(
@@ -622,9 +623,9 @@ class OrgAppSettingsUpdate(BaseModel):
     enable_proactive_conversation_starters: bool | None = None
     max_budget_per_task: float | None = None
     registered_marketplaces: list[MarketplaceRegistration] | None = None
-    # Optimistic locking: client must provide the last_known_updated_at they read
-    # If this doesn't match DB, someone else modified the record and an error is raised.
-    # Note: Ensure client and server clocks are synchronized to avoid false conflicts.
+    # Optimistic locking: client echoes back the server-generated updated_at it
+    # last read. If it no longer matches the DB, someone else modified the record
+    # and a 409 conflict is raised. (Server-generated, so clock skew is irrelevant.)
     last_known_updated_at: datetime | None = None
 
     @field_validator('max_budget_per_task')

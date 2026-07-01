@@ -334,3 +334,21 @@ async def test_disabled_skills_persistence(test_client):
     assert response.status_code == 200
     data = response.json()
     assert data['disabled_skills'] == []
+
+
+def test_store_settings_rejects_duplicate_personal_marketplace_names(test_client):
+    """Saving personal marketplaces with duplicate names is rejected (400)."""
+    # Arrange / Act
+    response = test_client.post(
+        '/api/v1/settings',
+        json={
+            'registered_marketplaces': [
+                {'name': 'dup', 'source': 'github:o/a'},
+                {'name': 'dup', 'source': 'github:o/b'},
+            ]
+        },
+    )
+
+    # Assert
+    assert response.status_code == 400
+    assert 'dup' in response.json()['error']

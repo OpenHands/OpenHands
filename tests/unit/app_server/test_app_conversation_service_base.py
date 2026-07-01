@@ -1403,3 +1403,46 @@ class TestLoadAndMergeAllSkills:
 
             # Assert
             assert result == []
+
+
+class TestLoadSkillsAndUpdateAgent:
+    """_load_skills_and_update_agent threads marketplaces into skill loading."""
+
+    @pytest.mark.asyncio
+    async def test_forwards_registered_marketplaces(self):
+        """Registered marketplaces reach load_and_merge_all_skills at startup."""
+        # Arrange
+        from openhands.app_server.settings.settings_models import (
+            MarketplaceRegistration,
+        )
+
+        mock_user_context = Mock(spec=UserContext)
+        with patch.object(AppConversationServiceBase, '__abstractmethods__', set()):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True, user_context=mock_user_context
+            )
+            service.load_and_merge_all_skills = AsyncMock(return_value=[])
+            service._create_agent_with_skills = Mock(return_value='updated-agent')
+
+            remote_workspace = AsyncMock()
+            remote_workspace.host = 'http://agent:8000'
+            marketplaces = [
+                MarketplaceRegistration(name='team', source='github:o/team')
+            ]
+
+            # Act
+            result = await service._load_skills_and_update_agent(
+                Mock(spec=SandboxInfo),
+                Mock(),
+                remote_workspace,
+                'owner/repo',
+                '/workspace/repo',
+                registered_marketplaces=marketplaces,
+            )
+
+            # Assert
+            assert result == 'updated-agent'
+            forwarded = service.load_and_merge_all_skills.call_args.kwargs[
+                'registered_marketplaces'
+            ]
+            assert forwarded == marketplaces

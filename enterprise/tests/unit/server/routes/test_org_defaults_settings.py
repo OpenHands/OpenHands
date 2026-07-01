@@ -286,3 +286,64 @@ class TestOrgAppSettingsUpdateMarketplaceValidation:
         assert update.registered_marketplaces[0].ref == 'v1.0.0'
         assert update.registered_marketplaces[0].repo_path == 'marketplaces/plugins'
         assert update.registered_marketplaces[0].auto_load is True
+
+
+class TestUpdateOrgAppSettingsRoute:
+    """Route-level behavior for the POST /orgs/app handler."""
+
+    @pytest.mark.asyncio
+    async def test_concurrent_modification_maps_to_409(self):
+        """A concurrent-modification conflict surfaces as HTTP 409, not 500."""
+        from datetime import datetime, timezone
+        from unittest.mock import AsyncMock
+
+        from fastapi import HTTPException
+        from server.routes.org_models import OrgConcurrentModificationError
+        from server.routes.orgs import update_org_app_settings
+
+        # Arrange - service raises the conflict; no marketplaces => no admin gate.
+        now = datetime.now(timezone.utc)
+        service = MagicMock()
+        service.update_org_app_settings = AsyncMock(
+            side_effect=OrgConcurrentModificationError(
+                org_id='o1', expected_version=now, actual_version=now
+            )
+        )
+        update_data = OrgAppSettingsUpdate(enable_proactive_conversation_starters=False)
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc:
+            await update_org_app_settings(
+                update_data, MagicMock(), service=service, user_id='u1'
+            )
+        assert exc.value.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_marketplace_edit_requires_admin(self, monkeypatch):
+        """Editing org marketplaces without EDIT_ORG_SETTINGS is blocked (403)."""
+        from unittest.mock import AsyncMock
+
+        import server.routes.orgs as orgs_module
+        from fastapi import HTTPException
+        from server.routes.orgs import update_org_app_settings
+
+        # Arrange - deny the marketplace permission; the write must not happen.
+        async def _deny(request, user_id, permission):
+            raise HTTPException(status_code=403, detail='forbidden')
+
+        monkeypatch.setattr(orgs_module, 'authorize_permission', _deny)
+        service = MagicMock()
+        service.update_org_app_settings = AsyncMock()
+        update_data = OrgAppSettingsUpdate(
+            registered_marketplaces=[
+                MarketplaceRegistration(name='team', source='github:o/team')
+            ]
+        )
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc:
+            await update_org_app_settings(
+                update_data, MagicMock(), service=service, user_id='u1'
+            )
+        assert exc.value.status_code == 403
+        service.update_org_app_settings.assert_not_called()

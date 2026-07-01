@@ -41,7 +41,7 @@ export interface UseMarketplaceMutationsReturn {
     typeof useMutation<
       unknown,
       AxiosError,
-      { marketplaceSource: string; lastKnownUpdatedAt: string | null }
+      { marketplaceName: string; lastKnownUpdatedAt: string | null }
     >
   >;
 }
@@ -82,7 +82,13 @@ export function useMarketplaceMutations(
       options.onSuccess?.();
     },
     onError: (error: Error) => {
-      displayErrorToast(error.message || t(I18nKey.ERROR$GENERIC));
+      // Surface the backend detail (e.g. duplicate-name) for Axios errors;
+      // fall back to the thrown message for local validation errors.
+      const message =
+        error instanceof AxiosError
+          ? retrieveAxiosErrorMessage(error)
+          : error.message;
+      displayErrorToast(message || t(I18nKey.ERROR$GENERIC));
     },
     onSettled: options.onSettled,
     meta: { disableToast: true },
@@ -142,10 +148,11 @@ export function useMarketplaceMutations(
   // Delete personal marketplace mutation
   // Fetches fresh state at mutation time to avoid stale closure issues
   const deletePersonal = useMutation({
-    mutationFn: async (marketplaceSource: string) => {
+    mutationFn: async (marketplaceName: string) => {
       const settings = await SettingsService.getSettings();
+      // Name is the marketplace identity (unique across scopes).
       const updated = (settings.registered_marketplaces || []).filter(
-        (mp) => mp.source !== marketplaceSource,
+        (mp) => mp.name !== marketplaceName,
       );
       // Backend will automatically set scope='personal' for user settings
       await SettingsService.saveSettings({
@@ -159,7 +166,11 @@ export function useMarketplaceMutations(
       options.onSuccess?.();
     },
     onError: (error: Error) => {
-      displayErrorToast(error.message || t(I18nKey.ERROR$GENERIC));
+      const message =
+        error instanceof AxiosError
+          ? retrieveAxiosErrorMessage(error)
+          : error.message;
+      displayErrorToast(message || t(I18nKey.ERROR$GENERIC));
     },
     onSettled: options.onSettled,
     meta: { disableToast: true },
@@ -169,15 +180,16 @@ export function useMarketplaceMutations(
   // Fetches fresh state at mutation time to avoid stale closure issues
   const deleteOrg = useMutation({
     mutationFn: async ({
-      marketplaceSource,
+      marketplaceName,
       lastKnownUpdatedAt,
     }: {
-      marketplaceSource: string;
+      marketplaceName: string;
       lastKnownUpdatedAt: string | null;
     }) => {
       const settings = await organizationService.getOrganizationAppSettings();
+      // Name is the marketplace identity (unique across scopes).
       const updated = (settings.registered_marketplaces || []).filter(
-        (mp) => mp.source !== marketplaceSource,
+        (mp) => mp.name !== marketplaceName,
       );
       // Backend will automatically set scope='org' for org settings
       return organizationService.saveOrganizationAppSettings({

@@ -11,6 +11,11 @@ interface MarketplaceModalProps {
   isOpen: boolean;
   mode: "add" | "edit";
   marketplace?: MarketplaceRegistration | null;
+  /**
+   * When true (admin adding in an org context), the modal shows an org/personal
+   * scope selector. Otherwise the marketplace is added as personal.
+   */
+  allowScopeSelection?: boolean;
   onClose: () => void;
   onSave: (data: {
     name: string;
@@ -18,21 +23,19 @@ interface MarketplaceModalProps {
     ref?: string;
     repo_path?: string;
     auto_load?: boolean;
+    scope?: "org" | "personal";
   }) => void;
-  onDelete?: () => void;
   isSaving?: boolean;
-  isDeleting?: boolean;
 }
 
 export function MarketplaceModal({
   isOpen,
   mode,
   marketplace,
+  allowScopeSelection = false,
   onClose,
   onSave,
-  onDelete,
   isSaving = false,
-  isDeleting = false,
 }: MarketplaceModalProps) {
   const { t } = useTranslation();
   const [name, setName] = React.useState(marketplace?.name || "");
@@ -40,8 +43,10 @@ export function MarketplaceModal({
   const [ref, setRef] = React.useState(marketplace?.ref || "");
   const [repoPath, setRepoPath] = React.useState(marketplace?.repo_path || "");
   const [autoLoad, setAutoLoad] = React.useState(!!marketplace?.auto_load);
+  const [scope, setScope] = React.useState<"org" | "personal">("personal");
   const [nameError, setNameError] = React.useState<string | null>(null);
   const [sourceError, setSourceError] = React.useState<string | null>(null);
+  const [repoPathError, setRepoPathError] = React.useState<string | null>(null);
 
   // Reset form when modal opens/closes or marketplace changes
   React.useEffect(() => {
@@ -51,10 +56,16 @@ export function MarketplaceModal({
       setRef(marketplace?.ref || "");
       setRepoPath(marketplace?.repo_path || "");
       setAutoLoad(!!marketplace?.auto_load);
+      // Default new marketplaces to personal; admins can opt into org.
+      setScope(marketplace?.scope === "org" ? "org" : "personal");
       setNameError(null);
       setSourceError(null);
+      setRepoPathError(null);
     }
   }, [isOpen, marketplace]);
+
+  // Scope selection only applies when adding and the caller allows it.
+  const showScopeSelector = mode === "add" && allowScopeSelection;
 
   const handleSave = () => {
     // Validate name on click
@@ -70,14 +81,31 @@ export function MarketplaceModal({
       setSourceError(t(I18nKey.SETTINGS$MARKETPLACE_SOURCE_REQUIRED));
       return;
     }
+    // Repository Path is an optional subdirectory *within* the repository
+    // (e.g. "marketplaces/internal"), not a URL or absolute path. Catch the
+    // common mistake of pasting the repository URL here before it reaches the
+    // backend, where it would fail with a confusing "Repo path not found".
+    const trimmedRepoPath = repoPath.trim();
+    if (
+      trimmedRepoPath &&
+      (trimmedRepoPath.includes("://") ||
+        trimmedRepoPath.startsWith("/") ||
+        trimmedRepoPath.startsWith("\\") ||
+        trimmedRepoPath.includes(".."))
+    ) {
+      setRepoPathError(t(I18nKey.SETTINGS$MARKETPLACE_REPO_PATH_INVALID));
+      return;
+    }
     setNameError(null);
+    setRepoPathError(null);
 
     onSave({
       name: name.trim(),
       source: source.trim(),
       ref: ref.trim() || undefined,
-      repo_path: repoPath.trim() || undefined,
+      repo_path: trimmedRepoPath || undefined,
       auto_load: autoLoad,
+      scope: showScopeSelector ? scope : undefined,
     });
   };
 
@@ -92,29 +120,17 @@ export function MarketplaceModal({
         variant="secondary"
         className="grow"
         onClick={onClose}
-        isDisabled={isSaving || isDeleting}
+        isDisabled={isSaving}
       >
         {t(I18nKey.BUTTON$CANCEL)}
       </BrandButton>
-      {isEdit && onDelete && (
-        <BrandButton
-          testId="marketplace-delete-button"
-          type="button"
-          variant="danger"
-          className="grow"
-          onClick={onDelete}
-          isDisabled={isDeleting}
-        >
-          {isDeleting ? <span>...</span> : t(I18nKey.BUTTON$DELETE)}
-        </BrandButton>
-      )}
       <BrandButton
         testId="marketplace-save-button"
         type="button"
         variant="primary"
         className="grow"
         onClick={handleSave}
-        isDisabled={isSaving || isDeleting}
+        isDisabled={isSaving}
       >
         {isSaving ? <span>...</span> : t(I18nKey.BUTTON$SAVE)}
       </BrandButton>
@@ -147,7 +163,7 @@ export function MarketplaceModal({
             }}
             placeholder="e.g., my-skills"
             className={cn(
-              "bg-tertiary border h-10 w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt",
+              "bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt",
               nameError && "border-red-500",
             )}
           />
@@ -174,7 +190,7 @@ export function MarketplaceModal({
             disabled={isEdit}
             readOnly={isEdit}
             className={cn(
-              "bg-tertiary border h-10 w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt disabled:opacity-50 disabled:cursor-not-allowed",
+              "bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt disabled:opacity-50 disabled:cursor-not-allowed",
               sourceError && "border-red-500",
             )}
           />
@@ -189,6 +205,28 @@ export function MarketplaceModal({
             </Typography.Paragraph>
           )}
         </div>
+
+        {/* Scope selector - only when an admin adds in an org context */}
+        {showScopeSelector && (
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium text-tertiary-alt">
+              {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_LABEL)}
+            </label>
+            <select
+              data-testid="marketplace-scope-select"
+              value={scope}
+              onChange={(e) => setScope(e.target.value as "org" | "personal")}
+              className="bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2"
+            >
+              <option value="personal">
+                {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_PERSONAL)}
+              </option>
+              <option value="org">
+                {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_ORG)}
+              </option>
+            </select>
+          </div>
+        )}
 
         {/* Ref field (optional) */}
         <div className="flex flex-col gap-2">
@@ -218,14 +256,25 @@ export function MarketplaceModal({
           <input
             type="text"
             value={repoPath}
-            onChange={(e) => setRepoPath(e.target.value)}
+            onChange={(e) => {
+              setRepoPath(e.target.value);
+              setRepoPathError(null);
+            }}
             placeholder="e.g., marketplaces/internal"
-            className="bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt"
+            className={cn(
+              "bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt",
+              repoPathError && "border-red-500",
+            )}
           />
+          {repoPathError && (
+            <Typography.Paragraph className="text-xs text-red-400">
+              {repoPathError}
+            </Typography.Paragraph>
+          )}
         </div>
 
         {/* Auto-load toggle */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
           <label className="text-sm font-medium text-tertiary-alt">
             {t(I18nKey.SETTINGS$MARKETPLACE_AUTO_LOAD)}
           </label>

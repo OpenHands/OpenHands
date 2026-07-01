@@ -12,6 +12,7 @@ All source-specific skill loading is handled by the agent-server.
 
 import asyncio
 import logging
+from typing import Any
 
 import httpx
 from pydantic import BaseModel
@@ -425,18 +426,10 @@ async def load_skills_from_agent_server(
         Returns empty list on error.
     """
     try:
-        # Convert marketplace registrations to API payload format
-        # Preserve semantic distinction: None = not specified, [] = explicitly empty
-        marketplace_payloads = (
-            [reg.model_dump() for reg in registered_marketplaces]
-            if registered_marketplaces is not None
-            else None
-        )
-
         # Build request payload. ``org_configs`` is the current list form;
         # ``org_config`` (the first entry) is kept for backward compatibility
         # with older agent-server images that only understand a single config.
-        payload = {
+        payload: dict[str, Any] = {
             'load_public': load_public,
             'load_user': load_user,
             'load_project': load_project,
@@ -447,8 +440,18 @@ async def load_skills_from_agent_server(
             ),
             'org_config': org_configs[0].model_dump() if org_configs else None,
             'sandbox_config': sandbox_config.model_dump() if sandbox_config else None,
-            'registered_marketplaces': marketplace_payloads,
         }
+
+        # Only include ``registered_marketplaces`` when we actually have a value.
+        # The agent-server field is a non-Optional ``list`` with a default, so an
+        # explicit ``null`` fails validation (422) and would drop *all* skills.
+        # Omitting the key lets the agent-server apply its own default, and older
+        # agent-servers without the field simply ignore an absent key.
+        if registered_marketplaces is not None:
+            payload['registered_marketplaces'] = [
+                reg.model_dump(exclude_none=True, exclude={'scope'})
+                for reg in registered_marketplaces
+            ]
 
         # Build headers
         headers = {'Content-Type': 'application/json'}

@@ -186,9 +186,23 @@ class OrgAppSettingsStore:
                     validated_marketplaces.append(
                         MarketplaceRegistration.model_validate(db_mp)
                     )
-            # Convert to dicts for JSON storage
+
+            # Names are the marketplace identity; reject duplicates before persist
+            # so a bad write can't break loading/resolution later.
+            from openhands.app_server.settings.marketplace_composition import (
+                duplicate_marketplace_names,
+            )
+
+            conflicts = duplicate_marketplace_names(validated_marketplaces)
+            if conflicts:
+                raise ValueError(
+                    'Duplicate marketplace name(s) not allowed: '
+                    + ', '.join(sorted(conflicts))
+                )
+
+            # Convert to JSON-ready dicts for the JSON column.
             org.registered_marketplaces = [
-                mp.model_dump() for mp in validated_marketplaces
+                mp.model_dump(mode='json') for mp in validated_marketplaces
             ]
 
         # Update regular org fields

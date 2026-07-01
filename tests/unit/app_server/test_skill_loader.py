@@ -938,7 +938,11 @@ class TestLoadSkillsWithMarketplaces:
     @pytest.mark.asyncio
     @patch('httpx.AsyncClient')
     async def test_handles_none_registered_marketplaces(self, mock_client_class):
-        """Test that None registered_marketplaces is handled correctly."""
+        """None registered_marketplaces omits the key entirely from the payload.
+
+        The agent-server field is a non-optional list, so sending ``null`` would
+        fail validation and drop all skills; omitting the key uses its default.
+        """
         # Arrange
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -966,8 +970,8 @@ class TestLoadSkillsWithMarketplaces:
         call_args = mock_client.post.call_args
         payload = call_args[1]['json']
 
-        # registered_marketplaces should be None when not provided
-        assert payload.get('registered_marketplaces') is None
+        # The key is omitted entirely (not sent as null) when not provided.
+        assert 'registered_marketplaces' not in payload
 
     @pytest.mark.asyncio
     @patch('httpx.AsyncClient')

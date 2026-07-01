@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shlex
 import shutil
 import subprocess
 import tempfile
@@ -295,13 +294,15 @@ async def _clone_marketplace_repo(
             tempfile.mkdtemp(prefix=f'openhands_marketplace_{marketplace.name}_')
         )
 
-        # Build git clone command
-        clone_cmd = f'git clone {shlex.quote(clone_url)} {shlex.quote(str(clone_dir))}'
+        # Run git without a shell (argv form) and use ``--`` so a source/ref
+        # that begins with '-' can never be parsed as a git option (argument
+        # injection). Reject leading-'-' values outright as defense in depth.
+        if clone_url.startswith('-'):
+            _cleanup_clone_dir(clone_dir)
+            return None, f'Invalid clone URL: {clone_url}'
 
-        # Run git clone
         result = subprocess.run(
-            clone_cmd,
-            shell=True,
+            ['git', 'clone', '--', clone_url, str(clone_dir)],
             capture_output=True,
             text=True,
             timeout=120,
@@ -313,10 +314,11 @@ async def _clone_marketplace_repo(
 
         # Checkout ref if specified
         if marketplace.ref:
-            checkout_cmd = f'git -C {shlex.quote(str(clone_dir))} checkout {shlex.quote(marketplace.ref)}'
+            if marketplace.ref.startswith('-'):
+                _cleanup_clone_dir(clone_dir)
+                return None, f'Invalid ref: {marketplace.ref}'
             checkout_result = subprocess.run(
-                checkout_cmd,
-                shell=True,
+                ['git', '-C', str(clone_dir), 'checkout', marketplace.ref],
                 capture_output=True,
                 text=True,
                 timeout=60,
