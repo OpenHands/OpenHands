@@ -1205,6 +1205,49 @@ class TestLiveStatusAppConversationService:
 
         assert result.observability_metadata == {}
 
+    @pytest.mark.asyncio
+    async def test_build_request_routes_acp_user_to_observability_metadata(self):
+        """End-to-end through the *routing* entrypoint (not the ACP builder
+        directly): an ACP user hits the ``isinstance(..., ACPAgentSettings)``
+        branch in ``_build_start_conversation_request_for_user``, which must
+        forward git_provider/selected_branch/remote_workspace into
+        ``_build_acp_start_conversation_request`` for this to populate.
+        """
+        from openhands.sdk.settings import ACPAgentSettings
+
+        self.mock_user.agent_settings = ACPAgentSettings(
+            acp_server='claude-code',
+            llm=LLM(model='claude-sonnet-4-5', api_key=SecretStr('k')),
+        )
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+        self.mock_user_context.get_secrets = AsyncMock(return_value={})
+        self.mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
+
+        remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        remote_workspace.execute_command = AsyncMock(
+            return_value=SimpleNamespace(exit_code=0, stdout='def456sha\n')
+        )
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=ProviderType.GITHUB,
+            working_dir='/test/dir',
+            remote_workspace=remote_workspace,
+            selected_repository='test/repo',
+            selected_branch='feature-x',
+        )
+
+        assert result.agent.agent_kind == 'acp'
+        assert result.observability_metadata == {
+            'repo': 'test/repo',
+            'branch': 'feature-x',
+            'git_provider': 'github',
+            'commit': 'def456sha',
+        }
+
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
         return_value=[],
