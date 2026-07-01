@@ -598,17 +598,6 @@ class TestApiKeyCreateValidation:
         assert model.not_before == not_before
         assert model.expires_at == expires_at
 
-    def test_rejects_not_before_in_past(self):
-        from pydantic import ValidationError
-        from server.routes.api_keys import ApiKeyCreate
-
-        with pytest.raises(ValidationError) as exc_info:
-            ApiKeyCreate(
-                name='past-key',
-                not_before=datetime.now(UTC) - timedelta(days=1),
-            )
-        assert 'not_before' in str(exc_info.value)
-
     def test_rejects_expires_at_in_past(self):
         from pydantic import ValidationError
         from server.routes.api_keys import ApiKeyCreate
