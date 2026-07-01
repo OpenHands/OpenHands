@@ -117,12 +117,6 @@ class ApiKeyCreate(BaseModel):
     not_before: datetime | None = None
     expires_at: datetime | None = None
 
-    @field_validator('not_before')
-    def validate_not_before(cls, v):
-        if v and v < datetime.now(UTC):
-            raise ValueError('not_before cannot be in the past')
-        return v
-
     @field_validator('expires_at')
     def validate_expiration(cls, v):
         if v and v < datetime.now(UTC):
