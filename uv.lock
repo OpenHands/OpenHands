@@ -3178,7 +3178,7 @@ wheels = [
 
 [[package]]
 name = "openhands-agent-server"
-version = "1.29.0"
+version = "1.30.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiosqlite" },
@@ -3193,9 +3193,9 @@ dependencies = [
     { name = "websockets" },
     { name = "wsproto" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b3/91/64405ab306622d62b797595ea20a49e836c040ab04cfcca5e62e3a73427b/openhands_agent_server-1.29.0.tar.gz", hash = "sha256:f9e16a9d67b6bee9f8eefc4df46aedd0a4a3e03a8bcd150d679b7775076b7bf2", size = 167536, upload-time = "2026-06-18T16:11:00.897Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9e/15/6d872038eb79fda789db1914b77107729952c058b26550fd9080d113e5e7/openhands_agent_server-1.30.0.tar.gz", hash = "sha256:af2290355350fa5c51c1ec5f2faea373124b08af2c12f25ef902567789c8371a", size = 186446, upload-time = "2026-07-01T10:29:56.859Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/58/86/5f7fcb4a62e57c4fa363d5e11fdcfb49c51051117a800413cc61ce41bd25/openhands_agent_server-1.29.0-py3-none-any.whl", hash = "sha256:39c633d6be822c264076ff1851317b192cc796ddf48c9146497f78c554c99127", size = 193097, upload-time = "2026-06-18T16:10:53.41Z" },
+    { url = "https://files.pythonhosted.org/packages/bb/8c/64dba47bc88e0989bdcd9d5879bf04435bee9f797bdb64a50afb390e9e49/openhands_agent_server-1.30.0-py3-none-any.whl", hash = "sha256:759e337b2b029d1891e8eca351e2af5f05b304f5a800a346b216f56e5964ab89", size = 213756, upload-time = "2026-07-01T10:29:51.576Z" },
 ]
 
 [[package]]
@@ -3356,9 +3356,9 @@ requires-dist = [
     { name = "memory-profiler", specifier = ">=0.61" },
     { name = "numpy" },
     { name = "openai", specifier = "==2.33.0" },
-    { name = "openhands-agent-server", specifier = "==1.29.0" },
-    { name = "openhands-sdk", specifier = "==1.29.0" },
-    { name = "openhands-tools", specifier = "==1.29.0" },
+    { name = "openhands-agent-server", specifier = "==1.30.0" },
+    { name = "openhands-sdk", specifier = "==1.30.0" },
+    { name = "openhands-tools", specifier = "==1.30.0" },
     { name = "opentelemetry-api", specifier = ">=1.33.1" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.33.1" },
     { name = "orjson", specifier = ">=3.11.6" },
@@ -3436,7 +3436,7 @@ test = [
 
 [[package]]
 name = "openhands-sdk"
-version = "1.29.0"
+version = "1.30.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "agent-client-protocol" },
@@ -3457,14 +3457,14 @@ dependencies = [
     { name = "tree-sitter-bash" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/13/d7/03c75453aa50e016e10989bb11e6fe5015db659c3d6d541a38aa60ec7920/openhands_sdk-1.29.0.tar.gz", hash = "sha256:2b38dec04858535ff78fdc961ffc44cee338aca6947c0ddb70c6926e5ac883af", size = 588347, upload-time = "2026-06-18T16:10:58.279Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ee/32/a8fc01eefe1a9857ef9432c833841beb216ddd85ee8d6c2968013be267c1/openhands_sdk-1.30.0.tar.gz", hash = "sha256:b48a75adb8d2c48d6a53d0022e3521d63caeb5931b99d5a56906a24a4eec3e72", size = 588645, upload-time = "2026-07-01T10:29:58.062Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/95/7d/faacecdc314f1deb85f7f123147c4522a77200c8b744496269b830dded36/openhands_sdk-1.29.0-py3-none-any.whl", hash = "sha256:ae9f4ec0b1fd86e3fd4c74682a9ee477614e790457ed06c675ad6caf9eef5194", size = 710013, upload-time = "2026-06-18T16:10:59.683Z" },
+    { url = "https://files.pythonhosted.org/packages/32/e9/330fa562f63732c545d7fa0c8b68b8575cd39c952c605150bf41134932f3/openhands_sdk-1.30.0-py3-none-any.whl", hash = "sha256:53423bd4916c578ccb8f8f488dfcc16669343f2a3ac0c3db955793e704f734a2", size = 708572, upload-time = "2026-07-01T10:29:53.107Z" },
 ]
 
 [[package]]
 name = "openhands-tools"
-version = "1.29.0"
+version = "1.30.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "binaryornot" },
@@ -3478,9 +3478,9 @@ dependencies = [
     { name = "tree-sitter" },
     { name = "tree-sitter-bash" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0e/31/95c9575bca5124dec2e603b32ebf15363b6a3e70f7d8becfa1e025c1df5e/openhands_tools-1.29.0.tar.gz", hash = "sha256:3427966f5cb21cc64932dde73173772ccf384ba25f4f599501d540b3f2dd7d01", size = 144895, upload-time = "2026-06-18T16:10:54.664Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/f5/017a969303eeb3c614d924e744b07e75540dc93e6786c8e1486654e0b74d/openhands_tools-1.30.0.tar.gz", hash = "sha256:8762808cb481a7d5805c0f66ac62228dc25ce2baf336ab2d446ca772c761c864", size = 145603, upload-time = "2026-07-01T10:29:59.418Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/05/49/0375502eb628d5df7e4dab08bfedcdbd5caec8c81d6dc2176ead1c7f9423/openhands_tools-1.29.0-py3-none-any.whl", hash = "sha256:bb50b62a1929958e4fd8991fd8dbd6b8269c87da74286a925c066d0ac3dd915f", size = 190143, upload-time = "2026-06-18T16:10:55.842Z" },
+    { url = "https://files.pythonhosted.org/packages/51/3d/c3a754c1f010f3d4b100357b83b306c9efdcaca69742cc45ad1d2b386305/openhands_tools-1.30.0-py3-none-any.whl", hash = "sha256:349af6c15b7d9808edc529d52e0e06efea064187662bef0d2e6c3a0d219f6cfa", size = 190947, upload-time = "2026-07-01T10:29:54.436Z" },
 ]
 
 [[package]]
