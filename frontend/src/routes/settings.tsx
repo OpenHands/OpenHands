@@ -39,6 +39,7 @@ const SAAS_ONLY_PATHS = [
   "/settings/org-defaults",
   "/settings/org-defaults/condenser",
   "/settings/org-defaults/verification",
+  "/settings/admin-dashboard",
 ];
 
 const ORG_WIDE_BADGE_PATHS = new Set<string>([
@@ -116,7 +117,8 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   if (
     pathname === "/settings/billing" ||
     pathname === "/settings/org" ||
-    pathname === "/settings/org-members"
+    pathname === "/settings/org-members" ||
+    pathname === "/settings/admin-dashboard"
   ) {
     const user = await getActiveOrganizationUser();
 
@@ -150,18 +152,32 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
     }
 
     // Org route protection: redirect if user lacks required permissions or personal org
-    if (pathname === "/settings/org" || pathname === "/settings/org-members") {
+    if (pathname === "/settings/org") {
       const role = user?.role ?? "member";
-      const requiredPermission =
-        pathname === "/settings/org"
-          ? "view_billing"
-          : "invite_user_to_organization";
-
       if (
         !user ||
-        !rolePermissions[role].includes(requiredPermission) ||
+        !rolePermissions[role].includes("view_billing") ||
         isPersonalOrg
       ) {
+        return redirect("/settings");
+      }
+    }
+
+    if (pathname === "/settings/org-members") {
+      const role = user?.role ?? "member";
+      if (
+        !user ||
+        !rolePermissions[role].includes("invite_user_to_organization") ||
+        isPersonalOrg
+      ) {
+        return redirect("/settings");
+      }
+    }
+
+    // Admin Dashboard route protection: only admins and owners can access
+    if (pathname === "/settings/admin-dashboard") {
+      const role = user?.role ?? "member";
+      if (!user || (role !== "admin" && role !== "owner") || isPersonalOrg) {
         return redirect("/settings");
       }
     }

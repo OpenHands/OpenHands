@@ -669,6 +669,7 @@ class TestLiveStatusAppConversationService:
 
         assert llm.model == 'sdk-model'
         assert llm.base_url == 'https://sdk-llm.example.com'
+        assert llm.stream is True
 
     @pytest.mark.asyncio
     async def test_configure_llm_preserves_reasoning_effort(self):
@@ -1893,7 +1894,9 @@ class TestLiveStatusAppConversationService:
             task.sandbox_id = self.mock_sandbox.id
             yield task
 
-        async def mock_run_setup_scripts(task, sandbox, workspace, agent_server_url):
+        async def mock_run_setup_scripts(
+            task, sandbox, workspace, agent_server_url, conversation_id
+        ):
             yield task
 
         self.service._wait_for_sandbox_start = mock_wait_for_sandbox
@@ -1997,7 +2000,9 @@ class TestLiveStatusAppConversationService:
             task.sandbox_id = self.mock_sandbox.id
             yield task
 
-        async def mock_run_setup_scripts(task, sandbox, workspace, agent_server_url):
+        async def mock_run_setup_scripts(
+            task, sandbox, workspace, agent_server_url, conversation_id
+        ):
             yield task
 
         self.service._wait_for_sandbox_start = mock_wait_for_sandbox

@@ -4,8 +4,9 @@ Admin endpoint for provisioning new users directly into an organization.
 This is a privileged operation: it bypasses the normal sign-up flow
 (email verification, TOS acceptance, OAuth IDP round-trip) and creates a
 ready-to-use account on behalf of an org admin. Access is gated by the
-``PROVISION_USER`` permission, which is granted only to ``owner`` and
-``admin`` roles (see ``server.auth.authorization``).
+``PROVISION_USER`` permission, which is granted to org-scoped ``owner``
+and ``admin`` roles and explicit instance-level super roles (see
+``server.auth.authorization``).
 
 Flow (POST ``/api/organizations/provision-user``):
 
@@ -21,7 +22,7 @@ Flow (POST ``/api/organizations/provision-user``):
    shape), but with ``email_verified=True``, ``accepted_tos=now()``, and
    ``user_consents_to_analytics=True`` — no UI round-trips required.
 5. Set up a LiteLLM integration for the user in the target org and add
-   them as a member (default role ``member``).
+   them with the requested role (``member`` by default, ``admin``, or ``owner``).
 6. Mint an API key bound to the target org and return it to the caller.
 
 The caller receives the email, password (generated if not supplied) and
@@ -74,6 +75,7 @@ from __future__ import annotations
 import secrets
 import string
 from datetime import datetime, timezone
+from typing import Literal
 from uuid import UUID
 from uuid import UUID as parse_uuid
 
@@ -103,8 +105,10 @@ from openhands.app_server.utils.logger import openhands_logger as logger
 # keeping the routers split makes the intent explicit).
 user_provisioning_router = APIRouter(prefix='/api/organizations', tags=['Orgs'])
 
-# Default role assigned to newly provisioned users in the target org.
-DEFAULT_PROVISIONED_ROLE = 'member'
+# Roles that can be assigned directly during provisioning. Provisioning
+# supports creating regular members, org admins, and org owners.
+ProvisionedRoleName = Literal['member', 'admin', 'owner']
+DEFAULT_PROVISIONED_ROLE: ProvisionedRoleName = 'member'
 
 # Length of generated passwords. 24 characters from a 70-symbol alphabet
 # yields well over 128 bits of entropy, which exceeds typical Keycloak
@@ -183,6 +187,13 @@ class ProvisionUserRequest(BaseModel):
         max_length=255,
         description='Optional name for the generated API key.',
     )
+    role: ProvisionedRoleName = Field(
+        default=DEFAULT_PROVISIONED_ROLE,
+        description=(
+            'Role to assign in the target organization. Provisioning supports '
+            'member, admin, and owner.'
+        ),
+    )
 
 
 class ProvisionUserResponse(BaseModel):
@@ -209,6 +220,7 @@ class ProvisionUserResponse(BaseModel):
     api_key: str
     user_id: str
     org_id: str
+    role: str
 
 
 async def _set_user_provisioned_flags(user_id: str) -> None:
@@ -250,7 +262,9 @@ async def provision_user(
 
     The target org is the API key org if an API key is used, otherwise it is
     taken from the ``X-Org-Id`` header (resolved by ``EFFECTIVE_ORG_ID``).
-    The caller must hold the ``PROVISION_USER`` permission in that org (owner or admin).
+    The caller must hold the ``PROVISION_USER`` permission for that org.
+    Org-scoped owners/admins have it, and super roles may grant it explicitly
+    without org membership.
 
     Returns the email, password (generated if not supplied) and the
     new user's API key bound to the target org.
@@ -258,6 +272,7 @@ async def provision_user(
     email = body.email.lower().strip()
     password = body.password or _generate_password()
     api_key_name = body.api_key_name or 'Initial API Key'
+    provisioned_role = body.role
 
     # Confirm the target org actually exists before we mutate Keycloak.
     # ``require_permission`` has already validated that the caller is a
@@ -397,11 +412,9 @@ async def provision_user(
             else:
                 llm_api_key = llm_api_key_secret
 
-            role = await RoleStore.get_role_by_name(DEFAULT_PROVISIONED_ROLE)
+            role = await RoleStore.get_role_by_name(provisioned_role)
             if role is None:
-                raise RuntimeError(
-                    f'Role {DEFAULT_PROVISIONED_ROLE!r} not found in database'
-                )
+                raise RuntimeError(f'Role {provisioned_role!r} not found in database')
 
             await OrgMemberStore.add_user_to_org(
                 org_id=target_org_id,
@@ -470,6 +483,7 @@ async def provision_user(
             'caller_user_id': caller_user_id,
             'provisioned_user_id': kc_user_id,
             'target_org_id': str(target_org_id),
+            'provisioned_role': provisioned_role,
             # Intentionally omit email/password from the log line; the
             # full audit trail of who provisioned whom is captured by
             # caller_user_id + provisioned_user_id.
@@ -482,6 +496,7 @@ async def provision_user(
         api_key=api_key,
         user_id=kc_user_id,
         org_id=str(target_org_id),
+        role=provisioned_role,
     )
 
 

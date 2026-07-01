@@ -730,6 +730,23 @@
     "uk": "Невідома подія",
     "ca": "Esdeveniment desconegut"
   },
+  "EVENT$THINKING": {
+    "en": "Thinking",
+    "ja": "思考中",
+    "zh-CN": "思考中",
+    "zh-TW": "思考中",
+    "ko-KR": "생각 중",
+    "no": "Tenker",
+    "it": "Ragionamento",
+    "pt": "Raciocínio",
+    "es": "Razonamiento",
+    "ar": "التفكير",
+    "fr": "Réflexion",
+    "tr": "Düşünme",
+    "de": "Nachdenken",
+    "uk": "Міркування",
+    "ca": "Raonament"
+  },
   "OBSERVATION$COMMAND_NO_OUTPUT": {
     "en": "[Command finished execution with no output]",
     "ja": "[コマンドは出力なしで実行を終了しました]",
@@ -4929,6 +4946,23 @@
     "uk": "Організація",
     "ca": "Organització"
   },
+  "SETTINGS$NAV_ADMIN_DASHBOARD": {
+    "en": "Admin Dashboard",
+    "ja": "管理ダッシュボード",
+    "zh-CN": "管理仪表板",
+    "zh-TW": "管理儀表板",
+    "ko-KR": "관리자 대시보드",
+    "no": "Admin Dashboard",
+    "it": "Dashboard Admin",
+    "pt": "Painel Admin",
+    "es": "Panel de Admin",
+    "ar": "لوحة الإدارة",
+    "fr": "Tableau de Bord Admin",
+    "tr": "Yönetici Panosu",
+    "de": "Admin-Dashboard",
+    "uk": "Панель адміністратора",
+    "ca": "Tauler d'Admin"
+  },
   "SETTINGS$NAV_ORG_MEMBERS": {
     "en": "Org Members",
     "ja": "組織メンバー",
@@ -6374,22 +6408,22 @@
     "uk": "Редактор коду",
     "ca": "Editor de codi"
   },
-  "WORKSPACE$TITLE": {
-    "en": "Workspace",
-    "zh-CN": "工作区",
-    "de": "Arbeitsbereich",
-    "ko-KR": "작업 공간",
-    "no": "Arbeidsområde",
-    "zh-TW": "工作區",
-    "it": "Area di lavoro",
-    "pt": "Espaço de trabalho",
-    "es": "Espacio de trabajo",
-    "ar": "مساحة العمل",
-    "fr": "Espace de travail",
-    "tr": "Çalışma Alanı",
-    "ja": "ワークスペース",
-    "uk": "Робочий простір",
-    "ca": "Espai de treball"
+  "ORG$LABEL": {
+    "en": "Organization",
+    "zh-CN": "组织",
+    "de": "Organisation",
+    "ko-KR": "조직",
+    "no": "Organisasjon",
+    "zh-TW": "組織",
+    "it": "Organizzazione",
+    "pt": "Organização",
+    "es": "Organización",
+    "ar": "المنظمة",
+    "fr": "Organisation",
+    "tr": "Organizasyon",
+    "ja": "組織",
+    "uk": "Організація",
+    "ca": "Organització"
   },
   "TERMINAL$WAITING_FOR_CLIENT": {
     "en": "Waiting for client to become ready...",
@@ -24903,6 +24937,23 @@
     "tr": "Cihazınızı yetkilendirmek için lütfen giriş yapın.",
     "uk": "Будь ласка, увійдіть, щоб авторизувати свій пристрій.",
     "ca": "Inicieu sessió per autoritzar el vostre dispositiu."
+  },
+  "DEVICE$ORG_SWITCH_FAILED": {
+    "en": "Could not switch organization. Please try selecting a different organization.",
+    "ja": "組織を切り替えられませんでした。別の組織を選択してください。",
+    "zh-CN": "无法切换组织。请尝试选择其他组织。",
+    "zh-TW": "無法切換組織。請嘗試選擇其他組織。",
+    "ko-KR": "조직을 전환할 수 없습니다. 다른 조직을 선택해 주세요.",
+    "no": "Kunne ikke bytte organisasjon. Prøv å velge en annen organisasjon.",
+    "ar": "تعذر تبديل المنظمة. يرجى تجربة تحديد منظمة مختلفة.",
+    "de": "Organisation konnte nicht gewechselt werden. Bitte wählen Sie eine andere Organisation.",
+    "fr": "Impossible de changer d'organisation. Veuillez essayer de sélectionner une autre organisation.",
+    "it": "Impossibile cambiare organizzazione. Prova a selezionare un'organizzazione diversa.",
+    "pt": "Não foi possível mudar a organização. Tente selecionar uma organização diferente.",
+    "es": "No se pudo cambiar la organización. Intenta seleccionar otra organización.",
+    "tr": "Organizasyon değiştirilemedi. Lütfen farklı bir organizasyon seçmeyi deneyin.",
+    "uk": "Не вдалося переключити організацію. Будь ласка, виберіть іншу організацію.",
+    "ca": "No s'ha pogut canviar l'organització. Proveu de seleccionar una altra organització."
   },
   "CTA$ENTERPRISE_TITLE": {
     "en": "Get OpenHands For Enterprise",

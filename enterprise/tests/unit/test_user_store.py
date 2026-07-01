@@ -10,6 +10,8 @@ import pytest
 from pydantic import SecretStr
 from sqlalchemy import select
 from storage.org import Org
+from storage.org_member import OrgMember
+from storage.role import Role
 from storage.user import User
 from storage.user_store import UserStore
 
@@ -133,6 +135,136 @@ async def test_create_user_with_llm_profiles_does_not_crash_and_preserves_secret
     assert user.llm_profiles['profiles']['work']['api_key'] == 'work-secret-key'
 
 
+# --- Tests for first-user → superadmin designation ---
+
+
+async def _seed_admin_role(async_session_maker) -> int:
+    """Seed roles required by ``UserStore.create_user``.
+
+    ``owner`` is required for the user's personal-org membership, while
+    ``admin`` is the first user's explicit superadmin role. Returns the
+    seeded admin role id so tests can assert the new user's ``role_id``
+    matches it.
+    """
+    from storage.role import Role
+
+    async with async_session_maker() as session:
+        owner_role = Role(name='owner', rank=0)
+        admin_role = Role(name='admin', rank=1)
+        session.add_all([owner_role, admin_role])
+        await session.commit()
+        await session.refresh(admin_role)
+        return admin_role.id
+
+
+def _mock_create_default_settings_returning_default():
+    """Patch ``create_default_settings`` to return a minimal valid Settings.
+
+    ``UserStore.create_user`` only needs a non-None Settings to proceed
+    past the LiteLLM provisioning step; the contents are irrelevant for
+    the superadmin-designation behavior being tested here.
+    """
+    return patch(
+        'storage.user_store.UserStore.create_default_settings',
+        new_callable=AsyncMock,
+        return_value=Settings(language='en'),
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_user_first_user_is_designated_superadmin(async_session_maker):
+    """The very first user created must receive the ``admin`` super role.
+
+    The super role is attached via ``user.role_id`` (not the
+    ``org_member.role_id`` org-scoped role) and grants only the explicit
+    instance-level permissions defined in ``server.auth.authorization``.
+    """
+    admin_role_id = await _seed_admin_role(async_session_maker)
+
+    user_id = str(uuid.uuid4())
+    user_info = {'email': 'first@example.com', 'preferred_username': 'first'}
+
+    with (
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.role_store.a_session_maker', async_session_maker),
+        _mock_create_default_settings_returning_default(),
+    ):
+        user = await UserStore.create_user(user_id, user_info)
+
+    assert user is not None
+    assert user.role_id == admin_role_id
+
+
+@pytest.mark.asyncio
+async def test_create_user_subsequent_users_are_not_superadmins(async_session_maker):
+    """Only the first user gets the super role; later users do not.
+
+    Without this guard the super-role hand-out would be unbounded and
+    every newly onboarded user would silently gain workspace-wide
+    privileges.
+    """
+    await _seed_admin_role(async_session_maker)
+
+    first_user_id = str(uuid.uuid4())
+    second_user_id = str(uuid.uuid4())
+
+    with (
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.role_store.a_session_maker', async_session_maker),
+        _mock_create_default_settings_returning_default(),
+    ):
+        first_user = await UserStore.create_user(
+            first_user_id, {'email': 'a@example.com'}
+        )
+        second_user = await UserStore.create_user(
+            second_user_id, {'email': 'b@example.com'}
+        )
+
+    assert first_user is not None
+    assert second_user is not None
+    assert first_user.role_id is not None
+    assert second_user.role_id is None
+
+
+@pytest.mark.asyncio
+async def test_create_user_explicit_role_id_is_respected_for_first_user(
+    async_session_maker,
+):
+    """Caller-supplied ``role_id`` wins over the first-user auto-designation.
+
+    This keeps the auto-promotion strictly opt-in for the default
+    onboarding path (``role_id is None``) and preserves the existing
+    contract for callers that pass an explicit super role.
+    """
+    admin_role_id = await _seed_admin_role(async_session_maker)
+
+    # Seed a second distinct role so we can pass a non-admin role_id and
+    # prove the override is honored verbatim.
+    from storage.role import Role
+
+    async with async_session_maker() as session:
+        other_role = Role(name='member', rank=10)
+        session.add(other_role)
+        await session.commit()
+        await session.refresh(other_role)
+        other_role_id = other_role.id
+
+    user_id = str(uuid.uuid4())
+
+    with (
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.role_store.a_session_maker', async_session_maker),
+        _mock_create_default_settings_returning_default(),
+    ):
+        user = await UserStore.create_user(
+            user_id, {'email': 'first@example.com'}, role_id=other_role_id
+        )
+
+    assert user is not None
+    assert user.role_id == other_role_id
+    assert user.role_id != admin_role_id
+
+
 # --- Tests for create_default_settings ---
 
 
@@ -192,7 +324,9 @@ async def test_create_default_settings_v1_enabled_true_when_default_is_true(
     # Track the settings passed to LiteLlmManager.create_entries
     captured_settings = None
 
-    async def capture_create_entries(_org_id, _user_id, settings, _create_user):
+    async def capture_create_entries(
+        _org_id, _user_id, settings, _create_user, *, add_user_to_team=True
+    ):
         nonlocal captured_settings
         captured_settings = settings
         return settings
@@ -225,7 +359,9 @@ async def test_create_default_settings_v1_enabled_false_when_default_is_false(
     # Track the settings passed to LiteLlmManager.create_entries
     captured_settings = None
 
-    async def capture_create_entries(_org_id, _user_id, settings, _create_user):
+    async def capture_create_entries(
+        _org_id, _user_id, settings, _create_user, *, add_user_to_team=True
+    ):
         nonlocal captured_settings
         captured_settings = settings
         return settings
@@ -241,6 +377,79 @@ async def test_create_default_settings_v1_enabled_false_when_default_is_false(
 
     assert captured_settings is not None
     assert captured_settings.v1_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_create_user_reuses_existing_org(async_session_maker):
+    user_id = str(uuid.uuid4())
+    user_uuid = uuid.UUID(user_id)
+    user_info = {
+        'email': 'user@example.com',
+        'preferred_username': 'test-user',
+        'name': 'Test User',
+    }
+
+    mock_settings = Settings(language='en')
+    mock_settings.update(
+        {
+            'agent_settings_diff': {
+                'agent': 'CodeActAgent',
+                'llm': {
+                    'model': 'anthropic/claude-sonnet-4-5-20250929',
+                    'api_key': 'test_api_key',
+                    'base_url': 'http://test.url',
+                },
+            },
+        }
+    )
+
+    async with async_session_maker() as session:
+        session.add(
+            Org(
+                id=user_uuid,
+                name=f'user_{user_id}_org',
+                contact_name='Existing User',
+                contact_email='existing@example.com',
+            )
+        )
+        session.add(Role(id=1, name='owner', rank=10))
+        await session.commit()
+
+    with (
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.role_store.a_session_maker', async_session_maker),
+        patch(
+            'storage.user_store.UserStore.create_default_settings',
+            new_callable=AsyncMock,
+            return_value=mock_settings,
+        ),
+    ):
+        user = await UserStore.create_user(user_id, user_info)
+
+    assert user is not None
+    assert user.id == user_uuid
+    assert user.current_org_id == user_uuid
+
+    async with async_session_maker() as session:
+        db_user = (
+            (await session.execute(select(User).filter(User.id == user_uuid)))
+            .scalars()
+            .first()
+        )
+        org_member = (
+            (
+                await session.execute(
+                    select(OrgMember).filter(
+                        OrgMember.org_id == user_uuid, OrgMember.user_id == user_uuid
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+
+    assert db_user is not None
+    assert org_member is not None
 
 
 # --- Tests for get_user_by_id ---
