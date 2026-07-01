@@ -24,17 +24,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    with op.batch_alter_table('api_keys') as batch_op:
-        batch_op.add_column(sa.Column('not_before', sa.DateTime(), nullable=True))
-        batch_op.create_index(
-            'ix_api_keys_not_before',
-            'api_keys',
-            ['not_before'],
-            unique=False,
-        )
+    op.add_column('api_keys', sa.Column('not_before', sa.DateTime(), nullable=True))
+    op.create_index(
+        op.f('ix_api_keys_not_before'),
+        'api_keys',
+        ['not_before'],
+        unique=False,
+    )
 
 
 def downgrade() -> None:
-    with op.batch_alter_table('api_keys') as batch_op:
-        batch_op.drop_index('ix_api_keys_not_before')
-        batch_op.drop_column('not_before')
+    op.drop_index(op.f('ix_api_keys_not_before'), table_name='api_keys')
+    op.drop_column('api_keys', 'not_before')
