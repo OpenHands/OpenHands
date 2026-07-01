@@ -3755,7 +3755,18 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
         return user
 
-    def _call_build(self, service, user, tmp_path, *, secrets=None):
+    def _call_build(
+        self,
+        service,
+        user,
+        tmp_path,
+        *,
+        secrets=None,
+        git_provider=None,
+        selected_repository=None,
+        selected_branch=None,
+        remote_workspace=None,
+    ):
         """Wire user_context and call _build_acp_start_conversation_request."""
         service.user_context.get_user_info = AsyncMock(return_value=user)
         service.user_context.get_user_email = AsyncMock(return_value=None)
@@ -3767,6 +3778,10 @@ class TestBuildAcpStartConversationRequestSecrets:
             conversation_id=uuid4(),
             initial_message=None,
             working_dir=str(tmp_path),
+            git_provider=git_provider,
+            selected_repository=selected_repository,
+            selected_branch=selected_branch,
+            remote_workspace=remote_workspace,
             plugins=None,
         )
 
@@ -3946,3 +3961,60 @@ class TestBuildAcpStartConversationRequestSecrets:
         ) or {}
         assert agent_ctx_secrets.get('GH_TOKEN') == 'explicit-token'
         assert request.secrets.get('GH_TOKEN') is panel_secret
+
+    @pytest.mark.asyncio
+    async def test_observability_metadata_populated(self, service, tmp_path):
+        """Repo / branch / provider land on the request's observability_metadata
+        for ACP conversations too, matching the OpenHands-agent path."""
+        user = self._make_acp_user()
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            git_provider=ProviderType.GITHUB,
+            selected_repository='test/repo',
+            selected_branch='feature-x',
+        )
+
+        assert request.observability_metadata == {
+            'repo': 'test/repo',
+            'branch': 'feature-x',
+            'git_provider': 'github',
+        }
+
+    @pytest.mark.asyncio
+    async def test_observability_metadata_includes_commit(self, service, tmp_path):
+        """The post-clone HEAD sha is resolved from the workspace and added,
+        mirroring the OpenHands-agent path's commit resolution."""
+        user = self._make_acp_user()
+        remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        remote_workspace.execute_command = AsyncMock(
+            return_value=SimpleNamespace(exit_code=0, stdout='abc123sha\n')
+        )
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            git_provider=ProviderType.GITHUB,
+            selected_repository='test/repo',
+            selected_branch='feature-x',
+            remote_workspace=remote_workspace,
+        )
+
+        assert request.observability_metadata == {
+            'repo': 'test/repo',
+            'branch': 'feature-x',
+            'git_provider': 'github',
+            'commit': 'abc123sha',
+        }
+
+    @pytest.mark.asyncio
+    async def test_no_repo_omits_observability_metadata(self, service, tmp_path):
+        """A repo-less ACP conversation adds no repo metadata to the trace."""
+        user = self._make_acp_user()
+
+        request = await self._call_build(service, user, tmp_path)
+
+        assert request.observability_metadata == {}

@@ -1538,6 +1538,35 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             return ''
         return result.stdout.strip() if not result.exit_code else ''
 
+    async def _build_observability_metadata(
+        self,
+        remote_workspace: AsyncRemoteWorkspace | None,
+        project_dir: str,
+        selected_repository: str | None,
+        selected_branch: str | None,
+        git_provider: ProviderType | None,
+    ) -> dict[str, str]:
+        """Repo identity for the Laminar trace so trajectories are searchable
+        by repo / branch / commit (the trace UI has no DB to join against).
+
+        Shared by the OpenHands and ACP request builders. The commit is the
+        post-clone HEAD, resolved best-effort from the (already-cloned)
+        workspace; omitted entirely for a repo-less conversation.
+        """
+        commit = ''
+        if selected_repository and remote_workspace is not None:
+            commit = await self._resolve_head_commit(remote_workspace, project_dir)
+        return {
+            key: value
+            for key, value in (
+                ('repo', selected_repository),
+                ('branch', selected_branch),
+                ('git_provider', git_provider.value if git_provider else None),
+                ('commit', commit),
+            )
+            if value
+        }
+
     async def _build_start_conversation_request_for_user(
         self,
         sandbox: SandboxInfo,
@@ -1594,7 +1623,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 system_message_suffix=system_message_suffix,
                 trigger=trigger,
                 working_dir=working_dir,
+                git_provider=git_provider,
                 selected_repository=selected_repository,
+                selected_branch=selected_branch,
+                remote_workspace=remote_workspace,
                 plugins=plugins,
                 api_secrets=api_secrets,
             )
@@ -1785,25 +1817,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # injects it directly into the JSON body as a forward-compatible
         # fallback.
         laminar_user_id = await self.user_context.get_user_email() or user.id
-        # Repo identity on the Laminar trace so trajectories are searchable by
-        # repo / branch / commit (the trace UI has no DB to join against).
-        # repo/branch/provider are request inputs; commit is the post-clone HEAD,
-        # resolved best-effort from the (already-cloned) workspace. Omitted for a
-        # repo-less conversation; forwarded into the request's
-        # observability_metadata, which the agent-server attaches to the span.
-        commit = ''
-        if selected_repository and remote_workspace is not None:
-            commit = await self._resolve_head_commit(remote_workspace, project_dir)
-        observability_metadata = {
-            key: value
-            for key, value in (
-                ('repo', selected_repository),
-                ('branch', selected_branch),
-                ('git_provider', git_provider.value if git_provider else None),
-                ('commit', commit),
-            )
-            if value
-        }
+        observability_metadata = await self._build_observability_metadata(
+            remote_workspace,
+            project_dir,
+            selected_repository,
+            selected_branch,
+            git_provider,
+        )
         create_kwargs: dict[str, Any] = {'agent': agent, 'user_id': laminar_user_id}
         if observability_metadata:
             create_kwargs['observability_metadata'] = observability_metadata
@@ -1861,7 +1881,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         working_dir: str,
         system_message_suffix: str | None = None,
         trigger: ConversationTrigger | None = None,
+        git_provider: ProviderType | None = None,
         selected_repository: str | None = None,
+        selected_branch: str | None = None,
+        remote_workspace: AsyncRemoteWorkspace | None = None,
         plugins: list[PluginSpec] | None = None,
         api_secrets: dict[str, SecretStr] | None = None,
     ) -> StartConversationRequest:
@@ -1884,7 +1907,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             working_dir: Working directory path
             system_message_suffix: Optional suffix for system message.
             trigger: Optional conversation trigger.
+            git_provider: Optional git provider type
             selected_repository: Optional repository name
+            selected_branch: Optional branch name
+            remote_workspace: Optional remote workspace instance, used to
+                resolve the HEAD commit for the Laminar trace metadata.
             plugins: Optional list of plugins to load
             api_secrets: Optional secrets passed directly via the API.
         """
@@ -2000,12 +2027,21 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # prefer email over the internal id so Laminar traces are immediately
         # attributable, falling back to ``user.id`` when no email is available.
         laminar_user_id = await self.user_context.get_user_email() or user.id
-        return conv_settings.create_request(
-            StartConversationRequest,
-            agent=acp_agent,
-            user_id=laminar_user_id,
-            secrets=secrets,
+        observability_metadata = await self._build_observability_metadata(
+            remote_workspace,
+            project_dir,
+            selected_repository,
+            selected_branch,
+            git_provider,
         )
+        create_kwargs: dict[str, Any] = {
+            'agent': acp_agent,
+            'user_id': laminar_user_id,
+            'secrets': secrets,
+        }
+        if observability_metadata:
+            create_kwargs['observability_metadata'] = observability_metadata
+        return conv_settings.create_request(StartConversationRequest, **create_kwargs)
 
     async def _process_pending_messages(
         self,
