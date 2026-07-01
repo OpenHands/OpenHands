@@ -55,6 +55,7 @@ class ApiKeyStore:
         user_id: str,
         name: str | None = None,
         expires_at: datetime | None = None,
+        not_before: datetime | None = None,
         org_id: UUID | None = None,
     ) -> str:
         """Create a new API key for a user.
@@ -64,6 +65,9 @@ class ApiKeyStore:
             name: Optional name for the key
             expires_at: Expiration datetime in UTC. Timezone info is stripped before
                 writing to the TIMESTAMP WITHOUT TIME ZONE column.
+            not_before: Optional earliest activation datetime in UTC. The key is
+                rejected at validation time when ``now < not_before``. Timezone
+                info is stripped before writing, mirroring ``expires_at``.
             org_id: Optional explicit org binding. When omitted, falls back
                 to the user's persisted ``current_org_id``. Callers in
                 request context should pass the effective org id (see
@@ -82,6 +86,8 @@ class ApiKeyStore:
         # Column is TIMESTAMP WITHOUT TIME ZONE; strip tzinfo before writing.
         if expires_at is not None and expires_at.tzinfo is not None:
             expires_at = expires_at.replace(tzinfo=None)
+        if not_before is not None and not_before.tzinfo is not None:
+            not_before = not_before.replace(tzinfo=None)
 
         async with a_session_maker() as session:
             key_record = ApiKey(
@@ -89,6 +95,7 @@ class ApiKeyStore:
                 user_id=user_id,
                 org_id=org_id,
                 name=name,
+                not_before=not_before,
                 expires_at=expires_at,
             )
             session.add(key_record)
@@ -206,6 +213,11 @@ class ApiKeyStore:
     async def validate_api_key(self, api_key: str) -> ApiKeyValidationResult | None:
         """Validate an API key and return the associated user_id and org_id if valid.
 
+        A key is valid only when ``not_before <= now < expires_at``. Both bounds
+        are optional and independent: a ``NULL`` bound means the key is
+        unconstrained in that direction. Out-of-window keys are rejected and
+        ``last_used_at`` is not updated.
+
         Returns:
             ApiKeyValidationResult if the key is valid, None otherwise.
             The org_id may be None for legacy API keys that weren't bound to an organization.
@@ -219,7 +231,17 @@ class ApiKeyStore:
             if not key_record:
                 return None
 
-            # expires_at is stored as naive UTC; re-attach tzinfo for comparison.
+            # not_before / expires_at are stored as naive UTC; re-attach tzinfo
+            # for comparison. The two checks are independent and combined with
+            # AND semantics.
+            if key_record.not_before:
+                not_before = key_record.not_before
+                if not_before.tzinfo is None:
+                    not_before = not_before.replace(tzinfo=UTC)
+                if now < not_before:
+                    logger.info(f'API key not yet active: {key_record.id}')
+                    return None
+
             if key_record.expires_at:
                 expires_at = key_record.expires_at
                 if expires_at.tzinfo is None:
