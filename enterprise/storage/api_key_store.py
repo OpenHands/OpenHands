@@ -170,7 +170,7 @@ class ApiKeyStore:
                     now = datetime.now(UTC)
                     expires_at = _as_utc_aware(existing_key.expires_at)
 
-                    if expires_at < now:
+                    if expires_at and expires_at < now:
                         # Key is expired, delete it and create new one
                         logger.info(
                             'System API key expired, re-issuing',
