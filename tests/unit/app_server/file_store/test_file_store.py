@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import tempfile
 import threading
@@ -265,6 +266,33 @@ class TestLocalFileStore(TestCase, _StorageTest):
         except Exception as e:
             logging.warning(
                 f'Failed to remove temporary directory {self.temp_dir}: {e}'
+            )
+
+    def test_path_traversal_rejected(self):
+        traversal_paths = [
+            '../etc/passwd',
+            '../../etc/passwd',
+            'foo/../../etc/passwd',
+            '../',
+            '..',
+        ]
+        for path in traversal_paths:
+            with self.assertRaises(ValueError, msg=f'Expected ValueError for path: {path}'):
+                self.store.get_full_path(path)
+
+    def test_safe_paths_allowed(self):
+        safe_paths = [
+            'foo/bar/../baz',
+            './foo',
+            'simple.txt',
+            '',
+        ]
+        root_normalized = os.path.normpath(self.temp_dir)
+        for path in safe_paths:
+            result = self.store.get_full_path(path)
+            self.assertTrue(
+                result == root_normalized or result.startswith(root_normalized + os.sep),
+                f'Path {path!r} resolved to {result!r} which is outside root {root_normalized!r}',
             )
 
     def test_concurrent_writes_no_corruption(self):

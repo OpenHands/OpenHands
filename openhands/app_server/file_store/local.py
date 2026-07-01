@@ -21,7 +21,11 @@ class LocalFileStore(FileStore):
     def get_full_path(self, path: str) -> str:
         if path.startswith('/'):
             path = path[1:]
-        return os.path.join(self.root, path)
+        full = os.path.normpath(os.path.join(self.root, path))
+        root_normalized = os.path.normpath(self.root)
+        if not (full == root_normalized or full.startswith(root_normalized + os.sep)):
+            raise ValueError(f'Path traversal detected: {path}')
+        return full
 
     def write(self, path: str, contents: str | bytes) -> None:
         full_path = self.get_full_path(path)
