@@ -31,9 +31,9 @@ def _as_naive(value: datetime | None) -> datetime | None:
 
     TODO: switch the api_keys columns to TIMESTAMP WITH TIME ZONE and drop this.
     """
-    if value is None:
-        return None
-    return value.replace(tzinfo=None) if value.tzinfo is not None else value
+    if value is None or value.tzinfo is None:
+        return value
+    return value.astimezone(UTC)
 
 
 def _as_utc_aware(value: datetime | None) -> datetime | None:
@@ -356,11 +356,20 @@ class ApiKeyStore:
             keys = result.scalars().all()
 
             # Filter out system keys and MCP_API_KEY
-            return [
+            keys = [
                 key
                 for key in keys
                 if key.name != 'MCP_API_KEY' and not self.is_system_key_name(key.name)
             ]
+
+            # Set timezones
+            for key in keys:
+                key.created_at = _as_utc_aware(key.created_at)
+                key.last_used_at = _as_utc_aware(key.last_used_at)
+                key.not_before = _as_utc_aware(key.not_before)
+                key.expires_at = _as_utc_aware(key.expires_at)
+
+            return keys
 
     async def retrieve_mcp_api_key(
         self, user_id: str, org_id: UUID | None = None
