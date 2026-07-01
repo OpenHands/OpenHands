@@ -391,6 +391,10 @@ export function Budgets() {
   }, [budgetData]);
 
   const monthlyLimitValue = monthlyLimit ? Number(monthlyLimit) : null;
+  const isMonthlyLimitValid =
+    !orgBudgetEnabled ||
+    (typeof monthlyLimitValue === "number" && monthlyLimitValue > 0);
+
   const currentSpend = budgetData?.current_spend ?? 0;
   const percentage = budgetData?.current_spend_percentage ?? 0;
   const cycleLabel = budgetData?.cycle_start_at
@@ -427,7 +431,7 @@ export function Budgets() {
   };
 
   const handleSaveOrgBudget = () => {
-    if (!organizationId) return;
+    if (!organizationId || !isMonthlyLimitValid) return;
     updateBudgets.mutate({
       enabled: orgBudgetEnabled,
       monthly_limit: monthlyLimitValue,
@@ -910,7 +914,7 @@ export function Budgets() {
             <button
               type="button"
               onClick={handleSaveOrgBudget}
-              disabled={updateBudgets.isPending}
+              disabled={updateBudgets.isPending || !isMonthlyLimitValid}
               className="px-4 py-2 text-sm text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-60"
             >
               Save changes

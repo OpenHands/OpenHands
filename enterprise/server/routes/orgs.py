@@ -1990,6 +1990,17 @@ async def get_org_conversation_usage_stats(
 )
 async def get_org_conversation_user_usage_stats(
     org_id: UUID,
+    limit: int = Query(
+        default=500,
+        ge=1,
+        le=2000,
+        description='Maximum number of user rows to return',
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        description='Offset for paginated user rows',
+    ),
     user_id: str = Depends(require_permission(Permission.VIEW_ORG_CONVERSATIONS)),
     service: OrgConversationService = org_conversation_service_dependency,
 ) -> OrgUserUsageStats:
@@ -1999,21 +2010,38 @@ async def get_org_conversation_user_usage_stats(
 
     Args:
         org_id: The organization ID
+        limit: Maximum number of user rows to return
+        offset: Offset for paginated user rows
 
     Returns:
         OrgUserUsageStats: Usage statistics aggregated by user
     """
     logger.info(
         'Getting organization user usage stats',
-        extra={'user_id': user_id, 'org_id': str(org_id)},
+        extra={
+            'user_id': user_id,
+            'org_id': str(org_id),
+            'limit': limit,
+            'offset': offset,
+        },
     )
 
     try:
-        stats = await service.get_user_usage_stats(org_id=org_id)
+        stats = await service.get_user_usage_stats(
+            org_id=org_id,
+            limit=limit,
+            offset=offset,
+        )
 
         logger.info(
             'Successfully retrieved organization user usage stats',
-            extra={'user_id': user_id, 'org_id': str(org_id)},
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'limit': limit,
+                'offset': offset,
+                'has_more': stats.has_more,
+            },
         )
 
         return stats
