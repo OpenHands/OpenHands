@@ -277,7 +277,9 @@ class TestLocalFileStore(TestCase, _StorageTest):
             '..',
         ]
         for path in traversal_paths:
-            with self.assertRaises(ValueError, msg=f'Expected ValueError for path: {path}'):
+            with self.assertRaises(
+                ValueError, msg=f'Expected ValueError for path: {path}'
+            ):
                 self.store.get_full_path(path)
 
     def test_safe_paths_allowed(self):
@@ -291,7 +293,8 @@ class TestLocalFileStore(TestCase, _StorageTest):
         for path in safe_paths:
             result = self.store.get_full_path(path)
             self.assertTrue(
-                result == root_normalized or result.startswith(root_normalized + os.sep),
+                result == root_normalized
+                or result.startswith(root_normalized + os.sep),
                 f'Path {path!r} resolved to {result!r} which is outside root {root_normalized!r}',
             )
 
