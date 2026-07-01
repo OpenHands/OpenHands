@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import AsyncGenerator
 from uuid import UUID
 
-from fastapi import Request
+from fastapi import HTTPException, Request, status
 from server.auth.authorization import RoleName
 from server.services.email_service import EmailService
 from sqlalchemy import func, select
@@ -141,13 +141,19 @@ class OrgBudgetService:
         if 'slack_team_id' in fields_set:
             settings.slack_team_id = update_data.slack_team_id
 
+        if settings.enabled and (settings.monthly_limit is None or settings.monthly_limit <= 0):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='monthly_limit is required when budgets are enabled',
+            )
+
         if reset_day_changed or (not previous_enabled and settings.enabled):
             settings.cycle_start_at = _current_cycle_start(
                 datetime.now(UTC), settings.reset_day
             )
             settings.cycle_start_spend = await self._fetch_team_spend(org_id)
 
-        if 'thresholds' in fields_set:
+        if 'thresholds' in fields_set and update_data.thresholds is not None:
             await self._replace_thresholds(org_id, thresholds, update_data.thresholds)
             thresholds = await self._get_thresholds(org_id)
 

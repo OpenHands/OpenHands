@@ -14,6 +14,7 @@ from uuid import UUID
 
 from fastapi import Request
 from server.routes.org_models import (
+    AgentUsageData,
     DailyUsageData,
     ModelUsageData,
     OrgConversationPage,
@@ -53,6 +54,35 @@ TIME_WINDOW_OPTIONS = {
     '30d': 30,
     '90d': 90,
 }
+
+
+AGENT_LABELS = {
+    'openhands': 'OpenHands',
+    'acp': 'ACP',
+}
+
+
+def _format_acp_agent_label(llm_model: str | None) -> str:
+    if not llm_model:
+        return AGENT_LABELS['acp']
+    llm_model_lower = llm_model.lower()
+    if 'claude' in llm_model_lower:
+        return 'Claude'
+    if 'codex' in llm_model_lower:
+        return 'Codex'
+    if 'gpt' in llm_model_lower or 'openai' in llm_model_lower:
+        return 'OpenAI'
+    if 'gemini' in llm_model_lower:
+        return 'Gemini'
+    return llm_model
+
+
+def _format_agent_label(agent_kind: str | None, llm_model: str | None) -> str:
+    if agent_kind == 'acp':
+        return _format_acp_agent_label(llm_model)
+    if not agent_kind:
+        return AGENT_LABELS['openhands']
+    return AGENT_LABELS.get(agent_kind, agent_kind)
 
 MAX_SANDBOX_STATUS_FILTER_ROWS = 5000
 
@@ -763,6 +793,59 @@ class OrgConversationService:
                 )
             )
 
+        agent_query = (
+            select(
+                StoredConversationMetadata.agent_kind,
+                StoredConversationMetadata.llm_model,
+                func.count(StoredConversationMetadata.conversation_id).label(
+                    'conv_count'
+                ),
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.accumulated_cost), 0
+                ).label('total_cost'),
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationMetadata.created_at >= cutoff)
+            .group_by(
+                StoredConversationMetadata.agent_kind,
+                StoredConversationMetadata.llm_model,
+            )
+            .order_by(
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.accumulated_cost), 0
+                ).desc()
+            )
+        )
+        result = await self.db_session.execute(agent_query)
+        agent_rows = result.all()
+        agent_counts: dict[str, int] = {}
+        agent_costs: dict[str, float] = {}
+        for row in agent_rows:
+            label = _format_agent_label(row.agent_kind, row.llm_model)
+            agent_counts[label] = agent_counts.get(label, 0) + int(
+                row.conv_count or 0
+            )
+            agent_costs[label] = agent_costs.get(label, 0.0) + float(
+                row.total_cost or 0.0
+            )
+
+        agent_usage = [
+            AgentUsageData(
+                agent_name=label,
+                conversation_count=agent_counts[label],
+                total_cost=agent_costs[label],
+            )
+            for label in agent_counts
+        ]
+        agent_usage.sort(key=lambda item: item.total_cost, reverse=True)
+
+
         return OrgUsageStats(
             active_users=int(active_users),
             agent_runs=int(agent_runs),
@@ -772,9 +855,15 @@ class OrgConversationService:
             daily_usage=daily_usage,
             team_usage=team_usage,
             model_usage=model_usage,
+            agent_usage=agent_usage,
         )
 
-    async def get_user_usage_stats(self, org_id: UUID) -> OrgUserUsageStats:
+    async def get_user_usage_stats(
+        self,
+        org_id: UUID,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> OrgUserUsageStats:
         now = datetime.now(UTC)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         year_start = now.replace(
@@ -852,8 +941,15 @@ class OrgConversationService:
             )
         )
 
-        result = await self.db_session.execute(user_query)
+        fetch_limit = limit + 1
+        result = await self.db_session.execute(
+            user_query.limit(fetch_limit).offset(offset)
+        )
         user_rows = result.all()
+        has_more = False
+        if len(user_rows) > limit:
+            has_more = True
+            user_rows = user_rows[:limit]
 
         settings_result = await self.db_session.execute(
             select(OrgBudgetSettings).where(OrgBudgetSettings.org_id == org_id)
@@ -942,7 +1038,7 @@ class OrgConversationService:
                 )
             )
 
-        return OrgUserUsageStats(items=items)
+        return OrgUserUsageStats(items=items, has_more=has_more)
 
     async def get_org_conversation(
         self,

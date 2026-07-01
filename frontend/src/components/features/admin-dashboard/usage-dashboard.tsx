@@ -122,6 +122,16 @@ const TIME_WINDOWS = [
   { label: "YTD", value: "ytd" },
 ];
 
+const AGENT_COLORS = [
+  "#3B82F6",
+  "#F59E0B",
+  "#10B981",
+  "#8B5CF6",
+  "#EF4444",
+  "#06B6D4",
+  "#F97316",
+];
+
 // Format date/time
 const formatDateTime = (dateStr: string) => {
   const date = new Date(dateStr);
@@ -173,6 +183,27 @@ const formatBudget = (user: {
   if (user.budget_is_disabled) return "Disabled";
   if (user.budget_monthly_limit == null) return "-";
   return formatCost(user.budget_monthly_limit);
+};
+
+const formatAgentLabel = (conversation: {
+  agent_kind?: string | null;
+  llm_model?: string | null;
+}) => {
+  const agentKind = conversation.agent_kind ?? null;
+  if (agentKind === "acp") {
+    const llmModel = conversation.llm_model ?? "";
+    const llmModelLower = llmModel.toLowerCase();
+    if (!llmModel) return "ACP";
+    if (llmModelLower.includes("claude")) return "Claude";
+    if (llmModelLower.includes("codex")) return "Codex";
+    if (llmModelLower.includes("gpt") || llmModelLower.includes("openai")) {
+      return "OpenAI";
+    }
+    if (llmModelLower.includes("gemini")) return "Gemini";
+    return llmModel;
+  }
+  if (agentKind === "openhands") return "OpenHands";
+  return agentKind || "-";
 };
 
 const formatMergedStatus = (merged?: boolean | null) => {
@@ -279,6 +310,72 @@ function AreaChart({ data }: { data: { date: string; value: number }[] }) {
             <span key={d.date}>{formatShortDate(d.date)}</span>
           ))}
       </div>
+    </div>
+  );
+}
+
+function PieChart({
+  data,
+  total,
+}: {
+  data: { value: number; color: string }[];
+  total: number;
+}) {
+  const size = 160;
+  const strokeWidth = 18;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+
+  return (
+    <div className="relative h-40 w-40">
+      <svg viewBox={`0 0 ${size} ${size}`} className="h-full w-full">
+        <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="transparent"
+            stroke="rgba(255,255,255,0.08)"
+            strokeWidth={strokeWidth}
+          />
+          {data.map((slice, index) => {
+            const dash = (slice.value / total) * circumference;
+            const dashArray = `${dash} ${circumference - dash}`;
+            const dashOffset = -offset;
+            offset += dash;
+            return (
+              <circle
+                key={`${slice.color}-${index}`}
+                cx={size / 2}
+                cy={size / 2}
+                r={radius}
+                fill="transparent"
+                stroke={slice.color}
+                strokeWidth={strokeWidth}
+                strokeDasharray={dashArray}
+                strokeDashoffset={dashOffset}
+              />
+            );
+          })}
+        </g>
+        <text
+          x="50%"
+          y="48%"
+          textAnchor="middle"
+          className="fill-white text-sm font-semibold"
+        >
+          {formatCost(total)}
+        </text>
+        <text
+          x="50%"
+          y="60%"
+          textAnchor="middle"
+          className="fill-zinc-500 text-[10px]"
+        >
+          Total
+        </text>
+      </svg>
     </div>
   );
 }
@@ -396,6 +493,21 @@ export function UsageDashboard() {
         value: d.conversations,
       })),
     [usageStats?.daily_usage],
+  );
+
+  const agentSpendRows = useMemo(() => {
+    const rows = usageStats?.agent_usage ?? [];
+    const total = rows.reduce((sum, row) => sum + row.total_cost, 0);
+    return rows.map((row, index) => ({
+      ...row,
+      percent: total > 0 ? (row.total_cost / total) * 100 : 0,
+      color: AGENT_COLORS[index % AGENT_COLORS.length],
+    }));
+  }, [usageStats?.agent_usage]);
+
+  const agentSpendTotal = agentSpendRows.reduce(
+    (sum, row) => sum + row.total_cost,
+    0,
   );
 
   const tabCounts = {
@@ -517,31 +629,82 @@ export function UsageDashboard() {
             </div>
 
             {/* Chart Row */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
-              <div className="flex items-start justify-between mb-6">
-                <div>
-                  <h2 className="text-lg font-medium text-white">
-                    Conversations per day
-                  </h2>
-                  <p className="text-sm text-zinc-500">
-                    {timeWindowLabel} · all users
-                  </p>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 lg:col-span-2">
+                <div className="flex items-start justify-between mb-6">
+                  <div>
+                    <h2 className="text-lg font-medium text-white">
+                      Conversations per day
+                    </h2>
+                    <p className="text-sm text-zinc-500">
+                      {timeWindowLabel} · all users
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-zinc-400 border border-zinc-700 rounded-lg hover:text-white hover:border-zinc-600 transition-colors"
+                  >
+                    <ExportIcon />
+                    Export CSV
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-zinc-400 border border-zinc-700 rounded-lg hover:text-white hover:border-zinc-600 transition-colors"
-                >
-                  <ExportIcon />
-                  Export CSV
-                </button>
+                {chartData.length > 0 ? (
+                  <AreaChart data={chartData} />
+                ) : (
+                  <div className="py-10 text-center text-sm text-zinc-500">
+                    No usage data available yet.
+                  </div>
+                )}
               </div>
-              {chartData.length > 0 ? (
-                <AreaChart data={chartData} />
-              ) : (
-                <div className="py-10 text-center text-sm text-zinc-500">
-                  No usage data available yet.
+              <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+                <div className="flex items-start justify-between mb-6">
+                  <div>
+                    <h2 className="text-lg font-medium text-white">
+                      Spend by agent
+                    </h2>
+                    <p className="text-sm text-zinc-500">
+                      {timeWindowLabel} · total spend
+                    </p>
+                  </div>
                 </div>
-              )}
+                {agentSpendTotal > 0 ? (
+                  <div className="flex flex-col items-center gap-6 lg:flex-row">
+                    <PieChart
+                      data={agentSpendRows.map((row) => ({
+                        value: row.total_cost,
+                        color: row.color,
+                      }))}
+                      total={agentSpendTotal}
+                    />
+                    <div className="w-full space-y-3">
+                      {agentSpendRows.map((row) => (
+                        <div
+                          key={row.agent_name}
+                          className="flex items-center justify-between text-sm"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="h-2 w-2 rounded-full"
+                              style={{ backgroundColor: row.color }}
+                            />
+                            <span className="text-zinc-300">
+                              {row.agent_name}
+                            </span>
+                          </div>
+                          <span className="text-zinc-400">
+                            {formatCost(row.total_cost)} ·
+                            {` ${row.percent.toFixed(1)}%`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-10 text-center text-sm text-zinc-500">
+                    No agent spend data available yet.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -621,6 +784,9 @@ export function UsageDashboard() {
                       Merged?
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Agent
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                       Type
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
@@ -632,7 +798,7 @@ export function UsageDashboard() {
                   {conversationsLoading && (
                     <tr>
                       <td
-                        colSpan={10}
+                        colSpan={11}
                         className="px-4 py-8 text-center text-zinc-500"
                       >
                         Loading conversations...
@@ -643,7 +809,7 @@ export function UsageDashboard() {
                     (conversationsData?.items.length ?? 0) === 0 && (
                       <tr>
                         <td
-                          colSpan={10}
+                          colSpan={11}
                           className="px-4 py-8 text-center text-zinc-500"
                         >
                           No conversations found for this time window.
@@ -692,10 +858,11 @@ export function UsageDashboard() {
                         <td className="px-4 py-4 text-sm text-zinc-400">
                           {formatMergedStatus(conversation.pr_merged)}
                         </td>
+                        <td className="px-4 py-4 text-sm text-zinc-400">
+                          {formatAgentLabel(conversation)}
+                        </td>
                         <td className="px-4 py-4 text-sm text-zinc-400 capitalize">
-                          {conversation.trigger ||
-                            conversation.agent_kind ||
-                            "-"}
+                          {conversation.trigger || "-"}
                         </td>
                         <td className="px-4 py-4 text-right text-sm">
                           {isRunning && (

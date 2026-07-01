@@ -320,9 +320,25 @@ export const organizationService = {
     return data;
   },
 
-  getUserUsageStats: async ({ orgId }: { orgId: string }) => {
+  getUserUsageStats: async ({
+    orgId,
+    limit,
+    offset,
+  }: {
+    orgId: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const params: Record<string, number> = {};
+    if (typeof limit === "number") {
+      params.limit = limit;
+    }
+    if (typeof offset === "number") {
+      params.offset = offset;
+    }
     const { data } = await openHands.get<OrgUserUsageStats>(
       `/api/organizations/${orgId}/conversations/user-usage`,
+      { params },
     );
     return data;
   },
@@ -522,12 +538,19 @@ interface OrgUserUsageRow {
 
 interface OrgUserUsageStats {
   items: OrgUserUsageRow[];
+  has_more: boolean;
 }
 
 interface ModelUsageData {
   model_name: string;
   conversation_count: number;
   total_tokens: number;
+  total_cost: number;
+}
+
+interface AgentUsageData {
+  agent_name: string;
+  conversation_count: number;
   total_cost: number;
 }
 
@@ -539,6 +562,7 @@ interface OrgUsageStats {
   daily_usage: DailyUsageData[];
   team_usage: TeamUsageData[];
   model_usage: ModelUsageData[];
+  agent_usage: AgentUsageData[];
 }
 
 interface OrgBudgetThreshold {
