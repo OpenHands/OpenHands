@@ -54,7 +54,9 @@ def resolve_profile_llm(
                 model=profile_llm.model,
                 base_url=profile_llm.base_url,
                 managed_proxy_url=managed_proxy_url,
-            )
+            ),
+            # Force streaming on (profiles default to the SDK's stream=False).
+            'stream': True,
         }
     )
     if not has_real_api_key(resolved.api_key) and has_real_api_key(fallback_api_key):
@@ -103,6 +105,33 @@ class StrictLLM(LLM):
     """
 
     model_config = ConfigDict(extra='forbid')
+
+    @model_validator(mode='wrap')
+    @classmethod
+    def _restore_is_subscription(cls, data: Any, handler: Any) -> Any:
+        """Temporary workaround for a non-composable SDK validator.
+
+        ``LLM`` defines a validator of this same name (``mode="wrap"``)
+        that restores ``_is_subscription`` from this computed field so it
+        survives a dump/validate round trip. It does so by reading its own
+        raw ``data`` argument directly, independent of any subclass
+        ``mode="before"`` validator's transformation of the input — so a
+        normal ``before`` validator can't neutralize it, and the *only*
+        way to override the behavior is to shadow this exact method name.
+        See OpenHands/software-agent-sdk#3942.
+
+        Strip ``is_subscription`` from the input before validation (so
+        ``extra='forbid'`` doesn't reject the GET-response echo as an
+        unrecognized field on this endpoint's GET-edit-POST round trip)
+        and don't restore it: it's semantically only ever supposed to be
+        set via ``LLM.subscription_login()``, never via user-supplied
+        JSON here.
+
+        TODO: remove once software-agent-sdk#3942 is fixed upstream.
+        """
+        if isinstance(data, dict):
+            data = {k: v for k, v in data.items() if k != 'is_subscription'}
+        return handler(data)
 
 
 class LLMProfiles(BaseModel):

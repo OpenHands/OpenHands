@@ -42,6 +42,20 @@ class LocalFileStore(FileStore):
                 os.remove(temp_path)
             raise
 
+    def write_from_path(self, path: str, source_path: str) -> None:
+        # shutil.copyfile streams in chunks (never the whole file in RAM); keep
+        # the same write-temp-then-atomic-rename to avoid torn concurrent writes.
+        full_path = self.get_full_path(path)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        temp_path = f'{full_path}.tmp.{os.getpid()}.{threading.get_ident()}'
+        try:
+            shutil.copyfile(source_path, temp_path)
+            os.replace(temp_path, full_path)
+        except Exception:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise
+
     def read(self, path: str) -> str:
         full_path = self.get_full_path(path)
         with open(full_path, 'r') as f:

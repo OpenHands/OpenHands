@@ -113,14 +113,24 @@ _jinja_env = Environment(loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DI
 def get_oh_labels(web_host: str) -> tuple[str, str]:
     """Get the OpenHands labels based on the web host.
 
+    An explicit ``OH_RESOLVER_LABEL`` environment variable takes precedence and
+    lets each deployment declare its own trigger macro (issue label + mention)
+    without a code change. When it is unset, the macro is inferred from
+    ``web_host`` for backward compatibility.
+
     Args:
         web_host: The web host string to check
 
     Returns:
         A tuple of (oh_label, inline_oh_label) where:
-        - oh_label is 'openhands-exp' for staging/local hosts, 'openhands' otherwise
-        - inline_oh_label is '@openhands-exp' for staging/local hosts, '@openhands' otherwise
+        - oh_label is OH_RESOLVER_LABEL when set; otherwise 'openhands-exp' for
+          staging/local hosts and 'openhands' for everything else
+        - inline_oh_label is oh_label prefixed with '@'
     """
+    override = os.getenv('OH_RESOLVER_LABEL', '').strip()
+    if override:
+        return override, f'@{override}'
+
     web_host = web_host.strip()
     is_staging_or_local = 'staging' in web_host or 'local' in web_host
     oh_label = 'openhands-exp' if is_staging_or_local else 'openhands'
@@ -182,10 +192,12 @@ def infer_repo_from_message(user_msg: str) -> list[str]:
         r'https?://[a-zA-Z0-9.-]+(?::\d+)?/(?:projects|users)/'
         r'([a-zA-Z0-9_~.-]+)/repos/([a-zA-Z0-9_.-]+)'
     )
-    # Bitbucket Data Center clone URLs: /scm/<KEY>/<slug>(.git).
+    # Bitbucket Data Center clone URLs: /scm/<KEY>/<slug>(.git). Boundary is any
+    # non-slug char (not just /?#space) so a URL wrapped in Jira/markdown link
+    # markup -- [url] or [text|url] -- still terminates cleanly on ] or |.
     bitbucket_dc_scm_pattern = (
         r'https?://[a-zA-Z0-9.-]+(?::\d+)?/scm/'
-        r'([a-zA-Z0-9_~.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?(?=[/?#\s]|$)'
+        r'([a-zA-Z0-9_~.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?(?=[^a-zA-Z0-9_.~-]|$)'
     )
 
     # Generic Git host (cloud or self-hosted): github.com, a GitHub Enterprise
@@ -198,30 +210,37 @@ def infer_repo_from_message(user_msg: str) -> list[str]:
         r'(?:[/?#].*?)?(?=\s|$|[^\w.-])'
     )
 
-    # UPDATED: allow {{ owner/repo }} in addition to existing boundaries
+    # Direct 'owner/repo' mention. Right boundary also accepts ? ! ; and the
+    # Jira link pipe |, so a trailing question mark or a wiki-link wrapper does
+    # not drop an otherwise-valid mention. ({{ owner/repo }} stays supported.)
     direct_pattern = (
         r'(?:^|\s|{{|[\[\(\'":`])'  # left boundary
         r'([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)'
-        r'(?=\s|$|}}|[\]\)\'",.:`])'  # right boundary
+        r'(?=\s|$|}}|[\]\)\'",.:;!?`|])'  # right boundary
     )
+
+    def _clean(repo: str) -> str:
+        # Greedy captures keep trailing punctuation / .git; strip both.
+        return re.sub(r'\.git$', '', repo.rstrip('.,;:!?'))
 
     # Use dict to preserve ordering
     matches: dict[str, bool] = {}
 
     # Bitbucket Data Center URLs first (most specific layout)
     for owner, repo in re.findall(bitbucket_dc_web_pattern, normalized_msg):
-        matches[f'{owner}/{repo}'] = True
+        matches[f'{owner}/{_clean(repo)}'] = True
     for owner, repo in re.findall(bitbucket_dc_scm_pattern, normalized_msg):
-        repo = re.sub(r'\.git$', '', repo)
-        matches[f'{owner}/{repo}'] = True
+        matches[f'{owner}/{_clean(repo)}'] = True
 
     # Generic Git URLs next (highest priority among the standard layout)
     for owner, repo in re.findall(git_url_pattern, normalized_msg):
-        repo = re.sub(r'\.git$', '', repo)
-        matches[f'{owner}/{repo}'] = True
+        matches[f'{owner}/{_clean(repo)}'] = True
 
     # Direct mentions
     for owner, repo in re.findall(direct_pattern, normalized_msg):
+        repo = _clean(repo)
+        if not repo:
+            continue
         full_match = f'{owner}/{repo}'
 
         if (
@@ -293,10 +312,54 @@ def markdown_to_jira_markup(markdown_text: str) -> str:
         text = re.sub(r'^#{2}\s+(.*?)$', r'h2. \1', text, flags=re.MULTILINE)
         text = re.sub(r'^#{1}\s+(.*?)$', r'h1. \1', text, flags=re.MULTILINE)
 
-        # Convert code blocks first (before other formatting)
-        text = re.sub(
-            r'```(\w+)\n(.*?)\n```', r'{code:\1}\n\2\n{code}', text, flags=re.DOTALL
-        )
+        # Convert code blocks first (before other formatting). Jira's {code}
+        # macro only supports a fixed language set; fall back to a plain {code}
+        # for anything else (e.g. ```text) so Jira doesn't show a "no
+        # source-code formatter for language: X" warning.
+        jira_code_langs = {
+            'actionscript',
+            'ada',
+            'applescript',
+            'bash',
+            'c',
+            'c#',
+            'c++',
+            'cpp',
+            'css',
+            'erlang',
+            'go',
+            'groovy',
+            'haskell',
+            'html',
+            'java',
+            'javascript',
+            'js',
+            'json',
+            'lua',
+            'none',
+            'nyan',
+            'objc',
+            'perl',
+            'php',
+            'python',
+            'r',
+            'rainbow',
+            'ruby',
+            'scala',
+            'sh',
+            'sql',
+            'swift',
+            'visualbasic',
+            'xml',
+            'yaml',
+        }
+
+        def _code_block(m):
+            lang = m.group(1).lower()
+            header = f'{{code:{lang}}}' if lang in jira_code_langs else '{code}'
+            return f'{header}\n{m.group(2)}\n{{code}}'
+
+        text = re.sub(r'```(\w+)\n(.*?)\n```', _code_block, text, flags=re.DOTALL)
         text = re.sub(r'```\n(.*?)\n```', r'{code}\n\1\n{code}', text, flags=re.DOTALL)
 
         # Convert inline code (`code`)

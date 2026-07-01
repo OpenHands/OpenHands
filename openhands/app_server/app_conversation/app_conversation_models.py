@@ -1,10 +1,9 @@
-import re
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, SecretStr, computed_field, field_serializer
+from pydantic import BaseModel, Field, SecretStr, computed_field
 
 from openhands.agent_server.models import (
     ImageContent,
@@ -33,6 +32,12 @@ __all__ = ['SandboxGroupingStrategy']
 # The typed ``AppConversationInfo.acp_server`` field is a projection of this tag.
 ACP_SERVER_TAG_KEY = 'acpserver'
 
+# Conversation-tag key pinning the resolved (grouped) workspace path at creation
+# so the delete-time archive captures the right directory without re-deriving it
+# from settings that may have changed. Must satisfy the SDK ^[a-z0-9]+$ tag-key
+# rule — no underscores.
+ARCHIVE_WORKSPACE_PATH_TAG_KEY = 'archiveworkspacepath'
+
 
 class ConversationTrigger(Enum):
     RESOLVER = 'resolver'
@@ -46,16 +51,6 @@ class ConversationTrigger(Enum):
     LINEAR = 'linear'
     BITBUCKET = 'bitbucket'
     AUTOMATION = 'automation'
-
-
-def _redact_url_credentials(url: str) -> str:
-    """Redact embedded credentials from a URL (https://user:token@host → https://****@host).
-
-    # TODO: replace with `from openhands.sdk.utils.redact import redact_url_credentials`
-    # once the SDK pin is bumped to include OpenHands/software-agent-sdk#2154.
-    """
-    m = re.match(r'^(https?://)([^@/]+)@(.+)$', url)
-    return f'{m.group(1)}****@{m.group(3)}' if m else url
 
 
 class AgentType(Enum):
@@ -76,11 +71,6 @@ class PluginSpec(PluginSource):
         default=None,
         description='User-provided values for plugin input parameters',
     )
-
-    @field_serializer('source')
-    @classmethod
-    def _serialize_source(cls, source: str) -> str:
-        return _redact_url_credentials(source)
 
     @property
     def display_name(self) -> str:

@@ -25,6 +25,10 @@ export function SwitchProfileButton() {
   const profiles = data?.profiles ?? [];
   const conversationModel = conversation?.llm_model ?? null;
 
+  // Still starting: the id is the placeholder `task-<uuid>`, not the real
+  // conversation UUID yet, so a switch can't be persisted (would 422).
+  const isStarting = conversationId.startsWith("task-");
+
   // Resolve the active profile, most-authoritative source first:
   //   1. A switch the user made this session (recorded by name, so it's exact
   //      even when several profiles share a model string, e.g. SaaS managed
@@ -77,7 +81,7 @@ export function SwitchProfileButton() {
       <button
         type="button"
         onClick={handleClick}
-        disabled={isPending}
+        disabled={isPending || isStarting}
         data-testid="switch-profile-button"
         title={activeProfileModel ?? undefined}
         aria-haspopup="menu"

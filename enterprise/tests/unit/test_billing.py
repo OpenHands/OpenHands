@@ -41,29 +41,82 @@ def mock_request():
 @pytest.fixture
 def mock_checkout_request():
     """Create a mock request object for checkout session tests."""
-    request = Request(
+    return Request(
         scope={
             'type': 'http',
-            'path': '/api/billing/create-checkout-session',
+            'scheme': 'http',
             'server': ('test.com', 80),
+            'path': '/api/billing/create-checkout-session',
+            'headers': [],
         }
     )
-    request._url = URL('http://test.com/')
-    return request
 
 
 @pytest.fixture
 def mock_subscription_request():
     """Create a mock request object for subscription checkout session tests."""
-    request = Request(
+    return Request(
         scope={
             'type': 'http',
-            'path': '/api/billing/subscription-checkout-session',
+            'scheme': 'http',
             'server': ('test.com', 80),
+            'path': '/api/billing/subscription-checkout-session',
+            'headers': [],
         }
     )
-    request._url = URL('http://test.com/')
-    return request
+
+
+@pytest.fixture
+def mock_callback_request():
+    """Create a mock request object for success/cancel callback tests."""
+    return Request(
+        scope={
+            'type': 'http',
+            'scheme': 'http',
+            'server': ('test.com', 80),
+            'path': '/api/billing/callback',
+            'headers': [],
+        }
+    )
+
+
+@pytest.fixture
+def patched_billing_session_maker(async_session_maker):
+    """Patch the billing route session maker."""
+    with patch('server.routes.billing.a_session_maker', async_session_maker):
+        yield
+
+
+@pytest.fixture
+def mock_stripe_session_retrieve():
+    """Patch stripe.checkout.Session.retrieve and yield the mock."""
+    with patch('stripe.checkout.Session.retrieve') as mock_retrieve:
+        yield mock_retrieve
+
+
+@pytest.fixture
+def mock_setup_request():
+    """Create a mock request object for customer setup session tests."""
+    return Request(
+        scope={
+            'type': 'http',
+            'scheme': 'http',
+            'server': ('test.com', 80),
+            'path': '/api/billing/create-customer-setup-session',
+            'headers': [],
+        }
+    )
+
+
+@pytest.fixture
+def patched_checkout_session_makers(async_session_maker):
+    """Patch all session makers needed for checkout session tests."""
+    with (
+        patch('server.routes.billing.a_session_maker', async_session_maker),
+        patch('integrations.stripe_service.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+    ):
+        yield
 
 
 @pytest.fixture
@@ -154,7 +207,7 @@ async def test_get_credits_success():
 
 @pytest.mark.asyncio
 async def test_create_checkout_session_stripe_error(
-    async_session_maker, mock_checkout_request, test_org
+    mock_checkout_request, test_org, patched_checkout_session_makers
 ):
     """Test handling of Stripe API errors."""
     mock_customer = stripe.Customer(
@@ -172,10 +225,6 @@ async def test_create_checkout_session_stripe_error(
             'stripe.checkout.Session.create_async',
             AsyncMock(side_effect=Exception('Stripe API Error')),
         ),
-        patch('server.routes.billing.a_session_maker', async_session_maker),
-        patch('integrations.stripe_service.a_session_maker', async_session_maker),
-        patch('storage.database.a_session_maker', async_session_maker),
-        patch('storage.org_store.a_session_maker', async_session_maker),
         patch(
             'storage.org_store.OrgStore.get_current_org_from_keycloak_user_id',
             return_value=test_org,
@@ -196,7 +245,10 @@ async def test_create_checkout_session_stripe_error(
 
 @pytest.mark.asyncio
 async def test_create_checkout_session_success(
-    async_session_maker, mock_checkout_request, test_org
+    async_session_maker,
+    mock_checkout_request,
+    test_org,
+    patched_checkout_session_makers,
 ):
     """Test successful creation of checkout session."""
     mock_session = MagicMock()
@@ -208,8 +260,6 @@ async def test_create_checkout_session_success(
 
     with (
         patch('stripe.checkout.Session.create_async', mock_create),
-        patch('server.routes.billing.a_session_maker', async_session_maker),
-        patch('integrations.stripe_service.a_session_maker', async_session_maker),
         patch(
             'integrations.stripe_service.find_or_create_customer_by_user_id',
             AsyncMock(return_value=mock_customer_info),
@@ -266,28 +316,25 @@ async def test_create_checkout_session_success(
 
 
 @pytest.mark.asyncio
-async def test_success_callback_session_not_found(async_session_maker):
+async def test_success_callback_session_not_found(
+    patched_billing_session_maker, mock_callback_request
+):
     """Test success callback when billing session is not found."""
-    mock_request = Request(scope={'type': 'http'})
-    mock_request._url = URL('http://test.com/')
-
-    with (
-        patch('server.routes.billing.a_session_maker', async_session_maker),
-        patch('stripe.checkout.Session.retrieve'),
-    ):
-        with pytest.raises(HTTPException) as exc_info:
-            await success_callback('nonexistent_session_id', mock_request)
-        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+    with pytest.raises(HTTPException) as exc_info:
+        await success_callback('nonexistent_session_id', mock_callback_request)
+    assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
 
 
 @pytest.mark.asyncio
 async def test_success_callback_stripe_incomplete(
-    async_session_maker, test_org, test_user
+    async_session_maker,
+    test_org,
+    test_user,
+    patched_billing_session_maker,
+    mock_callback_request,
+    mock_stripe_session_retrieve,
 ):
     """Test success callback when Stripe session is not complete."""
-    mock_request = Request(scope={'type': 'http'})
-    mock_request._url = URL('http://test.com/')
-
     session_id = 'test_incomplete_session'
     async with async_session_maker() as session:
         billing_session = BillingSession(
@@ -301,15 +348,11 @@ async def test_success_callback_stripe_incomplete(
         session.add(billing_session)
         await session.commit()
 
-    with (
-        patch('server.routes.billing.a_session_maker', async_session_maker),
-        patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
-    ):
-        mock_stripe_retrieve.return_value = MagicMock(status='pending')
+    mock_stripe_session_retrieve.return_value = MagicMock(status='pending')
 
-        with pytest.raises(HTTPException) as exc_info:
-            await success_callback(session_id, mock_request)
-        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+    with pytest.raises(HTTPException) as exc_info:
+        await success_callback(session_id, mock_callback_request)
+    assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
 
     # Verify no database update occurred
     async with async_session_maker() as session:
@@ -321,11 +364,15 @@ async def test_success_callback_stripe_incomplete(
 
 
 @pytest.mark.asyncio
-async def test_success_callback_success(async_session_maker, test_org, test_user):
+async def test_success_callback_success(
+    async_session_maker,
+    test_org,
+    test_user,
+    patched_billing_session_maker,
+    mock_callback_request,
+    mock_stripe_session_retrieve,
+):
     """Test successful payment completion and credit update."""
-    mock_request = Request(scope={'type': 'http'})
-    mock_request._url = URL('http://test.com/')
-
     session_id = 'test_success_session'
     async with async_session_maker() as session:
         billing_session = BillingSession(
@@ -339,9 +386,11 @@ async def test_success_callback_success(async_session_maker, test_org, test_user
         session.add(billing_session)
         await session.commit()
 
+    mock_stripe_session_retrieve.return_value = MagicMock(
+        status='complete', amount_subtotal=2500, customer='mock_customer_id'
+    )
+
     with (
-        patch('server.routes.billing.a_session_maker', async_session_maker),
-        patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
         patch(
             'storage.user_store.UserStore.get_user_by_id',
             new_callable=AsyncMock,
@@ -358,11 +407,7 @@ async def test_success_callback_success(async_session_maker, test_org, test_user
             'storage.lite_llm_manager.LiteLlmManager.update_team_and_users_budget'
         ) as mock_update_budget,
     ):
-        mock_stripe_retrieve.return_value = MagicMock(
-            status='complete', amount_subtotal=2500, customer='mock_customer_id'
-        )
-
-        response = await success_callback(session_id, mock_request)
+        response = await success_callback(session_id, mock_callback_request)
 
         assert response.status_code == 302
         assert (
@@ -392,12 +437,14 @@ async def test_success_callback_success(async_session_maker, test_org, test_user
 
 @pytest.mark.asyncio
 async def test_success_callback_lite_llm_error(
-    async_session_maker, test_org, test_user
+    async_session_maker,
+    test_org,
+    test_user,
+    patched_billing_session_maker,
+    mock_callback_request,
+    mock_stripe_session_retrieve,
 ):
     """Test handling of LiteLLM API errors during success callback."""
-    mock_request = Request(scope={'type': 'http'})
-    mock_request._url = URL('http://test.com/')
-
     session_id = 'test_litellm_error_session'
     async with async_session_maker() as session:
         billing_session = BillingSession(
@@ -411,9 +458,11 @@ async def test_success_callback_lite_llm_error(
         session.add(billing_session)
         await session.commit()
 
+    mock_stripe_session_retrieve.return_value = MagicMock(
+        status='complete', amount_subtotal=2500
+    )
+
     with (
-        patch('server.routes.billing.a_session_maker', async_session_maker),
-        patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
         patch(
             'storage.user_store.UserStore.get_user_by_id',
             new_callable=AsyncMock,
@@ -424,12 +473,8 @@ async def test_success_callback_lite_llm_error(
             side_effect=Exception('LiteLLM API Error'),
         ),
     ):
-        mock_stripe_retrieve.return_value = MagicMock(
-            status='complete', amount_subtotal=2500
-        )
-
         with pytest.raises(Exception, match='LiteLLM API Error'):
-            await success_callback(session_id, mock_request)
+            await success_callback(session_id, mock_callback_request)
 
     # Verify no database updates occurred (transaction rolled back)
     async with async_session_maker() as session:
@@ -442,16 +487,18 @@ async def test_success_callback_lite_llm_error(
 
 @pytest.mark.asyncio
 async def test_success_callback_lite_llm_update_budget_error_rollback(
-    async_session_maker, test_org, test_user
+    async_session_maker,
+    test_org,
+    test_user,
+    patched_billing_session_maker,
+    mock_callback_request,
+    mock_stripe_session_retrieve,
 ):
     """Test that database changes are not committed when update_team_and_users_budget fails.
 
     This test verifies that if LiteLlmManager.update_team_and_users_budget raises an exception,
     the database transaction rolls back.
     """
-    mock_request = Request(scope={'type': 'http'})
-    mock_request._url = URL('http://test.com/')
-
     session_id = 'test_budget_rollback_session'
     async with async_session_maker() as session:
         billing_session = BillingSession(
@@ -465,9 +512,13 @@ async def test_success_callback_lite_llm_update_budget_error_rollback(
         session.add(billing_session)
         await session.commit()
 
+    mock_stripe_session_retrieve.return_value = MagicMock(
+        status='complete',
+        amount_subtotal=1000,
+        customer='mock_customer_id',
+    )
+
     with (
-        patch('server.routes.billing.a_session_maker', async_session_maker),
-        patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
         patch(
             'storage.user_store.UserStore.get_user_by_id',
             new_callable=AsyncMock,
@@ -485,14 +536,8 @@ async def test_success_callback_lite_llm_update_budget_error_rollback(
             side_effect=Exception('LiteLLM API Error'),
         ),
     ):
-        mock_stripe_retrieve.return_value = MagicMock(
-            status='complete',
-            amount_subtotal=1000,
-            customer='mock_customer_id',
-        )
-
         with pytest.raises(Exception, match='LiteLLM API Error'):
-            await success_callback(session_id, mock_request)
+            await success_callback(session_id, mock_callback_request)
 
     # Verify no database commit occurred - the transaction should roll back
     async with async_session_maker() as session:
@@ -504,26 +549,27 @@ async def test_success_callback_lite_llm_update_budget_error_rollback(
 
 
 @pytest.mark.asyncio
-async def test_cancel_callback_session_not_found(async_session_maker):
+async def test_cancel_callback_session_not_found(
+    patched_billing_session_maker, mock_callback_request
+):
     """Test cancel callback when billing session is not found."""
-    mock_request = Request(scope={'type': 'http'})
-    mock_request._url = URL('http://test.com/')
-
-    with patch('server.routes.billing.a_session_maker', async_session_maker):
-        response = await cancel_callback('nonexistent_session_id', mock_request)
-        assert response.status_code == 302
-        assert (
-            response.headers['location']
-            == 'https://test.com/settings/billing?checkout=cancel'
-        )
+    response = await cancel_callback('nonexistent_session_id', mock_callback_request)
+    assert response.status_code == 302
+    assert (
+        response.headers['location']
+        == 'https://test.com/settings/billing?checkout=cancel'
+    )
 
 
 @pytest.mark.asyncio
-async def test_cancel_callback_success(async_session_maker, test_org, test_user):
+async def test_cancel_callback_success(
+    async_session_maker,
+    test_org,
+    test_user,
+    patched_billing_session_maker,
+    mock_callback_request,
+):
     """Test successful cancellation of billing session."""
-    mock_request = Request(scope={'type': 'http'})
-    mock_request._url = URL('http://test.com/')
-
     session_id = 'test_cancel_session'
     async with async_session_maker() as session:
         billing_session = BillingSession(
@@ -537,14 +583,13 @@ async def test_cancel_callback_success(async_session_maker, test_org, test_user)
         session.add(billing_session)
         await session.commit()
 
-    with patch('server.routes.billing.a_session_maker', async_session_maker):
-        response = await cancel_callback(session_id, mock_request)
+    response = await cancel_callback(session_id, mock_callback_request)
 
-        assert response.status_code == 302
-        assert (
-            response.headers['location']
-            == 'https://test.com/settings/billing?checkout=cancel'
-        )
+    assert response.status_code == 302
+    assert (
+        response.headers['location']
+        == 'https://test.com/settings/billing?checkout=cancel'
+    )
 
     # Verify database update
     async with async_session_maker() as session:
@@ -556,51 +601,23 @@ async def test_cancel_callback_success(async_session_maker, test_org, test_user)
 
 
 @pytest.mark.asyncio
-async def test_has_payment_method_with_payment_method():
-    """Test has_payment_method returns True when user has a payment method."""
+@pytest.mark.parametrize('has_method', [True, False])
+async def test_has_payment_method(has_method):
+    """Test has_payment_method reflects the underlying stripe service result."""
     effective_org_id = uuid.uuid4()
-    mock_has_payment_method = AsyncMock(return_value=True)
+    mock_fn = AsyncMock(return_value=has_method)
     with patch(
         'server.routes.billing.stripe_service.has_payment_method_by_user_id',
-        mock_has_payment_method,
+        mock_fn,
     ):
         result = await has_payment_method('mock_user', effective_org_id)
-        assert result is True
-    mock_has_payment_method.assert_called_once_with(
-        'mock_user', org_id=effective_org_id
-    )
+        assert result is has_method
+    mock_fn.assert_called_once_with('mock_user', org_id=effective_org_id)
 
 
 @pytest.mark.asyncio
-async def test_has_payment_method_without_payment_method():
-    """Test has_payment_method returns False when user has no payment method."""
-    effective_org_id = uuid.uuid4()
-    mock_has_payment_method = AsyncMock(return_value=False)
-    with patch(
-        'server.routes.billing.stripe_service.has_payment_method_by_user_id',
-        mock_has_payment_method,
-    ):
-        mock_has_payment_method.return_value = False
-        result = await has_payment_method('mock_user', effective_org_id)
-        assert result is False
-    mock_has_payment_method.assert_called_once_with(
-        'mock_user', org_id=effective_org_id
-    )
-
-
-@pytest.mark.asyncio
-async def test_create_customer_setup_session_success():
+async def test_create_customer_setup_session_success(mock_setup_request):
     """Test successful creation of customer setup session."""
-    mock_request = Request(
-        scope={
-            'type': 'http',
-            'path': '/api/billing/create-customer-setup-session',
-            'server': ('test.com', 80),
-            'headers': [],
-        }
-    )
-    mock_request._url = URL('http://test.com/')
-
     effective_org_id = uuid.uuid4()
     mock_customer_info = {'customer_id': 'mock-customer-id', 'org_id': 'mock-org-id'}
     mock_session = MagicMock()
@@ -616,7 +633,7 @@ async def test_create_customer_setup_session_success():
         patch('server.routes.billing.validate_billing_enabled'),
     ):
         result = await create_customer_setup_session(
-            mock_request, 'mock_user', effective_org_id
+            mock_setup_request, 'mock_user', effective_org_id
         )
 
         assert isinstance(result, billing.CreateBillingSessionResponse)

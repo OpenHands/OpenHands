@@ -92,6 +92,23 @@ class SandboxGroupingStrategy(str, Enum):
     ADD_TO_ANY = 'ADD_TO_ANY'  # Add to any available sandbox (first found)
 
 
+def grouped_workspace_dir(
+    base_working_dir: str,
+    grouping_strategy: SandboxGroupingStrategy,
+    conversation_id_hex: str,
+) -> str:
+    """Workspace dir for a conversation given the grouping strategy.
+
+    Single source of truth for the relocation used at conversation start and at
+    archive time. Under any grouping strategy the workspace is nested under the
+    conversation id so co-located conversations stay isolated; NO_GROUPING keeps
+    the bare base dir.
+    """
+    if grouping_strategy == SandboxGroupingStrategy.NO_GROUPING:
+        return base_working_dir
+    return f'{base_working_dir}/{conversation_id_hex}'
+
+
 # Fields the batch ``update()`` method refuses to touch:
 # - ``secrets_store`` is frozen (Pydantic would raise).
 # - ``llm_profiles`` is off-limits for the generic settings POST; profile
@@ -129,6 +146,7 @@ class Settings(BaseModel):
     email_verified: bool | None = None
     git_user_name: str | None = None
     git_user_email: str | None = None
+    git_full_clone: bool = False
     v1_enabled: bool = True
     agent_settings: AgentSettingsConfig = Field(default_factory=default_agent_settings)
     conversation_settings: ConversationSettings = Field(
@@ -137,6 +155,7 @@ class Settings(BaseModel):
     sandbox_grouping_strategy: SandboxGroupingStrategy = (
         SandboxGroupingStrategy.NO_GROUPING
     )
+    default_sandbox_spec_id: str | None = None
     llm_profiles: LLMProfiles = Field(
         default_factory=LLMProfiles,
         description=(

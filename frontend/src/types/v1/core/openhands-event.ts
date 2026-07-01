@@ -15,6 +15,7 @@ import {
   HookExecutionEvent,
   PauseEvent,
   ServerErrorEvent,
+  StreamingDeltaEvent,
 } from "./events/index";
 
 /**
@@ -31,6 +32,8 @@ export type OpenHandsEvent =
   | SystemPromptEvent
   // ACP sub-agent tool call events
   | ACPToolCallEvent
+  // Transient LLM token streaming deltas
+  | StreamingDeltaEvent
   // Hook events
   | HookExecutionEvent
   // Conversation management events
