@@ -33,7 +33,7 @@ def _as_naive(value: datetime | None) -> datetime | None:
     """
     if value is None or value.tzinfo is None:
         return value
-    return value.astimezone(UTC)
+    return value.astimezone(UTC).replace(tzinfo=None)
 
 
 def _as_utc_aware(value: datetime | None) -> datetime | None:
