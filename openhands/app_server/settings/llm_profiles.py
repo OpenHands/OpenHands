@@ -106,6 +106,21 @@ class StrictLLM(LLM):
 
     model_config = ConfigDict(extra='forbid')
 
+    @model_validator(mode='before')
+    @classmethod
+    def _drop_is_subscription(cls, data: Any) -> Any:
+        """Strip the SDK's read-only ``is_subscription`` computed field.
+
+        It's serialized into GET responses (so it round-trips through the
+        frontend's GET-edit-POST flow) but isn't a settable input: it only
+        becomes true via ``LLM.subscription_login()``, never via user-supplied
+        JSON, and letting a client set it here would let them self-declare
+        subscription billing.
+        """
+        if isinstance(data, dict) and 'is_subscription' in data:
+            data = {k: v for k, v in data.items() if k != 'is_subscription'}
+        return data
+
 
 class LLMProfiles(BaseModel):
     """Container for saved LLM configurations.
