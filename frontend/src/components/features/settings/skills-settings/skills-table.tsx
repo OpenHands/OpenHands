@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { SkillWithState } from "#/types/settings";
 import { Toggle } from "#/components/shared/toggle/toggle";
+import { InfoTooltip } from "#/components/features/settings/info-tooltip";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
@@ -115,7 +116,14 @@ export function SkillsTable({
                 <th className={HEADER_CLASS}>
                   {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_LABEL)}
                 </th>
-                <th className={HEADER_CLASS}>{t(I18nKey.SETTINGS$ENABLED)}</th>
+                <th className={HEADER_CLASS}>
+                  <span className="inline-flex items-center gap-1.5">
+                    {t(I18nKey.SETTINGS$ENABLED)}
+                    <InfoTooltip
+                      content={t(I18nKey.SETTINGS$ENABLED_TOOLTIP)}
+                    />
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -144,11 +152,22 @@ export function SkillsTable({
                     <ScopeBadge scope={skill.scope} />
                   </td>
                   <td className={CELL_CLASS}>
-                    <Toggle
-                      checked={skill.isEnabled}
-                      onClick={() => onToggle(skill.id)}
-                      aria-label={`Toggle enabled for ${skill.name}`}
-                    />
+                    {skill.type === "plugin" ? (
+                      // Plugins are enabled via their marketplace's Auto-Load
+                      // toggle, so this reflects that state read-only.
+                      <Toggle
+                        checked={skill.isAutoLoad}
+                        disabled
+                        title={t(I18nKey.SETTINGS$PLUGIN_AUTOLOAD_READONLY)}
+                        aria-label={`Auto-load state for ${skill.name}`}
+                      />
+                    ) : (
+                      <Toggle
+                        checked={skill.isEnabled}
+                        onClick={() => onToggle(skill.id)}
+                        aria-label={`Toggle enabled for ${skill.name}`}
+                      />
+                    )}
                   </td>
                 </tr>
               ))}

@@ -113,6 +113,15 @@ export type SkillInfo = {
   triggers?: string[];
 };
 
+// A plugin advertised by a marketplace manifest. The UI operates at the plugin
+// level, so a plugin's bundled skills are not expanded into this shape.
+export type MarketplacePluginInfo = {
+  name: string;
+  description?: string | null;
+  source: string; // the marketplace registration source (e.g. github:owner/repo)
+  marketplace: string; // the marketplace registration name
+};
+
 export type SettingsScope = "personal" | "org";
 
 export type MarketplaceRegistration = {

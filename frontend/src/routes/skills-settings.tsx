@@ -227,7 +227,33 @@ function SkillsSettingsScreen() {
           }
         }
 
-        const combinedSkills = [...mappedSkills, ...marketplaceSkills];
+        // Plugins advertised by marketplace manifests, shown at the plugin
+        // level (bundled skills are not expanded). Enablement/auto-load is
+        // governed by the parent marketplace, so these rows are read-only here.
+        const marketplacePlugins: SkillWithState[] = (
+          preview.plugins ?? []
+        ).map((plugin) => {
+          const mp = marketplaceMap.get(plugin.source);
+          const pluginScope =
+            (mp?.scope as "instance" | "org" | "personal") || "personal";
+          const autoLoad = !!mp?.auto_load;
+          return {
+            name: plugin.name,
+            type: "plugin",
+            source: `marketplace:${plugin.marketplace}`,
+            id: `plugin:${plugin.marketplace}:${plugin.name}`,
+            repository: plugin.source,
+            scope: pluginScope,
+            isEnabled: autoLoad,
+            isAutoLoad: autoLoad,
+          };
+        });
+
+        const combinedSkills = [
+          ...mappedSkills,
+          ...marketplaceSkills,
+          ...marketplacePlugins,
+        ];
         setSkillsState(combinedSkills);
         originalSkillsRef.current = combinedSkills;
       } catch {
@@ -295,8 +321,10 @@ function SkillsSettingsScreen() {
   }, []);
 
   const handleSaveSkillChanges = useCallback(() => {
+    // Plugin rows are read-only previews whose toggle mirrors the marketplace's
+    // auto-load; they must never leak into the user's disabled_skills list.
     const disabledSkills = skillsState
-      .filter((s) => !s.isEnabled)
+      .filter((s) => s.type !== "plugin" && !s.isEnabled)
       .map((s) => s.name);
 
     skillMutations.saveDisabledSkills.mutate(disabledSkills, {
@@ -552,7 +580,7 @@ function SkillsSettingsScreen() {
         <section className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <Typography.H2>
-              {t(I18nKey.SETTINGS$AVAILABLE_SKILLS)}
+              {t(I18nKey.SETTINGS$SKILLS_AND_PLUGINS)}
             </Typography.H2>
             <Typography.Paragraph className="max-w-2xl text-sm text-tertiary-alt">
               {t(I18nKey.SETTINGS$SKILLS_DESCRIPTION)}

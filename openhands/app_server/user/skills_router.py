@@ -22,6 +22,7 @@ from openhands.app_server.settings.settings_models import MarketplaceRegistratio
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.sdk.marketplace import Marketplace
 
 router = APIRouter(prefix='/skills', tags=['Skills'], dependencies=get_dependencies())
 user_context_dependency = depends_user_context()
@@ -54,10 +55,24 @@ class SkillPage(BaseModel):
     next_page_id: str | None = None
 
 
+class MarketplacePluginPreview(BaseModel):
+    """A plugin advertised by a marketplace manifest.
+
+    The UI operates at the plugin level, so a plugin's bundled skills are not
+    expanded here; only the plugin itself is surfaced.
+    """
+
+    name: str
+    description: str | None = None
+    source: str  # the marketplace registration source (e.g. 'github:owner/repo')
+    marketplace: str  # the marketplace registration name this plugin belongs to
+
+
 class MarketplaceSkillsPreviewResponse(BaseModel):
     """Response for marketplace skills preview endpoint."""
 
     skills: list[SkillInfo]
+    plugins: list[MarketplacePluginPreview]
     marketplace_skills: dict[str, list[str]]  # marketplace_name -> skill names
     errors: list[str]
 
@@ -387,6 +402,7 @@ async def get_marketplace_skills(
             return cached_result
 
     all_skills: list[SkillInfo] = []
+    plugins: list[MarketplacePluginPreview] = []
     marketplace_skills: dict[str, list[str]] = {}
     errors: list[str] = []
 
@@ -408,43 +424,73 @@ async def get_marketplace_skills(
 
             cloned_dirs.append(clone_path)
 
-            # Look for skills in the cloned directory
-            # Common patterns: skills/, .skills/, plugins/*/skills/
-            skills_dirs = []
-
-            # Direct skills/ directory
-            if (clone_path / 'skills').is_dir():
-                skills_dirs.append(clone_path / 'skills')
-
-            # .skills/ directory
-            if (clone_path / '.skills').is_dir():
-                skills_dirs.append(clone_path / '.skills')
-
-            # plugins/*/skills/ pattern for monorepo setups
-            plugins_dir = clone_path / 'plugins'
-            if plugins_dir.is_dir():
-                for plugin_dir in plugins_dir.iterdir():
-                    if plugin_dir.is_dir():
-                        plugin_skills = plugin_dir / 'skills'
-                        if plugin_skills.is_dir():
-                            skills_dirs.append(plugin_skills)
-
+            # Prefer the marketplace manifest so we operate at the *plugin* level.
+            # ``Marketplace.load`` parses ``.plugin/marketplace.json`` (or
+            # ``.claude-plugin/marketplace.json``) and exposes the plugins and any
+            # standalone skills the marketplace advertises. A plugin's bundled
+            # skills are intentionally not expanded — the UI shows plugins, not
+            # their internals.
             skill_names: list[str] = []
-            for skills_dir in skills_dirs:
-                try:
-                    skills = _load_skills_from_dir(skills_dir, marketplace.source)
-                    for skill in skills:
-                        # Add marketplace name to source for marketplace skills
-                        skill_with_source = SkillInfo(
-                            name=skill.name,
-                            type=skill.type,
-                            source=f'marketplace:{marketplace.name}',
-                            triggers=skill.triggers,
+            loaded_marketplace: Marketplace | None = None
+            try:
+                loaded_marketplace = Marketplace.load(clone_path)
+            except FileNotFoundError:
+                # No manifest: this is a plain skills repo, not a plugin
+                # marketplace. Fall back to a loose-skill scan below.
+                loaded_marketplace = None
+            except Exception as e:
+                logger.warning(
+                    f'Failed to parse marketplace manifest for {marketplace.name}: {e}'
+                )
+                errors.append(f'{marketplace.name}: invalid marketplace manifest')
+                loaded_marketplace = None
+
+            if loaded_marketplace is not None:
+                for plugin_entry in loaded_marketplace.plugins:
+                    plugins.append(
+                        MarketplacePluginPreview(
+                            name=plugin_entry.name,
+                            description=plugin_entry.description,
+                            source=marketplace.source,
+                            marketplace=marketplace.name,
                         )
-                        all_skills.append(skill_with_source)
-                        skill_names.append(skill.name)
-                except Exception as e:
-                    logger.warning(f'Failed to load skills from {skills_dir}: {e}')
+                    )
+                # Standalone skills declared in the manifest (not plugin-bundled).
+                for skill_entry in loaded_marketplace.skills:
+                    all_skills.append(
+                        SkillInfo(
+                            name=skill_entry.name,
+                            type='knowledge',
+                            source=f'marketplace:{marketplace.name}',
+                            triggers=None,
+                        )
+                    )
+                    skill_names.append(skill_entry.name)
+            else:
+                # No manifest: surface loose skills from skills/ and .skills/.
+                # Bundled plugin skills under plugins/*/skills/ are deliberately
+                # not flattened — a plugin marketplace should ship a manifest.
+                skills_dirs = [
+                    d
+                    for d in (clone_path / 'skills', clone_path / '.skills')
+                    if d.is_dir()
+                ]
+                for skills_dir in skills_dirs:
+                    try:
+                        for skill in _load_skills_from_dir(
+                            skills_dir, marketplace.source
+                        ):
+                            all_skills.append(
+                                SkillInfo(
+                                    name=skill.name,
+                                    type=skill.type,
+                                    source=f'marketplace:{marketplace.name}',
+                                    triggers=skill.triggers,
+                                )
+                            )
+                            skill_names.append(skill.name)
+                    except Exception as e:
+                        logger.warning(f'Failed to load skills from {skills_dir}: {e}')
 
             marketplace_skills[marketplace.name] = skill_names
 
@@ -463,6 +509,7 @@ async def get_marketplace_skills(
 
     result = MarketplaceSkillsPreviewResponse(
         skills=all_skills,
+        plugins=plugins,
         marketplace_skills=marketplace_skills,
         errors=errors,
     )

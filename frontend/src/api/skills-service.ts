@@ -1,5 +1,9 @@
 import { openHands } from "./open-hands-axios";
-import { MarketplaceRegistration, SkillInfo } from "#/types/settings";
+import {
+  MarketplaceRegistration,
+  MarketplacePluginInfo,
+  SkillInfo,
+} from "#/types/settings";
 
 interface SkillPage {
   items: SkillInfo[];
@@ -8,6 +12,7 @@ interface SkillPage {
 
 export interface MarketplaceSkillsResponse {
   skills: SkillInfo[];
+  plugins: MarketplacePluginInfo[];
   marketplace_skills: Record<string, string[]>;
   errors: string[];
 }

@@ -2,10 +2,30 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import { InfoTooltip } from "#/components/features/settings/info-tooltip";
 import { MarketplaceRegistration } from "#/types/settings";
 import { I18nKey } from "#/i18n/declaration";
 import { Typography } from "#/ui/typography";
 import { cn } from "#/utils/utils";
+
+/**
+ * Best-effort marketplace name from a repository source, mirroring the backend
+ * `_derive_name_from_source` (marketplace_composition.py): strip a `provider:`
+ * prefix, take the last path segment, drop a trailing `.git`. The result is then
+ * sanitized to the valid name pattern (`^[a-zA-Z][a-zA-Z0-9_-]*$`) so the derived
+ * default is usually accepted as-is; on-save validation still guards edge cases.
+ */
+export function deriveMarketplaceName(source: string): string {
+  let s = (source || "").trim();
+  if (!s) return "";
+  if (s.includes(":")) s = s.slice(s.indexOf(":") + 1);
+  if (s.includes("/")) s = s.replace(/\/+$/, "").split("/").pop() ?? "";
+  s = s.replace(/\.git$/i, "");
+  return s
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^[^a-zA-Z]+/, "")
+    .replace(/-+$/g, "");
+}
 
 interface MarketplaceModalProps {
   isOpen: boolean;
@@ -44,6 +64,9 @@ export function MarketplaceModal({
   const [repoPath, setRepoPath] = React.useState(marketplace?.repo_path || "");
   const [autoLoad, setAutoLoad] = React.useState(!!marketplace?.auto_load);
   const [scope, setScope] = React.useState<"org" | "personal">("personal");
+  // Tracks whether the user has hand-edited Name, so auto-derivation from the
+  // repository stops clobbering an intentional name.
+  const [nameEdited, setNameEdited] = React.useState(false);
   const [nameError, setNameError] = React.useState<string | null>(null);
   const [sourceError, setSourceError] = React.useState<string | null>(null);
   const [repoPathError, setRepoPathError] = React.useState<string | null>(null);
@@ -58,6 +81,8 @@ export function MarketplaceModal({
       setAutoLoad(!!marketplace?.auto_load);
       // Default new marketplaces to personal; admins can opt into org.
       setScope(marketplace?.scope === "org" ? "org" : "personal");
+      // An existing (edit) name counts as user-owned; a fresh add starts clean.
+      setNameEdited(Boolean(marketplace?.name));
       setNameError(null);
       setSourceError(null);
       setRepoPathError(null);
@@ -149,32 +174,8 @@ export function MarketplaceModal({
             : t(I18nKey.SETTINGS$MARKETPLACE_ADD_TITLE)}
         </h3>
 
-        {/* Name field */}
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-tertiary-alt">
-            {t(I18nKey.SETTINGS$MARKETPLACE_NAME)}
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              setNameError(null);
-            }}
-            placeholder="e.g., my-skills"
-            className={cn(
-              "bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt",
-              nameError && "border-red-500",
-            )}
-          />
-          {nameError && (
-            <Typography.Paragraph className="text-xs text-red-400">
-              {nameError}
-            </Typography.Paragraph>
-          )}
-        </div>
-
-        {/* Source field - read-only in edit mode */}
+        {/* Repository (source) field - required, no default. Shown first so the
+            Name below can be derived from it. Read-only in edit mode. */}
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-tertiary-alt">
             {t(I18nKey.SETTINGS$MARKETPLACE_SOURCE)}
@@ -183,8 +184,14 @@ export function MarketplaceModal({
             type="text"
             value={source}
             onChange={(e) => {
-              setSource(e.target.value);
+              const nextSource = e.target.value;
+              setSource(nextSource);
               setSourceError(null);
+              // Pre-fill Name from the repository until the user edits Name.
+              if (!isEdit && !nameEdited) {
+                setName(deriveMarketplaceName(nextSource));
+                setNameError(null);
+              }
             }}
             placeholder="github:owner/repo"
             disabled={isEdit}
@@ -202,6 +209,32 @@ export function MarketplaceModal({
           {!sourceError && isEdit && (
             <Typography.Paragraph className="text-xs text-tertiary-alt">
               {t(I18nKey.SETTINGS$MARKETPLACE_SOURCE_READONLY)}
+            </Typography.Paragraph>
+          )}
+        </div>
+
+        {/* Name field - defaults to a value derived from the repository above. */}
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-tertiary-alt">
+            {t(I18nKey.SETTINGS$MARKETPLACE_NAME)}
+          </label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              setNameEdited(true);
+              setNameError(null);
+            }}
+            placeholder="e.g., my-skills"
+            className={cn(
+              "bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt",
+              nameError && "border-red-500",
+            )}
+          />
+          {nameError && (
+            <Typography.Paragraph className="text-xs text-red-400">
+              {nameError}
             </Typography.Paragraph>
           )}
         </div>
@@ -275,9 +308,12 @@ export function MarketplaceModal({
 
         {/* Auto-load toggle */}
         <div className="flex items-center gap-3">
-          <label className="text-sm font-medium text-tertiary-alt">
-            {t(I18nKey.SETTINGS$MARKETPLACE_AUTO_LOAD)}
-          </label>
+          <div className="flex items-center gap-1.5">
+            <label className="text-sm font-medium text-tertiary-alt">
+              {t(I18nKey.SETTINGS$MARKETPLACE_AUTO_LOAD)}
+            </label>
+            <InfoTooltip content={t(I18nKey.SETTINGS$AUTO_LOAD_TOOLTIP)} />
+          </div>
           <button
             type="button"
             onClick={() => setAutoLoad(!autoLoad)}

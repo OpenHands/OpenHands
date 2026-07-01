@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { MarketplaceRegistration } from "#/types/settings";
 import { Toggle } from "#/components/shared/toggle/toggle";
+import { InfoTooltip } from "#/components/features/settings/info-tooltip";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import EditIcon from "#/icons/u-edit.svg?react";
@@ -86,7 +87,14 @@ export function MarketplaceTable({
               <th className={HEADER_CLASS}>
                 {t(I18nKey.SETTINGS$MARKETPLACE_SCOPE_LABEL)}
               </th>
-              <th className={HEADER_CLASS}>{t(I18nKey.SETTINGS$AUTO_LOAD)}</th>
+              <th className={HEADER_CLASS}>
+                <span className="inline-flex items-center gap-1.5">
+                  {t(I18nKey.SETTINGS$AUTO_LOAD)}
+                  <InfoTooltip
+                    content={t(I18nKey.SETTINGS$AUTO_LOAD_TOOLTIP)}
+                  />
+                </span>
+              </th>
               <th className={cn(HEADER_CLASS, "text-right")}>
                 {t(I18nKey.SETTINGS$ACTIONS)}
               </th>
