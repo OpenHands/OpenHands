@@ -44,6 +44,32 @@ class TestMeResponseFromOrgMember:
         assert result.role == RoleName.MEMBER
         assert result.email == 'test@example.com'
 
+    def test_from_org_member_populates_permissions_from_role(self):
+        """Permissions are derived from the role for server-defined client gating."""
+        member = MagicMock(spec=OrgMember)
+        member.org_id = uuid4()
+        member.user_id = uuid4()
+        member.agent_settings_diff = {}
+        member.conversation_settings_diff = {}
+        member.status = 'active'
+        member.has_custom_llm_api_key = False
+        type(member).llm_api_key = PropertyMock(return_value=None)
+        type(member).llm_api_key_for_byor = PropertyMock(return_value=None)
+
+        admin_role = MagicMock()
+        admin_role.name = RoleName.ADMIN
+        admin = MeResponse.from_org_member(member, admin_role, 'admin@example.com')
+        assert 'edit_org_settings' in admin.permissions
+        assert 'view_org_settings' in admin.permissions
+
+        member_role = MagicMock()
+        member_role.name = RoleName.MEMBER
+        viewer = MeResponse.from_org_member(member, member_role, 'm@example.com')
+        # Members may view but not edit; the client gates LLM-profile mutations
+        # on the absence of edit_org_settings.
+        assert 'edit_org_settings' not in viewer.permissions
+        assert 'view_org_settings' in viewer.permissions
+
     def test_from_org_member_without_custom_llm_api_key_returns_empty_string(self):
         """When has_custom_llm_api_key is False, returns '' without accessing member.llm_api_key.
 
