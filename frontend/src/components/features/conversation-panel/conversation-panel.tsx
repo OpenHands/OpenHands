@@ -20,6 +20,7 @@ import { useConfig } from "#/hooks/query/use-config";
 import { ConversationCard } from "./conversation-card/conversation-card";
 import { StartTaskCard } from "./start-task-card/start-task-card";
 import { ConversationCardSkeleton } from "./conversation-card/conversation-card-skeleton";
+import { ConversationListErrorState } from "./conversation-list-error-state";
 
 interface ConversationPanelProps {
   onClose: () => void;
@@ -59,6 +60,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
+    refetch,
   } = usePaginatedConversations();
 
   // Fetch in-progress start tasks
@@ -132,6 +134,10 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
     }
   };
 
+  const handleRetry = () => {
+    refetch().catch(() => undefined);
+  };
+
   return (
     <div
       ref={(node) => {
@@ -152,17 +158,21 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
       )}
 
       {error && (
-        <div className="flex flex-col items-center justify-center h-full">
-          <p className="text-danger">{error.message}</p>
-        </div>
+        <ConversationListErrorState
+          isRetrying={isFetching}
+          onRetry={handleRetry}
+        />
       )}
-      {!isFetching && conversations?.length === 0 && !startTasks?.length && (
-        <div className="flex flex-col items-center justify-center h-full">
-          <p className="text-neutral-400">
-            {t(I18nKey.CONVERSATION$NO_CONVERSATIONS)}
-          </p>
-        </div>
-      )}
+      {!error &&
+        !isFetching &&
+        conversations?.length === 0 &&
+        !startTasks?.length && (
+          <div className="flex flex-col items-center justify-center h-full">
+            <p className="text-neutral-400">
+              {t(I18nKey.CONVERSATION$NO_CONVERSATIONS)}
+            </p>
+          </div>
+        )}
       {/* Render in-progress start tasks first */}
       {startTasks?.map((task) => (
         <NavLink

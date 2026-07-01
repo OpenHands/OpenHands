@@ -36,17 +36,19 @@ describe("RecentConversations", () => {
 
   it("should not show empty state when there is an error", async () => {
     searchConversationsSpy.mockRejectedValue(
-      new Error("Failed to fetch conversations"),
+      new Error("Request failed with status code 500"),
     );
 
     renderRecentConversations();
 
-    // Wait for the error to be displayed
+    // Wait for the structured error state to be displayed.
     await waitFor(() => {
-      expect(
-        screen.getByText("Failed to fetch conversations"),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("conversation-list-error")).toBeInTheDocument();
     });
+    expect(screen.getByText("ERROR$GENERIC")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Request failed with status code 500"),
+    ).not.toBeInTheDocument();
 
     // The empty state should NOT be displayed when there's an error
     expect(

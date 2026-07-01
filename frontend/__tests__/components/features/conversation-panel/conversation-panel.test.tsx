@@ -116,19 +116,34 @@ describe("ConversationPanel", () => {
     expect(emptyState).toBeInTheDocument();
   });
 
-  it("should handle an error when fetching conversations", async () => {
+  it("should show a retryable error state when fetching conversations fails", async () => {
+    const user = userEvent.setup();
     const searchConversationsSpy = vi.spyOn(
       V1ConversationService,
       "searchConversations",
     );
-    searchConversationsSpy.mockRejectedValue(
-      new Error("Failed to fetch conversations"),
-    );
+    searchConversationsSpy
+      .mockRejectedValueOnce(new Error("Request failed with status code 500"))
+      .mockResolvedValueOnce({
+        items: [...mockConversations],
+        next_page_id: null,
+      });
 
     renderConversationPanel();
 
-    const error = await screen.findByText("Failed to fetch conversations");
-    expect(error).toBeInTheDocument();
+    const error = await screen.findByTestId("conversation-list-error");
+    expect(error).toHaveTextContent("ERROR$GENERIC");
+    expect(
+      screen.queryByText("Request failed with status code 500"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "BUTTON$REFRESH" }));
+
+    await waitFor(() => {
+      expect(searchConversationsSpy).toHaveBeenCalledTimes(2);
+    });
+    const cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(3);
   });
 
   it("should cancel deleting a conversation", async () => {

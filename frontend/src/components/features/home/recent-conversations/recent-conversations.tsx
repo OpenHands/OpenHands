@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
+import { ConversationListErrorState } from "#/components/features/conversation-panel/conversation-list-error-state";
 import { RecentConversationsSkeleton } from "./recent-conversations-skeleton";
 import { RecentConversation } from "./recent-conversation";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
@@ -18,6 +19,7 @@ export function RecentConversations() {
     error,
     hasNextPage,
     fetchNextPage,
+    refetch,
   } = usePaginatedConversations(10);
 
   // Set up infinite scroll
@@ -48,6 +50,10 @@ export function RecentConversations() {
     setIsExpanded(!isExpanded);
   };
 
+  const handleRetry = () => {
+    refetch().catch(() => undefined);
+  };
+
   return (
     <section
       data-testid="recent-conversations"
@@ -65,9 +71,11 @@ export function RecentConversations() {
       </div>
 
       {error && (
-        <div className="flex flex-col items-center justify-center h-full pl-4">
-          <p className="text-danger">{error.message}</p>
-        </div>
+        <ConversationListErrorState
+          className="items-start px-4 text-left"
+          isRetrying={isFetching}
+          onRetry={handleRetry}
+        />
       )}
 
       <div className="flex flex-col">
