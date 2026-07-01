@@ -405,6 +405,50 @@ class TestLiteLlmManager:
             )  # create_team, add_user_to_team, delete_key_by_alias, generate_key
 
     @pytest.mark.asyncio
+    async def test_create_entries_can_create_team_without_adding_user(
+        self, mock_settings, mock_response
+    ):
+        """Test org bootstrap can create a team without user membership/key."""
+        mock_404_response = MagicMock()
+        mock_404_response.status_code = 404
+        mock_404_response.is_success = False
+        mock_404_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            message='Not Found', request=MagicMock(), response=mock_404_response
+        )
+
+        mock_token_manager = MagicMock()
+        mock_token_manager.return_value.get_user_info_from_user_id = AsyncMock(
+            return_value={'email': 'test@example.com'}
+        )
+
+        mock_client = AsyncMock()
+        mock_client.get.side_effect = [mock_404_response]
+        mock_client.post.return_value = mock_response
+
+        mock_client_class = MagicMock()
+        mock_client_class.return_value.__aenter__.return_value = mock_client
+
+        with (
+            patch.dict(os.environ, {'LOCAL_DEPLOYMENT': ''}),
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'),
+            patch('storage.lite_llm_manager.TokenManager', mock_token_manager),
+            patch('httpx.AsyncClient', mock_client_class),
+        ):
+            result = await LiteLlmManager.create_entries(
+                'test-org-id',
+                'test-user-id',
+                mock_settings,
+                create_user=False,
+                add_user_to_team=False,
+            )
+
+        assert result is not None
+        assert _secret_value(result, 'llm.api_key') is None
+        assert mock_client.get.call_count == 1
+        assert mock_client.post.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_create_entries_inherits_existing_team_budget(
         self, mock_settings, mock_response
     ):

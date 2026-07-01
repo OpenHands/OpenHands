@@ -29,6 +29,8 @@ class User(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     current_org_id: Mapped[UUID] = mapped_column(ForeignKey('org.id'), nullable=False)
+    # Instance-level super role; org membership roles live on OrgMember.role_id.
+    # Effective permissions are defined by SUPER_ROLE_PERMISSIONS.
     role_id: Mapped[int | None] = mapped_column(ForeignKey('role.id'), nullable=True)
     accepted_tos: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     enable_sound_notifications: Mapped[bool | None] = mapped_column(nullable=True)
@@ -50,6 +52,7 @@ class User(Base):
     )
 
     # Relationships
+    # Instance-level super-role relationship, not an org-scoped membership role.
     role: Mapped['Role | None'] = relationship('Role', back_populates='users')
     org_members: Mapped[list['OrgMember']] = relationship(
         'OrgMember', back_populates='user'

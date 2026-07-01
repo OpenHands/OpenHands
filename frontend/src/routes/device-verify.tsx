@@ -27,15 +27,15 @@ export default function DeviceVerify() {
   const [isProcessing, setIsProcessing] = useState(false);
   const { isEnterpriseCloud } = useAppMode();
 
-  // Organization dropdown state — defaults to the user's current workspace.
+  // Organization dropdown state — defaults to the user's current organization.
   const { data: orgData, isLoading: isOrgsLoading } = useOrganizations();
   const { organizationId: selectedOrgId } = useSelectedOrganizationId();
   const { mutate: switchOrganization, isPending: isSwitchingOrg } =
     useSwitchOrganization();
   const shouldHideOrgSelector = useShouldHideOrgSelector();
 
-  // Tracks the most recent failed workspace switch so Authorize stays disabled
-  // until the user picks a different workspace. Cleared on the next onChange.
+  // Tracks the most recent failed organization switch so Authorize stays disabled
+  // until the user picks a different organization. Cleared on the next onChange.
   const [switchFailed, setSwitchFailed] = useState(false);
 
   const organizations = orgData?.organizations;
@@ -216,7 +216,7 @@ export default function DeviceVerify() {
               <div className="mb-6">
                 <label className="flex flex-col gap-2">
                   <span className="text-sm font-medium">
-                    {t(I18nKey.WORKSPACE$TITLE)}
+                    {t(I18nKey.ORG$LABEL)}
                   </span>
                   <Dropdown
                     testId="device-verify-org-selector"
@@ -250,7 +250,7 @@ export default function DeviceVerify() {
                         {
                           onError: () => {
                             displayErrorToast(
-                              t(I18nKey.DEVICE$WORKSPACE_SWITCH_FAILED),
+                              t(I18nKey.DEVICE$ORG_SWITCH_FAILED),
                             );
                             setSwitchFailed(true);
                           },

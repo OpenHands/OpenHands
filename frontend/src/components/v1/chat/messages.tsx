@@ -80,14 +80,12 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       </>
     );
   },
-  (prevProps, nextProps) => {
-    // Prevent re-renders if messages are the same length
-    if (prevProps.messages.length !== nextProps.messages.length) {
-      return false;
-    }
-
-    return true;
-  },
+  // Default shallow prop comparison: re-render whenever the `messages`/`allEvents`
+  // array reference changes (a fresh array is produced whenever the event store
+  // updates). A custom length-only comparator was previously used, but it
+  // skipped re-renders when a streaming delta grows its bubble *in place*
+  // (content changes, array length stays the same), so the live answer never
+  // repainted until the next event changed the length.
 );
 
 Messages.displayName = "Messages";

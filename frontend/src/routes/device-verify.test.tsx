@@ -205,23 +205,23 @@ describe("DeviceVerify", () => {
     mockState.isEnterpriseCloud = false;
   });
 
-  describe("workspace dropdown visibility", () => {
-    it("renders the workspace dropdown in SaaS mode with multiple orgs", () => {
+  describe("organization dropdown visibility", () => {
+    it("renders the organization dropdown in SaaS mode with multiple orgs", () => {
       renderDeviceVerify();
       expect(getDropdown()).toBeInTheDocument();
-      expect(screen.getByText("WORKSPACE$TITLE")).toBeInTheDocument();
+      expect(screen.getByText("ORG$LABEL")).toBeInTheDocument();
     });
 
-    it("does not render the workspace dropdown when useShouldHideOrgSelector returns true", () => {
+    it("does not render the organization dropdown when useShouldHideOrgSelector returns true", () => {
       mockState.hideOrgSelector = true;
       renderDeviceVerify();
       expect(screen.queryByTestId("device-verify-org-selector")).toBeNull();
-      expect(screen.queryByText("WORKSPACE$TITLE")).toBeNull();
+      expect(screen.queryByText("ORG$LABEL")).toBeNull();
     });
   });
 
-  describe("workspace default", () => {
-    it("defaults the dropdown to the user's current workspace", () => {
+  describe("organization default", () => {
+    it("defaults the dropdown to the user's current organization", () => {
       mockState.selectedOrgId = "org-b";
       renderDeviceVerify();
       const input = getDropdown().querySelector("input") as HTMLInputElement;
@@ -229,7 +229,7 @@ describe("DeviceVerify", () => {
     });
   });
 
-  describe("workspace switch — happy path", () => {
+  describe("organization switch — happy path", () => {
     it("calls switchOrganization.mutate with the new org payload when a different org is picked", async () => {
       renderDeviceVerify();
       // current org is org-a ("Alpha"); pick org-b ("Beta").
@@ -272,12 +272,12 @@ describe("DeviceVerify", () => {
     });
   });
 
-  describe("failed workspace switch", () => {
+  describe("failed organization switch", () => {
     /**
      * Reproduces the race-condition that Hiep's review flagged:
      * the switch request fails server-side, `isPending` flips back to
      * false, and we must NOT allow Authorize to fire against the wrong
-     * workspace. The Authorize button must stay disabled and a toast
+     * organization. The Authorize button must stay disabled and a toast
      * must be surfaced.
      */
     it("keeps the Authorize button disabled and shows an error toast when the switch fails", async () => {
@@ -305,17 +305,17 @@ describe("DeviceVerify", () => {
       expect(getAuthorizeButton()).toBeDisabled();
       // The user is told why.
       expect(displayErrorToast).toHaveBeenCalledWith(
-        "DEVICE$WORKSPACE_SWITCH_FAILED",
+        "DEVICE$ORG_SWITCH_FAILED",
       );
     });
 
     /**
-     * After a failed switch, picking a different workspace must clear the
+     * After a failed switch, picking a different organization must clear the
      * failure flag so the Authorize button can re-enable for the new
      * attempt. Without this, the user would be permanently locked out
-     * of authorizing the device against any workspace.
+     * of authorizing the device against any organization.
      */
-    it("re-enables the Authorize button when the user picks a different workspace after a failed switch", async () => {
+    it("re-enables the Authorize button when the user picks a different organization after a failed switch", async () => {
       renderDeviceVerify();
 
       // First switch fails.
@@ -329,7 +329,7 @@ describe("DeviceVerify", () => {
       });
       expect(getAuthorizeButton()).toBeDisabled();
 
-      // User picks a *different* workspace (Gamma). The onChange handler
+      // User picks a *different* organization (Gamma). The onChange handler
       // clears the local switchFailed flag before kicking off the new
       // mutation, so once the new in-flight switch completes the Authorize
       // button can re-enable.

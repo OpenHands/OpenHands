@@ -659,6 +659,7 @@ class TestSwitchConversationProfile:
         post_kwargs = client.post.await_args.kwargs
         assert post_kwargs['json']['llm']['model'] == new_model
         assert post_kwargs['json']['llm']['usage_id'].startswith('profile:gpt-5:')
+        assert post_kwargs['json']['llm']['stream'] is True
 
     async def test_falls_back_to_settings_api_key_when_profile_has_none(self):
         """SaaS: managed profiles persist no key, so the switch must source the

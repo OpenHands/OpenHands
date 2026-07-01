@@ -495,13 +495,13 @@ class OrgStore:
     @staticmethod
     async def persist_org_with_owner(
         org: Org,
-        org_member: OrgMember,
+        org_member: OrgMember | None,
     ) -> Org:
-        """Persist organization and owner membership in a single transaction.
+        """Persist organization and optional owner membership in a single transaction.
 
         Args:
             org: Organization entity to persist
-            org_member: Organization member entity to persist
+            org_member: Optional organization member entity to persist
 
         Returns:
             Org: The persisted organization object
@@ -511,7 +511,8 @@ class OrgStore:
         """
         async with a_session_maker() as session:
             session.add(org)
-            session.add(org_member)
+            if org_member is not None:
+                session.add(org_member)
             await session.commit()
             await session.refresh(org)
             return org
