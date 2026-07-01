@@ -42,23 +42,23 @@
     "url": "https://github.com/OpenHands/OpenHands/issues"
   },
   "devDependencies": {
-    "@chromatic-com/storybook": "^4.0.0",
-    "@storybook/addon-a11y": "^9.0.12",
-    "@storybook/addon-docs": "^9.0.12",
-    "@storybook/addon-onboarding": "^9.0.12",
-    "@storybook/addon-vitest": "^9.0.12",
-    "@storybook/react-vite": "^9.0.12",
-    "@tailwindcss/vite": "^4.1.10",
-    "@types/bun": "latest",
-    "@types/deep-equal": "^1.0.4",
-    "@vitejs/plugin-react": "^4.5.2",
-    "@vitest/browser": "^4.1.0",
-    "@vitest/coverage-v8": "^4.1.0",
-    "playwright": "^1.53.1",
-    "storybook": "^9.0.12",
-    "typescript": "^5.8.3",
-    "vite-plugin-dts": "^4.5.4",
-    "vitest": "^4.1.0"
+    "@chromatic-com/storybook": "4.0.1",
+    "@storybook/addon-a11y": "9.0.18",
+    "@storybook/addon-docs": "9.0.18",
+    "@storybook/addon-onboarding": "9.0.18",
+    "@storybook/addon-vitest": "9.0.18",
+    "@storybook/react-vite": "9.0.18",
+    "@tailwindcss/vite": "4.1.11",
+    "@types/bun": "1.2.19",
+    "@types/deep-equal": "1.0.4",
+    "@vitejs/plugin-react": "4.7.0",
+    "@vitest/browser": "4.1.8",
+    "@vitest/coverage-v8": "4.1.8",
+    "playwright": "1.54.1",
+    "storybook": "9.0.18",
+    "typescript": "5.8.3",
+    "vite-plugin-dts": "4.5.4",
+    "vitest": "4.1.8"
   },
   "peerDependencies": {
     "react": ">=19.1.0",
@@ -66,17 +66,16 @@
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^4.1.10",
     "tailwind-scrollbar": "^4.0.2"
-
   },
   "dependencies": {
-    "@floating-ui/react": "^0.27.12",
-    "clsx": "^2.1.1",
-    "deep-equal": "^2.2.3",
-    "focus-trap-react": "^11.0.4",
-    "react-bootstrap-icons": "^1.11.6",
-    "react-select": "^5.10.2",
-    "sonner": "^2.0.6",
-    "tailwind-scrollbar": "^4.0.2"
+    "@floating-ui/react": "0.27.14",
+    "clsx": "2.1.1",
+    "deep-equal": "2.2.3",
+    "focus-trap-react": "11.0.4",
+    "react-bootstrap-icons": "1.11.6",
+    "react-select": "5.10.2",
+    "sonner": "2.0.6",
+    "tailwind-scrollbar": "4.0.2"
   },
   "scripts": {
     "dev": "storybook dev -p 6006",
