@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select, update
-
 from storage.api_key import ApiKey
 from storage.database import a_session_maker
 from storage.user_store import UserStore
