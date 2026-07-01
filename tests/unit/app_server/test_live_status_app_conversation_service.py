@@ -669,6 +669,7 @@ class TestLiveStatusAppConversationService:
 
         assert llm.model == 'sdk-model'
         assert llm.base_url == 'https://sdk-llm.example.com'
+        assert llm.stream is True
 
     @pytest.mark.asyncio
     async def test_configure_llm_preserves_reasoning_effort(self):

@@ -15,7 +15,7 @@ from server.constants import (
     get_default_llm_model,
 )
 from server.logger import logger
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from storage.database import a_session_maker
@@ -80,6 +80,25 @@ class UserStore:
             existing_user = result.scalars().first()
             if existing_user:
                 return existing_user
+
+            # First-user → superadmin: if the caller did not specify a
+            # super ``role_id`` and there are no existing users in the
+            # database, designate this user as a ``superadmin`` (the
+            # ``admin`` role attached via ``user.role_id``). Super-role
+            # permissions are explicit in ``server.auth.authorization``
+            # and do not inherit org-scoped admin permissions.
+            if role_id is None:
+                existing_user_count = await session.scalar(
+                    select(func.count()).select_from(User)
+                )
+                if existing_user_count == 0:
+                    superadmin_role = await RoleStore.get_role_by_name('admin', session)
+                    if superadmin_role is not None:
+                        role_id = superadmin_role.id
+                        logger.info(
+                            'user_store:create_user:first_user_designated_superadmin',
+                            extra={'user_id': user_id},
+                        )
 
             org = await session.get(Org, user_uuid)
             org_created = False
@@ -996,7 +1015,10 @@ class UserStore:
 
     @staticmethod
     async def create_default_settings(
-        org_id: str, user_id: str, create_user: bool = True
+        org_id: str,
+        user_id: str,
+        create_user: bool = True,
+        add_user_to_litellm_team: bool = True,
     ) -> Optional['Settings']:
         logger.info(
             'UserStore:create_default_settings:start',
@@ -1017,7 +1039,11 @@ class UserStore:
         from storage.lite_llm_manager import LiteLlmManager
 
         settings = await LiteLlmManager.create_entries(
-            org_id, user_id, default_settings, create_user
+            org_id,
+            user_id,
+            default_settings,
+            create_user,
+            add_user_to_team=add_user_to_litellm_team,
         )
         if not settings:
             logger.info(
