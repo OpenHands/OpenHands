@@ -343,9 +343,35 @@ export const organizationService = {
     return data;
   },
 
-  getBudgetSettings: async ({ orgId }: { orgId: string }) => {
+  getBudgetSettings: async ({
+    orgId,
+    usersPage,
+    usersPerPage,
+    usersSearch,
+    usersStatus,
+  }: {
+    orgId: string;
+    usersPage?: number;
+    usersPerPage?: number;
+    usersSearch?: string;
+    usersStatus?: string;
+  }) => {
+    const params: Record<string, number | string> = {};
+    if (typeof usersPage === "number") {
+      params.users_page = usersPage;
+    }
+    if (typeof usersPerPage === "number") {
+      params.users_per_page = usersPerPage;
+    }
+    if (usersSearch) {
+      params.users_search = usersSearch;
+    }
+    if (usersStatus) {
+      params.users_status = usersStatus;
+    }
     const { data } = await openHands.get<OrgBudgetSettings>(
       `/api/organizations/${orgId}/budgets`,
+      { params },
     );
     return data;
   },
@@ -596,6 +622,9 @@ interface OrgBudgetSettings {
   current_spend_percentage: number;
   thresholds: OrgBudgetThreshold[];
   users: OrgBudgetUser[];
+  users_total: number;
+  users_page: number;
+  users_per_page: number;
 }
 
 interface OrgBudgetSettingsUpdate {

@@ -3,7 +3,6 @@
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
 from server.services.email_service import (
     DEFAULT_WEB_HOST,
     EmailService,
@@ -15,16 +14,12 @@ class TestEmailServiceInvitationUrl:
 
     def test_invitation_url_uses_correct_endpoint(self):
         """Test that invitation URL points to the correct API endpoint."""
-        mock_response = MagicMock()
-        mock_response.get.return_value = 'test-email-id'
+        smtp_client = MagicMock()
 
         with (
-            patch.dict(os.environ, {'RESEND_API_KEY': 'test-key'}),
-            patch('server.services.email_service.RESEND_AVAILABLE', True),
-            patch('server.services.email_service.resend') as mock_resend,
+            patch.dict(os.environ, {'SMTP_HOST': 'smtp.example.com'}, clear=True),
+            patch('server.services.email_service.smtplib.SMTP', return_value=smtp_client),
         ):
-            mock_resend.Emails.send.return_value = mock_response
-
             EmailService.send_invitation_email(
                 to_email='test@example.com',
                 org_name='Test Org',
@@ -34,33 +29,23 @@ class TestEmailServiceInvitationUrl:
                 invitation_id=1,
             )
 
-            # Get the call arguments
-            call_args = mock_resend.Emails.send.call_args
-            email_params = call_args[0][0]
-
-            # Verify the URL in the email HTML contains the correct endpoint
-            assert (
-                '/api/organizations/members/invite/accept?token='
-                in email_params['html']
-            )
-            assert 'inv-test-token-12345' in email_params['html']
+            message = smtp_client.sendmail.call_args[0][2]
+            assert '/api/organizations/members/invite/accept?token=' in message
+            assert 'inv-test-token-12345' in message
 
     def test_invitation_url_uses_web_host_env_var(self):
         """Test that invitation URL uses WEB_HOST environment variable."""
         custom_host = 'https://custom.example.com'
-        mock_response = MagicMock()
-        mock_response.get.return_value = 'test-email-id'
+        smtp_client = MagicMock()
 
         with (
             patch.dict(
                 os.environ,
-                {'RESEND_API_KEY': 'test-key', 'WEB_HOST': custom_host},
+                {'SMTP_HOST': 'smtp.example.com', 'WEB_HOST': custom_host},
+                clear=True,
             ),
-            patch('server.services.email_service.RESEND_AVAILABLE', True),
-            patch('server.services.email_service.resend') as mock_resend,
+            patch('server.services.email_service.smtplib.SMTP', return_value=smtp_client),
         ):
-            mock_resend.Emails.send.return_value = mock_response
-
             EmailService.send_invitation_email(
                 to_email='test@example.com',
                 org_name='Test Org',
@@ -70,30 +55,18 @@ class TestEmailServiceInvitationUrl:
                 invitation_id=1,
             )
 
-            call_args = mock_resend.Emails.send.call_args
-            email_params = call_args[0][0]
-
+            message = smtp_client.sendmail.call_args[0][2]
             expected_url = f'{custom_host}/api/organizations/members/invite/accept?token=inv-test-token-12345'
-            assert expected_url in email_params['html']
+            assert expected_url in message
 
     def test_invitation_url_uses_default_host_when_env_not_set(self):
         """Test that invitation URL falls back to DEFAULT_WEB_HOST when env not set."""
-        mock_response = MagicMock()
-        mock_response.get.return_value = 'test-email-id'
-
-        env_without_web_host = {'RESEND_API_KEY': 'test-key'}
-        # Remove WEB_HOST if it exists
-        env_without_web_host.pop('WEB_HOST', None)
+        smtp_client = MagicMock()
 
         with (
-            patch.dict(os.environ, env_without_web_host, clear=True),
-            patch('server.services.email_service.RESEND_AVAILABLE', True),
-            patch('server.services.email_service.resend') as mock_resend,
+            patch.dict(os.environ, {'SMTP_HOST': 'smtp.example.com'}, clear=True),
+            patch('server.services.email_service.smtplib.SMTP', return_value=smtp_client),
         ):
-            # Clear WEB_HOST from the environment
-            os.environ.pop('WEB_HOST', None)
-            mock_resend.Emails.send.return_value = mock_response
-
             EmailService.send_invitation_email(
                 to_email='test@example.com',
                 org_name='Test Org',
@@ -103,53 +76,19 @@ class TestEmailServiceInvitationUrl:
                 invitation_id=1,
             )
 
-            call_args = mock_resend.Emails.send.call_args
-            email_params = call_args[0][0]
-
+            message = smtp_client.sendmail.call_args[0][2]
             expected_url = f'{DEFAULT_WEB_HOST}/api/organizations/members/invite/accept?token=inv-test-token-12345'
-            assert expected_url in email_params['html']
-
-
-class TestEmailServiceGetResendClient:
-    """Test cases for Resend client initialization."""
-
-    def test_get_resend_client_returns_false_when_resend_not_available(self):
-        """Test that _get_resend_client returns False when resend is not installed."""
-        with patch('server.services.email_service.RESEND_AVAILABLE', False):
-            result = EmailService._get_resend_client()
-            assert result is False
-
-    def test_get_resend_client_returns_false_when_api_key_not_configured(self):
-        """Test that _get_resend_client returns False when API key is missing."""
-        with (
-            patch('server.services.email_service.RESEND_AVAILABLE', True),
-            patch.dict(os.environ, {}, clear=True),
-        ):
-            os.environ.pop('RESEND_API_KEY', None)
-            result = EmailService._get_resend_client()
-            assert result is False
-
-    def test_get_resend_client_returns_true_when_configured(self):
-        """Test that _get_resend_client returns True when properly configured."""
-        with (
-            patch.dict(os.environ, {'RESEND_API_KEY': 'test-key'}),
-            patch('server.services.email_service.RESEND_AVAILABLE', True),
-            patch('server.services.email_service.resend') as mock_resend,
-        ):
-            result = EmailService._get_resend_client()
-            assert result is True
-            assert mock_resend.api_key == 'test-key'
+            assert expected_url in message
 
 
 class TestEmailServiceSendInvitationEmail:
     """Test cases for send_invitation_email method."""
 
-    def test_send_invitation_email_skips_when_client_not_ready(self):
-        """Test that email sending is skipped when client is not ready."""
+    def test_send_invitation_email_skips_when_smtp_not_configured(self):
+        """Test that email sending is skipped when SMTP is not configured."""
         with patch.object(
-            EmailService, '_get_resend_client', return_value=False
-        ) as mock_get_client:
-            # Should not raise, just return early
+            EmailService, '_send_smtp_email', return_value=False
+        ) as mock_send:
             EmailService.send_invitation_email(
                 to_email='test@example.com',
                 org_name='Test Org',
@@ -159,20 +98,23 @@ class TestEmailServiceSendInvitationEmail:
                 invitation_id=1,
             )
 
-            mock_get_client.assert_called_once()
+            mock_send.assert_called_once()
 
     def test_send_invitation_email_includes_all_required_info(self):
         """Test that invitation email includes org name, inviter name, and role."""
-        mock_response = MagicMock()
-        mock_response.get.return_value = 'test-email-id'
+        smtp_client = MagicMock()
 
         with (
-            patch.dict(os.environ, {'RESEND_API_KEY': 'test-key'}),
-            patch('server.services.email_service.RESEND_AVAILABLE', True),
-            patch('server.services.email_service.resend') as mock_resend,
+            patch.dict(
+                os.environ,
+                {
+                    'SMTP_HOST': 'smtp.example.com',
+                    'SMTP_FROM_EMAIL': 'alerts@example.com',
+                },
+                clear=True,
+            ),
+            patch('server.services.email_service.smtplib.SMTP', return_value=smtp_client),
         ):
-            mock_resend.Emails.send.return_value = mock_response
-
             EmailService.send_invitation_email(
                 to_email='test@example.com',
                 org_name='Acme Corp',
@@ -182,33 +124,66 @@ class TestEmailServiceSendInvitationEmail:
                 invitation_id=42,
             )
 
-            call_args = mock_resend.Emails.send.call_args
-            email_params = call_args[0][0]
+            message = smtp_client.sendmail.call_args[0][2]
 
-            # Verify email content
-            assert email_params['to'] == ['test@example.com']
-            assert 'Acme Corp' in email_params['subject']
-            assert 'John Doe' in email_params['html']
-            assert 'Acme Corp' in email_params['html']
-            assert 'admin' in email_params['html']
+            assert 'Acme Corp' in message
+            assert 'John Doe' in message
+            assert 'admin' in message
+            assert "You're invited to join Acme Corp on OpenHands" in message
 
+
+
+
+class TestEmailServiceBudgetAlerts:
+    """Test cases for budget alert emails."""
+
+    def test_send_budget_alert_uses_smtp_when_configured(self):
+        smtp_client = MagicMock()
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    'SMTP_HOST': 'smtp.example.com',
+                    'SMTP_PORT': '2525',
+                    'SMTP_FROM_EMAIL': 'alerts@example.com',
+                },
+                clear=True,
+            ),
+            patch('server.services.email_service.smtplib.SMTP', return_value=smtp_client) as mock_smtp,
+        ):
+            EmailService.send_budget_alert_email(
+                to_emails=['ops@example.com'],
+                org_name='Acme Corp',
+                percentage=80.0,
+                current_spend=800.0,
+                monthly_limit=1000.0,
+                threshold=80,
+            )
+
+            mock_smtp.assert_called_once_with('smtp.example.com', 2525)
+            smtp_client.starttls.assert_called_once()
+            smtp_client.sendmail.assert_called_once()
+            send_args = smtp_client.sendmail.call_args[0]
+            assert send_args[0] == 'alerts@example.com'
+            assert send_args[1] == ['ops@example.com']
+
+            smtp_client.quit.assert_called_once()
 
 class TestEmailServiceHelpers:
     """Tests for is_configured and build_invitation_url."""
 
-    def test_is_configured_false_without_api_key(self, monkeypatch):
-        monkeypatch.delenv('RESEND_API_KEY', raising=False)
+    def test_is_configured_false_without_smtp_host(self, monkeypatch):
+        monkeypatch.delenv('SMTP_HOST', raising=False)
         from server.services.email_service import EmailService
 
         assert EmailService.is_configured() is False
 
-    def test_is_configured_true_with_api_key(self, monkeypatch):
-        monkeypatch.setenv('RESEND_API_KEY', 'test-key')
-        from server.services import email_service
+    def test_is_configured_true_with_smtp_host(self, monkeypatch):
+        monkeypatch.setenv('SMTP_HOST', 'smtp.example.com')
+        from server.services.email_service import EmailService
 
-        if not email_service.RESEND_AVAILABLE:
-            pytest.skip('resend library not installed')
-        assert email_service.EmailService.is_configured() is True
+        assert EmailService.is_configured() is True
 
     def test_build_invitation_url_normalizes_bare_hostname(self, monkeypatch):
         """OHE charts set WEB_HOST as a bare hostname; links must get a scheme."""

@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import HTTPException, Request, status
 from server.auth.authorization import RoleName
 from server.services.email_service import EmailService
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org import Org
@@ -85,7 +85,14 @@ class OrgBudgetService:
     def __init__(self, db_session: AsyncSession):
         self.db_session = db_session
 
-    async def get_budget_state(self, org_id: UUID):
+    async def get_budget_state(
+        self,
+        org_id: UUID,
+        users_page: int = 1,
+        users_per_page: int = 50,
+        users_search: str | None = None,
+        users_status: str | None = None,
+    ):
         settings = await self._get_or_create_settings(org_id)
         thresholds = await self._get_thresholds(org_id)
         overrides = await self._get_overrides(org_id)
@@ -95,7 +102,7 @@ class OrgBudgetService:
         if cycle_rolled:
             cycle = self._current_cycle(settings)
 
-        current_spend, user_spend = await self._get_cycle_spend(org_id, cycle.start_at)
+        current_spend = await self._get_cycle_spend(org_id, cycle.start_at)
         await self._maybe_send_alerts(
             org_id,
             settings,
@@ -103,8 +110,14 @@ class OrgBudgetService:
             current_spend,
             cycle.start_at,
         )
-        users = await self._build_user_budget_rows(
-            org_id, settings, overrides, user_spend
+        users, users_total = await self._build_user_budget_rows(
+            org_id,
+            settings,
+            cycle.start_at,
+            users_page=users_page,
+            users_per_page=users_per_page,
+            users_search=users_search,
+            users_status=users_status,
         )
         return {
             'settings': settings,
@@ -112,12 +125,19 @@ class OrgBudgetService:
             'cycle': cycle,
             'current_spend': current_spend,
             'users': users,
+            'users_total': users_total,
+            'users_page': users_page,
+            'users_per_page': users_per_page,
         }
 
     async def update_budget_settings(
         self,
         org_id: UUID,
         update_data,
+        users_page: int = 1,
+        users_per_page: int = 50,
+        users_search: str | None = None,
+        users_status: str | None = None,
     ):
         settings = await self._get_or_create_settings(org_id)
         thresholds = await self._get_thresholds(org_id)
@@ -163,9 +183,15 @@ class OrgBudgetService:
         await self._sync_litellm_budgets(org_id, settings, overrides)
 
         cycle = self._current_cycle(settings)
-        current_spend, user_spend = await self._get_cycle_spend(org_id, cycle.start_at)
-        users = await self._build_user_budget_rows(
-            org_id, settings, overrides, user_spend
+        current_spend = await self._get_cycle_spend(org_id, cycle.start_at)
+        users, users_total = await self._build_user_budget_rows(
+            org_id,
+            settings,
+            cycle.start_at,
+            users_page=users_page,
+            users_per_page=users_per_page,
+            users_search=users_search,
+            users_status=users_status,
         )
         return {
             'settings': settings,
@@ -173,6 +199,9 @@ class OrgBudgetService:
             'cycle': cycle,
             'current_spend': current_spend,
             'users': users,
+            'users_total': users_total,
+            'users_page': users_page,
+            'users_per_page': users_per_page,
         }
 
     async def upsert_user_override(
@@ -327,9 +356,7 @@ class OrgBudgetService:
             return 0.0
         return float(financial_data.get('team_spend') or 0.0)
 
-    async def _get_cycle_spend(
-        self, org_id: UUID, cycle_start: datetime
-    ) -> tuple[float, dict[str, float]]:
+    async def _get_cycle_spend(self, org_id: UUID, cycle_start: datetime) -> float:
         total_query = (
             select(
                 func.coalesce(func.sum(StoredConversationMetadata.accumulated_cost), 0)
@@ -345,14 +372,24 @@ class OrgBudgetService:
             .where(StoredConversationMetadata.created_at >= cycle_start)
         )
         result = await self.db_session.execute(total_query)
-        total_spend = float(result.scalar() or 0.0)
+        return float(result.scalar() or 0.0)
 
-        user_query = (
+    async def _build_user_budget_rows(
+        self,
+        org_id: UUID,
+        settings: OrgBudgetSettings,
+        cycle_start: datetime,
+        users_page: int,
+        users_per_page: int,
+        users_search: str | None,
+        users_status: str | None,
+    ) -> tuple[list[dict], int]:
+        spend_subquery = (
             select(
-                StoredConversationMetadataSaas.user_id,
+                StoredConversationMetadataSaas.user_id.label('user_id'),
                 func.coalesce(
                     func.sum(StoredConversationMetadata.accumulated_cost), 0
-                ).label('spend'),
+                ).label('current_spend'),
             )
             .select_from(StoredConversationMetadata)
             .join(
@@ -364,46 +401,185 @@ class OrgBudgetService:
             .where(StoredConversationMetadataSaas.org_id == org_id)
             .where(StoredConversationMetadata.created_at >= cycle_start)
             .group_by(StoredConversationMetadataSaas.user_id)
+        ).subquery()
+
+        default_limit = literal(settings.default_user_monthly_limit)
+        effective_limit = case(
+            (OrgUserBudgetOverride.is_disabled.is_(True), literal(None)),
+            (
+                OrgUserBudgetOverride.user_id.isnot(None),
+                OrgUserBudgetOverride.monthly_limit,
+            ),
+            else_=default_limit,
         )
-        result = await self.db_session.execute(user_query)
-        user_spend = {str(row.user_id): float(row.spend or 0.0) for row in result}
+        is_disabled = case(
+            (OrgUserBudgetOverride.is_disabled.is_(True), literal(True)),
+            else_=literal(False),
+        )
+        is_override = OrgUserBudgetOverride.user_id.isnot(None)
+        current_spend = func.coalesce(spend_subquery.c.current_spend, 0.0)
 
-        return total_spend, user_spend
-
-    async def _build_user_budget_rows(
-        self,
-        org_id: UUID,
-        settings: OrgBudgetSettings,
-        overrides: list[OrgUserBudgetOverride],
-        user_spend: dict[str, float],
-    ) -> list[dict]:
-        override_map = {str(o.user_id): o for o in overrides}
-        query = (
-            select(OrgMember, User)
+        base_query = (
+            select(
+                OrgMember.user_id.label('user_id'),
+                User.email.label('user_email'),
+                User.git_user_name.label('user_name'),
+                current_spend.label('current_spend'),
+                OrgUserBudgetOverride.monthly_limit.label('monthly_limit'),
+                effective_limit.label('effective_monthly_limit'),
+                is_disabled.label('is_disabled'),
+                is_override.label('is_override'),
+            )
+            .select_from(OrgMember)
             .join(User, OrgMember.user_id == User.id)
+            .outerjoin(
+                OrgUserBudgetOverride,
+                and_(
+                    OrgUserBudgetOverride.org_id == org_id,
+                    OrgUserBudgetOverride.user_id == OrgMember.user_id,
+                ),
+            )
+            .outerjoin(spend_subquery, spend_subquery.c.user_id == OrgMember.user_id)
             .where(OrgMember.org_id == org_id)
+        )
+
+        search_value = (users_search or '').strip()
+        if search_value:
+            pattern = f"%{search_value}%"
+            base_query = base_query.where(
+                or_(
+                    User.email.ilike(pattern),
+                    User.git_user_name.ilike(pattern),
+                )
+            )
+
+        status_value = (users_status or '').strip().lower()
+        if status_value:
+            has_limit = and_(
+                is_disabled.is_(False),
+                effective_limit.isnot(None),
+                effective_limit > 0,
+            )
+            if status_value == 'disabled':
+                base_query = base_query.where(is_disabled.is_(True))
+            elif status_value == 'nocap':
+                base_query = base_query.where(
+                    and_(
+                        is_disabled.is_(False),
+                        or_(effective_limit.is_(None), effective_limit <= 0),
+                    )
+                )
+            elif status_value == 'overcap':
+                base_query = base_query.where(
+                    and_(has_limit, current_spend > effective_limit)
+                )
+            elif status_value == 'over90':
+                base_query = base_query.where(
+                    and_(has_limit, current_spend >= effective_limit * 0.9)
+                )
+            elif status_value == 'over80':
+                base_query = base_query.where(
+                    and_(has_limit, current_spend >= effective_limit * 0.8)
+                )
+            elif status_value == 'ontrack':
+                base_query = base_query.where(
+                    and_(has_limit, current_spend < effective_limit * 0.8)
+                )
+
+        total_query = select(func.count()).select_from(base_query.subquery())
+        total_result = await self.db_session.execute(total_query)
+        total = int(total_result.scalar() or 0)
+
+        offset = (users_page - 1) * users_per_page
+        query = (
+            base_query.order_by(User.email.asc(), User.id.asc())
+            .limit(users_per_page)
+            .offset(offset)
         )
         result = await self.db_session.execute(query)
         rows = []
-        for org_member, user in result.all():
-            user_id = str(org_member.user_id)
-            override = override_map.get(user_id)
-            effective_limit, is_disabled, is_override = _effective_user_budget_limit(
-                override, settings.default_user_monthly_limit
-            )
+        for row in result:
             rows.append(
                 {
-                    'user_id': user_id,
-                    'user_email': user.email,
-                    'user_name': user.git_user_name,
-                    'current_spend': user_spend.get(user_id, 0.0),
-                    'monthly_limit': override.monthly_limit if override else None,
-                    'effective_monthly_limit': effective_limit,
-                    'is_disabled': is_disabled,
-                    'is_override': is_override,
+                    'user_id': str(row.user_id),
+                    'user_email': row.user_email,
+                    'user_name': row.user_name,
+                    'current_spend': float(row.current_spend or 0.0),
+                    'monthly_limit': row.monthly_limit,
+                    'effective_monthly_limit': row.effective_monthly_limit,
+                    'is_disabled': bool(row.is_disabled),
+                    'is_override': bool(row.is_override),
                 }
             )
-        return rows
+        return rows, total
+
+    async def _get_user_spend(
+        self, org_id: UUID, user_id: UUID, cycle_start: datetime
+    ) -> float:
+        user_query = (
+            select(
+                func.coalesce(func.sum(StoredConversationMetadata.accumulated_cost), 0)
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadataSaas.org_id == org_id)
+            .where(StoredConversationMetadataSaas.user_id == user_id)
+            .where(StoredConversationMetadata.created_at >= cycle_start)
+        )
+        result = await self.db_session.execute(user_query)
+        return float(result.scalar() or 0.0)
+
+    async def get_user_budget_row(
+        self, org_id: UUID, user_id: UUID
+    ) -> dict | None:
+        settings = await self._get_or_create_settings(org_id)
+        thresholds = await self._get_thresholds(org_id)
+        overrides = await self._get_overrides(org_id)
+        cycle = self._current_cycle(settings)
+
+        cycle_rolled = await self._roll_cycle_if_needed(
+            settings, thresholds, overrides
+        )
+        if cycle_rolled:
+            cycle = self._current_cycle(settings)
+
+        result = await self.db_session.execute(
+            select(OrgMember, User)
+            .join(User, OrgMember.user_id == User.id)
+            .where(OrgMember.org_id == org_id)
+            .where(OrgMember.user_id == user_id)
+        )
+        row = result.one_or_none()
+        if not row:
+            return None
+
+        org_member, user = row
+        override = next(
+            (override for override in overrides if override.user_id == user_id),
+            None,
+        )
+        effective_limit, is_disabled, is_override = _effective_user_budget_limit(
+            override, settings.default_user_monthly_limit
+        )
+        current_spend = await self._get_user_spend(
+            org_id, user_id, cycle.start_at
+        )
+        return {
+            'user_id': str(org_member.user_id),
+            'user_email': user.email,
+            'user_name': user.git_user_name,
+            'current_spend': current_spend,
+            'monthly_limit': override.monthly_limit if override else None,
+            'effective_monthly_limit': effective_limit,
+            'is_disabled': is_disabled,
+            'is_override': is_override,
+        }
+
 
     async def _sync_litellm_budgets(
         self,

@@ -734,6 +734,10 @@ class OrgBudgetThresholdUpdate(BaseModel):
     slack_enabled: bool = False
 
 
+
+MAX_BUDGET_THRESHOLDS = 10000
+
+
 class OrgBudgetUserResponse(BaseModel):
     user_id: str
     user_email: str | None = None
@@ -758,6 +762,9 @@ class OrgBudgetSettingsResponse(BaseModel):
     current_spend_percentage: float = 0.0
     thresholds: list[OrgBudgetThresholdResponse] = Field(default_factory=list)
     users: list[OrgBudgetUserResponse] = Field(default_factory=list)
+    users_total: int = 0
+    users_page: int = 1
+    users_per_page: int = 50
 
 
 class OrgBudgetSettingsUpdate(BaseModel):
@@ -782,6 +789,10 @@ class OrgBudgetSettingsUpdate(BaseModel):
     def _validate_thresholds(self) -> 'OrgBudgetSettingsUpdate':
         if not self.thresholds:
             return self
+        if len(self.thresholds) > MAX_BUDGET_THRESHOLDS:
+            raise ValueError(
+                f'thresholds cannot exceed {MAX_BUDGET_THRESHOLDS} entries'
+            )
         seen = set()
         for threshold in self.thresholds:
             if threshold.percentage in seen:
