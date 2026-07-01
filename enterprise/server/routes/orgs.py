@@ -1134,6 +1134,9 @@ def _build_budget_response(state: dict) -> OrgBudgetSettingsResponse:
             for threshold in thresholds
         ],
         users=[OrgBudgetUserResponse(**user) for user in state['users']],
+        users_total=state['users_total'],
+        users_page=state['users_page'],
+        users_per_page=state['users_per_page'],
     )
 
 
@@ -1144,13 +1147,23 @@ def _build_budget_response(state: dict) -> OrgBudgetSettingsResponse:
 async def get_org_budget_settings(
     org_id: UUID,
     user_id: str = Depends(require_financial_data_access),
+    users_page: int = Query(1, ge=1),
+    users_per_page: int = Query(50, ge=1, le=1000),
+    users_search: str | None = Query(None, max_length=200),
+    users_status: str | None = Query(None),
     budget_service: OrgBudgetService = org_budget_service_dependency,
 ) -> OrgBudgetSettingsResponse:
     logger.info(
         'Getting org budget settings',
         extra={'org_id': str(org_id), 'user_id': user_id},
     )
-    state = await budget_service.get_budget_state(org_id)
+    state = await budget_service.get_budget_state(
+        org_id,
+        users_page=users_page,
+        users_per_page=users_per_page,
+        users_search=users_search,
+        users_status=users_status,
+    )
     return _build_budget_response(state)
 
 
@@ -1162,13 +1175,24 @@ async def update_org_budget_settings(
     org_id: UUID,
     update: OrgBudgetSettingsUpdate,
     user_id: str = Depends(require_financial_data_access),
+    users_page: int = Query(1, ge=1),
+    users_per_page: int = Query(50, ge=1, le=1000),
+    users_search: str | None = Query(None, max_length=200),
+    users_status: str | None = Query(None),
     budget_service: OrgBudgetService = org_budget_service_dependency,
 ) -> OrgBudgetSettingsResponse:
     logger.info(
         'Updating org budget settings',
         extra={'org_id': str(org_id), 'user_id': user_id},
     )
-    state = await budget_service.update_budget_settings(org_id, update)
+    state = await budget_service.update_budget_settings(
+        org_id,
+        update,
+        users_page=users_page,
+        users_per_page=users_per_page,
+        users_search=users_search,
+        users_status=users_status,
+    )
     return _build_budget_response(state)
 
 
@@ -1197,11 +1221,7 @@ async def upsert_org_budget_override(
         monthly_limit=update.monthly_limit,
         is_disabled=update.is_disabled,
     )
-    state = await budget_service.get_budget_state(org_id)
-    user_row = next(
-        (user for user in state['users'] if user['user_id'] == user_id),
-        None,
-    )
+    user_row = await budget_service.get_user_budget_row(org_id, UUID(user_id))
     if not user_row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

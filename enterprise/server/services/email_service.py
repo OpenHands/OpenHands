@@ -1,13 +1,9 @@
-"""Email service for sending transactional emails via Resend."""
+"""Email service for sending transactional emails via SMTP."""
 
 import os
-
-try:
-    import resend
-
-    RESEND_AVAILABLE = True
-except ImportError:
-    RESEND_AVAILABLE = False
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 from openhands.app_server.utils.logger import openhands_logger as logger
 
@@ -19,33 +15,92 @@ class EmailService:
     """Service for sending transactional emails."""
 
     @staticmethod
-    def _get_resend_client() -> bool:
-        """Initialize and return the Resend client.
+    def _get_smtp_settings() -> dict[str, object] | None:
+        host = os.environ.get('SMTP_HOST')
+        if not host:
+            return None
 
-        Returns:
-            bool: True if client is ready, False otherwise
-        """
-        if not RESEND_AVAILABLE:
-            logger.warning('Resend library not installed, skipping email')
+        port_value = os.environ.get('SMTP_PORT', '587')
+        try:
+            port = int(port_value)
+        except ValueError:
+            logger.warning(
+                'SMTP_PORT invalid, defaulting to 587',
+                extra={'smtp_port': port_value},
+            )
+            port = 587
+
+        use_ssl = os.environ.get('SMTP_USE_SSL', 'false').lower() in (
+            'true',
+            '1',
+        )
+        use_tls = (
+            os.environ.get('SMTP_USE_TLS', 'true').lower() in ('true', '1')
+            and not use_ssl
+        )
+
+        return {
+            'host': host,
+            'port': port,
+            'use_ssl': use_ssl,
+            'use_tls': use_tls,
+            'username': os.environ.get('SMTP_USERNAME', ''),
+            'password': os.environ.get('SMTP_PASSWORD', ''),
+            'from_email': os.environ.get('SMTP_FROM_EMAIL', DEFAULT_FROM_EMAIL),
+        }
+
+    @staticmethod
+    def _send_smtp_email(
+        to_emails: list[str],
+        subject: str,
+        html: str,
+        extra: dict[str, object] | None = None,
+    ) -> bool:
+        settings = EmailService._get_smtp_settings()
+        if not settings:
+            logger.warning('SMTP not configured, skipping email')
             return False
 
-        resend_api_key = os.environ.get('RESEND_API_KEY')
-        if not resend_api_key:
-            logger.warning('RESEND_API_KEY not configured, skipping email')
-            return False
+        message = MIMEMultipart('alternative')
+        message['Subject'] = subject
+        message['From'] = str(settings['from_email'])
+        message['To'] = ', '.join(to_emails)
+        message.attach(MIMEText(html, 'html'))
 
-        resend.api_key = resend_api_key
-        return True
+        extra_payload = extra or {}
+
+        try:
+            smtp_class = smtplib.SMTP_SSL if settings['use_ssl'] else smtplib.SMTP
+            client = smtp_class(settings['host'], settings['port'])
+            try:
+                if settings['use_tls']:
+                    client.starttls()
+                if settings['username']:
+                    client.login(settings['username'], settings['password'])
+                client.sendmail(
+                    settings['from_email'],
+                    to_emails,
+                    message.as_string(),
+                )
+            finally:
+                client.quit()
+            return True
+        except Exception as exc:
+            logger.error(
+                'Failed to send SMTP email',
+                extra={'error': str(exc), **extra_payload},
+            )
+            return False
 
     @staticmethod
     def is_configured() -> bool:
         """Whether transactional email delivery is configured.
 
-        Mirrors the checks in _get_resend_client without logging, so callers
-        can surface "email is not configured" to users instead of letting
-        invitations fail silently.
+        Returns True when SMTP settings are available so callers can surface
+        "email is not configured" to users instead of letting invitations fail
+        silently.
         """
-        return RESEND_AVAILABLE and bool(os.environ.get('RESEND_API_KEY'))
+        return EmailService._get_smtp_settings() is not None
 
     @staticmethod
     def build_invitation_url(invitation_token: str) -> str:
@@ -83,76 +138,51 @@ class EmailService:
             invitation_token: The secure invitation token
             invitation_id: The invitation ID for logging
         """
-        if not EmailService._get_resend_client():
-            return
-
         invitation_url = EmailService.build_invitation_url(invitation_token)
+        subject = f"You're invited to join {org_name} on OpenHands"
+        body = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <p>Hi,</p>
 
-        from_email = os.environ.get('RESEND_FROM_EMAIL', DEFAULT_FROM_EMAIL)
+            <p><strong>{inviter_name}</strong> has invited you to join <strong>{org_name}</strong> on OpenHands as a <strong>{role_name}</strong>.</p>
 
-        params = {
-            'from': from_email,
-            'to': [to_email],
-            'subject': f"You're invited to join {org_name} on OpenHands",
-            'html': f"""
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <p>Hi,</p>
+            <p>Click the button below to accept the invitation:</p>
 
-                <p><strong>{inviter_name}</strong> has invited you to join <strong>{org_name}</strong> on OpenHands as a <strong>{role_name}</strong>.</p>
+            <p style="margin: 30px 0;">
+                <a href="{invitation_url}"
+                   style="background-color: #c9b974; color: #0D0F11; padding: 8px 16px;
+                          text-decoration: none; border-radius: 8px; display: inline-block;
+                          font-size: 14px; font-weight: 600;">
+                    Accept Invitation
+                </a>
+            </p>
 
-                <p>Click the button below to accept the invitation:</p>
+            <p style="color: #666; font-size: 14px;">
+                Or copy and paste this link into your browser:<br>
+                <a href="{invitation_url}" style="color: #c9b974; font-weight: 600;">{invitation_url}</a>
+            </p>
 
-                <p style="margin: 30px 0;">
-                    <a href="{invitation_url}"
-                       style="background-color: #c9b974; color: #0D0F11; padding: 8px 16px;
-                              text-decoration: none; border-radius: 8px; display: inline-block;
-                              font-size: 14px; font-weight: 600;">
-                        Accept Invitation
-                    </a>
-                </p>
+            <p style="color: #666; font-size: 14px;">
+                This invitation will expire in 7 days.
+            </p>
 
-                <p style="color: #666; font-size: 14px;">
-                    Or copy and paste this link into your browser:<br>
-                    <a href="{invitation_url}" style="color: #c9b974; font-weight: 600;">{invitation_url}</a>
-                </p>
+            <p style="color: #666; font-size: 14px;">
+                If you weren't expecting this invitation, you can safely ignore this email.
+            </p>
 
-                <p style="color: #666; font-size: 14px;">
-                    This invitation will expire in 7 days.
-                </p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
 
-                <p style="color: #666; font-size: 14px;">
-                    If you weren't expecting this invitation, you can safely ignore this email.
-                </p>
+            <p style="color: #999; font-size: 12px;">
+                Best,<br>
+                The OpenHands Team
+            </p>
+        </div>
+        """
 
-                <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+        extra = {'invitation_id': invitation_id, 'email': to_email}
 
-                <p style="color: #999; font-size: 12px;">
-                    Best,<br>
-                    The OpenHands Team
-                </p>
-            </div>
-            """,
-        }
-
-        try:
-            response = resend.Emails.send(params)
-            logger.info(
-                'Invitation email sent',
-                extra={
-                    'invitation_id': invitation_id,
-                    'email': to_email,
-                    'response_id': response.get('id') if response else None,
-                },
-            )
-        except Exception as e:
-            logger.error(
-                'Failed to send invitation email',
-                extra={
-                    'invitation_id': invitation_id,
-                    'email': to_email,
-                    'error': str(e),
-                },
-            )
+        if EmailService._send_smtp_email([to_email], subject, body, extra):
+            logger.info('Invitation email sent', extra=extra)
 
     @staticmethod
     def send_budget_alert_email(
@@ -163,10 +193,6 @@ class EmailService:
         monthly_limit: float,
         threshold: int,
     ) -> None:
-        if not EmailService._get_resend_client():
-            return
-
-        from_email = os.environ.get('RESEND_FROM_EMAIL', DEFAULT_FROM_EMAIL)
         subject = (
             f'OpenHands budget alert: {org_name} reached {threshold}% of its limit'
         )
@@ -184,26 +210,7 @@ class EmailService:
         </div>
         """
 
-        params = {
-            'from': from_email,
-            'to': to_emails,
-            'subject': subject,
-            'html': body,
-        }
+        extra = {'org_name': org_name, 'recipient_count': len(to_emails)}
 
-        try:
-            response = resend.Emails.send(params)
-            logger.info(
-                'Budget alert email sent',
-                extra={
-                    'org_name': org_name,
-                    'recipient_count': len(to_emails),
-                    'response_id': response.get('id') if response else None,
-                },
-            )
-        except Exception as e:
-            logger.error(
-                'Failed to send budget alert email',
-                extra={'org_name': org_name, 'error': str(e)},
-            )
-            raise
+        if EmailService._send_smtp_email(to_emails, subject, body, extra):
+            logger.info('Budget alert email sent via SMTP', extra=extra)

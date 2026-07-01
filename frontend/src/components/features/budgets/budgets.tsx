@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useConfig } from "#/hooks/query/use-config";
+import { useDebounce } from "#/hooks/use-debounce";
 
 // Icons as inline SVGs
 function SearchIcon() {
@@ -279,6 +280,8 @@ const BUDGET_TABS = [
   { value: "overrides", label: "User overrides" },
 ] as const;
 
+const USERS_PER_PAGE = 50;
+
 type BudgetTab = (typeof BUDGET_TABS)[number]["value"];
 
 export function Budgets() {
@@ -287,18 +290,45 @@ export function Budgets() {
 
   const { data: config } = useConfig();
   const slackIntegrationEnabled = Boolean(config?.slack_enabled);
+  const [usersPage, setUsersPage] = useState(1);
+
   const emailIntegrationEnabled = Boolean(config?.email_enabled);
 
   const [activeTab, setActiveTab] = useState<BudgetTab>("organization");
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const usersSearch = debouncedSearchQuery.trim();
+  const usersStatus = statusFilter === "all" ? undefined : statusFilter;
+
   const { data: budgetData, isLoading } = useQuery({
-    queryKey: ["organizations", "budgets", organizationId],
+    queryKey: [
+      "organizations",
+      "budgets",
+      organizationId,
+      usersPage,
+      usersSearch,
+      usersStatus,
+    ],
     queryFn: () =>
       organizationService.getBudgetSettings({
         orgId: organizationId!,
+        usersPage,
+        usersPerPage: USERS_PER_PAGE,
+        usersSearch: usersSearch || undefined,
+        usersStatus,
       }),
     enabled: !!organizationId,
   });
+
+  useEffect(() => {
+    setUsersPage(1);
+  }, [organizationId]);
+
+  useEffect(() => {
+    setUsersPage(1);
+  }, [debouncedSearchQuery, statusFilter]);
 
   const updateBudgets = useMutation({
     mutationFn: (payload: {
@@ -362,8 +392,6 @@ export function Budgets() {
     { percentage: number; email_enabled: boolean; slack_enabled: boolean }[]
   >([]);
   const [defaultAmount, setDefaultAmount] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [overrideAmount, setOverrideAmount] = useState("");
   const [overrideDisabled, setOverrideDisabled] = useState(false);
@@ -403,6 +431,19 @@ export function Budgets() {
       })
     : "this cycle";
   const defaultUserLimit = budgetData?.default_user_monthly_limit ?? null;
+
+  const usersTotal = budgetData?.users_total ?? 0;
+  const usersPerPage = budgetData?.users_per_page ?? USERS_PER_PAGE;
+  const totalPages = Math.max(1, Math.ceil(usersTotal / usersPerPage));
+  const usersStart = usersTotal === 0 ? 0 : (usersPage - 1) * usersPerPage + 1;
+  const usersEnd =
+    usersTotal === 0 ? 0 : usersStart + (budgetData?.users.length ?? 0) - 1;
+
+  useEffect(() => {
+    if (usersPage > totalPages) {
+      setUsersPage(totalPages);
+    }
+  }, [totalPages, usersPage]);
 
   const defaultAmountLabel = defaultAmount
     ? parseFloat(defaultAmount).toLocaleString()
@@ -551,29 +592,7 @@ export function Budgets() {
     [budgetData, defaultUserLimit],
   );
 
-  const filteredUsers = useMemo(
-    () =>
-      userRows.filter((user) => {
-        const matchesSearch =
-          user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          user.email.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesStatus =
-          statusFilter === "all" ||
-          (statusFilter === "over80" &&
-            (user.status.includes("> 80%") ||
-              user.status.includes("> 90%") ||
-              user.status.includes("Over cap"))) ||
-          (statusFilter === "over90" &&
-            (user.status.includes("> 90%") ||
-              user.status.includes("Over cap"))) ||
-          (statusFilter === "overCap" && user.status.includes("Over cap")) ||
-          (statusFilter === "onTrack" && user.status.includes("On track")) ||
-          (statusFilter === "noCap" && user.status.includes("No cap")) ||
-          (statusFilter === "disabled" && user.status.includes("Disabled"));
-        return matchesSearch && matchesStatus;
-      }),
-    [userRows, searchQuery, statusFilter],
-  );
+  const filteredUsers = userRows;
 
   const startEditingUser = (user: (typeof userRows)[number]) => {
     setEditingUserId(user.user_id);
@@ -1206,6 +1225,37 @@ export function Budgets() {
               </tbody>
             </table>
           </div>
+
+          {usersTotal > 0 && (
+            <div className="mt-4 flex flex-col gap-3 text-sm text-[#6B6B6B] sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                {`Showing ${usersStart}-${usersEnd} of ${usersTotal}`}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUsersPage((prev) => Math.max(1, prev - 1))}
+                  disabled={usersPage <= 1 || isLoading}
+                  className="px-3 py-1.5 text-sm text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors disabled:opacity-60"
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-[#6B6B6B]">
+                  {`${usersPage} / ${totalPages}`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setUsersPage((prev) => Math.min(totalPages, prev + 1))
+                  }
+                  disabled={usersPage >= totalPages || isLoading}
+                  className="px-3 py-1.5 text-sm text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors disabled:opacity-60"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
 
           {filteredUsers.length === 0 && (
             <div className="py-12 text-center text-[#6B6B6B]">
