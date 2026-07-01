@@ -106,20 +106,28 @@ class StrictLLM(LLM):
 
     model_config = ConfigDict(extra='forbid')
 
-    @model_validator(mode='before')
+    @model_validator(mode='wrap')
     @classmethod
-    def _drop_is_subscription(cls, data: Any) -> Any:
-        """Strip the SDK's read-only ``is_subscription`` computed field.
+    def _restore_is_subscription(cls, data: Any, handler: Any) -> Any:
+        """Override the SDK's read-only ``is_subscription`` round-trip hook.
 
-        It's serialized into GET responses (so it round-trips through the
-        frontend's GET-edit-POST flow) but isn't a settable input: it only
-        becomes true via ``LLM.subscription_login()``, never via user-supplied
-        JSON, and letting a client set it here would let them self-declare
-        subscription billing.
+        ``LLM.model_validator`` (mode="wrap") reads ``is_subscription`` off
+        the *raw* input to restore ``_is_subscription`` on the built model,
+        so a plain ``extra``-forbid guard on the field doesn't stop it: it
+        inspects ``data`` directly rather than the value that reached core
+        validation. It's serialized into GET responses (so it round-trips
+        through the frontend's GET-edit-POST flow) but is otherwise only
+        ever set via ``LLM.subscription_login()`` — a path this profile
+        endpoint doesn't use. OpenHands doesn't read ``is_subscription``
+        anywhere itself, so there's no live exploit in accepting it; we drop
+        it here rather than restore it so a client can't put a profile into
+        a state (subscription-mode request handling with no real
+        subscription session behind it) this endpoint was never meant to
+        produce.
         """
-        if isinstance(data, dict) and 'is_subscription' in data:
+        if isinstance(data, dict):
             data = {k: v for k, v in data.items() if k != 'is_subscription'}
-        return data
+        return handler(data)
 
 
 class LLMProfiles(BaseModel):
