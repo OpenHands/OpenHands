@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
+from openhands.app_server.utils.logger import openhands_logger as logger
 from sqlalchemy import select, update
+
 from storage.api_key import ApiKey
 from storage.database import a_session_maker
 from storage.user_store import UserStore
-
-from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass
@@ -22,6 +22,30 @@ class ApiKeyValidationResult:
     org_id: UUID | None  # None for legacy API keys without org binding
     key_id: int
     key_name: str | None
+
+
+def _as_naive(value: datetime | None) -> datetime | None:
+    """Strip tzinfo so a value can be written to a `TIMESTAMP WITHOUT TIME ZONE`
+    column. Naive values are passed through unchanged; values already in UTC
+    are returned naive without conversion (i.e. we trust the caller's value).
+
+    TODO: switch the api_keys columns to TIMESTAMP WITH TIME ZONE and drop this.
+    """
+    if value is None:
+        return None
+    return value.replace(tzinfo=None) if value.tzinfo is not None else value
+
+
+def _as_utc_aware(value: datetime | None) -> datetime | None:
+    """Re-attach UTC tzinfo to a value that was stored as naive in a
+    `TIMESTAMP WITHOUT TIME ZONE` column. Already-aware values are returned
+    unchanged.
+
+    TODO: switch the api_keys columns to TIMESTAMP WITH TIME ZONE and drop this.
+    """
+    if value is None:
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 @dataclass
@@ -84,10 +108,8 @@ class ApiKeyStore:
             org_id = user.current_org_id
 
         # Column is TIMESTAMP WITHOUT TIME ZONE; strip tzinfo before writing.
-        if expires_at is not None and expires_at.tzinfo is not None:
-            expires_at = expires_at.replace(tzinfo=None)
-        if not_before is not None and not_before.tzinfo is not None:
-            not_before = not_before.replace(tzinfo=None)
+        expires_at = _as_naive(expires_at)
+        not_before = _as_naive(not_before)
 
         async with a_session_maker() as session:
             key_record = ApiKey(
@@ -146,9 +168,7 @@ class ApiKeyStore:
                 # Check if expired
                 if existing_key.expires_at:
                     now = datetime.now(UTC)
-                    expires_at = existing_key.expires_at
-                    if expires_at.tzinfo is None:
-                        expires_at = expires_at.replace(tzinfo=UTC)
+                    expires_at = _as_utc_aware(existing_key.expires_at)
 
                     if expires_at < now:
                         # Key is expired, delete it and create new one
@@ -234,28 +254,21 @@ class ApiKeyStore:
             # not_before / expires_at are stored as naive UTC; re-attach tzinfo
             # for comparison. The two checks are independent and combined with
             # AND semantics.
-            if key_record.not_before:
-                not_before = key_record.not_before
-                if not_before.tzinfo is None:
-                    not_before = not_before.replace(tzinfo=UTC)
-                if now < not_before:
-                    logger.info(f'API key not yet active: {key_record.id}')
-                    return None
+            not_before = _as_utc_aware(key_record.not_before)
+            if not_before and now < not_before:
+                logger.info(f'API key not yet active: {key_record.id}')
+                return None
 
-            if key_record.expires_at:
-                expires_at = key_record.expires_at
-                if expires_at.tzinfo is None:
-                    expires_at = expires_at.replace(tzinfo=UTC)
-
-                if expires_at < now:
-                    logger.info(f'API key has expired: {key_record.id}')
-                    return None
+            expires_at = _as_utc_aware(key_record.expires_at)
+            if expires_at and expires_at < now:
+                logger.info(f'API key has expired: {key_record.id}')
+                return None
 
             # Update last_used_at timestamp
             await session.execute(
                 update(ApiKey)
                 .where(ApiKey.id == key_record.id)
-                .values(last_used_at=now.replace(tzinfo=None))
+                .values(last_used_at=_as_naive(now))
             )
             await session.commit()
 
@@ -341,6 +354,7 @@ class ApiKeyStore:
                 )
             )
             keys = result.scalars().all()
+
             # Filter out system keys and MCP_API_KEY
             return [
                 key
