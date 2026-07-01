@@ -3,7 +3,7 @@ from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, SecretStr, field_validator
+from pydantic import BaseModel, SecretStr, field_validator, model_validator
 from server.auth.org_context import EFFECTIVE_ORG_ID
 from server.auth.saas_user_auth import SaasUserAuth
 from storage.api_key import ApiKey
@@ -114,6 +114,7 @@ api_key_store = ApiKeyStore.get_instance()
 
 class ApiKeyCreate(BaseModel):
     name: str | None = None
+    not_before: datetime | None = None
     expires_at: datetime | None = None
 
     @field_validator('expires_at')
@@ -122,12 +123,23 @@ class ApiKeyCreate(BaseModel):
             raise ValueError('Expiration date cannot be in the past')
         return v
 
+    @model_validator(mode='after')
+    def validate_active_window(self):
+        if (
+            self.not_before is not None
+            and self.expires_at is not None
+            and self.not_before >= self.expires_at
+        ):
+            raise ValueError('not_before must be earlier than expires_at')
+        return self
+
 
 class ApiKeyResponse(BaseModel):
     id: int
     name: str | None = None
     created_at: datetime
     last_used_at: datetime | None = None
+    not_before: datetime | None = None
     expires_at: datetime | None = None
 
 
@@ -164,6 +176,7 @@ def api_key_to_response(key: ApiKey) -> ApiKeyResponse:
         name=key.name,
         created_at=key.created_at,
         last_used_at=key.last_used_at,
+        not_before=key.not_before,
         expires_at=key.expires_at,
     )
 
@@ -200,7 +213,8 @@ async def create_api_key(
         api_key = await api_key_store.create_api_key(
             user_id,
             key_data.name,
-            key_data.expires_at,
+            expires_at=key_data.expires_at,
+            not_before=key_data.not_before,
             org_id=effective_org_id,
         )
         # Get the created key details
@@ -213,6 +227,7 @@ async def create_api_key(
                     key=api_key,
                     created_at=key.created_at,
                     last_used_at=key.last_used_at,
+                    not_before=key.not_before,
                     expires_at=key.expires_at,
                 )
     except Exception:

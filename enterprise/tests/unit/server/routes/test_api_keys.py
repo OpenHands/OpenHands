@@ -1,6 +1,7 @@
 """Unit tests for API keys routes, focusing on BYOR key validation and retrieval."""
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -554,3 +555,84 @@ class TestGetCurrentApiKey:
 
         assert exc_info.value.status_code == 400
         assert 'created before organization support' in exc_info.value.detail
+
+
+class TestApiKeyCreateValidation:
+    """Test the ApiKeyCreate Pydantic model's active-window validators."""
+
+    def test_accepts_no_window(self):
+        """A request with neither bound set is valid (legacy behaviour)."""
+        from server.routes.api_keys import ApiKeyCreate
+
+        model = ApiKeyCreate(name='legacy-style')
+        assert model.not_before is None
+        assert model.expires_at is None
+
+    def test_accepts_not_before_only(self):
+        """A request with only not_before is valid."""
+        from server.routes.api_keys import ApiKeyCreate
+
+        future = datetime.now(UTC) + timedelta(days=1)
+        model = ApiKeyCreate(name='future-key', not_before=future)
+        assert model.not_before == future
+        assert model.expires_at is None
+
+    def test_accepts_expires_at_only(self):
+        """A request with only expires_at is valid."""
+        from server.routes.api_keys import ApiKeyCreate
+
+        future = datetime.now(UTC) + timedelta(days=1)
+        model = ApiKeyCreate(name='expiring-key', expires_at=future)
+        assert model.not_before is None
+        assert model.expires_at == future
+
+    def test_accepts_valid_window(self):
+        """A request with not_before < expires_at is valid."""
+        from server.routes.api_keys import ApiKeyCreate
+
+        not_before = datetime.now(UTC) + timedelta(days=1)
+        expires_at = not_before + timedelta(days=30)
+        model = ApiKeyCreate(
+            name='window-key', not_before=not_before, expires_at=expires_at
+        )
+        assert model.not_before == not_before
+        assert model.expires_at == expires_at
+
+    def test_rejects_expires_at_in_past(self):
+        from pydantic import ValidationError
+        from server.routes.api_keys import ApiKeyCreate
+
+        with pytest.raises(ValidationError) as exc_info:
+            ApiKeyCreate(
+                name='past-key',
+                expires_at=datetime.now(UTC) - timedelta(days=1),
+            )
+        assert 'Expiration' in str(exc_info.value)
+
+    def test_rejects_inverted_window(self):
+        from pydantic import ValidationError
+        from server.routes.api_keys import ApiKeyCreate
+
+        not_before = datetime.now(UTC) + timedelta(days=10)
+        expires_at = datetime.now(UTC) + timedelta(days=1)
+        with pytest.raises(ValidationError) as exc_info:
+            ApiKeyCreate(
+                name='inverted-key',
+                not_before=not_before,
+                expires_at=expires_at,
+            )
+        assert 'not_before must be earlier than expires_at' in str(exc_info.value)
+
+    def test_rejects_equal_window(self):
+        """not_before == expires_at is rejected (degenerate window)."""
+        from pydantic import ValidationError
+        from server.routes.api_keys import ApiKeyCreate
+
+        same = datetime.now(UTC) + timedelta(days=1)
+        with pytest.raises(ValidationError) as exc_info:
+            ApiKeyCreate(
+                name='equal-key',
+                not_before=same,
+                expires_at=same,
+            )
+        assert 'not_before must be earlier than expires_at' in str(exc_info.value)

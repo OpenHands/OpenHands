@@ -689,6 +689,23 @@ async def test_saas_user_auth_from_bearer_invalid_api_key():
 
 
 @pytest.mark.asyncio
+async def test_saas_user_auth_from_bearer_key_outside_active_window():
+    """A key that validate_api_key rejects (e.g. not yet active) must not produce auth."""
+    mock_request = MagicMock()
+    mock_request.headers = {'Authorization': 'Bearer scheduled_key'}
+
+    with patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls:
+        mock_api_key_store = MagicMock()
+        # Simulate what validate_api_key returns when not_before is in the future.
+        mock_api_key_store.validate_api_key = AsyncMock(return_value=None)
+        mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+
+        result = await saas_user_auth_from_bearer(mock_request)
+
+        assert result is None
+
+
+@pytest.mark.asyncio
 async def test_saas_user_auth_from_bearer_exception():
     """Test that saas_user_auth_from_bearer raises BearerTokenError on exception."""
     mock_request = MagicMock()

@@ -157,6 +157,42 @@ function LlmApiKeyManager({
   );
 }
 
+type ApiKeyStatus = "active" | "pending" | "expired";
+
+const getApiKeyStatus = (key: ApiKey): ApiKeyStatus => {
+  const now = Date.now();
+  if (key.expires_at && new Date(key.expires_at).getTime() < now) {
+    return "expired";
+  }
+  if (key.not_before && new Date(key.not_before).getTime() > now) {
+    return "pending";
+  }
+  return "active";
+};
+
+const STATUS_BADGE_CLASSES: Record<ApiKeyStatus, string> = {
+  active: "bg-green-500/20 text-green-300",
+  pending: "bg-yellow-500/20 text-yellow-300",
+  expired: "bg-red-500/20 text-red-300",
+};
+
+function ApiKeyStatusBadge({ status }: { status: ApiKeyStatus }) {
+  const { t } = useTranslation();
+  const labelKey = {
+    active: I18nKey.SETTINGS$API_KEY_STATUS_ACTIVE,
+    pending: I18nKey.SETTINGS$API_KEY_STATUS_PENDING,
+    expired: I18nKey.SETTINGS$API_KEY_STATUS_EXPIRED,
+  }[status];
+
+  return (
+    <span
+      className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${STATUS_BADGE_CLASSES[status]}`}
+    >
+      {t(labelKey)}
+    </span>
+  );
+}
+
 interface ApiKeysTableProps {
   apiKeys: ApiKey[];
   isLoading: boolean;
@@ -167,7 +203,7 @@ function ApiKeysTable({ apiKeys, isLoading, onDeleteKey }: ApiKeysTableProps) {
   const { t } = useTranslation();
 
   const formatDate = (dateString: string | null) => {
-    if (!dateString) return "Never";
+    if (!dateString) return "—";
     return new Date(dateString).toLocaleString();
   };
 
@@ -197,34 +233,65 @@ function ApiKeysTable({ apiKeys, isLoading, onDeleteKey }: ApiKeysTableProps) {
             <th className="text-left p-3 text-sm font-medium">
               {t(I18nKey.SETTINGS$LAST_USED)}
             </th>
+            <th className="text-left p-3 text-sm font-medium">
+              {t(I18nKey.SETTINGS$API_KEY_STATUS)}
+            </th>
             <th className="text-right p-3 text-sm font-medium">
               {t(I18nKey.SETTINGS$ACTIONS)}
             </th>
           </tr>
         </thead>
         <tbody>
-          {apiKeys.map((key) => (
-            <tr key={key.id} className="border-t border-tertiary">
-              <td
-                className="p-3 text-sm truncate max-w-[160px]"
-                title={key.name}
-              >
-                {key.name}
-              </td>
-              <td className="p-3 text-sm">{formatDate(key.created_at)}</td>
-              <td className="p-3 text-sm">{formatDate(key.last_used_at)}</td>
-              <td className="p-3 text-right">
-                <button
-                  type="button"
-                  onClick={() => onDeleteKey(key)}
-                  aria-label={`Delete ${key.name}`}
-                  className="cursor-pointer"
+          {apiKeys.map((key) => {
+            const status = getApiKeyStatus(key);
+            const dimmed =
+              status === "expired" || status === "pending" ? "opacity-60" : "";
+            return (
+              <tr key={key.id} className={`border-t border-tertiary ${dimmed}`}>
+                <td
+                  className="p-3 text-sm truncate max-w-[160px]"
+                  title={key.name}
                 >
-                  <FaTrash size={16} />
-                </button>
-              </td>
-            </tr>
-          ))}
+                  {key.name}
+                </td>
+                <td className="p-3 text-sm">{formatDate(key.created_at)}</td>
+                <td className="p-3 text-sm">{formatDate(key.last_used_at)}</td>
+                <td className="p-3 text-sm">
+                  <div className="flex flex-col gap-1">
+                    <ApiKeyStatusBadge status={status} />
+                    {key.not_before && (
+                      <span
+                        className="text-xs text-gray-400"
+                        title={t(I18nKey.SETTINGS$API_KEY_NOT_BEFORE)}
+                      >
+                        {t(I18nKey.SETTINGS$API_KEY_NOT_BEFORE)}:{" "}
+                        {formatDate(key.not_before)}
+                      </span>
+                    )}
+                    {key.expires_at && (
+                      <span
+                        className="text-xs text-gray-400"
+                        title={t(I18nKey.SETTINGS$API_KEY_EXPIRES_AT)}
+                      >
+                        {t(I18nKey.SETTINGS$API_KEY_EXPIRES_AT)}:{" "}
+                        {formatDate(key.expires_at)}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="p-3 text-right">
+                  <button
+                    type="button"
+                    onClick={() => onDeleteKey(key)}
+                    aria-label={`Delete ${key.name}`}
+                    className="cursor-pointer"
+                  >
+                    <FaTrash size={16} />
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
