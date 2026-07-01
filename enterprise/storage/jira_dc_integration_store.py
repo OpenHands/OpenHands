@@ -129,6 +129,22 @@ class JiraDcIntegrationStore:
             )
             return result.scalar_one_or_none()
 
+    async def get_active_workspace(self) -> Optional[JiraDcWorkspace]:
+        """Return the install's active Jira DC workspace, if any.
+
+        Jira DC is single-server, so there is at most one active workspace; this
+        lets a not-yet-linked user discover that the integration is set up (and
+        which host to link to) without knowing its exact name.
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(JiraDcWorkspace)
+                .where(JiraDcWorkspace.status == 'active')
+                .order_by(JiraDcWorkspace.id)
+                .limit(1)
+            )
+            return result.scalar_one_or_none()
+
     async def get_user_by_active_workspace(
         self, keycloak_user_id: str
     ) -> Optional[JiraDcUser]:
