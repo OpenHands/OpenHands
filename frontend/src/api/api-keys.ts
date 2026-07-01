@@ -6,6 +6,8 @@ export interface ApiKey {
   prefix: string;
   created_at: string;
   last_used_at: string | null;
+  not_before: string | null;
+  expires_at: string | null;
 }
 
 export interface CreateApiKeyResponse {
@@ -14,6 +16,14 @@ export interface CreateApiKeyResponse {
   key: string; // Full key, only returned once upon creation
   prefix: string;
   created_at: string;
+  not_before: string | null;
+  expires_at: string | null;
+}
+
+export interface CreateApiKeyInput {
+  name: string;
+  not_before?: string | null; // ISO 8601 UTC; omit to activate immediately
+  expires_at?: string | null; // ISO 8601 UTC; omit for no expiration
 }
 
 class ApiKeysClient {
@@ -28,11 +38,15 @@ class ApiKeysClient {
 
   /**
    * Create a new API key
-   * @param name - A descriptive name for the API key
+   * @param input - Key name plus optional active-window bounds
    */
-  static async createApiKey(name: string): Promise<CreateApiKeyResponse> {
+  static async createApiKey(
+    input: CreateApiKeyInput,
+  ): Promise<CreateApiKeyResponse> {
     const { data } = await openHands.post<CreateApiKeyResponse>("/api/keys", {
-      name,
+      name: input.name,
+      not_before: input.not_before ?? undefined,
+      expires_at: input.expires_at ?? undefined,
     });
     return data;
   }

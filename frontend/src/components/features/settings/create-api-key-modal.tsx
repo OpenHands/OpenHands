@@ -16,6 +16,15 @@ interface CreateApiKeyModalProps {
   onKeyCreated: (newKey: CreateApiKeyResponse) => void;
 }
 
+// Converts a `datetime-local` input value ("2026-01-31T14:30") to a UTC ISO
+// string. Returns undefined when the input is empty.
+const localDateTimeToIso = (value: string): string | undefined => {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toISOString();
+};
+
 export function CreateApiKeyModal({
   isOpen,
   onClose,
@@ -23,6 +32,8 @@ export function CreateApiKeyModal({
 }: CreateApiKeyModalProps) {
   const { t } = useTranslation();
   const [newKeyName, setNewKeyName] = useState("");
+  const [notBefore, setNotBefore] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
 
   const createApiKeyMutation = useCreateApiKey();
 
@@ -32,19 +43,43 @@ export function CreateApiKeyModal({
       return;
     }
 
-    const newKey = await mutateWithToast(createApiKeyMutation, newKeyName, {
-      success: t(I18nKey.SETTINGS$API_KEY_CREATED),
-      error: t(I18nKey.ERROR$GENERIC),
-    }).catch(() => null);
+    const notBeforeIso = localDateTimeToIso(notBefore);
+    const expiresAtIso = localDateTimeToIso(expiresAt);
+
+    if (
+      notBeforeIso &&
+      expiresAtIso &&
+      new Date(notBeforeIso) >= new Date(expiresAtIso)
+    ) {
+      displayErrorToast(t(I18nKey.SETTINGS$API_KEY_WINDOW_INVALID));
+      return;
+    }
+
+    const newKey = await mutateWithToast(
+      createApiKeyMutation,
+      {
+        name: newKeyName.trim(),
+        not_before: notBeforeIso,
+        expires_at: expiresAtIso,
+      },
+      {
+        success: t(I18nKey.SETTINGS$API_KEY_CREATED),
+        error: t(I18nKey.ERROR$GENERIC),
+      },
+    ).catch(() => null);
 
     if (newKey) {
       onKeyCreated(newKey);
       setNewKeyName("");
+      setNotBefore("");
+      setExpiresAt("");
     }
   };
 
   const handleCancel = () => {
     setNewKeyName("");
+    setNotBefore("");
+    setExpiresAt("");
     onClose();
   };
 
@@ -94,6 +129,29 @@ export function CreateApiKeyModal({
           className="w-full mt-4"
           type="text"
         />
+        <p className="text-sm text-gray-300 mt-6">
+          {t(I18nKey.SETTINGS$API_KEY_ACTIVE_WINDOW)}
+        </p>
+        <div className="flex flex-col gap-4 mt-2">
+          <SettingsInput
+            testId="api-key-not-before-input"
+            label={t(I18nKey.SETTINGS$API_KEY_NOT_BEFORE)}
+            value={notBefore}
+            onChange={(value) => setNotBefore(value)}
+            className="w-full"
+            type="datetime-local"
+            showOptionalTag
+          />
+          <SettingsInput
+            testId="api-key-expires-at-input"
+            label={t(I18nKey.SETTINGS$API_KEY_EXPIRES_AT)}
+            value={expiresAt}
+            onChange={(value) => setExpiresAt(value)}
+            className="w-full"
+            type="datetime-local"
+            showOptionalTag
+          />
+        </div>
       </div>
     </ApiKeyModalBase>
   );
