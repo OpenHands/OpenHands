@@ -24,22 +24,50 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    with op.batch_alter_table('conversation_metadata') as batch_op:
-        batch_op.add_column(
-            sa.Column(
-                'execution_status',
-                sa.String(),
-                nullable=True,
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    columns = {
+        column['name'] for column in inspector.get_columns('conversation_metadata')
+    }
+    indexes = {
+        index['name'] for index in inspector.get_indexes('conversation_metadata')
+    }
+
+    if 'execution_status' not in columns:
+        with op.batch_alter_table('conversation_metadata') as batch_op:
+            batch_op.add_column(
+                sa.Column(
+                    'execution_status',
+                    sa.String(),
+                    nullable=True,
+                )
             )
-        )
-        batch_op.create_index(
+
+    if 'ix_conversation_metadata_execution_status' not in indexes:
+        op.create_index(
             'ix_conversation_metadata_execution_status',
-            'execution_status',
+            'conversation_metadata',
+            ['execution_status'],
             unique=False,
         )
 
 
 def downgrade() -> None:
-    with op.batch_alter_table('conversation_metadata') as batch_op:
-        batch_op.drop_index('ix_conversation_metadata_execution_status')
-        batch_op.drop_column('execution_status')
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    columns = {
+        column['name'] for column in inspector.get_columns('conversation_metadata')
+    }
+    indexes = {
+        index['name'] for index in inspector.get_indexes('conversation_metadata')
+    }
+
+    if 'ix_conversation_metadata_execution_status' in indexes:
+        op.drop_index(
+            'ix_conversation_metadata_execution_status',
+            table_name='conversation_metadata',
+        )
+
+    if 'execution_status' in columns:
+        with op.batch_alter_table('conversation_metadata') as batch_op:
+            batch_op.drop_column('execution_status')
