@@ -405,7 +405,8 @@ async def test_save_profile_rejects_client_declared_is_subscription(
     into GET responses so GET-edit-POST round trips don't 422, but a client
     setting it to ``True`` directly must not survive validation, since it
     only becomes true via ``LLM.subscription_login()`` — a path this
-    endpoint doesn't use.
+    endpoint doesn't use. This is a temporary compensating control pending
+    OpenHands/software-agent-sdk#3942; see ``StrictLLM._restore_is_subscription``.
     """
     await _seed(settings_store, _base_settings())
 

@@ -109,21 +109,25 @@ class StrictLLM(LLM):
     @model_validator(mode='wrap')
     @classmethod
     def _restore_is_subscription(cls, data: Any, handler: Any) -> Any:
-        """Override the SDK's read-only ``is_subscription`` round-trip hook.
+        """Temporary workaround for a non-composable SDK validator.
 
-        ``LLM.model_validator`` (mode="wrap") reads ``is_subscription`` off
-        the *raw* input to restore ``_is_subscription`` on the built model,
-        so a plain ``extra``-forbid guard on the field doesn't stop it: it
-        inspects ``data`` directly rather than the value that reached core
-        validation. It's serialized into GET responses (so it round-trips
-        through the frontend's GET-edit-POST flow) but is otherwise only
-        ever set via ``LLM.subscription_login()`` — a path this profile
-        endpoint doesn't use. OpenHands doesn't read ``is_subscription``
-        anywhere itself, so there's no live exploit in accepting it; we drop
-        it here rather than restore it so a client can't put a profile into
-        a state (subscription-mode request handling with no real
-        subscription session behind it) this endpoint was never meant to
-        produce.
+        ``LLM`` defines a validator of this same name (``mode="wrap"``)
+        that restores ``_is_subscription`` from this computed field so it
+        survives a dump/validate round trip. It does so by reading its own
+        raw ``data`` argument directly, independent of any subclass
+        ``mode="before"`` validator's transformation of the input — so a
+        normal ``before`` validator can't neutralize it, and the *only*
+        way to override the behavior is to shadow this exact method name.
+        See OpenHands/software-agent-sdk#3942.
+
+        Strip ``is_subscription`` from the input before validation (so
+        ``extra='forbid'`` doesn't reject the GET-response echo as an
+        unrecognized field on this endpoint's GET-edit-POST round trip)
+        and don't restore it: it's semantically only ever supposed to be
+        set via ``LLM.subscription_login()``, never via user-supplied
+        JSON here.
+
+        TODO: remove once software-agent-sdk#3942 is fixed upstream.
         """
         if isinstance(data, dict):
             data = {k: v for k, v in data.items() if k != 'is_subscription'}
