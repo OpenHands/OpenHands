@@ -14,6 +14,24 @@ from storage.jira_dc_workspace import JiraDcWorkspace
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 
+def workspace_visible_to_org(
+    workspace: JiraDcWorkspace, effective_org_id: UUID | None
+) -> bool:
+    """Whether an active Jira DC workspace should be visible to a user in the
+    given org. Install-wide when it has no org or is stamped with its creator's
+    personal org (org_id == admin_user_id); otherwise scoped to that org. Mirrors
+    the enricher's ``_workspace_matches_context`` so status/hint and per-user
+    token injection agree on who can see/link an org's Jira DC connection.
+    """
+    org_id = getattr(workspace, 'org_id', None)
+    if org_id is None:
+        return True
+    admin_user_id = getattr(workspace, 'admin_user_id', None)
+    if admin_user_id is not None and str(org_id) == str(admin_user_id):
+        return True
+    return effective_org_id is not None and str(org_id) == str(effective_org_id)
+
+
 @dataclass
 class JiraDcIntegrationStore:
     async def create_workspace(

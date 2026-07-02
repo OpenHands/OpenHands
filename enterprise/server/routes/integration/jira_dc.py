@@ -44,6 +44,7 @@ from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
 from server.constants import WEB_HOST
 from server.services.automation_event_service import AutomationEventService
+from storage.jira_dc_integration_store import workspace_visible_to_org
 from storage.redis import get_redis_client
 
 from openhands.app_server.config import depends_jwt_service
@@ -1144,11 +1145,14 @@ async def get_jira_dc_instance_status(
 
     Lets the settings UI tell a not-yet-linked member "the integration exists,
     link your account" (vs "ask an admin to set it up") and supplies the host
-    the per-user link call needs. Instance-level, non-secret; requires login.
+    the per-user link call needs. Scoped to the caller's org so a user in one org
+    can't see or link another org's Jira DC connection (install-wide workspaces
+    -- no org, or personal-org-stamped -- stay visible to everyone).
     """
-    await get_user_auth(request)
+    user_auth = cast(SaasUserAuth, await get_user_auth(request))
+    effective_org_id = await user_auth.get_effective_org_id()
     workspace = await jira_dc_manager.integration_store.get_active_workspace()
-    if workspace:
+    if workspace and workspace_visible_to_org(workspace, effective_org_id):
         return JiraDcInstanceStatusResponse(configured=True, host=workspace.name)
     return JiraDcInstanceStatusResponse(configured=False, host=None)
 

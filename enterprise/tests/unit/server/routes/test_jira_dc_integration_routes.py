@@ -2226,13 +2226,36 @@ async def test_get_jira_dc_instance_status_configured(
     mock_manager, mock_get_auth, mock_request, mock_user_auth
 ):
     mock_get_auth.return_value = mock_user_auth
-    mock_workspace = MagicMock(status='active')
+    # org_id=None => install-wide, visible to everyone.
+    mock_workspace = MagicMock(status='active', org_id=None)
     mock_workspace.name = 'jira.example.com'
     mock_manager.integration_store.get_active_workspace.return_value = mock_workspace
 
     response = await get_jira_dc_instance_status(mock_request)
     assert response.configured is True
     assert response.host == 'jira.example.com'
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.get_user_auth')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+async def test_get_jira_dc_instance_status_hidden_for_other_org(
+    mock_manager, mock_get_auth, mock_request, mock_user_auth
+):
+    # A workspace stamped with a different team org must not leak to this user
+    # (mock_user_auth's effective org is ...123).
+    mock_get_auth.return_value = mock_user_auth
+    mock_workspace = MagicMock(
+        status='active',
+        org_id=uuid.UUID('00000000-0000-0000-0000-000000000999'),
+        admin_user_id='some-other-admin',
+    )
+    mock_workspace.name = 'jira.other-org.com'
+    mock_manager.integration_store.get_active_workspace.return_value = mock_workspace
+
+    response = await get_jira_dc_instance_status(mock_request)
+    assert response.configured is False
+    assert response.host is None
 
 
 @pytest.mark.asyncio
