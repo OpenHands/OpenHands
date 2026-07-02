@@ -4,6 +4,7 @@ import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import TypedDict
 
 from openhands.app_server.utils.logger import openhands_logger as logger
 
@@ -11,11 +12,21 @@ DEFAULT_FROM_EMAIL = 'OpenHands <no-reply@openhands.dev>'
 DEFAULT_WEB_HOST = 'https://app.all-hands.dev'
 
 
+class SMTPSettings(TypedDict):
+    host: str
+    port: int
+    use_ssl: bool
+    use_tls: bool
+    username: str
+    password: str
+    from_email: str
+
+
 class EmailService:
     """Service for sending transactional emails."""
 
     @staticmethod
-    def _get_smtp_settings() -> dict[str, object] | None:
+    def _get_smtp_settings() -> SMTPSettings | None:
         host = os.environ.get('SMTP_HOST')
         if not host:
             return None
