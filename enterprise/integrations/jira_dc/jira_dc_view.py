@@ -209,7 +209,13 @@ class JiraDcNewConversationView(JiraDcViewInterface):
     def get_response_msg(self) -> str:
         """Get the response message to send back to Jira DC."""
         conversation_link = CONVERSATION_URL.format(self.conversation_id)
-        return f"I'm on it! {self.job_context.display_name} can [track my progress here|{conversation_link}]."
+        # Name the resolved repo so the user can confirm we picked the right one.
+        prefix = (
+            f"I'm on it in {self.selected_repo}!"
+            if self.selected_repo
+            else "I'm on it!"
+        )
+        return f'{prefix} {self.job_context.display_name} can [track my progress here|{conversation_link}].'
 
 
 @dataclass

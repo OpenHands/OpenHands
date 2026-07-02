@@ -79,6 +79,32 @@ async def test_create_api_key_strips_timezone_from_expires_at(
 
 @pytest.mark.asyncio
 @patch('storage.api_key_store.UserStore.get_user_by_id')
+async def test_create_api_key_strips_timezone_from_not_before(
+    mock_get_user, api_key_store, async_session_maker, mock_user
+):
+    """Timezone-aware not_before must be stored as naive UTC without shifting the value."""
+    user_id = str(uuid.uuid4())
+    aware_not_before = datetime.now(UTC) + timedelta(days=7)
+    mock_get_user.return_value = mock_user
+
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        key = await api_key_store.create_api_key(
+            user_id, name='nb-key', not_before=aware_not_before
+        )
+
+    async with async_session_maker() as session:
+        result = await session.execute(select(ApiKey).filter(ApiKey.key == key))
+        record = result.scalars().first()
+
+    assert record.not_before is not None
+    assert record.not_before.tzinfo is None
+    assert record.not_before == aware_not_before.replace(tzinfo=None)
+    # expires_at should still be None when only not_before is provided
+    assert record.expires_at is None
+
+
+@pytest.mark.asyncio
+@patch('storage.api_key_store.UserStore.get_user_by_id')
 async def test_create_api_key(
     mock_get_user, api_key_store, async_session_maker, mock_user
 ):
@@ -105,6 +131,71 @@ async def test_create_api_key(
         api_key = result_db.scalars().first()
         assert api_key is not None
         assert api_key.name == name
+        assert api_key.org_id == mock_user.current_org_id
+
+
+@pytest.mark.asyncio
+@patch('storage.api_key_store.UserStore.get_user_by_id')
+async def test_create_api_key_unbound_with_fallback_disabled(
+    mock_get_user, api_key_store, async_session_maker, mock_user
+):
+    """Explicit ``org_id=None`` is stored verbatim when fallback is disabled.
+
+    Regression: previously, ``create_api_key(user, name, org_id=None)``
+    silently rebound to ``user.current_org_id``, so the "All orgs" / unbound
+    key flow in ``POST /api/keys`` returned 500 -- the route inserted
+    with ``None`` matching nothing.
+    """
+    user_id = str(uuid.uuid4())
+    name = 'Unbound Key'
+    # If the fallback were still active, the store would look up the user
+    # and rebind ``org_id`` to ``mock_user.current_org_id``.
+    mock_get_user.return_value = mock_user
+
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.create_api_key(
+            user_id,
+            name,
+            org_id=None,
+            use_current_org_fallback=False,
+        )
+
+    assert result.startswith('sk-oh-')
+    # The user must NOT be looked up when the caller has already decided
+    # the binding -- that's the whole point of opting out of the fallback.
+    mock_get_user.assert_not_called()
+
+    async with async_session_maker() as session:
+        result_db = await session.execute(
+            select(ApiKey).filter(ApiKey.user_id == user_id)
+        )
+        api_key = result_db.scalars().first()
+        assert api_key is not None
+        assert api_key.name == name
+        assert api_key.org_id is None  # stored verbatim
+
+
+@pytest.mark.asyncio
+@patch('storage.api_key_store.UserStore.get_user_by_id')
+async def test_create_api_key_default_fallback_still_works(
+    mock_get_user, api_key_store, async_session_maker, mock_user
+):
+    """Default (fallback) behavior is preserved for existing internal callers."""
+    user_id = str(uuid.uuid4())
+    name = 'Legacy-style Key'
+    mock_get_user.return_value = mock_user
+
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        # No ``use_current_org_fallback`` argument -- the default kicks in.
+        await api_key_store.create_api_key(user_id, name, org_id=None)
+
+    mock_get_user.assert_called_once_with(user_id)
+    async with async_session_maker() as session:
+        result_db = await session.execute(
+            select(ApiKey).filter(ApiKey.user_id == user_id)
+        )
+        api_key = result_db.scalars().first()
+        assert api_key is not None
         assert api_key.org_id == mock_user.current_org_id
 
 
@@ -231,20 +322,25 @@ async def test_validate_api_key_valid_timezone_naive(
 
 
 @pytest.mark.asyncio
-async def test_validate_api_key_legacy_without_org_id(
+async def test_validate_api_key_unbound_returns_none_org_id(
     api_key_store, async_session_maker
 ):
-    """Test validating a legacy API key without org_id returns None for org_id."""
+    """An unbound API key validates successfully and reports ``org_id=None``.
+
+    The effective org for an unbound key is resolved per-request by
+    ``SaasUserAuth`` (from ``X-Org-Id`` or ``user.current_org_id``); the
+    store layer only reflects the persisted binding.
+    """
     # Arrange
     user_id = str(uuid.uuid4())
-    api_key_value = 'test-legacy-key-no-org'
+    api_key_value = 'test-unbound-key-no-org'
 
     async with async_session_maker() as session:
         key_record = ApiKey(
             key=api_key_value,
             user_id=user_id,
-            org_id=None,  # Legacy key without org binding
-            name='Legacy Key',
+            org_id=None,  # Unbound key
+            name='Multi-org Key',
         )
         session.add(key_record)
         await session.commit()
@@ -258,6 +354,119 @@ async def test_validate_api_key_legacy_without_org_id(
     assert result is not None
     assert result.user_id == user_id
     assert result.org_id is None
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_not_yet_active(api_key_store, async_session_maker):
+    """A key whose not_before is in the future must be rejected."""
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    api_key_value = 'test-not-yet-active-key'
+
+    async with async_session_maker() as session:
+        key_record = ApiKey(
+            key=api_key_value,
+            user_id=user_id,
+            org_id=org_id,
+            name='Scheduled Key',
+            not_before=datetime.now(UTC) + timedelta(days=1),
+        )
+        session.add(key_record)
+        await session.commit()
+        key_id = key_record.id
+
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.validate_api_key(api_key_value)
+
+    assert result is None
+
+    # Rejected keys must NOT have last_used_at updated.
+    async with async_session_maker() as session:
+        stored = await session.execute(select(ApiKey).filter(ApiKey.id == key_id))
+        assert stored.scalars().first().last_used_at is None
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_not_yet_active_timezone_naive(
+    api_key_store, async_session_maker
+):
+    """A naive-UTC not_before in the future must also be rejected."""
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    api_key_value = 'test-not-yet-active-naive'
+
+    async with async_session_maker() as session:
+        key_record = ApiKey(
+            key=api_key_value,
+            user_id=user_id,
+            org_id=org_id,
+            name='Scheduled Key Naive',
+            not_before=datetime.now() + timedelta(days=1),
+        )
+        session.add(key_record)
+        await session.commit()
+
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.validate_api_key(api_key_value)
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_active_window_inside(
+    api_key_store, async_session_maker
+):
+    """A key with both bounds set is accepted when now is inside the window."""
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    api_key_value = 'test-active-window-inside'
+
+    async with async_session_maker() as session:
+        key_record = ApiKey(
+            key=api_key_value,
+            user_id=user_id,
+            org_id=org_id,
+            name='Window Key',
+            not_before=datetime.now(UTC) - timedelta(hours=1),
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        session.add(key_record)
+        await session.commit()
+
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.validate_api_key(api_key_value)
+
+    assert isinstance(result, ApiKeyValidationResult)
+    assert result.user_id == user_id
+    assert result.org_id == org_id
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_only_not_before_past(
+    api_key_store, async_session_maker
+):
+    """A key with only not_before in the past and no expires_at is accepted."""
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    api_key_value = 'test-only-not-before'
+
+    async with async_session_maker() as session:
+        key_record = ApiKey(
+            key=api_key_value,
+            user_id=user_id,
+            org_id=org_id,
+            name='No Expiry Key',
+            not_before=datetime.now(UTC) - timedelta(minutes=1),
+            expires_at=None,
+        )
+        session.add(key_record)
+        await session.commit()
+
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.validate_api_key(api_key_value)
+
+    assert isinstance(result, ApiKeyValidationResult)
+    assert result.user_id == user_id
 
 
 @pytest.mark.asyncio

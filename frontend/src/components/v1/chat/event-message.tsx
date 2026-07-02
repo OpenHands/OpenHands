@@ -1,6 +1,8 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { OpenHandsEvent, MessageEvent, ActionEvent } from "#/types/v1/core";
 import { FinishAction, ThinkAction } from "#/types/v1/core/base/action";
+import { I18nKey } from "#/i18n/declaration";
 import {
   isActionEvent,
   isObservationEvent,
@@ -9,12 +11,14 @@ import {
   isPlanningFileEditorObservationEvent,
   isHookExecutionEvent,
   isACPToolCallEvent,
+  isStreamingDeltaEvent,
 } from "#/types/v1/type-guards";
 import { useConfig } from "#/hooks/query/use-config";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import { ChatMessage } from "../../features/chat/chat-message";
+import { GenericEventMessage } from "../../features/chat/generic-event-message";
 import { PlanPreview } from "../../features/chat/plan-preview";
 import {
   ErrorEventMessage,
@@ -123,6 +127,7 @@ export function EventMessage({
   isInLast10Actions,
   planPreviewEventIds,
 }: EventMessageProps) {
+  const { t } = useTranslation();
   const { data: config } = useConfig();
   const { planContent } = useConversationStore();
   const { curAgentState } = useAgentState();
@@ -159,6 +164,36 @@ export function EventMessage({
   if (isACPToolCallEvent(event)) {
     return (
       <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
+    );
+  }
+
+  // Streaming token deltas - the live, growing assistant bubble. Consecutive
+  // deltas are merged upstream (handleEventForUI / event store) into this single
+  // event, and the turn's final MessageEvent is reconciled into it rather than
+  // appended, so this same bubble becomes the finalized message.
+  if (isStreamingDeltaEvent(event)) {
+    const reasoning = event.reasoning_content ?? "";
+    const message = event.content ?? "";
+    return (
+      <>
+        {reasoning && (
+          // Render the streamed reasoning as a collapsible "Thinking" section
+          // (collapsed by default) so it's distinct from the answer and doesn't
+          // dominate the bubble.
+          <GenericEventMessage
+            title={t(I18nKey.EVENT$THINKING)}
+            details={reasoning}
+            initiallyExpanded={false}
+          />
+        )}
+        {message && (
+          <ChatMessage
+            type="agent"
+            message={message}
+            isFromPlanningAgent={isFromPlanningAgent}
+          />
+        )}
+      </>
     );
   }
 

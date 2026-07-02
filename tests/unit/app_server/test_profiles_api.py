@@ -396,6 +396,31 @@ async def test_edit_profile_round_trip_preserves_api_key(test_client, settings_s
 
 
 @pytest.mark.asyncio
+async def test_save_profile_rejects_client_declared_is_subscription(
+    test_client, settings_store
+):
+    """A client can't put a profile into subscription mode via this endpoint.
+
+    ``is_subscription`` is a read-only SDK computed field: it's serialized
+    into GET responses so GET-edit-POST round trips don't 422, but a client
+    setting it to ``True`` directly must not survive validation, since it
+    only becomes true via ``LLM.subscription_login()`` — a path this
+    endpoint doesn't use. This is a temporary compensating control pending
+    OpenHands/software-agent-sdk#3942; see ``StrictLLM._restore_is_subscription``.
+    """
+    await _seed(settings_store, _base_settings())
+
+    resp = test_client.post(
+        '/api/v1/settings/profiles/p',
+        json={'llm': {'model': 'openai/gpt-4o', 'is_subscription': True}},
+    )
+    assert resp.status_code == 201
+
+    stored = await settings_store.load()
+    assert stored.llm_profiles.get('p').is_subscription is False
+
+
+@pytest.mark.asyncio
 async def test_edit_profile_with_new_api_key_replaces_old(test_client, settings_store):
     """Counter-test to the round-trip guard: when the user actually types
     a new api_key in the edit form, the server must replace the stored

@@ -589,9 +589,8 @@ class TestResolveServiceAccountMentions:
             first = await jira_dc_manager._resolve_service_account_mentions(payload)
             second = await jira_dc_manager._resolve_service_account_mentions(payload)
 
-        assert '[~openhands]' in first
-        assert '[~jirauser1]' in first
-        assert '[~accountid:jirauser1]' in first
+        # Returns the bot identifiers (username + Jira key), not [~...] tokens.
+        assert first == {'openhands', 'jirauser1'}
         assert jira_dc_manager._svc_mentions_cache[1] == first
         # Second call served from cache -> only one /myself fetch.
         mock_client.get.assert_awaited_once()
@@ -674,27 +673,31 @@ class TestParseWebhook:
         assert jira_dc_manager.parse_webhook(payload, bot_mentions=None) is not None
 
     def test_parse_webhook_wiki_mention_triggers(self, jira_dc_manager):
-        """A picker mention [~name] triggers once the bot mentions are known."""
+        """A picker mention [~name] triggers once the bot ids are known."""
         payload = _jdc_comment_payload('cc [~openhands] please review')
-        result = jira_dc_manager.parse_webhook(payload, bot_mentions={'[~openhands]'})
+        result = jira_dc_manager.parse_webhook(payload, bot_mentions={'openhands'})
         assert result is not None
 
     def test_parse_webhook_wiki_mention_case_insensitive(self, jira_dc_manager):
         payload = _jdc_comment_payload('cc [~OpenHands]')
-        result = jira_dc_manager.parse_webhook(payload, bot_mentions={'[~openhands]'})
+        result = jira_dc_manager.parse_webhook(payload, bot_mentions={'openhands'})
         assert result is not None
 
     def test_parse_webhook_wiki_mention_by_key(self, jira_dc_manager):
         """The bot's Jira key form ([~JIRAUSER...]) also triggers."""
         payload = _jdc_comment_payload('cc [~jirauser173929] please')
-        result = jira_dc_manager.parse_webhook(
-            payload, bot_mentions={'[~jirauser173929]'}
-        )
+        result = jira_dc_manager.parse_webhook(payload, bot_mentions={'jirauser173929'})
+        assert result is not None
+
+    def test_parse_webhook_wiki_mention_accountid_form(self, jira_dc_manager):
+        """The Cloud-style [~accountid:<key>] wrapper also triggers."""
+        payload = _jdc_comment_payload('cc [~accountid:JIRAUSER173929] please')
+        result = jira_dc_manager.parse_webhook(payload, bot_mentions={'jirauser173929'})
         assert result is not None
 
     def test_parse_webhook_wiki_mention_other_user_no_trigger(self, jira_dc_manager):
         payload = _jdc_comment_payload('cc [~someoneelse] review')
-        result = jira_dc_manager.parse_webhook(payload, bot_mentions={'[~openhands]'})
+        result = jira_dc_manager.parse_webhook(payload, bot_mentions={'openhands'})
         assert result is None
 
     def test_parse_webhook_wiki_mention_dropped_when_unresolved(self, jira_dc_manager):
@@ -1729,7 +1732,7 @@ class TestSendRepoSelectionComment:
             'Could not access any of the mentioned repositories: company/repo'
             in call_args[0]
         )
-        assert 'OpenHands account has access' in call_args[0]
+        assert 'Git account linked to your OpenHands user can access it' in call_args[0]
 
     @pytest.mark.asyncio
     async def test_send_repo_selection_comment_send_fails(

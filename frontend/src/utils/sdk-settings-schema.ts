@@ -106,7 +106,7 @@ function isMinorField(field: SettingsFieldSchema): boolean {
   return field.prominence === "minor";
 }
 
-function normalizeFieldValue(
+export function normalizeFieldValue(
   field: SettingsFieldSchema,
   rawValue: unknown,
 ): string | boolean {
@@ -311,7 +311,7 @@ function parseBooleanFieldValue(rawValue: string | boolean): boolean | null {
   throw new Error(`Expected a boolean value, received: ${rawValue}`);
 }
 
-function coerceFieldValue(
+export function coerceFieldValue(
   field: SettingsFieldSchema,
   rawValue: string | boolean,
 ): SettingsValue {

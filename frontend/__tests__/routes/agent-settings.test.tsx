@@ -272,4 +272,64 @@ describe("AgentSettingsScreen — minimal generic ACP UX", () => {
       "npx -y <package-name>",
     );
   });
+
+  const openHandsSettingsWithConcurrency = (toolConcurrencyLimit: number) => ({
+    ...MOCK_DEFAULT_USER_SETTINGS,
+    agent_settings: {
+      ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+      agent_kind: "openhands",
+      enable_sub_agents: false,
+      tool_concurrency_limit: toolConcurrencyLimit,
+    },
+  });
+
+  it("saves a coerced tool_concurrency_limit on the OpenHands path", async () => {
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue(baseConfig);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      openHandsSettingsWithConcurrency(1),
+    );
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderAgentSettings();
+
+    const input = await screen.findByTestId(
+      "sdk-settings-tool_concurrency_limit",
+    );
+    await userEvent.clear(input);
+    await userEvent.type(input, "4");
+    await userEvent.click(screen.getByTestId("agent-save-button"));
+
+    await waitFor(() => {
+      expect(saveSpy).toHaveBeenCalledTimes(1);
+    });
+    const { agent_settings_diff: diff } = saveSpy.mock.calls[0][0] as {
+      agent_settings_diff: Record<string, unknown>;
+    };
+    // Coerced to a number (not the raw input string) via the shared coercion.
+    expect(diff.tool_concurrency_limit).toBe(4);
+  });
+
+  it("rejects a tool_concurrency_limit above the cap of 10", async () => {
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue(baseConfig);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      openHandsSettingsWithConcurrency(1),
+    );
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderAgentSettings();
+
+    const input = await screen.findByTestId(
+      "sdk-settings-tool_concurrency_limit",
+    );
+    await userEvent.clear(input);
+    await userEvent.type(input, "15");
+    await userEvent.click(screen.getByTestId("agent-save-button"));
+
+    // coerceFieldValue throws ("must be at most 10") → error toast, no save.
+    expect(saveSpy).not.toHaveBeenCalled();
+  });
 });

@@ -55,6 +55,10 @@ def test_markdown_to_jira_markup():
         ('# Header', 'h1. Header'),
         ('`code`', '{{code}}'),
         ('```python\ncode\n```', '{code:python}\ncode\n{code}'),
+        # Unsupported languages (e.g. text) fall back to a plain {code} block so
+        # Jira doesn't warn "no source-code formatter for language: text".
+        ('```text\nplain\n```', '{code}\nplain\n{code}'),
+        ('```TEXT\nx\n```', '{code}\nx\n{code}'),
         ('[link](url)', '[link|url]'),
         ('- item', '* item'),
         ('1. item', '# item'),
@@ -187,6 +191,23 @@ def test_infer_repo_from_message():
         ),
         ('https://bitbucket.mycorp.com/scm/~jdoe/tool.git', ['~jdoe/tool']),
         ('https://git.internal:7990/scm/TEAM/app.git', ['TEAM/app']),
+        # FDE-86 (1finity): trailing punctuation must not drop a mention, and a
+        # Jira/markdown link-wrapped clone URL must still resolve.
+        ('Is this merged into PF/meta-fnos-pf?', ['PF/meta-fnos-pf']),
+        ('Please look at acme/widgets!', ['acme/widgets']),
+        ('Check acme/widgets; thanks', ['acme/widgets']),
+        ('The fix is in acme/widgets.', ['acme/widgets']),
+        (
+            'merged into [https://bitbucket.fnc.fujitsu.com/scm/pf/meta-fnos-pf.git] ?',
+            ['pf/meta-fnos-pf'],
+        ),
+        (
+            'see [https://bitbucket.fnc.fujitsu.com/scm/pf/meta-fnos-pf.git|'
+            'https://bitbucket.fnc.fujitsu.com/scm/pf/meta-fnos-pf.git]',
+            ['pf/meta-fnos-pf'],
+        ),
+        # Trailing dot must not leak a date as a repo.
+        ('It is due on 1/2.', []),
     ]
 
     for message, expected in test_cases:

@@ -5776,14 +5776,14 @@ numpy = {version = ">=2", markers = "python_version >= \"3.9\""}
 
 [[package]]
 name = "openhands-agent-server"
-version = "1.29.0"
+version = "1.30.0"
 description = "OpenHands Agent Server - REST/WebSocket interface for OpenHands AI Agent"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_agent_server-1.29.0-py3-none-any.whl", hash = "sha256:39c633d6be822c264076ff1851317b192cc796ddf48c9146497f78c554c99127"},
-    {file = "openhands_agent_server-1.29.0.tar.gz", hash = "sha256:f9e16a9d67b6bee9f8eefc4df46aedd0a4a3e03a8bcd150d679b7775076b7bf2"},
+    {file = "openhands_agent_server-1.30.0-py3-none-any.whl", hash = "sha256:759e337b2b029d1891e8eca351e2af5f05b304f5a800a346b216f56e5964ab89"},
+    {file = "openhands_agent_server-1.30.0.tar.gz", hash = "sha256:af2290355350fa5c51c1ec5f2faea373124b08af2c12f25ef902567789c8371a"},
 ]
 
 [package.dependencies]
@@ -5810,90 +5810,90 @@ files = []
 develop = true
 
 [package.dependencies]
-aiohttp = ">=3.14.1"
+aiohttp = "3.14.1"
 anthropic = {version = "*", extras = ["vertex"]}
-anyio = "4.9"
+anyio = "4.9.0"
 asyncpg = ">=0.30"
-authlib = ">=1.6.12"
-bashlex = ">=0.18"
-binaryornot = ">=0.5.0,<1"
+authlib = ">=1.6.12,<1.7.0 || >1.7.0"
+bashlex = "0.18"
+binaryornot = "0.6.0"
 boto3 = "*"
 browsergym-core = "0.13.3"
-deprecated = "*"
-deprecation = ">=2.1"
-dirhash = "*"
-docker = "*"
+deprecated = "1.3.1"
+deprecation = "2.1.0"
+dirhash = "0.5.0"
+docker = "7.1.0"
 fastapi = "*"
 fastmcp = ">=3.2,<4"
-gitpython = ">=3.1.49"
+gitpython = "3.1.50"
 google-api-python-client = ">=2.164"
-google-auth-httplib2 = "*"
-google-auth-oauthlib = "*"
+google-auth-httplib2 = "0.3.1"
+google-auth-oauthlib = "1.3.1"
 google-cloud-aiplatform = "*"
 google-genai = "*"
-html2text = "*"
-httpx-aiohttp = ">=0.1.8"
-ipywidgets = ">=8.1.5"
-jinja2 = ">=3.1.6"
-joblib = "*"
+html2text = "2025.4.15"
+httpx-aiohttp = "0.1.12"
+ipywidgets = "8.1.8"
+jinja2 = "3.1.6"
+joblib = "1.5.3"
 joserfc = ">=1.0.0"
 json-repair = "*"
-jupyter-kernel-gateway = "*"
+jupyter-kernel-gateway = "3.0.1"
 kubernetes = ">=33.1"
 libtmux = ">=0.46.2"
 litellm = "1.84.1"
 lmnr = ">=0.7.20"
 mcp = ">=1.25"
-memory-profiler = ">=0.61"
-numpy = "*"
+memory-profiler = "0.61.0"
+numpy = "2.4.4"
 openai = "2.33.0"
-openhands-agent-server = "1.29.0"
-openhands-sdk = "1.29.0"
-openhands-tools = "1.29.0"
-opentelemetry-api = ">=1.33.1"
-opentelemetry-exporter-otlp-proto-grpc = ">=1.33.1"
-orjson = ">=3.11.6"
+openhands-agent-server = "1.30.0"
+openhands-sdk = "1.30.0"
+openhands-tools = "1.30.0"
+opentelemetry-api = "1.39.1"
+opentelemetry-exporter-otlp-proto-grpc = "1.39.1"
+orjson = "3.11.8"
 pathspec = ">=0.12.1"
-pexpect = "*"
-pg8000 = ">=1.31.5"
-pillow = ">=12.1.1"
-playwright = ">=1.55"
-poetry = ">=2.3.4,<2.4.0"
-prompt-toolkit = ">=3.0.50"
-protobuf = ">=5.29.6,<6"
-psutil = "*"
-pybase62 = ">=1"
+pexpect = "4.9.0"
+pg8000 = "1.31.5"
+pillow = "12.2.0"
+playwright = "1.58.0"
+poetry = "2.3.4"
+prompt-toolkit = "3.0.52"
+protobuf = "5.29.6"
+psutil = "7.2.2"
+pybase62 = "1.0.0"
 pygithub = ">=2.5"
-pyjwt = ">=2.13.0"
-pylatexenc = "*"
-pypdf = ">=6.13.3"
-python-docx = "*"
-python-dotenv = "*"
-python-frontmatter = ">=1.1"
+pyjwt = "2.13.0"
+pylatexenc = "2.10"
+pypdf = "6.14.2"
+python-docx = "1.2.0"
+python-dotenv = "1.2.2"
+python-frontmatter = "1.1.0"
 python-json-logger = ">=3.2.1"
-python-multipart = ">=0.0.30"
-python-pptx = "*"
-python-socketio = "5.14"
-pythonnet = {version = "*", markers = "sys_platform == \"win32\""}
-pyyaml = ">=6.0.2"
-qtconsole = ">=5.6.1"
+python-multipart = "0.0.32"
+python-pptx = "1.0.2"
+python-socketio = "5.14.0"
+pythonnet = {version = "3.0.5", markers = "sys_platform == \"win32\""}
+pyyaml = "6.0.3"
+qtconsole = "5.7.2"
 rapidfuzz = ">=3.9"
-redis = ">=5.2,<7"
-requests = ">=2.33"
-setuptools = ">=78.1.1"
-shellingham = ">=1.5.4"
+redis = "6.4.0"
+requests = "2.33.1"
+setuptools = "82.0.1"
+shellingham = "1.5.4"
 sqlalchemy = {version = ">=2.0.40", extras = ["asyncio"]}
-sse-starlette = ">=3.0.2"
-starlette = ">=1.3.1"
-tenacity = ">=8.5,<10"
-termcolor = "*"
-toml = "*"
-tornado = ">=6.5"
+sse-starlette = "3.3.4"
+starlette = "1.3.1"
+tenacity = "9.1.4"
+termcolor = "3.3.0"
+toml = "0.10.2"
+tornado = "6.5.7"
 tree-sitter-language-pack = ">=0.7.3"
 types-toml = "*"
-urllib3 = ">=2.7.0"
+urllib3 = "2.7.0"
 uvicorn = "*"
-whatthepatch = ">=1.0.6"
+whatthepatch = "1.0.7"
 zope-interface = "7.2"
 
 [package.source]
@@ -5902,14 +5902,14 @@ url = ".."
 
 [[package]]
 name = "openhands-sdk"
-version = "1.29.0"
+version = "1.30.0"
 description = "OpenHands SDK - Core functionality for building AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_sdk-1.29.0-py3-none-any.whl", hash = "sha256:ae9f4ec0b1fd86e3fd4c74682a9ee477614e790457ed06c675ad6caf9eef5194"},
-    {file = "openhands_sdk-1.29.0.tar.gz", hash = "sha256:2b38dec04858535ff78fdc961ffc44cee338aca6947c0ddb70c6926e5ac883af"},
+    {file = "openhands_sdk-1.30.0-py3-none-any.whl", hash = "sha256:53423bd4916c578ccb8f8f488dfcc16669343f2a3ac0c3db955793e704f734a2"},
+    {file = "openhands_sdk-1.30.0.tar.gz", hash = "sha256:b48a75adb8d2c48d6a53d0022e3521d63caeb5931b99d5a56906a24a4eec3e72"},
 ]
 
 [package.dependencies]
@@ -5933,17 +5933,18 @@ websockets = ">=12"
 
 [package.extras]
 boto3 = ["boto3 (>=1.35.0)"]
+vertex = ["google-cloud-aiplatform (>=1.38)"]
 
 [[package]]
 name = "openhands-tools"
-version = "1.29.0"
+version = "1.30.0"
 description = "OpenHands Tools - Runtime tools for AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_tools-1.29.0-py3-none-any.whl", hash = "sha256:bb50b62a1929958e4fd8991fd8dbd6b8269c87da74286a925c066d0ac3dd915f"},
-    {file = "openhands_tools-1.29.0.tar.gz", hash = "sha256:3427966f5cb21cc64932dde73173772ccf384ba25f4f599501d540b3f2dd7d01"},
+    {file = "openhands_tools-1.30.0-py3-none-any.whl", hash = "sha256:349af6c15b7d9808edc529d52e0e06efea064187662bef0d2e6c3a0d219f6cfa"},
+    {file = "openhands_tools-1.30.0.tar.gz", hash = "sha256:8762808cb481a7d5805c0f66ac62228dc25ce2baf336ab2d446ca772c761c864"},
 ]
 
 [package.dependencies]
@@ -14458,4 +14459,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "3ed1ff54e78b57ec90cadf57dd1165ef76945c01c87ae358c6a8f3da1fd1e5a8"
+content-hash = "05e41d88a2e42b3dc042490a6ddbaedd60ea97722c6e1d831b7bf31626f1055c"
