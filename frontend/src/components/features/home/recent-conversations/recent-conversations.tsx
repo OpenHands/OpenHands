@@ -4,6 +4,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { RecentConversationsSkeleton } from "./recent-conversations-skeleton";
 import { RecentConversation } from "./recent-conversation";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
+import { ConversationListErrorState } from "#/components/features/conversation-panel/conversation-list-error-state";
 import { useInfiniteScroll } from "#/hooks/use-infinite-scroll";
 import { cn } from "#/utils/utils";
 
@@ -18,6 +19,7 @@ export function RecentConversations() {
     error,
     hasNextPage,
     fetchNextPage,
+    refetch,
   } = usePaginatedConversations(10);
 
   // Set up infinite scroll
@@ -65,9 +67,7 @@ export function RecentConversations() {
       </div>
 
       {error && (
-        <div className="flex flex-col items-center justify-center h-full pl-4">
-          <p className="text-danger">{error.message}</p>
-        </div>
+        <ConversationListErrorState onRetry={refetch} />
       )}
 
       <div className="flex flex-col">
