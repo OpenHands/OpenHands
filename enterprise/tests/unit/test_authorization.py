@@ -42,6 +42,10 @@ class TestPermission:
         assert Permission.MANAGE_MCP.value == 'manage_mcp'
         assert Permission.MANAGE_INTEGRATIONS.value == 'manage_integrations'
         assert (
+            Permission.MANAGE_INTEGRATION_PROVIDERS.value
+            == 'manage_integration_providers'
+        )
+        assert (
             Permission.MANAGE_APPLICATION_SETTINGS.value
             == 'manage_application_settings'
         )
@@ -151,6 +155,7 @@ class TestRolePermissions:
         assert Permission.DELETE_ORGANIZATION in owner_perms
         assert Permission.MANAGE_AUTOMATIONS in owner_perms
         assert Permission.VIEW_ORG_CONVERSATIONS in owner_perms
+        assert Permission.MANAGE_INTEGRATION_PROVIDERS in owner_perms
 
     def test_admin_has_admin_permissions(self):
         """
@@ -170,6 +175,7 @@ class TestRolePermissions:
         assert Permission.CHANGE_USER_ROLE_ADMIN in admin_perms
         assert Permission.MANAGE_AUTOMATIONS in admin_perms
         assert Permission.VIEW_ORG_CONVERSATIONS in admin_perms
+        assert Permission.MANAGE_INTEGRATION_PROVIDERS in admin_perms
         # Admin should NOT have owner-only permissions
         assert Permission.CHANGE_USER_ROLE_OWNER not in admin_perms
         assert Permission.CHANGE_ORGANIZATION_NAME not in admin_perms
@@ -193,6 +199,7 @@ class TestRolePermissions:
         assert Permission.VIEW_ORG_SETTINGS in member_perms
         # Member should NOT have admin/owner permissions
         assert Permission.EDIT_LLM_SETTINGS not in member_perms
+        assert Permission.MANAGE_INTEGRATION_PROVIDERS not in member_perms
         assert Permission.VIEW_BILLING not in member_perms
         assert Permission.ADD_CREDITS not in member_perms
         assert Permission.INVITE_USER_TO_ORGANIZATION not in member_perms

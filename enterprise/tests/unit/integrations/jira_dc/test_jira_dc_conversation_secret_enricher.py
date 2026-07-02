@@ -308,3 +308,112 @@ async def test_enricher_injects_for_null_org_workspace():
         )
 
     assert 'JIRA_DC_TOKEN' in enrichment.secrets
+
+
+@pytest.mark.asyncio
+async def test_enricher_email_mode_hint_when_configured():
+    # Email mode: no token, but a set-up connection => tell the agent how to
+    # point the user at enabling live access (OAuth / Secret / MCP).
+    store = MagicMock()
+    store.get_active_workspace = AsyncMock(
+        return_value=SimpleNamespace(
+            id=1, name='jira.example.com', status='active', org_id=None
+        )
+    )
+    with (
+        patch(
+            'integrations.jira_dc.jira_dc_conversation_secret_enricher.JIRA_DC_ENABLE_OAUTH',
+            False,
+        ),
+        patch(
+            'integrations.jira_dc.jira_dc_conversation_secret_enricher.JiraDcIntegrationStore.get_instance',
+            return_value=store,
+        ),
+    ):
+        enrichment = await JiraDcConversationSecretEnricher().enrich(
+            user_context=FakeUserContext(),
+            user=MagicMock(id='kc-user'),
+            trigger=ConversationTrigger.SLACK,
+            system_message_suffix='Existing instructions.',
+            web_url=None,
+            jwt_service=MagicMock(),
+            access_token_hard_timeout=timedelta(minutes=5),
+        )
+
+    assert enrichment.secrets == {}
+    suffix = enrichment.system_message_suffix or ''
+    assert 'Existing instructions.' in suffix
+    # Host comes from the active workspace, not the (email-mode-empty) env var.
+    assert 'jira.example.com' in suffix
+    # Hedged: use a token/MCP tools if available, otherwise list the options.
+    assert 'available Jira token' in suffix
+    assert 'Jira MCP tools' in suffix
+    assert 'OAuth mode' in suffix
+    assert 'as a Secret' in suffix
+    assert 'MCP server' in suffix
+
+
+@pytest.mark.asyncio
+async def test_enricher_email_mode_no_hint_for_other_org():
+    # Active workspace belongs to a different team org => not visible here.
+    store = MagicMock()
+    store.get_active_workspace = AsyncMock(
+        return_value=SimpleNamespace(
+            id=1,
+            name='jira.example.com',
+            status='active',
+            org_id=OTHER_ORG_ID,
+            admin_user_id='some-other-admin',
+        )
+    )
+    with (
+        patch(
+            'integrations.jira_dc.jira_dc_conversation_secret_enricher.JIRA_DC_ENABLE_OAUTH',
+            False,
+        ),
+        patch(
+            'integrations.jira_dc.jira_dc_conversation_secret_enricher.JiraDcIntegrationStore.get_instance',
+            return_value=store,
+        ),
+    ):
+        enrichment = await JiraDcConversationSecretEnricher().enrich(
+            user_context=FakeUserContext(org_id=ORG_ID),
+            user=MagicMock(id='kc-user'),
+            trigger=ConversationTrigger.SLACK,
+            system_message_suffix='Existing instructions.',
+            web_url=None,
+            jwt_service=MagicMock(),
+            access_token_hard_timeout=timedelta(minutes=5),
+        )
+
+    assert enrichment.secrets == {}
+    assert enrichment.system_message_suffix == 'Existing instructions.'
+
+
+@pytest.mark.asyncio
+async def test_enricher_email_mode_no_hint_when_not_configured():
+    # Email mode with no active workspace => nothing set up, so no hint.
+    store = MagicMock()
+    store.get_active_workspace = AsyncMock(return_value=None)
+    with (
+        patch(
+            'integrations.jira_dc.jira_dc_conversation_secret_enricher.JIRA_DC_ENABLE_OAUTH',
+            False,
+        ),
+        patch(
+            'integrations.jira_dc.jira_dc_conversation_secret_enricher.JiraDcIntegrationStore.get_instance',
+            return_value=store,
+        ),
+    ):
+        enrichment = await JiraDcConversationSecretEnricher().enrich(
+            user_context=FakeUserContext(),
+            user=MagicMock(id='kc-user'),
+            trigger=ConversationTrigger.SLACK,
+            system_message_suffix='Existing instructions.',
+            web_url=None,
+            jwt_service=MagicMock(),
+            access_token_hard_timeout=timedelta(minutes=5),
+        )
+
+    assert enrichment.secrets == {}
+    assert enrichment.system_message_suffix == 'Existing instructions.'
