@@ -56,6 +56,9 @@ class Permission(str, Enum):
 
     # Integrations
     MANAGE_INTEGRATIONS = 'manage_integrations'
+    # Setting up an integration connection (admin/owner) vs the member-level
+    # MANAGE_INTEGRATIONS (linking/using an already-configured integration).
+    MANAGE_INTEGRATION_PROVIDERS = 'manage_integration_providers'
 
     # Application Settings
     MANAGE_APPLICATION_SETTINGS = 'manage_application_settings'
@@ -164,6 +167,8 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.PROVISION_USER,
             # Organization Conversations (Admin/Owner only)
             Permission.VIEW_ORG_CONVERSATIONS,
+            # Integration provider setup (Admin/Owner only)
+            Permission.MANAGE_INTEGRATION_PROVIDERS,
         ]
     ),
     RoleName.ADMIN: frozenset(
@@ -193,6 +198,8 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.PROVISION_USER,
             # Organization Conversations (Admin/Owner only)
             Permission.VIEW_ORG_CONVERSATIONS,
+            # Integration provider setup (Admin/Owner only)
+            Permission.MANAGE_INTEGRATION_PROVIDERS,
         ]
     ),
     RoleName.MEMBER: frozenset(

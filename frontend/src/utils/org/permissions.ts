@@ -12,6 +12,7 @@ type ViewBillingPermission = "view_billing";
 type ManageSecretsPermission = "manage_secrets";
 type ManageMCPPermission = "manage_mcp";
 type ManageIntegrationsPermission = "manage_integrations";
+type ManageIntegrationProvidersPermission = "manage_integration_providers";
 type ManageApplicationSettingsPermission = "manage_application_settings";
 type ManageAPIKeysPermission = "manage_api_keys";
 
@@ -31,6 +32,7 @@ export type PermissionKey =
   | ManageSecretsPermission
   | ManageMCPPermission
   | ManageIntegrationsPermission
+  | ManageIntegrationProvidersPermission
   | ManageApplicationSettingsPermission
   | ManageAPIKeysPermission
   | ViewLLMSettingsPermission
@@ -48,6 +50,7 @@ const memberPerms: PermissionKey[] = [
 ];
 
 const adminOnly: PermissionKey[] = [
+  "manage_integration_providers",
   "edit_llm_settings",
   "view_billing",
   "add_credits",
