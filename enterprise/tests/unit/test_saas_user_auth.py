@@ -1105,7 +1105,9 @@ async def test_saas_user_auth_from_bearer_via_api_key_cookie_invalid():
         result = await saas_user_auth_from_bearer(mock_request)
 
         assert result is None
-        mock_api_key_store.validate_api_key.assert_called_once_with('invalid_cookie_key')
+        mock_api_key_store.validate_api_key.assert_called_once_with(
+            'invalid_cookie_key'
+        )
 
 
 @pytest.mark.asyncio
