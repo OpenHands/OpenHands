@@ -135,6 +135,71 @@ async def test_create_api_key(
 
 
 @pytest.mark.asyncio
+@patch('storage.api_key_store.UserStore.get_user_by_id')
+async def test_create_api_key_unbound_with_fallback_disabled(
+    mock_get_user, api_key_store, async_session_maker, mock_user
+):
+    """Explicit ``org_id=None`` is stored verbatim when fallback is disabled.
+
+    Regression: previously, ``create_api_key(user, name, org_id=None)``
+    silently rebound to ``user.current_org_id``, so the "All orgs" / unbound
+    key flow in ``POST /api/keys`` returned 500 -- the route inserted
+    with ``None`` matching nothing.
+    """
+    user_id = str(uuid.uuid4())
+    name = 'Unbound Key'
+    # If the fallback were still active, the store would look up the user
+    # and rebind ``org_id`` to ``mock_user.current_org_id``.
+    mock_get_user.return_value = mock_user
+
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.create_api_key(
+            user_id,
+            name,
+            org_id=None,
+            use_current_org_fallback=False,
+        )
+
+    assert result.startswith('sk-oh-')
+    # The user must NOT be looked up when the caller has already decided
+    # the binding -- that's the whole point of opting out of the fallback.
+    mock_get_user.assert_not_called()
+
+    async with async_session_maker() as session:
+        result_db = await session.execute(
+            select(ApiKey).filter(ApiKey.user_id == user_id)
+        )
+        api_key = result_db.scalars().first()
+        assert api_key is not None
+        assert api_key.name == name
+        assert api_key.org_id is None  # stored verbatim
+
+
+@pytest.mark.asyncio
+@patch('storage.api_key_store.UserStore.get_user_by_id')
+async def test_create_api_key_default_fallback_still_works(
+    mock_get_user, api_key_store, async_session_maker, mock_user
+):
+    """Default (fallback) behavior is preserved for existing internal callers."""
+    user_id = str(uuid.uuid4())
+    name = 'Legacy-style Key'
+    mock_get_user.return_value = mock_user
+
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        # No ``use_current_org_fallback`` argument -- the default kicks in.
+        await api_key_store.create_api_key(user_id, name, org_id=None)
+
+    mock_get_user.assert_called_once_with(user_id)
+    async with async_session_maker() as session:
+        result_db = await session.execute(
+            select(ApiKey).filter(ApiKey.user_id == user_id)
+        )
+        api_key = result_db.scalars().first()
+        assert api_key is not None
+        assert api_key.org_id == mock_user.current_org_id
+
+
+@pytest.mark.asyncio
 async def test_validate_api_key_valid(api_key_store, async_session_maker):
     """Test validating a valid API key returns user_id and org_id."""
     # Arrange
@@ -257,20 +322,25 @@ async def test_validate_api_key_valid_timezone_naive(
 
 
 @pytest.mark.asyncio
-async def test_validate_api_key_legacy_without_org_id(
+async def test_validate_api_key_unbound_returns_none_org_id(
     api_key_store, async_session_maker
 ):
-    """Test validating a legacy API key without org_id returns None for org_id."""
+    """An unbound API key validates successfully and reports ``org_id=None``.
+
+    The effective org for an unbound key is resolved per-request by
+    ``SaasUserAuth`` (from ``X-Org-Id`` or ``user.current_org_id``); the
+    store layer only reflects the persisted binding.
+    """
     # Arrange
     user_id = str(uuid.uuid4())
-    api_key_value = 'test-legacy-key-no-org'
+    api_key_value = 'test-unbound-key-no-org'
 
     async with async_session_maker() as session:
         key_record = ApiKey(
             key=api_key_value,
             user_id=user_id,
-            org_id=None,  # Legacy key without org binding
-            name='Legacy Key',
+            org_id=None,  # Unbound key
+            name='Multi-org Key',
         )
         session.add(key_record)
         await session.commit()

@@ -94,8 +94,11 @@ class SaasUserAuth(UserAuth):
         """Get the organization ID bound to the API key used for authentication.
 
         Returns:
-            The org_id if authenticated via API key with org binding, None otherwise
-            (cookie auth or legacy API keys without org binding).
+            The org_id if authenticated via an API key with an explicit org
+            binding; ``None`` for cookie auth or for *unbound* API keys (in
+            which case the request's effective org is resolved per-request
+            via the ``X-Org-Id`` header or, as a fallback, the caller's
+            ``user.current_org_id`` -- see :meth:`_resolve_org_id`).
         """
         return self.api_key_org_id
 

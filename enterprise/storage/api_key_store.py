@@ -19,7 +19,10 @@ class ApiKeyValidationResult:
     """Result of API key validation containing user and organization info."""
 
     user_id: str
-    org_id: UUID | None  # None for legacy API keys without org binding
+    # None when the key is unbound (scoped to the caller via X-Org-Id at
+    # request time, or defaulting to user.current_org_id when no header is
+    # supplied). See ``SaasUserAuth._resolve_org_id`` for the full precedence.
+    org_id: UUID | None
     key_id: int
     key_name: str | None
 
@@ -81,6 +84,8 @@ class ApiKeyStore:
         expires_at: datetime | None = None,
         not_before: datetime | None = None,
         org_id: UUID | None = None,
+        *,
+        use_current_org_fallback: bool = True,
     ) -> str:
         """Create a new API key for a user.
 
@@ -92,16 +97,23 @@ class ApiKeyStore:
             not_before: Optional earliest activation datetime in UTC. The key is
                 rejected at validation time when ``now < not_before``. Timezone
                 info is stripped before writing, mirroring ``expires_at``.
-            org_id: Optional explicit org binding. When omitted, falls back
-                to the user's persisted ``current_org_id``. Callers in
-                request context should pass the effective org id (see
-                ``SaasUserAuth.get_effective_org_id``).
+            org_id: Org binding for the new key. ``None`` creates an
+                *unbound* key (resolved per-request via ``X-Org-Id`` or the
+                caller's ``user.current_org_id``). When
+                ``use_current_org_fallback`` is ``True`` (the default,
+                preserved for backwards compatibility with internal callers),
+                a ``None`` ``org_id`` is replaced with the user's
+                ``current_org_id`` instead. Callers that have already decided
+                the binding should pass ``use_current_org_fallback=False``
+                so an explicit ``None`` is stored verbatim.
+            use_current_org_fallback: See ``org_id``. Defaults to ``True``
+                for backward compatibility.
 
         Returns:
             The generated API key
         """
         api_key = self.generate_api_key()
-        if org_id is None:
+        if org_id is None and use_current_org_fallback:
             user = await UserStore.get_user_by_id(user_id)
             if user is None:
                 raise ValueError(f'User not found: {user_id}')
@@ -240,7 +252,9 @@ class ApiKeyStore:
 
         Returns:
             ApiKeyValidationResult if the key is valid, None otherwise.
-            The org_id may be None for legacy API keys that weren't bound to an organization.
+            The ``org_id`` is ``None`` for *unbound* keys (see
+            ``create_api_key``); such keys are scoped per-request via the
+            ``X-Org-Id`` header or the caller's current org id.
         """
         now = datetime.now(UTC)
 
@@ -328,17 +342,18 @@ class ApiKeyStore:
     async def list_api_keys(
         self, user_id: str, org_id: UUID | None = None
     ) -> list[ApiKey]:
-        """List all user-visible API keys for a user in the given org.
+        """List user-visible API keys for a user.
+
+        Returns keys that are either bound to ``org_id`` **or** unbound
+        (``org_id IS NULL`` -- visible from any org context). Internal keys
+        (system keys and ``MCP_API_KEY``) are excluded.
 
         Args:
             user_id: User to list keys for.
             org_id: Explicit org to scope to. When omitted, falls back to
-                the user's persisted ``current_org_id`` (legacy behavior).
-                Request-context callers should pass the effective org id.
-
-        This excludes:
-        - System keys (name starts with __SYSTEM__:) - created by internal services
-        - MCP_API_KEY - internal MCP key
+                the user's persisted ``current_org_id``. Request-context
+                callers should pass the effective org id so the user's
+                current selection is honored.
         """
         if org_id is None:
             user = await UserStore.get_user_by_id(user_id)
@@ -350,7 +365,9 @@ class ApiKeyStore:
             result = await session.execute(
                 select(ApiKey).filter(
                     ApiKey.user_id == user_id,
-                    ApiKey.org_id == org_id,
+                    # Bound to the requested org OR unbound (visible
+                    # regardless of which org the user is currently in).
+                    (ApiKey.org_id == org_id) | (ApiKey.org_id.is_(None)),
                 )
             )
             keys = result.scalars().all()

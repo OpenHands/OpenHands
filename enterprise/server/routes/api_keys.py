@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, SecretStr, field_validator, model_validator
+from server.auth.authorization import get_user_super_role
 from server.auth.org_context import EFFECTIVE_ORG_ID
 from server.auth.saas_user_auth import SaasUserAuth
 from storage.api_key import ApiKey
@@ -116,6 +117,11 @@ class ApiKeyCreate(BaseModel):
     name: str | None = None
     not_before: datetime | None = None
     expires_at: datetime | None = None
+    # Org the key is bound to. ``None`` (or omitted) creates an *unbound*
+    # key whose effective org is resolved per-request via the ``X-Org-Id``
+    # header or, as a fallback, the caller's ``user.current_org_id``. When
+    # set, the caller must be a member of the requested org.
+    org_id: UUID | None = None
 
     @field_validator('expires_at')
     def validate_expiration(cls, v):
@@ -141,6 +147,8 @@ class ApiKeyResponse(BaseModel):
     last_used_at: datetime | None = None
     not_before: datetime | None = None
     expires_at: datetime | None = None
+    # ``None`` denotes an unbound key (scoped per-request via ``X-Org-Id``).
+    org_id: UUID | None = None
 
 
 class ApiKeyCreateResponse(ApiKeyResponse):
@@ -160,11 +168,19 @@ class MessageResponse(BaseModel):
 
 
 class CurrentApiKeyResponse(BaseModel):
-    """Response model for the current API key endpoint."""
+    """Response model for the current API key endpoint.
+
+    ``org_id`` is the *effective* org id of the current request: the
+    key's bound org for org-bound keys, or the resolved org (from the
+    ``X-Org-Id`` header or ``user.current_org_id``) for unbound keys.
+    ``bound_org_id`` distinguishes the two cases -- it is the org
+    persisted on the key, or ``None`` when the key is unbound.
+    """
 
     id: int
     name: str | None
     org_id: str
+    bound_org_id: str | None
     user_id: str
     auth_type: str
 
@@ -178,6 +194,7 @@ def api_key_to_response(key: ApiKey) -> ApiKeyResponse:
         last_used_at=key.last_used_at,
         not_before=key.not_before,
         expires_at=key.expires_at,
+        org_id=key.org_id,
     )
 
 
@@ -208,19 +225,72 @@ async def create_api_key(
     user_id: str = Depends(get_user_id),
     effective_org_id: UUID = EFFECTIVE_ORG_ID,
 ) -> ApiKeyCreateResponse:
-    """Create a new API key bound to the request's effective org."""
+    """Create a new API key for the authenticated user.
+
+    The new key is bound to ``key_data.org_id`` when provided. An *omitted*
+    ``org_id`` falls back to the request's effective org (preserving the
+    pre-existing API). An *explicit* ``org_id: null`` creates an unbound
+    key whose effective org is resolved per-request via the ``X-Org-Id``
+    header or, as a fallback, the caller's ``user.current_org_id``. When a
+    specific ``org_id`` is supplied, the caller must be a member of that
+    org (or hold a super role).
+    """
+    if 'org_id' in key_data.model_fields_set:
+        # Caller expressed an explicit org choice -- ``null`` is meaningful
+        # (unbound key), an UUID requires a membership check.
+        target_org_id = key_data.org_id
+    else:
+        # Backwards-compatible default: bind to the effective org.
+        target_org_id = effective_org_id
+
+    if target_org_id is not None:
+        # Verify the caller is allowed to bind a key to this org.
+        try:
+            user_uuid = UUID(user_id)
+        except (TypeError, ValueError):
+            logger.warning('create_api_key_invalid_user_id', extra={'user_id': user_id})
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='Invalid user id',
+            )
+
+        member = await OrgMemberStore.get_org_member(target_org_id, user_uuid)
+        if member is None:
+            # Super-role bypass mirrors ``_resolve_org_id``: a user with a
+            # cross-org "super" role can bind keys on behalf of orgs they
+            # have not joined. The route still requires the explicit
+            # ``org_id`` in the request body for this to apply.
+            super_role = await get_user_super_role(user_id)
+            if super_role is None:
+                logger.warning(
+                    'create_api_key_not_a_member',
+                    extra={'user_id': user_id, 'org_id': str(target_org_id)},
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail='User is not a member of the requested organization',
+                )
+
     try:
         api_key = await api_key_store.create_api_key(
             user_id,
             key_data.name,
             expires_at=key_data.expires_at,
             not_before=key_data.not_before,
-            org_id=effective_org_id,
+            org_id=target_org_id,
+            # We've already decided the binding above (explicit null for
+            # unbound, the supplied UUID, or the effective org when omitted)
+            # so disable the store's current-org fallback.
+            use_current_org_fallback=False,
         )
-        # Get the created key details
-        keys = await api_key_store.list_api_keys(user_id, org_id=effective_org_id)
+        # Look up the row we just inserted so the response reflects the
+        # persisted ``org_id`` (which may be ``None`` for unbound keys).
+        # ``list_api_keys`` returns both bound keys for ``target_org_id`` and
+        # any unbound keys; matching by name+org disambiguates when the
+        # caller reuses a name across different org scopes.
+        keys = await api_key_store.list_api_keys(user_id, org_id=target_org_id)
         for key in keys:
-            if key.name == key_data.name:
+            if key.name == key_data.name and key.org_id == target_org_id:
                 return ApiKeyCreateResponse(
                     id=key.id,
                     name=key.name,
@@ -229,7 +299,10 @@ async def create_api_key(
                     last_used_at=key.last_used_at,
                     not_before=key.not_before,
                     expires_at=key.expires_at,
+                    org_id=key.org_id,
                 )
+    except HTTPException:
+        raise
     except Exception:
         logger.exception('Error creating API key')
     raise HTTPException(
@@ -304,9 +377,9 @@ async def get_current_api_key(
 ) -> CurrentApiKeyResponse:
     """Get information about the currently authenticated API key.
 
-    This endpoint returns metadata about the API key used for the current request,
-    including the org_id associated with the key. This is useful for API key
-    callers who need to know which organization context their key operates in.
+    Returns the key's bound org (``bound_org_id``, ``None`` for unbound
+    keys) and the request's effective org (``org_id``, resolved from the
+    ``X-Org-Id`` header or ``user.current_org_id`` for unbound keys).
 
     Returns 400 if not authenticated via API key (e.g., using cookie auth).
     """
@@ -322,20 +395,23 @@ async def get_current_api_key(
     # In SaaS context, bearer auth always produces SaasUserAuth
     saas_user_auth = cast(SaasUserAuth, user_auth)
 
-    if saas_user_auth.api_key_org_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='This API key was created before organization support. Please regenerate your API key to use this endpoint.',
-        )
     if saas_user_auth.api_key_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail='This endpoint requires API key authentication.',
         )
+    # Resolve the effective org so unbound keys report the org they're
+    # actually operating in for this request.
+    effective_org_id = await saas_user_auth.get_effective_org_id()
     return CurrentApiKeyResponse(
         id=saas_user_auth.api_key_id,
         name=saas_user_auth.api_key_name,
-        org_id=str(saas_user_auth.api_key_org_id),
+        org_id=str(effective_org_id) if effective_org_id is not None else '',
+        bound_org_id=(
+            str(saas_user_auth.api_key_org_id)
+            if saas_user_auth.api_key_org_id is not None
+            else None
+        ),
         user_id=user_id,
         auth_type=saas_user_auth.auth_type.value,
     )

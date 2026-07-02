@@ -1091,15 +1091,17 @@ class TestApiKeyOrgIdHandling:
         )
 
     @pytest.mark.asyncio
-    async def test_legacy_api_key_without_org_uses_user_current_org(
+    async def test_unbound_api_key_without_org_uses_user_current_org(
         self,
         async_session_with_users: AsyncSession,
     ):
-        """Test that legacy API keys (without org_id) fall back to user's current org.
+        """An unbound API key falls back to the user's current org.
 
-        Legacy API keys created before the org_id feature was added will have
-        api_key_org_id = None. In this case, we should fall back to the user's
-        current_org_id.
+        An unbound key (``api_key_org_id = None``) is explicitly supported:
+        the effective org is resolved per-request from the ``X-Org-Id``
+        header or, as a fallback, the caller's ``user.current_org_id``.
+        The mock here returns ``None`` from ``get_effective_org_id`` so the
+        injector falls back to the persisted ``user.current_org_id``.
         """
         from dataclasses import dataclass
 
@@ -1107,7 +1109,7 @@ class TestApiKeyOrgIdHandling:
             StoredConversationMetadataSaas,
         )
 
-        # Create a mock UserAuth with API key but NO org_id (legacy key)
+        # Create a mock UserAuth with an unbound API key.
         @dataclass
         class MockUserAuth:
             user_id: str
@@ -1132,10 +1134,10 @@ class TestApiKeyOrgIdHandling:
             async def get_user_id(self) -> str | None:
                 return await self.user_auth.get_user_id()
 
-        # Create service with mock auth context where API key has NO org_id
+        # Create service with mock auth context where API key is unbound.
         mock_user_auth = MockUserAuth(
             user_id=str(USER1_ID),
-            api_key_org_id=None,  # Legacy key without org binding
+            api_key_org_id=None,  # Unbound key
         )
         mock_context = MockAuthUserContext(user_auth=mock_user_auth)
 
@@ -1149,8 +1151,8 @@ class TestApiKeyOrgIdHandling:
         conv_info = AppConversationInfo(
             id=conv_id,
             created_by_user_id=str(USER1_ID),
-            sandbox_id='sandbox_legacy_key_test',
-            title='Legacy API Key Conversation',
+            sandbox_id='sandbox_unbound_key_test',
+            title='Unbound API Key Conversation',
         )
         await service.save_app_conversation_info(conv_info)
 
@@ -1164,7 +1166,7 @@ class TestApiKeyOrgIdHandling:
         assert saas_metadata is not None, 'SAAS metadata should be created'
         assert saas_metadata.user_id == USER1_ID
         assert saas_metadata.org_id == ORG1_ID, (
-            'Legacy key should fall back to user current org (ORG1)'
+            'Unbound key should fall back to user current org (ORG1)'
         )
 
     @pytest.mark.asyncio

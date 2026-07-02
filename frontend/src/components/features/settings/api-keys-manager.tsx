@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { useNavigate } from "react-router";
 import { FaTrash, FaEye, FaEyeSlash, FaCopy } from "react-icons/fa6";
@@ -17,6 +17,7 @@ import { NewApiKeyModal } from "./new-api-key-modal";
 import { useApiKeys } from "#/hooks/query/use-api-keys";
 import { useLlmApiKey } from "#/hooks/query/use-llm-api-key";
 import { useRefreshLlmApiKey } from "#/hooks/mutation/use-refresh-llm-api-key";
+import { useOrganizations } from "#/hooks/query/use-organizations";
 
 interface LlmApiKeyManagerProps {
   llmApiKey: { key: string | null } | undefined;
@@ -199,8 +200,69 @@ interface ApiKeysTableProps {
   onDeleteKey: (key: ApiKey) => void;
 }
 
+function ApiKeyScopeBadge({
+  orgId,
+  orgLabel,
+}: {
+  orgId: string | null;
+  orgLabel: string;
+}) {
+  const { t } = useTranslation();
+  if (orgId === null) {
+    // Unbound key -- usable against any org via X-Org-Id.
+    return (
+      <span
+        className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-300"
+        title={t(I18nKey.SETTINGS$API_KEY_ORG_ALL_ORGS_DESCRIPTION)}
+      >
+        {t(I18nKey.SETTINGS$API_KEY_SCOPE_ALL_ORGS)}
+      </span>
+    );
+  }
+  // Bound key -- show the org's display name (or the fallback label
+  // when the org is no longer in the user's membership list).
+  return (
+    <span
+      className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-tertiary text-gray-300"
+      title={t(I18nKey.SETTINGS$API_KEY_SCOPE_BOUND_TITLE)}
+    >
+      {orgLabel}
+    </span>
+  );
+}
+
 function ApiKeysTable({ apiKeys, isLoading, onDeleteKey }: ApiKeysTableProps) {
   const { t } = useTranslation();
+  const { data: organizationsData } = useOrganizations();
+
+  // Map org id -> display label. Personal workspaces are rendered using
+  // the same "Personal Workspace" string as the create modal so the
+  // list, modal and header all read the same way.
+  const orgLabelsById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const org of organizationsData?.organizations ?? []) {
+      map.set(
+        org.id,
+        org.is_personal ? t(I18nKey.ORG$PERSONAL_WORKSPACE) : org.name,
+      );
+    }
+    return map;
+  }, [organizationsData, t]);
+
+  const resolveOrgLabel = (orgId: string | null): string => {
+    if (orgId === null) {
+      // Unbound keys are rendered as their own badge; this shouldn't
+      // be reached but keep a sensible fallback.
+      return t(I18nKey.SETTINGS$API_KEY_SCOPE_ALL_ORGS);
+    }
+    return (
+      orgLabelsById.get(orgId) ??
+      // Fallback when the user can no longer see the org (e.g. they
+      // left it). The id is short and unambiguous; the title carries
+      // the full sentence.
+      orgId.slice(0, 8)
+    );
+  };
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "—";
@@ -235,6 +297,9 @@ function ApiKeysTable({ apiKeys, isLoading, onDeleteKey }: ApiKeysTableProps) {
             </th>
             <th className="text-left p-3 text-sm font-medium">
               {t(I18nKey.SETTINGS$API_KEY_STATUS)}
+            </th>
+            <th className="text-left p-3 text-sm font-medium">
+              {t(I18nKey.SETTINGS$API_KEY_SCOPE)}
             </th>
             <th className="text-right p-3 text-sm font-medium">
               {t(I18nKey.SETTINGS$ACTIONS)}
@@ -278,6 +343,12 @@ function ApiKeysTable({ apiKeys, isLoading, onDeleteKey }: ApiKeysTableProps) {
                       </span>
                     )}
                   </div>
+                </td>
+                <td className="p-3 text-sm">
+                  <ApiKeyScopeBadge
+                    orgId={key.org_id}
+                    orgLabel={resolveOrgLabel(key.org_id)}
+                  />
                 </td>
                 <td className="p-3 text-right">
                   <button

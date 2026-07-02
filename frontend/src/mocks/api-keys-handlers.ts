@@ -12,6 +12,7 @@ const DEFAULT_API_KEYS: ApiKey[] = [
     last_used_at: "2026-02-18T14:30:00Z",
     not_before: null,
     expires_at: null,
+    org_id: null,
   },
   {
     id: "2",
@@ -21,6 +22,7 @@ const DEFAULT_API_KEYS: ApiKey[] = [
     last_used_at: null,
     not_before: "2026-07-01T00:00:00Z",
     expires_at: "2026-08-01T00:00:00Z",
+    org_id: null,
   },
   {
     id: "3",
@@ -30,6 +32,7 @@ const DEFAULT_API_KEYS: ApiKey[] = [
     last_used_at: "2025-12-01T09:00:00Z",
     not_before: null,
     expires_at: "2026-01-01T00:00:00Z",
+    org_id: null,
   },
 ];
 
@@ -41,6 +44,7 @@ interface CreateApiKeyBody {
   name?: string;
   not_before?: string;
   expires_at?: string;
+  org_id?: string | null;
 }
 
 export const API_KEYS_HANDLERS = [
@@ -68,6 +72,9 @@ export const API_KEYS_HANDLERS = [
 
     nextId += 1;
     const id = String(nextId);
+    // ``org_id`` is honored verbatim: an explicit ``null`` creates an
+    // unbound ("All orgs") key, an UUID string binds the key.
+    const orgId = body.org_id ?? null;
     const newKey: ApiKey = {
       id,
       name: body.name,
@@ -76,6 +83,7 @@ export const API_KEYS_HANDLERS = [
       last_used_at: null,
       not_before: body.not_before ?? null,
       expires_at: body.expires_at ?? null,
+      org_id: orgId,
     };
     apiKeys.set(id, newKey);
 
@@ -87,6 +95,7 @@ export const API_KEYS_HANDLERS = [
       created_at: newKey.created_at,
       not_before: newKey.not_before,
       expires_at: newKey.expires_at,
+      org_id: orgId,
     };
 
     return HttpResponse.json(response);

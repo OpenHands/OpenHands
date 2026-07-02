@@ -8,6 +8,13 @@ const mockState = vi.hoisted(() => ({
   mutateAsync: vi.fn(),
   invalidateQueries: vi.fn(),
   isPending: false,
+  organizations: {
+    organizations: [
+      { id: "org-a", name: "Org A", is_personal: false },
+      { id: "org-b", name: "Personal Workspace", is_personal: true },
+    ],
+    currentOrgId: "org-a",
+  },
 }));
 
 vi.mock("#/hooks/mutation/use-create-api-key", () => ({
@@ -15,6 +22,17 @@ vi.mock("#/hooks/mutation/use-create-api-key", () => ({
     mutateAsync: mockState.mutateAsync,
     isPending: mockState.isPending,
   }),
+}));
+
+vi.mock("#/hooks/query/use-organizations", () => ({
+  useOrganizations: () => ({
+    data: mockState.organizations,
+    isLoading: false,
+  }),
+}));
+
+vi.mock("#/context/use-selected-organization", () => ({
+  useSelectedOrganizationId: () => ({ organizationId: "org-a" }),
 }));
 
 vi.mock("#/utils/custom-toast-handlers", () => ({
@@ -47,6 +65,7 @@ describe("CreateApiKeyModal", () => {
       created_at: "2026-06-01T00:00:00Z",
       not_before: null,
       expires_at: null,
+      org_id: null,
     });
   });
 
@@ -56,7 +75,17 @@ describe("CreateApiKeyModal", () => {
     expect(screen.getByTestId("api-key-expires-at-input")).toBeInTheDocument();
   });
 
-  it("submits with name only when no dates are set", async () => {
+  it("renders the org selector with the org selector label", () => {
+    renderModal({});
+    expect(screen.getByTestId("api-key-org-selector")).toBeInTheDocument();
+    // The label above the selector makes the "Organization" intent clear.
+    expect(screen.getByText("SETTINGS$API_KEY_ORG_LABEL")).toBeInTheDocument();
+    // The help text mentions the "All orgs" / "X-Org-Id" trade-off so
+    // users discover the new option.
+    expect(screen.getByText("SETTINGS$API_KEY_ORG_HELP")).toBeInTheDocument();
+  });
+
+  it("submits with name + explicit org_id=null (unbound) when 'All orgs' is selected", async () => {
     const onKeyCreated = vi.fn();
     renderModal({ onKeyCreated });
 
@@ -70,6 +99,7 @@ describe("CreateApiKeyModal", () => {
         name: "My Key",
         not_before: undefined,
         expires_at: undefined,
+        org_id: null,
       });
     });
     expect(onKeyCreated).toHaveBeenCalled();
@@ -95,6 +125,7 @@ describe("CreateApiKeyModal", () => {
     });
     const payload = mockState.mutateAsync.mock.calls[0][0];
     expect(payload.name).toBe("Windowed");
+    expect(payload.org_id).toBeNull();
     expect(typeof payload.not_before).toBe("string");
     expect(typeof payload.expires_at).toBe("string");
     expect(new Date(payload.not_before).toISOString()).toBe(

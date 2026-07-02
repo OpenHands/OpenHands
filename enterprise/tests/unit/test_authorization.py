@@ -920,11 +920,17 @@ class TestApiKeyOrgValidation:
         )
 
     @pytest.mark.asyncio
-    async def test_allows_access_for_legacy_api_key_without_org_binding(self):
+    async def test_allows_access_for_unbound_api_key_without_org_binding(self):
         """
-        GIVEN: Legacy API key without org_id binding (org_id is None)
+        GIVEN: Unbound API key (api_key_org_id is None)
         WHEN: Permission checker is called
-        THEN: Falls through to normal permission check (backward compatible)
+        THEN: Falls through to the normal permission check.
+
+        Unbound keys are explicitly supported: the effective org is
+        resolved per-request via ``X-Org-Id`` or
+        ``user.current_org_id``; here the explicit path ``{org_id}``
+        parameter is what the route uses, so the unbound key does not
+        impose any additional check beyond the regular role lookup.
         """
         # Arrange
         user_id = str(uuid4())

@@ -370,8 +370,10 @@ async def get_api_key_org_id_from_request(request: Request) -> UUID | None:
     """Get the org_id bound to the API key used for authentication.
 
     Returns None if:
-    - Not authenticated via API key (cookie auth)
-    - API key is a legacy key without org binding
+    - Not authenticated via API key (cookie auth), or
+    - The API key is *unbound* -- the request's effective org is then
+      resolved per-request via the ``X-Org-Id`` header or the caller's
+      ``user.current_org_id`` (see ``SaasUserAuth._resolve_org_id``).
     """
     user_auth = getattr(request.state, 'user_auth', None)
     if user_auth and hasattr(user_auth, 'get_api_key_org_id'):
