@@ -1,7 +1,7 @@
 """Add org budget configuration tables.
 
-Revision ID: 128
-Revises: 127
+Revision ID: 130
+Revises: 129
 Create Date: 2026-06-16 00:00:00.000000
 """
 
@@ -10,8 +10,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = '128'
-down_revision: Union[str, None] = '127'
+revision: str = '130'
+down_revision: Union[str, None] = '129'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
