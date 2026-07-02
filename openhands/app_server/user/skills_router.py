@@ -3,7 +3,6 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
-import time
 from pathlib import Path
 from types import MappingProxyType
 from typing import Annotated, cast
@@ -30,13 +29,6 @@ user_context_dependency = depends_user_context()
 # skills/ is at the repo root, two levels above the openhands package __file__
 GLOBAL_SKILLS_DIR = Path(openhands.__file__).parent.parent / 'skills'
 USER_SKILLS_DIR = Path.home() / '.openhands' / 'microagents'
-
-# Rate limiting: cache for marketplace skills results (5 minute TTL)
-# Format: {cache_key: (result, timestamp)}
-_MARKETPLACE_SKILLS_CACHE: dict[
-    str, tuple[MarketplaceSkillsPreviewResponse, float]
-] = {}
-_CACHE_TTL_SECONDS = 300  # 5 minutes
 
 
 class SkillInfo(BaseModel):
@@ -381,8 +373,9 @@ async def get_marketplace_skills(
     without requiring an active sandbox session. Useful for previewing what
     skills a marketplace provides before or after adding it.
 
-    Results are cached for 5 minutes to prevent resource exhaustion from
-    repeated requests for the same marketplace.
+    Each call clones the marketplace repos fresh; this endpoint is admin-only
+    and low-traffic, so caching the git clones here would buy little for the
+    cross-user / pod-local complexity a shared cache introduces.
 
     Args:
         marketplaces: List of marketplace registrations to fetch skills from.
@@ -390,17 +383,6 @@ async def get_marketplace_skills(
     Returns:
         MarketplaceSkillsPreviewResponse with skill metadata and any errors.
     """
-    # Generate cache key from marketplace sources
-    cache_key = '|'.join(sorted(m.source for m in marketplaces))
-    current_time = time.time()
-
-    # Check cache
-    if cache_key in _MARKETPLACE_SKILLS_CACHE:
-        cached_result, cached_time = _MARKETPLACE_SKILLS_CACHE[cache_key]
-        if current_time - cached_time < _CACHE_TTL_SECONDS:
-            logger.debug(f'Returning cached marketplace skills for: {cache_key}')
-            return cached_result
-
     all_skills: list[SkillInfo] = []
     plugins: list[MarketplacePluginPreview] = []
     marketplace_skills: dict[str, list[str]] = {}
@@ -513,15 +495,5 @@ async def get_marketplace_skills(
         marketplace_skills=marketplace_skills,
         errors=errors,
     )
-
-    # Cache the result
-    _MARKETPLACE_SKILLS_CACHE[cache_key] = (result, current_time)
-
-    # Clean up old cache entries (simple eviction)
-    # Remove entries older than 2x TTL to prevent memory bloat
-    for key in list(_MARKETPLACE_SKILLS_CACHE.keys()):
-        _, cached_time = _MARKETPLACE_SKILLS_CACHE[key]
-        if current_time - cached_time > _CACHE_TTL_SECONDS * 2:
-            del _MARKETPLACE_SKILLS_CACHE[key]
 
     return result
