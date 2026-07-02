@@ -21,90 +21,90 @@ dynamic = [ "version" ]
 
 # Main dependencies (mirrors [tool.poetry.dependencies] for UV compatibility)
 dependencies = [
-  "aiohttp>=3.14.1",
+  "aiohttp==3.14.1",
   "anthropic[vertex]",
-  "anyio==4.9",
+  "anyio==4.9.0",
   "asyncpg>=0.30",
   "authlib>=1.6.12,!=1.7.0",
-  "bashlex>=0.18",
-  "binaryornot>=0.5.0,<1",
+  "bashlex==0.18",
+  "binaryornot==0.6.0",
   "boto3",
   "browsergym-core==0.13.3",
-  "deprecated",
-  "deprecation>=2.1",
-  "dirhash",
-  "docker",
+  "deprecated==1.3.1",
+  "deprecation==2.1.0",
+  "dirhash==0.5.0",
+  "docker==7.1.0",
   "fastapi",
   "fastmcp>=3.2,<4",
-  "gitpython>=3.1.49",
+  "gitpython==3.1.50",
   "google-api-python-client>=2.164",
-  "google-auth-httplib2",
-  "google-auth-oauthlib",
+  "google-auth-httplib2==0.3.1",
+  "google-auth-oauthlib==1.3.1",
   "google-cloud-aiplatform",
   "google-genai",
-  "html2text",
-  "httpx-aiohttp>=0.1.8",
-  "ipywidgets>=8.1.5",
-  "jinja2>=3.1.6",
-  "joblib",
+  "html2text==2025.4.15",
+  "httpx-aiohttp==0.1.12",
+  "ipywidgets==8.1.8",
+  "jinja2==3.1.6",
+  "joblib==1.5.3",
   "joserfc>=1.0.0",
   "json-repair",
-  "jupyter-kernel-gateway",
+  "jupyter-kernel-gateway==3.0.1",
   "kubernetes>=33.1",
   "libtmux>=0.46.2",
   "litellm==1.84.1",
   "lmnr>=0.7.20",
   "mcp>=1.25",
-  "memory-profiler>=0.61",
-  "numpy",
+  "memory-profiler==0.61.0",
+  "numpy==2.4.4",
   "openai==2.33.0",
   "openhands-agent-server==1.30.0",
   "openhands-sdk==1.30.0",
   "openhands-tools==1.30.0",
-  "opentelemetry-api>=1.33.1",
-  "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
-  "orjson>=3.11.6",
+  "opentelemetry-api==1.39.1",
+  "opentelemetry-exporter-otlp-proto-grpc==1.39.1",
+  "orjson==3.11.8",
   "pathspec>=0.12.1",
-  "pexpect",
-  "pg8000>=1.31.5",
-  "pillow>=12.1.1",
-  "playwright>=1.55",
-  "poetry>=2.3.4,<2.4.0",
-  "prompt-toolkit>=3.0.50",
-  "protobuf>=5.29.6,<6",
-  "psutil",
-  "pybase62>=1",
+  "pexpect==4.9.0",
+  "pg8000==1.31.5",
+  "pillow==12.2.0",
+  "playwright==1.58.0",
+  "poetry==2.3.4",
+  "prompt-toolkit==3.0.52",
+  "protobuf==5.29.6",
+  "psutil==7.2.2",
+  "pybase62==1.0.0",
   "pygithub>=2.5",
-  "pyjwt>=2.13.0",
-  "pylatexenc",
-  "pypdf>=6.13.3",
-  "python-docx",
-  "python-dotenv",
-  "python-frontmatter>=1.1",
+  "pyjwt==2.13.0",
+  "pylatexenc==2.10",
+  "pypdf==6.14.2",
+  "python-docx==1.2.0",
+  "python-dotenv==1.2.2",
+  "python-frontmatter==1.1.0",
   "python-json-logger>=3.2.1",
-  "python-multipart>=0.0.30",
-  "python-pptx",
-  "python-socketio==5.14",
-  "pythonnet; sys_platform=='win32'",
-  "pyyaml>=6.0.2",
-  "qtconsole>=5.6.1",
+  "python-multipart==0.0.32",
+  "python-pptx==1.0.2",
+  "python-socketio==5.14.0",
+  "pythonnet==3.0.5; sys_platform=='win32'",
+  "pyyaml==6.0.3",
+  "qtconsole==5.7.2",
   "rapidfuzz>=3.9",
-  "redis>=5.2,<7",
-  "requests>=2.33",
-  "setuptools>=78.1.1",
-  "shellingham>=1.5.4",
+  "redis==6.4.0",
+  "requests==2.33.1",
+  "setuptools==82.0.1",
+  "shellingham==1.5.4",
   "sqlalchemy[asyncio]>=2.0.40",
-  "sse-starlette>=3.0.2",
-  "starlette>=1.3.1",
-  "tenacity>=8.5,<10",
-  "termcolor",
-  "toml",
-  "tornado>=6.5",
+  "sse-starlette==3.3.4",
+  "starlette==1.3.1",
+  "tenacity==9.1.4",
+  "termcolor==3.3.0",
+  "toml==0.10.2",
+  "tornado==6.5.7",
   "tree-sitter-language-pack>=0.7.3",
   "types-toml",
-  "urllib3>=2.7.0",
+  "urllib3==2.7.0",
   "uvicorn",
-  "whatthepatch>=1.0.6",
+  "whatthepatch==1.0.7",
   "zope-interface==7.2",
 ]
 
@@ -116,27 +116,27 @@ dev = [
   "build",
   "mypy==1.17",
   "pre-commit==4.2",
-  "pytest>=8.4",
-  "pytest-asyncio>=1.3",
+  "pytest==9.0.3",
+  "pytest-asyncio==1.3.0",
   "ruff==0.12.5",
   "types-setuptools",
 ]
 test = [
-  "gevent>=24.2.1,<26",
+  "gevent==25.9.1",
   "pandas",
-  "pytest",
-  "pytest-asyncio",
-  "pytest-cov",
-  "pytest-forked",
-  "pytest-playwright>=0.7",
-  "pytest-timeout>=2.4",
-  "pytest-xdist",
-  "reportlab",
+  "pytest==9.0.3",
+  "pytest-asyncio==1.3.0",
+  "pytest-cov==7.1.0",
+  "pytest-forked==1.6.0",
+  "pytest-playwright==0.7.2",
+  "pytest-timeout==2.4.0",
+  "pytest-xdist==3.8.0",
+  "reportlab==4.4.10",
 ]
 runtime = [
-  "flake8",
+  "flake8==7.3.0",
   "jupyterlab",
-  "notebook",
+  "notebook==7.5.6",
 ]
 
 [tool.poetry]
@@ -158,104 +158,104 @@ include = [
 
 [tool.poetry.dependencies]
 python = "^3.12,<3.14"
-authlib = ">=1.6.12,!=1.7.0"                       # CVE-2026-44681 (fixed in 1.6.12 and 1.7.1; 1.7.0 is vulnerable)
-orjson = ">=3.11.6"                                # Pinned to fix CVE-2025-67221
-litellm = "1.84.1"                                 # Exact pin to the verified 1.84.1 release; bump explicitly when upgrading (rather than a floor) to ensure only the tested version is used
-openai = "2.33.0"                                  # Pin because litellm 1.84.1 requires 2.33.0 and is incompatible with >=1.100.0 (BerriAI/litellm#13711)
-aiohttp = ">=3.14.1"                               # CVE-2026-54278 (fixed in 3.14.1); keep aiohttp on a fixed-or-newer release
-google-genai = "*"                                 # To use litellm with Gemini Pro API
-google-api-python-client = "^2.164.0"              # For Google Sheets API
-google-auth-httplib2 = "*"                         # For Google Sheets authentication
-google-auth-oauthlib = "*"                         # For Google Sheets OAuth
-termcolor = "*"
-docker = "*"
+authlib = ">=1.6.12,!=1.7.0"                      # CVE-2026-44681 (fixed in 1.6.12 and 1.7.1; 1.7.0 is vulnerable)
+orjson = "3.11.8"                                 # Pinned to fix CVE-2025-67221
+litellm = "1.84.1"                                # Exact pin to the verified 1.84.1 release; bump explicitly when upgrading (rather than a floor) to ensure only the tested version is used
+openai = "2.33.0"                                 # Pin because litellm 1.84.1 requires 2.33.0 and is incompatible with >=1.100.0 (BerriAI/litellm#13711)
+aiohttp = "3.14.1"                                # CVE-2026-54278 (fixed in 3.14.1); keep aiohttp on a fixed-or-newer release
+google-genai = "*"                                # To use litellm with Gemini Pro API
+google-api-python-client = "^2.164.0"             # For Google Sheets API
+google-auth-httplib2 = "0.3.1"                    # For Google Sheets authentication
+google-auth-oauthlib = "1.3.1"                    # For Google Sheets OAuth
+termcolor = "3.3.0"
+docker = "7.1.0"
 fastapi = "*"
-toml = "*"
+toml = "0.10.2"
 types-toml = "*"
 uvicorn = "*"
-numpy = "*"
+numpy = "2.4.4"
 json-repair = "*"
-browsergym-core = "0.13.3"                         # integrate browsergym-core as the browsing interface
-playwright = "^1.55.0"
-html2text = "*"
-deprecated = "*"
-pexpect = "*"
-jinja2 = "^3.1.6"
-python-multipart = ">=0.0.30"
-tenacity = ">=8.5,<10.0"
+browsergym-core = "0.13.3"                        # integrate browsergym-core as the browsing interface
+playwright = "1.58.0"
+html2text = "2025.4.15"
+deprecated = "1.3.1"
+pexpect = "4.9.0"
+jinja2 = "3.1.6"
+python-multipart = "0.0.32"
+tenacity = "9.1.4"
 zope-interface = "7.2"
 pathspec = ">=0.12.1,<1.1.0"
-pyjwt = "^2.13.0"
-dirhash = "*"
-tornado = ">=6.5"
-python-dotenv = "*"
+pyjwt = "2.13.0"
+dirhash = "0.5.0"
+tornado = "6.5.7"
+python-dotenv = "1.2.2"
 rapidfuzz = "^3.9.0"
 tree-sitter-language-pack = "^0.7.3"
-whatthepatch = "^1.0.6"
-protobuf = ">=5.29.6,<6.0.0"                       # Updated to fix CVE-2026-0994
-opentelemetry-api = "^1.33.1"
-opentelemetry-exporter-otlp-proto-grpc = "^1.33.1"
+whatthepatch = "1.0.7"
+protobuf = "5.29.6"                               # Updated to fix CVE-2026-0994
+opentelemetry-api = "1.39.1"
+opentelemetry-exporter-otlp-proto-grpc = "1.39.1"
 
 libtmux = ">=0.46.2"
 pygithub = "^2.5.0"
-joblib = "*"
-gitpython = ">=3.1.49"
+joblib = "1.5.3"
+gitpython = "3.1.50"
 python-socketio = "5.14.0"
-sse-starlette = "^3.0.2"
-psutil = "*"
+sse-starlette = "3.3.4"
+psutil = "7.2.2"
 python-json-logger = ">=3.2.1,<5.0.0"
-prompt-toolkit = "^3.0.50"
-poetry = ">=2.3.4,<2.4.0"
+prompt-toolkit = "3.0.52"
+poetry = "2.3.4"
 anyio = "4.9.0"
-pythonnet = { version = "*", markers = "sys_platform == 'win32'" }
+pythonnet = { version = "3.0.5", markers = "sys_platform == 'win32'" }
 fastmcp = ">=3.2,<4"
-python-frontmatter = "^1.1.0"
-shellingham = "^1.5.4"
+python-frontmatter = "1.1.0"
+shellingham = "1.5.4"
 # TODO: Should these go into the runtime group?
-ipywidgets = "^8.1.5"
-qtconsole = "^5.6.1"
-python-pptx = "*"
-pylatexenc = "*"
-python-docx = "*"
-bashlex = "^0.18"
-binaryornot = ">=0.5.0,<1"
+ipywidgets = "8.1.8"
+qtconsole = "5.7.2"
+python-pptx = "1.0.2"
+pylatexenc = "2.10"
+python-docx = "1.2.0"
+bashlex = "0.18"
+binaryornot = "0.6.0"
 
 # Explicitly pinned packages for latest versions
-pypdf = "^6.13.3"
-pillow = "^12.1.1"
-starlette = ">=1.3.1,<2.0.0"
-urllib3 = "^2.7.0"
-requests = "^2.33.0"
-setuptools = ">=78.1.1"
+pypdf = "6.14.2"
+pillow = "12.2.0"
+starlette = "1.3.1"
+urllib3 = "2.7.0"
+requests = "2.33.1"
+setuptools = "82.0.1"
 
 # TODO: These are integrations that should probably be optional
-redis = ">=5.2,<7.0"
+redis = "6.4.0"
 
 google-cloud-aiplatform = "*"
 anthropic = { extras = [ "vertex" ], version = "*" }
 boto3 = "*"
 kubernetes = ">=33.1,<36.0"
-pyyaml = "^6.0.2"
-memory-profiler = "^0.61.0"
-jupyter_kernel_gateway = "*"
+pyyaml = "6.0.3"
+memory-profiler = "0.61.0"
+jupyter_kernel_gateway = "3.0.1"
 
 # Third-party runtime dependencies (optional)
 modal = { version = ">=0.66.26,<1.2.0", optional = true }
 runloop-api-client = { version = "0.50.0", optional = true }
 daytona = { version = "0.24.2", optional = true }
-httpx-aiohttp = "^0.1.8"
+httpx-aiohttp = "0.1.12"
 e2b-code-interpreter = { version = "^2.0.0", optional = true }
-pybase62 = "^1.0.0"
+pybase62 = "1.0.0"
 
 # V1 dependencies
-openhands-sdk = "==1.30.0"
-openhands-agent-server = "==1.30.0"
-openhands-tools = "==1.30.0"
+openhands-sdk = "1.30.0"
+openhands-agent-server = "1.30.0"
+openhands-tools = "1.30.0"
 joserfc = ">=1.0.0"
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
-pg8000 = "^1.31.5"
+pg8000 = "1.31.5"
 asyncpg = ">=0.30,<0.32"
-deprecation = "^2.1.0"
+deprecation = "2.1.0"
 lmnr = "^0.7.20"
 
 [tool.poetry.group.dev]
@@ -267,31 +267,31 @@ mypy = "1.17.0"
 pre-commit = "4.2.0"
 build = "*"
 types-setuptools = "*"
-pytest = ">=8.4,<10.0"
-pytest-asyncio = "^1.3.0"
+pytest = "9.0.3"
+pytest-asyncio = "1.3.0"
 
 [tool.poetry.group.test]
 optional = true
 
 [tool.poetry.group.test.dependencies]
-pytest = "*"
-pytest-cov = "*"
-pytest-asyncio = "*"
-pytest-forked = "*"
-pytest-xdist = "*"
-pytest-playwright = "^0.7.0"
-pytest-timeout = "^2.4.0"
+pytest = "9.0.3"
+pytest-cov = "7.1.0"
+pytest-asyncio = "1.3.0"
+pytest-forked = "1.6.0"
+pytest-xdist = "3.8.0"
+pytest-playwright = "0.7.2"
+pytest-timeout = "2.4.0"
 pandas = "*"
-reportlab = "*"
-gevent = ">=24.2.1,<26.0.0"
+reportlab = "4.4.10"
+gevent = "25.9.1"
 
 [tool.poetry.group.runtime]
 optional = true
 
 [tool.poetry.group.runtime.dependencies]
 jupyterlab = "*"
-notebook = "*"
-flake8 = "*"
+notebook = "7.5.6"
+flake8 = "7.3.0"
 
 [tool.poetry-dynamic-versioning]
 enable = true
