@@ -741,7 +741,20 @@ def get_api_key_from_header(request: Request):
         return session_api_key
 
     # Fallback to X-Access-Token header as an additional option
-    return request.headers.get('X-Access-Token')
+    x_access_token = request.headers.get('X-Access-Token')
+    if x_access_token:
+        return x_access_token
+
+    # Fallback to the `api_key` cookie, which mirrors the X-Access-Token header
+    # for clients (e.g. browser-based or local CLI tools) that cannot easily
+    # set custom request headers. The cookie is the lowest-priority source so
+    # that an explicit header always wins when both are present.
+    #
+    # Security note: cookies are sent automatically by browsers, so clients
+    # setting this cookie MUST mark it `Secure; HttpOnly; SameSite=Strict`
+    # (or `Lax`) to mitigate CSRF and XSS risks. Unlike `keycloak_auth`, the
+    # server never sets this cookie itself; it is purely an inbound credential.
+    return request.cookies.get('api_key')
 
 
 async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
