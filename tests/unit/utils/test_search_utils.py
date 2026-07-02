@@ -1,3 +1,4 @@
+import base64
 from dataclasses import dataclass
 
 import pytest
@@ -33,6 +34,22 @@ def test_offset_to_page_id():
 def test_page_id_to_offset():
     # Test with None should return 0
     assert page_id_to_offset(None) == 0
+
+
+@pytest.mark.parametrize(
+    'bad_page_id',
+    [
+        '!!!not-base64!!!',  # invalid base64 -> binascii.Error
+        'ab',  # incorrect base64 padding -> binascii.Error
+        '####',  # decodes to empty string -> ValueError from int('')
+        base64.b64encode(b'not-an-int').decode(),  # valid base64, non-int -> ValueError
+        base64.b64encode(b'\xff\xfe').decode(),  # non-utf-8 bytes -> UnicodeDecodeError
+    ],
+)
+def test_page_id_to_offset_malformed_returns_zero(bad_page_id):
+    # A malformed/opaque cursor must not raise; it falls back to offset 0,
+    # mirroring paging_utils.decode_page_id's tolerance of bad cursors.
+    assert page_id_to_offset(bad_page_id) == 0
 
 
 def test_bidirectional_conversion():

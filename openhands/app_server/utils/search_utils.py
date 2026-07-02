@@ -1,4 +1,5 @@
 import base64
+import binascii
 from typing import AsyncIterator, Callable
 
 
@@ -12,8 +13,12 @@ def offset_to_page_id(offset: int, has_next: bool) -> str | None:
 def page_id_to_offset(page_id: str | None) -> int:
     if not page_id:
         return 0
-    offset = int(base64.b64decode(page_id).decode())
-    return offset
+    try:
+        return int(base64.b64decode(page_id).decode())
+    except (ValueError, UnicodeDecodeError, binascii.Error):
+        # Malformed/opaque page_id -> start from the beginning, mirroring
+        # paging_utils.decode_page_id which also tolerates bad cursors.
+        return 0
 
 
 async def iterate(fn: Callable, **kwargs) -> AsyncIterator:
