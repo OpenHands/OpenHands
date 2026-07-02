@@ -1,4 +1,5 @@
 import os
+import subprocess
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -14,7 +15,12 @@ from openhands.app_server.integrations.service_types import UserGitInfo
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
+from openhands.app_server.settings.settings_models import MarketplaceRegistration
 from openhands.app_server.settings.settings_store import SettingsStore
+from openhands.app_server.user.skills_router import (
+    GLOBAL_SKILLS_DIR,
+    _clone_marketplace_repo,
+)
 from openhands.app_server.user_auth.user_auth import UserAuth
 
 
@@ -242,8 +248,6 @@ def test_global_skills_dir_points_to_repo_root():
     to the skills/ directory at the repo root. This prevents regressions like the
     one introduced in fb98faf4a where an incorrect path caused no skills to load.
     """
-    from openhands.app_server.user.skills_router import GLOBAL_SKILLS_DIR
-
     # The directory should exist
     assert GLOBAL_SKILLS_DIR.exists(), (
         f'GLOBAL_SKILLS_DIR does not exist: {GLOBAL_SKILLS_DIR}'
@@ -267,3 +271,164 @@ def test_global_skills_dir_points_to_repo_root():
         f'Expected skill file not found: {expected_skill}. '
         f'GLOBAL_SKILLS_DIR may be pointing to wrong location.'
     )
+
+
+# Tests for marketplace-skills endpoint git clone failures
+
+
+class TestMarketplaceSkillsCloneFailures:
+    """Tests for git clone failure scenarios in marketplace-skills endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_clone_invalid_repo_path(self):
+        """Test that invalid repository path returns appropriate error."""
+        mock_user_context = MagicMock()
+        mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
+        mock_user_context.get_user_id = AsyncMock(return_value='test-user')
+
+        marketplace = MarketplaceRegistration(
+            name='test-marketplace',
+            source='github:owner/valid-repo',
+        )
+
+        # Mock _parse_marketplace_source to return invalid path (empty = parse failure)
+        with patch(
+            'openhands.app_server.user.skills_router._parse_marketplace_source',
+            return_value=('github', ''),
+        ):
+            result = await _clone_marketplace_repo(marketplace, mock_user_context)
+
+        assert result[0] is None
+        assert 'Invalid repository path' in result[1]
+
+    @pytest.mark.asyncio
+    async def test_clone_network_timeout(self):
+        """Test that network timeout returns appropriate error."""
+
+        mock_user_context = MagicMock()
+        mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
+        mock_user_context.get_user_id = AsyncMock(return_value='test-user')
+
+        marketplace = MarketplaceRegistration(
+            name='test-marketplace',
+            source='github:owner/nonexistent-repo-12345',
+        )
+
+        # Mock subprocess.run to raise TimeoutExpired
+        with patch(
+            'openhands.app_server.user.skills_router.subprocess.run'
+        ) as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired(
+                cmd='git clone', timeout=120
+            )
+            result = await _clone_marketplace_repo(marketplace, mock_user_context)
+
+        assert result[0] is None
+        assert 'timed out' in result[1]
+
+    @pytest.mark.asyncio
+    async def test_clone_git_failure_returns_error(self):
+        """Test that git clone failure returns error message."""
+        mock_user_context = MagicMock()
+        mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
+        mock_user_context.get_user_id = AsyncMock(return_value='test-user')
+
+        marketplace = MarketplaceRegistration(
+            name='test-marketplace',
+            source='github:owner/nonexistent-repo-xyz',
+        )
+
+        # Mock subprocess.run to return error
+        mock_result = MagicMock()
+        mock_result.returncode = 128
+        mock_result.stderr = 'Repository not found'
+
+        with patch(
+            'openhands.app_server.user.skills_router.subprocess.run'
+        ) as mock_run:
+            mock_run.return_value = mock_result
+            result = await _clone_marketplace_repo(marketplace, mock_user_context)
+
+        assert result[0] is None
+        assert 'Git clone failed' in result[1]
+        assert 'not found' in result[1].lower()
+
+    @pytest.mark.asyncio
+    async def test_clone_with_ref_checkout_failure(self):
+        """Test that checkout ref failure returns appropriate error."""
+        mock_user_context = MagicMock()
+        mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
+        mock_user_context.get_user_id = AsyncMock(return_value='test-user')
+
+        marketplace = MarketplaceRegistration(
+            name='test-marketplace',
+            source='github:owner/valid-repo',
+            ref='nonexistent-branch',
+        )
+
+        # Mock subprocess.run for clone success, checkout failure
+        mock_clone_result = MagicMock()
+        mock_clone_result.returncode = 0
+
+        mock_checkout_result = MagicMock()
+        mock_checkout_result.returncode = 128
+        mock_checkout_result.stderr = " pathspec 'nonexistent-branch' did not match"
+
+        def run_side_effect(cmd, *args, **kwargs):
+            if 'checkout' in cmd:
+                return mock_checkout_result
+            return mock_clone_result
+
+        with patch(
+            'openhands.app_server.user.skills_router.subprocess.run'
+        ) as mock_run:
+            with patch('openhands.app_server.user.skills_router._cleanup_clone_dir'):
+                with patch('tempfile.mkdtemp', return_value=Path('/tmp/test_clone')):
+                    mock_run.side_effect = run_side_effect
+                    result = await _clone_marketplace_repo(
+                        marketplace, mock_user_context
+                    )
+
+        assert result[0] is None
+        assert 'Git checkout failed' in result[1]
+
+    @pytest.mark.asyncio
+    async def test_clone_repo_path_not_found(self):
+        """Test that non-existent repo_path returns appropriate error."""
+        mock_user_context = MagicMock()
+        mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
+        mock_user_context.get_user_id = AsyncMock(return_value='test-user')
+
+        marketplace = MarketplaceRegistration(
+            name='test-marketplace',
+            source='github:owner/valid-repo',
+            repo_path='nonexistent/skills/dir',
+        )
+
+        mock_clone_result = MagicMock()
+        mock_clone_result.returncode = 0
+
+        def run_side_effect(cmd, *args, **kwargs):
+            return mock_clone_result
+
+        with patch(
+            'openhands.app_server.user.skills_router.subprocess.run'
+        ) as mock_run:
+            with patch(
+                'openhands.app_server.user.skills_router.Path.exists'
+            ) as mock_exists:
+                with patch(
+                    'openhands.app_server.user.skills_router._cleanup_clone_dir'
+                ):
+                    with patch(
+                        'tempfile.mkdtemp', return_value=Path('/tmp/test_clone')
+                    ):
+                        mock_run.side_effect = run_side_effect
+                        # First call is clone, exists() returns False for repo_path
+                        mock_exists.return_value = False
+                        result = await _clone_marketplace_repo(
+                            marketplace, mock_user_context
+                        )
+
+        assert result[0] is None
+        assert 'Repo path not found' in result[1]

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import Annotated, Any
 
@@ -16,8 +17,10 @@ from storage.org_member import OrgMember
 from storage.role import Role
 
 from openhands.app_server.settings.settings_models import (
+    MarketplaceRegistration,
     _load_persisted_agent_settings,
     _load_persisted_conversation_settings,
+    validate_and_convert_marketplaces,
 )
 from openhands.app_server.utils.llm import MASKED_API_KEY, resolve_llm_base_url
 from openhands.sdk.settings import (
@@ -25,6 +28,8 @@ from openhands.sdk.settings import (
     ConversationSettings,
     OpenHandsAgentSettings,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class OrgCreationError(Exception):
@@ -92,6 +97,35 @@ class OrgNotFoundError(Exception):
     def __init__(self, org_id: str):
         self.org_id = org_id
         super().__init__(f'Organization with id "{org_id}" not found')
+
+
+class OrgConcurrentModificationError(Exception):
+    """Raised when a concurrent modification conflict is detected.
+
+    This occurs when optimistic locking detects that the resource was modified
+    by another request between when the client read it and when they attempted
+    to update it. The client should re-fetch the latest data and retry.
+
+    Note: The compared timestamp is generated and stored server-side; the client
+    only echoes back the value it last read, so client/server clock skew does not
+    affect conflict detection.
+    """
+
+    def __init__(
+        self,
+        org_id: str,
+        expected_version: datetime,
+        actual_version: datetime,
+    ):
+        self.org_id = org_id
+        self.expected_version = expected_version
+        self.actual_version = actual_version
+        super().__init__(
+            f'Organization "{org_id}" was modified by another request. '
+            f'Expected version: {expected_version.isoformat()}, '
+            f'actual version: {actual_version.isoformat()}. '
+            'Please refresh and retry.'
+        )
 
 
 class OrgMemberNotFoundError(Exception):
@@ -563,6 +597,9 @@ class OrgAppSettingsResponse(BaseModel):
 
     enable_proactive_conversation_starters: bool = True
     max_budget_per_task: float | None = None
+    registered_marketplaces: list[MarketplaceRegistration] = Field(default_factory=list)
+    # Include updated_at in response for optimistic locking
+    updated_at: datetime | None = None
 
     @classmethod
     def from_org(cls, org: Org) -> 'OrgAppSettingsResponse':
@@ -574,11 +611,19 @@ class OrgAppSettingsResponse(BaseModel):
         Returns:
             OrgAppSettingsResponse with app settings
         """
+        # Get registered_marketplaces from dedicated column
+        marketplaces = validate_and_convert_marketplaces(
+            org.registered_marketplaces,
+            source_name=f"org '{org.name}'",
+        )
+
         return cls(
             enable_proactive_conversation_starters=org.enable_proactive_conversation_starters
             if org.enable_proactive_conversation_starters is not None
             else True,
             max_budget_per_task=org.max_budget_per_task,
+            registered_marketplaces=marketplaces,
+            updated_at=org.updated_at,
         )
 
 
@@ -587,6 +632,11 @@ class OrgAppSettingsUpdate(BaseModel):
 
     enable_proactive_conversation_starters: bool | None = None
     max_budget_per_task: float | None = None
+    registered_marketplaces: list[MarketplaceRegistration] | None = None
+    # Optimistic locking: client echoes back the server-generated updated_at it
+    # last read. If it no longer matches the DB, someone else modified the record
+    # and a 409 conflict is raised. (Server-generated, so clock skew is irrelevant.)
+    last_known_updated_at: datetime | None = None
 
     @field_validator('max_budget_per_task')
     @classmethod

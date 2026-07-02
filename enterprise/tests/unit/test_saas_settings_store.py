@@ -167,6 +167,9 @@ def settings_store(async_session_maker):
                 del item_dict['secrets_store']
             if 'llm_profiles' in item_dict:
                 del item_dict['llm_profiles']
+            # inherited_marketplaces is computed at runtime, not persisted
+            if 'inherited_marketplaces' in item_dict:
+                del item_dict['inherited_marketplaces']
 
             # Encrypt the data before storing
             for key in ('llm_api_key', 'search_api_key', 'sandbox_api_key'):

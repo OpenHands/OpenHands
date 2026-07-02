@@ -346,6 +346,33 @@ def has_permission(
     return permission in get_role_permissions(user_role.name)
 
 
+async def authorize_permission(
+    request: Request, user_id: str, permission: Permission
+) -> None:
+    """Enforce that ``user_id`` has ``permission`` in the request's target org.
+
+    Raises ``HTTPException(403)`` otherwise. Programmatic counterpart to
+    :func:`require_permission` for handlers that must enforce a stricter
+    permission for only part of a request (e.g. org-wide marketplace edits on an
+    otherwise member-editable endpoint). Mirrors the org-role then super-role
+    fallback used by ``require_permission``.
+    """
+    # Local import to avoid circular import via saas_user_auth.
+    from server.auth.org_context import resolve_target_org_id_for_permission_check
+
+    org_id = await resolve_target_org_id_for_permission_check(request)
+    user_role = await get_user_org_role(user_id, org_id)
+    if user_role and has_permission(user_role, permission):
+        return
+    super_role = await get_user_super_role(user_id)
+    if super_role and has_permission(super_role, permission, is_super=True):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f'Missing required permission: {permission.value}',
+    )
+
+
 async def get_api_key_org_id_from_request(request: Request) -> UUID | None:
     """Get the org_id bound to the API key used for authentication.
 

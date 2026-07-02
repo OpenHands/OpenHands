@@ -54,3 +54,10 @@ class FileSettingsStore(SettingsStore):
 
         file_store = get_global_config().file_store
         return FileSettingsStore(file_store)
+
+    async def get_org_marketplaces(self, user_id: str | None) -> list[dict]:
+        """Get organization-level marketplaces.
+
+        OSS mode has no org concept, so returns empty list.
+        """
+        return []

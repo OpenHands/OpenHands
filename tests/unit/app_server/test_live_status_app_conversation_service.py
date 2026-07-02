@@ -124,6 +124,20 @@ class _TestUserInfo(SimpleNamespace):
         object.__setattr__(self, '_llm_profiles_override', value)
 
     @property
+    def registered_marketplaces(self) -> list:
+        # Real UserInfo (via Settings) always carries registered_marketplaces,
+        # defaulting to an empty list. Mirror that so marketplace composition at
+        # conversation start doesn't raise AttributeError on the fake.
+        override = getattr(self, '_registered_marketplaces_override', None)
+        if override is not None:
+            return override
+        return []
+
+    @registered_marketplaces.setter
+    def registered_marketplaces(self, value):
+        object.__setattr__(self, '_registered_marketplaces_override', value)
+
+    @property
     def conversation_settings(self) -> ConversationSettings:
         kwargs: dict = {
             'confirmation_mode': getattr(self, 'confirmation_mode', False),
