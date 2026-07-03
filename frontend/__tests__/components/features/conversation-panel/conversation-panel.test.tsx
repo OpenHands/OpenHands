@@ -127,7 +127,7 @@ describe("ConversationPanel", () => {
 
     renderConversationPanel();
 
-    const error = await screen.findByText("Failed to fetch conversations");
+    const error = await screen.findByTestId("conversation-list-error-state");
     expect(error).toBeInTheDocument();
   });
 

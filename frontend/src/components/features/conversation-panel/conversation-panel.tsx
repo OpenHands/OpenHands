@@ -153,9 +153,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
         </div>
       )}
 
-      {error && (
-        <ConversationListErrorState onRetry={refetch} />
-      )}
+      {error && <ConversationListErrorState onRetry={refetch} />}
       {!isFetching && conversations?.length === 0 && !startTasks?.length && (
         <div className="flex flex-col items-center justify-center h-full">
           <p className="text-neutral-400">

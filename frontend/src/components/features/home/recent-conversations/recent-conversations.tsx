@@ -66,9 +66,7 @@ export function RecentConversations() {
         </h3>
       </div>
 
-      {error && (
-        <ConversationListErrorState onRetry={refetch} />
-      )}
+      {error && <ConversationListErrorState onRetry={refetch} />}
 
       <div className="flex flex-col">
         {isInitialLoading && (

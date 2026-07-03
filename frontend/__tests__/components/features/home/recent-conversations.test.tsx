@@ -44,7 +44,7 @@ describe("RecentConversations", () => {
     // Wait for the error to be displayed
     await waitFor(() => {
       expect(
-        screen.getByText("Failed to fetch conversations"),
+        screen.getByTestId("conversation-list-error-state"),
       ).toBeInTheDocument();
     });
 
