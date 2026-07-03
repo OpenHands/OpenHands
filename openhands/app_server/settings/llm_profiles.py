@@ -14,7 +14,7 @@ from pydantic import (
     model_validator,
 )
 
-from openhands.app_server.utils.llm import resolve_llm_base_url
+from openhands.app_server.utils.llm import normalize_litellm_model, resolve_llm_base_url
 from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk.llm import LLM
 
@@ -48,10 +48,12 @@ def resolve_profile_llm(
     without the fallback the agent server would call the LiteLLM proxy with no
     credentials; BYOR profiles keep their own key (the fallback is skipped).
     """
+    model = normalize_litellm_model(profile_llm.model) or profile_llm.model
     resolved = profile_llm.model_copy(
         update={
+            'model': model,
             'base_url': resolve_llm_base_url(
-                model=profile_llm.model,
+                model=model,
                 base_url=profile_llm.base_url,
                 managed_proxy_url=managed_proxy_url,
             ),

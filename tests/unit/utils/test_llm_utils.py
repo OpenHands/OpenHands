@@ -109,6 +109,37 @@ class TestAssignProvider:
         assert _assign_provider('whatever') == 'whatever'
 
 
+class TestNormalizeLitellmModel:
+    """Tests for model ids that need provider-prefix normalization."""
+
+    def test_bare_workers_ai_scoped_models_get_cloudflare_prefix(self):
+        """Workers AI @hf/@cf model ids need the LiteLLM cloudflare prefix."""
+        assert (
+            llm_utils.normalize_litellm_model('@hf/thebloke/codellama-7b-instruct-awq')
+            == 'cloudflare/@hf/thebloke/codellama-7b-instruct-awq'
+        )
+        assert (
+            llm_utils.normalize_litellm_model('@cf/meta/llama-3.2-3b-instruct')
+            == 'cloudflare/@cf/meta/llama-3.2-3b-instruct'
+        )
+
+    def test_prefixed_and_non_workers_models_are_left_unchanged(self):
+        assert (
+            llm_utils.normalize_litellm_model(
+                'cloudflare/@hf/thebloke/codellama-7b-instruct-awq'
+            )
+            == 'cloudflare/@hf/thebloke/codellama-7b-instruct-awq'
+        )
+        assert (
+            llm_utils.normalize_litellm_model(
+                'huggingface/meta-llama/Llama-3.1-8B-Instruct'
+            )
+            == 'huggingface/meta-llama/Llama-3.1-8B-Instruct'
+        )
+        assert llm_utils.normalize_litellm_model('openai/gpt-4o') == 'openai/gpt-4o'
+        assert llm_utils.normalize_litellm_model(None) is None
+
+
 class TestDeriveVerifiedModels:
     """Tests for the _derive_verified_models helper."""
 

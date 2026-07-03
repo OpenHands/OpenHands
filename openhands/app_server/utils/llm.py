@@ -114,6 +114,26 @@ def is_openhands_model(model: str | None) -> bool:
 # intentionally hidden."
 MASKED_API_KEY = '**********'
 
+_WORKERS_AI_SCOPED_MODEL_PREFIXES = ('@cf/', '@hf/')
+_CLOUDFLARE_PROVIDER_PREFIX = 'cloudflare/'
+
+
+def normalize_litellm_model(model: str | None) -> str | None:
+    """Normalize user-facing model ids into the LiteLLM routing shape.
+
+    Cloudflare Workers AI documents scoped model ids like
+    ``@hf/thebloke/codellama-7b-instruct-awq``. LiteLLM needs the provider
+    prefix (``cloudflare/@hf/...``); without it the id falls through to the
+    OpenAI route and Cloudflare keys are rejected as OpenAI keys.
+    """
+    if not model:
+        return model
+    if model.startswith(_CLOUDFLARE_PROVIDER_PREFIX):
+        return model
+    if model.startswith(_WORKERS_AI_SCOPED_MODEL_PREFIXES):
+        return f'{_CLOUDFLARE_PROVIDER_PREFIX}{model}'
+    return model
+
 
 def resolve_llm_base_url(
     model: str | None,
@@ -148,6 +168,7 @@ def resolve_llm_base_url(
         return None
     if base_url is not None:
         return base_url
+    model = normalize_litellm_model(model)
     if not model:
         return None
     if is_openhands_model(model):
@@ -225,11 +246,16 @@ def _assign_provider(model: str) -> str:
     """Prefix a bare model name with its canonical provider.
 
     Models that already contain a ``/`` provider separator are returned
-    unchanged. Bare names are first checked against the SDK's verified
-    sets (cheap, no network), then fall back to LiteLLM's own routing
+    unchanged unless they are Cloudflare Workers AI scoped ids (``@cf/...`` or
+    ``@hf/...``), which look provider-qualified but still need the LiteLLM
+    ``cloudflare/`` prefix. Bare names are first checked against the SDK's
+    verified sets (cheap, no network), then fall back to LiteLLM's own routing
     tables so that unverified names like ``claude-opus-4-7`` or
     ``gemini-2.0-flash`` still reach the provider-keyed dropdown.
     """
+    normalized = normalize_litellm_model(model)
+    if normalized is not None and normalized != model:
+        return normalized
     if '/' in model:
         return model
 

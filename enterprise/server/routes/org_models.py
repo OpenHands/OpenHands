@@ -22,7 +22,11 @@ from openhands.app_server.settings.settings_models import (
     _load_persisted_conversation_settings,
     validate_and_convert_marketplaces,
 )
-from openhands.app_server.utils.llm import MASKED_API_KEY, resolve_llm_base_url
+from openhands.app_server.utils.llm import (
+    MASKED_API_KEY,
+    normalize_litellm_model,
+    resolve_llm_base_url,
+)
 from openhands.sdk.settings import (
     AgentSettingsConfig,
     ConversationSettings,
@@ -72,8 +76,7 @@ class OrgAuthorizationError(OrgDeletionError):
 
 
 class OrphanedUserError(OrgDeletionError):
-    """Raised when deleting an org would leave OTHER users (not the requester)
-    without any organization.
+    """Raised when deleting an org would leave other users organizationless.
 
     A user is "orphaned" when their only ``org_member`` row is for the org being
     deleted. The deletion path tolerates *the requester themselves* being orphaned
@@ -301,6 +304,8 @@ class OrgUpdate(BaseModel):
         if llm_diff is None:
             return
 
+        if model := llm_diff.get('model'):
+            llm_diff['model'] = normalize_litellm_model(model) or model
         self._lift_and_mask_llm_api_key(llm_diff)
         self._resolve_agent_llm_base_url(llm_diff)
 

@@ -14,6 +14,7 @@ from openhands.app_server.settings.llm_profiles import (
     ProfileLimitExceededError,
     ProfileNotFoundError,
     StrictLLM,
+    resolve_profile_llm,
 )
 from openhands.sdk.llm import LLM
 
@@ -105,6 +106,15 @@ def test_summaries_resolves_base_url_with_managed_proxy_url():
 
     # Without the proxy url, base_url is returned raw (None for the managed one).
     assert {s['name']: s['base_url'] for s in profiles.summaries()}['managed'] is None
+
+
+def test_resolve_profile_llm_normalizes_bare_workers_ai_models():
+    resolved = resolve_profile_llm(
+        LLM(model='@cf/meta/llama-3.2-3b-instruct'),
+        managed_proxy_url='https://proxy.test',
+    )
+
+    assert resolved.model == 'cloudflare/@cf/meta/llama-3.2-3b-instruct'
 
 
 # ── Mutations ─────────────────────────────────────────────────────

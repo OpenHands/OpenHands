@@ -47,6 +47,7 @@ from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.llm import (
     get_provider_api_base,
     is_openhands_model,
+    normalize_litellm_model,
     resolve_llm_base_url,
 )
 from openhands.app_server.utils.logger import openhands_logger as logger
@@ -109,6 +110,9 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
     if not isinstance(settings.agent_settings, OpenHandsAgentSettings):
         return
     llm = settings.agent_settings.llm
+    model = normalize_litellm_model(llm.model)
+    if model is not None:
+        llm.model = model
     llm.base_url = resolve_llm_base_url(
         model=llm.model,
         base_url=llm.base_url,

@@ -16,8 +16,23 @@ from unittest.mock import MagicMock, PropertyMock
 from uuid import uuid4
 
 from server.auth.authorization import RoleName
-from server.routes.org_models import MeResponse
+from server.routes.org_models import MeResponse, OrgUpdate
 from storage.org_member import OrgMember
+
+
+class TestOrgUpdate:
+    """Tests for org settings update normalization."""
+
+    def test_normalizes_bare_workers_ai_model_in_agent_settings_diff(self):
+        update = OrgUpdate(
+            agent_settings_diff={
+                'llm': {'model': '@cf/meta/llama-3.2-3b-instruct'},
+            }
+        )
+
+        assert update.agent_settings_diff == {
+            'llm': {'model': 'cloudflare/@cf/meta/llama-3.2-3b-instruct'}
+        }
 
 
 class TestMeResponseFromOrgMember:

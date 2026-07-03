@@ -260,6 +260,28 @@ async def test_saving_settings_with_frozen_secrets_store(test_client):
 
 
 @pytest.mark.asyncio
+async def test_store_settings_normalizes_bare_workers_ai_models(test_client):
+    response = test_client.post(
+        '/api/v1/settings',
+        json=_dump_update(
+            Settings(
+                agent_settings=OpenHandsAgentSettings(
+                    llm=LLM(model='@hf/thebloke/codellama-7b-instruct-awq')
+                ),
+            )
+        ),
+    )
+
+    assert response.status_code == 200
+    response = test_client.get('/api/v1/settings')
+    assert response.status_code == 200
+    assert (
+        response.json()['agent_settings']['llm']['model']
+        == 'cloudflare/@hf/thebloke/codellama-7b-instruct-awq'
+    )
+
+
+@pytest.mark.asyncio
 async def test_search_api_key_explicit_clear(test_client):
     """Explicit empty search_api_key payloads should clear the stored secret."""
     response = test_client.post(
