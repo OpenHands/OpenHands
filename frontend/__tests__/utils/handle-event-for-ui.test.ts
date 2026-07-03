@@ -489,6 +489,30 @@ describe("handleEventForUI - durable events supersede streaming deltas", () => {
     expect(ui).toEqual([userMessage, action]);
   });
 
+  it("keeps a reasoning-only bubble when the superseding action lacks reasoning", () => {
+    // For many models the delta is the sole carrier of reasoning_content, so
+    // stripping the streamed text must not lose the reasoning display.
+    let ui: OpenHandsEvent[] = [userMessage];
+    ui = handleEventForUI(
+      mkDelta(
+        "sup-d5",
+        "2026-07-03T00:00:01.000Z",
+        "I'll run a command",
+        "considering the request",
+      ),
+      ui,
+    );
+    const action = mkAction("2026-07-03T00:00:02.000Z", "I'll run a command");
+    ui = handleEventForUI(action, ui);
+
+    expect(ui).toHaveLength(3);
+    const kept = ui[1] as StreamingDeltaEvent;
+    expect(isStreamingDeltaEvent(kept)).toBe(true);
+    expect(kept.content).toBeNull();
+    expect(kept.reasoning_content).toBe("considering the request");
+    expect(ui[2]).toBe(action);
+  });
+
   it("replaces non-reconciling preview deltas with the final message instead of duplicating", () => {
     // In a multi-step turn the deltas accumulated since the last user message
     // include earlier steps' text, so the final summary never reconciles

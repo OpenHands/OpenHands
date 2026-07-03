@@ -163,25 +163,38 @@ const finalizeStreamingDeltasInPlace = (
 
   const nextUiEvents = [...uiEvents];
   const streamedText = streamingSegments.join("");
-  let unstreamedSuffix = "";
+  let matched = false;
+  let lastMatchEnd = 0;
 
-  if (finalText.startsWith(streamedText)) {
-    unstreamedSuffix = finalText.slice(streamedText.length);
-  } else {
-    const match = findTextSegmentsInOrder(finalText, streamingSegments);
-    if (!match.matched) {
-      // The streamed preview never reconciles (e.g. it contains earlier
-      // steps' text, or chunks were reordered in delivery). The durable final
-      // message is canonical: drop the preview deltas and render it once.
-      const removeSet = new Set(
-        contentStreamingDeltas.map(({ index }) => index),
-      );
-      const cleaned = uiEvents.filter((_, index) => !removeSet.has(index));
-      cleaned.push(finalEvent);
-      return cleaned;
+  // The SDK strips the finalized text, so it may lack trailing whitespace the
+  // model streamed - tolerate that by also trying the trailing-trimmed
+  // streamed text (mirrors agent-canvas #1552).
+  for (const candidate of [streamedText, streamedText.trimEnd()]) {
+    if (candidate && finalText.startsWith(candidate)) {
+      matched = true;
+      lastMatchEnd = candidate.length;
+      break;
     }
-    unstreamedSuffix = finalText.slice(match.lastMatchEnd);
   }
+  if (!matched) {
+    const lastIndex = streamingSegments.length - 1;
+    const searchSegments = streamingSegments.map((segment, index) =>
+      index === lastIndex ? segment.trimEnd() : segment,
+    );
+    const match = findTextSegmentsInOrder(finalText, searchSegments);
+    matched = match.matched;
+    lastMatchEnd = match.lastMatchEnd;
+  }
+  if (!matched) {
+    // The streamed preview never reconciles (e.g. it contains earlier
+    // steps' text, or chunks were reordered in delivery). The durable final
+    // message is canonical: drop the preview deltas and render it once.
+    const removeSet = new Set(contentStreamingDeltas.map(({ index }) => index));
+    const cleaned = uiEvents.filter((_, index) => !removeSet.has(index));
+    cleaned.push(finalEvent);
+    return cleaned;
+  }
+  const unstreamedSuffix = finalText.slice(lastMatchEnd);
 
   const lastDeltaIndex = contentStreamingDeltas.at(-1)?.index;
   const lastDelta =
@@ -236,14 +249,29 @@ const supersedeStreamingDeltasForAction = (
     return null;
   }
 
-  // The action renders its own thought (and reasoning); any streamed preview
-  // deltas for this turn are redundant once the durable action arrives -
-  // remove them all (including reasoning-only deltas, whose reasoning the
-  // action also carries). Text-matching is deliberately NOT required: chunk
-  // reordering between the delta stream and event persistence would otherwise
-  // leak stray preview bubbles that later merge with the next stream.
-  const removeSet = new Set(currentTurnDeltaIndexes);
-  return uiEvents.filter((_, index) => !removeSet.has(index));
+  // The action renders its own thought, so the streamed preview text is
+  // redundant once the durable action arrives. Text-matching is deliberately
+  // NOT required: chunk reordering between the delta stream and event
+  // persistence would otherwise leak stray preview bubbles that later merge
+  // with the next stream. For many models the delta is the sole carrier of
+  // reasoning_content, though - when the action does not render reasoning of
+  // its own, keep the delta as a reasoning-only bubble (content cleared)
+  // instead of dropping it (mirrors agent-canvas #1552).
+  const actionRendersReasoning =
+    Boolean(actionEvent.reasoning_content?.trim()) ||
+    (actionEvent.thinking_blocks?.length ?? 0) > 0;
+  const stripSet = new Set(currentTurnDeltaIndexes);
+  const nextUiEvents: OpenHandsEvent[] = [];
+  uiEvents.forEach((uiEvent, index) => {
+    if (!stripSet.has(index) || !isStreamingDeltaEvent(uiEvent)) {
+      nextUiEvents.push(uiEvent);
+      return;
+    }
+    if (!actionRendersReasoning && uiEvent.reasoning_content) {
+      nextUiEvents.push({ ...uiEvent, content: null });
+    }
+  });
+  return nextUiEvents;
 };
 
 /**
