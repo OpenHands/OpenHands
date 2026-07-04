@@ -4,6 +4,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.middleware.cors import CORSMiddleware
+from starlette.requests import Request
 
 from openhands.app_server.middleware import (
     InMemoryRateLimiter,
@@ -190,3 +191,11 @@ def test_rate_limit_middleware_exempts_sandbox_resume():
     assert rate_limited_response.status_code == 429
     assert resume_response.status_code == 200
     assert resume_response.json() == {'sandbox_id': 'sandbox-123'}
+
+
+async def test_in_memory_rate_limiter_client_none():
+    """Test that InMemoryRateLimiter handles a request with client=None."""
+    request = Request({'type': 'http', 'client': None})
+    rate_limiter = InMemoryRateLimiter()
+    result = await rate_limiter(request)
+    assert result is True
