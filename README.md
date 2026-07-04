@@ -10,11 +10,17 @@
 </div>
 <div align="center">
   <a href="https://github.com/OpenHands/incubator-program"><img src="https://img.shields.io/badge/status-beta-blue?style=for-the-badge" alt="Project status beta"></a>
-  <a href="https://github.com/OpenHands/agent-canvas/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/OpenHands/agent-canvas/ci.yml?branch=main&style=for-the-badge" alt="CI status"></a>
+  <a href="https://github.com/OpenHands/agent-canvas/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/OpenHands/agent-canvas/ci.yml?branch=main&style=for-t[...]"></a>
   <a href="https://www.npmjs.com/package/@openhands/agent-canvas"><img src="https://img.shields.io/npm/v/%40openhands%2Fagent-canvas?style=for-the-badge&logo=npm" alt="npm version"></a>
-  <a href="https://docs.openhands.dev/openhands/usage/agent-canvas/backends"><img src="https://img.shields.io/badge/Documentation-000?logo=googledocs&logoColor=FFE165&style=for-the-badge" alt="Documentation"></a>
+  <a href="https://docs.openhands.dev/openhands/usage/agent-canvas/backends"><img src="https://img.shields.io/badge/Documentation-000?logo=googledocs&logoColor=FFE165&style=for-the-badge" alt="Doc[...]"></a>
   <a href="https://go.openhands.dev/slack"><img src="https://img.shields.io/badge/Slack-Join%20the%20community-611f69?logo=slack&logoColor=white&style=for-the-badge" alt="Join us on Slack"></a>
 </div>
+
+<!-- Free for students banner -->
+<div align="center" style="margin-top:8px;">
+  <strong style="color:#ffffff;background:#e60000;padding:6px 10px;border-radius:6px;">FREE for Students — Educational Use Only</strong>
+</div>
+
 <div align="center">
   <a href="#quickstart">Quickstart</a> |
   <a href="https://docs.openhands.dev/overview/introduction">Docs</a> |
@@ -28,9 +34,9 @@
 </p>
 <hr>
 
-OpenHands Agent Canvas turns your coding agents into a self-hosted, always-on engineering team. It's a developer control center for starting conversations and automating everyday tasks — like generating reports that publish to Slack or automatically decomposing GitHub issues into tasks.
+OpenHands Agent Canvas turns your coding agents into a self-hosted, always-on engineering team. It's a developer control center for starting conversations and automating everyday tasks — like ge[...]
 
-It runs locally on your machine by default, but can connect to multiple “agent backends”, e.g. running agents in Docker containers, on VMs, or within your company infrastructure. You can optionally choose to run agents on OpenHands Cloud or OpenHands Enterprise infrastructure.
+It runs locally on your machine by default, but can connect to multiple “agent backends”, e.g. running agents in Docker containers, on VMs, or within your company infrastructure. You can optio[...]
 
 Agent Canvas runs the open source OpenHands agent out-of-the-box, but can use any third-party agent like Claude Code and Codex.
 
@@ -38,8 +44,8 @@ Agent Canvas runs the open source OpenHands agent out-of-the-box, but can use an
 |---|---|
 | [**Self-host your way**](https://docs.openhands.dev/openhands/usage/agent-canvas/backend-setup/vm) | Run agents locally, in Docker, on VMs, or anywhere you can run an agent server backend |
 | [**Switch between different backends**](https://docs.openhands.dev/openhands/usage/agent-canvas/backends) | Switch between local, remote, and cloud agents without losing focus |
-| [**Create automations**](https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations) | Create automations and workflows that integrate with Slack, GitHub, Linear, and more. Run on a schedule or in response to webhook events  |
-| [**Integrate with the tools you use**](https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations) | Connect your automations with third-party services like Slack, GitHub, Notion, and more to automate workflows |
+| [**Create automations**](https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations) | Create automations and workflows that integrate with Slack, GitHub, Linear, and more. Run[...]
+| [**Integrate with the tools you use**](https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations) | Connect your automations with third-party services like Slack, GitHub, Noti[...]
 | [**Bring your own model**](https://docs.openhands.dev/openhands/usage/settings/llm-settings#llm-profiles) | Use with any LLM |
 | [**Use with any agent**](https://docs.openhands.dev/openhands/usage/agent-canvas/acp-agents) | Use with OpenHands, Claude Code, Codex, Gemini, or any agent with Agent-Client Protocol (ACP). |
 
@@ -65,6 +71,21 @@ like Slack, GitHub, and Datadog. See the [self-hosting guide](https://docs.openh
 Notably, you can run the backend in _multiple different environments_, and switch between
 them from the same Agent Canvas frontend. E.g. you can share an Agent Server with your team for agents doing
 code review and dependency updates, then have your personal agents running on your laptop.
+
+### Student one-line install (FREE for students)
+
+This repository includes a student-friendly installer that installs dependencies and builds the frontend for local development.
+
+Prerequisites: Node.js 22.12.x or later, a compatible Python 3.12/3.13 interpreter, and Poetry.
+
+Run from the repo root:
+
+```sh
+# One-line student installer (non-Docker)
+make install-free
+```
+
+The installer runs: Poetry install (backend), npm install & build (frontend), and basic local setup. See FREE_FOR_STUDENTS.md for the student policy and additional instructions.
 
 ### Option 1: Without a Sandbox
 
@@ -129,7 +150,7 @@ Access the UI at [http://localhost:8000](http://localhost:8000). You can add add
 
 # Architecture
 
-Agent Canvas is powered by the [OpenHands Agent Server](https://github.com/OpenHands/software-agent-sdk/tree/main/openhands-agent-server/openhands/agent_server), a REST API for running multiple agents on a single machine. Each Agent Server runs on a single host/port; the Agent Canvas can connect to multiple Agent Servers and easily flip between them.
+Agent Canvas is powered by the [OpenHands Agent Server](https://github.com/OpenHands/software-agent-sdk/tree/main/openhands-agent-server/openhands/agent_server), a REST API for running multiple a[...]
 
 You can run an Agent Server anywhere:
 
