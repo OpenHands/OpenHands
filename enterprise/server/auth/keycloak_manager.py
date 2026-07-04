@@ -10,12 +10,8 @@ from server.auth.constants import (
 )
 from server.logger import logger
 
-try:
-    from keycloak.keycloak_admin import KeycloakAdmin
-    from keycloak.keycloak_openid import KeycloakOpenID
-except ModuleNotFoundError:  # pragma: no cover - optional dependency in OSS tests
-    KeycloakAdmin = None
-    KeycloakOpenID = None
+from keycloak.keycloak_admin import KeycloakAdmin
+from keycloak.keycloak_openid import KeycloakOpenID
 
 logger.debug(
     f'KEYCLOAK_SERVER_URL:{KEYCLOAK_SERVER_URL}, KEYCLOAK_SERVER_URL_EXT:{KEYCLOAK_SERVER_URL_EXT}, KEYCLOAK_CLIENT_ID:{KEYCLOAK_CLIENT_ID}'
