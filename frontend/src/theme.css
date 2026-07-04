@@ -1,0 +1,88 @@
+/* Global red & black theme for OpenHands frontend
+   - Enforces black background, white text for readability
+   - Red accents for primary actions
+   - Anime-like keyframes and subtle particle styles
+*/
+:root{
+  --bg-color: #000000; /* black */
+  --text-color: #ffffff; /* readable white text */
+  --accent-color: #e60000; /* bright red */
+  --accent-color-dark: #b30000;
+  --muted-color: #111111;
+}
+
+/* Force base colors (use !important so this overrides component themes) */
+html, body, #root {
+  background: var(--bg-color) !important;
+  color: var(--text-color) !important;
+  height: 100%;
+  margin: 0;
+  font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Links and accents */
+a, .accent {
+  color: var(--accent-color) !important;
+}
+
+/* Primary button style */
+.btn-primary, button.primary {
+  background: linear-gradient(90deg, var(--accent-color), var(--accent-color-dark)) !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: 0 8px 28px rgba(230,0,0,0.14) !important;
+  transition: transform 220ms cubic-bezier(.2,.9,.3,1), box-shadow 220ms !important;
+  border-radius: 8px !important;
+  padding: 8px 14px !important;
+}
+
+/* Hover/active punch */
+.btn-primary:hover, .btn-primary:focus {
+  transform: translateY(-4px) scale(1.02) !important;
+  box-shadow: 0 14px 40px rgba(230,0,0,0.26) !important;
+  animation: ember-glow 1.2s ease-in-out infinite alternate !important;
+}
+
+/* Ember glow */
+@keyframes ember-glow {
+  from { filter: drop-shadow(0 0 2px rgba(230,0,0,0.08)); }
+  to   { filter: drop-shadow(0 0 18px rgba(230,0,0,0.24)); }
+}
+
+/* Entry animation (anime-like) */
+.anime-enter {
+  animation: anime-slide-up 520ms cubic-bezier(.2,.9,.3,1) both;
+}
+@keyframes anime-slide-up {
+  0% { transform: translateY(20px) scale(0.98); opacity: 0; filter: blur(8px); }
+  60% { transform: translateY(-6px) scale(1.01); opacity: 1; filter: blur(0); }
+  100% { transform: translateY(0) scale(1); opacity:1; }
+}
+
+/* Particles background */
+.particles {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+.particle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: radial-gradient(circle at 30% 30%, rgba(230,0,0,0.95), rgba(180,0,0,0.7));
+  opacity: 0.85;
+  border-radius: 50%;
+  mix-blend-mode: screen;
+  animation: drift 8s linear infinite;
+}
+@keyframes drift {
+  0% { transform: translateY(-10vh) translateX(0) scale(0.8); opacity: 0; }
+  10% { opacity: 0.6; }
+  50% { transform: translateY(60vh) translateX(20vw) scale(1.2); opacity: 0.9; }
+  100% { transform: translateY(110vh) translateX(40vw) scale(0.6); opacity: 0; }
+}
+
+/* Ensure main app layers sit above particles */
+.app-shell, #root > * { position: relative; z-index: 10; }
