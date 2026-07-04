@@ -62,7 +62,7 @@ check-system:
 		else \
 			echo "$(BLUE)Linux detected.$(RESET)"; \
 		fi; \
-	elif [ "$$(uname -r | grep -i microsoft)" ]; then \
+	elif [ "$$((uname -r) | grep -i microsoft)" ]; then \
 		echo "$(BLUE)Windows Subsystem for Linux detected.$(RESET)"; \
 	else \
 		echo "$(RED)Unsupported system detected. Please use macOS, Linux, or Windows Subsystem for Linux (WSL).$(RESET)"; \
@@ -117,11 +117,11 @@ check-tmux:
 	@if command -v tmux > /dev/null; then \
 		echo "$(BLUE)$(shell tmux -V) is already installed.$(RESET)"; \
 	else \
-		echo "$(YELLOW)╔════════════════════════════════════════════════════════════════════════════╗$(RESET)"; \
+		echo "$(YELLOW)╔══════════════════════════════════════════════════════════�[...]"); \
 		echo "$(YELLOW)║ OPTIONAL: tmux is not installed.                                          ║$(RESET)"; \
 		echo "$(YELLOW)║ Some advanced terminal features may not work without tmux.                ║$(RESET)"; \
 		echo "$(YELLOW)║ You can install it if needed, but it's not required for development.      ║$(RESET)"; \
-		echo "$(YELLOW)╚════════════════════════════════════════════════════════════════════════════╝$(RESET)"; \
+		echo "$(YELLOW)╚══════════════════════════════════════════════════════════�[...]"); \
 	fi
 
 check-poetry:
@@ -320,23 +320,25 @@ setup-config-prompts:
 
 	@read -p "Enter your workspace directory (as absolute path) [default: $(DEFAULT_WORKSPACE_DIR)]: " workspace_dir; \
 	 workspace_dir=$${workspace_dir:-$(DEFAULT_WORKSPACE_DIR)}; \
-	 echo "workspace_base=\"$$workspace_dir\"" >> $(CONFIG_FILE).tmp
+	 echo "workspace_base="$$workspace_dir"" >> $(CONFIG_FILE).tmp
 
 	@echo "" >> $(CONFIG_FILE).tmp
 
 	@echo "[llm]" >> $(CONFIG_FILE).tmp
-	@read -p "Enter your LLM model name, used for running without UI. Set the model in the UI after you start the app. (see https://docs.litellm.ai/docs/providers for full list) [default: $(DEFAULT_MODEL)]: " llm_model; \
+
+	@read -p "Enter your LLM model name, used for running without UI. Set the model in the UI after you start the app. (see https://docs.litellm.ai/docs/providers for full list) [default: $(DEFAULT_[...]"; \
 	 llm_model=$${llm_model:-$(DEFAULT_MODEL)}; \
-	 echo "model=\"$$llm_model\"" >> $(CONFIG_FILE).tmp
+	 echo "model="$$llm_model"" >> $(CONFIG_FILE).tmp
 
 	@read -p "Enter your LLM api key: " llm_api_key; \
-	 echo "api_key=\"$$llm_api_key\"" >> $(CONFIG_FILE).tmp
+	 echo "api_key="$$llm_api_key"" >> $(CONFIG_FILE).tmp
 
 	@read -p "Enter your LLM base URL [mostly used for local LLMs, leave blank if not needed - example: http://localhost:5001/v1/]: " llm_base_url; \
-	 if [[ ! -z "$$llm_base_url" ]]; then echo "base_url=\"$$llm_base_url\"" >> $(CONFIG_FILE).tmp; fi
+	 if [[ ! -z "$$llm_base_url" ]]; then echo "base_url="$$llm_base_url"" >> $(CONFIG_FILE).tmp; fi
 
 setup-config-basic:
-	@printf '%s\n' \
+	@printf '%s
+' \
 	'[core]' \
 	'workspace_base="./workspace"' \
 	> config.toml
@@ -367,16 +369,16 @@ help:
 	@echo "Targets:"
 	@echo "  $(GREEN)build$(RESET)               - Build project, including environment setup and dependencies."
 	@echo "  $(GREEN)lint$(RESET)                - Run linters on the project."
-	@echo "  $(GREEN)setup-config$(RESET)        - Setup the configuration for OpenHands by providing LLM API key,"
-	@echo "                        LLM Model name, and workspace directory."
+	@echo "  $(GREEN)setup-config$(RESET)        - Setup the configuration for OpenHands by providing LLM API key," \
+		"                        LLM Model name, and workspace directory."
 	@echo "  $(GREEN)start-backend$(RESET)       - Start the backend server for the OpenHands project."
 	@echo "  $(GREEN)start-frontend$(RESET)      - Start the frontend server for the OpenHands project."
-	@echo "  $(GREEN)run$(RESET)                 - Run the OpenHands application, starting both backend and frontend servers."
-	@echo "                        Backend Log file will be stored in the 'logs' directory."
+	@echo "  $(GREEN)run$(RESET)                 - Run the OpenHands application, starting both backend and frontend servers." \
+		"                        Backend Log file will be stored in the 'logs' directory."
 	@echo "  $(GREEN)docker-dev$(RESET)          - Build and run the OpenHands application in Docker."
 	@echo "  $(GREEN)docker-run$(RESET)          - Run the OpenHands application, starting both backend and frontend servers in Docker."
 	@echo "  $(GREEN)help$(RESET)                - Display this help message, providing information on available targets."
 
 # Phony targets
-.PHONY: build check-dependencies check-system check-python check-npm check-nodejs check-docker check-poetry install-python-dependencies install-frontend-dependencies install-pre-commit-hooks lint-backend lint-frontend lint test-frontend test build-frontend start-backend start-frontend _run_setup run run-wsl setup-config setup-config-prompts setup-config-basic openhands-cloud-run docker-dev docker-run clean help
+.PHONY: build check-dependencies check-system check-python check-npm check-nodejs check-docker check-poetry install-python-dependencies install-frontend-dependencies install-pre-commit-hooks lint[...]
 .PHONY: kind
