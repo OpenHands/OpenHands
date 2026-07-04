@@ -26,9 +26,12 @@ from storage.device_code import DeviceCode  # noqa: F401
 from storage.feedback import Feedback
 from storage.github_app_installation import GithubAppInstallation
 from storage.org import Org
+from storage.org_budget_settings import OrgBudgetSettings  # noqa: F401
+from storage.org_budget_threshold import OrgBudgetThreshold  # noqa: F401
 from storage.org_git_claim import OrgGitClaim  # noqa: F401
 from storage.org_invitation import OrgInvitation  # noqa: F401
 from storage.org_member import OrgMember
+from storage.org_user_budget_override import OrgUserBudgetOverride  # noqa: F401
 from storage.role import Role
 from storage.slack_conversation import SlackConversation  # noqa: F401
 from storage.stored_conversation_metadata import StoredConversationMetadata
