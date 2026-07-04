@@ -13,6 +13,10 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./query-client-config";
 import { PostHogWrapper } from "./components/providers/posthog-wrapper";
 
+// Global red/black theme and subtle anime-style particles
+import "./theme.css";
+import Particles from "./Particles";
+
 async function prepareApp() {
   if (
     process.env.NODE_ENV === "development" &&
@@ -33,6 +37,7 @@ prepareApp().then(() =>
       <StrictMode>
         <QueryClientProvider client={queryClient}>
           <PostHogWrapper>
+            <Particles />
             <HydratedRouter />
           </PostHogWrapper>
         </QueryClientProvider>
