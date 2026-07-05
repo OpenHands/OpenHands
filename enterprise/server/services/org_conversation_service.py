@@ -84,6 +84,7 @@ def _format_agent_label(agent_kind: str | None, llm_model: str | None) -> str:
         return AGENT_LABELS['openhands']
     return AGENT_LABELS.get(agent_kind, agent_kind)
 
+
 MAX_SANDBOX_STATUS_FILTER_ROWS = 5000
 
 
@@ -828,9 +829,7 @@ class OrgConversationService:
         agent_costs: dict[str, float] = {}
         for row in agent_rows:
             label = _format_agent_label(row.agent_kind, row.llm_model)
-            agent_counts[label] = agent_counts.get(label, 0) + int(
-                row.conv_count or 0
-            )
+            agent_counts[label] = agent_counts.get(label, 0) + int(row.conv_count or 0)
             agent_costs[label] = agent_costs.get(label, 0.0) + float(
                 row.total_cost or 0.0
             )
@@ -844,7 +843,6 @@ class OrgConversationService:
             for label in agent_counts
         ]
         agent_usage.sort(key=lambda item: item.total_cost, reverse=True)
-
 
         return OrgUsageStats(
             active_users=int(active_users),

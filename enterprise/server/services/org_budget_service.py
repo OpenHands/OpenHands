@@ -530,9 +530,7 @@ class OrgBudgetService:
         effective_limit, is_disabled, is_override = _effective_user_budget_limit(
             override, settings.default_user_monthly_limit
         )
-        current_spend = await self._get_user_spend(
-            org_id, user_id, cycle.start_at
-        )
+        current_spend = await self._get_user_spend(org_id, user_id, cycle.start_at)
         return {
             'user_id': str(org_member.user_id),
             'user_email': user.email,
@@ -554,7 +552,6 @@ class OrgBudgetService:
         settings.litellm_last_sync_status = status_value
         settings.litellm_last_sync_error = error
         await self.store.flush()
-
 
     async def _sync_litellm_budgets(
         self,
@@ -649,7 +646,7 @@ class OrgBudgetService:
         if sync_errors:
             summary = sync_errors[0]
             if len(sync_errors) > 1:
-                summary = f"{summary} (+{len(sync_errors) - 1} more)"
+                summary = f'{summary} (+{len(sync_errors) - 1} more)'
             await self._record_litellm_sync(settings, 'error', summary[:500])
         else:
             await self._record_litellm_sync(settings, 'success')
