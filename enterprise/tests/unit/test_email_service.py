@@ -18,7 +18,9 @@ class TestEmailServiceInvitationUrl:
 
         with (
             patch.dict(os.environ, {'SMTP_HOST': 'smtp.example.com'}, clear=True),
-            patch('server.services.email_service.smtplib.SMTP', return_value=smtp_client),
+            patch(
+                'server.services.email_service.smtplib.SMTP', return_value=smtp_client
+            ),
         ):
             EmailService.send_invitation_email(
                 to_email='test@example.com',
@@ -44,7 +46,9 @@ class TestEmailServiceInvitationUrl:
                 {'SMTP_HOST': 'smtp.example.com', 'WEB_HOST': custom_host},
                 clear=True,
             ),
-            patch('server.services.email_service.smtplib.SMTP', return_value=smtp_client),
+            patch(
+                'server.services.email_service.smtplib.SMTP', return_value=smtp_client
+            ),
         ):
             EmailService.send_invitation_email(
                 to_email='test@example.com',
@@ -65,7 +69,9 @@ class TestEmailServiceInvitationUrl:
 
         with (
             patch.dict(os.environ, {'SMTP_HOST': 'smtp.example.com'}, clear=True),
-            patch('server.services.email_service.smtplib.SMTP', return_value=smtp_client),
+            patch(
+                'server.services.email_service.smtplib.SMTP', return_value=smtp_client
+            ),
         ):
             EmailService.send_invitation_email(
                 to_email='test@example.com',
