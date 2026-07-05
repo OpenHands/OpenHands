@@ -22,7 +22,7 @@ async def budget_org(async_session_maker):
     async with async_session_maker() as session:
         org = Org(
             id=org_id,
-            name=f'test-org-{org_id}',
+            name=f"test-org-{org_id}",
             org_version=ORG_SETTINGS_VERSION,
             enable_proactive_conversation_starters=True,
         )
@@ -65,9 +65,9 @@ async def test_roll_cycle_if_needed_updates_cycle(async_session_maker, budget_or
 
         with (
             patch.object(
-                service, '_fetch_team_spend', AsyncMock(return_value=42.5)
+                service, "_fetch_team_spend", AsyncMock(return_value=42.5)
             ) as fetch_mock,
-            patch.object(service, '_sync_litellm_budgets', AsyncMock()) as sync_mock,
+            patch.object(service, "_sync_litellm_budgets", AsyncMock()) as sync_mock,
         ):
             rolled = await service._roll_cycle_if_needed(
                 settings, [threshold], overrides
@@ -115,8 +115,8 @@ async def test_roll_cycle_if_needed_noop(async_session_maker, budget_org):
 
         service = OrgBudgetService(session)
         with (
-            patch.object(service, '_fetch_team_spend', AsyncMock()) as fetch_mock,
-            patch.object(service, '_sync_litellm_budgets', AsyncMock()) as sync_mock,
+            patch.object(service, "_fetch_team_spend", AsyncMock()) as fetch_mock,
+            patch.object(service, "_sync_litellm_budgets", AsyncMock()) as sync_mock,
         ):
             rolled = await service._roll_cycle_if_needed(settings, [threshold], [])
 
@@ -166,24 +166,24 @@ async def test_sync_litellm_budgets_updates_team_and_members(
         ]
 
         financial_data = {
-            'members': {
-                str(disabled_user_id): {'spend': 12.0},
-                str(override_user_id): {'spend': 7.0},
-                str(default_user_id): {'spend': 5.0},
+            "members": {
+                str(disabled_user_id): {"spend": 12.0},
+                str(override_user_id): {"spend": 7.0},
+                str(default_user_id): {"spend": 5.0},
             }
         }
 
         with (
             patch(
-                'server.services.org_budget_service.LiteLlmManager.get_team_members_financial_data',
+                "server.services.org_budget_service.LiteLlmManager.get_team_members_financial_data",
                 AsyncMock(return_value=financial_data),
             ),
             patch(
-                'server.services.org_budget_service.LiteLlmManager.update_team',
+                "server.services.org_budget_service.LiteLlmManager.update_team",
                 AsyncMock(),
             ) as update_team,
             patch(
-                'server.services.org_budget_service.LiteLlmManager.update_user_in_team',
+                "server.services.org_budget_service.LiteLlmManager.update_user_in_team",
                 AsyncMock(),
             ) as update_user,
         ):
@@ -218,7 +218,7 @@ async def test_sync_litellm_budgets_updates_team_and_members(
             any_order=True,
         )
 
-        assert settings.litellm_last_sync_status == 'success'
+        assert settings.litellm_last_sync_status == "success"
         assert settings.litellm_last_sync_error is None
         assert settings.litellm_last_sync_at is not None
 
@@ -281,8 +281,8 @@ async def test_send_alerts_emails_and_slack(async_session_maker, budget_org):
             reset_day=1,
             monthly_limit=120.0,
             default_user_monthly_limit=None,
-            slack_channel='alerts',
-            slack_team_id='team-123',
+            slack_channel="alerts",
+            slack_team_id="team-123",
             cycle_start_at=datetime.now(UTC),
             cycle_start_spend=0.0,
         )
@@ -293,12 +293,12 @@ async def test_send_alerts_emails_and_slack(async_session_maker, budget_org):
             slack_enabled=True,
         )
 
-        service._get_org_name = AsyncMock(return_value='Acme')
-        service._get_admin_emails = AsyncMock(return_value=['admin@example.com'])
+        service._get_org_name = AsyncMock(return_value="Acme")
+        service._get_admin_emails = AsyncMock(return_value=["admin@example.com"])
         service._send_slack_alert = AsyncMock()
 
         with patch(
-            'server.services.org_budget_service.EmailService.send_budget_alert_email',
+            "server.services.org_budget_service.SMTPEmailService.send_budget_alert_email",
             MagicMock(),
         ) as send_email:
             await service._send_alerts(
@@ -310,15 +310,15 @@ async def test_send_alerts_emails_and_slack(async_session_maker, budget_org):
             )
 
         send_email.assert_called_once_with(
-            ['admin@example.com'],
-            org_name='Acme',
+            ["admin@example.com"],
+            org_name="Acme",
             percentage=83.3,
             current_spend=100.0,
             monthly_limit=120.0,
             threshold=90,
         )
         service._send_slack_alert.assert_awaited_once_with(
-            'Acme',
+            "Acme",
             settings,
             90,
             100.0,

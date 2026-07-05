@@ -3,7 +3,7 @@ Pydantic models and custom exceptions for organization invitations.
 """
 
 from pydantic import BaseModel, EmailStr
-from server.services.email_service import EmailService
+from server.services.smtp_email_service import SMTPEmailService
 from storage.org_invitation import OrgInvitation
 from storage.role_store import RoleStore
 
@@ -18,7 +18,7 @@ class InvitationAlreadyExistsError(InvitationError):
     """Raised when a pending invitation already exists for the email."""
 
     def __init__(
-        self, message: str = 'A pending invitation already exists for this email'
+        self, message: str = "A pending invitation already exists for this email"
     ):
         super().__init__(message)
 
@@ -26,35 +26,35 @@ class InvitationAlreadyExistsError(InvitationError):
 class UserAlreadyMemberError(InvitationError):
     """Raised when the user is already a member of the organization."""
 
-    def __init__(self, message: str = 'User is already a member of this organization'):
+    def __init__(self, message: str = "User is already a member of this organization"):
         super().__init__(message)
 
 
 class InvitationExpiredError(InvitationError):
     """Raised when the invitation has expired."""
 
-    def __init__(self, message: str = 'Invitation has expired'):
+    def __init__(self, message: str = "Invitation has expired"):
         super().__init__(message)
 
 
 class InvitationInvalidError(InvitationError):
     """Raised when the invitation is invalid or revoked."""
 
-    def __init__(self, message: str = 'Invitation is no longer valid'):
+    def __init__(self, message: str = "Invitation is no longer valid"):
         super().__init__(message)
 
 
 class InsufficientPermissionError(InvitationError):
     """Raised when the user lacks permission to perform the action."""
 
-    def __init__(self, message: str = 'Insufficient permission'):
+    def __init__(self, message: str = "Insufficient permission"):
         super().__init__(message)
 
 
 class EmailMismatchError(InvitationError):
     """Raised when the accepting user's email doesn't match the invitation email."""
 
-    def __init__(self, message: str = 'Your email does not match the invitation'):
+    def __init__(self, message: str = "Your email does not match the invitation"):
         super().__init__(message)
 
 
@@ -62,7 +62,7 @@ class InvitationCreate(BaseModel):
     """Request model for creating invitation(s)."""
 
     emails: list[EmailStr]
-    role: str = 'member'  # Default to member role
+    role: str = "member"  # Default to member role
 
 
 class InvitationResponse(BaseModel):
@@ -85,7 +85,7 @@ class InvitationResponse(BaseModel):
         cls,
         invitation: OrgInvitation,
         inviter_email: str | None = None,
-    ) -> 'InvitationResponse':
+    ) -> "InvitationResponse":
         """Create an InvitationResponse from an OrgInvitation entity.
 
         Args:
@@ -95,12 +95,12 @@ class InvitationResponse(BaseModel):
         Returns:
             InvitationResponse: The response model instance
         """
-        role_name = ''
+        role_name = ""
         if invitation.role:
             role_name = invitation.role.name
         elif invitation.role_id:
             role = await RoleStore.get_role_by_id(invitation.role_id)
-            role_name = role.name if role else ''
+            role_name = role.name if role else ""
 
         return cls(
             id=invitation.id,
@@ -110,7 +110,7 @@ class InvitationResponse(BaseModel):
             created_at=invitation.created_at.isoformat(),
             expires_at=invitation.expires_at.isoformat(),
             inviter_email=inviter_email,
-            invite_url=EmailService.build_invitation_url(invitation.token),
+            invite_url=SMTPEmailService.build_invitation_url(invitation.token),
         )
 
 
@@ -127,7 +127,7 @@ class BatchInvitationResponse(BaseModel):
     successful: list[InvitationResponse]
     failed: list[InvitationFailure]
     # False when no email provider is configured (e.g. OHE installs without
-    # RESEND_API_KEY): invitations were created but no email was sent, so the
+    # SMTP_HOST): invitations were created but no email was sent, so the
     # UI should tell the inviter to share the invite links directly.
     email_delivery_configured: bool = True
 
