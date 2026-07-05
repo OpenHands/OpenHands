@@ -14,21 +14,20 @@ def test_budget_settings_rejects_invalid_reset_day():
         OrgBudgetSettingsUpdate(reset_day=2)
 
 
-
 def test_budget_settings_accepts_valid_slack_channel():
-    settings = OrgBudgetSettingsUpdate(slack_channel="#usage-monitoring_1")
-    assert settings.slack_channel == "#usage-monitoring_1"
+    settings = OrgBudgetSettingsUpdate(slack_channel='#usage-monitoring_1')
+    assert settings.slack_channel == '#usage-monitoring_1'
 
 
 def test_budget_settings_rejects_invalid_slack_channel():
     with pytest.raises(
         ValidationError, match='slack_channel must start with # and contain only'
     ):
-        OrgBudgetSettingsUpdate(slack_channel="general")
+        OrgBudgetSettingsUpdate(slack_channel='general')
 
 
 def test_budget_settings_rejects_overlong_slack_channel():
-    too_long = "#" + ("a" * org_models.SLACK_CHANNEL_MAX_LENGTH)
+    too_long = '#' + ('a' * org_models.SLACK_CHANNEL_MAX_LENGTH)
     with pytest.raises(
         ValidationError, match='slack_channel must be .* characters or fewer'
     ):
