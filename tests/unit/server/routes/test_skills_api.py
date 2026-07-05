@@ -155,6 +155,77 @@ async def test_skills_search_returns_skills(test_client, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_skills_search_includes_v1_user_skills(test_client, tmp_path):
+    """User skills placed in the V1 ~/.openhands/skills/ path are listed.
+
+    Regression test for the WebUI skills list only scanning the V0
+    ~/.openhands/microagents/ path while the docs and the conversation-skills
+    endpoint treat ~/.openhands/skills/ as the preferred V1 location.
+    """
+    v1_dir = tmp_path / 'skills'
+    _write_skill_file(v1_dir, 'my_v1_skill', skill_type='knowledge')
+
+    with (
+        patch(
+            'openhands.app_server.user.skills_router.GLOBAL_SKILLS_DIR',
+            tmp_path / 'no_global',
+        ),
+        patch('openhands.app_server.user.skills_router.USER_SKILLS_DIR', v1_dir),
+        patch(
+            'openhands.app_server.user.skills_router.USER_SKILLS_DIR_LEGACY',
+            tmp_path / 'no_legacy',
+        ),
+    ):
+        response = test_client.get('/api/v1/skills/search')
+
+    assert response.status_code == 200
+    data = response.json()
+    names = [s['name'] for s in data['items']]
+    assert 'my_v1_skill' in names
+    v1_skill = next(s for s in data['items'] if s['name'] == 'my_v1_skill')
+    assert v1_skill['source'] == 'user'
+
+
+@pytest.mark.asyncio
+async def test_skills_search_merges_user_paths_v1_wins(test_client, tmp_path):
+    """Both user paths are scanned; on a name collision the V1 copy wins."""
+    v1_dir = tmp_path / 'skills'
+    v0_dir = tmp_path / 'microagents'
+
+    _write_skill_file(v1_dir, 'only_v1', skill_type='knowledge')
+    _write_skill_file(v0_dir, 'only_v0', skill_type='knowledge')
+    # Same name in both locations, different metadata, so we can tell them apart.
+    _write_skill_file(v1_dir, 'shared', skill_type='repo')
+    _write_skill_file(v0_dir, 'shared', skill_type='knowledge', triggers=['legacyword'])
+
+    with (
+        patch(
+            'openhands.app_server.user.skills_router.GLOBAL_SKILLS_DIR',
+            tmp_path / 'no_global',
+        ),
+        patch('openhands.app_server.user.skills_router.USER_SKILLS_DIR', v1_dir),
+        patch(
+            'openhands.app_server.user.skills_router.USER_SKILLS_DIR_LEGACY',
+            v0_dir,
+        ),
+    ):
+        response = test_client.get('/api/v1/skills/search')
+
+    assert response.status_code == 200
+    data = response.json()
+    names = [s['name'] for s in data['items']]
+
+    assert 'only_v1' in names
+    assert 'only_v0' in names
+    # Collision is deduplicated to a single entry...
+    assert names.count('shared') == 1
+    # ...and the surviving copy is the V1 one.
+    shared = next(s for s in data['items'] if s['name'] == 'shared')
+    assert shared['type'] == 'repo'
+    assert shared['triggers'] is None
+
+
+@pytest.mark.asyncio
 async def test_skills_search_handles_missing_dirs(test_client, tmp_path):
     """Test that the endpoint handles missing directories gracefully."""
     with (
@@ -165,6 +236,10 @@ async def test_skills_search_handles_missing_dirs(test_client, tmp_path):
         patch(
             'openhands.app_server.user.skills_router.USER_SKILLS_DIR',
             tmp_path / 'also_missing',
+        ),
+        patch(
+            'openhands.app_server.user.skills_router.USER_SKILLS_DIR_LEGACY',
+            tmp_path / 'also_missing_legacy',
         ),
     ):
         response = test_client.get('/api/v1/skills/search')

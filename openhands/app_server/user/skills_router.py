@@ -28,7 +28,10 @@ user_context_dependency = depends_user_context()
 
 # skills/ is at the repo root, two levels above the openhands package __file__
 GLOBAL_SKILLS_DIR = Path(openhands.__file__).parent.parent / 'skills'
-USER_SKILLS_DIR = Path.home() / '.openhands' / 'microagents'
+# User skills live under ~/.openhands. V1 prefers skills/; microagents/ is the
+# V0 legacy path kept for backward compatibility. V1 wins on name collisions.
+USER_SKILLS_DIR = Path.home() / '.openhands' / 'skills'
+USER_SKILLS_DIR_LEGACY = Path.home() / '.openhands' / 'microagents'
 
 
 class SkillInfo(BaseModel):
@@ -167,9 +170,16 @@ async def search_skills(
     except Exception as e:
         logger.warning(f'Failed to load global skills: {e}')
 
-    # Load user-level skills
+    # Load user-level skills from both the V1 (preferred) and V0 (legacy)
+    # locations, deduplicated by name with the V1 path winning collisions.
     try:
-        skills.extend(_load_skills_from_dir(USER_SKILLS_DIR, 'user'))
+        seen_user_names: set[str] = set()
+        for user_dir in (USER_SKILLS_DIR, USER_SKILLS_DIR_LEGACY):
+            for skill in _load_skills_from_dir(user_dir, 'user'):
+                if skill.name in seen_user_names:
+                    continue
+                seen_user_names.add(skill.name)
+                skills.append(skill)
     except Exception as e:
         logger.warning(f'Failed to load user skills: {e}')
 
