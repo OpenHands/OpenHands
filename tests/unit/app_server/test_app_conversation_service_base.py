@@ -1446,3 +1446,34 @@ class TestLoadSkillsAndUpdateAgent:
                 'registered_marketplaces'
             ]
             assert forwarded == marketplaces
+
+
+@pytest.mark.asyncio
+async def test_clone_or_init_git_repo_mkdir_runs_from_existing_cwd():
+    """The workspace ``mkdir`` must run from a directory that exists.
+
+    Regression: a nested working_dir (e.g. a grouped per-conversation workspace
+    ``/workspace/project/<conv>``) lives under a parent that has not been
+    created yet. Running ``mkdir -p`` from that missing parent as the cwd fails
+    to chdir, so the directory is never created and the subsequent clone fails
+    with ENOENT. The command must run from ``/`` (always present); ``mkdir -p``
+    with an absolute target creates every parent regardless of the cwd.
+    """
+    workspace = MagicMock()
+    workspace.working_dir = '/workspace/project/conv123'
+    workspace.execute_command = AsyncMock(return_value=MagicMock(exit_code=0))
+
+    # Minimal fake self exercising the no-repo path (mkdir + git init) only.
+    svc = MagicMock(spec=AppConversationServiceBase)
+    svc.init_git_in_empty_workspace = True
+    svc._configure_git_user_settings = AsyncMock()
+
+    task = MagicMock()
+    task.request.selected_repository = None
+
+    await AppConversationServiceBase.clone_or_init_git_repo(svc, task, workspace)
+
+    # First command is the mkdir; it must run from '/', not the missing parent.
+    first_cmd, first_cwd = workspace.execute_command.call_args_list[0].args[:2]
+    assert first_cmd == 'mkdir -p /workspace/project/conv123'
+    assert str(first_cwd) == '/'

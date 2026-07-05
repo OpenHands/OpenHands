@@ -412,10 +412,15 @@ class AppConversationServiceBase(AppConversationService, ABC):
     ):
         request = task.request
 
-        # Create the projects directory if it does not exist yet
-        parent = Path(workspace.working_dir).parent
+        # Create the working directory if it does not exist yet. Run from '/'
+        # (always present): the target is absolute and `mkdir -p` creates every
+        # parent, so the cwd is irrelevant to the result. Using the target's own
+        # parent as the cwd fails when that parent does not exist yet — e.g. a
+        # grouped per-conversation workspace nested under a not-yet-created
+        # `/workspace/project` — because the shell cannot chdir into it, leaving
+        # the directory uncreated and the subsequent clone failing with ENOENT.
         result = await workspace.execute_command(
-            f'mkdir -p {workspace.working_dir}', parent
+            f'mkdir -p {workspace.working_dir}', '/'
         )
         if result.exit_code:
             _logger.warning(f'mkdir failed: {result.stderr}')
