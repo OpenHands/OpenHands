@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import AsyncGenerator
@@ -698,7 +700,8 @@ class OrgBudgetService:
         if threshold.email_enabled:
             recipients = await self._get_admin_emails(org_id)
             if recipients:
-                SMTPEmailService.send_budget_alert_email(
+                await asyncio.to_thread(
+                    SMTPEmailService.send_budget_alert_email,
                     recipients,
                     org_name=org_name,
                     percentage=percentage,
