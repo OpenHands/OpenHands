@@ -133,7 +133,8 @@ class OrgInvitationService:
             if inviter_user and inviter_user.email:
                 inviter_name = inviter_user.email.split("@")[0]
 
-            SMTPEmailService.send_invitation_email(
+            await asyncio.to_thread(
+                SMTPEmailService.send_invitation_email,
                 to_email=email,
                 org_name=org.name,
                 inviter_name=inviter_name,
