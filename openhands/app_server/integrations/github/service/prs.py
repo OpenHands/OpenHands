@@ -24,9 +24,9 @@ class GitHubPRsMixin(GitHubMixinBase):
             repo_name: The full name of the repository (owner/repo)
             source_branch: The name of the branch where your changes are implemented
             target_branch: The name of the branch you want the changes pulled into
-            title: The title of the pull request (optional, defaults to a generic title)
+            title: The title of the pull request
             body: The body/description of the pull request (optional)
-            draft: Whether to create the PR as a draft (optional, defaults to False)
+            draft: Whether to create the PR as a draft (optional, defaults to True)
             labels: A list of labels to apply to the pull request (optional)
 
         Returns:

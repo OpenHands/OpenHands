@@ -23,7 +23,7 @@ class GitLabPRsMixin(GitLabMixinBase):
             id: The ID or URL-encoded path of the project
             source_branch: The name of the branch where your changes are implemented
             target_branch: The name of the branch you want the changes merged into
-            title: The title of the merge request (optional, defaults to a generic title)
+            title: The title of the merge request
             description: The description of the merge request (optional)
             labels: A list of labels to apply to the merge request (optional)
 
