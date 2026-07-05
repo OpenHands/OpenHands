@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
 from unittest.mock import AsyncMock, MagicMock, call, patch
+from uuid import uuid4
 
 import pytest
 from server.constants import ORG_SETTINGS_VERSION
@@ -218,10 +218,9 @@ async def test_sync_litellm_budgets_updates_team_and_members(
             any_order=True,
         )
 
-        assert settings.litellm_last_sync_status == "success"
+        assert settings.litellm_last_sync_status == 'success'
         assert settings.litellm_last_sync_error is None
         assert settings.litellm_last_sync_at is not None
-
 
 
 @pytest.mark.asyncio
@@ -254,7 +253,7 @@ async def test_maybe_send_alerts_tracks_thresholds(async_session_maker, budget_o
             slack_enabled=False,
         )
 
-        service.db_session.commit = AsyncMock()
+        service.store.flush = AsyncMock()
         service._send_alerts = AsyncMock()
 
         await service._maybe_send_alerts(
@@ -269,7 +268,7 @@ async def test_maybe_send_alerts_tracks_thresholds(async_session_maker, budget_o
         assert threshold_80.last_triggered_cycle_start == cycle_start
         assert threshold_80.last_triggered_at is not None
         assert threshold_90.last_triggered_at is None
-        service.db_session.commit.assert_awaited_once()
+        service.store.flush.assert_awaited_once()
 
 
 @pytest.mark.asyncio

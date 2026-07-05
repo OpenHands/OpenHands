@@ -113,7 +113,9 @@ class TestEmailServiceSendInvitationEmail:
                 },
                 clear=True,
             ),
-            patch('server.services.email_service.smtplib.SMTP', return_value=smtp_client),
+            patch(
+                'server.services.email_service.smtplib.SMTP', return_value=smtp_client
+            ),
         ):
             EmailService.send_invitation_email(
                 to_email='test@example.com',
@@ -132,8 +134,6 @@ class TestEmailServiceSendInvitationEmail:
             assert "You're invited to join Acme Corp on OpenHands" in message
 
 
-
-
 class TestEmailServiceBudgetAlerts:
     """Test cases for budget alert emails."""
 
@@ -150,7 +150,9 @@ class TestEmailServiceBudgetAlerts:
                 },
                 clear=True,
             ),
-            patch('server.services.email_service.smtplib.SMTP', return_value=smtp_client) as mock_smtp,
+            patch(
+                'server.services.email_service.smtplib.SMTP', return_value=smtp_client
+            ) as mock_smtp,
         ):
             EmailService.send_budget_alert_email(
                 to_emails=['ops@example.com'],
@@ -169,6 +171,7 @@ class TestEmailServiceBudgetAlerts:
             assert send_args[1] == ['ops@example.com']
 
             smtp_client.quit.assert_called_once()
+
 
 class TestEmailServiceHelpers:
     """Tests for is_configured and build_invitation_url."""
