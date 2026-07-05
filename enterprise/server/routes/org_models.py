@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 from typing import Annotated, Any
 
@@ -735,6 +736,9 @@ class OrgBudgetThresholdUpdate(BaseModel):
 
 
 
+SLACK_CHANNEL_MAX_LENGTH = 80
+SLACK_CHANNEL_PATTERN = re.compile(r'^#[a-z0-9][a-z0-9_-]*$')
+
 MAX_BUDGET_THRESHOLDS = 10000
 
 
@@ -752,6 +756,10 @@ class OrgBudgetUserResponse(BaseModel):
 class OrgBudgetSettingsResponse(BaseModel):
     enabled: bool
     monthly_limit: float | None = None
+    litellm_last_sync_at: datetime | None = None
+    litellm_last_sync_status: str | None = None
+    litellm_last_sync_error: str | None = None
+
     reset_day: int
     slack_channel: str | None = None
     slack_team_id: str | None = None
@@ -783,6 +791,21 @@ class OrgBudgetSettingsUpdate(BaseModel):
             return value
         if value not in (1, 15):
             raise ValueError('reset_day must be 1 or 15')
+        return value
+
+    @field_validator('slack_channel')
+    @classmethod
+    def _validate_slack_channel(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        if len(value) > SLACK_CHANNEL_MAX_LENGTH:
+            raise ValueError(
+                f'slack_channel must be {SLACK_CHANNEL_MAX_LENGTH} characters or fewer'
+            )
+        if not SLACK_CHANNEL_PATTERN.fullmatch(value):
+            raise ValueError(
+                'slack_channel must start with # and contain only lowercase letters, numbers, hyphens, or underscores'
+            )
         return value
 
     @model_validator(mode='after')

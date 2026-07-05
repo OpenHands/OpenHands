@@ -218,6 +218,11 @@ async def test_sync_litellm_budgets_updates_team_and_members(
             any_order=True,
         )
 
+        assert settings.litellm_last_sync_status == "success"
+        assert settings.litellm_last_sync_error is None
+        assert settings.litellm_last_sync_at is not None
+
+
 
 @pytest.mark.asyncio
 async def test_maybe_send_alerts_tracks_thresholds(async_session_maker, budget_org):
