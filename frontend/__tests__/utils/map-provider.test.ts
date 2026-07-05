@@ -1,5 +1,5 @@
 import { test, expect } from "vitest";
-import { mapProvider } from "../../src/utils/map-provider";
+import { mapProvider, getProviderId } from "../../src/utils/map-provider";
 
 test("mapProvider", () => {
   expect(mapProvider("azure")).toBe("Azure");
@@ -14,7 +14,7 @@ test("mapProvider", () => {
   expect(mapProvider("anyscale")).toBe("Anyscale");
   expect(mapProvider("databricks")).toBe("Databricks");
   expect(mapProvider("ollama")).toBe("Ollama");
-  expect(mapProvider("perlexity")).toBe("Perplexity AI");
+  expect(mapProvider("perplexity")).toBe("Perplexity AI");
   expect(mapProvider("friendliai")).toBe("FriendliAI");
   expect(mapProvider("groq")).toBe("Groq");
   expect(mapProvider("fireworks_ai")).toBe("Fireworks AI");
@@ -25,4 +25,10 @@ test("mapProvider", () => {
   expect(mapProvider("voyage")).toBe("Voyage AI");
   expect(mapProvider("openrouter")).toBe("OpenRouter");
   expect(mapProvider("clarifai")).toBe("Clarifai");
+});
+
+test("getProviderId maps display names back to LiteLLM provider ids", () => {
+  expect(getProviderId("Perplexity AI")).toBe("perplexity");
+  expect(getProviderId("OpenAI")).toBe("openai");
+  expect(getProviderId("Anthropic")).toBe("anthropic");
 });
