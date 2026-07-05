@@ -1,7 +1,7 @@
 """Add LiteLLM sync metadata to org budgets.
 
-Revision ID: 131
-Revises: 130
+Revision ID: 133
+Revises: 132
 Create Date: 2026-06-16 12:24:55.000000
 """
 
@@ -10,8 +10,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = '131'
-down_revision: Union[str, None] = '130'
+revision: str = '133'
+down_revision: Union[str, None] = '132'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
