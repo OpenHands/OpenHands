@@ -43,12 +43,12 @@ In-memory storage keeps files in memory, useful for testing or temporary storage
 S3 storage uses Amazon S3 or compatible services for file storage.
 
 **Parameters:**
-- `bucket`: The S3 bucket name (falls back to `AWS_S3_BUCKET` environment variable if empty)
+- `bucket_name`: The S3 bucket name (falls back to `AWS_S3_BUCKET` environment variable if empty)
 
 **Environment Variables:**
 - `AWS_ACCESS_KEY_ID`: Your AWS access key
 - `AWS_SECRET_ACCESS_KEY`: Your AWS secret key
-- `AWS_S3_BUCKET`: Default bucket name (used if `bucket` parameter is empty)
+- `AWS_S3_BUCKET`: Default bucket name (used if `bucket_name` parameter is empty)
 - `AWS_S3_ENDPOINT`: Optional custom endpoint for S3-compatible services
 - `AWS_S3_SECURE`: Whether to use HTTPS (default: "true")
 
