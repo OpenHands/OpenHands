@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org import Org
 from storage.org_budget_settings import OrgBudgetSettings
+from storage.org_budget_store import OrgBudgetStore
 from storage.org_budget_threshold import OrgBudgetThreshold
 from storage.org_member import OrgMember
 from storage.org_user_budget_override import OrgUserBudgetOverride
@@ -80,10 +81,24 @@ def _effective_user_budget_limit(
         return override.monthly_limit, False, True
     return default_limit, False, False
 
+def _escape_ilike(value: str) -> str:
+    return value.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+
+
+
 
 class OrgBudgetService:
-    def __init__(self, db_session: AsyncSession):
-        self.db_session = db_session
+    def __init__(
+        self,
+        db_session: AsyncSession | None = None,
+        store: OrgBudgetStore | None = None,
+    ):
+        if store is None:
+            if db_session is None:
+                raise ValueError('db_session is required when store is not provided')
+            store = OrgBudgetStore(db_session=db_session)
+        self.store = store
+        self.db_session = store.db_session
 
     async def get_budget_state(
         self,
@@ -177,8 +192,8 @@ class OrgBudgetService:
             await self._replace_thresholds(org_id, thresholds, update_data.thresholds)
             thresholds = await self._get_thresholds(org_id)
 
-        await self.db_session.commit()
-        await self.db_session.refresh(settings)
+        await self.store.flush()
+        await self.store.refresh(settings)
 
         await self._sync_litellm_budgets(org_id, settings, overrides)
 
@@ -211,20 +226,12 @@ class OrgBudgetService:
         monthly_limit: float | None,
         is_disabled: bool,
     ) -> OrgUserBudgetOverride:
-        override = await self._get_override(org_id, user_id)
-        if override is None:
-            override = OrgUserBudgetOverride(
-                org_id=org_id,
-                user_id=user_id,
-                monthly_limit=monthly_limit,
-                is_disabled=is_disabled,
-            )
-            self.db_session.add(override)
-        else:
-            override.monthly_limit = monthly_limit
-            override.is_disabled = is_disabled
-        await self.db_session.commit()
-        await self.db_session.refresh(override)
+        override = await self.store.upsert_override(
+            org_id=org_id,
+            user_id=user_id,
+            monthly_limit=monthly_limit,
+            is_disabled=is_disabled,
+        )
         settings = await self._get_or_create_settings(org_id)
         overrides = await self._get_overrides(org_id)
         await self._sync_litellm_budgets(org_id, settings, overrides)
@@ -234,51 +241,25 @@ class OrgBudgetService:
         override = await self._get_override(org_id, user_id)
         if override is None:
             return
-        await self.db_session.delete(override)
-        await self.db_session.commit()
+        await self.store.delete_override(override)
         settings = await self._get_or_create_settings(org_id)
         overrides = await self._get_overrides(org_id)
         await self._sync_litellm_budgets(org_id, settings, overrides)
 
     async def _get_or_create_settings(self, org_id: UUID) -> OrgBudgetSettings:
-        result = await self.db_session.execute(
-            select(OrgBudgetSettings).where(OrgBudgetSettings.org_id == org_id)
-        )
-        settings = result.scalar_one_or_none()
+        settings = await self.store.get_settings(org_id)
         if settings:
             return settings
 
-        settings = OrgBudgetSettings(
+        return await self.store.create_settings(
             org_id=org_id,
-            enabled=False,
             reset_day=1,
-            monthly_limit=None,
-            default_user_monthly_limit=None,
             cycle_start_at=_current_cycle_start(datetime.now(UTC), 1),
-            cycle_start_spend=0.0,
+            thresholds=DEFAULT_THRESHOLDS,
         )
-        self.db_session.add(settings)
-        await self.db_session.flush()
-        for percentage, email_enabled, slack_enabled in DEFAULT_THRESHOLDS:
-            self.db_session.add(
-                OrgBudgetThreshold(
-                    org_id=org_id,
-                    percentage=percentage,
-                    email_enabled=email_enabled,
-                    slack_enabled=slack_enabled,
-                )
-            )
-        await self.db_session.commit()
-        await self.db_session.refresh(settings)
-        return settings
 
     async def _get_thresholds(self, org_id: UUID) -> list[OrgBudgetThreshold]:
-        result = await self.db_session.execute(
-            select(OrgBudgetThreshold)
-            .where(OrgBudgetThreshold.org_id == org_id)
-            .order_by(OrgBudgetThreshold.percentage.asc())
-        )
-        return list(result.scalars().all())
+        return await self.store.get_thresholds(org_id)
 
     async def _replace_thresholds(
         self,
@@ -286,33 +267,15 @@ class OrgBudgetService:
         existing: list[OrgBudgetThreshold],
         new_thresholds,
     ) -> None:
-        for threshold in existing:
-            await self.db_session.delete(threshold)
-        for threshold in new_thresholds:
-            self.db_session.add(
-                OrgBudgetThreshold(
-                    org_id=org_id,
-                    percentage=threshold.percentage,
-                    email_enabled=threshold.email_enabled,
-                    slack_enabled=threshold.slack_enabled,
-                )
-            )
+        await self.store.replace_thresholds(org_id, existing, new_thresholds)
 
     async def _get_overrides(self, org_id: UUID) -> list[OrgUserBudgetOverride]:
-        result = await self.db_session.execute(
-            select(OrgUserBudgetOverride).where(OrgUserBudgetOverride.org_id == org_id)
-        )
-        return list(result.scalars().all())
+        return await self.store.get_overrides(org_id)
 
     async def _get_override(
         self, org_id: UUID, user_id: UUID
     ) -> OrgUserBudgetOverride | None:
-        result = await self.db_session.execute(
-            select(OrgUserBudgetOverride)
-            .where(OrgUserBudgetOverride.org_id == org_id)
-            .where(OrgUserBudgetOverride.user_id == user_id)
-        )
-        return result.scalar_one_or_none()
+        return await self.store.get_override(org_id, user_id)
 
     def _current_cycle(self, settings: OrgBudgetSettings) -> BudgetCycle:
         start_at = settings.cycle_start_at
@@ -336,8 +299,8 @@ class OrgBudgetService:
         for threshold in thresholds:
             threshold.last_triggered_at = None
             threshold.last_triggered_cycle_start = None
-        await self.db_session.commit()
-        await self.db_session.refresh(settings)
+        await self.store.flush()
+        await self.store.refresh(settings)
         await self._sync_litellm_budgets(org_id, settings, overrides)
         return True
 
@@ -445,11 +408,12 @@ class OrgBudgetService:
 
         search_value = (users_search or '').strip()
         if search_value:
-            pattern = f"%{search_value}%"
+            escaped = _escape_ilike(search_value)
+            pattern = f"%{escaped}%"
             base_query = base_query.where(
                 or_(
-                    User.email.ilike(pattern),
-                    User.git_user_name.ilike(pattern),
+                    User.email.ilike(pattern, escape='\\'),
+                    User.git_user_name.ilike(pattern, escape='\\'),
                 )
             )
 
@@ -580,6 +544,17 @@ class OrgBudgetService:
             'is_override': is_override,
         }
 
+    async def _record_litellm_sync(
+        self,
+        settings: OrgBudgetSettings,
+        status_value: str,
+        error: str | None = None,
+    ) -> None:
+        settings.litellm_last_sync_at = datetime.now(UTC)
+        settings.litellm_last_sync_status = status_value
+        settings.litellm_last_sync_error = error
+        await self.store.flush()
+
 
     async def _sync_litellm_budgets(
         self,
@@ -587,24 +562,28 @@ class OrgBudgetService:
         settings: OrgBudgetSettings,
         overrides: list[OrgUserBudgetOverride],
     ) -> None:
-        financial_data = None
+        sync_errors: list[str] = []
         try:
             financial_data = await LiteLlmManager.get_team_members_financial_data(
                 str(org_id)
             )
         except Exception as e:
+            error_message = f'fetch_failed: {e}'
             logger.warning(
                 'org_budget_litellm_fetch_failed',
                 extra={'org_id': str(org_id), 'error': str(e)},
             )
+            await self._record_litellm_sync(settings, 'error', error_message[:500])
             return
 
         if not financial_data:
+            await self._record_litellm_sync(settings, 'skipped')
             return
 
         members = financial_data.get('members', {})
 
         if settings.enabled and settings.monthly_limit:
+            # Anchor LiteLLM budgets to our cycle start spend so resets stay aligned.
             max_budget = settings.cycle_start_spend + settings.monthly_limit
             try:
                 await LiteLlmManager.update_team(
@@ -613,6 +592,7 @@ class OrgBudgetService:
                     max_budget=max_budget,
                 )
             except Exception as e:
+                sync_errors.append(f'team_update_failed: {e}')
                 logger.warning(
                     'org_budget_litellm_team_update_failed',
                     extra={'org_id': str(org_id), 'error': str(e)},
@@ -626,6 +606,7 @@ class OrgBudgetService:
                     clear_budget=True,
                 )
             except Exception as e:
+                sync_errors.append(f'team_clear_failed: {e}')
                 logger.warning(
                     'org_budget_litellm_team_clear_failed',
                     extra={'org_id': str(org_id), 'error': str(e)},
@@ -655,6 +636,7 @@ class OrgBudgetService:
                     clear_budget=clear_budget,
                 )
             except Exception as e:
+                sync_errors.append(f'user_update_failed: {user_id}: {e}')
                 logger.warning(
                     'org_budget_litellm_user_update_failed',
                     extra={
@@ -663,6 +645,14 @@ class OrgBudgetService:
                         'error': str(e),
                     },
                 )
+
+        if sync_errors:
+            summary = sync_errors[0]
+            if len(sync_errors) > 1:
+                summary = f"{summary} (+{len(sync_errors) - 1} more)"
+            await self._record_litellm_sync(settings, 'error', summary[:500])
+        else:
+            await self._record_litellm_sync(settings, 'success')
 
     async def _maybe_send_alerts(
         self,
@@ -700,7 +690,7 @@ class OrgBudgetService:
             triggered = True
 
         if triggered:
-            await self.db_session.commit()
+            await self.store.flush()
 
     async def _send_alerts(
         self,
