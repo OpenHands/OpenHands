@@ -30,12 +30,8 @@ class OrgBudgetSettings(Base):
     litellm_last_sync_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    litellm_last_sync_status: Mapped[str | None] = mapped_column(
-        String, nullable=True
-    )
-    litellm_last_sync_error: Mapped[str | None] = mapped_column(
-        String, nullable=True
-    )
+    litellm_last_sync_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    litellm_last_sync_error: Mapped[str | None] = mapped_column(String, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
