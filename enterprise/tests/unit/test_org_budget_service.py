@@ -128,6 +128,55 @@ async def test_roll_cycle_if_needed_noop(async_session_maker, budget_org):
 
 
 @pytest.mark.asyncio
+async def test_run_budget_maintenance_syncs_when_cycle_not_rolled(
+    async_session_maker, budget_org
+):
+    async with async_session_maker() as session:
+        service = OrgBudgetService(session)
+        with patch.object(service, "_sync_litellm_budgets", AsyncMock()) as sync_mock:
+            result = await service.run_budget_maintenance(budget_org.id)
+
+    assert result["cycle_rolled"] is False
+    sync_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_run_budget_maintenance_uses_cycle_roll_sync(
+    async_session_maker, budget_org
+):
+    async with async_session_maker() as session:
+        reset_day = 1
+        settings = OrgBudgetSettings(
+            org_id=budget_org.id,
+            enabled=True,
+            reset_day=reset_day,
+            monthly_limit=250.0,
+            default_user_monthly_limit=None,
+            slack_channel=None,
+            slack_team_id=None,
+            cycle_start_at=_current_cycle_start(
+                datetime.now(UTC) - timedelta(days=40), reset_day
+            ),
+            cycle_start_spend=10.0,
+        )
+        session.add(settings)
+        await session.commit()
+
+        service = OrgBudgetService(session)
+        with (
+            patch.object(
+                service, "_fetch_team_spend", AsyncMock(return_value=42.5)
+            ) as fetch_mock,
+            patch.object(service, "_sync_litellm_budgets", AsyncMock()) as sync_mock,
+        ):
+            result = await service.run_budget_maintenance(budget_org.id)
+
+    assert result["cycle_rolled"] is True
+    fetch_mock.assert_awaited_once_with(settings.org_id)
+    sync_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_sync_litellm_budgets_updates_team_and_members(
     async_session_maker, budget_org
 ):
