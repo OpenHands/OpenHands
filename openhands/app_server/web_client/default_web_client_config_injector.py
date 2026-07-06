@@ -120,6 +120,15 @@ def _get_slack_enabled() -> bool:
     )
 
 
+def _get_email_enabled() -> bool:
+    """Return whether transactional email delivery is configured."""
+    try:
+        from server.services.smtp_email_service import SMTPEmailService
+    except Exception:
+        return bool(os.getenv('SMTP_HOST', '').strip())
+    return SMTPEmailService.is_configured()
+
+
 def _get_jira_dc_oauth_host() -> str | None:
     """Hostname of the Jira Data Center server when DC OAuth is configured.
 
@@ -218,6 +227,7 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
         }
     )
     slack_enabled: bool = Field(default_factory=_get_slack_enabled)
+    email_enabled: bool = Field(default_factory=_get_email_enabled)
     jira_dc_oauth_host: str | None = Field(default_factory=_get_jira_dc_oauth_host)
     jira_dc_service_account_managed: bool = Field(
         default_factory=_is_jira_dc_service_account_managed
@@ -265,6 +275,7 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
             gitlab_enabled=self.gitlab_enabled,
             provider_default_hosts=self.provider_default_hosts,
             slack_enabled=self.slack_enabled,
+            email_enabled=self.email_enabled,
             jira_dc_oauth_host=self.jira_dc_oauth_host,
             jira_dc_service_account_managed=self.jira_dc_service_account_managed,
             jira_dc_service_account_email=self.jira_dc_service_account_email,

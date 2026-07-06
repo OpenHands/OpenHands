@@ -46,6 +46,23 @@ The github service is responsible for interacting with Github APIs. As a consequ
 
 NOTE: in the future we will simply replace the `GithubTokenManager` with keycloak. The `SaaSGithubService` should interact with keycloack instead.
 
+### Email delivery (SMTP)
+
+Budget alert emails and other SMTP-backed notifications are sent via SMTP when configured.
+If `SMTP_HOST` is unset, email delivery is disabled and the UI can surface manual links
+instead of attempting to send mail.
+
+| Env var | Purpose | Default |
+| --- | --- | --- |
+| `SMTP_HOST` | SMTP server hostname | (required) |
+| `SMTP_PORT` | SMTP server port | `587` |
+| `SMTP_USERNAME` | SMTP auth username | empty |
+| `SMTP_PASSWORD` | SMTP auth password | empty |
+| `SMTP_FROM_EMAIL` | Sender address | `OpenHands <no-reply@openhands.dev>` |
+| `SMTP_USE_SSL` | Use implicit TLS/SSL | `false` |
+| `SMTP_USE_TLS` | StartTLS upgrade (ignored if SSL) | `true` |
+
+
 # Areas that are BRITTLE!
 
 ## User ID vs User Token
