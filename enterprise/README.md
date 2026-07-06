@@ -44,13 +44,13 @@ The github service is responsible for interacting with Github APIs. As a consequ
 | **Token used**            | User's PAT fetched from `Settings`     | User's token fetched from `GitHubTokenManager` |
 | **Refresh functionality** | **N/A**; user provides PAT for the app | Uses the `GitHubTokenManager` to refresh       |
 
-NOTE: in the future we will simply replace the `GithubTokenManager` with keycloak. The `SaaSGithubService` should interact with keycloack instead.
+NOTE: in the future we will simply replace the `GithubTokenManager` with keycloak. The `SaaSGithubService` should interact with keycloak instead.
 
 # Areas that are BRITTLE!
 
 ## User ID vs User Token
 
 - In OpenHands, the entire app revolves around the GitHub token the user sets. `openhands/server` uses `request.state.github_token` for the entire app
-- On Enterprise, the entire APP resolves around the Github User ID. This is because the cookie sets it, so `openhands/server` AND `enterprise/server` depend on it and completely ignore `request.state.github_token` (token is fetched from `GithubTokenManager` instead)
+- On Enterprise, the entire APP revolves around the Github User ID. This is because the cookie sets it, so `openhands/server` AND `enterprise/server` depend on it and completely ignore `request.state.github_token` (token is fetched from `GithubTokenManager` instead)
 
 Note that introducing GitHub User ID in OpenHands, for instance, will cause large breakages.
