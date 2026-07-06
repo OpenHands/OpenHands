@@ -57,6 +57,7 @@ export function JiraDcIntegrationPanel() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { data: config } = useConfig();
+  const jiraDcHost = config?.jira_dc_host ?? null;
   // OAuth installs already know the host; pre-fill + lock it.
   const jiraDcOAuthHost = config?.jira_dc_oauth_host ?? null;
   const serviceAccountManaged =
@@ -136,7 +137,7 @@ export function JiraDcIntegrationPanel() {
       setHasSavedApiKey(true);
       setIsActive(existingWorkspace.status === "active");
     } else {
-      setWorkspace(jiraDcOAuthHost ?? "");
+      setWorkspace(jiraDcOAuthHost ?? jiraDcHost ?? "");
       setServiceAccountEmail(
         serviceAccountManaged ? managedServiceAccountEmail : "",
       );
@@ -152,6 +153,7 @@ export function JiraDcIntegrationPanel() {
     setManualSetupSaved(false);
   }, [
     existingWorkspace,
+    jiraDcHost,
     jiraDcOAuthHost,
     managedServiceAccountEmail,
     serviceAccountManaged,
@@ -371,8 +373,9 @@ export function JiraDcIntegrationPanel() {
     manualInstructionKey =
       I18nKey.PROJECT_MANAGEMENT$JIRA_DC_MANUAL_INSTRUCTIONS;
   }
+  const requiresHostInput = !serviceAccountManaged;
   const isSubmitDisabled =
-    !workspace.trim() ||
+    (requiresHostInput && !workspace.trim()) ||
     !serviceAccountEmailSatisfied ||
     (apiKeyRequired && !serviceAccountApiKey.trim()) ||
     emailError !== null ||

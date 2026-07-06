@@ -137,6 +137,19 @@ def _get_jira_dc_oauth_host() -> str | None:
     return urlparse(base_url).hostname or None
 
 
+def _get_jira_dc_host() -> str | None:
+    """Hostname of the Jira Data Center server.
+
+    Returns the host from JIRA_DC_BASE_URL regardless of whether OAuth is enabled.
+    Useful for pre-filling the host in email-match mode when the service account
+    is managed.
+    """
+    base_url = os.getenv('JIRA_DC_BASE_URL', '').strip()
+    if not base_url:
+        return None
+    return urlparse(base_url).hostname or None
+
+
 def _get_jira_dc_service_account_config_error() -> str | None:
     """Return a web-client-safe service-account config error, if any."""
     return get_jira_dc_service_account_env_config().error
@@ -218,6 +231,7 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
         }
     )
     slack_enabled: bool = Field(default_factory=_get_slack_enabled)
+    jira_dc_host: str | None = Field(default_factory=_get_jira_dc_host)
     jira_dc_oauth_host: str | None = Field(default_factory=_get_jira_dc_oauth_host)
     jira_dc_service_account_managed: bool = Field(
         default_factory=_is_jira_dc_service_account_managed
@@ -265,6 +279,7 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
             gitlab_enabled=self.gitlab_enabled,
             provider_default_hosts=self.provider_default_hosts,
             slack_enabled=self.slack_enabled,
+            jira_dc_host=self.jira_dc_host,
             jira_dc_oauth_host=self.jira_dc_oauth_host,
             jira_dc_service_account_managed=self.jira_dc_service_account_managed,
             jira_dc_service_account_email=self.jira_dc_service_account_email,
