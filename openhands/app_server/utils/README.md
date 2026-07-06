@@ -16,7 +16,6 @@ This module provides utility functions that are used across OpenHands for common
 - **import_utils**: Dynamic module import utilities
 - **jsonpatch_compat**: JSON patch compatibility utilities
 - **llm**: LLM model management and configuration
-- **sdk_settings_compat**: SDK settings compatibility layer
 - **search_utils**: Pagination and search utilities
 - **shutdown_listener**: Graceful shutdown signal handling
 - **sql_utils**: SQL database operation helpers
