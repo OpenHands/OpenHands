@@ -129,6 +129,7 @@ async def test_search_branches_github_success_and_variables():
         assert variables['owner'] == 'foo'
         assert variables['name'] == 'bar'
         assert variables['query'] == 'fe'
+        assert variables['after'] is None
         assert 1 <= variables['perPage'] <= 100
 
         assert len(branches) == 2
@@ -143,6 +144,55 @@ async def test_search_branches_github_success_and_variables():
         assert b1.commit_sha == ''
         assert b1.last_push_date is None
         assert b1.protected is False
+
+
+@pytest.mark.asyncio
+async def test_search_branches_github_uses_cursor_for_page():
+    service = GitHubService(token=SecretStr('t'))
+
+    first_page = {
+        'data': {
+            'repository': {
+                'refs': {
+                    'nodes': [{'name': 'feature/one', 'target': {'__typename': 'Tag'}}],
+                    'pageInfo': {'endCursor': 'cursor-1', 'hasNextPage': True},
+                }
+            }
+        }
+    }
+    second_page = {
+        'data': {
+            'repository': {
+                'refs': {
+                    'nodes': [
+                        {
+                            'name': 'feature/two',
+                            'target': {
+                                '__typename': 'Commit',
+                                'oid': 'bbb222',
+                                'committedDate': '2024-01-06T10:00:00Z',
+                            },
+                        }
+                    ],
+                    'pageInfo': {'endCursor': 'cursor-2', 'hasNextPage': False},
+                }
+            }
+        }
+    }
+
+    exec_mock = AsyncMock(side_effect=[first_page, second_page])
+    with patch.object(service, 'execute_graphql_query', exec_mock):
+        branches = await service.search_branches(
+            'foo/bar', query='feature', per_page=1, page=2
+        )
+
+    assert len(branches) == 1
+    assert branches[0].name == 'feature/two'
+    assert branches[0].commit_sha == 'bbb222'
+    first_call = exec_mock.call_args_list[0].args[1]
+    second_call = exec_mock.call_args_list[1].args[1]
+    assert first_call['after'] is None
+    assert second_call['after'] == 'cursor-1'
 
 
 @pytest.mark.asyncio

@@ -140,7 +140,7 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
         )
 
     async def search_branches(
-        self, repository: str, query: str, per_page: int = 30
+        self, repository: str, query: str, per_page: int = 30, page: int = 1
     ) -> list[Branch]:
         """Search for branches within a repository."""
         # Parse repository string: organization/project/repo
@@ -167,12 +167,21 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
 
             # Filter branches by query
             filtered_branches = []
+            start_idx = max((page - 1) * per_page, 0)
+            end_idx = start_idx + per_page
+            matched_count = 0
             for branch_data in branches_data:
                 # Extract branch name from the ref (e.g., "refs/heads/main" -> "main")
                 name = branch_data.get('name', '').replace('refs/heads/', '')
 
                 # Check if query matches branch name
                 if query.lower() in name.lower():
+                    matched_count += 1
+                    if matched_count <= start_idx:
+                        continue
+                    if matched_count > end_idx:
+                        break
+
                     object_id = branch_data.get('objectId', '')
 
                     # Get commit details for this branch
@@ -190,9 +199,6 @@ class AzureDevOpsBranchesMixin(AzureDevOpsMixinBase):
                         last_push_date=last_push_date,
                     )
                     filtered_branches.append(branch)
-
-                    if len(filtered_branches) >= per_page:
-                        break
 
             return filtered_branches
         except Exception:

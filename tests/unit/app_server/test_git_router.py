@@ -709,10 +709,14 @@ class TestSearchBranches:
         # Arrange
         mock_handler = MagicMock()
         mock_handler.search_branches = AsyncMock(
-            return_value=[
-                Branch(name='main', commit_sha='abc123', protected=False),
-                Branch(name='develop', commit_sha='def456', protected=False),
-                Branch(name='feature-branch', commit_sha='ghi789', protected=False),
+            side_effect=[
+                [
+                    Branch(name='main', commit_sha='abc123', protected=False),
+                    Branch(name='develop', commit_sha='def456', protected=False),
+                ],
+                [
+                    Branch(name='feature-branch', commit_sha='ghi789', protected=False),
+                ],
             ]
         )
         mock_handler_cls.return_value = mock_handler
@@ -739,6 +743,8 @@ class TestSearchBranches:
         assert result.items[0].name == 'main'
         assert result.items[1].name == 'develop'
         assert result.next_page_id == encode_page_id(2)
+        assert mock_handler.search_branches.call_args_list[0].kwargs.get('page') == 1
+        assert mock_handler.search_branches.call_args_list[1].kwargs.get('page') == 2
 
     @pytest.mark.asyncio
     @patch('openhands.app_server.git.git_router.ProviderHandler')
@@ -772,7 +778,54 @@ class TestSearchBranches:
         assert call_kwargs.get('selected_provider') == ProviderType.GITHUB
         assert call_kwargs.get('repository') == 'user/repo'
         assert call_kwargs.get('query') == 'feature'
-        assert call_kwargs.get('per_page') == 11  # limit + 1
+        assert call_kwargs.get('per_page') == 10
+        assert call_kwargs.get('page') == 1
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.git.git_router.ProviderHandler')
+    async def test_passes_page_to_provider(self, mock_handler_cls):
+        """Test that branch search supports following pagination links."""
+        # Arrange
+        mock_handler = MagicMock()
+        mock_handler.search_branches = AsyncMock(
+            side_effect=[
+                [
+                    Branch(name='feature-3', commit_sha='ghi789', protected=False),
+                    Branch(name='feature-4', commit_sha='jkl012', protected=False),
+                ],
+                [
+                    Branch(name='feature-5', commit_sha='mno345', protected=False),
+                ],
+            ]
+        )
+        mock_handler_cls.return_value = mock_handler
+
+        mock_context = _make_mock_user_context(
+            provider_tokens={
+                ProviderType.GITHUB: ProviderToken(user_id='user-123', token='token')
+            },
+            user_id='user-123',
+        )
+
+        # Act
+        result = await search_branches(
+            provider=ProviderType.GITHUB,
+            repository='user/repo',
+            query='feature',
+            page_id=encode_page_id(2),
+            limit=2,
+            user_context=mock_context,
+        )
+
+        # Assert
+        assert [branch.name for branch in result.items] == ['feature-3', 'feature-4']
+        assert result.next_page_id == encode_page_id(3)
+        first_call = mock_handler.search_branches.call_args_list[0].kwargs
+        second_call = mock_handler.search_branches.call_args_list[1].kwargs
+        assert first_call.get('page') == 2
+        assert first_call.get('per_page') == 2
+        assert second_call.get('page') == 3
+        assert second_call.get('per_page') == 2
 
     def test_returns_403_when_no_provider_tokens(self, test_client):
         """Test that 403 is returned when no provider tokens."""

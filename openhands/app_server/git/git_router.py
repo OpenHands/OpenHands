@@ -243,22 +243,28 @@ async def search_branches(
     if decoded_page_id is not None:
         page = decoded_page_id
 
+    next_page_id = None
     if query:
-        if page != 1:
-            # TODO(#13883): Support pagination for branch search after refactoring.
-            # The search_branches method does not support paging in the same way as
-            # get_branches - those should be merged into a single paginated method
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail='Pagination not yet supported for branch search queries. Use empty query to list all branches with pagination.',
-            )
-        # Get search results - we'll handle pagination ourselves
         branches: list[Branch] = await client.search_branches(
             selected_provider=provider,
             repository=repository,
             query=query,
-            per_page=limit + 1,
+            per_page=limit,
+            page=page,
         )
+        if len(branches) > limit:
+            branches = branches[:limit]
+            next_page_id = encode_page_id(page + 1)
+        elif len(branches) == limit:
+            next_branches = await client.search_branches(
+                selected_provider=provider,
+                repository=repository,
+                query=query,
+                per_page=limit,
+                page=page + 1,
+            )
+            if next_branches:
+                next_page_id = encode_page_id(page + 1)
     else:
         current_page = await client.get_branches(
             repository=repository,
@@ -267,11 +273,9 @@ async def search_branches(
             per_page=limit + 1,
         )
         branches = current_page.branches
-
-    next_page_id = None
-    if len(branches) > limit:
-        branches = branches[:-1]
-        next_page_id = encode_page_id(page + 1)
+        if len(branches) > limit:
+            branches = branches[:-1]
+            next_page_id = encode_page_id(page + 1)
 
     return BranchPage(items=branches, next_page_id=next_page_id)
 
