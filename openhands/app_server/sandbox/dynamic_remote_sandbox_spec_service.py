@@ -9,7 +9,9 @@ import httpx
 from fastapi import Request
 from pydantic import Field, PrivateAttr
 
-from openhands.app_server.errors import SandboxError
+from openhands.app_server.sandbox.remote_sandbox_spec_service import (
+    get_default_sandbox_specs,
+)
 from openhands.app_server.sandbox.sandbox_spec_models import (
     SandboxSpecInfo,
     SandboxSpecInfoPage,
@@ -68,6 +70,11 @@ class DynamicRemoteSandboxSpecService(SandboxSpecService):
             specs.append(spec)
             name_to_spec[config['name']] = spec
 
+        # When runtime-api reports no warm runtimes, fall back to the default
+        # sandbox specs so callers (e.g. conversation startup) can still proceed.
+        if not specs:
+            specs = get_default_sandbox_specs()
+
         self._cached_specs = specs
         self._name_to_spec = name_to_spec
         self._cache_expires_at = now + self.cache_ttl_seconds
@@ -90,8 +97,6 @@ class DynamicRemoteSandboxSpecService(SandboxSpecService):
 
     async def get_default_sandbox_spec(self) -> SandboxSpecInfo:
         specs = await self._fetch_specs()
-        if not specs:
-            raise SandboxError('No warm runtime configs available from runtime-api.')
         if self.default_spec_name:
             spec = self._name_to_spec.get(self.default_spec_name)
             if spec is not None:
