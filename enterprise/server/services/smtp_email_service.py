@@ -8,8 +8,8 @@ from typing import TypedDict
 
 from openhands.app_server.utils.logger import openhands_logger as logger
 
-DEFAULT_FROM_EMAIL = "OpenHands <no-reply@openhands.dev>"
-DEFAULT_WEB_HOST = "https://app.all-hands.dev"
+DEFAULT_FROM_EMAIL = 'OpenHands <no-reply@openhands.dev>'
+DEFAULT_WEB_HOST = 'https://app.all-hands.dev'
 
 
 class SMTPSettings(TypedDict):
@@ -27,37 +27,37 @@ class SMTPEmailService:
 
     @staticmethod
     def _get_smtp_settings() -> SMTPSettings | None:
-        host = os.environ.get("SMTP_HOST")
+        host = os.environ.get('SMTP_HOST')
         if not host:
             return None
 
-        port_value = os.environ.get("SMTP_PORT", "587")
+        port_value = os.environ.get('SMTP_PORT', '587')
         try:
             port = int(port_value)
         except ValueError:
             logger.warning(
-                "SMTP_PORT invalid, defaulting to 587",
-                extra={"smtp_port": port_value},
+                'SMTP_PORT invalid, defaulting to 587',
+                extra={'smtp_port': port_value},
             )
             port = 587
 
-        use_ssl = os.environ.get("SMTP_USE_SSL", "false").lower() in (
-            "true",
-            "1",
+        use_ssl = os.environ.get('SMTP_USE_SSL', 'false').lower() in (
+            'true',
+            '1',
         )
         use_tls = (
-            os.environ.get("SMTP_USE_TLS", "true").lower() in ("true", "1")
+            os.environ.get('SMTP_USE_TLS', 'true').lower() in ('true', '1')
             and not use_ssl
         )
 
         return {
-            "host": host,
-            "port": port,
-            "use_ssl": use_ssl,
-            "use_tls": use_tls,
-            "username": os.environ.get("SMTP_USERNAME", ""),
-            "password": os.environ.get("SMTP_PASSWORD", ""),
-            "from_email": os.environ.get("SMTP_FROM_EMAIL", DEFAULT_FROM_EMAIL),
+            'host': host,
+            'port': port,
+            'use_ssl': use_ssl,
+            'use_tls': use_tls,
+            'username': os.environ.get('SMTP_USERNAME', ''),
+            'password': os.environ.get('SMTP_PASSWORD', ''),
+            'from_email': os.environ.get('SMTP_FROM_EMAIL', DEFAULT_FROM_EMAIL),
         }
 
     @staticmethod
@@ -69,27 +69,27 @@ class SMTPEmailService:
     ) -> bool:
         settings = SMTPEmailService._get_smtp_settings()
         if not settings:
-            logger.warning("SMTP not configured, skipping email")
+            logger.warning('SMTP not configured, skipping email')
             return False
 
-        message = MIMEMultipart("alternative")
-        message["Subject"] = subject
-        message["From"] = str(settings["from_email"])
-        message["To"] = ", ".join(to_emails)
-        message.attach(MIMEText(html, "html"))
+        message = MIMEMultipart('alternative')
+        message['Subject'] = subject
+        message['From'] = str(settings['from_email'])
+        message['To'] = ', '.join(to_emails)
+        message.attach(MIMEText(html, 'html'))
 
         extra_payload = extra or {}
 
         try:
-            smtp_class = smtplib.SMTP_SSL if settings["use_ssl"] else smtplib.SMTP
-            client = smtp_class(settings["host"], settings["port"])
+            smtp_class = smtplib.SMTP_SSL if settings['use_ssl'] else smtplib.SMTP
+            client = smtp_class(settings['host'], settings['port'])
             try:
-                if settings["use_tls"]:
+                if settings['use_tls']:
                     client.starttls()
-                if settings["username"]:
-                    client.login(settings["username"], settings["password"])
+                if settings['username']:
+                    client.login(settings['username'], settings['password'])
                 client.sendmail(
-                    settings["from_email"],
+                    settings['from_email'],
                     to_emails,
                     message.as_string(),
                 )
@@ -98,8 +98,8 @@ class SMTPEmailService:
             return True
         except Exception as exc:
             logger.error(
-                "Failed to send SMTP email",
-                extra={"error": str(exc), **extra_payload},
+                'Failed to send SMTP email',
+                extra={'error': str(exc), **extra_payload},
             )
             return False
 
@@ -120,14 +120,14 @@ class SMTPEmailService:
         WEB_HOST may be configured as a bare hostname (the OHE chart sets it
         that way), so normalize to an https URL before composing the link.
         """
-        web_host = os.environ.get("WEB_HOST", DEFAULT_WEB_HOST).strip().rstrip("/")
+        web_host = os.environ.get('WEB_HOST', DEFAULT_WEB_HOST).strip().rstrip('/')
         if not web_host:
             web_host = DEFAULT_WEB_HOST
-        if not web_host.startswith(("http://", "https://")):
-            web_host = f"https://{web_host}"
+        if not web_host.startswith(('http://', 'https://')):
+            web_host = f'https://{web_host}'
         return (
-            f"{web_host}/api/organizations/members/invite/accept"
-            f"?token={invitation_token}"
+            f'{web_host}/api/organizations/members/invite/accept'
+            f'?token={invitation_token}'
         )
 
     @staticmethod
@@ -190,10 +190,10 @@ class SMTPEmailService:
         </div>
         """
 
-        extra = {"invitation_id": invitation_id, "email": to_email}
+        extra = {'invitation_id': invitation_id, 'email': to_email}
 
         if SMTPEmailService._send_smtp_email([to_email], subject, body, extra):
-            logger.info("Invitation email sent", extra=extra)
+            logger.info('Invitation email sent', extra=extra)
 
     @staticmethod
     def send_budget_alert_email(
@@ -205,7 +205,7 @@ class SMTPEmailService:
         threshold: int,
     ) -> None:
         subject = (
-            f"OpenHands budget alert: {org_name} reached {threshold}% of its limit"
+            f'OpenHands budget alert: {org_name} reached {threshold}% of its limit'
         )
         body = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -221,7 +221,7 @@ class SMTPEmailService:
         </div>
         """
 
-        extra = {"org_name": org_name, "recipient_count": len(to_emails)}
+        extra = {'org_name': org_name, 'recipient_count': len(to_emails)}
 
         if SMTPEmailService._send_smtp_email(to_emails, subject, body, extra):
-            logger.info("Budget alert email sent via SMTP", extra=extra)
+            logger.info('Budget alert email sent via SMTP', extra=extra)
