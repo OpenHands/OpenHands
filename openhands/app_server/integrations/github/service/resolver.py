@@ -42,7 +42,7 @@ class GitHubResolverMixin(GitHubMixinBase):
         Args:
             repository: Repository name in format 'owner/repo'
             issue_number: The issue number
-            discussion_id: Not used for GitHub (kept for compatibility with GitLab)
+            max_comments: Maximum number of comments to retrieve
 
         Returns:
             List of Comment objects ordered by creation date
@@ -83,7 +83,7 @@ class GitHubResolverMixin(GitHubMixinBase):
 
         Args:
             comment_id: The GraphQL node ID of any comment in the thread
-            repo: Repository name
+            repository: Repository name
             pr_number: Pull request number
 
         Returns:

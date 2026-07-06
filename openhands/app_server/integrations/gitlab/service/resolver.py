@@ -28,10 +28,9 @@ class GitLabResolverMixin(GitLabMixinBase):
         """Get the title and body of an issue or merge request.
 
         Args:
-            repository: Repository name in format 'owner/repo' or 'domain/owner/repo'
+            project_id: The GitLab project ID or URL-encoded path
             issue_number: The issue/MR IID within the project
-            is_mr: If True, treat as merge request; if False, treat as issue;
-                   if None, try issue first then merge request (default behavior)
+            is_mr: If True, treat as merge request; if False, treat as issue
 
         Returns:
             A tuple of (title, body)
@@ -59,11 +58,10 @@ class GitLabResolverMixin(GitLabMixinBase):
         """Get comments for an issue or merge request.
 
         Args:
-            repository: Repository name in format 'owner/repo' or 'domain/owner/repo'
+            project_id: The GitLab project ID or URL-encoded path
             issue_number: The issue/MR IID within the project
             max_comments: Maximum number of comments to retrieve
-            is_pr: If True, treat as merge request; if False, treat as issue;
-                   if None, try issue first then merge request (default behavior)
+            is_mr: If True, treat as merge request; if False, treat as issue
 
         Returns:
             List of Comment objects ordered by creation date
