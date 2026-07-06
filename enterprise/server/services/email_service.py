@@ -11,12 +11,12 @@ except ImportError:
 
 from openhands.app_server.utils.logger import openhands_logger as logger
 
-DEFAULT_FROM_EMAIL = "OpenHands <no-reply@openhands.dev>"
-DEFAULT_WEB_HOST = "https://app.all-hands.dev"
+DEFAULT_FROM_EMAIL = 'OpenHands <no-reply@openhands.dev>'
+DEFAULT_WEB_HOST = 'https://app.all-hands.dev'
 
 
 class EmailService:
-    """Service for sending transactional emails via Resend."""
+    """Service for sending transactional emails."""
 
     @staticmethod
     def _get_resend_client() -> bool:
@@ -26,12 +26,12 @@ class EmailService:
             bool: True if client is ready, False otherwise
         """
         if not RESEND_AVAILABLE:
-            logger.warning("Resend library not installed, skipping email")
+            logger.warning('Resend library not installed, skipping email')
             return False
 
-        resend_api_key = os.environ.get("RESEND_API_KEY")
+        resend_api_key = os.environ.get('RESEND_API_KEY')
         if not resend_api_key:
-            logger.warning("RESEND_API_KEY not configured, skipping email")
+            logger.warning('RESEND_API_KEY not configured, skipping email')
             return False
 
         resend.api_key = resend_api_key
@@ -45,7 +45,7 @@ class EmailService:
         can surface "email is not configured" to users instead of letting
         invitations fail silently.
         """
-        return RESEND_AVAILABLE and bool(os.environ.get("RESEND_API_KEY"))
+        return RESEND_AVAILABLE and bool(os.environ.get('RESEND_API_KEY'))
 
     @staticmethod
     def build_invitation_url(invitation_token: str) -> str:
@@ -54,14 +54,14 @@ class EmailService:
         WEB_HOST may be configured as a bare hostname (the OHE chart sets it
         that way), so normalize to an https URL before composing the link.
         """
-        web_host = os.environ.get("WEB_HOST", DEFAULT_WEB_HOST).strip().rstrip("/")
+        web_host = os.environ.get('WEB_HOST', DEFAULT_WEB_HOST).strip().rstrip('/')
         if not web_host:
             web_host = DEFAULT_WEB_HOST
-        if not web_host.startswith(("http://", "https://")):
-            web_host = f"https://{web_host}"
+        if not web_host.startswith(('http://', 'https://')):
+            web_host = f'https://{web_host}'
         return (
-            f"{web_host}/api/organizations/members/invite/accept"
-            f"?token={invitation_token}"
+            f'{web_host}/api/organizations/members/invite/accept'
+            f'?token={invitation_token}'
         )
 
     @staticmethod
@@ -88,13 +88,13 @@ class EmailService:
 
         invitation_url = EmailService.build_invitation_url(invitation_token)
 
-        from_email = os.environ.get("RESEND_FROM_EMAIL", DEFAULT_FROM_EMAIL)
+        from_email = os.environ.get('RESEND_FROM_EMAIL', DEFAULT_FROM_EMAIL)
 
         params = {
-            "from": from_email,
-            "to": [to_email],
-            "subject": f"You're invited to join {org_name} on OpenHands",
-            "html": f"""
+            'from': from_email,
+            'to': [to_email],
+            'subject': f"You're invited to join {org_name} on OpenHands",
+            'html': f"""
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <p>Hi,</p>
 
@@ -137,20 +137,20 @@ class EmailService:
         try:
             response = resend.Emails.send(params)
             logger.info(
-                "Invitation email sent",
+                'Invitation email sent',
                 extra={
-                    "invitation_id": invitation_id,
-                    "email": to_email,
-                    "response_id": response.get("id") if response else None,
+                    'invitation_id': invitation_id,
+                    'email': to_email,
+                    'response_id': response.get('id') if response else None,
                 },
             )
-        except Exception as exc:
+        except Exception as e:
             logger.error(
-                "Failed to send invitation email",
+                'Failed to send invitation email',
                 extra={
-                    "invitation_id": invitation_id,
-                    "email": to_email,
-                    "error": str(exc),
+                    'invitation_id': invitation_id,
+                    'email': to_email,
+                    'error': str(e),
                 },
             )
             raise
