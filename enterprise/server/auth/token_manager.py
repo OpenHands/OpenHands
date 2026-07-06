@@ -13,7 +13,6 @@ from keycloak.exceptions import (
     KeycloakError,
     KeycloakPostError,
 )
-
 from pydantic import BaseModel
 from server.auth.auth_error import ExpiredError
 from server.auth.constants import (
