@@ -39,7 +39,7 @@ from openhands.app_server.utils.logger import openhands_logger as logger
 # attach REJECT_X_ORG_ID_PATH_MISMATCH at the router level — a request
 # with a conflicting ``X-Org-Id`` is rejected before any handler runs.
 invitation_router = APIRouter(
-    prefix="/api/organizations/{org_id}/members",
+    prefix='/api/organizations/{org_id}/members',
     dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
 
@@ -47,11 +47,11 @@ invitation_router = APIRouter(
 # is encoded in the invitation token). X-Org-Id has no meaning here
 # and must not influence which invitation is accepted, so the guard
 # is intentionally NOT attached.
-accept_router = APIRouter(prefix="/api/organizations/members/invite")
+accept_router = APIRouter(prefix='/api/organizations/members/invite')
 
 
 @invitation_router.post(
-    "/invite",
+    '/invite',
     response_model=BatchInvitationResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -90,7 +90,7 @@ async def create_invitation(
     # RATE_LIMIT_ORG_INVITATION_USER_SECONDS).
     await check_rate_limit_by_user_id(
         request=request,
-        key_prefix="org_invitation_create",
+        key_prefix='org_invitation_create',
         user_id=user_id,
         user_rate_limit_seconds=RATE_LIMIT_ORG_INVITATION_USER_SECONDS,
     )
@@ -104,13 +104,13 @@ async def create_invitation(
         )
 
         logger.info(
-            "Batch organization invitations created",
+            'Batch organization invitations created',
             extra={
-                "org_id": str(org_id),
-                "total_emails": len(invitation_data.emails),
-                "successful": len(successful),
-                "failed": len(failed),
-                "inviter_id": user_id,
+                'org_id': str(org_id),
+                'total_emails': len(invitation_data.emails),
+                'successful': len(successful),
+                'failed': len(failed),
+                'inviter_id': user_id,
             },
         )
 
@@ -139,7 +139,7 @@ async def create_invitation(
                     role=invitation_data.role,
                 )
         except Exception:
-            logger.exception("analytics:team_members_invited:failed")
+            logger.exception('analytics:team_members_invited:failed')
 
         successful_responses = [
             await InvitationResponse.from_invitation(inv) for inv in successful
@@ -164,17 +164,17 @@ async def create_invitation(
         )
     except Exception as e:
         logger.exception(
-            "Unexpected error creating batch invitations",
-            extra={"org_id": str(org_id), "error": str(e)},
+            'Unexpected error creating batch invitations',
+            extra={'org_id': str(org_id), 'error': str(e)},
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred",
+            detail='An unexpected error occurred',
         )
 
 
 @invitation_router.get(
-    "/invite",
+    '/invite',
     response_model=PendingInvitationsResponse,
 )
 async def list_pending_invitations(
@@ -201,12 +201,12 @@ async def list_pending_invitations(
         raise
     except Exception:
         logger.exception(
-            "Error listing pending invitations",
-            extra={"org_id": str(org_id)},
+            'Error listing pending invitations',
+            extra={'org_id': str(org_id)},
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to list pending invitations",
+            detail='Failed to list pending invitations',
         )
 
 
@@ -220,7 +220,7 @@ async def _org_auto_adds_users(org_id: UUID) -> bool:
 
 
 @invitation_router.delete(
-    "/invite/{invitation_id}",
+    '/invite/{invitation_id}',
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def revoke_invitation(
@@ -243,22 +243,22 @@ async def revoke_invitation(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except Exception:
         logger.exception(
-            "Error revoking invitation",
-            extra={"org_id": str(org_id), "invitation_id": invitation_id},
+            'Error revoking invitation',
+            extra={'org_id': str(org_id), 'invitation_id': invitation_id},
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to revoke invitation",
+            detail='Failed to revoke invitation',
         )
 
     if revoked is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Invitation not found",
+            detail='Invitation not found',
         )
 
 
-@accept_router.get("/accept")
+@accept_router.get('/accept')
 async def accept_invitation_redirect(
     token: str,
     request: Request,
@@ -280,17 +280,17 @@ async def accept_invitation_redirect(
     Returns:
         RedirectResponse: Redirect to home page with invitation_token query param
     """
-    base_url = str(request.base_url).rstrip("/")
+    base_url = str(request.base_url).rstrip('/')
 
     logger.info(
-        "Invitation accept: redirecting to frontend for acceptance",
-        extra={"token_prefix": token[:10] + "..."},
+        'Invitation accept: redirecting to frontend for acceptance',
+        extra={'token_prefix': token[:10] + '...'},
     )
 
-    return RedirectResponse(f"{base_url}/?invitation_token={token}", status_code=302)
+    return RedirectResponse(f'{base_url}/?invitation_token={token}', status_code=302)
 
 
-@accept_router.post("/accept", response_model=AcceptInvitationResponse)
+@accept_router.post('/accept', response_model=AcceptInvitationResponse)
 async def accept_invitation(
     request_data: AcceptInvitationRequest,
     user_id: str = Depends(get_user_id),
@@ -322,79 +322,79 @@ async def accept_invitation(
         role = await RoleStore.get_role_by_id(invitation.role_id)
 
         logger.info(
-            "Invitation accepted via API",
+            'Invitation accepted via API',
             extra={
-                "token_prefix": token[:10] + "...",
-                "user_id": user_id,
-                "org_id": str(invitation.org_id),
+                'token_prefix': token[:10] + '...',
+                'user_id': user_id,
+                'org_id': str(invitation.org_id),
             },
         )
 
         return AcceptInvitationResponse(
             success=True,
             org_id=str(invitation.org_id),
-            org_name=org.name if org else "",
-            role=role.name if role else "",
+            org_name=org.name if org else '',
+            role=role.name if role else '',
         )
 
     except InvitationExpiredError:
         logger.warning(
-            "Invitation accept failed: expired",
-            extra={"token_prefix": token[:10] + "...", "user_id": user_id},
+            'Invitation accept failed: expired',
+            extra={'token_prefix': token[:10] + '...', 'user_id': user_id},
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="invitation_expired",
+            detail='invitation_expired',
         )
 
     except InvitationInvalidError as e:
         logger.warning(
-            "Invitation accept failed: invalid",
+            'Invitation accept failed: invalid',
             extra={
-                "token_prefix": token[:10] + "...",
-                "user_id": user_id,
-                "error": str(e),
+                'token_prefix': token[:10] + '...',
+                'user_id': user_id,
+                'error': str(e),
             },
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="invitation_invalid",
+            detail='invitation_invalid',
         )
 
     except UserAlreadyMemberError:
         logger.info(
-            "Invitation accept: user already member",
-            extra={"token_prefix": token[:10] + "...", "user_id": user_id},
+            'Invitation accept: user already member',
+            extra={'token_prefix': token[:10] + '...', 'user_id': user_id},
         )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="already_member",
+            detail='already_member',
         )
 
     except EmailMismatchError as e:
         logger.warning(
-            "Invitation accept failed: email mismatch",
+            'Invitation accept failed: email mismatch',
             extra={
-                "token_prefix": token[:10] + "...",
-                "user_id": user_id,
-                "error": str(e),
+                'token_prefix': token[:10] + '...',
+                'user_id': user_id,
+                'error': str(e),
             },
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="email_mismatch",
+            detail='email_mismatch',
         )
 
     except Exception as e:
         logger.exception(
-            "Unexpected error accepting invitation via API",
+            'Unexpected error accepting invitation via API',
             extra={
-                "token_prefix": token[:10] + "...",
-                "user_id": user_id,
-                "error": str(e),
+                'token_prefix': token[:10] + '...',
+                'user_id': user_id,
+                'error': str(e),
             },
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred",
+            detail='An unexpected error occurred',
         )
