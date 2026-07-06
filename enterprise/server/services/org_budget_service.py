@@ -111,21 +111,9 @@ class OrgBudgetService:
     ):
         settings = await self._get_or_create_settings(org_id)
         thresholds = await self._get_thresholds(org_id)
-        overrides = await self._get_overrides(org_id)
         cycle = self._current_cycle(settings)
 
-        cycle_rolled = await self._roll_cycle_if_needed(settings, thresholds, overrides)
-        if cycle_rolled:
-            cycle = self._current_cycle(settings)
-
         current_spend = await self._get_cycle_spend(org_id, cycle.start_at)
-        await self._maybe_send_alerts(
-            org_id,
-            settings,
-            thresholds,
-            current_spend,
-            cycle.start_at,
-        )
         users, users_total = await self._build_user_budget_rows(
             org_id,
             settings,
@@ -144,6 +132,34 @@ class OrgBudgetService:
             "users_total": users_total,
             "users_page": users_page,
             "users_per_page": users_per_page,
+        }
+
+    async def run_budget_maintenance(self, org_id: UUID) -> dict:
+        settings = await self._get_or_create_settings(org_id)
+        thresholds = await self._get_thresholds(org_id)
+        overrides = await self._get_overrides(org_id)
+        cycle = self._current_cycle(settings)
+
+        cycle_rolled = await self._roll_cycle_if_needed(settings, thresholds, overrides)
+        if cycle_rolled:
+            cycle = self._current_cycle(settings)
+
+        current_spend = await self._get_cycle_spend(org_id, cycle.start_at)
+        await self._maybe_send_alerts(
+            org_id,
+            settings,
+            thresholds,
+            current_spend,
+            cycle.start_at,
+        )
+        if not cycle_rolled:
+            await self._sync_litellm_budgets(org_id, settings, overrides)
+
+        return {
+            "cycle_start_at": cycle.start_at,
+            "cycle_end_at": cycle.end_at,
+            "cycle_rolled": cycle_rolled,
+            "current_spend": current_spend,
         }
 
     async def update_budget_settings(
@@ -503,13 +519,8 @@ class OrgBudgetService:
 
     async def get_user_budget_row(self, org_id: UUID, user_id: UUID) -> dict | None:
         settings = await self._get_or_create_settings(org_id)
-        thresholds = await self._get_thresholds(org_id)
         overrides = await self._get_overrides(org_id)
         cycle = self._current_cycle(settings)
-
-        cycle_rolled = await self._roll_cycle_if_needed(settings, thresholds, overrides)
-        if cycle_rolled:
-            cycle = self._current_cycle(settings)
 
         result = await self.db_session.execute(
             select(OrgMember, User)
