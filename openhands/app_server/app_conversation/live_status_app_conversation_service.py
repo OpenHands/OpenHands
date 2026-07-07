@@ -1301,25 +1301,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if isinstance(user.agent_settings, ACPAgentSettings):
             return
 
-        sdk_mcp = user.agent_settings.mcp_config
-        if not sdk_mcp:
+        user_mcp = user.agent_settings.mcp_config
+        if not user_mcp:
             return
 
         try:
-            count = len(sdk_mcp)
+            count = len(user_mcp)
             _logger.info(
                 f'Loading custom MCP config from user settings: {count} servers'
             )
-
-            for name, server in sdk_mcp.items():
-                mcp_servers[name] = server
-                # mcp_servers[name] = server.model_dump(
-                #    exclude_none=True, context={'expose_secrets': 'plaintext'}
-                # )
-
-            _logger.info(
-                f'Successfully merged custom MCP config: added {count} servers'
-            )
+            mcp_servers.update(user_mcp)
 
         except Exception as e:
             _logger.error(
