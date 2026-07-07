@@ -92,7 +92,7 @@ async def grant_super_admin(
     Idempotent: granting to a user who is already a super admin succeeds and
     returns their record. Requires ``MANAGE_SUPER_ADMINS``.
     """
-    if body.email is not None:
+    if body.email:
         target = await UserStore.get_user_by_email(body.email)
         if target is None:
             raise HTTPException(
@@ -101,7 +101,11 @@ async def grant_super_admin(
             )
         target_user_id = str(target.id)
     else:
-        # Validator guarantees exactly one of user_id/email is set.
+        # Validator guarantees exactly one of user_id/email is truthy, so
+        # (email falsy) implies user_id is a non-empty string here. Branch on
+        # truthiness -- not ``is not None`` -- to stay consistent with the
+        # validator, otherwise an empty-string ``email`` would wrongly take
+        # the email branch and 404.
         target_user_id = body.user_id  # type: ignore[assignment]
 
     try:
