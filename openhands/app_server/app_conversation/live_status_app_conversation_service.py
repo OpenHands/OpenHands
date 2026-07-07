@@ -1299,17 +1299,19 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             return
 
         sdk_mcp = user.agent_settings.mcp_config
-        if not sdk_mcp or not sdk_mcp.mcpServers:
+        if not sdk_mcp:
             return
 
         try:
-            count = len(sdk_mcp.mcpServers)
+            count = len(sdk_mcp)
             _logger.info(
                 f'Loading custom MCP config from user settings: {count} servers'
             )
 
-            for name, server in sdk_mcp.mcpServers.items():
-                mcp_servers[name] = server.model_dump(exclude_none=True)
+            for name, server in sdk_mcp.items():
+                mcp_servers[name] = server.model_dump(
+                    exclude_none=True, context={'expose_secrets': 'plaintext'}
+                )
 
             _logger.info(
                 f'Successfully merged custom MCP config: added {count} servers'
@@ -1731,13 +1733,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 agent_definitions = list(get_registered_agent_definitions())
 
         # --- build AgentSettings and create agent ---------------------------
-        from fastmcp.mcp_config import MCPConfig
-
         configured_agent_settings = user.agent_settings.model_copy(
             update={
                 'llm': llm,
                 'tools': tools,
-                'mcp_config': MCPConfig(**mcp_config) if mcp_config else None,
+                'mcp_config': mcp_config if mcp_config else {},
                 'agent_context': AgentContext(
                     system_message_suffix=effective_suffix,
                     secrets=secrets,

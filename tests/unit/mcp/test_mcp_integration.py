@@ -3,7 +3,6 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastmcp.mcp_config import MCPConfig, RemoteMCPServer
 
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_models import Settings
@@ -18,13 +17,12 @@ async def test_user_auth_returns_stored_settings():
     stored_settings = Settings(
         agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='anthropic/claude-sonnet-4-5-20250929'),
-            mcp_config=MCPConfig(
-                mcpServers={
-                    'frontend': RemoteMCPServer(
-                        url='http://frontend-server.com', transport='sse'
-                    )
+            mcp_config={
+                'frontend': {
+                    'url': 'http://frontend-server.com',
+                    'transport': 'sse',
                 }
-            ),
+            },
         ),
     )
 
@@ -42,8 +40,8 @@ async def test_user_auth_returns_stored_settings():
     assert settings.agent_settings.llm.model == 'anthropic/claude-sonnet-4-5-20250929'
     mcp = settings.agent_settings.mcp_config
     assert mcp is not None
-    assert len(mcp.mcpServers) == 1
-    assert 'frontend' in mcp.mcpServers
+    assert len(mcp) == 1
+    assert 'frontend' in mcp
 
 
 @pytest.mark.asyncio
@@ -52,13 +50,12 @@ async def test_user_auth_caching_behavior():
     stored_settings = Settings(
         agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='anthropic/claude-sonnet-4-5-20250929'),
-            mcp_config=MCPConfig(
-                mcpServers={
-                    'frontend': RemoteMCPServer(
-                        url='http://frontend-server.com', transport='sse'
-                    )
+            mcp_config={
+                'frontend': {
+                    'url': 'http://frontend-server.com',
+                    'transport': 'sse',
                 }
-            ),
+            },
         ),
     )
 

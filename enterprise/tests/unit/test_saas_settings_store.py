@@ -885,7 +885,7 @@ async def test_store_and_load_mcp_config_via_agent_settings(
     assert loaded is not None
     assert loaded.agent_settings.mcp_config is not None
     assert (
-        loaded.agent_settings.mcp_config.mcpServers['admin'].url
+        loaded.agent_settings.mcp_config['admin'].url
         == 'https://admin-private-server.com'
     )
 

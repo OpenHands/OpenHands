@@ -170,7 +170,7 @@ def test_migrated_payload_loads_via_user_settings_to_settings():
     assert settings.agent_settings.condenser.max_size == 128
     assert settings.agent_settings.mcp_config is not None
     assert (
-        settings.agent_settings.mcp_config.mcpServers['admin'].url
+        settings.agent_settings.mcp_config['admin'].url
         == 'https://mcp.example.com'
     )
     assert settings.conversation_settings.max_iterations == 42
