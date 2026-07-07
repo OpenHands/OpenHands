@@ -1260,7 +1260,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
 
     async def _add_system_mcp_servers(
-        self, mcp_servers: dict[str, Any], conversation_id: UUID
+        self, mcp_servers: dict[str, MCPServer], conversation_id: UUID
     ) -> None:
         """Add system-generated MCP servers (default OpenHands server).
 
@@ -1275,22 +1275,22 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not self.web_url:
             return
 
-        # Add default OpenHands MCP server (includes Tavily proxy if configured)
-        mcp_url = f'{self.web_url}/mcp/mcp'
-        mcp_servers['default'] = MCPServer(
-            url=mcp_url,
-            headers={
-                'X-OpenHands-ServerConversation-ID': SecretStr(str(conversation_id))
-            },
-        )
+        headers = {'X-OpenHands-ServerConversation-ID': SecretStr(str(conversation_id))}
 
         # Add API key if available
         mcp_api_key = await self.user_context.get_mcp_api_key()
         if mcp_api_key:
-            mcp_servers['default'].headers['X-Session-API-Key'] = mcp_api_key
+            headers['X-Session-API-Key'] = SecretStr(mcp_api_key)
+
+        # Add default OpenHands MCP server (includes Tavily proxy if configured)
+        mcp_url = f'{self.web_url}/mcp/mcp'
+        mcp_servers['default'] = MCPServer(
+            url=mcp_url,
+            headers=headers,
+        )
 
     def _merge_custom_mcp_config(
-        self, mcp_servers: dict[str, Any], user: UserInfo
+        self, mcp_servers: dict[str, MCPServer], user: UserInfo
     ) -> None:
         """Merge custom MCP configuration from user settings.
 
