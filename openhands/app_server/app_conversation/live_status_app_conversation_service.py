@@ -1338,12 +1338,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             conversation_id: Conversation ID forwarded to the OpenHands MCP server
 
         Returns:
-            Tuple of (configured LLM instance, MCP config dictionary)
+            Tuple of (configured LLM instance, MCP config dict in the flat
+            ``{server_name: server_dict}`` shape the SDK 1.31.x
+            ``Agent.mcp_config`` field expects)
         """
         # Configure LLM
         llm = self._configure_llm(user, llm_model)
 
-        # Configure MCP - SDK expects format: {'mcpServers': {'server_name': {...}}}
         mcp_servers: dict[str, Any] = {}
 
         # Add system-generated servers (default MCP server with Tavily proxy)
@@ -1352,17 +1353,20 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Merge custom servers from user settings
         self._merge_custom_mcp_config(mcp_servers, user)
 
-        # Wrap in the mcpServers structure required by the SDK
-        mcp_config = {'mcpServers': mcp_servers} if mcp_servers else {}
-        _logger.info(f'Final MCP configuration: {sanitize_config(mcp_config)}')
+        # SDK 1.31.x ``Agent.mcp_config`` is a flat ``dict[str, MCPServer]``
+        # — the legacy ``{"mcpServers": {...}}`` wrapper is no longer
+        # accepted. Returning the flat shape directly avoids relying on a
+        # validator that ``model_copy(update=...)`` bypasses anyway.
+        _logger.info(
+            f'Final MCP configuration: {sanitize_config({"mcpServers": mcp_servers})}'
+        )
 
-        return llm, mcp_config
+        return llm, mcp_servers
 
     @staticmethod
     def _apply_server_agent_overrides(
         agent: Agent,
         agent_type: AgentType,
-        mcp_config: dict,
         conversation_id: UUID,
         user_id: str | None,
     ) -> Agent:
@@ -1770,7 +1774,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
 
         agent = self._apply_server_agent_overrides(
-            agent, agent_type, mcp_config, conversation_id, user.id
+            agent, agent_type, conversation_id, user.id
         )
 
         # --- hooks (require remote workspace; must precede request build) -----

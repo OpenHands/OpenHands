@@ -655,19 +655,12 @@ class TestLiveStatusAppConversationService:
         assert llm.api_key.get_secret_value() == self.mock_user.llm_api_key
         assert llm.usage_id == 'agent'
 
-        assert 'mcpServers' in mcp_config
-        assert 'default' in mcp_config['mcpServers']
-        assert (
-            mcp_config['mcpServers']['default']['url']
-            == 'https://test.example.com/mcp/mcp'
-        )
-        assert mcp_config['mcpServers']['default']['headers'][
+        assert 'default' in mcp_config
+        assert mcp_config['default']['url'] == 'https://test.example.com/mcp/mcp'
+        assert mcp_config['default']['headers'][
             'X-OpenHands-ServerConversation-ID'
         ] == str(self.conversation_id)
-        assert (
-            mcp_config['mcpServers']['default']['headers']['X-Session-API-Key']
-            == 'mcp_api_key'
-        )
+        assert mcp_config['default']['headers']['X-Session-API-Key'] == 'mcp_api_key'
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_uses_user_llm_settings(self):
@@ -835,10 +828,9 @@ class TestLiveStatusAppConversationService:
 
         # Assert
         assert llm.model == self.mock_user.llm_model
-        assert 'mcpServers' in mcp_config
-        assert 'default' in mcp_config['mcpServers']
+        assert 'default' in mcp_config
 
-        headers = mcp_config['mcpServers']['default']['headers']
+        headers = mcp_config['default']['headers']
         assert headers['X-OpenHands-ServerConversation-ID'] == str(self.conversation_id)
         assert 'X-Session-API-Key' not in headers
 
@@ -1003,7 +995,7 @@ class TestLiveStatusAppConversationService:
         agent = Agent(llm=llm, tools=[], condenser=condenser)
 
         updated = self.service._apply_server_agent_overrides(
-            agent, AgentType.DEFAULT, {}, uuid4(), 'user-1'
+            agent, AgentType.DEFAULT, uuid4(), 'user-1'
         )
 
         assert updated.llm.usage_id == 'agent'
@@ -1018,7 +1010,7 @@ class TestLiveStatusAppConversationService:
         agent = Agent(llm=llm, tools=[], condenser=condenser)
 
         updated = self.service._apply_server_agent_overrides(
-            agent, AgentType.DEFAULT, {}, uuid4(), 'user-1'
+            agent, AgentType.DEFAULT, uuid4(), 'user-1'
         )
 
         # Non-openhands model: main LLM unchanged, but condenser still gets usage_id
@@ -2264,9 +2256,7 @@ class TestLiveStatusAppConversationService:
         )
 
         assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
         assert 'default' in mcp_servers
         assert 'linear' in mcp_servers
         assert 'notion' in mcp_servers
@@ -2293,7 +2283,7 @@ class TestLiveStatusAppConversationService:
         )
 
         assert isinstance(llm, LLM)
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
         assert 'custom-http' in mcp_servers
 
     @pytest.mark.asyncio
@@ -2317,7 +2307,7 @@ class TestLiveStatusAppConversationService:
         )
 
         assert isinstance(llm, LLM)
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
 
         assert 'my-custom-server' in mcp_servers
         server_config = mcp_servers['my-custom-server']
@@ -2348,7 +2338,7 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
 
         # System provides default MCP server (Tavily is proxied through it if configured)
         assert 'default' in mcp_servers
@@ -2379,12 +2369,17 @@ class TestLiveStatusAppConversationService:
 
         # Assert - should still return valid config with system servers only
         assert isinstance(llm, LLM)
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
         assert 'default' in mcp_servers
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_sdk_format_with_mcpservers_wrapper(self):
-        """Test _configure_llm_and_mcp returns SDK-required format with mcpServers key."""
+    async def test_configure_llm_and_mcp_returns_flat_server_map(self):
+        """Test _configure_llm_and_mcp returns the SDK 1.31.x flat server map.
+
+        ``Agent.mcp_config`` is a ``dict[str, MCPServer]`` — no ``mcpServers``
+        wrapper — so ``_configure_llm_and_mcp`` must hand back the flat
+        ``{server_name: server_dict}`` shape directly.
+        """
         # Arrange
         self.mock_user_context.get_mcp_api_key.return_value = 'mcp_key'
 
@@ -2393,12 +2388,13 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        # Assert - SDK expects {'mcpServers': {...}} format
-        assert 'mcpServers' in mcp_config
-        assert isinstance(mcp_config['mcpServers'], dict)
+        # Assert - SDK 1.31.x ``Agent.mcp_config`` expects the flat shape.
+        assert 'mcpServers' not in mcp_config
+        assert isinstance(mcp_config, dict)
 
-        # Verify structure matches SDK expectations
-        for server_name, server_config in mcp_config['mcpServers'].items():
+        # Verify each entry is a string server name mapped to a server dict
+        # matching the SDK ``MCPServer`` model_dump shape.
+        for server_name, server_config in mcp_config.items():
             assert isinstance(server_name, str)
             assert isinstance(server_config, dict)
 
@@ -2414,7 +2410,7 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
         assert 'default' in mcp_servers
         assert len(mcp_servers) == 1
 
@@ -2434,7 +2430,7 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
         assert 'public' in mcp_servers
 
     @pytest.mark.asyncio
@@ -2455,7 +2451,7 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
         assert 'http-server' in mcp_servers
 
     @pytest.mark.asyncio
@@ -2474,7 +2470,7 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
         assert 'simple-server' in mcp_servers
         server_config = mcp_servers['simple-server']
         assert server_config['command'] == 'node'
@@ -2504,7 +2500,7 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
 
         assert 'server1' in mcp_servers
         assert 'server2' in mcp_servers
@@ -2544,7 +2540,7 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
 
         assert 'sse-server' in mcp_servers
         assert 'http-server' in mcp_servers
