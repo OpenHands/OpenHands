@@ -126,7 +126,7 @@ class OrgAppSettingsService:
         )
 
         if not updated_org:
-            raise OrgNotFoundError('current')
+            raise OrgNotFoundError(str(org.id))
 
         logger.info(
             'Organization app settings updated successfully',

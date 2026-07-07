@@ -18,6 +18,11 @@ export const SETTINGS_QUERY_KEYS = {
     ["settings", "personal", organizationId] as const,
 } as const;
 
+export const ORGANIZATION_APP_SETTINGS_KEYS = {
+  byOrg: (organizationId: string | null | undefined) =>
+    ["organization-app-settings", organizationId] as const,
+} as const;
+
 /** Cache configuration shared across all config-related queries */
 export const CONFIG_CACHE_OPTIONS = {
   staleTime: 1000 * 60 * 5, // 5 minutes

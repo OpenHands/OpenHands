@@ -10,8 +10,10 @@ This module contains:
 
 from __future__ import annotations
 
+import logging
+import re
 from enum import Enum
-from typing import Annotated, Any
+from typing import Annotated, Any, Sequence
 
 from fastmcp.mcp_config import MCPConfig
 from fastmcp.mcp_config import MCPConfig as SDKMCPConfig
@@ -21,7 +23,9 @@ from pydantic import (
     Field,
     SecretStr,
     SerializationInfo,
+    ValidationError,
     field_serializer,
+    field_validator,
     model_validator,
 )
 
@@ -38,6 +42,214 @@ from openhands.sdk.settings import (
     default_agent_settings,
     validate_agent_settings,
 )
+
+logger = logging.getLogger(__name__)
+
+# Valid source patterns for MarketplaceRegistration
+# - github:owner/repo format
+_GITHUB_SOURCE_PATTERN = re.compile(r'^github:[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$')
+# - Git URLs (https, git, ssh protocols)
+_GIT_URL_PATTERN = re.compile(
+    r'^(https?://|git@|ssh://|git://)[a-zA-Z0-9_.-]+[:/][a-zA-Z0-9_./-]+$'
+)
+# - Relative local paths (no absolute paths, no parent traversal)
+_LOCAL_PATH_PATTERN = re.compile(r'^[a-zA-Z0-9_][a-zA-Z0-9_./-]*$')
+
+
+class MarketplaceScope(str, Enum):
+    """Scope of a marketplace registration."""
+
+    INSTANCE = 'instance'
+    ORG = 'org'
+    PERSONAL = 'personal'
+
+
+class MarketplaceRegistration(BaseModel):
+    """Registration for a plugin marketplace.
+
+    Represents a marketplace that can be registered for plugin resolution.
+    Marketplaces can be auto-loaded (plugins loaded at conversation start)
+    or registered only (available for explicit plugin references).
+
+    Wire-compatible with ``openhands.sdk.marketplace.MarketplaceRegistration``
+    (the model the agent-server ``/api/skills`` endpoint consumes): dumping this
+    model with ``exclude={'scope'}`` yields exactly the SDK model's fields
+    (``name``/``source``/``ref``/``repo_path``/``auto_load``), and our ``bool``
+    ``auto_load`` and stricter field validators are a subset of what the SDK
+    accepts, so any value we produce validates upstream.
+
+    This is intentionally kept as a separate model rather than importing the SDK
+    one, because it carries a backend-only ``scope`` (set per storage layer for
+    API responses/UI, stripped at the wire boundary and re-derived during
+    composition) and enforces input validation the SDK model does not (source /
+    ``repo_path`` traversal guards, name format).
+
+    Examples:
+        >>> # Auto-load all plugins from a marketplace
+        >>> MarketplaceRegistration(
+        ...     name="public",
+        ...     source="github:OpenHands/skills",
+        ...     auto_load=True
+        ... )
+
+        >>> # Register marketplace without auto-loading
+        >>> MarketplaceRegistration(
+        ...     name="experimental",
+        ...     source="github:acme/experimental"
+        ... )
+
+        >>> # Marketplace in monorepo subdirectory
+        >>> MarketplaceRegistration(
+        ...     name="team",
+        ...     source="github:acme/monorepo",
+        ...     repo_path="marketplaces/internal",
+        ...     auto_load=True
+        ... )
+    """
+
+    name: str = Field(description='Identifier for this marketplace registration')
+    source: str = Field(
+        description="Marketplace source: 'github:owner/repo', git URL, or local path"
+    )
+    ref: str | None = Field(
+        default=None,
+        description='Optional branch, tag, or commit (only for git sources)',
+    )
+    repo_path: str | None = Field(
+        default=None,
+        description=(
+            'Subdirectory path within the git repository containing the marketplace '
+            "(e.g., 'marketplaces/internal' for monorepos). "
+            'Only relevant for git sources, not local paths.'
+        ),
+    )
+    auto_load: bool = Field(
+        default=False,
+        description=(
+            'Auto-load behavior for this marketplace. '
+            'True = load all plugins at conversation start. '
+            'False = registered for resolution but not auto-loaded.'
+        ),
+    )
+    scope: 'MarketplaceScope | None' = Field(
+        default=None,
+        description=(
+            'Scope of this marketplace registration. '
+            'Set automatically by backend based on storage layer: '
+            '"instance" for system defaults, "org" for organization-level, '
+            '"personal" for user-level. '
+            'Frontend should NOT send this field in save requests.'
+        ),
+    )
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        """Validate name is non-empty and contains only valid identifier characters."""
+        if not v or not v.strip():
+            raise ValueError('name cannot be empty')
+        v = v.strip()
+        # Name should be a valid identifier (alphanumeric, hyphens, underscores)
+        if not re.match(r'^[a-zA-Z][a-zA-Z0-9_-]*$', v):
+            raise ValueError(
+                'name must start with a letter and contain only '
+                'letters, numbers, hyphens, and underscores'
+            )
+        return v
+
+    @field_validator('source')
+    @classmethod
+    def validate_source(cls, v: str) -> str:
+        """Validate source matches expected patterns (github:owner/repo, git URL, or local path)."""
+        if not v or not v.strip():
+            raise ValueError('source cannot be empty')
+        v = v.strip()
+
+        # Check for valid source patterns
+        if _GITHUB_SOURCE_PATTERN.match(v):
+            return v
+        if _GIT_URL_PATTERN.match(v):
+            return v
+        # Local path: must be relative, no parent traversal
+        if v.startswith('/'):
+            raise ValueError('local path source must be relative, not absolute')
+        if '..' in v:
+            raise ValueError("source cannot contain '..' (parent directory traversal)")
+        if _LOCAL_PATH_PATTERN.match(v):
+            return v
+
+        raise ValueError(
+            "source must be 'github:owner/repo', a git URL "
+            '(https/git/ssh), or a relative local path'
+        )
+
+    @field_validator('repo_path')
+    @classmethod
+    def validate_repo_path(cls, v: str | None) -> str | None:
+        """Validate repo_path is a safe relative path within the repository."""
+        if v is None:
+            return v
+        # A common mistake is pasting the repository URL here; repo_path is a
+        # subdirectory *within* the already-specified source repository.
+        if '://' in v:
+            raise ValueError(
+                'repo_path must be a subdirectory within the repository, not a URL'
+            )
+        # Must be relative (no absolute paths)
+        if v.startswith('/'):
+            raise ValueError('repo_path must be relative, not absolute')
+        # No parent directory traversal
+        if '..' in v:
+            raise ValueError(
+                "repo_path cannot contain '..' (parent directory traversal)"
+            )
+        return v
+
+
+def validate_and_convert_marketplaces(
+    raw_marketplaces: Sequence[dict[str, Any] | MarketplaceRegistration] | None,
+    source_name: str = 'marketplaces',
+) -> list[MarketplaceRegistration]:
+    """Validate and convert raw marketplace data to MarketplaceRegistration objects.
+
+    This function handles the common pattern of validating marketplace data
+    that comes from database storage (stored as dicts) or direct model instances.
+    Invalid entries are logged and skipped (graceful degradation).
+
+    Args:
+        raw_marketplaces: List of raw marketplace data (dicts or model instances)
+        source_name: Descriptive name for logging (e.g., "org", "user settings")
+
+    Returns:
+        List of validated MarketplaceRegistration objects.
+
+    Example:
+        >>> data = [{'name': 'test', 'source': 'github:owner/repo'}]
+        >>> registrations = validate_and_convert_marketplaces(data, "my-org")
+        >>> len(registrations)
+        1
+    """
+    if not raw_marketplaces:
+        return []
+
+    validated = []
+    for i, mp in enumerate(raw_marketplaces):
+        try:
+            if isinstance(mp, dict):
+                validated.append(MarketplaceRegistration.model_validate(mp))
+            elif isinstance(mp, MarketplaceRegistration):
+                validated.append(mp)
+            else:
+                raise ValueError(
+                    f'Expected dict or MarketplaceRegistration, got {type(mp).__name__}'
+                )
+        except (ValidationError, ValueError) as e:
+            logger.warning(
+                f'Skipping invalid marketplace at index {i} in {source_name}: {e}'
+            )
+            continue
+
+    return validated
 
 
 def _coerce_value(value: Any) -> Any:
@@ -163,8 +375,35 @@ class Settings(BaseModel):
             'See ``LLMProfiles`` for the profile-management API.'
         ),
     )
+    # Marketplace registrations for plugin resolution
+    # Users can register multiple marketplaces with different auto-load behaviors
+    registered_marketplaces: list[MarketplaceRegistration] = Field(
+        default_factory=list,
+        description=(
+            'List of marketplace registrations for plugin resolution. '
+            'Marketplaces with auto_load=True will have their plugins loaded '
+            'automatically at conversation start. '
+            'See MarketplaceRegistration for details.'
+        ),
+    )
+    # Inherited marketplaces from instance/org level (read-only for user)
+    # This is computed at runtime from environment variables and org settings
+    inherited_marketplaces: list[MarketplaceRegistration] = Field(
+        default_factory=list,
+        description=(
+            'Marketplaces inherited from instance or organization level. '
+            'These are read-only and cannot be modified by the user. '
+            'Computed at runtime: Instance defaults + Org defaults.'
+        ),
+    )
 
     model_config = ConfigDict(populate_by_name=True)
+
+    # NOTE: marketplace name uniqueness is enforced on the write paths (personal
+    # settings + org store) and deduplicated defensively during composition
+    # (``marketplace_composition``). It is intentionally NOT a model validator:
+    # validating on construction would run on every ``load()`` and could lock a
+    # user out of settings entirely if legacy stored data contained a duplicate.
 
     def __init__(self, **data: Any):
         # Import Secrets here to avoid circular imports
@@ -274,6 +513,35 @@ class Settings(BaseModel):
                         and SecretStr in getattr(annotation, '__args__', ())
                     ):
                         value = SecretStr(value) if value else None
+                # Validate registered_marketplaces before setting
+                if key == 'registered_marketplaces' and value is not None:
+                    validated = []
+                    for i, mp in enumerate(value):
+                        try:
+                            if isinstance(mp, dict):
+                                # Strip scope from incoming request - backend will set it
+                                mp_dict = {k: v for k, v in mp.items() if k != 'scope'}
+                                # Ensure auto_load defaults to False if not provided
+                                if 'auto_load' not in mp_dict:
+                                    mp_dict['auto_load'] = False
+                                mp_obj = MarketplaceRegistration.model_validate(mp_dict)
+                                # Set scope='personal' for user-level settings
+                                mp_obj.scope = MarketplaceScope.PERSONAL
+                                validated.append(mp_obj)
+                            elif isinstance(mp, MarketplaceRegistration):
+                                # Set scope='personal' for user-level settings
+                                mp.scope = MarketplaceScope.PERSONAL
+                                validated.append(mp)
+                            else:
+                                raise ValueError(
+                                    f'Expected dict or MarketplaceRegistration, '
+                                    f'got {type(mp).__name__}'
+                                )
+                        except ValidationError as e:
+                            raise ValueError(
+                                f'Invalid marketplace at index {i}: {e.errors()[0]["msg"]}'
+                            ) from e
+                    value = validated
                 setattr(self, key, value)
 
         self.reconcile_active_profile()

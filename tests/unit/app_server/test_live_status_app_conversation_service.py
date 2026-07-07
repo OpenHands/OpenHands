@@ -124,6 +124,20 @@ class _TestUserInfo(SimpleNamespace):
         object.__setattr__(self, '_llm_profiles_override', value)
 
     @property
+    def registered_marketplaces(self) -> list:
+        # Real UserInfo (via Settings) always carries registered_marketplaces,
+        # defaulting to an empty list. Mirror that so marketplace composition at
+        # conversation start doesn't raise AttributeError on the fake.
+        override = getattr(self, '_registered_marketplaces_override', None)
+        if override is not None:
+            return override
+        return []
+
+    @registered_marketplaces.setter
+    def registered_marketplaces(self, value):
+        object.__setattr__(self, '_registered_marketplaces_override', value)
+
+    @property
     def conversation_settings(self) -> ConversationSettings:
         kwargs: dict = {
             'confirmation_mode': getattr(self, 'confirmation_mode', False),
@@ -641,17 +655,14 @@ class TestLiveStatusAppConversationService:
         assert llm.api_key.get_secret_value() == self.mock_user.llm_api_key
         assert llm.usage_id == 'agent'
 
-        assert 'mcpServers' in mcp_config
-        assert 'default' in mcp_config['mcpServers']
-        assert (
-            mcp_config['mcpServers']['default']['url']
-            == 'https://test.example.com/mcp/mcp'
-        )
-        assert mcp_config['mcpServers']['default']['headers'][
+        assert 'default' in mcp_config
+        default_server = mcp_config['default']
+        assert default_server.url == 'https://test.example.com/mcp/mcp'
+        assert default_server.headers[
             'X-OpenHands-ServerConversation-ID'
-        ] == str(self.conversation_id)
+        ].get_secret_value() == str(self.conversation_id)
         assert (
-            mcp_config['mcpServers']['default']['headers']['X-Session-API-Key']
+            default_server.headers['X-Session-API-Key'].get_secret_value()
             == 'mcp_api_key'
         )
 
@@ -821,12 +832,13 @@ class TestLiveStatusAppConversationService:
 
         # Assert
         assert llm.model == self.mock_user.llm_model
-        assert 'mcpServers' in mcp_config
-        assert 'default' in mcp_config['mcpServers']
+        assert 'default' in mcp_config
 
-        headers = mcp_config['mcpServers']['default']['headers']
-        assert headers['X-OpenHands-ServerConversation-ID'] == str(self.conversation_id)
-        assert 'X-Session-API-Key' not in headers
+        default_headers = mcp_config['default'].headers
+        assert default_headers[
+            'X-OpenHands-ServerConversation-ID'
+        ].get_secret_value() == str(self.conversation_id)
+        assert 'X-Session-API-Key' not in default_headers
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_without_web_url(self):
@@ -989,7 +1001,7 @@ class TestLiveStatusAppConversationService:
         agent = Agent(llm=llm, tools=[], condenser=condenser)
 
         updated = self.service._apply_server_agent_overrides(
-            agent, AgentType.DEFAULT, {}, uuid4(), 'user-1'
+            agent, AgentType.DEFAULT, uuid4(), 'user-1'
         )
 
         assert updated.llm.usage_id == 'agent'
@@ -1004,7 +1016,7 @@ class TestLiveStatusAppConversationService:
         agent = Agent(llm=llm, tools=[], condenser=condenser)
 
         updated = self.service._apply_server_agent_overrides(
-            agent, AgentType.DEFAULT, {}, uuid4(), 'user-1'
+            agent, AgentType.DEFAULT, uuid4(), 'user-1'
         )
 
         # Non-openhands model: main LLM unchanged, but condenser still gets usage_id
@@ -1067,6 +1079,187 @@ class TestLiveStatusAppConversationService:
         self.service._configure_llm_and_mcp.assert_called_once_with(
             self.mock_user, 'gpt-4', test_conversation_id
         )
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_populates_observability_metadata(self, _mock_tools):
+        """Repo / branch / provider land on the request's observability_metadata
+        so the agent-server attaches them to the Laminar trace. With no
+        remote_workspace the commit can't be resolved, so it is omitted."""
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(
+            return_value=(LLM(model='gpt-4', api_key=SecretStr('k')), {})
+        )
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=ProviderType.GITHUB,
+            working_dir='/test/dir',
+            remote_workspace=None,
+            selected_repository='test/repo',
+            selected_branch='feature-x',
+        )
+
+        assert result.observability_metadata == {
+            'repo': 'test/repo',
+            'branch': 'feature-x',
+            'git_provider': 'github',
+        }
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_observability_metadata_includes_commit(
+        self, _mock_tools
+    ):
+        """The post-clone HEAD sha is resolved from the workspace and added."""
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('k'))
+        mock_agent = Mock(spec=Agent)
+        mock_agent.llm = real_llm
+        mock_agent.condenser = None
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+        self.service._load_skills_and_update_agent = AsyncMock(return_value=mock_agent)
+
+        remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        remote_workspace.execute_command = AsyncMock(
+            return_value=SimpleNamespace(exit_code=0, stdout='abc123sha\n')
+        )
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=ProviderType.GITHUB,
+            working_dir='/test/dir',
+            remote_workspace=remote_workspace,
+            selected_repository='test/repo',
+            selected_branch='feature-x',
+        )
+
+        assert result.observability_metadata == {
+            'repo': 'test/repo',
+            'branch': 'feature-x',
+            'git_provider': 'github',
+            'commit': 'abc123sha',
+        }
+        remote_workspace.execute_command.assert_awaited_once_with(
+            'git rev-parse --verify --quiet HEAD', '/test/dir/repo', timeout=10.0
+        )
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_commit_resolution_is_best_effort(self, _mock_tools):
+        """A failed HEAD lookup leaves commit out without breaking the build."""
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('k'))
+        mock_agent = Mock(spec=Agent)
+        mock_agent.llm = real_llm
+        mock_agent.condenser = None
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+        self.service._load_skills_and_update_agent = AsyncMock(return_value=mock_agent)
+
+        remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        remote_workspace.execute_command = AsyncMock(side_effect=RuntimeError('boom'))
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            remote_workspace=remote_workspace,
+            selected_repository='test/repo',
+        )
+
+        assert result.observability_metadata == {'repo': 'test/repo'}
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
+    async def test_build_request_no_repo_omits_observability_metadata(
+        self, _mock_tools
+    ):
+        """A repo-less conversation adds no repo metadata to the trace."""
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(
+            return_value=(LLM(model='gpt-4', api_key=SecretStr('k')), {})
+        )
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            remote_workspace=None,
+            selected_repository=None,
+        )
+
+        assert result.observability_metadata == {}
+
+    @pytest.mark.asyncio
+    async def test_build_request_routes_acp_user_to_observability_metadata(self):
+        """End-to-end through the *routing* entrypoint (not the ACP builder
+        directly): an ACP user hits the ``isinstance(..., ACPAgentSettings)``
+        branch in ``_build_start_conversation_request_for_user``, which must
+        forward git_provider/selected_branch/remote_workspace into
+        ``_build_acp_start_conversation_request`` for this to populate.
+        """
+        from openhands.sdk.settings import ACPAgentSettings
+
+        self.mock_user.agent_settings = ACPAgentSettings(
+            acp_server='claude-code',
+            llm=LLM(model='claude-sonnet-4-5', api_key=SecretStr('k')),
+        )
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+        self.mock_user_context.get_secrets = AsyncMock(return_value={})
+        self.mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
+
+        remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        remote_workspace.execute_command = AsyncMock(
+            return_value=SimpleNamespace(exit_code=0, stdout='def456sha\n')
+        )
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=ProviderType.GITHUB,
+            working_dir='/test/dir',
+            remote_workspace=remote_workspace,
+            selected_repository='test/repo',
+            selected_branch='feature-x',
+        )
+
+        assert result.agent.agent_kind == 'acp'
+        assert result.observability_metadata == {
+            'repo': 'test/repo',
+            'branch': 'feature-x',
+            'git_provider': 'github',
+            'commit': 'def456sha',
+        }
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
@@ -2069,9 +2262,7 @@ class TestLiveStatusAppConversationService:
         )
 
         assert isinstance(llm, LLM)
-        assert 'mcpServers' in mcp_config
-
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
         assert 'default' in mcp_servers
         assert 'linear' in mcp_servers
         assert 'notion' in mcp_servers
@@ -2098,7 +2289,7 @@ class TestLiveStatusAppConversationService:
         )
 
         assert isinstance(llm, LLM)
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
         assert 'custom-http' in mcp_servers
 
     @pytest.mark.asyncio
@@ -2122,13 +2313,15 @@ class TestLiveStatusAppConversationService:
         )
 
         assert isinstance(llm, LLM)
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
 
         assert 'my-custom-server' in mcp_servers
         server_config = mcp_servers['my-custom-server']
-        assert server_config['command'] == 'npx'
-        assert server_config['args'] == ['-y', 'my-package']
-        assert server_config['env'] == {'API_KEY': 'secret'}
+        assert server_config.command == 'npx'
+        assert server_config.args == ['-y', 'my-package']
+        assert {
+            k: v.get_secret_value() for k, v in (server_config.env or {}).items()
+        } == {'API_KEY': 'secret'}
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_merges_system_and_custom_servers(self):
@@ -2153,7 +2346,7 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
 
         # System provides default MCP server (Tavily is proxied through it if configured)
         assert 'default' in mcp_servers
@@ -2184,12 +2377,19 @@ class TestLiveStatusAppConversationService:
 
         # Assert - should still return valid config with system servers only
         assert isinstance(llm, LLM)
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
         assert 'default' in mcp_servers
 
     @pytest.mark.asyncio
-    async def test_configure_llm_and_mcp_sdk_format_with_mcpservers_wrapper(self):
-        """Test _configure_llm_and_mcp returns SDK-required format with mcpServers key."""
+    async def test_configure_llm_and_mcp_returns_flat_server_map(self):
+        """Test _configure_llm_and_mcp returns the SDK 1.31.x flat server map.
+
+        ``Agent.mcp_config`` is a ``dict[str, MCPServer]`` — no ``mcpServers``
+        wrapper — so ``_configure_llm_and_mcp`` must hand back the flat
+        ``{server_name: MCPServer}`` shape directly.
+        """
+        from openhands.sdk.mcp.config import MCPServer
+
         # Arrange
         self.mock_user_context.get_mcp_api_key.return_value = 'mcp_key'
 
@@ -2198,14 +2398,15 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        # Assert - SDK expects {'mcpServers': {...}} format
-        assert 'mcpServers' in mcp_config
-        assert isinstance(mcp_config['mcpServers'], dict)
+        # Assert - SDK 1.31.x ``Agent.mcp_config`` expects the flat shape.
+        assert 'mcpServers' not in mcp_config
+        assert isinstance(mcp_config, dict)
 
-        # Verify structure matches SDK expectations
-        for server_name, server_config in mcp_config['mcpServers'].items():
+        # Verify each entry is a string server name mapped to an MCPServer
+        # instance so the SDK ``Agent`` constructor can validate it directly.
+        for server_name, server_config in mcp_config.items():
             assert isinstance(server_name, str)
-            assert isinstance(server_config, dict)
+            assert isinstance(server_config, MCPServer)
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_empty_custom_config(self):
@@ -2219,7 +2420,7 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
         assert 'default' in mcp_servers
         assert len(mcp_servers) == 1
 
@@ -2239,7 +2440,7 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
         assert 'public' in mcp_servers
 
     @pytest.mark.asyncio
@@ -2260,7 +2461,7 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
         assert 'http-server' in mcp_servers
 
     @pytest.mark.asyncio
@@ -2279,11 +2480,11 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
         assert 'simple-server' in mcp_servers
         server_config = mcp_servers['simple-server']
-        assert server_config['command'] == 'node'
-        assert server_config['args'] == ['app.js']
+        assert server_config.command == 'node'
+        assert server_config.args == ['app.js']
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_multiple_servers_same_type(self):
@@ -2309,7 +2510,7 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
 
         assert 'server1' in mcp_servers
         assert 'server2' in mcp_servers
@@ -2349,15 +2550,17 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        mcp_servers = mcp_config['mcpServers']
+        mcp_servers = mcp_config
 
         assert 'sse-server' in mcp_servers
         assert 'http-server' in mcp_servers
         assert 'stdio-server' in mcp_servers
 
         stdio_server = mcp_servers['stdio-server']
-        assert stdio_server['command'] == 'npx'
-        assert stdio_server['env'] == {'TOKEN': 'value'}
+        assert stdio_server.command == 'npx'
+        assert {
+            k: v.get_secret_value() for k, v in (stdio_server.env or {}).items()
+        } == {'TOKEN': 'value'}
 
     # ------------------------------------------------------------------ #
     #  Regression tests: workspace.working_dir == project_dir             #
@@ -3618,7 +3821,18 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
         return user
 
-    def _call_build(self, service, user, tmp_path, *, secrets=None):
+    def _call_build(
+        self,
+        service,
+        user,
+        tmp_path,
+        *,
+        secrets=None,
+        git_provider=None,
+        selected_repository=None,
+        selected_branch=None,
+        remote_workspace=None,
+    ):
         """Wire user_context and call _build_acp_start_conversation_request."""
         service.user_context.get_user_info = AsyncMock(return_value=user)
         service.user_context.get_user_email = AsyncMock(return_value=None)
@@ -3630,6 +3844,10 @@ class TestBuildAcpStartConversationRequestSecrets:
             conversation_id=uuid4(),
             initial_message=None,
             working_dir=str(tmp_path),
+            git_provider=git_provider,
+            selected_repository=selected_repository,
+            selected_branch=selected_branch,
+            remote_workspace=remote_workspace,
             plugins=None,
         )
 
@@ -3809,3 +4027,60 @@ class TestBuildAcpStartConversationRequestSecrets:
         ) or {}
         assert agent_ctx_secrets.get('GH_TOKEN') == 'explicit-token'
         assert request.secrets.get('GH_TOKEN') is panel_secret
+
+    @pytest.mark.asyncio
+    async def test_observability_metadata_populated(self, service, tmp_path):
+        """Repo / branch / provider land on the request's observability_metadata
+        for ACP conversations too, matching the OpenHands-agent path."""
+        user = self._make_acp_user()
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            git_provider=ProviderType.GITHUB,
+            selected_repository='test/repo',
+            selected_branch='feature-x',
+        )
+
+        assert request.observability_metadata == {
+            'repo': 'test/repo',
+            'branch': 'feature-x',
+            'git_provider': 'github',
+        }
+
+    @pytest.mark.asyncio
+    async def test_observability_metadata_includes_commit(self, service, tmp_path):
+        """The post-clone HEAD sha is resolved from the workspace and added,
+        mirroring the OpenHands-agent path's commit resolution."""
+        user = self._make_acp_user()
+        remote_workspace = Mock(spec=AsyncRemoteWorkspace)
+        remote_workspace.execute_command = AsyncMock(
+            return_value=SimpleNamespace(exit_code=0, stdout='abc123sha\n')
+        )
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            git_provider=ProviderType.GITHUB,
+            selected_repository='test/repo',
+            selected_branch='feature-x',
+            remote_workspace=remote_workspace,
+        )
+
+        assert request.observability_metadata == {
+            'repo': 'test/repo',
+            'branch': 'feature-x',
+            'git_provider': 'github',
+            'commit': 'abc123sha',
+        }
+
+    @pytest.mark.asyncio
+    async def test_no_repo_omits_observability_metadata(self, service, tmp_path):
+        """A repo-less ACP conversation adds no repo metadata to the trace."""
+        user = self._make_acp_user()
+
+        request = await self._call_build(service, user, tmp_path)
+
+        assert request.observability_metadata == {}

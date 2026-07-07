@@ -13,7 +13,50 @@ const EMPTY_MCP_CONFIG: MCPConfig = {
 };
 
 type SdkMcpServerConfig = Record<string, SettingsValue>;
-type SdkMcpConfig = { mcpServers: Record<string, SdkMcpServerConfig> };
+
+/**
+ * Normalize the SDK wire payload to a flat server map.
+ *
+ * SDK 1.31.x dropped the ``mcpServers`` wrapper from ``model_dump``, so the
+ * ``GET /api/v1/settings`` response now returns a flat dict keyed by server
+ * name (e.g. ``{shttp: {...}}``) instead of ``{mcpServers: {shttp: {...}}}``.
+ * Older persisted settings, and clients that still send the wrapper, are
+ * accepted by the SDK's ``_normalize_mcp_config_field``, so we mirror its
+ * unwrap-or-pass-through logic here for both directions.
+ */
+function unwrapMcpServers(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  if (
+    "mcpServers" in value &&
+    value.mcpServers &&
+    typeof value.mcpServers === "object"
+  ) {
+    return value.mcpServers as Record<string, unknown>;
+  }
+  return value;
+}
+
+/**
+ * Returns true if ``value`` already matches the frontend's parsed ``MCPConfig``
+ * shape (the grouped ``{ sse_servers, stdio_servers, shttp_servers }`` form
+ * used internally by the UI and as the placeholder on ``DEFAULT_AGENT_SETTINGS``).
+ *
+ * The check requires **exactly** the three grouping keys as arrays; a strict
+ * 3-key shape avoids misidentifying SDK-format payloads that happen to also
+ * carry an empty ``sse_servers``/``stdio_servers``/``shttp_servers`` array
+ * (e.g. a defensive frontend caller returning ``EMPTY_MCP_CONFIG`` alongside
+ * an SDK-format flat map).
+ */
+function isParsedMcpConfigShape(value: Record<string, unknown>): boolean {
+  const keys = Object.keys(value);
+  return (
+    keys.length === 3 &&
+    Array.isArray(value.sse_servers) &&
+    Array.isArray(value.stdio_servers) &&
+    Array.isArray(value.shttp_servers)
+  );
+}
 
 function apiKeyFromAuthorizationHeader(value: unknown): string | undefined {
   if (Array.isArray(value)) {
@@ -78,9 +121,13 @@ function getUniqueName(base: string, usedNames: Set<string>): string {
 }
 
 /**
- * Parse an SDK mcp_config value ({ mcpServers: { ... } }) and convert it
- * to the frontend MCPConfig format used by UI components.
- * Preserves server names for round-trip serialization.
+ * Parse an SDK mcp_config value and convert it to the frontend MCPConfig
+ * format used by UI components.
+ *
+ * Accepts both the SDK 1.31.x flat server map ({ shttp: {...} }) and the
+ * legacy wrapped shape ({ mcpServers: { shttp: {...} } }) so previously
+ * persisted settings keep loading. Preserves server names for round-trip
+ * serialization.
  */
 export function parseMcpConfig(value: unknown): MCPConfig {
   if (!value || typeof value !== "object") {
@@ -89,24 +136,34 @@ export function parseMcpConfig(value: unknown): MCPConfig {
 
   const obj = value as Record<string, unknown>;
 
-  if (
-    !("mcpServers" in obj) ||
-    !obj.mcpServers ||
-    typeof obj.mcpServers !== "object"
-  ) {
-    return { ...EMPTY_MCP_CONFIG };
+  // Pass-through for the frontend's already-parsed grouped shape (used by
+  // ``DEFAULT_AGENT_SETTINGS`` and any internal caller that hands us an
+  // ``MCPConfig`` value). Detected by the three array-typed grouping keys.
+  if (isParsedMcpConfigShape(obj)) {
+    return {
+      sse_servers: obj.sse_servers as (string | MCPSSEServer)[],
+      stdio_servers: obj.stdio_servers as MCPStdioServer[],
+      shttp_servers: obj.shttp_servers as (string | MCPSHTTPServer)[],
+    };
   }
+
+  const mcpServers = unwrapMcpServers(obj);
 
   const sseServers: (string | MCPSSEServer)[] = [];
   const stdioServers: MCPStdioServer[] = [];
   const shttpServers: (string | MCPSHTTPServer)[] = [];
 
-  const mcpServers = obj.mcpServers as Record<string, Record<string, unknown>>;
+  for (const [serverName, rawServerConfig] of Object.entries(mcpServers)) {
+    if (
+      !rawServerConfig ||
+      typeof rawServerConfig !== "object" ||
+      Array.isArray(rawServerConfig)
+    ) {
+      // eslint-disable-next-line no-continue
+      continue;
+    }
 
-  for (const [serverName, serverConfig] of Object.entries(mcpServers)) {
-    // eslint-disable-next-line no-continue
-    if (!serverConfig || typeof serverConfig !== "object") continue;
-
+    const serverConfig = rawServerConfig as Record<string, unknown>;
     const url = serverConfig.url as string | undefined;
 
     if (url) {
@@ -154,11 +211,18 @@ export function parseMcpConfig(value: unknown): MCPConfig {
 }
 
 /**
- * Convert the frontend MCPConfig format back to the SDK { mcpServers: { ... } }
- * shape expected by agent_settings.mcp_config on the backend.
+ * Convert the frontend MCPConfig format to the flat server map shape the
+ * SDK 1.31.x settings model emits via ``model_dump`` (``agent_settings.mcp_config``
+ * is now a ``dict[str, MCPServer]``, not a FastMCP ``MCPConfig``). The backend's
+ * ``_normalize_mcp_config_field`` still accepts the legacy ``{ mcpServers: ... }``
+ * wrapper for back-compat, so either shape round-trips; we emit the SDK-native
+ * shape to match the wire format the frontend receives.
+ *
  * Uses preserved names when available, only generates names for new servers.
  */
-export function toSdkMcpConfig(config: MCPConfig): SdkMcpConfig | null {
+export function toSdkMcpConfig(
+  config: MCPConfig,
+): Record<string, SdkMcpServerConfig> | null {
   const mcpServers: Record<string, SdkMcpServerConfig> = {};
   const usedNames = new Set<string>();
 
@@ -212,5 +276,5 @@ export function toSdkMcpConfig(config: MCPConfig): SdkMcpConfig | null {
     mcpServers[name] = server;
   }
 
-  return Object.keys(mcpServers).length > 0 ? { mcpServers } : null;
+  return Object.keys(mcpServers).length > 0 ? mcpServers : null;
 }

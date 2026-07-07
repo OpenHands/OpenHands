@@ -42,6 +42,10 @@ class TestPermission:
         assert Permission.MANAGE_MCP.value == 'manage_mcp'
         assert Permission.MANAGE_INTEGRATIONS.value == 'manage_integrations'
         assert (
+            Permission.MANAGE_INTEGRATION_PROVIDERS.value
+            == 'manage_integration_providers'
+        )
+        assert (
             Permission.MANAGE_APPLICATION_SETTINGS.value
             == 'manage_application_settings'
         )
@@ -151,6 +155,7 @@ class TestRolePermissions:
         assert Permission.DELETE_ORGANIZATION in owner_perms
         assert Permission.MANAGE_AUTOMATIONS in owner_perms
         assert Permission.VIEW_ORG_CONVERSATIONS in owner_perms
+        assert Permission.MANAGE_INTEGRATION_PROVIDERS in owner_perms
 
     def test_admin_has_admin_permissions(self):
         """
@@ -170,6 +175,7 @@ class TestRolePermissions:
         assert Permission.CHANGE_USER_ROLE_ADMIN in admin_perms
         assert Permission.MANAGE_AUTOMATIONS in admin_perms
         assert Permission.VIEW_ORG_CONVERSATIONS in admin_perms
+        assert Permission.MANAGE_INTEGRATION_PROVIDERS in admin_perms
         # Admin should NOT have owner-only permissions
         assert Permission.CHANGE_USER_ROLE_OWNER not in admin_perms
         assert Permission.CHANGE_ORGANIZATION_NAME not in admin_perms
@@ -193,6 +199,7 @@ class TestRolePermissions:
         assert Permission.VIEW_ORG_SETTINGS in member_perms
         # Member should NOT have admin/owner permissions
         assert Permission.EDIT_LLM_SETTINGS not in member_perms
+        assert Permission.MANAGE_INTEGRATION_PROVIDERS not in member_perms
         assert Permission.VIEW_BILLING not in member_perms
         assert Permission.ADD_CREDITS not in member_perms
         assert Permission.INVITE_USER_TO_ORGANIZATION not in member_perms
@@ -920,11 +927,17 @@ class TestApiKeyOrgValidation:
         )
 
     @pytest.mark.asyncio
-    async def test_allows_access_for_legacy_api_key_without_org_binding(self):
+    async def test_allows_access_for_unbound_api_key_without_org_binding(self):
         """
-        GIVEN: Legacy API key without org_id binding (org_id is None)
+        GIVEN: Unbound API key (api_key_org_id is None)
         WHEN: Permission checker is called
-        THEN: Falls through to normal permission check (backward compatible)
+        THEN: Falls through to the normal permission check.
+
+        Unbound keys are explicitly supported: the effective org is
+        resolved per-request via ``X-Org-Id`` or
+        ``user.current_org_id``; here the explicit path ``{org_id}``
+        parameter is what the route uses, so the unbound key does not
+        impose any additional check beyond the regular role lookup.
         """
         # Arrange
         user_id = str(uuid4())

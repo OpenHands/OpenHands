@@ -1064,6 +1064,16 @@ async def complete_onboarding(
         analytics = get_analytics_service()
         if analytics:
             ctx = await resolve_analytics_context(user_id)
+            # Stamp email on the person profile so person_display_name
+            # is set when the onboarding event is viewed in PostHog.
+            # identify_user was a no-op at login (consent was False),
+            # and accept_tos never re-triggered it, so this is the
+            # first opportunity after consent is granted.
+            if user.email:
+                analytics.set_person_properties(
+                    ctx=ctx,
+                    properties={'email': user.email},
+                )
             analytics.track_onboarding_completed(
                 ctx=ctx,
                 selections=selections,

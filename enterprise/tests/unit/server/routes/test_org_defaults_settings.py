@@ -2,15 +2,18 @@
 
 from unittest.mock import MagicMock
 
-from pydantic import SecretStr
+import pytest
+from pydantic import SecretStr, ValidationError
 from server.constants import LITE_LLM_API_URL
 from server.routes.org_models import (
     MASKED_API_KEY,
+    OrgAppSettingsUpdate,
     OrgDefaultsSettingsResponse,
     OrgUpdate,
 )
 from storage.org import Org
 
+from openhands.app_server.settings.settings_models import MarketplaceRegistration
 from openhands.sdk.settings import ACPAgentSettings
 
 
@@ -213,3 +216,134 @@ def test_from_org_keeps_custom_base_url_that_is_not_provider_default():
         == 'https://company-proxy.internal/anthropic'
     )
     assert response.search_api_key == '****1234'
+
+
+# --- Tests for OrgAppSettingsUpdate registered_marketplaces ---
+
+
+class TestOrgAppSettingsUpdateMarketplaceValidation:
+    """Tests for registered_marketplaces in OrgAppSettingsUpdate."""
+
+    def test_valid_marketplace_list(self):
+        """Test that OrgAppSettingsUpdate accepts valid marketplace list."""
+        update = OrgAppSettingsUpdate(
+            registered_marketplaces=[
+                MarketplaceRegistration(name='test', source='github:owner/repo')
+            ]
+        )
+        assert len(update.registered_marketplaces) == 1
+        assert update.registered_marketplaces[0].name == 'test'
+        assert update.registered_marketplaces[0].source == 'github:owner/repo'
+
+    def test_null_marketplaces_allowed(self):
+        """Test that None is allowed for PATCH semantics (field not updated)."""
+        update = OrgAppSettingsUpdate()
+        assert update.registered_marketplaces is None
+
+    def test_empty_list_valid(self):
+        """Test that empty list is valid (explicitly clear marketplaces)."""
+        update = OrgAppSettingsUpdate(registered_marketplaces=[])
+        assert update.registered_marketplaces == []
+
+    def test_invalid_marketplace_rejected(self):
+        """Test that invalid marketplace source is rejected."""
+        with pytest.raises(ValidationError):
+            OrgAppSettingsUpdate(
+                registered_marketplaces=[{'name': 'test', 'source': 'invalid!!source'}]
+            )
+
+    def test_multiple_valid_marketplaces(self):
+        """Test that multiple valid marketplaces are accepted."""
+        update = OrgAppSettingsUpdate(
+            registered_marketplaces=[
+                MarketplaceRegistration(
+                    name='marketplace-1',
+                    source='github:owner/repo1',
+                    auto_load=True,
+                ),
+                MarketplaceRegistration(
+                    name='marketplace-2',
+                    source='github:owner/repo2',
+                ),
+            ]
+        )
+        assert len(update.registered_marketplaces) == 2
+
+    def test_marketplace_with_all_fields(self):
+        """Test marketplace with all optional fields."""
+        update = OrgAppSettingsUpdate(
+            registered_marketplaces=[
+                MarketplaceRegistration(
+                    name='full-featured',
+                    source='github:owner/repo',
+                    ref='v1.0.0',
+                    repo_path='marketplaces/plugins',
+                    auto_load=True,
+                ),
+            ]
+        )
+        assert update.registered_marketplaces[0].name == 'full-featured'
+        assert update.registered_marketplaces[0].ref == 'v1.0.0'
+        assert update.registered_marketplaces[0].repo_path == 'marketplaces/plugins'
+        assert update.registered_marketplaces[0].auto_load is True
+
+
+class TestUpdateOrgAppSettingsRoute:
+    """Route-level behavior for the POST /orgs/app handler."""
+
+    @pytest.mark.asyncio
+    async def test_concurrent_modification_maps_to_409(self):
+        """A concurrent-modification conflict surfaces as HTTP 409, not 500."""
+        from datetime import datetime, timezone
+        from unittest.mock import AsyncMock
+
+        from fastapi import HTTPException
+        from server.routes.org_models import OrgConcurrentModificationError
+        from server.routes.orgs import update_org_app_settings
+
+        # Arrange - service raises the conflict; no marketplaces => no admin gate.
+        now = datetime.now(timezone.utc)
+        service = MagicMock()
+        service.update_org_app_settings = AsyncMock(
+            side_effect=OrgConcurrentModificationError(
+                org_id='o1', expected_version=now, actual_version=now
+            )
+        )
+        update_data = OrgAppSettingsUpdate(enable_proactive_conversation_starters=False)
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc:
+            await update_org_app_settings(
+                update_data, MagicMock(), service=service, user_id='u1'
+            )
+        assert exc.value.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_marketplace_edit_requires_admin(self, monkeypatch):
+        """Editing org marketplaces without EDIT_ORG_SETTINGS is blocked (403)."""
+        from unittest.mock import AsyncMock
+
+        import server.routes.orgs as orgs_module
+        from fastapi import HTTPException
+        from server.routes.orgs import update_org_app_settings
+
+        # Arrange - deny the marketplace permission; the write must not happen.
+        async def _deny(request, user_id, permission):
+            raise HTTPException(status_code=403, detail='forbidden')
+
+        monkeypatch.setattr(orgs_module, 'authorize_permission', _deny)
+        service = MagicMock()
+        service.update_org_app_settings = AsyncMock()
+        update_data = OrgAppSettingsUpdate(
+            registered_marketplaces=[
+                MarketplaceRegistration(name='team', source='github:o/team')
+            ]
+        )
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc:
+            await update_org_app_settings(
+                update_data, MagicMock(), service=service, user_id='u1'
+            )
+        assert exc.value.status_code == 403
+        service.update_org_app_settings.assert_not_called()

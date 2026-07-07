@@ -36,6 +36,33 @@ JIRA_DC_SECRET_HINT = """You have credentialed access to the Jira Data Center RE
 The token value is supplied only as a sandbox secret/environment variable. Never echo or log the value of $JIRA_DC_TOKEN."""
 
 
+def _email_mode_hint(host: str) -> str:
+    # Hedged on purpose: the user may have their own Jira token/MCP tools, so tell
+    # the agent to use those if present and only otherwise list the enablement
+    # options -- don't assert "no access", which would be wrong in that case.
+    # `host` comes from the active workspace, not JIRA_DC_BASE_URL, which the
+    # chart only sets in OAuth mode.
+    return (
+        f'Jira Data Center for this workspace is at {host}, but the admin has '
+        'enabled email-linking mode so no Jira token is automatically provided '
+        'to conversations. If the user asks you to read or query Jira Data '
+        'Center, check to see if you have an available Jira token (e.g. a Secret) '
+        'or Jira MCP tools in your environment; otherwise, tell the user how to '
+        'enable access: an admin can enable OAuth mode in the OHE Admin Config '
+        'and redeploy, or the user can add their Jira API token as a Secret, or '
+        'connect a Jira Data Center MCP server (Settings → MCP).'
+    )
+
+
+def _append_email_mode_hint(system_message_suffix: str | None, host: str) -> str:
+    hint = _email_mode_hint(host)
+    if not system_message_suffix:
+        return hint
+    if 'Jira Data Center MCP server' in system_message_suffix:
+        return system_message_suffix
+    return f'{system_message_suffix}\n\n{hint}'
+
+
 def _workspace_matches_configured_jira_dc_host(workspace_name: str) -> bool:
     configured_host = urlparse(JIRA_DC_BASE_URL).hostname
     if not configured_host:
@@ -145,6 +172,17 @@ class JiraDcConversationSecretEnricher(ConversationSecretEnricher):
         del user
 
         if not JIRA_DC_ENABLE_OAUTH:
+            # Email mode: no per-user token to inject. When a connection is set up
+            # for the caller's org, tell the agent how to point the user at
+            # enabling live access instead of failing silently.
+            store = JiraDcIntegrationStore.get_instance()
+            workspace = await store.get_active_workspace()
+            if workspace and await _workspace_matches_context(workspace, user_context):
+                return ConversationSecretEnrichment(
+                    system_message_suffix=_append_email_mode_hint(
+                        system_message_suffix, workspace.name
+                    )
+                )
             return ConversationSecretEnrichment(
                 system_message_suffix=system_message_suffix
             )

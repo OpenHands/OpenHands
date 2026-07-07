@@ -93,7 +93,7 @@ class InMemoryRateLimiter:
         self.history[key] = [ts for ts in self.history[key] if ts > cutoff]
 
     async def __call__(self, request: Request) -> bool:
-        key = request.client.host
+        key = request.client.host if request.client else 'unknown'
         now = datetime.now()
 
         self._clean_old_requests(key)

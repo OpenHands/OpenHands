@@ -167,6 +167,9 @@ def settings_store(async_session_maker):
                 del item_dict['secrets_store']
             if 'llm_profiles' in item_dict:
                 del item_dict['llm_profiles']
+            # inherited_marketplaces is computed at runtime, not persisted
+            if 'inherited_marketplaces' in item_dict:
+                del item_dict['inherited_marketplaces']
 
             # Encrypt the data before storing
             for key in ('llm_api_key', 'search_api_key', 'sandbox_api_key'):
@@ -723,6 +726,13 @@ async def test_store_keeps_mcp_config_private_to_acting_member(
             'user1': {'url': 'https://user1-mcp-server.com', 'transport': 'sse'}
         },
     }
+    # The SDK 1.31.x wire format stores ``mcp_config`` as a flat server
+    # map; ``Settings.update`` still accepts the legacy wrapper for
+    # backwards compatibility, but ``model_dump(mode='json')`` — which is
+    # what ``_get_persisted_agent_settings`` uses — no longer wraps.
+    persisted_mcp_config = {
+        'user1': {'url': 'https://user1-mcp-server.com', 'transport': 'sse'},
+    }
     new_settings = DataSettings()
     new_settings.update(
         {
@@ -757,7 +767,8 @@ async def test_store_keeps_mcp_config_private_to_acting_member(
 
     assert 'mcp_config' not in org.agent_settings
     assert (
-        members[admin_user_id].agent_settings_diff.get('mcp_config') == user_mcp_config
+        members[admin_user_id].agent_settings_diff.get('mcp_config')
+        == persisted_mcp_config
     )
     assert 'mcp_config' not in members[member1_user_id].agent_settings_diff
     assert 'mcp_config' not in members[member2_user_id].agent_settings_diff
@@ -882,7 +893,7 @@ async def test_store_and_load_mcp_config_via_agent_settings(
     assert loaded is not None
     assert loaded.agent_settings.mcp_config is not None
     assert (
-        loaded.agent_settings.mcp_config.mcpServers['admin'].url
+        loaded.agent_settings.mcp_config['admin'].url
         == 'https://admin-private-server.com'
     )
 
@@ -938,7 +949,9 @@ async def test_load_drops_legacy_org_level_mcp_config(
 
     # Assert — legacy org mcp_config is not inherited by member1
     assert loaded is not None
-    assert loaded.agent_settings.mcp_config is None
+    # The SDK normalizes ``None`` to ``{}`` so the absence of an MCP config
+    # surfaces as an empty server map rather than ``None``.
+    assert loaded.agent_settings.mcp_config == {}
 
 
 @pytest.mark.asyncio
@@ -1274,11 +1287,10 @@ async def test_store_replaces_mcp_config_on_delete(
             .all()
         }
 
-    admin_servers = (
-        members[admin_user_id]
-        .agent_settings_diff.get('mcp_config', {})
-        .get('mcpServers', {})
-    )
+    # The persisted ``mcp_config`` is the SDK 1.31.x flat server map (no
+    # ``mcpServers`` wrapper), so reach directly into it instead of going
+    # through the legacy wrapper key.
+    admin_servers = members[admin_user_id].agent_settings_diff.get('mcp_config', {})
     assert set(admin_servers.keys()) == {'server1', 'server2'}
     assert 'mcp_config' not in members[member1_user_id].agent_settings_diff
 

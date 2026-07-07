@@ -23,7 +23,9 @@ from storage.user_settings import UserSettings
 from storage.user_store import UserStore
 
 from openhands.app_server.settings.llm_profiles import LLMProfiles
-from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_models import (
+    Settings,
+)
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.utils.jsonpatch_compat import (
     WHOLESALE_REPLACEMENT_KEYS,
@@ -224,6 +226,25 @@ class SaasSettingsStore(SettingsStore):
         # Apply default if git_full_clone is None in the database (pre-existing rows)
         if kwargs.get('git_full_clone') is None:
             kwargs.pop('git_full_clone', None)
+        # Apply default if registered_marketplaces is None in the database
+        if kwargs.get('registered_marketplaces') is None:
+            kwargs.pop('registered_marketplaces', None)
+
+        # Load personal registered_marketplaces from user_settings table
+        user_settings = await self._get_user_settings_by_keycloak_id_async(self.user_id)
+        if user_settings and user_settings.registered_marketplaces:
+            # Normalize marketplaces: use 'personal' scope for legacy data without scope
+            # The merge function will override with the correct scope value
+            normalized_mps: list[dict[str, Any]] = []
+            for mp in user_settings.registered_marketplaces:
+                if isinstance(mp, dict):
+                    if mp.get('scope') is None:
+                        mp = {**mp, 'scope': 'personal'}
+                    normalized_mps.append(mp)
+                else:
+                    # Convert MarketplaceRegistration to dict
+                    normalized_mps.append(mp.model_dump())
+            kwargs['registered_marketplaces'] = normalized_mps
         # Profiles in SaaS live on the org (managed via
         # /api/organizations/{org_id}/profiles). Surface them through
         # Settings.llm_profiles so the chat-layer endpoints
@@ -422,10 +443,24 @@ class SaasSettingsStore(SettingsStore):
             kwargs.pop('agent_settings', None)
             kwargs.pop('conversation_settings', None)
 
+            # Get or create user_settings for this user
+            user_settings_result = await session.execute(
+                select(UserSettings).filter(
+                    UserSettings.keycloak_user_id == self.user_id
+                )
+            )
+            user_settings = user_settings_result.scalars().first()
+            if not user_settings:
+                user_settings = UserSettings(keycloak_user_id=self.user_id)
+                session.add(user_settings)
+
             for key, value in kwargs.items():
                 if hasattr(user, key):
                     setattr(user, key, value)
-                if hasattr(org, key) and key not in {
+                if key == 'registered_marketplaces':
+                    # Save personal marketplace settings to user_settings table
+                    user_settings.registered_marketplaces = value
+                elif hasattr(org, key) and key not in {
                     'llm_api_key',
                     'agent_settings',
                     'conversation_settings',
@@ -501,6 +536,63 @@ class SaasSettingsStore(SettingsStore):
         """
         logger.debug(f'saas_settings_store.get_instance::{user_id}')
         return SaasSettingsStore(user_id, effective_org_id=effective_org_id)
+
+    async def get_org_marketplaces(self, user_id: str | None) -> list[dict]:
+        """Get organization-level marketplaces from the org's registered_marketplaces.
+
+        Uses the effective_org_id if set, otherwise resolves via user.current_org_id.
+        Returns empty list if no org or org has no registered marketplaces.
+        """
+        if not user_id:
+            return []
+
+        try:
+            user = await UserStore.get_user_by_id(user_id)
+            if not user:
+                logger.debug(f'No user found for ID {user_id}')
+                return []
+
+            org_id = self.effective_org_id or user.current_org_id
+            if not org_id:
+                logger.debug(f'No org_id for user {user_id}')
+                return []
+
+            # Validate org_id is a valid UUID before calling get_org_by_id_async
+            try:
+                from uuid import UUID
+
+                UUID(str(org_id))
+            except (ValueError, AttributeError, TypeError) as uuid_error:
+                logger.warning(
+                    f'Invalid org_id format for user {user_id}: {org_id} - {uuid_error}'
+                )
+                return []
+
+            org = await OrgStore.get_org_by_id_async(org_id)
+            if not org:
+                logger.debug(f'Org {org_id} not found for user {user_id}')
+                return []
+
+            if org.registered_marketplaces:
+                # Normalize: use 'org' scope for legacy data without scope
+                normalized: list[dict[str, Any]] = []
+                for mp in org.registered_marketplaces:
+                    if isinstance(mp, dict):
+                        # Set scope='org' if missing (backward compatibility)
+                        if mp.get('scope') is None:
+                            mp = {**mp, 'scope': 'org'}
+                        # Ensure auto_load defaults to False if missing
+                        if 'auto_load' not in mp:
+                            mp = {**mp, 'auto_load': False}
+                        normalized.append(mp)
+                    else:
+                        # Convert MarketplaceRegistration to dict
+                        normalized.append(mp.model_dump())
+                return normalized
+            return []
+        except Exception as e:
+            logger.error(f'Error fetching org marketplaces: {e}')
+            return []
 
     async def _ensure_api_key(
         self, item: Settings, org_id: str, openhands_type: bool = False

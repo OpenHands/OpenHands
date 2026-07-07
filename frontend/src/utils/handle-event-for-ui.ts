@@ -43,6 +43,32 @@ const findLastUserMessageIndex = (events: OpenHandsEvent[]): number => {
   return -1;
 };
 
+/**
+ * Newest timestamp among the durable (non-delta, non-metrics) agent/environment
+ * events already rendered. Streaming deltas older than this are stale: their
+ * content is already represented by durable events (the WebSocket history
+ * replay does not include deltas, while the REST history does, so on a reload
+ * the REST deltas can arrive AFTER the turn's final message was rendered).
+ */
+const findNewestDurableTimestamp = (
+  events: OpenHandsEvent[],
+): string | null => {
+  let newest: string | null = null;
+  for (const uiEvent of events) {
+    const isPreviewOrMetrics =
+      isStreamingDeltaEvent(uiEvent) || isConversationStateUpdateEvent(uiEvent);
+    const isDurableSource =
+      uiEvent.source === "agent" || uiEvent.source === "environment";
+    if (!isPreviewOrMetrics && isDurableSource) {
+      const ts = uiEvent.timestamp;
+      if (typeof ts === "string" && (newest === null || ts > newest)) {
+        newest = ts;
+      }
+    }
+  }
+  return newest;
+};
+
 // Join text blocks WITHOUT a separator: streaming deltas concatenate content
 // tokens directly with no separator between LLM content blocks, so using "\n"
 // here would cause startsWith/findTextSegmentsInOrder to miss when reconciling
@@ -137,17 +163,38 @@ const finalizeStreamingDeltasInPlace = (
 
   const nextUiEvents = [...uiEvents];
   const streamedText = streamingSegments.join("");
-  let unstreamedSuffix = "";
+  let matched = false;
+  let lastMatchEnd = 0;
 
-  if (finalText.startsWith(streamedText)) {
-    unstreamedSuffix = finalText.slice(streamedText.length);
-  } else {
-    const match = findTextSegmentsInOrder(finalText, streamingSegments);
-    if (!match.matched) {
-      return null;
+  // The SDK strips the finalized text, so it may lack trailing whitespace the
+  // model streamed - tolerate that by also trying the trailing-trimmed
+  // streamed text (mirrors agent-canvas #1552).
+  for (const candidate of [streamedText, streamedText.trimEnd()]) {
+    if (candidate && finalText.startsWith(candidate)) {
+      matched = true;
+      lastMatchEnd = candidate.length;
+      break;
     }
-    unstreamedSuffix = finalText.slice(match.lastMatchEnd);
   }
+  if (!matched) {
+    const lastIndex = streamingSegments.length - 1;
+    const searchSegments = streamingSegments.map((segment, index) =>
+      index === lastIndex ? segment.trimEnd() : segment,
+    );
+    const match = findTextSegmentsInOrder(finalText, searchSegments);
+    matched = match.matched;
+    lastMatchEnd = match.lastMatchEnd;
+  }
+  if (!matched) {
+    // The streamed preview never reconciles (e.g. it contains earlier
+    // steps' text, or chunks were reordered in delivery). The durable final
+    // message is canonical: drop the preview deltas and render it once.
+    const removeSet = new Set(contentStreamingDeltas.map(({ index }) => index));
+    const cleaned = uiEvents.filter((_, index) => !removeSet.has(index));
+    cleaned.push(finalEvent);
+    return cleaned;
+  }
+  const unstreamedSuffix = finalText.slice(lastMatchEnd);
 
   const lastDeltaIndex = contentStreamingDeltas.at(-1)?.index;
   const lastDelta =
@@ -172,13 +219,72 @@ const finalizeStreamingDeltasInPlace = (
 };
 
 /**
+ * A tool-call ``ActionEvent`` carries the agent's ``thought`` - the same text
+ * that was just streamed as deltas. The action card renders that thought
+ * itself, so once the action arrives, the streamed preview deltas for the turn
+ * are redundant: leaving them in place displays every step's reasoning twice.
+ *
+ * When the current turn's content-bearing deltas reconcile (in order) against
+ * the action's thought text, return uiEvents with those deltas removed so the
+ * caller can append the action as the single rendered copy. Returns ``null``
+ * (no change) when there is nothing to reconcile or the text doesn't match.
+ */
+const supersedeStreamingDeltasForAction = (
+  actionEvent: OpenHandsEvent,
+  uiEvents: OpenHandsEvent[],
+): OpenHandsEvent[] | null => {
+  if (!isActionEvent(actionEvent)) {
+    return null;
+  }
+  const lastUserMessageIndex = findLastUserMessageIndex(uiEvents);
+  const currentTurnDeltaIndexes = uiEvents
+    .map((uiEvent, index) => ({ uiEvent, index }))
+    .filter(
+      ({ uiEvent, index }) =>
+        index > lastUserMessageIndex && isStreamingDeltaEvent(uiEvent),
+    )
+    .map(({ index }) => index);
+
+  if (currentTurnDeltaIndexes.length === 0) {
+    return null;
+  }
+
+  // The action renders its own thought, so the streamed preview text is
+  // redundant once the durable action arrives. Text-matching is deliberately
+  // NOT required: chunk reordering between the delta stream and event
+  // persistence would otherwise leak stray preview bubbles that later merge
+  // with the next stream. For many models the delta is the sole carrier of
+  // reasoning_content, though - when the action does not render reasoning of
+  // its own, keep the delta as a reasoning-only bubble (content cleared)
+  // instead of dropping it (mirrors agent-canvas #1552).
+  const actionRendersReasoning =
+    Boolean(actionEvent.reasoning_content?.trim()) ||
+    (actionEvent.thinking_blocks?.length ?? 0) > 0;
+  const stripSet = new Set(currentTurnDeltaIndexes);
+  const nextUiEvents: OpenHandsEvent[] = [];
+  uiEvents.forEach((uiEvent, index) => {
+    if (!stripSet.has(index) || !isStreamingDeltaEvent(uiEvent)) {
+      nextUiEvents.push(uiEvent);
+      return;
+    }
+    if (!actionRendersReasoning && uiEvent.reasoning_content) {
+      nextUiEvents.push({ ...uiEvent, content: null });
+    }
+  });
+  return nextUiEvents;
+};
+
+/**
  * Handles adding an event to the UI events array
  * Replaces actions with observations when they arrive (so UI shows observation instead of action)
  * Exception: ThinkAction is NOT replaced because the thought content is in the action, not in the observation
  *
  * StreamingDeltaEvent: consecutive deltas merge in place into a single growing
  * bubble; when the turn's final agent message arrives it is reconciled into that
- * bubble (see `finalizeStreamingDeltasInPlace`) rather than appended.
+ * bubble (see `finalizeStreamingDeltasInPlace`) rather than appended, and a
+ * tool-call action removes the deltas that streamed its thought (see
+ * `supersedeStreamingDeltasForAction`). Deltas that arrive out of order (older
+ * than an already-rendered durable event) are dropped as stale.
  *
  * ACPToolCallEvent dedup: multiple events share a ``tool_call_id`` as an ACP
  * tool call progresses (in_progress → completed / failed). Collapse them to
@@ -193,6 +299,20 @@ export const handleEventForUI = (
   if (isStreamingDeltaEvent(event)) {
     // Drop empty boundary deltas (e.g. after a tool call) that carry no text.
     if (event.content === null && event.reasoning_content === null) {
+      return newUiEvents;
+    }
+
+    // Drop stale deltas. Deltas are a live-preview mechanism; one that is
+    // older than the newest durable event arrived late (e.g. the REST history
+    // response racing the WebSocket replay, which omits deltas). Its content
+    // is already represented by durable events, so rendering it would fragment
+    // and duplicate the finished message.
+    const newestDurableTimestamp = findNewestDurableTimestamp(newUiEvents);
+    if (
+      newestDurableTimestamp !== null &&
+      typeof event.timestamp === "string" &&
+      event.timestamp < newestDurableTimestamp
+    ) {
       return newUiEvents;
     }
 
@@ -240,6 +360,16 @@ export const handleEventForUI = (
     );
     if (finalizedUiEvents) {
       return finalizedUiEvents;
+    }
+  }
+
+  // A tool-call action renders its own thought; remove the preview deltas that
+  // streamed it, then fall through so the action is appended normally below.
+  if (isActionEvent(event) && event.action.kind !== "FinishAction") {
+    const superseded = supersedeStreamingDeltasForAction(event, newUiEvents);
+    if (superseded) {
+      superseded.push(event);
+      return superseded;
     }
   }
 

@@ -94,8 +94,11 @@ class SaasUserAuth(UserAuth):
         """Get the organization ID bound to the API key used for authentication.
 
         Returns:
-            The org_id if authenticated via API key with org binding, None otherwise
-            (cookie auth or legacy API keys without org binding).
+            The org_id if authenticated via an API key with an explicit org
+            binding; ``None`` for cookie auth or for *unbound* API keys (in
+            which case the request's effective org is resolved per-request
+            via the ``X-Org-Id`` header or, as a fallback, the caller's
+            ``user.current_org_id`` -- see :meth:`_resolve_org_id`).
         """
         return self.api_key_org_id
 
@@ -738,7 +741,14 @@ def get_api_key_from_header(request: Request):
         return session_api_key
 
     # Fallback to X-Access-Token header as an additional option
-    return request.headers.get('X-Access-Token')
+    x_access_token = request.headers.get('X-Access-Token')
+    if x_access_token:
+        return x_access_token
+
+    # Fallback to the `api_key` cookie, which mirrors the X-Access-Token header
+    # Security note: This cookie MUST be marked `Secure; HttpOnly; SameSite=Strict`
+    # (or `Lax`) to mitigate CSRF and XSS risks.
+    return request.cookies.get('api_key')
 
 
 async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
