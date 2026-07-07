@@ -127,6 +127,7 @@ from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.llm.llm_profile_store import PROFILE_NAME_REGEX
+from openhands.sdk.mcp.config import MCPServer
 from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ACPAgentSettings
@@ -1259,7 +1260,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
 
     async def _add_system_mcp_servers(
-        self, mcp_servers: dict[str, Any], conversation_id: UUID
+        self, mcp_servers: dict[str, MCPServer], conversation_id: UUID
     ) -> None:
         """Add system-generated MCP servers (default OpenHands server).
 
@@ -1274,20 +1275,22 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not self.web_url:
             return
 
-        # Add default OpenHands MCP server (includes Tavily proxy if configured)
-        mcp_url = f'{self.web_url}/mcp/mcp'
-        mcp_servers['default'] = {
-            'url': mcp_url,
-            'headers': {'X-OpenHands-ServerConversation-ID': str(conversation_id)},
-        }
+        headers = {'X-OpenHands-ServerConversation-ID': SecretStr(str(conversation_id))}
 
         # Add API key if available
         mcp_api_key = await self.user_context.get_mcp_api_key()
         if mcp_api_key:
-            mcp_servers['default']['headers']['X-Session-API-Key'] = mcp_api_key
+            headers['X-Session-API-Key'] = SecretStr(mcp_api_key)
+
+        # Add default OpenHands MCP server (includes Tavily proxy if configured)
+        mcp_url = f'{self.web_url}/mcp/mcp'
+        mcp_servers['default'] = MCPServer(
+            url=mcp_url,
+            headers=headers,
+        )
 
     def _merge_custom_mcp_config(
-        self, mcp_servers: dict[str, Any], user: UserInfo
+        self, mcp_servers: dict[str, MCPServer], user: UserInfo
     ) -> None:
         """Merge custom MCP configuration from user settings.
 
@@ -1298,24 +1301,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if isinstance(user.agent_settings, ACPAgentSettings):
             return
 
-        sdk_mcp = user.agent_settings.mcp_config
-        if not sdk_mcp:
+        user_mcp = user.agent_settings.mcp_config
+        if not user_mcp:
             return
 
         try:
-            count = len(sdk_mcp)
+            count = len(user_mcp)
             _logger.info(
                 f'Loading custom MCP config from user settings: {count} servers'
             )
-
-            for name, server in sdk_mcp.items():
-                mcp_servers[name] = server.model_dump(
-                    exclude_none=True, context={'expose_secrets': 'plaintext'}
-                )
-
-            _logger.info(
-                f'Successfully merged custom MCP config: added {count} servers'
-            )
+            mcp_servers.update(user_mcp)
 
         except Exception as e:
             _logger.error(
@@ -1329,7 +1324,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
     async def _configure_llm_and_mcp(
         self, user: UserInfo, llm_model: str | None, conversation_id: UUID
-    ) -> tuple[LLM, dict]:
+    ) -> tuple[LLM, dict[str, MCPServer]]:
         """Configure LLM and MCP (Model Context Protocol) settings.
 
         Args:
@@ -1338,12 +1333,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             conversation_id: Conversation ID forwarded to the OpenHands MCP server
 
         Returns:
-            Tuple of (configured LLM instance, MCP config dictionary)
+            Tuple of (configured LLM instance, MCP config dict in the flat
+            ``{server_name: server_dict}`` shape the SDK 1.31.x
+            ``Agent.mcp_config`` field expects)
         """
         # Configure LLM
         llm = self._configure_llm(user, llm_model)
 
-        # Configure MCP - SDK expects format: {'mcpServers': {'server_name': {...}}}
         mcp_servers: dict[str, Any] = {}
 
         # Add system-generated servers (default MCP server with Tavily proxy)
@@ -1352,17 +1348,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Merge custom servers from user settings
         self._merge_custom_mcp_config(mcp_servers, user)
 
-        # Wrap in the mcpServers structure required by the SDK
-        mcp_config = {'mcpServers': mcp_servers} if mcp_servers else {}
-        _logger.info(f'Final MCP configuration: {sanitize_config(mcp_config)}')
-
-        return llm, mcp_config
+        return llm, mcp_servers
 
     @staticmethod
     def _apply_server_agent_overrides(
         agent: Agent,
         agent_type: AgentType,
-        mcp_config: dict,
         conversation_id: UUID,
         user_id: str | None,
     ) -> Agent:
@@ -1770,7 +1761,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
 
         agent = self._apply_server_agent_overrides(
-            agent, agent_type, mcp_config, conversation_id, user.id
+            agent, agent_type, conversation_id, user.id
         )
 
         # --- hooks (require remote workspace; must precede request build) -----
