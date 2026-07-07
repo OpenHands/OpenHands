@@ -116,19 +116,54 @@ describe("ConversationPanel", () => {
     expect(emptyState).toBeInTheDocument();
   });
 
-  it("should handle an error when fetching conversations", async () => {
+  it("should show a descriptive error state instead of the raw error string", async () => {
     const searchConversationsSpy = vi.spyOn(
       V1ConversationService,
       "searchConversations",
     );
     searchConversationsSpy.mockRejectedValue(
-      new Error("Failed to fetch conversations"),
+      new Error("Request failed with status code 500"),
     );
 
     renderConversationPanel();
 
-    const error = await screen.findByText("Failed to fetch conversations");
-    expect(error).toBeInTheDocument();
+    // The descriptive message is shown, not the raw axios error string
+    expect(
+      await screen.findByText("CONVERSATION$FAILED_TO_LOAD"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Request failed with status code 500"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should refetch conversations when the retry button is clicked", async () => {
+    const user = userEvent.setup();
+    const searchConversationsSpy = vi.spyOn(
+      V1ConversationService,
+      "searchConversations",
+    );
+    searchConversationsSpy.mockRejectedValue(
+      new Error("Request failed with status code 500"),
+    );
+
+    renderConversationPanel();
+
+    const retryButton = await screen.findByTestId("retry-conversations-button");
+    const callsBeforeRetry = searchConversationsSpy.mock.calls.length;
+
+    // Recovery: the retry should succeed and render the conversations
+    searchConversationsSpy.mockResolvedValue({
+      items: [...mockConversations],
+      next_page_id: null,
+    });
+
+    await user.click(retryButton);
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(3);
+    expect(searchConversationsSpy.mock.calls.length).toBeGreaterThan(
+      callsBeforeRetry,
+    );
   });
 
   it("should cancel deleting a conversation", async () => {

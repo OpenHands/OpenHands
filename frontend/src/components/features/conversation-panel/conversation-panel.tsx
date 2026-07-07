@@ -59,6 +59,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
+    refetch,
   } = usePaginatedConversations();
 
   // Fetch in-progress start tasks
@@ -152,8 +153,21 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
       )}
 
       {error && (
-        <div className="flex flex-col items-center justify-center h-full">
-          <p className="text-danger">{error.message}</p>
+        <div
+          className="flex flex-col items-center justify-center h-full gap-4 px-4 text-center"
+          data-testid="conversation-panel-error"
+        >
+          <p className="text-danger">
+            {t(I18nKey.CONVERSATION$FAILED_TO_LOAD)}
+          </p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            data-testid="retry-conversations-button"
+            className="rounded-md bg-neutral-700 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-600"
+          >
+            {t(I18nKey.CONVERSATION$RETRY)}
+          </button>
         </div>
       )}
       {!isFetching && conversations?.length === 0 && !startTasks?.length && (
