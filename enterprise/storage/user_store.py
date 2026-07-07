@@ -6,7 +6,6 @@ from enum import Enum
 from typing import Optional
 from uuid import UUID
 
-from openhands.sdk.settings import AGENT_SETTINGS_SCHEMA_VERSION
 from server.auth.token_manager import TokenManager
 from server.constants import (
     DEFAULT_V1_ENABLED,
@@ -33,6 +32,8 @@ from storage.role_store import RoleStore
 from storage.user import User
 from storage.user_settings import UserSettings
 from utils.identity import resolve_display_name
+
+from openhands.sdk.settings import AGENT_SETTINGS_SCHEMA_VERSION
 
 # The max possible time to wait for another process to finish creating a user before retrying
 _REDIS_CREATE_TIMEOUT_SECONDS = 30
