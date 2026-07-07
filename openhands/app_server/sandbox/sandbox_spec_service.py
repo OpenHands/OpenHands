@@ -14,6 +14,26 @@ from openhands.app_server.sandbox.sandbox_spec_models import (
 from openhands.app_server.services.injector import Injector
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
+_DEFAULT_REPOSITORY = 'ghcr.io/openhands/agent-server'
+
+
+@cache
+def _bundled_agent_server_version() -> str:
+    """Version of the installed openhands-agent-server package.
+
+    openhands-agent-server is a hard runtime dependency of the V1 app server;
+    if it's not installed the V1 app server has no business starting. Let
+    PackageNotFoundError surface at first call rather than degrading silently
+    to a wrong default. Memoised via ``functools.cache`` so the lookup runs
+    once per process and remains mockable in tests.
+    """
+    return importlib.metadata.version('openhands-agent-server')
+
+
+def _bundled_default_image() -> str:
+    """Image URL of the bundled agent-server: ``<repo>:<version>-python``."""
+    return f'{_DEFAULT_REPOSITORY}:{_bundled_agent_server_version()}-python'
+
 
 class SandboxSpecService(ABC):
     """Service for managing Sandbox specs.
@@ -96,22 +116,26 @@ async def resolve_sandbox_spec(
     raise ValueError(f'Sandbox Spec {effective_id!r} not found')
 
 
-@cache  # memoize so the deprecation warning fires once per process
+@cache  # memoize so the auto-correct warning fires once per process
 def get_agent_server_image() -> str:
-    if os.getenv('AGENT_SERVER_IMAGE_REPOSITORY') or os.getenv(
-        'AGENT_SERVER_IMAGE_TAG'
-    ):
-        logging.getLogger(__name__).warning(
-            'Environment vars AGENT_SERVER_IMAGE_REPOSITORY/AGENT_SERVER_IMAGE_TAG '
-            'are no longer supported - the agent server image must match the SDK used '
-            'by the app server.'
-        )
-    # openhands-agent-server is a hard runtime dependency of the V1 app server;
-    # if it's not installed the V1 app server has no business starting. Let
-    # PackageNotFoundError surface at import time rather than degrading silently
-    # to a wrong default.
-    version = importlib.metadata.version('openhands-agent-server')
-    return f'ghcr.io/openhands/agent-server:{version}-python'
+    repository = os.getenv('AGENT_SERVER_IMAGE_REPOSITORY') or _DEFAULT_REPOSITORY
+    bundled_version = _bundled_agent_server_version()
+    tag = os.getenv('AGENT_SERVER_IMAGE_TAG') or f'{bundled_version}-python'
+
+    if repository == _DEFAULT_REPOSITORY:
+        parts = tag.split('-', 1)
+        if len(parts) == 2 and parts[0] != bundled_version:
+            parts[0] = bundled_version
+            updated_tag = '-'.join(parts)
+            logging.getLogger(__name__).warning(
+                f'AGENT_SERVER_IMAGE_TAG={tag} does not match the installed '
+                f'openhands-sdk (using {updated_tag} instead). Pin to a custom '
+                f'image repository via AGENT_SERVER_IMAGE_REPOSITORY if you '
+                f'need to use a different build.'
+            )
+            tag = updated_tag
+
+    return f'{repository}:{tag}'
 
 
 def is_custom_sandbox_spec(sandbox_spec_id: str) -> bool:
@@ -119,7 +143,7 @@ def is_custom_sandbox_spec(sandbox_spec_id: str) -> bool:
     custom image registered via runtime-api). The bundled spec always matches the
     SDK the app server ships with, so non-default specs are the only ones worth
     flagging on a sandbox-create failure."""
-    return sandbox_spec_id != get_agent_server_image()
+    return sandbox_spec_id != _bundled_default_image()
 
 
 # Prefixes for environment variables that should be auto-forwarded to agent-server

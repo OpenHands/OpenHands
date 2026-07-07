@@ -1,31 +1,33 @@
 """Tests for sandbox_spec_service helpers.
 
 Covers ``get_agent_server_image`` (derived from the installed
-``openhands-agent-server`` package, with a deprecation warning when the legacy
-env-var overrides are set) and ``is_custom_sandbox_spec`` (which compares a
-sandbox spec id against the bundled default).
+``openhands-agent-server`` package, with auto-correction of stale canonical
+tags for self-hosted installs) and ``is_custom_sandbox_spec`` (which compares
+a sandbox spec id against the bundled default).
 """
 
 import importlib.metadata
-import logging
 from unittest.mock import patch
 
 import pytest
 
-from openhands.app_server.sandbox import sandbox_spec_service as module
 from openhands.app_server.sandbox.sandbox_spec_service import (
+    _bundled_agent_server_version,
     get_agent_server_image,
     is_custom_sandbox_spec,
 )
 
 
 @pytest.fixture(autouse=True)
-def _clear_get_agent_server_image_cache():
-    """``get_agent_server_image`` is memoized via ``functools.cache``; clear the
-    cache around every test so we don't leak env-var state between cases."""
+def _clear_caches():
+    """All the @cache'd helpers in this module need their caches cleared around
+    every test so we don't leak env-var or mocked-version state between cases.
+    (_bundled_default_image isn't @cache'd; it just calls _bundled_agent_server_version.)"""
     get_agent_server_image.cache_clear()
+    _bundled_agent_server_version.cache_clear()
     yield
     get_agent_server_image.cache_clear()
+    _bundled_agent_server_version.cache_clear()
 
 
 def test_get_agent_server_image_derived_from_package_version():
@@ -38,8 +40,6 @@ def test_get_agent_server_image_derived_from_package_version():
         'version',
         return_value=fake_version,
     ):
-        # cache_clear from the fixture forces a re-derivation inside the patched context.
-        get_agent_server_image.cache_clear()
         assert get_agent_server_image() == (
             f'ghcr.io/openhands/agent-server:{fake_version}-python'
         )
@@ -60,66 +60,12 @@ def test_get_agent_server_image_returns_consistent_value_within_process():
         assert version_mock.call_count == 1
 
 
-def test_get_agent_server_image_warns_when_env_vars_set(caplog):
-    """A deprecation warning must fire when either legacy env var is set."""
+def test_get_agent_server_image_honours_custom_repository():
+    """Self-hosted customers can pin to their own image repository via
+    AGENT_SERVER_IMAGE_REPOSITORY; the result must be honoured verbatim,
+    including a non-default tag."""
     fake_version = '1.0.0'
     with patch.object(importlib.metadata, 'version', return_value=fake_version):
-        get_agent_server_image.cache_clear()
-        with caplog.at_level(logging.WARNING, logger=module.__name__):
-            with patch.dict(
-                'os.environ',
-                {'AGENT_SERVER_IMAGE_TAG': '1.31.1-python'},
-                clear=False,
-            ):
-                get_agent_server_image.cache_clear()
-                get_agent_server_image()
-
-    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
-    assert warnings, 'expected a deprecation warning when AGENT_SERVER_IMAGE_TAG is set'
-    assert 'no longer supported' in warnings[0].getMessage()
-
-
-def test_get_agent_server_image_warning_fires_once_per_process(caplog):
-    """The @cache decorator exists specifically to suppress repeated warnings.
-    Verify that contract: many calls produce exactly one warning."""
-    fake_version = '1.0.0'
-    with patch.object(importlib.metadata, 'version', return_value=fake_version):
-        get_agent_server_image.cache_clear()
-        with caplog.at_level(logging.WARNING, logger=module.__name__):
-            with patch.dict(
-                'os.environ',
-                {'AGENT_SERVER_IMAGE_REPOSITORY': 'example.com/agent-server'},
-                clear=False,
-            ):
-                get_agent_server_image.cache_clear()
-                for _ in range(10):
-                    get_agent_server_image()
-
-    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
-    assert len(warnings) == 1, (
-        f'expected exactly one deprecation warning per process, got {len(warnings)}'
-    )
-
-
-def test_get_agent_server_image_no_warning_without_env_vars(caplog):
-    """No env vars, no warning — the deprecation must stay silent on clean installs."""
-    fake_version = '1.0.0'
-    with patch.object(importlib.metadata, 'version', return_value=fake_version):
-        get_agent_server_image.cache_clear()
-        with caplog.at_level(logging.WARNING, logger=module.__name__):
-            with patch.dict('os.environ', {}, clear=True):
-                get_agent_server_image.cache_clear()
-                get_agent_server_image()
-
-    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
-    assert not warnings, 'no deprecation warning should fire on a clean install'
-
-
-def test_get_agent_server_image_ignores_env_vars():
-    """The legacy env vars are no-ops: setting them must not change the URL."""
-    fake_version = '1.0.0'
-    with patch.object(importlib.metadata, 'version', return_value=fake_version):
-        get_agent_server_image.cache_clear()
         with patch.dict(
             'os.environ',
             {
@@ -128,7 +74,64 @@ def test_get_agent_server_image_ignores_env_vars():
             },
             clear=False,
         ):
-            get_agent_server_image.cache_clear()
+            assert get_agent_server_image() == 'example.com/agent-server:9.9.9-python'
+
+
+def test_get_agent_server_image_auto_corrects_stale_canonical_tag():
+    """Regression test for the staging 500.
+
+    A canonical-repo + stale ``-python`` tag (the exact staging failure mode)
+    must be silently re-pinned to the SDK-matching tag, so self-hosted
+    installs keep working when they ship a stale AGENT_SERVER_IMAGE_TAG.
+    """
+    fake_version = '9.9.9'
+    with patch.object(importlib.metadata, 'version', return_value=fake_version):
+        with patch.dict(
+            'os.environ',
+            {
+                'AGENT_SERVER_IMAGE_REPOSITORY': 'ghcr.io/openhands/agent-server',
+                'AGENT_SERVER_IMAGE_TAG': '1.31.1-python',
+            },
+            clear=False,
+        ):
+            assert get_agent_server_image() == (
+                f'ghcr.io/openhands/agent-server:{fake_version}-python'
+            )
+
+
+def test_get_agent_server_image_passes_through_canonical_tag_without_suffix():
+    """Tags without a ``-`` separator (e.g. ``1.32.0``, ``nightly``) must not
+    be silently rewritten by the auto-correct heuristic — that would lose
+    legitimate canonical tags. The post-hoc 500-hint will still flag any
+    actual SDK mismatch downstream."""
+    fake_version = '9.9.9'
+    with patch.object(importlib.metadata, 'version', return_value=fake_version):
+        with patch.dict(
+            'os.environ',
+            {
+                'AGENT_SERVER_IMAGE_REPOSITORY': 'ghcr.io/openhands/agent-server',
+                'AGENT_SERVER_IMAGE_TAG': 'nightly',
+            },
+            clear=False,
+        ):
+            assert get_agent_server_image() == (
+                'ghcr.io/openhands/agent-server:nightly'
+            )
+
+
+def test_get_agent_server_image_passes_through_canonical_repo_with_matching_tag():
+    """Canonical repo + already-matching tag must be a no-op (no warning, no
+    rewrite) — the most common case for fresh installs."""
+    fake_version = '1.2.3'
+    with patch.object(importlib.metadata, 'version', return_value=fake_version):
+        with patch.dict(
+            'os.environ',
+            {
+                'AGENT_SERVER_IMAGE_REPOSITORY': 'ghcr.io/openhands/agent-server',
+                'AGENT_SERVER_IMAGE_TAG': f'{fake_version}-python',
+            },
+            clear=False,
+        ):
             assert get_agent_server_image() == (
                 f'ghcr.io/openhands/agent-server:{fake_version}-python'
             )
@@ -137,7 +140,6 @@ def test_get_agent_server_image_ignores_env_vars():
 def test_is_custom_sandbox_spec_false_for_bundled_default():
     """A spec id equal to the bundled default is, by definition, not custom."""
     with patch.object(importlib.metadata, 'version', return_value='1.0.0'):
-        get_agent_server_image.cache_clear()
         bundled = get_agent_server_image()
         assert is_custom_sandbox_spec(bundled) is False
 
@@ -145,14 +147,31 @@ def test_is_custom_sandbox_spec_false_for_bundled_default():
 def test_is_custom_sandbox_spec_true_for_runtime_api_image():
     """A spec id from runtime-api (any non-default image) must be flagged custom."""
     with patch.object(importlib.metadata, 'version', return_value='1.0.0'):
-        get_agent_server_image.cache_clear()
         assert is_custom_sandbox_spec('ghcr.io/some/custom:0.0.1') is True
+
+
+def test_is_custom_sandbox_spec_true_for_self_hosted_custom_repo():
+    """A self-hosted customer who set AGENT_SERVER_IMAGE_REPOSITORY to a
+    custom repo still has a non-default image; the post-hoc 500-hint must
+    fire for them when their image's SDK doesn't match."""
+    fake_version = '1.0.0'
+    with patch.object(importlib.metadata, 'version', return_value=fake_version):
+        with patch.dict(
+            'os.environ',
+            {
+                'AGENT_SERVER_IMAGE_REPOSITORY': 'example.com/agent-server',
+                'AGENT_SERVER_IMAGE_TAG': '9.9.9-python',
+            },
+            clear=False,
+        ):
+            assert (
+                is_custom_sandbox_spec('example.com/agent-server:9.9.9-python') is True
+            )
 
 
 def test_get_agent_server_image_propagates_package_not_found():
     """openhands-agent-server is a hard runtime dependency; a missing install
-    must surface at import time as PackageNotFoundError, not silently degrade."""
-    get_agent_server_image.cache_clear()
+    must surface as PackageNotFoundError at first call, not silently degrade."""
     with patch.object(
         importlib.metadata,
         'version',
