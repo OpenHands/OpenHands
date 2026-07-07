@@ -3,7 +3,6 @@ import warnings
 from unittest.mock import patch
 
 import pytest
-from fastmcp.mcp_config import MCPConfig
 from pydantic import SecretStr, ValidationError
 
 import openhands.app_server.settings.settings_models as settings_module
@@ -148,26 +147,23 @@ def test_settings_agent_settings_keeps_sdk_mcp_shape_canonical():
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='sdk-model'),
-            mcp_config=MCPConfig(
-                mcpServers={
-                    'sse_server': {
-                        'url': 'https://example.com/sse',
-                        'transport': 'sse',
-                    }
-                },
-            ),
+            mcp_config={
+                'sse_server': {
+                    'url': 'https://example.com/sse',
+                    'transport': 'sse',
+                }
+            },
         ),
     )
 
     mcp_config = settings.agent_settings.mcp_config
     assert mcp_config is not None
-    servers = mcp_config.mcpServers
-    assert 'sse_server' in servers
-    assert servers['sse_server'].transport == 'sse'
-    assert servers['sse_server'].url == 'https://example.com/sse'
+    assert 'sse_server' in mcp_config
+    assert mcp_config['sse_server'].transport == 'sse'
+    assert mcp_config['sse_server'].url == 'https://example.com/sse'
 
     api_values = settings.agent_settings.model_dump(mode='json')
-    assert 'sse_server' in api_values['mcp_config']['mcpServers']
+    assert 'sse_server' in api_values['mcp_config']
 
 
 def test_settings_update_mcp_config():
@@ -192,23 +188,21 @@ def test_settings_update_mcp_config():
 
     mcp = settings.agent_settings.mcp_config
     assert mcp is not None
-    assert 'custom' in mcp.mcpServers
-    assert mcp.mcpServers['custom'].transport == 'http'
-    assert mcp.mcpServers['custom'].url == 'https://example.com/mcp'
+    assert 'custom' in mcp
+    assert mcp['custom'].transport == 'http'
+    assert mcp['custom'].url == 'https://example.com/mcp'
 
 
 def test_settings_update_replaces_existing_mcp_servers():
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='sdk-model'),
-            mcp_config=MCPConfig(
-                mcpServers={
-                    'stale': {
-                        'transport': 'sse',
-                        'url': 'https://example.com/stale',
-                    }
+            mcp_config={
+                'stale': {
+                    'transport': 'sse',
+                    'url': 'https://example.com/stale',
                 }
-            ),
+            },
         )
     )
 
@@ -229,28 +223,28 @@ def test_settings_update_replaces_existing_mcp_servers():
 
     mcp = settings.agent_settings.mcp_config
     assert mcp is not None
-    assert set(mcp.mcpServers) == {'fresh'}
-    assert mcp.mcpServers['fresh'].url == 'https://example.com/fresh'
+    assert set(mcp) == {'fresh'}
+    assert mcp['fresh'].url == 'https://example.com/fresh'
 
 
 def test_settings_update_can_clear_mcp_config():
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
             llm=LLM(model='sdk-model'),
-            mcp_config=MCPConfig(
-                mcpServers={
-                    'custom': {
-                        'transport': 'http',
-                        'url': 'https://example.com/mcp',
-                    }
+            mcp_config={
+                'custom': {
+                    'transport': 'http',
+                    'url': 'https://example.com/mcp',
                 }
-            ),
+            },
         )
     )
 
     settings.update({'agent_settings_diff': {'mcp_config': None}})
 
-    assert settings.agent_settings.mcp_config is None
+    # The SDK normalizes ``None`` to ``{}`` so cleared configs round-trip as an
+    # empty server map rather than ``None``.
+    assert settings.agent_settings.mcp_config == {}
 
 
 def test_settings_update_batch():
@@ -328,14 +322,12 @@ def test_switch_to_profile_preserves_other_agent_settings():
             verification=VerificationSettings(
                 critic_enabled=True, critic_mode='all_actions'
             ),
-            mcp_config=MCPConfig(
-                mcpServers={
-                    's': {
-                        'transport': 'http',
-                        'url': 'https://example.com/mcp',
-                    }
+            mcp_config={
+                's': {
+                    'transport': 'http',
+                    'url': 'https://example.com/mcp',
                 }
-            ),
+            },
         ),
     )
     settings.llm_profiles.save('p', LLM(model='anthropic/claude-opus-4'))
@@ -346,7 +338,7 @@ def test_switch_to_profile_preserves_other_agent_settings():
     assert settings.agent_settings.condenser.max_size == 321
     assert settings.agent_settings.verification.critic_mode == 'all_actions'
     assert settings.agent_settings.mcp_config is not None
-    assert 's' in settings.agent_settings.mcp_config.mcpServers
+    assert 's' in settings.agent_settings.mcp_config
 
 
 def test_delete_active_profile_promotes_remaining_one():
