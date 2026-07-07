@@ -656,11 +656,15 @@ class TestLiveStatusAppConversationService:
         assert llm.usage_id == 'agent'
 
         assert 'default' in mcp_config
-        assert mcp_config['default']['url'] == 'https://test.example.com/mcp/mcp'
-        assert mcp_config['default']['headers'][
+        default_server = mcp_config['default']
+        assert default_server.url == 'https://test.example.com/mcp/mcp'
+        assert default_server.headers[
             'X-OpenHands-ServerConversation-ID'
-        ] == str(self.conversation_id)
-        assert mcp_config['default']['headers']['X-Session-API-Key'] == 'mcp_api_key'
+        ].get_secret_value() == str(self.conversation_id)
+        assert (
+            default_server.headers['X-Session-API-Key'].get_secret_value()
+            == 'mcp_api_key'
+        )
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_uses_user_llm_settings(self):
@@ -830,9 +834,11 @@ class TestLiveStatusAppConversationService:
         assert llm.model == self.mock_user.llm_model
         assert 'default' in mcp_config
 
-        headers = mcp_config['default']['headers']
-        assert headers['X-OpenHands-ServerConversation-ID'] == str(self.conversation_id)
-        assert 'X-Session-API-Key' not in headers
+        default_headers = mcp_config['default'].headers
+        assert default_headers[
+            'X-OpenHands-ServerConversation-ID'
+        ].get_secret_value() == str(self.conversation_id)
+        assert 'X-Session-API-Key' not in default_headers
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_without_web_url(self):
@@ -2311,9 +2317,11 @@ class TestLiveStatusAppConversationService:
 
         assert 'my-custom-server' in mcp_servers
         server_config = mcp_servers['my-custom-server']
-        assert server_config['command'] == 'npx'
-        assert server_config['args'] == ['-y', 'my-package']
-        assert server_config['env'] == {'API_KEY': 'secret'}
+        assert server_config.command == 'npx'
+        assert server_config.args == ['-y', 'my-package']
+        assert {
+            k: v.get_secret_value() for k, v in (server_config.env or {}).items()
+        } == {'API_KEY': 'secret'}
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_merges_system_and_custom_servers(self):
@@ -2378,8 +2386,10 @@ class TestLiveStatusAppConversationService:
 
         ``Agent.mcp_config`` is a ``dict[str, MCPServer]`` — no ``mcpServers``
         wrapper — so ``_configure_llm_and_mcp`` must hand back the flat
-        ``{server_name: server_dict}`` shape directly.
+        ``{server_name: MCPServer}`` shape directly.
         """
+        from openhands.sdk.mcp.config import MCPServer
+
         # Arrange
         self.mock_user_context.get_mcp_api_key.return_value = 'mcp_key'
 
@@ -2392,11 +2402,11 @@ class TestLiveStatusAppConversationService:
         assert 'mcpServers' not in mcp_config
         assert isinstance(mcp_config, dict)
 
-        # Verify each entry is a string server name mapped to a server dict
-        # matching the SDK ``MCPServer`` model_dump shape.
+        # Verify each entry is a string server name mapped to an MCPServer
+        # instance so the SDK ``Agent`` constructor can validate it directly.
         for server_name, server_config in mcp_config.items():
             assert isinstance(server_name, str)
-            assert isinstance(server_config, dict)
+            assert isinstance(server_config, MCPServer)
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_empty_custom_config(self):
@@ -2473,8 +2483,8 @@ class TestLiveStatusAppConversationService:
         mcp_servers = mcp_config
         assert 'simple-server' in mcp_servers
         server_config = mcp_servers['simple-server']
-        assert server_config['command'] == 'node'
-        assert server_config['args'] == ['app.js']
+        assert server_config.command == 'node'
+        assert server_config.args == ['app.js']
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_multiple_servers_same_type(self):
@@ -2547,8 +2557,10 @@ class TestLiveStatusAppConversationService:
         assert 'stdio-server' in mcp_servers
 
         stdio_server = mcp_servers['stdio-server']
-        assert stdio_server['command'] == 'npx'
-        assert stdio_server['env'] == {'TOKEN': 'value'}
+        assert stdio_server.command == 'npx'
+        assert {
+            k: v.get_secret_value() for k, v in (stdio_server.env or {}).items()
+        } == {'TOKEN': 'value'}
 
     # ------------------------------------------------------------------ #
     #  Regression tests: workspace.working_dir == project_dir             #
