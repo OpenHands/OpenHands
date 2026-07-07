@@ -20,8 +20,8 @@ from server.routes.org_invitation_models import (
     PendingInvitationsResponse,
     UserAlreadyMemberError,
 )
-from server.services.smtp_email_service import SMTPEmailService
 from server.services.org_invitation_service import OrgInvitationService
+from server.services.smtp_email_service import SMTPEmailService
 from server.utils.rate_limit_utils import (
     RATE_LIMIT_ORG_INVITATION_USER_SECONDS,
     check_rate_limit_by_user_id,
