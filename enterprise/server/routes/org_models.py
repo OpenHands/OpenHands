@@ -735,7 +735,6 @@ class OrgBudgetThresholdUpdate(BaseModel):
     slack_enabled: bool = False
 
 
-
 SLACK_CHANNEL_MAX_LENGTH = 80
 SLACK_CHANNEL_PATTERN = re.compile(r'^#[a-z0-9][a-z0-9_-]*$')
 
@@ -964,7 +963,6 @@ class AgentUsageData(BaseModel):
     agent_name: str
     conversation_count: int = 0
     total_cost: float = 0.0
-
 
 
 class OrgUsageStats(BaseModel):

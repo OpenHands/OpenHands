@@ -10,7 +10,6 @@ from storage.org_budget_settings import OrgBudgetSettings
 
 from enterprise import run_maintenance_tasks
 
-
 BATCH_SIZE = 25
 
 
@@ -21,8 +20,8 @@ def _chunked(values: list[str], size: int) -> list[list[str]]:
 def enqueue_budget_tasks(batch_size: int = BATCH_SIZE) -> int:
     with session_maker() as session:
         processor_type = (
-            f"{OrgBudgetMaintenanceProcessor.__module__}."
-            f"{OrgBudgetMaintenanceProcessor.__name__}"
+            f'{OrgBudgetMaintenanceProcessor.__module__}.'
+            f'{OrgBudgetMaintenanceProcessor.__name__}'
         )
         existing = (
             session.query(MaintenanceTask)
@@ -36,8 +35,8 @@ def enqueue_budget_tasks(batch_size: int = BATCH_SIZE) -> int:
         )
         if existing:
             logger.info(
-                "Budget maintenance tasks already queued",
-                extra={"count": existing},
+                'Budget maintenance tasks already queued',
+                extra={'count': existing},
             )
             return 0
 
@@ -58,12 +57,12 @@ def enqueue_budget_tasks(batch_size: int = BATCH_SIZE) -> int:
 def main() -> None:
     total = enqueue_budget_tasks()
     if total:
-        logger.info("Enqueued org budget maintenance tasks", extra={"orgs": total})
+        logger.info('Enqueued org budget maintenance tasks', extra={'orgs': total})
     else:
-        logger.info("No org budget settings found; skipping maintenance enqueue")
+        logger.info('No org budget settings found; skipping maintenance enqueue')
 
     asyncio.run(run_maintenance_tasks.main())
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

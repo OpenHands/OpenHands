@@ -21,7 +21,7 @@ class OrgBudgetMaintenanceProcessor(MaintenanceTaskProcessor):
                 try:
                     org_uuid = UUID(org_id)
                 except ValueError:
-                    errors.append({"org_id": org_id, "error": "invalid_uuid"})
+                    errors.append({'org_id': org_id, 'error': 'invalid_uuid'})
                     continue
 
                 try:
@@ -29,13 +29,13 @@ class OrgBudgetMaintenanceProcessor(MaintenanceTaskProcessor):
                     processed += 1
                 except Exception as exc:
                     logger.exception(
-                        "org_budget_maintenance_failed",
-                        extra={"org_id": org_id, "error": str(exc)},
+                        'org_budget_maintenance_failed',
+                        extra={'org_id': org_id, 'error': str(exc)},
                     )
-                    errors.append({"org_id": org_id, "error": str(exc)})
+                    errors.append({'org_id': org_id, 'error': str(exc)})
 
         return {
-            "processed": processed,
-            "error_count": len(errors),
-            "errors": errors[:20],
+            'processed': processed,
+            'error_count': len(errors),
+            'errors': errors[:20],
         }
