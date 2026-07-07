@@ -38,7 +38,7 @@ export function SettingsNavigation({
       <nav
         data-testid="settings-navbar"
         className={cn(
-          "flex flex-col gap-6 transition-transform duration-300 ease-in-out min-h-0 overflow-y-auto",
+          "flex flex-col gap-6 min-h-0 transition-transform duration-300 ease-in-out",
           // Mobile: full screen overlay with dark background matching desktop
           "fixed inset-0 z-50 w-full bg-[#050505] p-4 transform md:transform-none",
           isMobileMenuOpen ? "translate-x-0" : "-translate-x-full",
@@ -64,7 +64,7 @@ export function SettingsNavigation({
 
         {!shouldHideSelector && <OrgSelector />}
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar-always">
           {navigationItems.map((renderedItem, index) => {
             if (renderedItem.type === "header") {
               return (
