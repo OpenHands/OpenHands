@@ -1,7 +1,9 @@
 import asyncio
+import importlib
 import logging
 import os
 from abc import ABC, abstractmethod
+from functools import cache
 
 from openhands.agent_server import env_parser
 from openhands.app_server.errors import SandboxError
@@ -11,10 +13,6 @@ from openhands.app_server.sandbox.sandbox_spec_models import (
 )
 from openhands.app_server.services.injector import Injector
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
-
-# The version of the agent server to use for deployments.
-# Typically this will be the same as the values from the pyproject.toml
-AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:1.32.0-python'
 
 
 class SandboxSpecService(ABC):
@@ -98,19 +96,30 @@ async def resolve_sandbox_spec(
     raise ValueError(f'Sandbox Spec {effective_id!r} not found')
 
 
+@cache  # memoize so the deprecation warning fires once per process
 def get_agent_server_image() -> str:
-    agent_server_image_repository = os.getenv('AGENT_SERVER_IMAGE_REPOSITORY')
-    agent_server_image_tag = os.getenv('AGENT_SERVER_IMAGE_TAG')
-    if agent_server_image_repository and agent_server_image_tag:
-        return f'{agent_server_image_repository}:{agent_server_image_tag}'
-    return AGENT_SERVER_IMAGE
+    if os.getenv('AGENT_SERVER_IMAGE_REPOSITORY') or os.getenv(
+        'AGENT_SERVER_IMAGE_TAG'
+    ):
+        logging.getLogger(__name__).warning(
+            'Environment vars AGENT_SERVER_IMAGE_REPOSITORY/AGENT_SERVER_IMAGE_TAG '
+            'are no longer supported - the agent server image must match the SDK used '
+            'by the app server.'
+        )
+    # openhands-agent-server is a hard runtime dependency of the V1 app server;
+    # if it's not installed the V1 app server has no business starting. Let
+    # PackageNotFoundError surface at import time rather than degrading silently
+    # to a wrong default.
+    version = importlib.metadata.version('openhands-agent-server')
+    return f'ghcr.io/openhands/agent-server:{version}-python'
 
 
-def is_custom_agent_server_image() -> bool:
-    """True only when an admin pinned a custom sandbox image (tag differs from the
-    release-default tag). Default/upgrade installs keep the release tag, never gated."""
-    tag = os.getenv('AGENT_SERVER_IMAGE_TAG')
-    return bool(tag) and tag != AGENT_SERVER_IMAGE.rsplit(':', 1)[-1]
+def is_custom_sandbox_spec(sandbox_spec_id: str) -> bool:
+    """True when the sandbox spec differs from the bundled release default (e.g. a
+    custom image registered via runtime-api). The bundled spec always matches the
+    SDK the app server ships with, so non-default specs are the only ones worth
+    flagging on a sandbox-create failure."""
+    return sandbox_spec_id != get_agent_server_image()
 
 
 # Prefixes for environment variables that should be auto-forwarded to agent-server
