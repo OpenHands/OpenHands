@@ -3,10 +3,6 @@
 # retags the sha-built image with the tag name (type=ref,event=tag)
 # concurrently, so the image tag matches the git tag verbatim — no prefix
 # stripping needed.
-#
-# Deliberately does NOT bump the coupled agent-server pins
-# (global.agentServerImage.tag / image-loader); those stay manual for now and
-# must move with the enterprise-server's pinned SDK version.
 name: Bump chart image tag
 
 on:
