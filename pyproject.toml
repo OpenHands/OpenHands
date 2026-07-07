@@ -141,7 +141,7 @@ runtime = [
 
 [tool.poetry]
 name = "openhands-ai"
-version = "1.9.0"
+version = "1.9.1"
 description = "OpenHands: Code Less, Make More"
 authors = [ "OpenHands" ]
 license = "MIT"
