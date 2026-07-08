@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -18,6 +19,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 )
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
+    StoredConversationCostEvent,
     StoredConversationMetadata,
 )
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
@@ -225,6 +227,39 @@ class TestUpdateConversationStatistics:
         assert stored.prompt_tokens == 200
         # completion_tokens should remain unchanged (not None in stats)
         assert stored.completion_tokens == 0
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_records_cost_delta(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """Test that cost deltas are recorded for stats updates."""
+        conversation_id, stored = v1_conversation_metadata
+
+        stored.accumulated_cost = 0.01
+        await async_session.commit()
+
+        event_timestamp = datetime(2025, 1, 15, tzinfo=timezone.utc)
+        agent_metrics = Metrics(
+            model_name='test-model',
+            accumulated_cost=0.05,
+        )
+        stats = ConversationStats(usage_to_metrics={'agent': agent_metrics})
+
+        await service.update_conversation_statistics(
+            conversation_id, stats, event_timestamp=event_timestamp
+        )
+
+        result = await async_session.execute(
+            select(StoredConversationCostEvent).where(
+                StoredConversationCostEvent.conversation_id == str(conversation_id)
+            )
+        )
+        cost_event = result.scalar_one()
+        assert cost_event.cost_delta == pytest.approx(0.04)
+        occurred_at = cost_event.occurred_at
+        if occurred_at.tzinfo is None:
+            occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+        assert occurred_at == event_timestamp
 
     @pytest.mark.asyncio
     async def test_update_statistics_no_agent_metrics(

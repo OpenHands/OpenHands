@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from storage.openhands_pr import OpenhandsPR
 from storage.org_budget_settings import OrgBudgetSettings
 from storage.org_user_budget_override import OrgUserBudgetOverride
+from storage.stored_conversation_cost_event import StoredConversationCostEvent
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.user import User
@@ -873,6 +874,49 @@ class OrgConversationService:
             StoredConversationMetadataSaas.org_id == org_id,
         ]
 
+        cost_events_subquery = (
+            select(
+                StoredConversationMetadataSaas.user_id.label('user_id'),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                StoredConversationCostEvent.occurred_at >= month_start,
+                                StoredConversationCostEvent.cost_delta,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label('spend_mtd'),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                StoredConversationCostEvent.occurred_at >= year_start,
+                                StoredConversationCostEvent.cost_delta,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label('spend_ytd'),
+            )
+            .select_from(StoredConversationCostEvent)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationCostEvent.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .join(
+                StoredConversationMetadata,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .group_by(StoredConversationMetadataSaas.user_id)
+        ).subquery()
+
         user_query = (
             select(
                 StoredConversationMetadataSaas.user_id,
@@ -892,36 +936,23 @@ class OrgConversationService:
                 func.coalesce(
                     func.sum(StoredConversationMetadata.accumulated_cost), 0
                 ).label('lifetime_spend'),
-                func.coalesce(
-                    func.sum(
-                        case(
-                            (
-                                StoredConversationMetadata.created_at >= month_start,
-                                StoredConversationMetadata.accumulated_cost,
-                            ),
-                            else_=0,
-                        )
-                    ),
-                    0,
-                ).label('spend_mtd'),
-                func.coalesce(
-                    func.sum(
-                        case(
-                            (
-                                StoredConversationMetadata.created_at >= year_start,
-                                StoredConversationMetadata.accumulated_cost,
-                            ),
-                            else_=0,
-                        )
-                    ),
-                    0,
-                ).label('spend_ytd'),
+                func.coalesce(func.max(cost_events_subquery.c.spend_mtd), 0).label(
+                    'spend_mtd'
+                ),
+                func.coalesce(func.max(cost_events_subquery.c.spend_ytd), 0).label(
+                    'spend_ytd'
+                ),
             )
             .select_from(StoredConversationMetadata)
             .join(
                 StoredConversationMetadataSaas,
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
+            )
+            .outerjoin(
+                cost_events_subquery,
+                cost_events_subquery.c.user_id
+                == StoredConversationMetadataSaas.user_id,
             )
             .outerjoin(User, StoredConversationMetadataSaas.user_id == User.id)
             .where(*base_filter)
