@@ -98,8 +98,8 @@ export function OrganizationBudgetTab({
             Organization monthly budget
           </h2>
           <p className="text-sm text-[#8C8C8C]">
-            Track total spend across your org and get alerted before you hit your
-            cap.
+            Track total spend across your org and get alerted before you hit
+            your cap.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -116,12 +116,10 @@ export function OrganizationBudgetTab({
         <div className="flex items-baseline justify-between mb-3">
           <div>
             <span className="text-3xl font-bold text-white">
-              ${
-                currentSpend.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })
-              }
+              {`$${currentSpend.toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}`}
             </span>
             <span className="text-[#8C8C8C] ml-2">
               {monthlyLimitValue
@@ -499,8 +497,8 @@ export function UserOverridesTab({
             User budget overrides
           </h2>
           <p className="text-sm text-[#8C8C8C]">
-            Override the default for individual users — increase, decrease,
-            or disable.
+            Override the default for individual users — increase, decrease, or
+            disable.
           </p>
         </div>
       </div>
@@ -573,7 +571,9 @@ export function UserOverridesTab({
                     <div className="flex items-center gap-3">
                       <Avatar name={user.name} />
                       <div>
-                        <div className="text-white font-medium">{user.name}</div>
+                        <div className="text-white font-medium">
+                          {user.name}
+                        </div>
                         <div className="text-sm text-[#6B6B6B]">
                           {user.email || "-"}
                         </div>
@@ -720,9 +720,7 @@ export function UserOverridesTab({
             </span>
             <button
               type="button"
-              onClick={() =>
-                onPageChange(Math.min(totalPages, usersPage + 1))
-              }
+              onClick={() => onPageChange(Math.min(totalPages, usersPage + 1))}
               disabled={usersPage >= totalPages || isLoading}
               className="px-3 py-1.5 text-sm text-[#8C8C8C] hover:text-white hover:bg-[#262626] rounded transition-colors disabled:opacity-60"
             >

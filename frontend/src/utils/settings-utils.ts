@@ -55,7 +55,6 @@ export const extractSettings = (
   };
 };
 
-
 export const ADMIN_ONLY_SETTINGS_PATHS = new Set<string>([
   "/settings/usage-monitoring",
   "/settings/budgets",

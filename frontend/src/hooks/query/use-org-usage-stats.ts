@@ -12,14 +12,13 @@ export const useOrgUsageStats = ({
   timeWindow,
 }: UseOrgUsageStatsParams = {}) => {
   const { organizationId } = useSelectedOrganizationId();
-  const queryWindow = timeWindow ?? days ?? "default";
-
   return useQuery({
     queryKey: [
       "organizations",
       "usage-stats",
       organizationId,
-      queryWindow,
+      days ?? null,
+      timeWindow ?? null,
     ],
     queryFn: () =>
       organizationService.getUsageStats({

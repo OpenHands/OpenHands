@@ -61,7 +61,10 @@ export function OverviewTab({
           label="Avg Cost / Conversation"
           value={`$${avgCostPerConversation.toFixed(2)}`}
         />
-        <KPICard label={`Total Spend (${timeWindowLabel})`} value={totalSpend} />
+        <KPICard
+          label={`Total Spend (${timeWindowLabel})`}
+          value={totalSpend}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -210,7 +213,10 @@ export function ConversationsTab({
   onSandboxStatusChange: (value: string) => void;
   onPageChange: (page: number) => void;
   onPerPageChange: (value: number) => void;
-  onStopConversation: (conversation: { id: string; title: string | null }) => void;
+  onStopConversation: (conversation: {
+    id: string;
+    title: string | null;
+  }) => void;
   pendingStop: { id: string; title: string | null } | null;
   stopConfirmationText: string;
   onConfirmStop: () => void;
@@ -327,18 +333,25 @@ export function ConversationsTab({
           <tbody>
             {conversationsLoading && (
               <tr>
-                <td colSpan={11} className="px-4 py-8 text-center text-zinc-500">
+                <td
+                  colSpan={11}
+                  className="px-4 py-8 text-center text-zinc-500"
+                >
                   Loading conversations...
                 </td>
               </tr>
             )}
-            {!conversationsLoading && (conversationsData?.items.length ?? 0) === 0 && (
-              <tr>
-                <td colSpan={11} className="px-4 py-8 text-center text-zinc-500">
-                  No conversations found for this time window.
-                </td>
-              </tr>
-            )}
+            {!conversationsLoading &&
+              (conversationsData?.items.length ?? 0) === 0 && (
+                <tr>
+                  <td
+                    colSpan={11}
+                    className="px-4 py-8 text-center text-zinc-500"
+                  >
+                    No conversations found for this time window.
+                  </td>
+                </tr>
+              )}
             {conversationsData?.items.map((conversation) => {
               const isRunning =
                 conversation.execution_status?.toLowerCase() === "running";
@@ -362,7 +375,10 @@ export function ConversationsTab({
                     {formatCost(conversation.accumulated_cost)}
                   </td>
                   <td className="px-4 py-4 text-sm text-zinc-400">
-                    {formatDuration(conversation.created_at, conversation.updated_at)}
+                    {formatDuration(
+                      conversation.created_at,
+                      conversation.updated_at,
+                    )}
                   </td>
                   <td className="px-4 py-4 text-sm text-zinc-400">
                     {formatDateTimeOrDash(conversation.created_at)}
@@ -398,7 +414,9 @@ export function ConversationsTab({
                         aria-label="Stop conversation"
                       >
                         <StopIcon />
-                        {stoppingIds.has(conversation.id) ? "Stopping…" : "Stop"}
+                        {stoppingIds.has(conversation.id)
+                          ? "Stopping…"
+                          : "Stop"}
                       </button>
                     )}
                   </td>
@@ -424,7 +442,9 @@ export function ConversationsTab({
             <button
               type="button"
               onClick={() =>
-                onPageChange(Math.min(conversationTotalPages, conversationPage + 1))
+                onPageChange(
+                  Math.min(conversationTotalPages, conversationPage + 1),
+                )
               }
               disabled={conversationPage >= conversationTotalPages}
               className={`flex items-center gap-1 px-2 py-1 text-sm rounded transition-colors ${
@@ -441,7 +461,9 @@ export function ConversationsTab({
               <span className="text-zinc-500 text-sm">Per page</span>
               <select
                 value={conversationPerPage}
-                onChange={(event) => onPerPageChange(Number(event.target.value))}
+                onChange={(event) =>
+                  onPerPageChange(Number(event.target.value))
+                }
                 className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-sm text-white focus:outline-none"
               >
                 <option value="10">10</option>
@@ -450,7 +472,8 @@ export function ConversationsTab({
               </select>
             </div>
             <span className="text-zinc-500 text-sm">
-              Page {conversationPage} of {conversationTotalPages} · {conversationTotalItems} conversations
+              Page {conversationPage} of {conversationTotalPages} ·{" "}
+              {conversationTotalItems} conversations
             </span>
           </div>
         </div>
@@ -539,14 +562,20 @@ export function UsersTab({
           <tbody>
             {userUsageLoading && (
               <tr>
-                <td colSpan={11} className="px-4 py-8 text-center text-zinc-500">
+                <td
+                  colSpan={11}
+                  className="px-4 py-8 text-center text-zinc-500"
+                >
                   Loading user usage...
                 </td>
               </tr>
             )}
             {!userUsageLoading && (userUsage?.items.length ?? 0) === 0 && (
               <tr>
-                <td colSpan={11} className="px-4 py-8 text-center text-zinc-500">
+                <td
+                  colSpan={11}
+                  className="px-4 py-8 text-center text-zinc-500"
+                >
                   No user usage data available yet.
                 </td>
               </tr>
@@ -558,7 +587,9 @@ export function UsersTab({
               >
                 <td className="px-4 py-4">
                   <div className="text-white text-sm font-medium">
-                    {user.user_name ?? user.user_email?.split("@")[0] ?? "Unknown"}
+                    {user.user_name ??
+                      user.user_email?.split("@")[0] ??
+                      "Unknown"}
                   </div>
                   <div className="text-xs text-zinc-500">
                     {user.user_email || "-"}
