@@ -7,6 +7,14 @@ with warnings.catch_warnings():
     import litellm
     from litellm import LlmProviders, ProviderConfigManager, get_llm_provider
 
+# Register OmniRoute as an OpenAI-compatible provider with LiteLLM.
+# The SDK wrapper routes `omniroute/<model>` through the standard OpenAI
+# completion handler, using the caller-provided `api_base`.
+if 'omniroute' not in litellm.provider_list:
+    litellm.provider_list.append('omniroute')
+if 'omniroute' not in litellm.openai_compatible_providers:
+    litellm.openai_compatible_providers.append('omniroute')
+
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 # ---------------------------------------------------------------------------
@@ -66,6 +74,14 @@ _BARE_ANTHROPIC_MODELS: set[str] = set(_SDK_ANTHROPIC)
 _BARE_MISTRAL_MODELS: set[str] = set(_SDK_MISTRAL)
 
 DEFAULT_OPENHANDS_MODEL = 'openhands/minimax-m2.7'
+
+# OmniRoute default API base URL (local OpenAI-compatible proxy).
+OMNIROUTE_DEFAULT_API_BASE = 'http://localhost:20128/v1'
+
+# Hardcoded OmniRoute models that do not require a running server to discover.
+OMNIROUTE_MODELS = [
+    'omniroute/auto',
+]
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +189,11 @@ def get_provider_api_base(model: str) -> str | None:
     Returns:
         The API base URL if found, None otherwise.
     """
+    # OmniRoute is a local OpenAI-compatible proxy; LiteLLM has no built-in
+    # API base for it, so return the canonical default immediately.
+    if model.startswith('omniroute/'):
+        return OMNIROUTE_DEFAULT_API_BASE
+
     # First try get_api_base (handles OpenAI, Gemini with specific URL patterns)
     try:
         api_base = litellm.get_api_base(model, {})
@@ -289,7 +310,10 @@ def get_supported_llm_models(
 
     # Assign canonical provider prefixes to bare LiteLLM names, then dedupe.
     all_models = (
-        openhands_models + CLARIFAI_MODELS + [_assign_provider(m) for m in model_list]
+        openhands_models
+        + CLARIFAI_MODELS
+        + OMNIROUTE_MODELS
+        + [_assign_provider(m) for m in model_list]
     )
     unique_models = sorted(set(all_models))
 
