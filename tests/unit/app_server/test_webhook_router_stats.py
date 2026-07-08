@@ -256,7 +256,10 @@ class TestUpdateConversationStatistics:
         )
         cost_event = result.scalar_one()
         assert cost_event.cost_delta == pytest.approx(0.04)
-        assert cost_event.occurred_at == event_timestamp
+        occurred_at = cost_event.occurred_at
+        if occurred_at.tzinfo is None:
+            occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+        assert occurred_at == event_timestamp
 
     @pytest.mark.asyncio
     async def test_update_statistics_no_agent_metrics(

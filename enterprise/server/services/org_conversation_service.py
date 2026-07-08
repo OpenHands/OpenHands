@@ -917,7 +917,6 @@ class OrgConversationService:
             .group_by(StoredConversationMetadataSaas.user_id)
         ).subquery()
 
-
         user_query = (
             select(
                 StoredConversationMetadataSaas.user_id,
@@ -937,12 +936,12 @@ class OrgConversationService:
                 func.coalesce(
                     func.sum(StoredConversationMetadata.accumulated_cost), 0
                 ).label('lifetime_spend'),
-                func.coalesce(
-                    func.max(cost_events_subquery.c.spend_mtd), 0
-                ).label('spend_mtd'),
-                func.coalesce(
-                    func.max(cost_events_subquery.c.spend_ytd), 0
-                ).label('spend_ytd'),
+                func.coalesce(func.max(cost_events_subquery.c.spend_mtd), 0).label(
+                    'spend_mtd'
+                ),
+                func.coalesce(func.max(cost_events_subquery.c.spend_ytd), 0).label(
+                    'spend_ytd'
+                ),
             )
             .select_from(StoredConversationMetadata)
             .join(
@@ -952,9 +951,9 @@ class OrgConversationService:
             )
             .outerjoin(
                 cost_events_subquery,
-                cost_events_subquery.c.user_id == StoredConversationMetadataSaas.user_id,
+                cost_events_subquery.c.user_id
+                == StoredConversationMetadataSaas.user_id,
             )
-
             .outerjoin(User, StoredConversationMetadataSaas.user_id == User.id)
             .where(*base_filter)
             .group_by(
