@@ -443,6 +443,8 @@ async def keycloak_callback(
         response = RedirectResponse(verification_redirect_url, status_code=302)
         return response
 
+    await UserStore.record_login(user_id)
+
     # default to github IDP for now.
     # TODO: remove default once Keycloak is updated universally with the new attribute.
     idp: str = user_info.identity_provider or ProviderType.GITHUB.value
@@ -465,9 +467,7 @@ async def keycloak_callback(
         else True
     )
 
-    logger.debug(
-        f'keycloakAccessToken: {keycloak_access_token}, keycloakUserId: {user_id}'
-    )
+    logger.debug('keycloak_user_authenticated', extra={'user_id': user_id})
 
     # Server-side identity — defer to background to avoid blocking auth response
     consented = user.user_consents_to_analytics is True
@@ -893,7 +893,12 @@ async def accept_tos(request: Request):
 
     if not access_token or not refresh_token or not user_id:
         logger.warning(
-            f'accept_tos: One or more is None: access_token {access_token}, refresh_token {refresh_token}, user_id {user_id}'
+            'accept_tos: missing authentication state',
+            extra={
+                'has_access_token': bool(access_token),
+                'has_refresh_token': bool(refresh_token),
+                'user_id': user_id,
+            },
         )
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,

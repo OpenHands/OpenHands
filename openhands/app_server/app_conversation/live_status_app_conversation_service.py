@@ -3,7 +3,6 @@ import importlib.metadata
 import io
 import json
 import logging
-import os
 import zipfile
 from collections import defaultdict
 from collections.abc import Mapping
@@ -14,7 +13,6 @@ from uuid import UUID, uuid4
 
 import httpx
 from fastapi import Request
-from packaging.version import InvalidVersion, Version
 from pydantic import Field, SecretStr, TypeAdapter
 
 from openhands.agent_server.models import (
@@ -92,8 +90,7 @@ from openhands.app_server.sandbox.sandbox_models import (
 from openhands.app_server.sandbox.sandbox_service import SandboxService
 from openhands.app_server.sandbox.sandbox_spec_service import (
     SandboxSpecService,
-    get_agent_server_image,
-    is_custom_agent_server_image,
+    is_custom_sandbox_spec,
 )
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
@@ -383,12 +380,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             assert sandbox is not None
             agent_server_url = self._get_agent_server_url(sandbox)
 
-            # Custom sandbox images can ship an incompatible openhands-sdk; fail
-            # fast with a clear error instead of an opaque 500 on create.
-            await self._verify_agent_server_version(
-                agent_server_url, sandbox.session_api_key
-            )
-
             # Mirror the user's LLM profiles into the sandbox so the agent's
             # built-in switch_llm tool can resolve them (in SaaS profiles live
             # on the app-server, not the sandbox filesystem). Before conversation
@@ -482,12 +473,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             except httpx.HTTPStatusError as exc:
                 # A custom image that 500s on create is usually an openhands-sdk
                 # mismatch /server_info couldn't reveal; add an actionable hint.
-                if is_custom_agent_server_image():
+                if is_custom_sandbox_spec(sandbox.sandbox_spec_id):
                     expected = _expected_sdk_version()
                     raise SandboxError(
                         f'Conversation create failed (HTTP '
                         f'{exc.response.status_code}) on custom sandbox image '
-                        f'{get_agent_server_image()}. Verify its openhands-sdk '
+                        f'{sandbox.sandbox_spec_id}. Verify its openhands-sdk '
                         f'matches this release'
                         + (f' ({expected})' if expected else '')
                         + '; rebuild/re-pin the image if not.'
@@ -910,57 +901,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             timeout=self.sandbox_startup_timeout,
             poll_interval=self.sandbox_startup_poll_frequency,
             httpx_client=self.httpx_client,
-        )
-
-    async def _verify_agent_server_version(
-        self, agent_server_url: str, session_api_key: str | None
-    ) -> None:
-        """Fail fast with a clear error when an admin-pinned custom sandbox image
-        runs a different openhands-sdk minor than this app, instead of the opaque
-        500 the agent-server returns on create. Best-effort: only custom images are
-        checked, and we fail open on anything we can't read."""
-        if os.getenv('OH_SKIP_AGENT_SERVER_VERSION_CHECK', '').strip().lower() in (
-            '1',
-            'true',
-            'yes',
-        ):
-            return
-        # Proxy-default images move with the release; only custom-pinned can drift.
-        if not is_custom_agent_server_image():
-            return
-        expected = _expected_sdk_version()
-        if not expected:
-            return
-        try:
-            headers = {'X-Session-API-Key': session_api_key} if session_api_key else {}
-            resp = await self.httpx_client.get(
-                f'{agent_server_url.rstrip("/")}/server_info',
-                headers=headers,
-                timeout=30.0,
-            )
-            resp.raise_for_status()
-            reported = str(resp.json().get('sdk_version', '')).strip()
-        except Exception:
-            # 404 (image predates /server_info) or transient errors: can't verify,
-            # so don't block — the create POST still surfaces a custom-image hint.
-            _logger.warning(
-                'Could not read /server_info to verify agent-server SDK version',
-                exc_info=True,
-            )
-            return
-        # Endpoint present but metadata missing -> nothing to compare against.
-        if reported in ('', 'unknown'):
-            return
-        try:
-            if Version(reported).release[:2] == Version(expected).release[:2]:
-                return
-        except InvalidVersion:
-            return
-        raise SandboxError(
-            f'Sandbox image {get_agent_server_image()} runs openhands-sdk '
-            f'{reported}, but this release requires {expected}. Rebuild/re-pin the '
-            'custom sandbox image to a matching openhands-sdk, or set '
-            'OH_SKIP_AGENT_SERVER_VERSION_CHECK=1 to bypass.'
         )
 
     async def _seed_sandbox_profiles(

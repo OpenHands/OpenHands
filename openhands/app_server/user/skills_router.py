@@ -12,6 +12,9 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 import openhands
+from openhands.app_server.app_conversation.skill_loader import (
+    parse_marketplace_source as _parse_marketplace_source,
+)
 from openhands.app_server.config import depends_user_context
 from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
@@ -190,56 +193,6 @@ async def search_skills(
     )
 
     return SkillPage(items=page, next_page_id=next_page_id)
-
-
-def _parse_marketplace_source(source: str) -> tuple[str, str]:
-    """Parse marketplace source into provider and repo path.
-
-    Args:
-        source: Marketplace source (e.g., 'github:owner/repo', 'gitlab:owner/repo',
-                'https://github.com/owner/repo.git')
-
-    Returns:
-        Tuple of (provider, repo_path) where provider is 'github', 'gitlab', etc.
-    """
-    # Handle github:owner/repo format
-    if source.startswith('github:'):
-        return ('github', source[7:].lstrip('/'))
-    if source.startswith('gitlab:'):
-        return ('gitlab', source[7:].lstrip('/'))
-    if source.startswith('bitbucket:'):
-        return ('bitbucket', source[10:].lstrip('/'))
-    if source.startswith('azure-devops:'):
-        return ('azure-devops', source[13:].lstrip('/'))
-
-    # Handle URL format
-    lower = source.lower()
-    if 'github.com' in lower:
-        path = source.split('github.com', 1)[1].lstrip('/').rstrip('/')
-        # Remove .git suffix if present (use removesuffix to avoid character-by-character stripping)
-        if path.endswith('.git'):
-            path = path[:-4]
-        return ('github', path)
-    if 'gitlab.com' in lower or 'gitlab' in lower:
-        path = (
-            source.split(('gitlab.com' if 'gitlab.com' in lower else 'gitlab'), 1)[1]
-            .lstrip('/')
-            .rstrip('/')
-        )
-        if path.endswith('.git'):
-            path = path[:-4]
-        return ('gitlab', path)
-    if 'bitbucket.org' in lower:
-        path = source.split('bitbucket.org', 1)[1].lstrip('/').rstrip('/')
-        if path.endswith('.git'):
-            path = path[:-4]
-        return ('bitbucket', path)
-
-    # Default to github
-    path = source.rstrip('/')
-    if path.endswith('.git'):
-        path = path[:-4]
-    return ('github', path)
 
 
 async def _clone_marketplace_repo(
