@@ -160,12 +160,15 @@ def _get_feature_flags() -> WebClientFeatureFlags:
 
     Reads ENABLE_BILLING, HIDE_LLM_SETTINGS, ENABLE_JIRA, ENABLE_JIRA_DC,
     ENABLE_LINEAR, HIDE_USERS_PAGE, HIDE_BILLING_PAGE, HIDE_INTEGRATIONS_PAGE,
-    HIDE_PERSONAL_WORKSPACES, ENABLE_ACP, and OH_ENABLE_ONBOARDING from
-    environment. Each flag is True only if the corresponding env var is
-    exactly 'true', otherwise False.
+    HIDE_PERSONAL_WORKSPACES, and OH_ENABLE_ONBOARDING from environment. Each
+    flag is True only if the corresponding env var is exactly 'true', otherwise
+    False.
 
-    OH_ALLOW_USER_LLM_CONFIGURATION is the exception: it defaults to 'true'
-    when unset so SaaS and existing installs keep the BYOK editing UI.
+    OH_ALLOW_USER_LLM_CONFIGURATION and ENABLE_ACP are the exceptions: they
+    default to 'true' when unset. OH_ALLOW_USER_LLM_CONFIGURATION keeps the
+    BYOK editing UI visible; ENABLE_ACP keeps the ACP agent configuration UI
+    (Settings > Agent) visible on SaaS and existing installs, matching Agent
+    Canvas. Set ENABLE_ACP=false to hide it.
     """
     return WebClientFeatureFlags(
         enable_billing=os.getenv('ENABLE_BILLING', 'false') == 'true',
@@ -182,7 +185,7 @@ def _get_feature_flags() -> WebClientFeatureFlags:
             'OH_ALLOW_USER_LLM_CONFIGURATION', 'true'
         )
         == 'true',
-        enable_acp=os.getenv('ENABLE_ACP', 'false') == 'true',
+        enable_acp=os.getenv('ENABLE_ACP', 'true') == 'true',
         enable_onboarding=os.getenv('OH_ENABLE_ONBOARDING', 'false') == 'true',
         enable_automations=os.getenv('ENABLE_AUTOMATIONS', 'true') == 'true',
     )

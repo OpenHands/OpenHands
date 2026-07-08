@@ -33,7 +33,10 @@ class WebClientFeatureFlags(BaseModel):
     # existing installs are unaffected. UI-level only — previously saved BYOK
     # settings keep working at runtime.
     allow_user_llm_configuration: bool = True
-    enable_acp: bool = False
+    # Defaults to True so the ACP agent configuration UI (Settings > Agent) is
+    # visible on SaaS and existing installs, matching Agent Canvas. Set
+    # ENABLE_ACP=false to hide it. UI-level only.
+    enable_acp: bool = True
     deployment_mode: DeploymentMode | None = None
     enable_onboarding: bool = False
     enable_automations: bool = True

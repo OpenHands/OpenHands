@@ -303,6 +303,41 @@ class TestGetFeatureFlags:
             result = _get_feature_flags()
             assert result.enable_automations is True
 
+    def test_enable_acp_true_by_default(self):
+        """When ENABLE_ACP is unset, enable_acp defaults to True.
+
+        Keeps the ACP agent configuration UI (Settings > Agent) visible on
+        SaaS and existing installs, matching Agent Canvas.
+        """
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.pop('ENABLE_ACP', None)
+            result = _get_feature_flags()
+            assert result.enable_acp is True
+
+    def test_enable_acp_false_when_env_var_false(self):
+        """When ENABLE_ACP is 'false', enable_acp flag is False."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {'ENABLE_ACP': 'false'}):
+            result = _get_feature_flags()
+            assert result.enable_acp is False
+
+    def test_enable_acp_true_when_env_var_true(self):
+        """When ENABLE_ACP is 'true', enable_acp flag is True."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {'ENABLE_ACP': 'true'}):
+            result = _get_feature_flags()
+            assert result.enable_acp is True
+
 
 class TestGetJiraDcServiceAccountConfig:
     """Test cases for Jira DC service-account web-client config helpers."""
