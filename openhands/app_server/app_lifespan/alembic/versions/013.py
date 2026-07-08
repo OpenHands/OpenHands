@@ -34,7 +34,7 @@ def upgrade() -> None:
         # Create index for efficient dashboard queries
         batch_op.create_index(
             'ix_conversation_metadata_execution_status',
-            'execution_status',
+            ['execution_status'],
             unique=False,
         )
 
