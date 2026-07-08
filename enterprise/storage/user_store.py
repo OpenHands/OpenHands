@@ -2,6 +2,7 @@
 
 import asyncio
 import uuid
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 from uuid import UUID
@@ -200,6 +201,19 @@ class UserStore:
             await session.refresh(user)
             await session.refresh(user, ['org_members'])  # load org_members
             return user
+
+    @staticmethod
+    async def record_login(user_id: str) -> None:
+        """Record a successful login for a user."""
+        async with a_session_maker() as session:
+            user = await session.get(User, uuid.UUID(user_id))
+            if not user:
+                return
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            if user.first_login_at is None:
+                user.first_login_at = now
+            user.last_login_at = now
+            await session.commit()
 
     @staticmethod
     def _get_redis_client():

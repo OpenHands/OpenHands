@@ -49,7 +49,7 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
   },
   {
     icon: <FiBarChart2 size={22} />,
-    to: "/settings/admin-dashboard",
+    to: "/settings/usage-monitoring",
     text: "SETTINGS$NAV_ADMIN_DASHBOARD",
     section: "org",
   },

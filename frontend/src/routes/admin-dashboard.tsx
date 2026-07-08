@@ -1,6 +1,5 @@
-import React from "react";
-import { AdminDashboard } from "#/components/features/admin-dashboard/admin-dashboard";
+import { Navigate } from "react-router";
 
 export default function AdminDashboardPage() {
-  return <AdminDashboard />;
+  return <Navigate to="/settings/usage-monitoring" replace />;
 }

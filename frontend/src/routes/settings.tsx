@@ -39,7 +39,7 @@ const SAAS_ONLY_PATHS = [
   "/settings/org-defaults",
   "/settings/org-defaults/condenser",
   "/settings/org-defaults/verification",
-  "/settings/admin-dashboard",
+  "/settings/usage-monitoring",
 ];
 
 const ORG_WIDE_BADGE_PATHS = new Set<string>([
@@ -61,6 +61,10 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
 
   const isSaas = config?.app_mode === "saas";
   const featureFlags = config?.feature_flags;
+
+  if (pathname === "/settings/admin-dashboard") {
+    return redirect(isSaas ? "/settings/usage-monitoring" : "/settings");
+  }
 
   // Step 2: Check SAAS_ONLY_PATHS for OSS mode (no user data required)
   if (!isSaas && SAAS_ONLY_PATHS.includes(pathname)) {
@@ -118,7 +122,7 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
     pathname === "/settings/billing" ||
     pathname === "/settings/org" ||
     pathname === "/settings/org-members" ||
-    pathname === "/settings/admin-dashboard"
+    pathname === "/settings/usage-monitoring"
   ) {
     const user = await getActiveOrganizationUser();
 
@@ -174,8 +178,8 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
       }
     }
 
-    // Admin Dashboard route protection: only admins and owners can access
-    if (pathname === "/settings/admin-dashboard") {
+    // Usage & Monitoring route protection: only admins and owners can access
+    if (pathname === "/settings/usage-monitoring") {
       const role = user?.role ?? "member";
       if (!user || (role !== "admin" && role !== "owner") || isPersonalOrg) {
         return redirect("/settings");
