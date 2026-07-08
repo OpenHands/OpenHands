@@ -5,6 +5,7 @@ focusing on basic CRUD operations, search functionality, filtering, pagination,
 and batch operations using SQLite as a mock database.
 """
 
+import asyncio
 from datetime import datetime, timezone
 from typing import AsyncGenerator
 from uuid import uuid4
@@ -610,6 +611,71 @@ class TestSQLAppConversationInfoService:
             created_at__gte=start_time, created_at__lt=end_time
         )
         assert count == 2
+
+    @pytest.mark.asyncio
+    async def test_concurrent_saves_for_same_conversation_id_do_not_duplicate_key(
+        self, tmp_path
+    ):
+        """Concurrent startup/webhook saves for one conversation should be safe."""
+        engine = create_async_engine(
+            f'sqlite+aiosqlite:///{tmp_path / "conversation-race.db"}',
+            echo=False,
+        )
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        async_session_maker = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
+        conversation_id = uuid4()
+        now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+        async with (
+            async_session_maker() as session_one,
+            async_session_maker() as session_two,
+        ):
+            service_one = SQLAppConversationInfoService(
+                db_session=session_one,
+                user_context=SpecifyUserContext(user_id=None),
+            )
+            service_two = SQLAppConversationInfoService(
+                db_session=session_two,
+                user_context=SpecifyUserContext(user_id=None),
+            )
+            first_info = AppConversationInfo(
+                id=conversation_id,
+                created_by_user_id=None,
+                sandbox_id='sandbox-start-path',
+                title='Started from live status path',
+                created_at=now,
+                updated_at=now,
+            )
+            second_info = AppConversationInfo(
+                id=conversation_id,
+                created_by_user_id=None,
+                sandbox_id='sandbox-webhook-path',
+                title='Started from webhook path',
+                created_at=now,
+                updated_at=now,
+            )
+
+            await asyncio.gather(
+                service_one.save_app_conversation_info(first_info),
+                service_two.save_app_conversation_info(second_info),
+            )
+
+        async with async_session_maker() as verify_session:
+            verify_service = SQLAppConversationInfoService(
+                db_session=verify_session,
+                user_context=SpecifyUserContext(user_id=None),
+            )
+            saved_info = await verify_service.get_app_conversation_info(conversation_id)
+
+        await engine.dispose()
+
+        assert saved_info is not None
+        assert saved_info.title in {first_info.title, second_info.title}
+        assert saved_info.sandbox_id in {first_info.sandbox_id, second_info.sandbox_id}
 
     @pytest.mark.asyncio
     async def test_search_excludes_sub_conversations_by_default(

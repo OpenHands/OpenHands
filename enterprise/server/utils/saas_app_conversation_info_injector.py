@@ -1,11 +1,14 @@
 """Enterprise injector for SQLAppConversationInfoService with SAAS filtering."""
 
+import logging
 from datetime import datetime
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 from uuid import UUID
 
 from fastapi import Request
 from sqlalchemy import ColumnElement, func, select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.user import User
@@ -25,6 +28,8 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
 from openhands.app_server.errors import AuthError
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import ADMIN
+
+logger = logging.getLogger(__name__)
 
 
 class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
@@ -75,7 +80,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         user_id_str = await self.user_context.get_user_id()
         if not user_id_str:
             # Secure default: no user means no access, not "show everything"
-            raise AuthError('User authentication required')
+            raise AuthError("User authentication required")
 
         user_id_uuid = UUID(user_id_str)
         query = query.where(StoredConversationMetadataSaas.user_id == user_id_uuid)
@@ -97,8 +102,8 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         user.current_org_id) when the user is authenticated via SAAS auth,
         otherwise falls back to the user's persisted current_org_id.
         """
-        user_auth = getattr(self.user_context, 'user_auth', None)
-        if user_auth is not None and hasattr(user_auth, 'get_effective_org_id'):
+        user_auth = getattr(self.user_context, "user_auth", None)
+        if user_auth is not None and hasattr(user_auth, "get_effective_org_id"):
             return await user_auth.get_effective_org_id()
         user = await self._get_current_user()
         return user.current_org_id if user else None
@@ -111,7 +116,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadata.conversation_version == "V1")
         )
         return await self._apply_user_and_org_filter(query)
 
@@ -124,7 +129,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadata.conversation_version == "V1")
         )
         return await self._apply_user_and_org_filter(query)
 
@@ -226,7 +231,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadata.conversation_version == "V1")
         )
 
         # Apply user and organization filtering
@@ -261,7 +266,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         conditions: list[ColumnElement[bool]] = []
         if title__contains is not None:
             conditions.append(
-                StoredConversationMetadata.title.like(f'%{title__contains}%')
+                StoredConversationMetadata.title.like(f"%{title__contains}%")
             )
 
         if created_at__gte is not None:
@@ -382,35 +387,85 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             # This intentionally trumps the effective org because resolver
             # conversations are authored against a webhook-resolved org,
             # not the caller's session org.
-            resolver_org_id = getattr(self.user_context, 'resolver_org_id', None)
+            resolver_org_id = getattr(self.user_context, "resolver_org_id", None)
             if resolver_org_id is not None:
                 org_id = resolver_org_id
 
-            # Check if SAAS metadata already exists
-            saas_query = select(StoredConversationMetadataSaas).where(
-                StoredConversationMetadataSaas.conversation_id == str(info.id)
+            await self._upsert_saas_conversation_metadata(
+                conversation_id=str(info.id), user_id=user_id_uuid, org_id=org_id
             )
-            saas_result = await self.db_session.execute(saas_query)
-            existing_saas_metadata = saas_result.scalar_one_or_none()
-
-            # org_id is not asserted: it falls back to user.current_org_id, which changes when the user switches orgs.
-            assert (
-                existing_saas_metadata is None
-                or existing_saas_metadata.user_id == user_id_uuid
-            )
-
-            if not existing_saas_metadata:
-                # Create new SAAS metadata with the determined org_id
-                saas_metadata = StoredConversationMetadataSaas(
-                    conversation_id=str(info.id),
-                    user_id=user_id_uuid,
-                    org_id=org_id,
-                )
-                self.db_session.add(saas_metadata)
-
             await self.db_session.commit()
 
         return info
+
+    async def _upsert_saas_conversation_metadata(
+        self, conversation_id: str, user_id: UUID, org_id: UUID
+    ) -> None:
+        existing_saas_metadata = await self._get_saas_conversation_metadata(
+            conversation_id
+        )
+        if existing_saas_metadata is not None:
+            self._log_saas_metadata_user_mismatch(
+                conversation_id=conversation_id,
+                existing_user_id=existing_saas_metadata.user_id,
+                incoming_user_id=user_id,
+            )
+            return
+
+        values = {
+            "conversation_id": conversation_id,
+            "user_id": user_id,
+            "org_id": org_id,
+        }
+        dialect_name = self.db_session.get_bind().dialect.name
+        insert_stmt: Any
+        if dialect_name == "postgresql":
+            insert_stmt = postgresql_insert(StoredConversationMetadataSaas).values(
+                **values
+            )
+        elif dialect_name == "sqlite":
+            insert_stmt = sqlite_insert(StoredConversationMetadataSaas).values(**values)
+        else:
+            self.db_session.add(StoredConversationMetadataSaas(**values))
+            return
+
+        await self.db_session.execute(
+            insert_stmt.on_conflict_do_nothing(
+                index_elements=[StoredConversationMetadataSaas.conversation_id]
+            )
+        )
+
+        saved_saas_metadata = await self._get_saas_conversation_metadata(
+            conversation_id
+        )
+        if saved_saas_metadata is not None:
+            self._log_saas_metadata_user_mismatch(
+                conversation_id=conversation_id,
+                existing_user_id=saved_saas_metadata.user_id,
+                incoming_user_id=user_id,
+            )
+
+    async def _get_saas_conversation_metadata(
+        self, conversation_id: str
+    ) -> StoredConversationMetadataSaas | None:
+        saas_query = select(StoredConversationMetadataSaas).where(
+            StoredConversationMetadataSaas.conversation_id == conversation_id
+        )
+        saas_result = await self.db_session.execute(saas_query)
+        return saas_result.scalar_one_or_none()
+
+    def _log_saas_metadata_user_mismatch(
+        self, conversation_id: str, existing_user_id: UUID, incoming_user_id: UUID
+    ) -> None:
+        if existing_user_id == incoming_user_id:
+            return
+        logger.warning(
+            "Ignoring conflicting SaaS conversation metadata owner for "
+            "conversation %s: existing user %s, incoming user %s",
+            conversation_id,
+            existing_user_id,
+            incoming_user_id,
+        )
 
     def _to_info_with_user_id(
         self,

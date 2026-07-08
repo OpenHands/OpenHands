@@ -21,7 +21,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import AsyncGenerator, cast
+from typing import Any, AsyncGenerator, cast
 from uuid import UUID
 
 from fastapi import Request
@@ -33,6 +33,8 @@ from sqlalchemy import (
     func,
     select,
 )
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
@@ -352,45 +354,72 @@ class SQLAppConversationInfoService(AppConversationInfoService):
     async def save_app_conversation_info(
         self, info: AppConversationInfo
     ) -> AppConversationInfo:
+        values = self._stored_conversation_metadata_values(info)
+        await self._upsert_stored_conversation_metadata(values)
+        await self.db_session.commit()
+        return info
+
+    def _stored_conversation_metadata_values(
+        self, info: AppConversationInfo
+    ) -> dict[str, object]:
         metrics = info.metrics or MetricsSnapshot()
         usage = metrics.accumulated_token_usage or TokenUsage()
 
-        stored = StoredConversationMetadata(
-            conversation_id=str(info.id),
-            selected_repository=info.selected_repository,
-            selected_branch=info.selected_branch,
-            git_provider=info.git_provider.value if info.git_provider else None,
-            title=info.title,
-            last_updated_at=info.updated_at,
-            created_at=info.created_at,
-            trigger=info.trigger.value if info.trigger else None,
-            pr_number=info.pr_number or [],
-            # Cost and token metrics
-            accumulated_cost=metrics.accumulated_cost,
-            prompt_tokens=usage.prompt_tokens,
-            completion_tokens=usage.completion_tokens,
-            total_tokens=0,
-            max_budget_per_task=metrics.max_budget_per_task,
-            cache_read_tokens=usage.cache_read_tokens,
-            cache_write_tokens=usage.cache_write_tokens,
-            context_window=usage.context_window,
-            per_turn_token=usage.per_turn_token,
-            llm_model=info.llm_model,
-            agent_kind=info.agent_kind,
-            conversation_version='V1',
-            sandbox_id=info.sandbox_id,
-            parent_conversation_id=(
+        return {
+            'conversation_id': str(info.id),
+            'selected_repository': info.selected_repository,
+            'selected_branch': info.selected_branch,
+            'git_provider': info.git_provider.value if info.git_provider else None,
+            'title': info.title,
+            'last_updated_at': info.updated_at,
+            'created_at': info.created_at,
+            'trigger': info.trigger.value if info.trigger else None,
+            'pr_number': info.pr_number or [],
+            'accumulated_cost': metrics.accumulated_cost,
+            'prompt_tokens': usage.prompt_tokens,
+            'completion_tokens': usage.completion_tokens,
+            'total_tokens': 0,
+            'max_budget_per_task': metrics.max_budget_per_task,
+            'cache_read_tokens': usage.cache_read_tokens,
+            'cache_write_tokens': usage.cache_write_tokens,
+            'reasoning_tokens': usage.reasoning_tokens,
+            'context_window': usage.context_window,
+            'per_turn_token': usage.per_turn_token,
+            'llm_model': info.llm_model,
+            'agent_kind': info.agent_kind,
+            'conversation_version': 'V1',
+            'sandbox_id': info.sandbox_id,
+            'parent_conversation_id': (
                 str(info.parent_conversation_id)
                 if info.parent_conversation_id
                 else None
             ),
-            public=info.public,
-            tags=info.tags if info.tags else None,
-        )
+            'public': info.public,
+            'tags': info.tags if info.tags else None,
+        }
 
-        await self.db_session.merge(stored)
-        await self.db_session.commit()
-        return info
+    async def _upsert_stored_conversation_metadata(
+        self, values: dict[str, object]
+    ) -> None:
+        dialect_name = self.db_session.get_bind().dialect.name
+        insert_stmt: Any
+        if dialect_name == 'postgresql':
+            insert_stmt = postgresql_insert(StoredConversationMetadata).values(**values)
+        elif dialect_name == 'sqlite':
+            insert_stmt = sqlite_insert(StoredConversationMetadata).values(**values)
+        else:
+            await self.db_session.merge(StoredConversationMetadata(**values))
+            return
+
+        update_values = {
+            key: insert_stmt.excluded[key] for key in values if key != 'conversation_id'
+        }
+        await self.db_session.execute(
+            insert_stmt.on_conflict_do_update(
+                index_elements=[StoredConversationMetadata.conversation_id],
+                set_=update_values,
+            )
+        )
 
     async def update_conversation_statistics(
         self, conversation_id: UUID, stats: ConversationStats
