@@ -21,6 +21,7 @@ import { getSelectedOrganizationIdFromStore } from "#/stores/selected-organizati
 import { rolePermissions } from "#/utils/org/permissions";
 import { isBillingHidden } from "#/utils/org/billing-visibility";
 import {
+  ADMIN_ONLY_SETTINGS_PATHS,
   isSettingsPageHidden,
   getFirstAvailablePath,
 } from "#/utils/settings-utils";
@@ -52,6 +53,8 @@ const ORG_WIDE_BADGE_PATHS = new Set<string>([
 export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const url = new URL(request.url);
   const { pathname } = url;
+
+  const isAdminOnlyPath = ADMIN_ONLY_SETTINGS_PATHS.has(pathname);
 
   // Step 1: Get config first (needed for all checks, no user data required)
   const config = await queryClient.fetchQuery<WebClientConfig>({
@@ -123,8 +126,7 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
     pathname === "/settings/billing" ||
     pathname === "/settings/org" ||
     pathname === "/settings/org-members" ||
-    pathname === "/settings/usage-monitoring" ||
-    pathname === "/settings/budgets"
+    isAdminOnlyPath
   ) {
     const user = await getActiveOrganizationUser();
 
@@ -180,16 +182,8 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
       }
     }
 
-    // Usage & Monitoring route protection: only admins and owners can access
-    if (pathname === "/settings/usage-monitoring") {
-      const role = user?.role ?? "member";
-      if (!user || (role !== "admin" && role !== "owner") || isPersonalOrg) {
-        return redirect("/settings");
-      }
-    }
-
-    // Budgets route protection: only admins and owners can access
-    if (pathname === "/settings/budgets") {
+    // Admin-only settings route protection
+    if (isAdminOnlyPath) {
       const role = user?.role ?? "member";
       if (!user || (role !== "admin" && role !== "owner") || isPersonalOrg) {
         return redirect("/settings");

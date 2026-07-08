@@ -12,19 +12,19 @@ export const useOrgUsageStats = ({
   timeWindow,
 }: UseOrgUsageStatsParams = {}) => {
   const { organizationId } = useSelectedOrganizationId();
-  const resolvedDays = timeWindow ? undefined : (days ?? 7);
+  const queryWindow = timeWindow ?? days ?? "default";
 
   return useQuery({
     queryKey: [
       "organizations",
       "usage-stats",
       organizationId,
-      timeWindow ?? resolvedDays,
+      queryWindow,
     ],
     queryFn: () =>
       organizationService.getUsageStats({
         orgId: organizationId!,
-        days: resolvedDays,
+        days,
         timeWindow,
       }),
     enabled: !!organizationId,
