@@ -27828,6 +27828,38 @@
     "zh-CN": "邀请链接已复制",
     "zh-TW": "邀請連結已複製"
   },
-  "CONVERSATION$FAILED_TO_LOAD_CONVERSATIONS": "Failed to load conversations. Please try again.",
-  "CONVERSATION$RETRY": "Retry"
+  "CONVERSATION$FAILED_TO_LOAD_CONVERSATIONS": {
+    "ar": "فشل تحميل المحادثات. يرجى المحاولة مرة أخرى.",
+    "ca": "No s'han pogut carregar les converses. Torneu-ho a provar.",
+    "de": "Unterhaltungen konnten nicht geladen werden. Bitte versuchen Sie es erneut.",
+    "en": "Failed to load conversations. Please try again.",
+    "es": "No se pudieron cargar las conversaciones. Inténtalo de nuevo.",
+    "fr": "Échec du chargement des conversations. Veuillez réessayer.",
+    "it": "Impossibile caricare le conversazioni. Riprova.",
+    "ja": "会話を読み込めませんでした。もう一度お試しください。",
+    "ko-KR": "대화를 불러오지 못했습니다. 다시 시도해 주세요.",
+    "no": "Kunne ikke laste inn samtaler. Prøv igjen.",
+    "pt": "Falha ao carregar as conversas. Tente novamente.",
+    "tr": "Konuşmalar yüklenemedi. Lütfen tekrar deneyin.",
+    "uk": "Не вдалося завантажити розмови. Спробуйте ще раз.",
+    "zh-CN": "加载对话失败,请重试。",
+    "zh-TW": "載入對話失敗,請再試一次。"
+  },
+  "CONVERSATION$RETRY": {
+    "ar": "إعادة المحاولة",
+    "ca": "Torna-ho a provar",
+    "de": "Erneut versuchen",
+    "en": "Retry",
+    "es": "Reintentar",
+    "fr": "Réessayer",
+    "it": "Riprova",
+    "ja": "再試行",
+    "ko-KR": "다시 시도",
+    "no": "Prøv igjen",
+    "pt": "Tentar novamente",
+    "tr": "Tekrar dene",
+    "uk": "Повторити спробу",
+    "zh-CN": "重试",
+    "zh-TW": "重試"
+  }
 }
