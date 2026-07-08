@@ -49,6 +49,11 @@ If you are running headless or CLI workflows, you can prepare local defaults wit
 make setup-config
 ```
 
+For OpenAI-compatible providers, enter the provider model name and base URL when
+prompted. For example, TokenLab can be configured with a model such as
+`openai/claude-sonnet-5`, your TokenLab API key, and
+`https://api.tokenlab.sh/v1` as the base URL.
+
 **Note on Alternative Models:**
 See [our documentation](https://docs.openhands.dev/openhands/usage/llms/llms) for recommended models.
 
