@@ -13,6 +13,7 @@ export const MAP_PROVIDER = {
   anyscale: "Anyscale",
   databricks: "Databricks",
   ollama: "Ollama",
+  omniroute: "OmniRoute",
   perlexity: "Perplexity AI",
   friendliai: "FriendliAI",
   groq: "Groq",

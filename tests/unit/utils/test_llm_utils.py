@@ -79,6 +79,10 @@ class TestAssignProvider:
             'totally-made-up-model-xyz'
         )
 
+    def test_omniroute_prefixed_model_unchanged(self):
+        """OmniRoute models with a provider prefix are returned untouched."""
+        assert _assign_provider('omniroute/auto') == 'omniroute/auto'
+
     def test_unverified_bare_models_use_litellm_fallback(self, monkeypatch):
         """Unverified bare names reach the dropdown via LiteLLM's routing."""
         monkeypatch.setattr(llm_utils, '_BARE_OPENAI_MODELS', set())
@@ -158,6 +162,11 @@ class TestGetProviderApiBase:
             get_provider_api_base('mistral/mistral-large-latest')
             == 'https://api.mistral.ai/v1'
         )
+
+    def test_omniroute_model_returns_default_api_base(self):
+        """Test that OmniRoute models return the default local API base URL."""
+        assert get_provider_api_base('omniroute/auto') == 'http://localhost:20128/v1'
+        assert get_provider_api_base('omniroute/gpt-5.5') == 'http://localhost:20128/v1'
 
     def test_unknown_model_returns_none(self):
         """Test that unknown models return None."""
