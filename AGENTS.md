@@ -184,9 +184,6 @@ The `enterprise/` directory contains additional functionality that extends the o
   the SMTP-driven UI email-enabled checks (SMTP_HOST).
 - Billing and subscription management (Stripe)
 - Telemetry and analytics (PostHog, custom metrics framework)
-- Email services: Resend remains in `enterprise/server/services/email_service.py`; SMTPEmailService lives in
-  `enterprise/server/services/smtp_email_service.py` and is used for org invitations/budget alerts plus
-  the SMTP-driven UI email-enabled checks (SMTP_HOST).
 
 ### Enterprise Development Setup
 

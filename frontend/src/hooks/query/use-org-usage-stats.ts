@@ -4,29 +4,15 @@ import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 
 interface UseOrgUsageStatsParams {
   days?: number;
-  timeWindow?: string;
 }
 
-export const useOrgUsageStats = ({
-  days,
-  timeWindow,
-}: UseOrgUsageStatsParams = {}) => {
+export const useOrgUsageStats = ({ days = 7 }: UseOrgUsageStatsParams = {}) => {
   const { organizationId } = useSelectedOrganizationId();
-  const resolvedDays = timeWindow ? undefined : (days ?? 7);
 
   return useQuery({
-    queryKey: [
-      "organizations",
-      "usage-stats",
-      organizationId,
-      timeWindow ?? resolvedDays,
-    ],
+    queryKey: ["organizations", "usage-stats", organizationId, days],
     queryFn: () =>
-      organizationService.getUsageStats({
-        orgId: organizationId!,
-        days: resolvedDays,
-        timeWindow,
-      }),
+      organizationService.getUsageStats({ orgId: organizationId!, days }),
     enabled: !!organizationId,
   });
 };
