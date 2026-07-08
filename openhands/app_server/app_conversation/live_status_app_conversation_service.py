@@ -3,7 +3,6 @@ import importlib.metadata
 import io
 import json
 import logging
-import os
 import zipfile
 from collections import defaultdict
 from collections.abc import Mapping
@@ -14,7 +13,6 @@ from uuid import UUID, uuid4
 
 import httpx
 from fastapi import Request
-from packaging.version import InvalidVersion, Version
 from pydantic import Field, SecretStr, TypeAdapter
 
 from openhands.agent_server.models import (
@@ -92,8 +90,7 @@ from openhands.app_server.sandbox.sandbox_models import (
 from openhands.app_server.sandbox.sandbox_service import SandboxService
 from openhands.app_server.sandbox.sandbox_spec_service import (
     SandboxSpecService,
-    get_agent_server_image,
-    is_custom_agent_server_image,
+    is_custom_sandbox_spec,
 )
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
@@ -127,6 +124,7 @@ from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.llm.llm_profile_store import PROFILE_NAME_REGEX
+from openhands.sdk.mcp.config import MCPServer
 from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ACPAgentSettings
@@ -382,12 +380,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             assert sandbox is not None
             agent_server_url = self._get_agent_server_url(sandbox)
 
-            # Custom sandbox images can ship an incompatible openhands-sdk; fail
-            # fast with a clear error instead of an opaque 500 on create.
-            await self._verify_agent_server_version(
-                agent_server_url, sandbox.session_api_key
-            )
-
             # Mirror the user's LLM profiles into the sandbox so the agent's
             # built-in switch_llm tool can resolve them (in SaaS profiles live
             # on the app-server, not the sandbox filesystem). Before conversation
@@ -481,12 +473,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             except httpx.HTTPStatusError as exc:
                 # A custom image that 500s on create is usually an openhands-sdk
                 # mismatch /server_info couldn't reveal; add an actionable hint.
-                if is_custom_agent_server_image():
+                if is_custom_sandbox_spec(sandbox.sandbox_spec_id):
                     expected = _expected_sdk_version()
                     raise SandboxError(
                         f'Conversation create failed (HTTP '
                         f'{exc.response.status_code}) on custom sandbox image '
-                        f'{get_agent_server_image()}. Verify its openhands-sdk '
+                        f'{sandbox.sandbox_spec_id}. Verify its openhands-sdk '
                         f'matches this release'
                         + (f' ({expected})' if expected else '')
                         + '; rebuild/re-pin the image if not.'
@@ -911,57 +903,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             httpx_client=self.httpx_client,
         )
 
-    async def _verify_agent_server_version(
-        self, agent_server_url: str, session_api_key: str | None
-    ) -> None:
-        """Fail fast with a clear error when an admin-pinned custom sandbox image
-        runs a different openhands-sdk minor than this app, instead of the opaque
-        500 the agent-server returns on create. Best-effort: only custom images are
-        checked, and we fail open on anything we can't read."""
-        if os.getenv('OH_SKIP_AGENT_SERVER_VERSION_CHECK', '').strip().lower() in (
-            '1',
-            'true',
-            'yes',
-        ):
-            return
-        # Proxy-default images move with the release; only custom-pinned can drift.
-        if not is_custom_agent_server_image():
-            return
-        expected = _expected_sdk_version()
-        if not expected:
-            return
-        try:
-            headers = {'X-Session-API-Key': session_api_key} if session_api_key else {}
-            resp = await self.httpx_client.get(
-                f'{agent_server_url.rstrip("/")}/server_info',
-                headers=headers,
-                timeout=30.0,
-            )
-            resp.raise_for_status()
-            reported = str(resp.json().get('sdk_version', '')).strip()
-        except Exception:
-            # 404 (image predates /server_info) or transient errors: can't verify,
-            # so don't block — the create POST still surfaces a custom-image hint.
-            _logger.warning(
-                'Could not read /server_info to verify agent-server SDK version',
-                exc_info=True,
-            )
-            return
-        # Endpoint present but metadata missing -> nothing to compare against.
-        if reported in ('', 'unknown'):
-            return
-        try:
-            if Version(reported).release[:2] == Version(expected).release[:2]:
-                return
-        except InvalidVersion:
-            return
-        raise SandboxError(
-            f'Sandbox image {get_agent_server_image()} runs openhands-sdk '
-            f'{reported}, but this release requires {expected}. Rebuild/re-pin the '
-            'custom sandbox image to a matching openhands-sdk, or set '
-            'OH_SKIP_AGENT_SERVER_VERSION_CHECK=1 to bypass.'
-        )
-
     async def _seed_sandbox_profiles(
         self, agent_server_url: str, session_api_key: str | None
     ) -> None:
@@ -1259,7 +1200,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
 
     async def _add_system_mcp_servers(
-        self, mcp_servers: dict[str, Any], conversation_id: UUID
+        self, mcp_servers: dict[str, MCPServer], conversation_id: UUID
     ) -> None:
         """Add system-generated MCP servers (default OpenHands server).
 
@@ -1274,20 +1215,22 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not self.web_url:
             return
 
-        # Add default OpenHands MCP server (includes Tavily proxy if configured)
-        mcp_url = f'{self.web_url}/mcp/mcp'
-        mcp_servers['default'] = {
-            'url': mcp_url,
-            'headers': {'X-OpenHands-ServerConversation-ID': str(conversation_id)},
-        }
+        headers = {'X-OpenHands-ServerConversation-ID': SecretStr(str(conversation_id))}
 
         # Add API key if available
         mcp_api_key = await self.user_context.get_mcp_api_key()
         if mcp_api_key:
-            mcp_servers['default']['headers']['X-Session-API-Key'] = mcp_api_key
+            headers['X-Session-API-Key'] = SecretStr(mcp_api_key)
+
+        # Add default OpenHands MCP server (includes Tavily proxy if configured)
+        mcp_url = f'{self.web_url}/mcp/mcp'
+        mcp_servers['default'] = MCPServer(
+            url=mcp_url,
+            headers=headers,
+        )
 
     def _merge_custom_mcp_config(
-        self, mcp_servers: dict[str, Any], user: UserInfo
+        self, mcp_servers: dict[str, MCPServer], user: UserInfo
     ) -> None:
         """Merge custom MCP configuration from user settings.
 
@@ -1298,22 +1241,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if isinstance(user.agent_settings, ACPAgentSettings):
             return
 
-        sdk_mcp = user.agent_settings.mcp_config
-        if not sdk_mcp or not sdk_mcp.mcpServers:
+        user_mcp = user.agent_settings.mcp_config
+        if not user_mcp:
             return
 
         try:
-            count = len(sdk_mcp.mcpServers)
+            count = len(user_mcp)
             _logger.info(
                 f'Loading custom MCP config from user settings: {count} servers'
             )
-
-            for name, server in sdk_mcp.mcpServers.items():
-                mcp_servers[name] = server.model_dump(exclude_none=True)
-
-            _logger.info(
-                f'Successfully merged custom MCP config: added {count} servers'
-            )
+            mcp_servers.update(user_mcp)
 
         except Exception as e:
             _logger.error(
@@ -1327,7 +1264,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
     async def _configure_llm_and_mcp(
         self, user: UserInfo, llm_model: str | None, conversation_id: UUID
-    ) -> tuple[LLM, dict]:
+    ) -> tuple[LLM, dict[str, MCPServer]]:
         """Configure LLM and MCP (Model Context Protocol) settings.
 
         Args:
@@ -1336,12 +1273,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             conversation_id: Conversation ID forwarded to the OpenHands MCP server
 
         Returns:
-            Tuple of (configured LLM instance, MCP config dictionary)
+            Tuple of (configured LLM instance, MCP config dict in the flat
+            ``{server_name: server_dict}`` shape the SDK 1.31.x
+            ``Agent.mcp_config`` field expects)
         """
         # Configure LLM
         llm = self._configure_llm(user, llm_model)
 
-        # Configure MCP - SDK expects format: {'mcpServers': {'server_name': {...}}}
         mcp_servers: dict[str, Any] = {}
 
         # Add system-generated servers (default MCP server with Tavily proxy)
@@ -1350,17 +1288,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Merge custom servers from user settings
         self._merge_custom_mcp_config(mcp_servers, user)
 
-        # Wrap in the mcpServers structure required by the SDK
-        mcp_config = {'mcpServers': mcp_servers} if mcp_servers else {}
-        _logger.info(f'Final MCP configuration: {sanitize_config(mcp_config)}')
-
-        return llm, mcp_config
+        return llm, mcp_servers
 
     @staticmethod
     def _apply_server_agent_overrides(
         agent: Agent,
         agent_type: AgentType,
-        mcp_config: dict,
         conversation_id: UUID,
         user_id: str | None,
     ) -> Agent:
@@ -1731,13 +1664,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 agent_definitions = list(get_registered_agent_definitions())
 
         # --- build AgentSettings and create agent ---------------------------
-        from fastmcp.mcp_config import MCPConfig
-
         configured_agent_settings = user.agent_settings.model_copy(
             update={
                 'llm': llm,
                 'tools': tools,
-                'mcp_config': MCPConfig(**mcp_config) if mcp_config else None,
+                'mcp_config': mcp_config if mcp_config else {},
                 'agent_context': AgentContext(
                     system_message_suffix=effective_suffix,
                     secrets=secrets,
@@ -1770,7 +1701,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
 
         agent = self._apply_server_agent_overrides(
-            agent, agent_type, mcp_config, conversation_id, user.id
+            agent, agent_type, conversation_id, user.id
         )
 
         # --- hooks (require remote workspace; must precede request build) -----

@@ -13,7 +13,7 @@ from storage.org import Org
 from storage.org_member import OrgMember
 from storage.role import Role
 from storage.user import User
-from storage.user_store import UserStore
+from storage.user_store import SuperAdminRevokeResult, UserStore
 
 from openhands.app_server.settings.settings_models import Settings
 
@@ -2073,3 +2073,184 @@ async def test_get_first_owner_in_org_returns_none_for_empty_org(async_session_m
         result = await UserStore.get_first_owner_in_org(org_id)
 
     assert result is None
+
+
+# --- Tests for super-admin grant / revoke / list ---
+
+
+async def _seed_org(async_session_maker) -> uuid.UUID:
+    """Create a shared org so seeded users satisfy the non-null FK."""
+    org_id = uuid.uuid4()
+    async with async_session_maker() as session:
+        session.add(Org(id=org_id, name=f'org_{org_id}'))
+        await session.commit()
+    return org_id
+
+
+async def _seed_user(
+    async_session_maker, org_id: uuid.UUID, role_id: int | None, email: str
+) -> str:
+    """Insert a User row with the given super ``role_id`` and return its id."""
+    user_id = uuid.uuid4()
+    async with async_session_maker() as session:
+        session.add(
+            User(
+                id=user_id,
+                current_org_id=org_id,
+                role_id=role_id,
+                email=email,
+            )
+        )
+        await session.commit()
+    return str(user_id)
+
+
+def _patch_stores(async_session_maker):
+    return (
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.role_store.a_session_maker', async_session_maker),
+    )
+
+
+@pytest.mark.asyncio
+async def test_grant_super_admin_promotes_user(async_session_maker):
+    """Granting sets ``user.role_id`` to the admin role row."""
+    admin_role_id = await _seed_admin_role(async_session_maker)
+    org_id = await _seed_org(async_session_maker)
+    user_id = await _seed_user(async_session_maker, org_id, None, 'u@example.com')
+
+    p1, p2 = _patch_stores(async_session_maker)
+    with p1, p2:
+        user = await UserStore.grant_super_admin(user_id)
+
+    assert user is not None
+    assert user.role_id == admin_role_id
+
+
+@pytest.mark.asyncio
+async def test_grant_super_admin_is_idempotent(async_session_maker):
+    """Granting to an existing super admin is a no-op success."""
+    admin_role_id = await _seed_admin_role(async_session_maker)
+    org_id = await _seed_org(async_session_maker)
+    user_id = await _seed_user(
+        async_session_maker, org_id, admin_role_id, 'u@example.com'
+    )
+
+    p1, p2 = _patch_stores(async_session_maker)
+    with p1, p2:
+        user = await UserStore.grant_super_admin(user_id)
+        admins = await UserStore.list_super_admins()
+
+    assert user is not None
+    assert user.role_id == admin_role_id
+    assert len(admins) == 1
+
+
+@pytest.mark.asyncio
+async def test_grant_super_admin_user_not_found(async_session_maker):
+    """Granting to a non-existent user returns ``None``."""
+    await _seed_admin_role(async_session_maker)
+
+    p1, p2 = _patch_stores(async_session_maker)
+    with p1, p2:
+        user = await UserStore.grant_super_admin(str(uuid.uuid4()))
+
+    assert user is None
+
+
+@pytest.mark.asyncio
+async def test_list_super_admins_only_returns_super_admins(async_session_maker):
+    """Only users whose ``role_id`` is the admin role are returned."""
+    admin_role_id = await _seed_admin_role(async_session_maker)
+    org_id = await _seed_org(async_session_maker)
+    a = await _seed_user(async_session_maker, org_id, admin_role_id, 'a@example.com')
+    await _seed_user(async_session_maker, org_id, None, 'b@example.com')
+
+    p1, p2 = _patch_stores(async_session_maker)
+    with p1, p2:
+        admins = await UserStore.list_super_admins()
+
+    assert [str(u.id) for u in admins] == [a]
+
+
+@pytest.mark.asyncio
+async def test_revoke_super_admin_success_when_another_exists(async_session_maker):
+    """Revoking one of several super admins clears their role."""
+    admin_role_id = await _seed_admin_role(async_session_maker)
+    org_id = await _seed_org(async_session_maker)
+    a = await _seed_user(async_session_maker, org_id, admin_role_id, 'a@example.com')
+    await _seed_user(async_session_maker, org_id, admin_role_id, 'b@example.com')
+
+    p1, p2 = _patch_stores(async_session_maker)
+    with p1, p2:
+        result = await UserStore.revoke_super_admin(a)
+        admins = await UserStore.list_super_admins()
+
+    assert result is SuperAdminRevokeResult.REVOKED
+    assert a not in [str(u.id) for u in admins]
+    assert len(admins) == 1
+
+
+@pytest.mark.asyncio
+async def test_revoke_self_allowed_when_another_super_admin_exists(
+    async_session_maker,
+):
+    """A super admin may demote themselves while another still exists."""
+    admin_role_id = await _seed_admin_role(async_session_maker)
+    org_id = await _seed_org(async_session_maker)
+    me = await _seed_user(async_session_maker, org_id, admin_role_id, 'me@example.com')
+    await _seed_user(async_session_maker, org_id, admin_role_id, 'other@example.com')
+
+    p1, p2 = _patch_stores(async_session_maker)
+    with p1, p2:
+        # ``me`` removing ``me`` is just a revoke of the caller's own id.
+        result = await UserStore.revoke_super_admin(me)
+
+    assert result is SuperAdminRevokeResult.REVOKED
+
+
+@pytest.mark.asyncio
+async def test_revoke_last_super_admin_is_refused(async_session_maker):
+    """The only remaining super admin cannot be removed."""
+    admin_role_id = await _seed_admin_role(async_session_maker)
+    org_id = await _seed_org(async_session_maker)
+    only = await _seed_user(
+        async_session_maker, org_id, admin_role_id, 'only@example.com'
+    )
+
+    p1, p2 = _patch_stores(async_session_maker)
+    with p1, p2:
+        result = await UserStore.revoke_super_admin(only)
+        admins = await UserStore.list_super_admins()
+
+    assert result is SuperAdminRevokeResult.LAST_SUPER_ADMIN
+    assert [str(u.id) for u in admins] == [only]
+
+
+@pytest.mark.asyncio
+async def test_revoke_non_super_admin_reports_not_super_admin(async_session_maker):
+    """Revoking a user who isn't a super admin is reported distinctly."""
+    admin_role_id = await _seed_admin_role(async_session_maker)
+    org_id = await _seed_org(async_session_maker)
+    await _seed_user(async_session_maker, org_id, admin_role_id, 'a@example.com')
+    plain = await _seed_user(async_session_maker, org_id, None, 'plain@example.com')
+
+    p1, p2 = _patch_stores(async_session_maker)
+    with p1, p2:
+        result = await UserStore.revoke_super_admin(plain)
+
+    assert result is SuperAdminRevokeResult.NOT_SUPER_ADMIN
+
+
+@pytest.mark.asyncio
+async def test_revoke_unknown_user_reports_not_found(async_session_maker):
+    """Revoking a non-existent user is reported as not found."""
+    admin_role_id = await _seed_admin_role(async_session_maker)
+    org_id = await _seed_org(async_session_maker)
+    await _seed_user(async_session_maker, org_id, admin_role_id, 'a@example.com')
+
+    p1, p2 = _patch_stores(async_session_maker)
+    with p1, p2:
+        result = await UserStore.revoke_super_admin(str(uuid.uuid4()))
+
+    assert result is SuperAdminRevokeResult.NOT_FOUND

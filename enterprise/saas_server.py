@@ -54,6 +54,7 @@ from server.routes.org_profiles import router as org_profiles_router  # noqa: E4
 from server.routes.orgs import org_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.service import service_router  # noqa: E402
+from server.routes.super_admins import super_admin_router  # noqa: E402
 from server.routes.user_app_settings import user_app_settings_router  # noqa: E402
 from server.routes.user_provisioning import (  # noqa: E402
     user_provisioning_router,
@@ -153,6 +154,9 @@ if AZURE_DEVOPS_CLIENT_ID:
 base_app.include_router(api_keys_router)  # Add routes for API key management
 base_app.include_router(service_router)  # Add routes for internal service API
 base_app.include_router(org_router)  # Add routes for organization management
+base_app.include_router(
+    super_admin_router
+)  # Add routes for instance-level super-admin management
 if USER_PROVISIONING_ENABLED:
     # Privileged admin route — registered only when the
     # USER_PROVISIONING_ENABLED env var (driven by Helm value

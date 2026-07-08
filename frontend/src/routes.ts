@@ -37,6 +37,7 @@ export default [
       route("api-keys", "routes/api-keys.tsx"),
       route("org-members", "routes/manage-organization-members.tsx"),
       route("org", "routes/manage-org.tsx"),
+      route("usage-monitoring", "routes/usage-monitoring.tsx"),
       route("admin-dashboard", "routes/admin-dashboard.tsx"),
     ]),
     route("conversations/:conversationId", "routes/conversation.tsx"),
