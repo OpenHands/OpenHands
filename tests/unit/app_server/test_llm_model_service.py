@@ -45,6 +45,17 @@ class TestDefaultLLMModelServiceSearchModels:
         assert 'clarifai' in providers
 
     @pytest.mark.asyncio
+    async def test_includes_omniroute_models(self):
+        service = DefaultLLMModelService()
+        result = await service.search_llm_models(limit=10000)
+
+        providers = {m.provider for m in result.items}
+        assert 'omniroute' in providers
+
+        names = {m.name for m in result.items if m.provider == 'omniroute'}
+        assert 'auto' in names
+
+    @pytest.mark.asyncio
     async def test_filters_by_query(self):
         service = DefaultLLMModelService()
         result = await service.search_llm_models(query='gpt', limit=10000)
@@ -230,6 +241,15 @@ class TestDefaultLLMModelServiceSearchProviders:
         assert len(result.items) > 0
         for p in result.items:
             assert 'openai' in p.name.lower()
+
+    @pytest.mark.asyncio
+    async def test_includes_omniroute_provider(self):
+        service = DefaultLLMModelService()
+        result = await service.search_providers(query='omniroute', limit=10000)
+
+        assert len(result.items) > 0
+        for p in result.items:
+            assert 'omniroute' in p.name.lower()
 
     @pytest.mark.asyncio
     async def test_filters_by_verified_eq(self):
