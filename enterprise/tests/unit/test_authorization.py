@@ -1327,7 +1327,11 @@ class TestSuperRolePermissions:
         """
         assert SUPER_ROLE_PERMISSIONS[RoleName.OWNER] == frozenset()
         assert SUPER_ROLE_PERMISSIONS[RoleName.ADMIN] == frozenset(
-            [Permission.CREATE_ORGANIZATION, Permission.PROVISION_USER]
+            [
+                Permission.CREATE_ORGANIZATION,
+                Permission.PROVISION_USER,
+                Permission.MANAGE_SUPER_ADMINS,
+            ]
         )
         assert SUPER_ROLE_PERMISSIONS[RoleName.MEMBER] == frozenset()
 

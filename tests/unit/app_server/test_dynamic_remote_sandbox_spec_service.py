@@ -193,6 +193,37 @@ class TestFetchSpecs:
         # is the intended signal for get_default_sandbox_spec to fall back too.
         assert service._name_to_spec == {}
 
+    async def test_empty_configs_fallback_uses_bundled_default_not_env_override(
+        self,
+    ):
+        """Regression test for the staging 500.
+
+        When runtime-api returns empty configs, the fallback spec's image id
+        must equal the bundled default (whatever ``get_agent_server_image()``
+        currently returns), NOT whatever the legacy AGENT_SERVER_IMAGE_TAG env
+        var happens to say. Otherwise an admin pinning a stale tag would
+        cause a sandbox-create 500.
+        """
+        # Pin the bundled default to a specific image, regardless of what's
+        # installed in the test env, so we can assert against it directly.
+        # Patch via the module attribute (not patch.object on the function
+        # itself) because the @cache decorator wraps __call__ and intercepts
+        # the standard mock hook.
+        expected_image = 'ghcr.io/openhands/agent-server:9.9.9-python'
+
+        ctx, _ = _make_async_client_mock(_make_http_response({'configs': []}))
+        service = _make_service()
+
+        with patch(
+            'openhands.app_server.sandbox.remote_sandbox_spec_service.get_agent_server_image',
+            return_value=expected_image,
+        ):
+            with patch('httpx.AsyncClient', return_value=ctx):
+                specs = await service._fetch_specs()
+
+        assert len(specs) == 1
+        assert specs[0].id == expected_image
+
     async def test_fallback_specs_are_cached(self):
         """Default fallback specs must be cached like normal results."""
         from openhands.app_server.sandbox.remote_sandbox_spec_service import (

@@ -458,7 +458,7 @@ export function AdminDashboard() {
   if (!orgId) {
     return (
       <div className="p-8 text-center text-[#8C8C8C]">
-        Please select an organization to view the admin dashboard.
+        Please select an organization to view usage & monitoring.
       </div>
     );
   }

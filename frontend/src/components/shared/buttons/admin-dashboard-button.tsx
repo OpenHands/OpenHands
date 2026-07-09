@@ -25,19 +25,19 @@ export function AdminDashboardButton() {
     return null;
   }
 
-  const isActive = location.pathname.startsWith("/settings/admin-dashboard");
+  const isActive = location.pathname.startsWith("/settings/usage-monitoring");
 
   return (
     <Link
-      to="/settings/admin-dashboard"
+      to="/settings/usage-monitoring"
       className={cn(
         "flex items-center justify-center w-[34px] h-[34px] rounded-lg transition-colors",
         isActive
           ? "bg-[#262626] text-white"
           : "text-[#8C8C8C] hover:text-white hover:bg-[#1E1E1E]",
       )}
-      title="Admin Dashboard"
-      aria-label="Admin Dashboard"
+      title="Usage & Monitoring"
+      aria-label="Usage & Monitoring"
     >
       <svg
         width="20"

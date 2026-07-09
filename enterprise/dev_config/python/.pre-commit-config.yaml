@@ -50,8 +50,8 @@ repos:
           - ./
           - stripe==11.5.0
           - pygithub==2.6.1
-          - openhands-sdk==1.25.0
-          - openhands-tools==1.25.0
+          - openhands-sdk==1.31.2
+          - openhands-tools==1.31.2
           - sqlalchemy>=2.0
         # Use -p (package) to avoid dual module name conflict when using MYPYPATH
         # MYPYPATH=enterprise allows resolving bare imports like "from integrations.xxx"
