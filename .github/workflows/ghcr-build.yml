@@ -1,4 +1,8 @@
-# Workflow that builds and pushes the OpenHands app and enterprise Docker images to ghcr.io.
+# Workflow that builds and pushes the OpenHands app and enterprise Docker images
+# to ghcr.io, then cuts releases via release-please. Ordering the release jobs
+# after the image builds guarantees a release tag is only pushed once the images
+# for its commit exist, so tag-triggered consumers (tag-image.yml,
+# bump-chart.yml) never see a tag whose images aren't published yet.
 # Per-image build logic lives in .github/workflows/_build-image.yml.
 name: Docker
 
@@ -8,6 +12,7 @@ on:
       - main
       - "saas-rel-*"
       - "oss-rel-*"
+      - "release/**"
   pull_request:
   workflow_dispatch:
     inputs:
@@ -42,6 +47,44 @@ jobs:
       provenance: true
       sbom: true
       buildx-driver-opts: network=host
+
+  # Release-please for the app (X.Y.Z, excludes enterprise/) and cloud
+  # (cloud-X.Y.Z) release lines, moved here from a standalone push-triggered
+  # workflow so the release cut is ordered after the image builds: a release
+  # can't be tagged from a commit whose images failed, and everything driven by
+  # the tag push finds the images already published. Release-PR upkeep on
+  # ordinary merges is delayed by the build too; the next push catches it up.
+  #
+  # BOOTSTRAP: both configs set a top-level `last-release-sha` to bound the
+  # first release's notes (the existing tags aren't reachable from main).
+  # Delete those lines once each line's first release PR has merged — they cap
+  # every run, not just the first.
+  release_app:
+    name: Release (app)
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref_name == 'main' || startsWith(github.ref, 'refs/heads/release/'))
+    needs: build_enterprise
+    permissions:
+      contents: write
+      pull-requests: write
+    secrets: inherit
+    uses: OpenHands/release-actions/.github/workflows/release-please.yml@main
+
+  release_cloud:
+    name: Release (cloud)
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref_name == 'main' || startsWith(github.ref, 'refs/heads/release/'))
+    needs: build_enterprise
+    permissions:
+      contents: write
+      pull-requests: write
+    secrets: inherit
+    uses: OpenHands/release-actions/.github/workflows/release-please.yml@main
+    with:
+      config-file: release-please-config.cloud.json
+      manifest-file: .release-please-manifest.cloud.json
 
   update_pr_description:
     name: Update PR Description

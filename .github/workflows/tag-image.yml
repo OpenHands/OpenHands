@@ -3,6 +3,10 @@
 # (tagged `sha-<full>`) and adds the tag name as an alias for the same manifest.
 # Semver tags (X.Y.Z) also get X.Y, X, and latest aliases.
 # No rebuild — pure registry-side retag via `docker buildx imagetools create`.
+#
+# Release tags are safe to process immediately: release-please runs as the
+# final jobs of the Docker workflow, so a release tag is only ever pushed
+# after the images for its commit are published.
 name: Tag Docker images
 
 on:
