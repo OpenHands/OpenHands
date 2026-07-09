@@ -54,11 +54,6 @@ jobs:
   # can't be tagged from a commit whose images failed, and everything driven by
   # the tag push finds the images already published. Release-PR upkeep on
   # ordinary merges is delayed by the build too; the next push catches it up.
-  #
-  # BOOTSTRAP: both configs set a top-level `last-release-sha` to bound the
-  # first release's notes (the existing tags aren't reachable from main).
-  # Delete those lines once each line's first release PR has merged — they cap
-  # every run, not just the first.
   release_app:
     name: Release (app)
     if: >-
