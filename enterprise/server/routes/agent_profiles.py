@@ -32,7 +32,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field, ValidationError
-from server.auth.authorization import Permission, require_permission
+from server.auth.authorization import (
+    Permission,
+    get_user_org_role,
+    get_user_super_role,
+    has_permission,
+    require_permission,
+)
 from server.auth.org_context import EFFECTIVE_ORG_ID
 from server.routes.org_models import OrgNotFoundError
 from sqlalchemy import select, update
@@ -200,6 +206,25 @@ async def _agent_profiles_transaction(
         await session.commit()
 
 
+async def _can_edit_org_settings(user_id: str, org_id: UUID) -> bool:
+    """Check EDIT_ORG_SETTINGS without the ``{org_id}``-path assumption
+    ``require_permission`` makes -- this is a stricter, in-handler check for
+    part of an otherwise VIEW_ORG_SETTINGS-gated request, so it takes the
+    already-resolved ``effective_org_id`` directly rather than re-deriving one
+    from the request. Mirrors ``require_permission``'s org-role-then-super-role
+    fallback.
+    """
+    user_role = await get_user_org_role(user_id, org_id)
+    if user_role and has_permission(user_role, Permission.EDIT_ORG_SETTINGS):
+        return True
+    super_role = await get_user_super_role(user_id)
+    if super_role and has_permission(
+        super_role, Permission.EDIT_ORG_SETTINGS, is_super=True
+    ):
+        return True
+    return False
+
+
 async def _seed_default_agent_profile(org_id: UUID, user_id: str) -> str | None:
     """Lazily seed one default agent profile from the member's current settings.
 
@@ -209,6 +234,11 @@ async def _seed_default_agent_profile(org_id: UUID, user_id: str) -> str | None:
     composed ``agent_settings`` via ``build_seed_profile`` and point the acting
     member at it. Returns the seeded id, or ``None`` if a concurrent request
     already seeded (double-checked under the row lock).
+
+    Callers must confirm the acting user has ``EDIT_ORG_SETTINGS`` first: this
+    writes ``AgentProfiles.active``, the org-wide default every other
+    un-activated member falls back to (see the inline comment below), so it
+    must not be reachable from a VIEW_ORG_SETTINGS-only caller.
     """
     settings = await SaasSettingsStore(user_id, effective_org_id=org_id).load()
     if settings is None:
@@ -250,16 +280,25 @@ async def list_agent_profiles(
 ) -> AgentProfileListResponse:
     """List agent profiles and the effective active pointer for this member.
 
-    On the first call against an empty store with no active pointer, lazily
-    seeds one default profile from the org's current ``agent_settings`` and
-    points the member at it (the one-time migration; #15044 §8).
+    On the first call against an empty store with no active pointer, and only
+    when the caller has ``EDIT_ORG_SETTINGS``, lazily seeds one default
+    profile from the org's current ``agent_settings`` and points the member at
+    it (the one-time migration; #15044 §8). The seed creates a profile in the
+    shared org-wide store and sets the org-wide default pointer every other
+    un-activated member falls back to, so a VIEW-only caller must not trigger
+    it: they just see the empty list, and the migration runs the next time
+    someone with EDIT_ORG_SETTINGS visits.
     """
     org, member = await _get_org_and_member(effective_org_id, user_id)
     profiles = load_agent_profiles(org)
     member_active = member.active_agent_profile_id if member is not None else None
     active_id = member_active or profiles.active
 
-    if not profiles.list() and active_id is None:
+    if (
+        not profiles.list()
+        and active_id is None
+        and await _can_edit_org_settings(user_id, effective_org_id)
+    ):
         try:
             seeded_id = await _seed_default_agent_profile(effective_org_id, user_id)
         except Exception:

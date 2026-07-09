@@ -470,9 +470,15 @@ class TestLazySeedMigration:
         fake_store = MagicMock()
         fake_store.load = AsyncMock(return_value=fake_settings)
 
-        with patch(
-            'server.routes.agent_profiles.SaasSettingsStore',
-            return_value=fake_store,
+        with (
+            patch(
+                'server.routes.agent_profiles.SaasSettingsStore',
+                return_value=fake_store,
+            ),
+            patch(
+                'server.routes.agent_profiles.get_user_org_role',
+                AsyncMock(return_value=_role('admin')),
+            ),
         ):
             listing = await list_agent_profiles(effective_org_id=org_id, user_id=uid)
 
@@ -483,6 +489,84 @@ class TestLazySeedMigration:
         assert listing.active_agent_profile_id == listing.profiles[0].id
         member = await _read_member(async_session_maker, org_id, USER_ID)
         assert member.active_agent_profile_id == listing.profiles[0].id
+
+    @pytest.mark.asyncio
+    async def test_member_visiting_empty_store_does_not_seed(
+        self, async_session_maker, patch_agent_routes
+    ):
+        """A VIEW_ORG_SETTINGS-only caller (the seeded org member, role
+        'member') must not trigger the seed: it creates a profile in the
+        shared org-wide store and (for the first caller) sets the org-wide
+        default pointer every other un-activated member falls back to, so it
+        requires EDIT_ORG_SETTINGS. They just see an empty list."""
+        org_id = patch_agent_routes
+        uid = str(USER_ID)
+
+        with (
+            patch(
+                'server.routes.agent_profiles.get_user_org_role',
+                AsyncMock(return_value=_role('member')),
+            ),
+            patch(
+                'server.routes.agent_profiles.get_user_super_role',
+                AsyncMock(return_value=None),
+            ),
+        ):
+            listing = await list_agent_profiles(effective_org_id=org_id, user_id=uid)
+
+        assert listing.profiles == []
+        assert listing.active_agent_profile_id is None
+        member = await _read_member(async_session_maker, org_id, USER_ID)
+        assert member.active_agent_profile_id is None
+
+    @pytest.mark.asyncio
+    async def test_admin_can_seed_after_member_visited_empty_store(
+        self, async_session_maker, patch_agent_routes
+    ):
+        """After a member's no-op visit leaves the store empty, an
+        EDIT_ORG_SETTINGS-holder visiting next still triggers the one-time
+        seed normally."""
+        org_id = patch_agent_routes
+        uid = str(USER_ID)
+
+        with (
+            patch(
+                'server.routes.agent_profiles.get_user_org_role',
+                AsyncMock(return_value=_role('member')),
+            ),
+            patch(
+                'server.routes.agent_profiles.get_user_super_role',
+                AsyncMock(return_value=None),
+            ),
+        ):
+            await list_agent_profiles(effective_org_id=org_id, user_id=uid)
+
+        from openhands.sdk.settings import validate_agent_settings
+
+        fake_settings = MagicMock()
+        fake_settings.agent_settings = validate_agent_settings(
+            {'agent_kind': 'openhands'}
+        )
+        fake_settings.llm_profiles = LLMProfiles(
+            profiles={'Default': LLM(usage_id='u', model='gpt-4o')}, active='Default'
+        )
+        fake_store = MagicMock()
+        fake_store.load = AsyncMock(return_value=fake_settings)
+
+        with (
+            patch(
+                'server.routes.agent_profiles.SaasSettingsStore',
+                return_value=fake_store,
+            ),
+            patch(
+                'server.routes.agent_profiles.get_user_org_role',
+                AsyncMock(return_value=_role('admin')),
+            ),
+        ):
+            listing = await list_agent_profiles(effective_org_id=org_id, user_id=uid)
+
+        assert len(listing.profiles) == 1
+        assert listing.active_agent_profile_id == listing.profiles[0].id
 
     @pytest.mark.asyncio
     async def test_list_reflects_concurrently_seeded_profile_on_race_loss(
@@ -513,9 +597,15 @@ class TestLazySeedMigration:
             await _set_agent_profiles(async_session_maker, org_id, store)
             return None
 
-        with patch(
-            'server.routes.agent_profiles._seed_default_agent_profile',
-            new=AsyncMock(side_effect=_lost_the_race),
+        with (
+            patch(
+                'server.routes.agent_profiles._seed_default_agent_profile',
+                new=AsyncMock(side_effect=_lost_the_race),
+            ),
+            patch(
+                'server.routes.agent_profiles.get_user_org_role',
+                AsyncMock(return_value=_role('admin')),
+            ),
         ):
             listing = await list_agent_profiles(effective_org_id=org_id, user_id=uid)
 
@@ -531,9 +621,15 @@ class TestLazySeedMigration:
         org_id = patch_agent_routes
         uid = str(USER_ID)
 
-        with patch(
-            'server.routes.agent_profiles._seed_default_agent_profile',
-            new=AsyncMock(side_effect=RuntimeError('boom')),
+        with (
+            patch(
+                'server.routes.agent_profiles._seed_default_agent_profile',
+                new=AsyncMock(side_effect=RuntimeError('boom')),
+            ),
+            patch(
+                'server.routes.agent_profiles.get_user_org_role',
+                AsyncMock(return_value=_role('admin')),
+            ),
         ):
             listing = await list_agent_profiles(effective_org_id=org_id, user_id=uid)
 
@@ -586,9 +682,19 @@ class TestLazySeedMigration:
         fake_store = MagicMock()
         fake_store.load = AsyncMock(return_value=fake_settings)
 
-        with patch(
-            'server.routes.agent_profiles.SaasSettingsStore',
-            return_value=fake_store,
+        with (
+            patch(
+                'server.routes.agent_profiles.SaasSettingsStore',
+                return_value=fake_store,
+            ),
+            # The first (winning) caller needs EDIT_ORG_SETTINGS to trigger
+            # the seed; the second (losing) caller's own role is irrelevant
+            # here since the store is non-empty by the time they list, so
+            # they never reach the permission check at all.
+            patch(
+                'server.routes.agent_profiles.get_user_org_role',
+                AsyncMock(return_value=_role('admin')),
+            ),
         ):
             winner_listing = await list_agent_profiles(
                 effective_org_id=org_id, user_id=str(first_user_id)
@@ -1340,3 +1446,37 @@ class TestAgentProfilesRouterAuthorizationBoundary:
             )
 
         assert response.status_code == status.HTTP_201_CREATED
+
+    @pytest.mark.asyncio
+    async def test_member_gets_200_but_does_not_trigger_org_wide_seed(
+        self, agent_profiles_app, async_session_maker, patch_agent_routes
+    ):
+        """End-to-end: a MEMBER's real GET passes the route's own
+        VIEW_ORG_SETTINGS gate (200, not 403) but must not trigger the
+        org-wide seed, which needs EDIT_ORG_SETTINGS -- the write side of
+        this same permission boundary that ``TestLazySeedMigration`` proves
+        at the handler level."""
+        org_id = patch_agent_routes
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=_role('member')),
+            ),
+            patch(
+                'server.routes.agent_profiles.get_user_org_role',
+                AsyncMock(return_value=_role('member')),
+            ),
+            patch(
+                'server.routes.agent_profiles.get_user_super_role',
+                AsyncMock(return_value=None),
+            ),
+        ):
+            client = TestClient(agent_profiles_app)
+            response = client.get('/api/agent-profiles')
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()['profiles'] == []
+        assert response.json()['active_agent_profile_id'] is None
+        member = await _read_member(async_session_maker, org_id, USER_ID)
+        assert member.active_agent_profile_id is None
