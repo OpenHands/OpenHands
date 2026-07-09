@@ -8,13 +8,17 @@ on:
   workflow_run:
     workflows: ["Tag Docker images"]
     types: [completed]
-    # For tag-triggered runs, workflow_run.head_branch carries the tag name.
-    branches:
-      - 'cloud-[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
   bump-chart:
-    if: github.event.workflow_run.conclusion == 'success'
+    # "Tag Docker images" only runs on tag pushes, and workflow_run's
+    # head_branch carries the tag name for tag-triggered runs. Match the
+    # cloud line here rather than with a trigger-level `branches:` glob —
+    # whether that filter applies to tag-named head_branch values is
+    # undocumented, and a non-match would silently skip the chart bump.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'cloud-')
     # secrets: inherit forwards the org secrets RELEASE_APP_ID /
     # RELEASE_APP_PRIVATE_KEY that the reusable workflow needs.
     secrets: inherit
