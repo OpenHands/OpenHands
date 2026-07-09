@@ -931,6 +931,51 @@ class TestLiveStatusAppConversationService:
         # Assert
         assert path == '/workspace/project/agents-tmp-config/PLAN.md'
 
+    def test_build_observability_context_includes_repository(self):
+        conversation_id = uuid4()
+
+        metadata, tags = self.service._build_observability_context(
+            conversation_id,
+            agent_kind='openhands',
+            selected_repository='OpenHands/software-agent-sdk',
+            selected_branch='main',
+            git_provider=ProviderType.GITHUB,
+        )
+
+        assert metadata == {
+            'app': 'openhands',
+            'conversation_id': str(conversation_id),
+            'agent_kind': 'openhands',
+            'repo_name': 'OpenHands/software-agent-sdk',
+            'selected_branch': 'main',
+            'git_provider': 'github',
+        }
+        assert 'repo:OpenHands/software-agent-sdk' in tags
+        assert 'branch:main' in tags
+        assert 'git_provider:github' in tags
+
+    def test_apply_server_overrides_adds_repo_metadata(self):
+        llm = LLM(model='openhands/gpt-4', api_key='k', usage_id='agent')
+        agent = Agent(llm=llm, tools=[])
+
+        updated = self.service._apply_server_agent_overrides(
+            agent,
+            AgentType.DEFAULT,
+            uuid4(),
+            'user-1',
+            repo_name='OpenHands/software-agent-sdk',
+            git_provider=ProviderType.GITHUB,
+            selected_branch='main',
+        )
+
+        metadata = updated.llm.litellm_extra_body['metadata']
+        assert metadata['repo_name'] == 'OpenHands/software-agent-sdk'
+        assert metadata['git_provider'] == 'github'
+        assert metadata['selected_branch'] == 'main'
+        assert 'repo:OpenHands/software-agent-sdk' in metadata['tags']
+        assert 'branch:main' in metadata['tags']
+        assert 'git_provider:github' in metadata['tags']
+
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
         return_value=[],
@@ -2234,6 +2279,95 @@ class TestLiveStatusAppConversationService:
         'openhands.app_server.app_conversation.live_status_app_conversation_service.ConversationInfo'
     )
     @pytest.mark.asyncio
+    async def test_start_app_conversation_preserves_acp_and_repository_tags(
+        self, mock_conversation_info_class, mock_remote_workspace_class
+    ):
+        """ACP conversations keep provider tags when repository tags are added."""
+        from openhands.sdk.settings import ACPAgentSettings
+
+        conversation_id = uuid4()
+        self.mock_user.agent_settings = ACPAgentSettings(
+            acp_server='claude-code',
+            llm=LLM(model='claude-sonnet-4-5', api_key=SecretStr('sk-ui-key')),
+        )
+        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
+        self.mock_user_context.get_user_info = AsyncMock(return_value=self.mock_user)
+
+        mock_sandbox_spec = Mock(spec=SandboxSpecInfo)
+        mock_sandbox_spec.working_dir = '/test/workspace'
+        self.mock_sandbox.sandbox_spec_id = str(uuid4())
+        self.mock_sandbox.id = str(uuid4())
+        self.mock_sandbox.session_api_key = 'test_session_key'
+        exposed_url = ExposedUrl(
+            name=AGENT_SERVER, url='http://agent-server:8000', port=60000
+        )
+        self.mock_sandbox.exposed_urls = [exposed_url]
+        self.mock_sandbox_service.get_sandbox = AsyncMock(
+            return_value=self.mock_sandbox
+        )
+        self.mock_sandbox_spec_service.get_sandbox_spec = AsyncMock(
+            return_value=mock_sandbox_spec
+        )
+        mock_remote_workspace_class.return_value = Mock()
+
+        async def mock_wait_for_sandbox(task):
+            task.sandbox_id = self.mock_sandbox.id
+            yield task
+
+        async def mock_run_setup_scripts(
+            task, sandbox, workspace, agent_server_url, conversation_id
+        ):
+            yield task
+
+        self.service._wait_for_sandbox_start = mock_wait_for_sandbox
+        self.service.run_setup_scripts = mock_run_setup_scripts
+        self.service._seed_sandbox_profiles = AsyncMock()
+
+        mock_agent = Mock()
+        mock_agent.agent_kind = 'acp'
+        mock_agent.acp_model = 'claude-sonnet-4-5'
+        mock_start_request = Mock(spec=StartConversationRequest)
+        mock_start_request.agent = mock_agent
+        mock_start_request.model_dump.return_value = {'test': 'data'}
+        self.service._build_start_conversation_request_for_user = AsyncMock(
+            return_value=mock_start_request
+        )
+
+        mock_conversation_info = Mock()
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info_class.model_validate.return_value = (
+            mock_conversation_info
+        )
+        mock_response = Mock()
+        mock_response.json.return_value = {'id': str(conversation_id)}
+        mock_response.raise_for_status = Mock()
+        self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
+        self.mock_event_callback_service.save_event_callback = AsyncMock()
+
+        request = AppConversationStartRequest(
+            selected_repository='OpenHands/OpenHands',
+            selected_branch='main',
+            git_provider=ProviderType.GITHUB,
+        )
+
+        async for _ in self.service._start_app_conversation(request):
+            pass
+
+        saved_info = self.mock_app_conversation_info_service.save_app_conversation_info.call_args[
+            0
+        ][0]
+        assert saved_info.tags['acpserver'] == 'claude-code'
+        assert saved_info.tags['repo_name'] == 'OpenHands/OpenHands'
+        assert saved_info.tags['git_provider'] == 'github'
+        assert saved_info.tags['selected_branch'] == 'main'
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.ConversationInfo'
+    )
+    @pytest.mark.asyncio
     async def test_start_app_conversation_stores_acp_model_as_llm_model(
         self, mock_conversation_info_class, mock_remote_workspace_class
     ):
@@ -2262,7 +2396,6 @@ class TestLiveStatusAppConversationService:
             name=AGENT_SERVER, url='http://agent-server:8000', port=60000
         )
         self.mock_sandbox.exposed_urls = [exposed_url]
-
         self.mock_sandbox_service.get_sandbox = AsyncMock(
             return_value=self.mock_sandbox
         )
@@ -2291,7 +2424,6 @@ class TestLiveStatusAppConversationService:
         mock_start_request = Mock(spec=StartConversationRequest)
         mock_start_request.agent = mock_acp_agent
         mock_start_request.model_dump.return_value = {}
-
         self.service._build_start_conversation_request_for_user = AsyncMock(
             return_value=mock_start_request
         )
@@ -2301,7 +2433,6 @@ class TestLiveStatusAppConversationService:
         mock_conversation_info_class.model_validate.return_value = (
             mock_conversation_info
         )
-
         mock_response = Mock()
         mock_response.json.return_value = {'id': str(conversation_id)}
         mock_response.raise_for_status = Mock()
