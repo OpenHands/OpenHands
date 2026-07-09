@@ -750,26 +750,56 @@ class TestGetSlackEnabled:
 class TestGetEmailEnabled:
     """Test cases for _get_email_enabled helper function."""
 
-    def test_returns_true_when_email_service_is_configured(self):
+    def test_returns_true_when_smtp_is_configured(self):
         """Email is enabled when the SMTP integration is configured."""
         from openhands.app_server.web_client.default_web_client_config_injector import (
             _get_email_enabled,
         )
 
-        with patch(
-            'server.services.smtp_email_service.SMTPEmailService.is_configured',
-            return_value=True,
+        with (
+            patch(
+                'server.services.smtp_email_service.SMTPEmailService.is_configured',
+                return_value=True,
+            ),
+            patch(
+                'server.services.email_service.EmailService.is_configured',
+                return_value=False,
+            ),
         ):
             assert _get_email_enabled() is True
 
-    def test_returns_false_when_email_service_is_not_configured(self):
-        """Email stays disabled when the SMTP integration is missing."""
+    def test_returns_true_when_resend_is_configured(self):
+        """Email is enabled when the Resend integration is configured."""
         from openhands.app_server.web_client.default_web_client_config_injector import (
             _get_email_enabled,
         )
 
-        with patch(
-            'server.services.smtp_email_service.SMTPEmailService.is_configured',
-            return_value=False,
+        with (
+            patch(
+                'server.services.smtp_email_service.SMTPEmailService.is_configured',
+                return_value=False,
+            ),
+            patch(
+                'server.services.email_service.EmailService.is_configured',
+                return_value=True,
+            ),
+        ):
+            assert _get_email_enabled() is True
+
+    def test_returns_false_when_email_services_not_configured(self):
+        """Email stays disabled when SMTP and Resend are missing."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_email_enabled,
+        )
+
+        with (
+            patch(
+                'server.services.smtp_email_service.SMTPEmailService.is_configured',
+                return_value=False,
+            ),
+            patch(
+                'server.services.email_service.EmailService.is_configured',
+                return_value=False,
+            ),
         ):
             assert _get_email_enabled() is False

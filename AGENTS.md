@@ -134,6 +134,8 @@ Backend:
 
 Frontend:
 - Located in the `frontend` directory
+- UI refactors: Budgets UI is split into `budgets.tsx` + `budgets-tabs.tsx`, `budgets-components.tsx`, `budgets-constants.ts`. Usage monitoring dashboard is split into `usage-dashboard.tsx` with `usage-dashboard-tabs.tsx`, `usage-dashboard-widgets.tsx`, and `usage-dashboard-utils.ts`. Shared inline SVGs live in `frontend/src/components/shared/icons/inline-icons.tsx`.
+
 - Prerequisites: A recent version of NodeJS / NPM
 - Setup: Run `npm install` in the frontend directory
 - Testing:
@@ -184,6 +186,9 @@ The `enterprise/` directory contains additional functionality that extends the o
   the SMTP-driven UI email-enabled checks (SMTP_HOST).
 - Billing and subscription management (Stripe)
 - Telemetry and analytics (PostHog, custom metrics framework)
+- Email services: Resend remains in `enterprise/server/services/email_service.py`; SMTPEmailService lives in
+  `enterprise/server/services/smtp_email_service.py` and is used for org invitations/budget alerts plus
+  the SMTP-driven UI email-enabled checks (SMTP_HOST).
 
 ### Enterprise Development Setup
 
