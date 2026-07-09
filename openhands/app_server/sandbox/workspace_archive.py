@@ -26,6 +26,7 @@ import httpx
 from openhands.agent_server.utils import utc_now
 from openhands.app_server.file_store import get_file_store
 from openhands.app_server.file_store.files import FileStore
+from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 _logger = logging.getLogger(__name__)
 
@@ -79,6 +80,11 @@ def archive_enabled() -> bool:
 def archive_required() -> bool:
     """When true, an archive failure blocks deletion so it can be retried."""
     return os.getenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'false').lower() in ('true', '1')
+
+
+def _probe_packages_enabled() -> bool:
+    """Whether to snapshot installed packages into the manifest (default on)."""
+    return os.getenv('RUNTIME_FILE_ARCHIVE_PACKAGES', 'true').lower() in ('true', '1')
 
 
 def _archive_bucket() -> str:
@@ -197,6 +203,92 @@ def _write_file_to_store(store: FileStore, name: str, path: str) -> None:
     store.write_from_path(name, path)
 
 
+# Per-command timeout and per-manager entry cap for the package snapshot. Bounds
+# both the added archive latency and a pathological manifest blow-up.
+_PACKAGE_PROBE_TIMEOUT = 15.0
+_MAX_PACKAGES_PER_MANAGER = 2000
+
+
+def _parse_pip_list(out: str) -> dict[str, str]:
+    """Parse ``pip list --format=json`` output into ``{name: version}``."""
+    try:
+        data = json.loads(out or '[]')
+    except json.JSONDecodeError:
+        return {}
+    result: dict[str, str] = {}
+    for item in data if isinstance(data, list) else []:
+        name, version = item.get('name'), item.get('version')
+        if name and version:
+            result[name] = version
+        if len(result) >= _MAX_PACKAGES_PER_MANAGER:
+            break
+    return result
+
+
+def _parse_npm_ls(out: str) -> dict[str, str]:
+    """Parse ``npm ls --json`` output (top-level deps) into ``{name: version}``."""
+    try:
+        data = json.loads(out or '{}')
+    except json.JSONDecodeError:
+        return {}
+    deps = data.get('dependencies') if isinstance(data, dict) else None
+    result: dict[str, str] = {}
+    for name, meta in (deps or {}).items():
+        version = meta.get('version') if isinstance(meta, dict) else None
+        if name and version:
+            result[name] = version
+        if len(result) >= _MAX_PACKAGES_PER_MANAGER:
+            break
+    return result
+
+
+async def _probe_packages(
+    agent_server_url: str, session_api_key: str | None, cwd: str
+) -> dict[str, dict[str, str]]:
+    """Best-effort ``{manager: {name: version}}`` snapshot of the workspace env.
+
+    Runs each manager's own machine-readable listing (JSON) in the repo dir and
+    parses it — no command-text regex — so we get RESOLVED versions, capturing
+    lockfile/transitive installs a ``pip install X`` line never records. Any
+    manager that is absent, errors, times out, or emits unparseable output is
+    silently omitted; the whole probe never blocks archiving.
+    """
+    if not _probe_packages_enabled():
+        return {}
+    workspace = AsyncRemoteWorkspace(
+        host=agent_server_url, api_key=session_api_key, working_dir=cwd
+    )
+
+    async def _run(command: str) -> str:
+        # npm ls exits non-zero on peer-dep gripes but still emits valid JSON, so
+        # parse stdout regardless of exit code; a real failure yields '' -> {}.
+        try:
+            result = await workspace.execute_command(
+                command, cwd, timeout=_PACKAGE_PROBE_TIMEOUT
+            )
+        except Exception as e:
+            _logger.debug('Package probe %r failed: %s', command, e)
+            return ''
+        return result.stdout or ''
+
+    packages: dict[str, dict[str, str]] = {}
+    # Prefer a project venv / uv (where the agent's installs actually land)
+    # before the system interpreter; each emits the same --format=json shape.
+    pip = _parse_pip_list(
+        await _run(
+            '.venv/bin/python -m pip list --format=json 2>/dev/null '
+            '|| uv pip list --format=json 2>/dev/null '
+            '|| python3 -m pip list --format=json 2>/dev/null'
+        )
+    )
+    if pip:
+        packages['pip'] = pip
+    npm = _parse_npm_ls(await _run('npm ls --json --depth=0 2>/dev/null'))
+    if npm:
+        packages['npm'] = npm
+    return packages
+
+
 async def archive_workspace(
     httpx_client: httpx.AsyncClient,
     runtime: dict[str, Any],
@@ -284,6 +376,16 @@ async def archive_workspace(
     # image predating them — graceful) and is reused across formats so each
     # manifest is self-describing (repo / branch / captured HEAD).
     repo_metadata = dict.fromkeys(_REPO_METADATA_HEADERS, '')
+    # Installed-package snapshot: probed once from the live workspace (resolved
+    # versions the git delta / tar.gz cannot supply — .venv/node_modules are
+    # excluded) and reused across formats. Best-effort; never blocks archiving.
+    try:
+        packages = await _probe_packages(
+            agent_server_url, session_api_key, archive_path
+        )
+    except Exception as e:
+        _logger.debug('Package snapshot skipped for %s: %s', sandbox_id, e)
+        packages = {}
     # One store per call (not per format) — building it lazily spins up a client.
     store = _get_archive_file_store()
     for fmt in formats:
@@ -350,6 +452,7 @@ async def archive_workspace(
                     'phase': 'final',
                     'base_commit': base_commit,
                     **repo_metadata,
+                    'packages': packages,
                     'format': fmt,
                     'source_path': archive_path,
                     'byte_count': byte_count,
