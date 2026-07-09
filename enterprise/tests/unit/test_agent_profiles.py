@@ -11,7 +11,8 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException, status
+from fastapi.testclient import TestClient
 from sqlalchemy import select
 from storage.org import Org
 from storage.org_member import OrgMember
@@ -23,6 +24,7 @@ from openhands.app_server.settings.agent_profiles import (
     AgentProfiles,
 )
 from openhands.app_server.settings.llm_profiles import LLMProfiles
+from openhands.app_server.user_auth import get_user_id
 from openhands.sdk.llm import LLM
 from openhands.sdk.profiles import (
     ACPAgentProfile,
@@ -46,6 +48,7 @@ with patch('storage.database.a_session_maker'):
         rename_agent_profile,
         save_agent_profile,
     )
+    from server.routes.agent_profiles import router as agent_profiles_router
     from server.routes.org_profiles import (
         RenameProfileRequest,
         delete_profile,
@@ -1191,3 +1194,149 @@ class TestNoWriteBackWithoutMutation:
 
         assert diagnostics.valid is False
         assert any('Failed to resolve profile' in e for e in diagnostics.errors)
+
+
+# ── Router permission-boundary integration (real HTTP, real Depends chain) ──
+#
+# Every other test above calls the route handler *functions* directly, so
+# ``require_permission``/``EFFECTIVE_ORG_ID`` never actually run -- the tests
+# supply ``user_id``/``effective_org_id`` as plain kwargs. These tests mount
+# the real router behind a ``TestClient`` so the actual FastAPI dependency
+# chain executes, proving the VIEW/EDIT_ORG_SETTINGS gate for real rather
+# than by inspection (mirrors ``test_org_git_claims.py``'s pattern, which
+# neither ``org_profiles.py`` nor ``agent_profiles.py`` had before).
+
+
+@pytest.fixture
+def agent_profiles_app():
+    """Real app mounting the actual router. ``get_user_id`` is overridden
+    (identity only); org resolution stays on the real code path but is
+    pinned to ``ORG_ID`` on both sides (``EFFECTIVE_ORG_ID`` and
+    ``require_permission``'s own no-path-org_id fallback) so they agree,
+    same as a legitimate single-org request would. ``get_user_org_role`` is
+    left unpatched here -- each test controls it to select the role under
+    test.
+    """
+    from server.auth.org_context import resolve_effective_org_id
+
+    app = FastAPI()
+    app.include_router(agent_profiles_router)
+    app.dependency_overrides[get_user_id] = lambda: str(USER_ID)
+    app.dependency_overrides[resolve_effective_org_id] = lambda: ORG_ID
+    with (
+        patch(
+            'server.auth.org_context.resolve_target_org_id_for_permission_check',
+            AsyncMock(return_value=ORG_ID),
+        ),
+        patch(
+            'server.auth.authorization.get_user_super_role',
+            AsyncMock(return_value=None),
+        ),
+    ):
+        yield app
+
+
+def _role(name):
+    role = MagicMock()
+    role.name = name
+    return role
+
+
+class TestAgentProfilesRouterAuthorizationBoundary:
+    def test_member_gets_403_on_save(self, agent_profiles_app):
+        with patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=_role('member')),
+        ):
+            client = TestClient(agent_profiles_app)
+            response = client.post(
+                '/api/agent-profiles/reviewer', json={'llm_profile_ref': 'Default'}
+            )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert 'edit_org_settings' in response.json()['detail'].lower()
+
+    def test_member_gets_403_on_delete(self, agent_profiles_app):
+        with patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=_role('member')),
+        ):
+            client = TestClient(agent_profiles_app)
+            response = client.delete('/api/agent-profiles/reviewer')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert 'edit_org_settings' in response.json()['detail'].lower()
+
+    def test_member_gets_403_on_rename(self, agent_profiles_app):
+        with patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=_role('member')),
+        ):
+            client = TestClient(agent_profiles_app)
+            response = client.post(
+                '/api/agent-profiles/reviewer/rename', json={'new_name': 'renamed'}
+            )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert 'edit_org_settings' in response.json()['detail'].lower()
+
+    def test_non_member_gets_403_on_list(self, agent_profiles_app):
+        with patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=None),
+        ):
+            client = TestClient(agent_profiles_app)
+            response = client.get('/api/agent-profiles')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert 'not a member' in response.json()['detail'].lower()
+
+    def test_non_member_gets_403_on_save(self, agent_profiles_app):
+        """A non-admin lacking even VIEW_ORG_SETTINGS must not reach the
+        EDIT_ORG_SETTINGS check via some other path either."""
+        with patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=None),
+        ):
+            client = TestClient(agent_profiles_app)
+            response = client.post(
+                '/api/agent-profiles/reviewer', json={'llm_profile_ref': 'Default'}
+            )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert 'not a member' in response.json()['detail'].lower()
+
+    @pytest.mark.asyncio
+    async def test_member_can_list_profiles_200(
+        self, agent_profiles_app, async_session_maker, patch_agent_routes
+    ):
+        """A MEMBER has VIEW_ORG_SETTINGS -- the read path must stay open;
+        the fix for the write-side gap must not overshoot into blocking
+        legitimate reads."""
+        org_id = patch_agent_routes
+        ap = AgentProfiles()
+        save_profile_preserving_identity(
+            ap, OpenHandsAgentProfile(name='reviewer', llm_profile_ref='Default')
+        )
+        await _set_agent_profiles(async_session_maker, org_id, ap)
+
+        with patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=_role('member')),
+        ):
+            client = TestClient(agent_profiles_app)
+            response = client.get('/api/agent-profiles')
+
+        assert response.status_code == status.HTTP_200_OK
+        assert [p['name'] for p in response.json()['profiles']] == ['reviewer']
+
+    @pytest.mark.asyncio
+    async def test_admin_can_save_profile_201(
+        self, agent_profiles_app, async_session_maker, patch_agent_routes
+    ):
+        """An ADMIN has EDIT_ORG_SETTINGS -- the write path must stay open."""
+        with patch(
+            'server.auth.authorization.get_user_org_role',
+            AsyncMock(return_value=_role('admin')),
+        ):
+            client = TestClient(agent_profiles_app)
+            response = client.post(
+                '/api/agent-profiles/reviewer', json={'llm_profile_ref': 'Default'}
+            )
+
+        assert response.status_code == status.HTTP_201_CREATED
