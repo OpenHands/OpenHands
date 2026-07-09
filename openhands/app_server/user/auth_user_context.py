@@ -31,6 +31,7 @@ class AuthUserContext(UserContext):
 
     user_auth: UserAuth
     _user_info: UserInfo | None = None
+    _resolved_user_info: UserInfo | None = None
     _provider_handler: ProviderHandler | None = None
 
     async def get_user_id(self) -> str | None:
@@ -42,16 +43,44 @@ class AuthUserContext(UserContext):
     async def get_user_email(self) -> str | None:
         return await self.user_auth.get_user_email()
 
-    async def get_user_info(self) -> UserInfo:
+    @staticmethod
+    def _user_info_from_settings(user_id: str | None, settings: Any | None) -> UserInfo:
+        if settings is None:
+            return UserInfo(id=user_id)
+        return UserInfo(
+            id=user_id,
+            **settings.model_dump(context={'expose_secrets': True}),
+        )
+
+    async def get_user_info(
+        self,
+        *,
+        resolve_agent_profile: bool = False,
+        override_agent_profile_id: str | None = None,
+    ) -> UserInfo:
+        if override_agent_profile_id is not None:
+            # One-off launch override: never memoized in either direction.
+            user_id = await self.get_user_id()
+            settings = await self.user_auth.get_user_settings(
+                resolve_agent_profile=True,
+                override_agent_profile_id=override_agent_profile_id,
+            )
+            return self._user_info_from_settings(user_id, settings)
+        if resolve_agent_profile:
+            user_info = self._resolved_user_info
+            if user_info is None:
+                user_id = await self.get_user_id()
+                settings = await self.user_auth.get_user_settings(
+                    resolve_agent_profile=True
+                )
+                user_info = self._user_info_from_settings(user_id, settings)
+                self._resolved_user_info = user_info
+            return user_info
         user_info = self._user_info
         if user_info is None:
             user_id = await self.get_user_id()
             settings = await self.user_auth.get_user_settings()
-            assert settings is not None
-            user_info = UserInfo(
-                id=user_id,
-                **settings.model_dump(context={'expose_secrets': True}),
-            )
+            user_info = self._user_info_from_settings(user_id, settings)
             self._user_info = user_info
         return user_info
 

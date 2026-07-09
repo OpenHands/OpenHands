@@ -256,6 +256,7 @@ class TestGetEffectiveOrgId:
         user_auth.settings_store = object()
         user_auth.secrets_store = object()
         user_auth._settings = object()
+        user_auth._resolved_settings = object()
         user_auth._secrets = object()
         user_auth.provider_tokens = {}
         user_auth._org_id = 'old-org'
@@ -272,6 +273,10 @@ class TestGetEffectiveOrgId:
         assert user_auth.settings_store is None
         assert user_auth.secrets_store is None
         assert user_auth._settings is None
+        # The resolved launch view is org-scoped (referenced LLM key +
+        # ref-filtered mcp_config) and must not survive a re-scope to another
+        # org, or org B would read org A's resolved credentials.
+        assert user_auth._resolved_settings is None
         assert user_auth._secrets is None
         assert user_auth.provider_tokens is None
         assert user_auth._org_id is None

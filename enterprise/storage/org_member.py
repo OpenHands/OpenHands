@@ -31,6 +31,11 @@ class OrgMember(Base):
     agent_settings_diff: Mapped[dict[str, Any]] = mapped_column(
         JSON, nullable=False, default=dict
     )
+    # Per-member pointer to the active AgentProfile id — the sole launch
+    # authority for Agent Profiles (mirrors the per-member _llm_api_key
+    # precedent). NULL falls back to the org default (org.agent_profiles.active)
+    # and, pre-migration, to the legacy active-LLM-profile materialization.
+    active_agent_profile_id: Mapped[str | None] = mapped_column(String, nullable=True)
     conversation_settings_diff: Mapped[dict[str, Any]] = mapped_column(
         JSON, nullable=False, default=dict
     )

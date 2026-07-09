@@ -36,8 +36,16 @@ class ResolverUserContext(UserContext):
     async def get_user_email(self) -> str | None:
         return await self.saas_user_auth.get_user_email()
 
-    async def get_user_info(self) -> UserInfo:
-        user_settings = await self.saas_user_auth.get_user_settings()
+    async def get_user_info(
+        self,
+        *,
+        resolve_agent_profile: bool = False,
+        override_agent_profile_id: str | None = None,
+    ) -> UserInfo:
+        user_settings = await self.saas_user_auth.get_user_settings(
+            resolve_agent_profile=resolve_agent_profile,
+            override_agent_profile_id=override_agent_profile_id,
+        )
         user_id = await self.saas_user_auth.get_user_id()
         if user_settings:
             return UserInfo(
