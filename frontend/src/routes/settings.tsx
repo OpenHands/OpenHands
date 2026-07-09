@@ -120,8 +120,6 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
     }
   }
 
-  // Step 4: For routes that need permission checks, get user data
-  // Only fetch user data for billing and org routes that need permission validation
   if (
     pathname === "/settings/billing" ||
     pathname === "/settings/org" ||
@@ -130,7 +128,6 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   ) {
     const user = await getActiveOrganizationUser();
 
-    // Org-type detection for route protection
     const orgId = getSelectedOrganizationIdFromStore();
     const organizationsData = queryClient.getQueryData<{
       items: Organization[];
@@ -142,7 +139,6 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
     const isPersonalOrg = selectedOrg?.is_personal === true;
     const isTeamOrg = !!selectedOrg && !selectedOrg.is_personal;
 
-    // Billing route protection
     if (pathname === "/settings/billing") {
       if (
         !user ||
@@ -159,7 +155,6 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
       }
     }
 
-    // Org route protection: redirect if user lacks required permissions or personal org
     if (pathname === "/settings/org") {
       const role = user?.role ?? "member";
       if (
@@ -182,7 +177,6 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
       }
     }
 
-    // Admin-only settings route protection
     if (isAdminOnlyPath) {
       const role = user?.role ?? "member";
       if (!user || (role !== "admin" && role !== "owner") || isPersonalOrg) {
