@@ -27,9 +27,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COMMIT_SHA: ${{ github.sha }}
+        # shell: bash makes the runner invoke bash with -e and -o pipefail.
         shell: bash
         run: |
-          set -euo pipefail
           # The Docker run is registered by the branch push, which normally
           # lands a minute or more before the tag does — but retry briefly in
           # case this tag arrived first.
