@@ -66,6 +66,7 @@ class SaasUserAuth(UserAuth):
     settings_store: SaasSettingsStore | None = None
     secrets_store: SaasSecretsStore | None = None
     _settings: Settings | None = None
+    _resolved_settings: Settings | None = None
     _secrets: Secrets | None = None
     accepted_tos: bool | None = None
     auth_type: AuthType = AuthType.COOKIE
@@ -114,6 +115,10 @@ class SaasUserAuth(UserAuth):
         self.settings_store = None
         self.secrets_store = None
         self._settings = None
+        # Org-scoped like _settings: the resolved launch view carries the
+        # referenced LLM key + ref-filtered mcp_config of *this* org's active
+        # profile, so it must not survive a re-scope to another org.
+        self._resolved_settings = None
         self._secrets = None
         self.provider_tokens = None
         self._org_id = None
@@ -418,7 +423,29 @@ class SaasUserAuth(UserAuth):
     def get_auth_type(self) -> AuthType | None:
         return self.auth_type
 
-    async def get_user_settings(self) -> Settings | None:
+    async def get_user_settings(
+        self,
+        *,
+        resolve_agent_profile: bool = False,
+        override_agent_profile_id: str | None = None,
+    ) -> Settings | None:
+        if resolve_agent_profile or override_agent_profile_id is not None:
+            # Effective launch view (active Agent Profile resolved). Memoized
+            # separately from the persisted `_settings`; an explicit override
+            # is a one-off and is never memoized.
+            if override_agent_profile_id is None and self._resolved_settings:
+                return self._resolved_settings
+            settings_store = await self.get_user_settings_store()
+            settings = await settings_store.load(
+                resolve_agent_profile=True,
+                override_agent_profile_id=override_agent_profile_id,
+            )
+            if settings:
+                settings.email = await self.get_user_email()
+                settings.email_verified = self.email_verified
+                if override_agent_profile_id is None:
+                    self._resolved_settings = settings
+            return settings
         settings = self._settings
         if settings:
             return settings

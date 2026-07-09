@@ -936,30 +936,12 @@ class OrgConversationService:
                 func.coalesce(
                     func.sum(StoredConversationMetadata.accumulated_cost), 0
                 ).label('lifetime_spend'),
-                func.coalesce(
-                    func.sum(
-                        case(
-                            (
-                                StoredConversationMetadata.created_at >= month_start,
-                                StoredConversationMetadata.accumulated_cost,
-                            ),
-                            else_=0,
-                        )
-                    ),
-                    0,
-                ).label('spend_mtd'),
-                func.coalesce(
-                    func.sum(
-                        case(
-                            (
-                                StoredConversationMetadata.created_at >= year_start,
-                                StoredConversationMetadata.accumulated_cost,
-                            ),
-                            else_=0,
-                        )
-                    ),
-                    0,
-                ).label('spend_ytd'),
+                func.coalesce(func.max(cost_events_subquery.c.spend_mtd), 0).label(
+                    'spend_mtd'
+                ),
+                func.coalesce(func.max(cost_events_subquery.c.spend_ytd), 0).label(
+                    'spend_ytd'
+                ),
             )
             .select_from(StoredConversationMetadata)
             .join(
