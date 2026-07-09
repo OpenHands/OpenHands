@@ -1309,8 +1309,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     ) -> tuple[dict[str, Any], list[str]]:
         """Build trace metadata and tag filters for a conversation.
 
-        Metadata uses explicit field names such as ``repo_name`` and
-        ``selected_branch``. Tags intentionally keep the concise
+        Metadata carries the conversation-identity fields (``app``,
+        ``conversation_id``, ``agent_kind``). Repo identity (repo/branch/commit)
+        is resolved live from the workspace by the agent-server and merged onto
+        the trace's root span there, so it covers repos cloned after start too
+        (not just repo-preselected conversations). Tags keep the concise
         ``repo:`` / ``branch:`` prefixes used by LiteLLM metadata filters.
         """
         metadata: dict[str, Any] = {
@@ -1321,15 +1324,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         tags = ['app:openhands', f'agent_kind:{agent_kind}']
 
         if selected_repository:
-            metadata['repo_name'] = selected_repository
             tags.append(f'repo:{selected_repository}')
         if selected_branch:
-            metadata['selected_branch'] = selected_branch
             tags.append(f'branch:{selected_branch}')
         if git_provider:
-            provider = git_provider.value
-            metadata['git_provider'] = provider
-            tags.append(f'git_provider:{provider}')
+            tags.append(f'git_provider:{git_provider.value}')
 
         return metadata, tags
 
@@ -1510,56 +1509,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             project_dir=project_dir,
             httpx_client=self.httpx_client,
         )
-
-    @staticmethod
-    async def _resolve_head_commit(
-        remote_workspace: AsyncRemoteWorkspace, project_dir: str
-    ) -> str:
-        """Best-effort post-clone HEAD sha for the Laminar trace; '' on failure.
-
-        ``--verify --quiet`` guarantees stdout is a validated object id (never
-        the literal ``HEAD`` an unborn repo would echo) and fails silently
-        rather than logging a ``fatal:`` line. The short timeout keeps this
-        trace-only lookup from delaying conversation startup if the workspace is
-        unresponsive — the metadata is simply dropped instead.
-        """
-        try:
-            result = await remote_workspace.execute_command(
-                'git rev-parse --verify --quiet HEAD', project_dir, timeout=10.0
-            )
-        except Exception as e:
-            _logger.debug('HEAD commit lookup for trace metadata failed: %s', e)
-            return ''
-        return result.stdout.strip() if not result.exit_code else ''
-
-    async def _build_observability_metadata(
-        self,
-        remote_workspace: AsyncRemoteWorkspace | None,
-        project_dir: str,
-        selected_repository: str | None,
-        selected_branch: str | None,
-        git_provider: ProviderType | None,
-    ) -> dict[str, str]:
-        """Repo identity for the Laminar trace so trajectories are searchable
-        by repo / branch / commit (the trace UI has no DB to join against).
-
-        Shared by the OpenHands and ACP request builders. The commit is the
-        post-clone HEAD, resolved best-effort from the (already-cloned)
-        workspace; omitted entirely for a repo-less conversation.
-        """
-        commit = ''
-        if selected_repository and remote_workspace is not None:
-            commit = await self._resolve_head_commit(remote_workspace, project_dir)
-        return {
-            key: value
-            for key, value in (
-                ('repo', selected_repository),
-                ('branch', selected_branch),
-                ('git_provider', git_provider.value if git_provider else None),
-                ('commit', commit),
-            )
-            if value
-        }
 
     async def _build_start_conversation_request_for_user(
         self,
@@ -1830,13 +1779,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # injects it directly into the JSON body as a forward-compatible
         # fallback.
         laminar_user_id = await self.user_context.get_user_email() or user.id
-        observability_metadata = await self._build_observability_metadata(
-            remote_workspace,
-            project_dir,
-            selected_repository,
-            selected_branch,
-            git_provider,
-        )
         create_kwargs: dict[str, Any] = {'agent': agent, 'user_id': laminar_user_id}
         if observability_metadata:
             create_kwargs['observability_metadata'] = observability_metadata
@@ -2080,13 +2022,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # prefer email over the internal id so Laminar traces are immediately
         # attributable, falling back to ``user.id`` when no email is available.
         laminar_user_id = await self.user_context.get_user_email() or user.id
-        observability_metadata = await self._build_observability_metadata(
-            remote_workspace,
-            project_dir,
-            selected_repository,
-            selected_branch,
-            git_provider,
-        )
         create_kwargs: dict[str, Any] = {
             'agent': acp_agent,
             'user_id': laminar_user_id,
