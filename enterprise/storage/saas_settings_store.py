@@ -160,8 +160,7 @@ class SaasSettingsStore(SettingsStore):
         non-persisted launch override — never written back to
         ``org_member.active_agent_profile_id``), else the member's ambient
         ``active_agent_profile_id``, else the org-wide default pointer
-        (``AgentProfiles.active`` — covers members who never got their own
-        pointer set, e.g. a losing side of the one-time-seed race). Returns
+        (``AgentProfiles.active``, if one has been set). Returns
         ``(agent_settings_dump, profile_id, revision)``, or ``None`` to fall
         back to the composed ``agent_settings``.
         Delegates the ``llm_profile_ref`` + ``mcp_server_refs`` join entirely to

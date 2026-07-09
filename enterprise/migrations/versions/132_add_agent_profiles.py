@@ -15,9 +15,10 @@ organization level exactly like ``org.llm_profiles``:
 
 Data migration: no backfill. Existing rows read back with ``agent_profiles =
 NULL`` (treated as an empty collection) and ``active_agent_profile_id = NULL``
-(falls back to the legacy active-LLM materialization). The default agent profile
-is seeded lazily on first access to ``/api/agent-profiles``, so no downtime or
-follow-up script is required.
+(falls back to the legacy active-LLM materialization). No profile is
+auto-created: an org sees an empty list until someone with
+``EDIT_ORG_SETTINGS`` explicitly saves one, so no downtime or follow-up
+script is required.
 
 Revision ID: 132
 Revises: 131

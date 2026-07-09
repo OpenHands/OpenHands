@@ -11,8 +11,8 @@ else — the org-owned column, the locked org-row transaction, the
 
 Domain logic is **imported, never re-implemented** (the #3730 thin-boundary
 contract): validation → ``validate_agent_profile``; id/revision stamping →
-``save_profile_preserving_identity``; the default seed → ``build_seed_profile``;
-the dry-run resolve → ``resolve_agent_profile_dry_run``; the 422 redaction →
+``save_profile_preserving_identity``; the dry-run resolve →
+``resolve_agent_profile_dry_run``; the 422 redaction →
 ``safe_validation_error_detail``. Agent profiles are secret-free at rest
 (software-agent-sdk#4017 dropped the last secret-bearing field, embedded
 ``skills``) — unlike ``org_profiles``, there is no api-key lift/mask on
@@ -32,13 +32,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field, ValidationError
-from server.auth.authorization import (
-    Permission,
-    get_user_org_role,
-    get_user_super_role,
-    has_permission,
-    require_permission,
-)
+from server.auth.authorization import Permission, require_permission
 from server.auth.org_context import EFFECTIVE_ORG_ID
 from server.routes.org_models import OrgNotFoundError
 from sqlalchemy import select, update
@@ -53,7 +47,6 @@ from storage.database import a_session_maker
 from storage.org import Org
 from storage.org_member import OrgMember
 from storage.org_service import OrgService
-from storage.saas_settings_store import SaasSettingsStore
 
 from openhands.app_server.settings.agent_profiles import (
     MAX_AGENT_PROFILES,
@@ -64,7 +57,6 @@ from openhands.sdk.profiles import (
     AgentProfile,
     AgentProfileDiagnostics,
     ProfileLimitExceeded,
-    build_seed_profile,
     resolve_agent_profile_dry_run,
     safe_validation_error_detail,
     save_profile_preserving_identity,
@@ -206,70 +198,6 @@ async def _agent_profiles_transaction(
         await session.commit()
 
 
-async def _can_edit_org_settings(user_id: str, org_id: UUID) -> bool:
-    """Check EDIT_ORG_SETTINGS without the ``{org_id}``-path assumption
-    ``require_permission`` makes -- this is a stricter, in-handler check for
-    part of an otherwise VIEW_ORG_SETTINGS-gated request, so it takes the
-    already-resolved ``effective_org_id`` directly rather than re-deriving one
-    from the request. Mirrors ``require_permission``'s org-role-then-super-role
-    fallback.
-    """
-    user_role = await get_user_org_role(user_id, org_id)
-    if user_role and has_permission(user_role, Permission.EDIT_ORG_SETTINGS):
-        return True
-    super_role = await get_user_super_role(user_id)
-    if super_role and has_permission(
-        super_role, Permission.EDIT_ORG_SETTINGS, is_super=True
-    ):
-        return True
-    return False
-
-
-async def _seed_default_agent_profile(org_id: UUID, user_id: str) -> str | None:
-    """Lazily seed one default agent profile from the member's current settings.
-
-    The cloud half of the one-time migration (#15044 §8), mirroring the local
-    agent-server ``_seed_default_profile`` and the LLM ``_persist_seeded_default
-    _profile``: derive a behavior-preserving profile from the (kind-aware)
-    composed ``agent_settings`` via ``build_seed_profile`` and point the acting
-    member at it. Returns the seeded id, or ``None`` if a concurrent request
-    already seeded (double-checked under the row lock).
-
-    Callers must confirm the acting user has ``EDIT_ORG_SETTINGS`` first: this
-    writes ``AgentProfiles.active``, the org-wide default every other
-    un-activated member falls back to (see the inline comment below), so it
-    must not be reachable from a VIEW_ORG_SETTINGS-only caller.
-    """
-    settings = await SaasSettingsStore(user_id, effective_org_id=org_id).load()
-    if settings is None:
-        return None
-    # First caller wins: non-member-private fields (skills, condenser, ...) are
-    # captured from the acting member's composed settings as the org default.
-    seed = build_seed_profile(settings.agent_settings, settings.llm_profiles.active)
-    async with _agent_profiles_transaction(org_id, user_id) as (
-        session,
-        _org,
-        profiles,
-    ):
-        if profiles.list():
-            # Another request seeded between the unlocked emptiness check and the
-            # lock; don't clobber it.
-            return None
-        saved = save_profile_preserving_identity(
-            profiles, seed, max_profiles=MAX_AGENT_PROFILES
-        )
-        member = await _get_member(session, org_id, user_id)
-        if member is not None:
-            member.active_agent_profile_id = str(saved.id)
-        # Also set the org-wide default pointer so every *other* member —
-        # who never gets their own seed call re-triggered once profiles.list()
-        # is non-empty — still resolves to this profile instead of being
-        # stuck on the legacy composed-settings path forever (see
-        # AgentProfiles.active docstring: "an org-default active pointer").
-        profiles.active = str(saved.id)
-        return str(saved.id)
-
-
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 
@@ -280,47 +208,14 @@ async def list_agent_profiles(
 ) -> AgentProfileListResponse:
     """List agent profiles and the effective active pointer for this member.
 
-    On the first call against an empty store with no active pointer, and only
-    when the caller has ``EDIT_ORG_SETTINGS``, lazily seeds one default
-    profile from the org's current ``agent_settings`` and points the member at
-    it (the one-time migration; #15044 §8). The seed creates a profile in the
-    shared org-wide store and sets the org-wide default pointer every other
-    un-activated member falls back to, so a VIEW-only caller must not trigger
-    it: they just see the empty list, and the migration runs the next time
-    someone with EDIT_ORG_SETTINGS visits.
+    No implicit writes: an org with no profiles yet just returns an empty
+    list. Profile creation is always an explicit ``save_agent_profile`` call
+    (``EDIT_ORG_SETTINGS``).
     """
     org, member = await _get_org_and_member(effective_org_id, user_id)
     profiles = load_agent_profiles(org)
     member_active = member.active_agent_profile_id if member is not None else None
     active_id = member_active or profiles.active
-
-    if (
-        not profiles.list()
-        and active_id is None
-        and await _can_edit_org_settings(user_id, effective_org_id)
-    ):
-        try:
-            seeded_id = await _seed_default_agent_profile(effective_org_id, user_id)
-        except Exception:
-            # Never-brick: a seed failure (malformed composed settings, transient
-            # DB error) must degrade to the empty list, not 500 the whole listing.
-            logger.warning(
-                'Failed to seed default agent profile for user %s in org %s',
-                user_id,
-                effective_org_id,
-                exc_info=True,
-            )
-            seeded_id = None
-        # Refresh unconditionally: even when this request lost the seed race
-        # (seeded_id is None), a concurrent request may have already seeded
-        # the org-wide list, and this response must reflect it rather than
-        # the pre-seed snapshot taken above.
-        org = await _get_org(effective_org_id, user_id)
-        profiles = load_agent_profiles(org)
-        # This request's own seeded id if it won the race; otherwise the
-        # org-wide pointer a concurrent winner committed (member_active was
-        # None or we would not have entered this block).
-        active_id = seeded_id or profiles.active
 
     return AgentProfileListResponse(
         profiles=[AgentProfileInfo(**s) for s in profiles.list_summaries()],

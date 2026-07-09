@@ -23,9 +23,7 @@ from openhands.app_server.settings.agent_profiles import (
     MAX_AGENT_PROFILES,
     AgentProfiles,
 )
-from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.user_auth import get_user_id
-from openhands.sdk.llm import LLM
 from openhands.sdk.profiles import (
     ACPAgentProfile,
     AgentProfileStoreProtocol,
@@ -448,271 +446,61 @@ class TestAgentProfileRouterErrors:
         assert diag.llm_profile_resolved is True
 
 
-class TestLazySeedMigration:
+class TestListAgentProfiles:
     @pytest.mark.asyncio
-    async def test_first_list_seeds_default_and_points_member(
+    async def test_empty_store_returns_empty_list_no_implicit_write(
         self, async_session_maker, patch_agent_routes
     ):
+        """No auto-seed: an org with no profiles yet just gets an empty list,
+        and nothing is written (no shared profile, no pointer)."""
         org_id = patch_agent_routes
         uid = str(USER_ID)
 
-        # Stub the settings load the seed derives from.
-        fake_settings = MagicMock()
-        fake_settings.agent_settings.agent_kind = 'openhands'
-        from openhands.sdk.settings import validate_agent_settings
-
-        fake_settings.agent_settings = validate_agent_settings(
-            {'agent_kind': 'openhands'}
-        )
-        fake_settings.llm_profiles = LLMProfiles(
-            profiles={'Default': LLM(usage_id='u', model='gpt-4o')}, active='Default'
-        )
-        fake_store = MagicMock()
-        fake_store.load = AsyncMock(return_value=fake_settings)
-
-        with (
-            patch(
-                'server.routes.agent_profiles.SaasSettingsStore',
-                return_value=fake_store,
-            ),
-            patch(
-                'server.routes.agent_profiles.get_user_org_role',
-                AsyncMock(return_value=_role('admin')),
-            ),
-        ):
-            listing = await list_agent_profiles(effective_org_id=org_id, user_id=uid)
+        listing = await list_agent_profiles(effective_org_id=org_id, user_id=uid)
 
         assert isinstance(listing, AgentProfileListResponse)
-        assert len(listing.profiles) == 1
-        assert listing.profiles[0].name == 'default'
-        assert listing.profiles[0].llm_profile_ref == 'Default'
-        assert listing.active_agent_profile_id == listing.profiles[0].id
-        member = await _read_member(async_session_maker, org_id, USER_ID)
-        assert member.active_agent_profile_id == listing.profiles[0].id
-
-    @pytest.mark.asyncio
-    async def test_member_visiting_empty_store_does_not_seed(
-        self, async_session_maker, patch_agent_routes
-    ):
-        """A VIEW_ORG_SETTINGS-only caller (the seeded org member, role
-        'member') must not trigger the seed: it creates a profile in the
-        shared org-wide store and (for the first caller) sets the org-wide
-        default pointer every other un-activated member falls back to, so it
-        requires EDIT_ORG_SETTINGS. They just see an empty list."""
-        org_id = patch_agent_routes
-        uid = str(USER_ID)
-
-        with (
-            patch(
-                'server.routes.agent_profiles.get_user_org_role',
-                AsyncMock(return_value=_role('member')),
-            ),
-            patch(
-                'server.routes.agent_profiles.get_user_super_role',
-                AsyncMock(return_value=None),
-            ),
-        ):
-            listing = await list_agent_profiles(effective_org_id=org_id, user_id=uid)
-
         assert listing.profiles == []
         assert listing.active_agent_profile_id is None
         member = await _read_member(async_session_maker, org_id, USER_ID)
         assert member.active_agent_profile_id is None
 
     @pytest.mark.asyncio
-    async def test_admin_can_seed_after_member_visited_empty_store(
+    async def test_lists_saved_profiles_and_member_pointer(
         self, async_session_maker, patch_agent_routes
     ):
-        """After a member's no-op visit leaves the store empty, an
-        EDIT_ORG_SETTINGS-holder visiting next still triggers the one-time
-        seed normally."""
         org_id = patch_agent_routes
         uid = str(USER_ID)
 
-        with (
-            patch(
-                'server.routes.agent_profiles.get_user_org_role',
-                AsyncMock(return_value=_role('member')),
-            ),
-            patch(
-                'server.routes.agent_profiles.get_user_super_role',
-                AsyncMock(return_value=None),
-            ),
-        ):
-            await list_agent_profiles(effective_org_id=org_id, user_id=uid)
-
-        from openhands.sdk.settings import validate_agent_settings
-
-        fake_settings = MagicMock()
-        fake_settings.agent_settings = validate_agent_settings(
-            {'agent_kind': 'openhands'}
+        await save_agent_profile(
+            name='reviewer',
+            body={'llm_profile_ref': 'Default'},
+            effective_org_id=org_id,
+            user_id=uid,
         )
-        fake_settings.llm_profiles = LLMProfiles(
-            profiles={'Default': LLM(usage_id='u', model='gpt-4o')}, active='Default'
-        )
-        fake_store = MagicMock()
-        fake_store.load = AsyncMock(return_value=fake_settings)
+        listing = await list_agent_profiles(effective_org_id=org_id, user_id=uid)
 
-        with (
-            patch(
-                'server.routes.agent_profiles.SaasSettingsStore',
-                return_value=fake_store,
-            ),
-            patch(
-                'server.routes.agent_profiles.get_user_org_role',
-                AsyncMock(return_value=_role('admin')),
-            ),
-        ):
-            listing = await list_agent_profiles(effective_org_id=org_id, user_id=uid)
-
-        assert len(listing.profiles) == 1
-        assert listing.active_agent_profile_id == listing.profiles[0].id
+        assert [p.name for p in listing.profiles] == ['reviewer']
+        assert listing.active_agent_profile_id is None
 
     @pytest.mark.asyncio
-    async def test_list_reflects_concurrently_seeded_profile_on_race_loss(
+    async def test_falls_back_to_org_wide_active_pointer(
         self, async_session_maker, patch_agent_routes
     ):
-        """If this request loses the double-checked seed race,
-        list_agent_profiles must still return the profile a concurrent
-        request just seeded, not a stale pre-seed empty snapshot."""
+        """A member with no pointer of their own resolves to the org-wide
+        default (set explicitly via activate, not by any implicit write)."""
         org_id = patch_agent_routes
         uid = str(USER_ID)
 
         store = AgentProfiles()
-        winner_profile = save_profile_preserving_identity(
+        profile = save_profile_preserving_identity(
             store, OpenHandsAgentProfile(name='default', llm_profile_ref='Default')
         )
-        # The real winner also points the org-wide default at its seed
-        # (_seed_default_agent_profile sets profiles.active). The loser's own
-        # member pointer stays unset, so its effective active pointer is this
-        # org-wide one.
-        object.__setattr__(store, 'active', str(winner_profile.id))
+        object.__setattr__(store, 'active', str(profile.id))
+        await _set_agent_profiles(async_session_maker, org_id, store)
 
-        # The initial read (top of list_agent_profiles) sees an empty store,
-        # so it enters the seed branch. Only once _seed_default_agent_profile
-        # is actually invoked does a "concurrent" request's seed land on the
-        # org row — simulating the double-check losing the race — and this
-        # fake returns None just like the real losing branch does.
-        async def _lost_the_race(org_id, user_id):  # noqa: ARG001
-            await _set_agent_profiles(async_session_maker, org_id, store)
-            return None
+        listing = await list_agent_profiles(effective_org_id=org_id, user_id=uid)
 
-        with (
-            patch(
-                'server.routes.agent_profiles._seed_default_agent_profile',
-                new=AsyncMock(side_effect=_lost_the_race),
-            ),
-            patch(
-                'server.routes.agent_profiles.get_user_org_role',
-                AsyncMock(return_value=_role('admin')),
-            ),
-        ):
-            listing = await list_agent_profiles(effective_org_id=org_id, user_id=uid)
-
-        assert [p.name for p in listing.profiles] == ['default']
-        assert listing.profiles[0].id == str(winner_profile.id)
-        # The race loser must surface the winner's org-wide active pointer, not
-        # a stale null from the pre-seed snapshot.
-        assert listing.active_agent_profile_id == str(winner_profile.id)
-
-    @pytest.mark.asyncio
-    async def test_seed_failure_degrades_to_empty_list(self, patch_agent_routes):
-        """A raising seed must not 500 the listing — it degrades to empty."""
-        org_id = patch_agent_routes
-        uid = str(USER_ID)
-
-        with (
-            patch(
-                'server.routes.agent_profiles._seed_default_agent_profile',
-                new=AsyncMock(side_effect=RuntimeError('boom')),
-            ),
-            patch(
-                'server.routes.agent_profiles.get_user_org_role',
-                AsyncMock(return_value=_role('admin')),
-            ),
-        ):
-            listing = await list_agent_profiles(effective_org_id=org_id, user_id=uid)
-
-        assert isinstance(listing, AgentProfileListResponse)
-        assert listing.profiles == []
-        assert listing.active_agent_profile_id is None
-
-    @pytest.mark.asyncio
-    async def test_second_member_resolves_org_default_after_seed(
-        self, async_session_maker, patch_agent_routes
-    ):
-        """A member who never triggers (or wins) the one-time seed keeps
-        getting a null active pointer from ``member.active_agent_profile_id``
-        forever, since the seed gate only re-fires while ``profiles.list()``
-        is empty. They must still resolve to the org-wide default the first
-        member's seed set (``AgentProfiles.active``), both in the list
-        response and in ``SaasSettingsStore`` resolution."""
-        org_id = patch_agent_routes
-        first_user_id = USER_ID
-        second_user_id = uuid.UUID('6694c7b6-f959-4b81-92e9-b09c206f5099')
-
-        async with async_session_maker() as session:
-            session.add(
-                User(
-                    id=second_user_id,
-                    current_org_id=org_id,
-                    user_consents_to_analytics=True,
-                )
-            )
-            session.add(
-                OrgMember(
-                    org_id=org_id,
-                    user_id=second_user_id,
-                    role_id=20,
-                    llm_api_key='second-initial-key',
-                    agent_settings_diff={},
-                )
-            )
-            await session.commit()
-
-        from openhands.sdk.settings import validate_agent_settings
-
-        fake_settings = MagicMock()
-        fake_settings.agent_settings = validate_agent_settings(
-            {'agent_kind': 'openhands'}
-        )
-        fake_settings.llm_profiles = LLMProfiles(
-            profiles={'Default': LLM(usage_id='u', model='gpt-4o')}, active='Default'
-        )
-        fake_store = MagicMock()
-        fake_store.load = AsyncMock(return_value=fake_settings)
-
-        with (
-            patch(
-                'server.routes.agent_profiles.SaasSettingsStore',
-                return_value=fake_store,
-            ),
-            # The first (winning) caller needs EDIT_ORG_SETTINGS to trigger
-            # the seed; the second (losing) caller's own role is irrelevant
-            # here since the store is non-empty by the time they list, so
-            # they never reach the permission check at all.
-            patch(
-                'server.routes.agent_profiles.get_user_org_role',
-                AsyncMock(return_value=_role('admin')),
-            ),
-        ):
-            winner_listing = await list_agent_profiles(
-                effective_org_id=org_id, user_id=str(first_user_id)
-            )
-            loser_listing = await list_agent_profiles(
-                effective_org_id=org_id, user_id=str(second_user_id)
-            )
-
-        assert winner_listing.active_agent_profile_id == winner_listing.profiles[0].id
-
-        second_member = await _read_member(async_session_maker, org_id, second_user_id)
-        # The loser never gets their own per-member pointer set...
-        assert second_member.active_agent_profile_id is None
-        # ...but the list response still resolves them to the org default.
-        assert (
-            loser_listing.active_agent_profile_id
-            == winner_listing.active_agent_profile_id
-        )
+        assert listing.active_agent_profile_id == str(profile.id)
 
 
 # ── FK guard wired into the LLM-profile router ─────────────────────────────
@@ -827,10 +615,9 @@ class TestResolveActiveAgentProfile:
         assert store._resolve_active_agent_profile(org, member, {}, None) is None
 
     def test_falls_back_to_org_wide_active_pointer_when_member_pointer_unset(self):
-        """A member whose own ``active_agent_profile_id`` was never set
-        (e.g. the losing side of the one-time-seed race) must still resolve
-        to the org-wide default (``AgentProfiles.active``) rather than
-        silently falling back to the legacy composed settings forever."""
+        """A member with no per-member pointer of their own must still
+        resolve to the org-wide default (``AgentProfiles.active``), if one
+        happens to be set, rather than falling back to composed settings."""
         store = self._store()
         org, pid = self._org_with(
             OpenHandsAgentProfile(name='reviewer', llm_profile_ref='Default')
@@ -842,7 +629,7 @@ class TestResolveActiveAgentProfile:
         )
 
         member = MagicMock(spec=OrgMember)
-        member.active_agent_profile_id = None  # never won the seed race
+        member.active_agent_profile_id = None
 
         result = store._resolve_active_agent_profile(org, member, {}, None)
         assert result is not None
@@ -1446,37 +1233,3 @@ class TestAgentProfilesRouterAuthorizationBoundary:
             )
 
         assert response.status_code == status.HTTP_201_CREATED
-
-    @pytest.mark.asyncio
-    async def test_member_gets_200_but_does_not_trigger_org_wide_seed(
-        self, agent_profiles_app, async_session_maker, patch_agent_routes
-    ):
-        """End-to-end: a MEMBER's real GET passes the route's own
-        VIEW_ORG_SETTINGS gate (200, not 403) but must not trigger the
-        org-wide seed, which needs EDIT_ORG_SETTINGS -- the write side of
-        this same permission boundary that ``TestLazySeedMigration`` proves
-        at the handler level."""
-        org_id = patch_agent_routes
-
-        with (
-            patch(
-                'server.auth.authorization.get_user_org_role',
-                AsyncMock(return_value=_role('member')),
-            ),
-            patch(
-                'server.routes.agent_profiles.get_user_org_role',
-                AsyncMock(return_value=_role('member')),
-            ),
-            patch(
-                'server.routes.agent_profiles.get_user_super_role',
-                AsyncMock(return_value=None),
-            ),
-        ):
-            client = TestClient(agent_profiles_app)
-            response = client.get('/api/agent-profiles')
-
-        assert response.status_code == status.HTTP_200_OK
-        assert response.json()['profiles'] == []
-        assert response.json()['active_agent_profile_id'] is None
-        member = await _read_member(async_session_maker, org_id, USER_ID)
-        assert member.active_agent_profile_id is None
