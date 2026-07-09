@@ -105,6 +105,10 @@ def member_mcp_config(member: OrgMember) -> dict[str, MCPServer]:
         return {}
     try:
         return coerce_mcp_config(raw)
-    except ValidationError as exc:
+    except Exception as exc:
+        # Catch broadly, not just ValidationError: coerce_mcp_config also raises
+        # on fastmcp normalization / contract drift, and a malformed member
+        # config must resolve to "no servers" rather than 500 the materialize
+        # endpoint. Matches _resolve_active_agent_profile's inline coerce.
         logger.warning('Failed to parse member MCP config for resolve: %s', exc)
         return {}

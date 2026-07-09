@@ -260,7 +260,18 @@ async def list_agent_profiles(
     active_id = member_active or profiles.active
 
     if not profiles.list() and active_id is None:
-        seeded_id = await _seed_default_agent_profile(effective_org_id, user_id)
+        try:
+            seeded_id = await _seed_default_agent_profile(effective_org_id, user_id)
+        except Exception:
+            # Never-brick: a seed failure (malformed composed settings, transient
+            # DB error) must degrade to the empty list, not 500 the whole listing.
+            logger.warning(
+                'Failed to seed default agent profile for user %s in org %s',
+                user_id,
+                effective_org_id,
+                exc_info=True,
+            )
+            seeded_id = None
         # Refresh unconditionally: even when this request lost the seed race
         # (seeded_id is None), a concurrent request may have already seeded
         # the org-wide list, and this response must reflect it rather than

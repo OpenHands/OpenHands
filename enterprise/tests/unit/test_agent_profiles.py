@@ -51,7 +51,10 @@ with patch('storage.database.a_session_maker'):
         delete_profile,
         rename_profile,
     )
-    from storage.agent_profile_resolution import load_agent_profiles
+    from storage.agent_profile_resolution import (
+        load_agent_profiles,
+        member_mcp_config,
+    )
 
 ORG_ID = uuid.UUID('6694c7b6-f959-4b81-92e9-b09c206f5081')
 USER_ID = uuid.UUID('6694c7b6-f959-4b81-92e9-b09c206f5082')
@@ -146,6 +149,17 @@ def test_load_agent_profiles_defaults_empty_and_degrades():
     # Garbage envelope degrades to empty rather than raising.
     org.agent_profiles = {'profiles': 'not-a-dict'}
     assert load_agent_profiles(org).list_summaries() == []
+
+
+def test_member_mcp_config_degrades_on_non_validation_error():
+    """coerce_mcp_config failures beyond ValidationError degrade to {}, not raise."""
+    member = MagicMock(spec=OrgMember)
+    member.agent_settings_diff = {'mcp_config': {'mcpServers': {}}}
+    with patch(
+        'storage.agent_profile_resolution.coerce_mcp_config',
+        side_effect=TypeError('contract drift'),
+    ):
+        assert member_mcp_config(member) == {}
 
 
 # ── Router integration (real Org row over SQLite) ──────────────────────────
@@ -507,6 +521,22 @@ class TestLazySeedMigration:
         # The race loser must surface the winner's org-wide active pointer, not
         # a stale null from the pre-seed snapshot.
         assert listing.active_agent_profile_id == str(winner_profile.id)
+
+    @pytest.mark.asyncio
+    async def test_seed_failure_degrades_to_empty_list(self, patch_agent_routes):
+        """A raising seed must not 500 the listing — it degrades to empty."""
+        org_id = patch_agent_routes
+        uid = str(USER_ID)
+
+        with patch(
+            'server.routes.agent_profiles._seed_default_agent_profile',
+            new=AsyncMock(side_effect=RuntimeError('boom')),
+        ):
+            listing = await list_agent_profiles(effective_org_id=org_id, user_id=uid)
+
+        assert isinstance(listing, AgentProfileListResponse)
+        assert listing.profiles == []
+        assert listing.active_agent_profile_id is None
 
     @pytest.mark.asyncio
     async def test_second_member_resolves_org_default_after_seed(
