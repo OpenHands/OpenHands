@@ -1,5 +1,5 @@
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 from pydantic import SecretStr
@@ -167,6 +167,9 @@ def settings_store(async_session_maker):
                 del item_dict['secrets_store']
             if 'llm_profiles' in item_dict:
                 del item_dict['llm_profiles']
+            # inherited_marketplaces is computed at runtime, not persisted
+            if 'inherited_marketplaces' in item_dict:
+                del item_dict['inherited_marketplaces']
 
             # Encrypt the data before storing
             for key in ('llm_api_key', 'search_api_key', 'sandbox_api_key'):
@@ -196,7 +199,13 @@ def settings_store(async_session_maker):
                     await session.merge(existing)
                 else:
                     item_dict['keycloak_user_id'] = store.user_id
-                    settings = UserSettings(**item_dict)
+                    settings = UserSettings(
+                        **{
+                            key: value
+                            for key, value in item_dict.items()
+                            if key in UserSettings.__table__.columns
+                        }
+                    )
                     session.add(settings)
                 await session.commit()
 
@@ -717,6 +726,13 @@ async def test_store_keeps_mcp_config_private_to_acting_member(
             'user1': {'url': 'https://user1-mcp-server.com', 'transport': 'sse'}
         },
     }
+    # The SDK 1.31.x wire format stores ``mcp_config`` as a flat server
+    # map; ``Settings.update`` still accepts the legacy wrapper for
+    # backwards compatibility, but ``model_dump(mode='json')`` — which is
+    # what ``_get_persisted_agent_settings`` uses — no longer wraps.
+    persisted_mcp_config = {
+        'user1': {'url': 'https://user1-mcp-server.com', 'transport': 'sse'},
+    }
     new_settings = DataSettings()
     new_settings.update(
         {
@@ -751,7 +767,8 @@ async def test_store_keeps_mcp_config_private_to_acting_member(
 
     assert 'mcp_config' not in org.agent_settings
     assert (
-        members[admin_user_id].agent_settings_diff.get('mcp_config') == user_mcp_config
+        members[admin_user_id].agent_settings_diff.get('mcp_config')
+        == persisted_mcp_config
     )
     assert 'mcp_config' not in members[member1_user_id].agent_settings_diff
     assert 'mcp_config' not in members[member2_user_id].agent_settings_diff
@@ -876,7 +893,7 @@ async def test_store_and_load_mcp_config_via_agent_settings(
     assert loaded is not None
     assert loaded.agent_settings.mcp_config is not None
     assert (
-        loaded.agent_settings.mcp_config.mcpServers['admin'].url
+        loaded.agent_settings.mcp_config['admin'].url
         == 'https://admin-private-server.com'
     )
 
@@ -932,7 +949,9 @@ async def test_load_drops_legacy_org_level_mcp_config(
 
     # Assert — legacy org mcp_config is not inherited by member1
     assert loaded is not None
-    assert loaded.agent_settings.mcp_config is None
+    # The SDK normalizes ``None`` to ``{}`` so the absence of an MCP config
+    # surfaces as an empty server map rather than ``None``.
+    assert loaded.agent_settings.mcp_config == {}
 
 
 @pytest.mark.asyncio
@@ -1268,10 +1287,100 @@ async def test_store_replaces_mcp_config_on_delete(
             .all()
         }
 
-    admin_servers = (
-        members[admin_user_id]
-        .agent_settings_diff.get('mcp_config', {})
-        .get('mcpServers', {})
-    )
+    # The persisted ``mcp_config`` is the SDK 1.31.x flat server map (no
+    # ``mcpServers`` wrapper), so reach directly into it instead of going
+    # through the legacy wrapper key.
+    admin_servers = members[admin_user_id].agent_settings_diff.get('mcp_config', {})
     assert set(admin_servers.keys()) == {'server1', 'server2'}
     assert 'mcp_config' not in members[member1_user_id].agent_settings_diff
+
+
+class TestGetEffectiveLlmApiKey:
+    """Regression tests for SaasSettingsStore._get_effective_llm_api_key() - GitHub #14898."""
+
+    def test_returns_member_key_when_has_custom_is_true(self):
+        """When has_custom_llm_api_key is True, returns member's LLM API key."""
+        from pydantic import SecretStr
+        from storage.saas_settings_store import SaasSettingsStore
+
+        org = MagicMock()
+        org.llm_api_key = SecretStr('org-api-key')
+
+        member = MagicMock()
+        member.has_custom_llm_api_key = True
+        member.llm_api_key = SecretStr('member-api-key')
+
+        result = SaasSettingsStore._get_effective_llm_api_key(org, member)
+
+        assert result == SecretStr('member-api-key')
+
+    def test_returns_org_key_and_does_not_access_member_key_when_has_custom_is_false(
+        self,
+    ):
+        """When has_custom_llm_api_key is False, returns org key without accessing member key.
+
+        This is a regression test for GitHub #14898. Previously, the code would fall back
+        to org_member.llm_api_key even when has_custom_llm_api_key was False, which
+        caused decryption errors when the member had no custom key set (empty/null stored value).
+        """
+        from pydantic import SecretStr
+        from storage.saas_settings_store import SaasSettingsStore
+
+        org = MagicMock()
+        org.llm_api_key = SecretStr('org-api-key')
+
+        member = MagicMock()
+        member.has_custom_llm_api_key = False
+
+        # Set llm_api_key to raise an error if accessed - this verifies we don't access it
+        def raise_on_access():
+            raise AssertionError(
+                'member.llm_api_key should not be accessed when has_custom_llm_api_key is False'
+            )
+
+        type(member).llm_api_key = PropertyMock(side_effect=raise_on_access)
+
+        result = SaasSettingsStore._get_effective_llm_api_key(org, member)
+
+        # Must return org key when has_custom_llm_api_key is False
+        assert result == SecretStr('org-api-key')
+
+    def test_falls_back_to_managed_member_key_when_org_key_unset(self):
+        """has_custom False + no org key: fall back to the managed key on the member row.
+
+        Managed/proxy keys are persisted on org_member.llm_api_key with
+        has_custom_llm_api_key=False. #14898 dropped this fallback entirely, which
+        left managed-key users with no key (and wiped it on settings save).
+        """
+        from pydantic import SecretStr
+        from storage.saas_settings_store import SaasSettingsStore
+
+        org = MagicMock()
+        org.llm_api_key = None
+
+        member = MagicMock()
+        member.has_custom_llm_api_key = False
+        member._llm_api_key = 'encrypted-managed-key'  # truthy => set
+        type(member).llm_api_key = PropertyMock(return_value=SecretStr('managed-key'))
+
+        result = SaasSettingsStore._get_effective_llm_api_key(org, member)
+
+        assert result == SecretStr('managed-key')
+
+    def test_returns_none_without_decrypting_when_member_key_unset(self):
+        """has_custom False, no org key, empty member key: None, never decrypt (#14898)."""
+        from storage.saas_settings_store import SaasSettingsStore
+
+        org = MagicMock()
+        org.llm_api_key = None
+
+        member = MagicMock()
+        member.has_custom_llm_api_key = False
+        member._llm_api_key = ''  # falsy => not set; must NOT decrypt
+        type(member).llm_api_key = PropertyMock(
+            side_effect=AssertionError('should not decrypt an unset member key')
+        )
+
+        result = SaasSettingsStore._get_effective_llm_api_key(org, member)
+
+        assert result is None

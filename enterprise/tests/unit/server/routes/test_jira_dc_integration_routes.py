@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import parse_qs, urlparse
 
+import httpx
 import pytest
 from fastapi import HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -21,6 +22,7 @@ from server.routes.integration.jira_dc import (
     create_jira_dc_workspace,
     create_workspace_link,
     get_current_workspace_link,
+    get_jira_dc_instance_status,
     get_jira_dc_secret_token,
     jira_dc_callback,
     jira_dc_connection_events,
@@ -498,6 +500,37 @@ async def test_jira_dc_callback_token_exchange_uses_form_encoding(
     kwargs = mock_client.post.call_args.kwargs
     assert kwargs.get('data', {}).get('grant_type') == 'authorization_code'
     assert 'json' not in kwargs
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.redis_client')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+async def test_jira_dc_callback_token_endpoint_unreachable_returns_502(
+    mock_manager, mock_redis, mock_request
+):
+    """An unreachable token endpoint (wrong scheme / blocked egress) returns an
+    actionable 502, not a bare 500."""
+    state = 'test_state'
+    session_data = {
+        'operation_type': 'workspace_integration',
+        'keycloak_user_id': 'user1',
+        'target_workspace': 'test.atlassian.net',
+        'state': state,
+    }
+    mock_redis.get.return_value = json.dumps(session_data)
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(side_effect=httpx.ConnectTimeout('timed out'))
+    mock_httpx = AsyncMock()
+    mock_httpx.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_httpx.__aexit__ = AsyncMock(return_value=None)
+
+    with patch('httpx.AsyncClient', return_value=mock_httpx):
+        with pytest.raises(HTTPException) as exc_info:
+            await jira_dc_callback(mock_request, 'code', state)
+
+    assert exc_info.value.status_code == 502
+    assert 'Could not reach' in exc_info.value.detail
 
 
 @pytest.mark.asyncio
@@ -2184,3 +2217,56 @@ async def test_callback_workspace_link_persists_tokens(
     assert kwargs['keycloak_user_id'] == 'user2'
     assert kwargs['workspace_id'] == 9
     assert kwargs['encrypted_access_token'] == 'enc(at)'
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.get_user_auth')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+async def test_get_jira_dc_instance_status_configured(
+    mock_manager, mock_get_auth, mock_request, mock_user_auth
+):
+    mock_get_auth.return_value = mock_user_auth
+    # org_id=None => install-wide, visible to everyone.
+    mock_workspace = MagicMock(status='active', org_id=None)
+    mock_workspace.name = 'jira.example.com'
+    mock_manager.integration_store.get_active_workspace.return_value = mock_workspace
+
+    response = await get_jira_dc_instance_status(mock_request)
+    assert response.configured is True
+    assert response.host == 'jira.example.com'
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.get_user_auth')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+async def test_get_jira_dc_instance_status_hidden_for_other_org(
+    mock_manager, mock_get_auth, mock_request, mock_user_auth
+):
+    # A workspace stamped with a different team org must not leak to this user
+    # (mock_user_auth's effective org is ...123).
+    mock_get_auth.return_value = mock_user_auth
+    mock_workspace = MagicMock(
+        status='active',
+        org_id=uuid.UUID('00000000-0000-0000-0000-000000000999'),
+        admin_user_id='some-other-admin',
+    )
+    mock_workspace.name = 'jira.other-org.com'
+    mock_manager.integration_store.get_active_workspace.return_value = mock_workspace
+
+    response = await get_jira_dc_instance_status(mock_request)
+    assert response.configured is False
+    assert response.host is None
+
+
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.get_user_auth')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+async def test_get_jira_dc_instance_status_not_configured(
+    mock_manager, mock_get_auth, mock_request, mock_user_auth
+):
+    mock_get_auth.return_value = mock_user_auth
+    mock_manager.integration_store.get_active_workspace.return_value = None
+
+    response = await get_jira_dc_instance_status(mock_request)
+    assert response.configured is False
+    assert response.host is None

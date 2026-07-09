@@ -18,7 +18,7 @@ from integrations.resolver_context import ResolverUserContext
 from integrations.resolver_org_router import resolve_org_for_repo
 from integrations.utils import CONVERSATION_URL
 from jinja2 import Environment
-from server.auth.constants import JIRA_DC_ENABLE_OAUTH
+from server.auth.constants import JIRA_DC_ENABLE_OAUTH, JIRA_DC_HTTP_TIMEOUT
 from storage.jira_dc_conversation import JiraDcConversation
 from storage.jira_dc_integration_store import JiraDcIntegrationStore
 from storage.jira_dc_user import JiraDcUser
@@ -209,7 +209,13 @@ class JiraDcNewConversationView(JiraDcViewInterface):
     def get_response_msg(self) -> str:
         """Get the response message to send back to Jira DC."""
         conversation_link = CONVERSATION_URL.format(self.conversation_id)
-        return f"I'm on it! {self.job_context.display_name} can [track my progress here|{conversation_link}]."
+        # Name the resolved repo so the user can confirm we picked the right one.
+        prefix = (
+            f"I'm on it in {self.selected_repo}!"
+            if self.selected_repo
+            else "I'm on it!"
+        )
+        return f'{prefix} {self.job_context.display_name} can [track my progress here|{conversation_link}].'
 
 
 @dataclass
@@ -321,7 +327,7 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
                     url,
                     json=payload,
                     headers=headers,
-                    timeout=30.0,
+                    timeout=JIRA_DC_HTTP_TIMEOUT,
                 )
                 response.raise_for_status()
                 logger.info(

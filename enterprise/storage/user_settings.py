@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any
 
@@ -10,6 +11,10 @@ from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
 from storage.encrypt_utils import decrypt_legacy_value, encrypt_legacy_value
+
+from openhands.app_server.settings.settings_models import MarketplaceRegistration
+
+logger = logging.getLogger(__name__)
 
 
 class UserSettings(Base):
@@ -42,6 +47,7 @@ class UserSettings(Base):
         String, nullable=True
     )
     sandbox_grouping_strategy: Mapped[str | None] = mapped_column(String, nullable=True)
+    default_sandbox_spec_id: Mapped[str | None] = mapped_column(String, nullable=True)
     user_version: Mapped[int] = mapped_column(nullable=False, default=0)
     accepted_tos: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Deprecated (v0): mcp_config now lives inside AgentSettings on Org / OrgMember.
@@ -83,11 +89,36 @@ class UserSettings(Base):
     already_migrated: Mapped[bool | None] = mapped_column(
         nullable=True, default=False
     )  # False = not migrated, True = migrated
+    registered_marketplaces: Mapped[
+        list[dict[str, Any] | MarketplaceRegistration] | None
+    ] = mapped_column(JSON, nullable=True)
 
     def to_settings(self):
-        from openhands.app_server.settings.settings_models import Settings
+        from openhands.app_server.settings.settings_models import (
+            Settings,
+            validate_and_convert_marketplaces,
+        )
+
+        # Normalize marketplace data: ensure scope='personal' for legacy data
+        normalized_marketplaces = []
+        for mp in self.registered_marketplaces or []:
+            if isinstance(mp, dict):
+                # Set scope='personal' if missing (backward compatibility)
+                if mp.get('scope') is None:
+                    mp = {**mp, 'scope': 'personal'}
+                # Ensure auto_load defaults to False if missing
+                if 'auto_load' not in mp:
+                    mp = {**mp, 'auto_load': False}
+            normalized_marketplaces.append(mp)
+
+        # Validate marketplace data using shared utility
+        marketplaces = validate_and_convert_marketplaces(
+            normalized_marketplaces,
+            source_name='user settings',
+        )
 
         return Settings(
             agent_settings=self.agent_settings or {},
             conversation_settings=self.conversation_settings or {},
+            registered_marketplaces=marketplaces,
         )

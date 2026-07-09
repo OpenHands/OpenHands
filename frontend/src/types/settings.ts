@@ -113,7 +113,35 @@ export type SkillInfo = {
   triggers?: string[];
 };
 
+// A plugin advertised by a marketplace manifest. The UI operates at the plugin
+// level, so a plugin's bundled skills are not expanded into this shape.
+export type MarketplacePluginInfo = {
+  name: string;
+  description?: string | null;
+  source: string; // the marketplace registration source (e.g. github:owner/repo)
+  marketplace: string; // the marketplace registration name
+};
+
 export type SettingsScope = "personal" | "org";
+
+export type MarketplaceRegistration = {
+  name: string;
+  source: string;
+  ref?: string;
+  repo_path?: string;
+  auto_load?: boolean;
+  // Backend-derived; present on reads, omitted from write payloads (the backend
+  // sets scope per storage layer). Optional so save payloads need not include it.
+  scope?: "instance" | "org" | "personal";
+};
+
+export interface SkillWithState extends SkillInfo {
+  id: string;
+  repository: string;
+  scope: "instance" | "org" | "personal";
+  isEnabled: boolean;
+  isAutoLoad: boolean;
+}
 
 export type Settings = {
   llm_model: string;
@@ -143,10 +171,15 @@ export type Settings = {
   email_verified?: boolean;
   git_user_name?: string;
   git_user_email?: string;
+  git_full_clone?: boolean;
   v1_enabled?: boolean;
   agent_settings_schema?: SettingsSchema | null;
   agent_settings?: Record<string, SettingsValue> | null;
   conversation_settings_schema?: SettingsSchema | null;
   conversation_settings?: Record<string, SettingsValue> | null;
   sandbox_grouping_strategy?: SandboxGroupingStrategy;
+  registered_marketplaces?: MarketplaceRegistration[];
+  inherited_marketplaces?: MarketplaceRegistration[];
+  updated_at?: string;
+  default_sandbox_spec_id?: string | null;
 };

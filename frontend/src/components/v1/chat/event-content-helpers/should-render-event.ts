@@ -8,6 +8,7 @@ import {
   isConversationStateUpdateEvent,
   isHookExecutionEvent,
   isACPToolCallEvent,
+  isStreamingDeltaEvent,
   isV1Event,
 } from "#/types/v1/type-guards";
 
@@ -46,6 +47,12 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
 
   // Render message events (user and assistant messages)
   if (isMessageEvent(event)) {
+    return true;
+  }
+
+  // Render streaming token deltas (the live, growing assistant bubble).
+  // Empty boundary deltas are dropped upstream in handleEventForUI.
+  if (isStreamingDeltaEvent(event)) {
     return true;
   }
 

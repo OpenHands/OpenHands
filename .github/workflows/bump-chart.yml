@@ -1,0 +1,22 @@
+# Opens a PR in OpenHands/OpenHands-Cloud pointing the openhands chart's
+# image.tag at the enterprise-server image that was just tagged. tag-image.yml
+# retags the sha-built image with the tag name (type=ref,event=tag)
+# concurrently, so the image tag matches the git tag verbatim — no prefix
+# stripping needed.
+name: Bump chart image tag
+
+on:
+  push:
+    tags:
+      - 'cloud-[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  bump-chart:
+    # secrets: inherit forwards the org secrets RELEASE_APP_ID /
+    # RELEASE_APP_PRIVATE_KEY that the reusable workflow needs.
+    secrets: inherit
+    uses: OpenHands/OpenHands-Cloud/.github/workflows/bump-image-tag.yml@main
+    with:
+      component: openhands
+      chart_file: charts/openhands/values.yaml
+      tag: ${{ github.ref_name }}

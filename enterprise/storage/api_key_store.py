@@ -19,9 +19,36 @@ class ApiKeyValidationResult:
     """Result of API key validation containing user and organization info."""
 
     user_id: str
-    org_id: UUID | None  # None for legacy API keys without org binding
+    # None when the key is unbound (scoped to the caller via X-Org-Id at
+    # request time, or defaulting to user.current_org_id when no header is
+    # supplied). See ``SaasUserAuth._resolve_org_id`` for the full precedence.
+    org_id: UUID | None
     key_id: int
     key_name: str | None
+
+
+def _as_naive(value: datetime | None) -> datetime | None:
+    """Strip tzinfo so a value can be written to a `TIMESTAMP WITHOUT TIME ZONE`
+    column. Naive values are passed through unchanged; values already in UTC
+    are returned naive without conversion (i.e. we trust the caller's value).
+
+    TODO: switch the api_keys columns to TIMESTAMP WITH TIME ZONE and drop this.
+    """
+    if value is None or value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)
+
+
+def _as_utc_aware(value: datetime | None) -> datetime | None:
+    """Re-attach UTC tzinfo to a value that was stored as naive in a
+    `TIMESTAMP WITHOUT TIME ZONE` column. Already-aware values are returned
+    unchanged.
+
+    TODO: switch the api_keys columns to TIMESTAMP WITH TIME ZONE and drop this.
+    """
+    if value is None:
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 @dataclass
@@ -55,7 +82,10 @@ class ApiKeyStore:
         user_id: str,
         name: str | None = None,
         expires_at: datetime | None = None,
+        not_before: datetime | None = None,
         org_id: UUID | None = None,
+        *,
+        use_current_org_fallback: bool = True,
     ) -> str:
         """Create a new API key for a user.
 
@@ -64,24 +94,34 @@ class ApiKeyStore:
             name: Optional name for the key
             expires_at: Expiration datetime in UTC. Timezone info is stripped before
                 writing to the TIMESTAMP WITHOUT TIME ZONE column.
-            org_id: Optional explicit org binding. When omitted, falls back
-                to the user's persisted ``current_org_id``. Callers in
-                request context should pass the effective org id (see
-                ``SaasUserAuth.get_effective_org_id``).
+            not_before: Optional earliest activation datetime in UTC. The key is
+                rejected at validation time when ``now < not_before``. Timezone
+                info is stripped before writing, mirroring ``expires_at``.
+            org_id: Org binding for the new key. ``None`` creates an
+                *unbound* key (resolved per-request via ``X-Org-Id`` or the
+                caller's ``user.current_org_id``). When
+                ``use_current_org_fallback`` is ``True`` (the default,
+                preserved for backwards compatibility with internal callers),
+                a ``None`` ``org_id`` is replaced with the user's
+                ``current_org_id`` instead. Callers that have already decided
+                the binding should pass ``use_current_org_fallback=False``
+                so an explicit ``None`` is stored verbatim.
+            use_current_org_fallback: See ``org_id``. Defaults to ``True``
+                for backward compatibility.
 
         Returns:
             The generated API key
         """
         api_key = self.generate_api_key()
-        if org_id is None:
+        if org_id is None and use_current_org_fallback:
             user = await UserStore.get_user_by_id(user_id)
             if user is None:
                 raise ValueError(f'User not found: {user_id}')
             org_id = user.current_org_id
 
         # Column is TIMESTAMP WITHOUT TIME ZONE; strip tzinfo before writing.
-        if expires_at is not None and expires_at.tzinfo is not None:
-            expires_at = expires_at.replace(tzinfo=None)
+        expires_at = _as_naive(expires_at)
+        not_before = _as_naive(not_before)
 
         async with a_session_maker() as session:
             key_record = ApiKey(
@@ -89,6 +129,7 @@ class ApiKeyStore:
                 user_id=user_id,
                 org_id=org_id,
                 name=name,
+                not_before=not_before,
                 expires_at=expires_at,
             )
             session.add(key_record)
@@ -139,11 +180,9 @@ class ApiKeyStore:
                 # Check if expired
                 if existing_key.expires_at:
                     now = datetime.now(UTC)
-                    expires_at = existing_key.expires_at
-                    if expires_at.tzinfo is None:
-                        expires_at = expires_at.replace(tzinfo=UTC)
+                    expires_at = _as_utc_aware(existing_key.expires_at)
 
-                    if expires_at < now:
+                    if expires_at and expires_at < now:
                         # Key is expired, delete it and create new one
                         logger.info(
                             'System API key expired, re-issuing',
@@ -206,9 +245,16 @@ class ApiKeyStore:
     async def validate_api_key(self, api_key: str) -> ApiKeyValidationResult | None:
         """Validate an API key and return the associated user_id and org_id if valid.
 
+        A key is valid only when ``not_before <= now < expires_at``. Both bounds
+        are optional and independent: a ``NULL`` bound means the key is
+        unconstrained in that direction. Out-of-window keys are rejected and
+        ``last_used_at`` is not updated.
+
         Returns:
             ApiKeyValidationResult if the key is valid, None otherwise.
-            The org_id may be None for legacy API keys that weren't bound to an organization.
+            The ``org_id`` is ``None`` for *unbound* keys (see
+            ``create_api_key``); such keys are scoped per-request via the
+            ``X-Org-Id`` header or the caller's current org id.
         """
         now = datetime.now(UTC)
 
@@ -219,21 +265,24 @@ class ApiKeyStore:
             if not key_record:
                 return None
 
-            # expires_at is stored as naive UTC; re-attach tzinfo for comparison.
-            if key_record.expires_at:
-                expires_at = key_record.expires_at
-                if expires_at.tzinfo is None:
-                    expires_at = expires_at.replace(tzinfo=UTC)
+            # not_before / expires_at are stored as naive UTC; re-attach tzinfo
+            # for comparison. The two checks are independent and combined with
+            # AND semantics.
+            not_before = _as_utc_aware(key_record.not_before)
+            if not_before and now < not_before:
+                logger.info(f'API key not yet active: {key_record.id}')
+                return None
 
-                if expires_at < now:
-                    logger.info(f'API key has expired: {key_record.id}')
-                    return None
+            expires_at = _as_utc_aware(key_record.expires_at)
+            if expires_at and expires_at < now:
+                logger.info(f'API key has expired: {key_record.id}')
+                return None
 
             # Update last_used_at timestamp
             await session.execute(
                 update(ApiKey)
                 .where(ApiKey.id == key_record.id)
-                .values(last_used_at=now.replace(tzinfo=None))
+                .values(last_used_at=_as_naive(now))
             )
             await session.commit()
 
@@ -293,17 +342,18 @@ class ApiKeyStore:
     async def list_api_keys(
         self, user_id: str, org_id: UUID | None = None
     ) -> list[ApiKey]:
-        """List all user-visible API keys for a user in the given org.
+        """List user-visible API keys for a user.
+
+        Returns keys that are either bound to ``org_id`` **or** unbound
+        (``org_id IS NULL`` -- visible from any org context). Internal keys
+        (system keys and ``MCP_API_KEY``) are excluded.
 
         Args:
             user_id: User to list keys for.
             org_id: Explicit org to scope to. When omitted, falls back to
-                the user's persisted ``current_org_id`` (legacy behavior).
-                Request-context callers should pass the effective org id.
-
-        This excludes:
-        - System keys (name starts with __SYSTEM__:) - created by internal services
-        - MCP_API_KEY - internal MCP key
+                the user's persisted ``current_org_id``. Request-context
+                callers should pass the effective org id so the user's
+                current selection is honored.
         """
         if org_id is None:
             user = await UserStore.get_user_by_id(user_id)
@@ -315,16 +365,28 @@ class ApiKeyStore:
             result = await session.execute(
                 select(ApiKey).filter(
                     ApiKey.user_id == user_id,
-                    ApiKey.org_id == org_id,
+                    # Bound to the requested org OR unbound (visible
+                    # regardless of which org the user is currently in).
+                    (ApiKey.org_id == org_id) | (ApiKey.org_id.is_(None)),
                 )
             )
             keys = result.scalars().all()
+
             # Filter out system keys and MCP_API_KEY
-            return [
+            keys = [
                 key
                 for key in keys
                 if key.name != 'MCP_API_KEY' and not self.is_system_key_name(key.name)
             ]
+
+            # Set timezones
+            for key in keys:
+                key.created_at = _as_utc_aware(key.created_at)
+                key.last_used_at = _as_utc_aware(key.last_used_at)
+                key.not_before = _as_utc_aware(key.not_before)
+                key.expires_at = _as_utc_aware(key.expires_at)
+
+            return keys
 
     async def retrieve_mcp_api_key(
         self, user_id: str, org_id: UUID | None = None

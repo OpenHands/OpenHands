@@ -8,7 +8,7 @@ import {
   OrganizationUserRole,
   UpdateOrganizationMemberParams,
 } from "#/types/org";
-import { Settings } from "#/types/settings";
+import { Settings, MarketplaceRegistration } from "#/types/settings";
 import { openHands } from "../open-hands-axios";
 
 type OrganizationSettingsResponse = Pick<
@@ -18,6 +18,21 @@ type OrganizationSettingsResponse = Pick<
   | "search_api_key"
   | "llm_api_key_set"
 >;
+
+export type OrganizationAppSettingsResponse = {
+  enable_proactive_conversation_starters: boolean;
+  max_budget_per_task: number | null;
+  registered_marketplaces: MarketplaceRegistration[];
+  updated_at: string | null;
+};
+
+export type OrganizationAppSettingsUpdate = {
+  enable_proactive_conversation_starters?: boolean;
+  max_budget_per_task?: number | null;
+  registered_marketplaces?: MarketplaceRegistration[] | null;
+  /** For optimistic locking - must match current updated_at */
+  last_known_updated_at?: string | null;
+};
 
 export const organizationService = {
   getMe: async ({ orgId }: { orgId: string }) => {
@@ -250,4 +265,210 @@ export const organizationService = {
   }) => {
     await openHands.delete(`/api/organizations/${orgId}/git-claims/${claimId}`);
   },
+
+  getOrganizationAppSettings: async () => {
+    const { data } = await openHands.get<OrganizationAppSettingsResponse>(
+      "/api/organizations/app",
+    );
+    return data;
+  },
+
+  saveOrganizationAppSettings: async (
+    settings: OrganizationAppSettingsUpdate,
+  ) => {
+    const { data } = await openHands.post<OrganizationAppSettingsResponse>(
+      "/api/organizations/app",
+      settings,
+    );
+    return data;
+  },
+
+  // Organization Conversation APIs
+  getConversationStats: async ({ orgId }: { orgId: string }) => {
+    const { data } = await openHands.get<OrgConversationStats>(
+      `/api/organizations/${orgId}/conversations/stats`,
+    );
+    return data;
+  },
+
+  getUsageStats: async ({
+    orgId,
+    days = 7,
+  }: {
+    orgId: string;
+    days?: number;
+  }) => {
+    const { data } = await openHands.get<OrgUsageStats>(
+      `/api/organizations/${orgId}/conversations/usage-stats`,
+      { params: { days } },
+    );
+    return data;
+  },
+
+  getConversations: async ({
+    orgId,
+    page = 1,
+    perPage = 20,
+    search,
+    sortBy = "updated_at",
+    sortOrder = "desc",
+    executionStatus,
+    sandboxStatus,
+    timeWindow,
+    includeSubConversations = false,
+  }: {
+    orgId: string;
+    page?: number;
+    perPage?: number;
+    search?: string;
+    sortBy?: string;
+    sortOrder?: string;
+    executionStatus?: string;
+    sandboxStatus?: string;
+    timeWindow?: string;
+    includeSubConversations?: boolean;
+  }) => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("per_page", String(perPage));
+    params.set("sort_by", sortBy);
+    params.set("sort_order", sortOrder);
+    if (search) params.set("search", search);
+    if (executionStatus) params.set("execution_status", executionStatus);
+    if (sandboxStatus) params.set("sandbox_status", sandboxStatus);
+    if (timeWindow) params.set("time_window", timeWindow);
+    if (includeSubConversations)
+      params.set("include_sub_conversations", "true");
+
+    const { data } = await openHands.get<OrgConversationPage>(
+      `/api/organizations/${orgId}/conversations?${params.toString()}`,
+    );
+    return data;
+  },
+
+  getConversation: async ({
+    orgId,
+    conversationId,
+  }: {
+    orgId: string;
+    conversationId: string;
+  }) => {
+    const { data } = await openHands.get<OrgConversationResponse>(
+      `/api/organizations/${orgId}/conversations/${conversationId}`,
+    );
+    return data;
+  },
+
+  stopConversation: async ({
+    orgId,
+    conversationId,
+  }: {
+    orgId: string;
+    conversationId: string;
+  }) => {
+    const { data } = await openHands.post<{
+      success: boolean;
+      message: string;
+      conversation_id: string;
+      sandbox_id?: string;
+    }>(`/api/organizations/${orgId}/conversations/${conversationId}/stop`);
+    return data;
+  },
+
+  exportConversationsUrl: ({
+    orgId,
+    search,
+    sortBy = "updated_at",
+    sortOrder = "desc",
+    executionStatus,
+    sandboxStatus,
+    timeWindow,
+  }: {
+    orgId: string;
+    search?: string;
+    sortBy?: string;
+    sortOrder?: string;
+    executionStatus?: string;
+    sandboxStatus?: string;
+    timeWindow?: string;
+  }) => {
+    const params = new URLSearchParams();
+    params.set("sort_by", sortBy);
+    params.set("sort_order", sortOrder);
+    if (search) params.set("search", search);
+    if (executionStatus) params.set("execution_status", executionStatus);
+    if (sandboxStatus) params.set("sandbox_status", sandboxStatus);
+    if (timeWindow) params.set("time_window", timeWindow);
+    return `/api/organizations/${orgId}/conversations/export?${params.toString()}`;
+  },
 };
+
+// Types for org conversation APIs
+interface OrgConversationStats {
+  active_conversations: number;
+  running_runtimes: number;
+  completed_24h: number;
+  completed_7d: number;
+  completed_30d: number;
+  total_cost: number;
+  total_prompt_tokens: number;
+  total_completion_tokens: number;
+  total_tokens: number;
+}
+
+interface DailyUsageData {
+  date: string;
+  tokens: number;
+  conversations: number;
+}
+
+interface TeamUsageData {
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+  conversation_count: number;
+  total_tokens: number;
+  percentage: number;
+}
+
+interface OrgUsageStats {
+  active_users: number;
+  agent_runs: number;
+  total_tokens: number;
+  estimated_spend: number;
+  daily_usage: DailyUsageData[];
+  team_usage: TeamUsageData[];
+}
+
+interface OrgConversationResponse {
+  id: string;
+  title: string;
+  llm_model: string | null;
+  agent_kind: string;
+  user_id: string;
+  user_email: string | null;
+  created_at: string;
+  updated_at: string;
+  sandbox_id: string | null;
+  sandbox_status: string | null;
+  runtime_url: string | null;
+  execution_status: string | null;
+  selected_repository: string | null;
+  selected_branch: string | null;
+  trigger: string | null;
+  tags: Record<string, string>;
+  accumulated_cost: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+}
+
+interface OrgConversationPage {
+  items: OrgConversationResponse[];
+  total_items: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}

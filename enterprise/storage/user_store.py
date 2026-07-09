@@ -2,6 +2,8 @@
 
 import asyncio
 import uuid
+from datetime import datetime, timezone
+from enum import Enum
 from typing import Optional
 from uuid import UUID
 
@@ -15,7 +17,8 @@ from server.constants import (
     get_default_llm_model,
 )
 from server.logger import logger
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from storage.database import a_session_maker
 from storage.encrypt_utils import (
@@ -39,6 +42,23 @@ _REDIS_CREATE_TIMEOUT_SECONDS = 30
 _RETRY_LOAD_DELAY_SECONDS = 2
 # Redis key prefix for user creation locks
 _REDIS_USER_CREATION_KEY_PREFIX = 'create_user:'
+
+# Role name whose row, when referenced by ``user.role_id``, makes a user a
+# ``superadmin`` (see ``server.auth.authorization`` for the super-role model).
+_SUPER_ADMIN_ROLE_NAME = 'admin'
+
+
+class SuperAdminRevokeResult(str, Enum):
+    """Outcome of an attempt to revoke a user's super-admin role.
+
+    Returned (rather than raising) so the calling route can map each case
+    to an appropriate HTTP status without sniffing exception types.
+    """
+
+    REVOKED = 'revoked'
+    NOT_FOUND = 'not_found'
+    NOT_SUPER_ADMIN = 'not_super_admin'
+    LAST_SUPER_ADMIN = 'last_super_admin'
 
 
 class UserStore:
@@ -70,16 +90,55 @@ class UserStore:
         on the old values.
         """
         async with a_session_maker() as session:
-            # create personal org
-            org = Org(
-                id=uuid.UUID(user_id),
-                name=f'user_{user_id}_org',
-                contact_name=resolve_display_name(user_info)
-                or user_info.get('preferred_username', ''),
-                contact_email=user_info['email'],
-                v1_enabled=True,
+            user_uuid = uuid.UUID(user_id)
+            result = await session.execute(
+                select(User)
+                .options(selectinload(User.org_members))
+                .filter(User.id == user_uuid)
             )
-            session.add(org)
+            existing_user = result.scalars().first()
+            if existing_user:
+                return existing_user
+
+            # First-user → superadmin: if the caller did not specify a
+            # super ``role_id`` and there are no existing users in the
+            # database, designate this user as a ``superadmin`` (the
+            # ``admin`` role attached via ``user.role_id``). Super-role
+            # permissions are explicit in ``server.auth.authorization``
+            # and do not inherit org-scoped admin permissions.
+            if role_id is None:
+                existing_user_count = await session.scalar(
+                    select(func.count()).select_from(User)
+                )
+                if existing_user_count == 0:
+                    superadmin_role = await RoleStore.get_role_by_name('admin', session)
+                    if superadmin_role is not None:
+                        role_id = superadmin_role.id
+                        logger.info(
+                            'user_store:create_user:first_user_designated_superadmin',
+                            extra={'user_id': user_id},
+                        )
+
+            org = await session.get(Org, user_uuid)
+            org_created = False
+            if not org:
+                org = Org(
+                    id=user_uuid,
+                    name=f'user_{user_id}_org',
+                    contact_name=resolve_display_name(user_info)
+                    or user_info.get('preferred_username', ''),
+                    contact_email=user_info['email'],
+                    v1_enabled=True,
+                )
+                session.add(org)
+                org_created = True
+            else:
+                if not org.contact_name:
+                    org.contact_name = resolve_display_name(user_info) or user_info.get(
+                        'preferred_username', ''
+                    )
+                if not org.contact_email:
+                    org.contact_email = user_info.get('email')
 
             settings = await UserStore.create_default_settings(
                 org_id=str(org.id), user_id=user_id
@@ -88,16 +147,17 @@ class UserStore:
             if not settings:
                 return None
 
-            from storage.org_store import OrgStore
+            if org_created:
+                from storage.org_store import OrgStore
 
-            org_kwargs = OrgStore.get_kwargs_from_settings(settings)
-            for key, value in org_kwargs.items():
-                if hasattr(org, key):
-                    setattr(org, key, value)
+                org_kwargs = OrgStore.get_kwargs_from_settings(settings)
+                for key, value in org_kwargs.items():
+                    if hasattr(org, key):
+                        setattr(org, key, value)
 
             user_kwargs = UserStore.get_kwargs_from_settings(settings)
             user = User(
-                id=uuid.UUID(user_id),
+                id=user_uuid,
                 current_org_id=org.id,
                 role_id=role_id,
                 **user_kwargs,
@@ -121,10 +181,39 @@ class UserStore:
                 **org_member_kwargs,
             )
             session.add(org_member)
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                logger.warning(
+                    'user_store:create_user:integrity_error',
+                    extra={'user_id': user_id},
+                )
+                result = await session.execute(
+                    select(User)
+                    .options(selectinload(User.org_members))
+                    .filter(User.id == user_uuid)
+                )
+                existing_user = result.scalars().first()
+                if existing_user:
+                    return existing_user
+                raise
             await session.refresh(user)
             await session.refresh(user, ['org_members'])  # load org_members
             return user
+
+    @staticmethod
+    async def record_login(user_id: str) -> None:
+        """Record a successful login for a user."""
+        async with a_session_maker() as session:
+            user = await session.get(User, uuid.UUID(user_id))
+            if not user:
+                return
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            if user.first_login_at is None:
+                user.first_login_at = now
+            user.last_login_at = now
+            await session.commit()
 
     @staticmethod
     def _get_redis_client():
@@ -798,6 +887,126 @@ class UserStore:
             return user
 
     @staticmethod
+    async def _get_super_admin_role_id(session) -> int:
+        """Resolve the role id that designates a super admin.
+
+        Fails fast if the ``admin`` role row is missing -- it is seeded by
+        migration, so its absence is a deployment error, not a runtime
+        condition to be tolerated (mirrors the ``owner`` lookup in
+        ``create_user``).
+        """
+        role = await RoleStore.get_role_by_name(_SUPER_ADMIN_ROLE_NAME, session)
+        if role is None:
+            raise ValueError(
+                f'Super-admin role {_SUPER_ADMIN_ROLE_NAME!r} not found in database'
+            )
+        return role.id
+
+    @staticmethod
+    async def list_super_admins() -> list[User]:
+        """List all users that currently hold the instance-level super-admin role.
+
+        A super admin is a user whose ``user.role_id`` references the
+        ``admin`` role row (distinct from any org-scoped ``org_member.role_id``).
+        """
+        async with a_session_maker() as session:
+            admin_role_id = await UserStore._get_super_admin_role_id(session)
+            result = await session.execute(
+                select(User).filter(User.role_id == admin_role_id)
+            )
+            return list(result.scalars().all())
+
+    @staticmethod
+    async def grant_super_admin(user_id: str) -> Optional[User]:
+        """Grant the instance-level super-admin role to an existing user.
+
+        Sets ``user.role_id`` to the ``admin`` role row. Idempotent: if the
+        user already holds the super-admin role the row is returned unchanged.
+
+        Args:
+            user_id: The target user's ID.
+
+        Returns:
+            The updated (or already-super-admin) user, or ``None`` if no user
+            exists with the given id.
+        """
+        async with a_session_maker() as session:
+            admin_role_id = await UserStore._get_super_admin_role_id(session)
+            result = await session.execute(
+                select(User).filter(User.id == uuid.UUID(user_id)).with_for_update()
+            )
+            user = result.scalars().first()
+            if not user:
+                return None
+
+            if user.role_id != admin_role_id:
+                user.role_id = admin_role_id
+                await session.commit()
+                await session.refresh(user)
+                logger.info(
+                    'user_store:grant_super_admin:granted',
+                    extra={'user_id': user_id},
+                )
+            return user
+
+    @staticmethod
+    async def revoke_super_admin(user_id: str) -> SuperAdminRevokeResult:
+        """Revoke the instance-level super-admin role from a user.
+
+        Clears ``user.role_id``. Refuses to remove the **last** remaining
+        super admin so an installation can never be left with no instance
+        administrator (this also covers self-removal: a super admin may
+        demote themselves as long as another super admin still exists).
+
+        Concurrency: the whole set of current super admins is selected
+        ``FOR UPDATE`` before the count/clear, so simultaneous revokes
+        serialize. A transaction that waited re-evaluates the predicate
+        after acquiring the lock, so it sees an up-to-date set and cannot
+        race two "second-to-last" revocations down to zero. (On SQLite,
+        used in tests, ``FOR UPDATE`` is a no-op but the surrounding
+        transaction still serializes writes.)
+
+        Args:
+            user_id: The target user's ID.
+
+        Returns:
+            A :class:`SuperAdminRevokeResult` describing the outcome.
+        """
+        target_uuid = uuid.UUID(user_id)
+        async with a_session_maker() as session:
+            admin_role_id = await UserStore._get_super_admin_role_id(session)
+            result = await session.execute(
+                select(User).filter(User.role_id == admin_role_id).with_for_update()
+            )
+            super_admins = list(result.scalars().all())
+
+            target = next((u for u in super_admins if u.id == target_uuid), None)
+            if target is None:
+                exists = await session.scalar(
+                    select(User.id).filter(User.id == target_uuid)
+                )
+                return (
+                    SuperAdminRevokeResult.NOT_FOUND
+                    if exists is None
+                    else SuperAdminRevokeResult.NOT_SUPER_ADMIN
+                )
+
+            if len(super_admins) <= 1:
+                logger.warning(
+                    'user_store:revoke_super_admin:refused_last_super_admin',
+                    extra={'user_id': user_id},
+                )
+                return SuperAdminRevokeResult.LAST_SUPER_ADMIN
+
+            target.role_id = None
+            await session.commit()
+            logger.info(
+                'user_store:revoke_super_admin:revoked',
+                extra={'user_id': user_id},
+            )
+            return SuperAdminRevokeResult.REVOKED
+
+    @staticmethod
     async def get_first_owner_in_org(org_id: UUID) -> Optional[User]:
         """Get the first owner in an organization who accepted the Terms of Service.
 
@@ -958,7 +1167,10 @@ class UserStore:
 
     @staticmethod
     async def create_default_settings(
-        org_id: str, user_id: str, create_user: bool = True
+        org_id: str,
+        user_id: str,
+        create_user: bool = True,
+        add_user_to_litellm_team: bool = True,
     ) -> Optional['Settings']:
         logger.info(
             'UserStore:create_default_settings:start',
@@ -979,7 +1191,11 @@ class UserStore:
         from storage.lite_llm_manager import LiteLlmManager
 
         settings = await LiteLlmManager.create_entries(
-            org_id, user_id, default_settings, create_user
+            org_id,
+            user_id,
+            default_settings,
+            create_user,
+            add_user_to_team=add_user_to_litellm_team,
         )
         if not settings:
             logger.info(

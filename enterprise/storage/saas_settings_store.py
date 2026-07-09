@@ -23,7 +23,9 @@ from storage.user_settings import UserSettings
 from storage.user_store import UserStore
 
 from openhands.app_server.settings.llm_profiles import LLMProfiles
-from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_models import (
+    Settings,
+)
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.utils.jsonpatch_compat import (
     WHOLESALE_REPLACEMENT_KEYS,
@@ -35,11 +37,11 @@ from openhands.sdk.llm.utils.openhands_provider import (
     canonicalize_openhands_llm_payload,
 )
 
-# Agent-settings keys that are private to each org member and must never
-# be written to org-level defaults or broadcast across the org. Today this
-# covers ``mcp_config`` (per-user MCP server set) and ``acp_env`` (per-user
-# ACP environment variables) — both are dict-of-items collections that
-# represent one member's personal configuration, not org-wide defaults.
+# Agent-settings keys private to each org member: never written to
+# org-level defaults nor broadcast across the org. Covers ``mcp_config``
+# (per-user MCP server set, a dict-of-items collection). ACP provider
+# creds are not here — they ride the per-user Secrets panel
+# (``request.secrets`` -> ``state.secret_registry``), not agent_settings.
 MEMBER_PRIVATE_AGENT_KEYS: frozenset[str] = WHOLESALE_REPLACEMENT_KEYS
 
 
@@ -127,7 +129,13 @@ class SaasSettingsStore(SettingsStore):
     ) -> SecretStr | None:
         if org_member.has_custom_llm_api_key:
             return org_member.llm_api_key
-        return org.llm_api_key or org_member.llm_api_key
+        if org.llm_api_key:
+            return org.llm_api_key
+        # Managed keys are stored on the member row (has_custom=False); fall back to
+        # it, but only decrypt when actually set to avoid the empty-value error (#14898).
+        if org_member._llm_api_key:
+            return org_member.llm_api_key
+        return None
 
     @staticmethod
     def _get_persisted_agent_settings(item: Settings) -> dict[str, Any]:
@@ -174,10 +182,9 @@ class SaasSettingsStore(SettingsStore):
             },
         }
         # Drop member-private keys from the org dump before merging so
-        # legacy values written by older code paths (when mcp_config /
-        # acp_env were broadcast at the org level) can no longer leak
-        # one member's private config to another. Each member's own
-        # ``agent_settings_diff`` still supplies their personal values.
+        # legacy org-level values (older code paths broadcast mcp_config)
+        # can no longer leak one member's private config to another. Each
+        # member's own ``agent_settings_diff`` still supplies their values.
         org_agent_settings_dump = org_agent_settings.model_dump(mode='json')
         for private_key in MEMBER_PRIVATE_AGENT_KEYS:
             org_agent_settings_dump.pop(private_key, None)
@@ -216,6 +223,28 @@ class SaasSettingsStore(SettingsStore):
         # Apply default if sandbox_grouping_strategy is None in the database
         if kwargs.get('sandbox_grouping_strategy') is None:
             kwargs.pop('sandbox_grouping_strategy', None)
+        # Apply default if git_full_clone is None in the database (pre-existing rows)
+        if kwargs.get('git_full_clone') is None:
+            kwargs.pop('git_full_clone', None)
+        # Apply default if registered_marketplaces is None in the database
+        if kwargs.get('registered_marketplaces') is None:
+            kwargs.pop('registered_marketplaces', None)
+
+        # Load personal registered_marketplaces from user_settings table
+        user_settings = await self._get_user_settings_by_keycloak_id_async(self.user_id)
+        if user_settings and user_settings.registered_marketplaces:
+            # Normalize marketplaces: use 'personal' scope for legacy data without scope
+            # The merge function will override with the correct scope value
+            normalized_mps: list[dict[str, Any]] = []
+            for mp in user_settings.registered_marketplaces:
+                if isinstance(mp, dict):
+                    if mp.get('scope') is None:
+                        mp = {**mp, 'scope': 'personal'}
+                    normalized_mps.append(mp)
+                else:
+                    # Convert MarketplaceRegistration to dict
+                    normalized_mps.append(mp.model_dump())
+            kwargs['registered_marketplaces'] = normalized_mps
         # Profiles in SaaS live on the org (managed via
         # /api/organizations/{org_id}/profiles). Surface them through
         # Settings.llm_profiles so the chat-layer endpoints
@@ -376,11 +405,11 @@ class SaasSettingsStore(SettingsStore):
 
             effective_agent_settings_diff = self._get_persisted_agent_settings(item)
 
-            # Keep mcp_config / acp_env scoped to the acting member only.
+            # Keep mcp_config scoped to the acting member only.
             # ``shared_agent_settings_diff`` is the slice safe for org-wide
             # state; ``private_agent_settings_diff`` is applied below to the
             # acting member's row only so other members don't inherit one
-            # user's MCP servers (or ACP env vars).
+            # user's MCP servers.
             shared_agent_settings_diff, private_agent_settings_diff = (
                 _split_member_private_keys(effective_agent_settings_diff)
             )
@@ -414,10 +443,24 @@ class SaasSettingsStore(SettingsStore):
             kwargs.pop('agent_settings', None)
             kwargs.pop('conversation_settings', None)
 
+            # Get or create user_settings for this user
+            user_settings_result = await session.execute(
+                select(UserSettings).filter(
+                    UserSettings.keycloak_user_id == self.user_id
+                )
+            )
+            user_settings = user_settings_result.scalars().first()
+            if not user_settings:
+                user_settings = UserSettings(keycloak_user_id=self.user_id)
+                session.add(user_settings)
+
             for key, value in kwargs.items():
                 if hasattr(user, key):
                     setattr(user, key, value)
-                if hasattr(org, key) and key not in {
+                if key == 'registered_marketplaces':
+                    # Save personal marketplace settings to user_settings table
+                    user_settings.registered_marketplaces = value
+                elif hasattr(org, key) and key not in {
                     'llm_api_key',
                     'agent_settings',
                     'conversation_settings',
@@ -451,9 +494,9 @@ class SaasSettingsStore(SettingsStore):
                 ),
             )
 
-            # Member-private keys (mcp_config, acp_env) live only on the
-            # acting member's row. Use the wholesale-replacement semantics
-            # so deletes stick (APP-1862).
+            # Member-private keys (mcp_config) live only on the acting
+            # member's row. Use the wholesale-replacement semantics so
+            # deletes stick (APP-1862).
             if private_agent_settings_diff:
                 org_member.agent_settings_diff = deep_merge_with_wholesale_keys(
                     dict(org_member.agent_settings_diff),
@@ -493,6 +536,63 @@ class SaasSettingsStore(SettingsStore):
         """
         logger.debug(f'saas_settings_store.get_instance::{user_id}')
         return SaasSettingsStore(user_id, effective_org_id=effective_org_id)
+
+    async def get_org_marketplaces(self, user_id: str | None) -> list[dict]:
+        """Get organization-level marketplaces from the org's registered_marketplaces.
+
+        Uses the effective_org_id if set, otherwise resolves via user.current_org_id.
+        Returns empty list if no org or org has no registered marketplaces.
+        """
+        if not user_id:
+            return []
+
+        try:
+            user = await UserStore.get_user_by_id(user_id)
+            if not user:
+                logger.debug(f'No user found for ID {user_id}')
+                return []
+
+            org_id = self.effective_org_id or user.current_org_id
+            if not org_id:
+                logger.debug(f'No org_id for user {user_id}')
+                return []
+
+            # Validate org_id is a valid UUID before calling get_org_by_id_async
+            try:
+                from uuid import UUID
+
+                UUID(str(org_id))
+            except (ValueError, AttributeError, TypeError) as uuid_error:
+                logger.warning(
+                    f'Invalid org_id format for user {user_id}: {org_id} - {uuid_error}'
+                )
+                return []
+
+            org = await OrgStore.get_org_by_id_async(org_id)
+            if not org:
+                logger.debug(f'Org {org_id} not found for user {user_id}')
+                return []
+
+            if org.registered_marketplaces:
+                # Normalize: use 'org' scope for legacy data without scope
+                normalized: list[dict[str, Any]] = []
+                for mp in org.registered_marketplaces:
+                    if isinstance(mp, dict):
+                        # Set scope='org' if missing (backward compatibility)
+                        if mp.get('scope') is None:
+                            mp = {**mp, 'scope': 'org'}
+                        # Ensure auto_load defaults to False if missing
+                        if 'auto_load' not in mp:
+                            mp = {**mp, 'auto_load': False}
+                        normalized.append(mp)
+                    else:
+                        # Convert MarketplaceRegistration to dict
+                        normalized.append(mp.model_dump())
+                return normalized
+            return []
+        except Exception as e:
+            logger.error(f'Error fetching org marketplaces: {e}')
+            return []
 
     async def _ensure_api_key(
         self, item: Settings, org_id: str, openhands_type: bool = False

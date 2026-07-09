@@ -1,14 +1,18 @@
+import csv
+import io
+from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from server.auth.authorization import (
     Permission,
+    authorize_permission,
     require_financial_data_access,
     require_permission,
 )
 from server.auth.org_context import EFFECTIVE_ORG_ID, REJECT_X_ORG_ID_PATH_MISMATCH
-from server.email_validation import get_admin_user_id
 from server.routes.org_models import (
     CannotModifySelfError,
     GitOrgAlreadyClaimedError,
@@ -23,6 +27,10 @@ from server.routes.org_models import (
     OrgAppSettingsResponse,
     OrgAppSettingsUpdate,
     OrgAuthorizationError,
+    OrgConcurrentModificationError,
+    OrgConversationPage,
+    OrgConversationResponse,
+    OrgConversationStats,
     OrgCreate,
     OrgDatabaseError,
     OrgDefaultsSettingsResponse,
@@ -36,12 +44,18 @@ from server.routes.org_models import (
     OrgPage,
     OrgResponse,
     OrgUpdate,
+    OrgUsageStats,
     OrphanedUserError,
     RoleNotFoundError,
 )
 from server.services.org_app_settings_service import (
     OrgAppSettingsService,
     OrgAppSettingsServiceInjector,
+)
+from server.services.org_conversation_service import (
+    OrgConversationFilterError,
+    OrgConversationService,
+    OrgConversationServiceInjector,
 )
 from server.services.org_member_financial_service import OrgMemberFinancialService
 from server.services.org_member_service import OrgMemberService
@@ -65,6 +79,11 @@ org_router = APIRouter(
 # Create injector instance and dependency at module level
 _org_app_settings_injector = OrgAppSettingsServiceInjector()
 org_app_settings_service_dependency = Depends(_org_app_settings_injector.depends)
+
+_org_conversation_service_injector = OrgConversationServiceInjector()
+org_conversation_service_dependency = Depends(
+    _org_conversation_service_injector.depends
+)
 
 
 @org_router.get('', response_model=OrgPage)
@@ -152,23 +171,27 @@ async def list_user_orgs(
 @org_router.post('', response_model=OrgResponse, status_code=status.HTTP_201_CREATED)
 async def create_org(
     org_data: OrgCreate,
-    user_id: str = Depends(get_admin_user_id),
+    user_id: str = Depends(require_permission(Permission.CREATE_ORGANIZATION)),
 ) -> OrgResponse:
     """Create a new organization.
 
-    This endpoint allows authenticated users with @openhands.dev email to create
-    a new organization. The user who creates the organization automatically becomes
-    its owner.
+    This endpoint allows authenticated users that hold the
+    ``CREATE_ORGANIZATION`` permission to create a new organization. In
+    practice this permission is only granted via the ``superadmin``
+    role; no regular,
+    org-scoped role carries it. The creator is not automatically added
+    as a member; a superadmin can provision the initial org users separately.
 
     Args:
         org_data: Organization creation data
-        user_id: Authenticated user ID (injected by dependency)
+        user_id: Authenticated user ID (injected by ``require_permission``)
 
     Returns:
         OrgResponse: The created organization details
 
     Raises:
-        HTTPException: 403 if user email domain is not @openhands.dev
+        HTTPException: 401 if the user is not authenticated
+        HTTPException: 403 if the user lacks ``CREATE_ORGANIZATION``
         HTTPException: 409 if organization name already exists
         HTTPException: 500 if creation fails
     """
@@ -187,6 +210,7 @@ async def create_org(
             contact_name=org_data.contact_name,
             contact_email=org_data.contact_email,
             user_id=user_id,
+            add_creator_as_owner=False,
         )
 
         # Retrieve credits from LiteLLM
@@ -435,39 +459,60 @@ async def get_org_app_settings(
 @org_router.post(
     '/app',
     response_model=OrgAppSettingsResponse,
-    dependencies=[Depends(require_permission(Permission.MANAGE_APPLICATION_SETTINGS))],
 )
 async def update_org_app_settings(
     update_data: OrgAppSettingsUpdate,
+    request: Request,
     service: OrgAppSettingsService = org_app_settings_service_dependency,
+    user_id: str = Depends(require_permission(Permission.MANAGE_APPLICATION_SETTINGS)),
 ) -> OrgAppSettingsResponse:
     """Update organization app settings for the user's current organization.
 
-    This endpoint updates application settings for the authenticated user's
-    current organization. Access requires the MANAGE_APPLICATION_SETTINGS permission,
-    which is granted to all organization members (member, admin, and owner roles).
+    Base access requires MANAGE_APPLICATION_SETTINGS (all members). Editing
+    org-wide ``registered_marketplaces`` additionally requires EDIT_ORG_SETTINGS
+    (admin/owner), since those defaults apply to every member.
 
     Args:
         update_data: App settings update data
+        request: The incoming request (used to resolve the target org for the
+            marketplace permission check)
         service: OrgAppSettingsService (injected by dependency)
+        user_id: Authenticated user ID (injected by ``require_permission``)
 
     Returns:
         OrgAppSettingsResponse: The updated organization app settings
 
     Raises:
         HTTPException: 401 if user is not authenticated
-        HTTPException: 403 if user lacks MANAGE_APPLICATION_SETTINGS permission
+        HTTPException: 403 if user lacks the required permission
         HTTPException: 404 if current organization not found
-        HTTPException: 422 if validation errors occur (handled by FastAPI)
+        HTTPException: 409 if a concurrent modification is detected
+        HTTPException: 400 if validation errors occur (e.g. duplicate names)
         HTTPException: 500 if update fails
     """
     try:
+        # Org-wide marketplaces are admin/owner-only, even though the other
+        # settings on this endpoint are member-editable.
+        if update_data.registered_marketplaces is not None:
+            await authorize_permission(request, user_id, Permission.EDIT_ORG_SETTINGS)
         return await service.update_org_app_settings(update_data)
+    except OrgConcurrentModificationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
     except OrgNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail='Current organization not found',
         )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(
             'Unexpected error updating organization app settings',
@@ -1480,4 +1525,593 @@ async def disconnect_git_organization(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to disconnect Git organization',
+        )
+
+
+@org_router.get(
+    '/{org_id}/conversations',
+    response_model=OrgConversationPage,
+)
+async def list_org_conversations(
+    org_id: UUID,
+    # Search
+    search: Annotated[
+        str | None,
+        Query(
+            title='Search text matching conversation name, creator name, email, or sandbox ID'
+        ),
+    ] = None,
+    # Sorting
+    sort_by: Annotated[
+        str,
+        Query(
+            title='Field to sort by',
+            description='Options: created_at, updated_at, llm_model, accumulated_cost, title',
+        ),
+    ] = 'updated_at',
+    sort_order: Annotated[
+        str,
+        Query(
+            title='Sort order',
+            description='Options: desc (default), asc',
+        ),
+    ] = 'desc',
+    # Filters
+    execution_status: Annotated[
+        list[str] | None,
+        Query(
+            title='Filter by execution status',
+            description='Comma-separated list: idle, running, paused, finished, error, stuck',
+        ),
+    ] = None,
+    sandbox_status: Annotated[
+        str | None,
+        Query(
+            title='Filter by sandbox status',
+            description='Filter by sandbox status: STARTING, RUNNING, PAUSED, ERROR, MISSING. '
+            'Note: when filtering by sandbox_status, total_items reflects the unfiltered '
+            'count since the filter is applied post-query. This may result in pagination '
+            'showing fewer items per page than expected.',
+        ),
+    ] = None,
+    time_window: Annotated[
+        str | None,
+        Query(
+            title='Time window filter',
+            description='Options: all, 7d, 30d, 90d',
+        ),
+    ] = None,
+    # Pagination
+    page: Annotated[
+        int,
+        Query(
+            title='Page number',
+            ge=1,
+        ),
+    ] = 1,
+    per_page: Annotated[
+        int,
+        Query(
+            title='Items per page',
+            ge=1,
+            le=100,
+        ),
+    ] = 20,
+    include_sub_conversations: Annotated[
+        bool,
+        Query(
+            title='If True, include sub-conversations. If False (default), exclude them.'
+        ),
+    ] = False,
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_CONVERSATIONS)),
+    service: OrgConversationService = org_conversation_service_dependency,
+) -> OrgConversationPage:
+    """List all conversations for an organization.
+
+    This endpoint returns a paginated list of all conversations within an organization,
+    including details about each conversation such as the creator, timestamps, and metrics.
+
+    **Access Control**: Requires VIEW_ORG_CONVERSATIONS permission (Admin or Owner role).
+
+    Args:
+        org_id: Organization UUID
+        search: Search text matching conversation name, creator name, email, or sandbox ID
+        sort_by: Field to sort by (created_at, updated_at, llm_model, accumulated_cost, title)
+        sort_order: Sort order (desc or asc)
+        execution_status: Filter by execution status (idle, running, paused, finished, error, stuck)
+        sandbox_status: Filter by sandbox status (STARTING, RUNNING, PAUSED, ERROR, MISSING)
+        time_window: Time window filter (all, 7d, 30d, 90d)
+        page: Page number (1-indexed)
+        per_page: Items per page (1-100)
+        include_sub_conversations: If True, include sub-conversations in results
+        user_id: Authenticated user ID (injected by require_permission dependency)
+        service: OrgConversationService instance
+
+    Returns:
+        OrgConversationPage: Paginated list of conversations with total count
+
+    Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks VIEW_ORG_CONVERSATIONS permission
+        HTTPException: 500 if retrieval fails
+    """
+    logger.info(
+        'Listing organization conversations',
+        extra={
+            'user_id': user_id,
+            'org_id': str(org_id),
+            'search': search,
+            'sort_by': sort_by,
+            'sort_order': sort_order,
+            'execution_status': execution_status,
+            'sandbox_status': sandbox_status,
+            'time_window': time_window,
+            'page': page,
+            'per_page': per_page,
+        },
+    )
+
+    try:
+        # Convert single string to list for service compatibility
+        sandbox_status_list = [sandbox_status] if sandbox_status else None
+        result = await service.list_org_conversations(
+            org_id=org_id,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            execution_status=execution_status,
+            sandbox_status=sandbox_status_list,
+            time_window=time_window,
+            page=page,
+            per_page=per_page,
+            include_sub_conversations=include_sub_conversations,
+        )
+
+        logger.info(
+            'Successfully retrieved organization conversations',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'count': len(result.items),
+                'total_items': result.total_items,
+            },
+        )
+
+        return result
+
+    except OrgConversationFilterError as e:
+        logger.warning(
+            'Invalid organization conversation filter',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'error': e.message,
+                'error_code': e.error_code,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=e.message,
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error listing organization conversations',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve organization conversations',
+        )
+
+
+@org_router.get(
+    '/{org_id}/conversations/stats',
+    response_model=OrgConversationStats,
+)
+async def get_org_conversation_stats(
+    org_id: UUID,
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_CONVERSATIONS)),
+    service: OrgConversationService = org_conversation_service_dependency,
+) -> OrgConversationStats:
+    """Get aggregated statistics for organization conversations.
+
+    Returns counts of active conversations, running runtimes, completed conversations,
+    and aggregated cost/token usage for the organization.
+
+    **Access Control**: Requires VIEW_ORG_CONVERSATIONS permission (Admin or Owner role).
+
+    Returns:
+        OrgConversationStats: Aggregated statistics for the org
+    """
+    logger.info(
+        'Getting organization conversation stats',
+        extra={'user_id': user_id, 'org_id': str(org_id)},
+    )
+
+    try:
+        stats = await service.get_stats(org_id=org_id)
+
+        logger.info(
+            'Successfully retrieved organization conversation stats',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'active_conversations': stats.active_conversations,
+                'running_runtimes': stats.running_runtimes,
+                'total_cost': stats.total_cost,
+            },
+        )
+
+        return stats
+
+    except Exception as e:
+        logger.exception(
+            'Unexpected error getting organization conversation stats',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve organization conversation stats',
+        )
+
+
+@org_router.get(
+    '/{org_id}/conversations/usage-stats',
+    response_model=OrgUsageStats,
+)
+async def get_org_conversation_usage_stats(
+    org_id: UUID,
+    days: int = Query(
+        default=7, ge=1, le=90, description='Number of days to look back'
+    ),
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_CONVERSATIONS)),
+    service: OrgConversationService = org_conversation_service_dependency,
+) -> OrgUsageStats:
+    """Get detailed usage statistics for organization dashboard.
+
+    Returns detailed metrics including active users, agent runs, token usage,
+    daily breakdown, and team usage for the specified time window.
+
+    **Access Control**: Requires VIEW_ORG_CONVERSATIONS permission (Admin or Owner role).
+
+    Args:
+        org_id: The organization ID
+        days: Number of days to look back (1-90, default 7)
+
+    Returns:
+        OrgUsageStats: Detailed usage statistics for the org
+    """
+    logger.info(
+        'Getting organization conversation usage stats',
+        extra={'user_id': user_id, 'org_id': str(org_id), 'days': days},
+    )
+
+    try:
+        stats = await service.get_usage_stats(org_id=org_id, days=days)
+
+        logger.info(
+            'Successfully retrieved organization conversation usage stats',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'days': days,
+                'active_users': stats.active_users,
+                'agent_runs': stats.agent_runs,
+                'total_tokens': stats.total_tokens,
+            },
+        )
+
+        return stats
+
+    except Exception as e:
+        logger.exception(
+            'Unexpected error getting organization conversation usage stats',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve organization conversation usage stats',
+        )
+
+
+@org_router.get(
+    '/{org_id}/conversations/export',
+    response_class=StreamingResponse,
+)
+async def export_org_conversations_csv(
+    org_id: UUID,
+    search: Annotated[
+        str | None,
+        Query(
+            title='Search text matching conversation name, creator name, email, or sandbox ID'
+        ),
+    ] = None,
+    sort_by: Annotated[
+        str,
+        Query(title='Field to sort by'),
+    ] = 'updated_at',
+    sort_order: Annotated[
+        str,
+        Query(title='Sort order'),
+    ] = 'desc',
+    execution_status: Annotated[
+        list[str] | None,
+        Query(title='Filter by execution status'),
+    ] = None,
+    sandbox_status: Annotated[
+        str | None,
+        Query(title='Filter by sandbox status'),
+    ] = None,
+    time_window: Annotated[
+        str | None,
+        Query(title='Time window filter (7d, 30d, 90d)'),
+    ] = None,
+    include_sub_conversations: Annotated[
+        bool,
+        Query(title='If True, include sub-conversations'),
+    ] = False,
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_CONVERSATIONS)),
+    service: OrgConversationService = org_conversation_service_dependency,
+) -> StreamingResponse:
+    """Export organization conversations as CSV.
+
+    Returns the filtered conversation dataset as a downloadable CSV file.
+
+    **Access Control**: Requires VIEW_ORG_CONVERSATIONS permission (Admin or Owner role).
+    """
+    logger.info(
+        'Exporting organization conversations as CSV',
+        extra={'user_id': user_id, 'org_id': str(org_id)},
+    )
+
+    try:
+        # Fetch all conversations (no pagination for export)
+        result = await service.list_org_conversations(
+            org_id=org_id,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            execution_status=execution_status,
+            sandbox_status=[sandbox_status] if sandbox_status else None,
+            time_window=time_window,
+            page=1,
+            per_page=10000,  # Export up to 10k records
+            include_sub_conversations=include_sub_conversations,
+        )
+
+        # Build response headers
+        timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+        filename = f'conversations_export_{timestamp}.csv'
+        headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
+        if result.total_items > 10000:
+            headers['X-Export-Truncated'] = 'true'
+
+        async def generate():
+            output = io.StringIO()
+            writer = csv.writer(output)
+
+            # Write header row
+            writer.writerow(
+                [
+                    'id',
+                    'title',
+                    'llm_model',
+                    'agent_kind',
+                    'user_id',
+                    'user_email',
+                    'created_at',
+                    'updated_at',
+                    'sandbox_id',
+                    'sandbox_status',
+                    'runtime_url',
+                    'execution_status',
+                    'selected_repository',
+                    'selected_branch',
+                    'trigger',
+                    'accumulated_cost',
+                    'prompt_tokens',
+                    'completion_tokens',
+                    'total_tokens',
+                    'cache_read_tokens',
+                    'cache_write_tokens',
+                ]
+            )
+
+            # Write data rows
+            for item in result.items:
+                writer.writerow(
+                    [
+                        item.id,
+                        item.title,
+                        item.llm_model,
+                        item.agent_kind,
+                        item.user_id,
+                        item.user_email,
+                        item.created_at,
+                        item.updated_at,
+                        item.sandbox_id,
+                        item.sandbox_status,
+                        item.runtime_url,
+                        item.execution_status,
+                        item.selected_repository,
+                        item.selected_branch,
+                        item.trigger,
+                        item.accumulated_cost,
+                        item.prompt_tokens,
+                        item.completion_tokens,
+                        item.total_tokens,
+                        item.cache_read_tokens,
+                        item.cache_write_tokens,
+                    ]
+                )
+
+            yield output.getvalue()
+
+        return StreamingResponse(
+            generate(),
+            media_type='text/csv',
+            headers=headers,
+        )
+
+    except OrgConversationFilterError as e:
+        logger.warning(
+            'Invalid organization conversation filter for export',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'error': e.message,
+                'error_code': e.error_code,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=e.message,
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error exporting organization conversations',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to export organization conversations',
+        )
+
+
+@org_router.get(
+    '/{org_id}/conversations/{conversation_id}',
+    response_model=OrgConversationResponse,
+)
+async def get_org_conversation(
+    org_id: UUID,
+    conversation_id: str,
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_CONVERSATIONS)),
+    service: OrgConversationService = org_conversation_service_dependency,
+) -> OrgConversationResponse:
+    """Get a specific conversation by ID.
+
+    Returns full conversation details including logs/history reference.
+
+    **Access Control**: Requires VIEW_ORG_CONVERSATIONS permission (Admin or Owner role).
+
+    Raises:
+        HTTPException: 404 if conversation not found or not in org
+    """
+    logger.info(
+        'Getting organization conversation',
+        extra={
+            'user_id': user_id,
+            'org_id': str(org_id),
+            'conversation_id': conversation_id,
+        },
+    )
+
+    try:
+        result = await service.get_org_conversation(
+            org_id=org_id,
+            conversation_id=conversation_id,
+        )
+
+        if result is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail='Conversation not found',
+            )
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(
+            'Unexpected error getting organization conversation',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'conversation_id': conversation_id,
+                'error': str(e),
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve conversation',
+        )
+
+
+@org_router.post(
+    '/{org_id}/conversations/{conversation_id}/stop',
+)
+async def stop_org_conversation(
+    org_id: UUID,
+    conversation_id: str,
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_CONVERSATIONS)),
+    service: OrgConversationService = org_conversation_service_dependency,
+):
+    """Stop a running conversation and its runtime.
+
+    Safely terminates active agent loops and shuts down the underlying
+    runtime execution cell.
+
+    **Access Control**: Requires VIEW_ORG_CONVERSATIONS permission (Admin or Owner role).
+
+    Returns:
+        Success message with stopped conversation details
+
+    Raises:
+        HTTPException: 404 if conversation not found
+        HTTPException: 409 if conversation is not running
+        HTTPException: 503 if runtime stop fails
+    """
+    logger.info(
+        'Stopping organization conversation',
+        extra={
+            'user_id': user_id,
+            'org_id': str(org_id),
+            'conversation_id': conversation_id,
+        },
+    )
+
+    try:
+        result = await service.stop_conversation(
+            org_id=org_id,
+            conversation_id=conversation_id,
+            user_id=user_id,
+        )
+
+        if result is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail='Conversation not found',
+            )
+
+        if result.get('error'):
+            error_code = result.get('error_code')
+            if error_code == 'sandbox_shared':
+                status_code = status.HTTP_409_CONFLICT
+            elif error_code in {'sandbox_unavailable', 'sandbox_stop_failed'}:
+                status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            else:
+                status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            raise HTTPException(
+                status_code=status_code,
+                detail=result['error'],
+            )
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(
+            'Unexpected error stopping organization conversation',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'conversation_id': conversation_id,
+                'error': str(e),
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='Failed to stop conversation',
         )

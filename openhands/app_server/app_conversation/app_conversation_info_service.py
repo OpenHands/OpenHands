@@ -116,6 +116,19 @@ class AppConversationInfoService(ABC):
             conversation_id: The ID of the conversation to update
         """
 
+    @abstractmethod
+    async def update_execution_status(
+        self,
+        conversation_id: UUID,
+        execution_status: str,
+    ) -> None:
+        """Update the execution status for a conversation.
+
+        Args:
+            conversation_id: The ID of the conversation to update
+            execution_status: The new execution status value
+        """
+
 
 class AppConversationInfoServiceInjector(
     DiscriminatedUnionMixin, Injector[AppConversationInfoService], ABC

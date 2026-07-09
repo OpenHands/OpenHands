@@ -114,7 +114,10 @@ class TestMaintenanceTaskRunnerStandalone:
                         pass
 
                     try:
-                        await asyncio.sleep(0.01)  # Short sleep for testing
+                        # asyncio.sleep(0) yields control to the event loop without
+                        # adding real wall-clock delay, while still being a valid
+                        # cancellation point and incrementing sleep_calls correctly.
+                        await asyncio.sleep(0)
                         self.sleep_calls += 1
                     except asyncio.CancelledError:
                         break
@@ -161,7 +164,9 @@ class TestMaintenanceTaskRunnerStandalone:
                         # Simulate logging the error
 
                     try:
-                        await asyncio.sleep(0.01)  # Short sleep for testing
+                        # asyncio.sleep(0) yields to the event loop without real delay,
+                        # keeping the cancellation point without slowing down the test.
+                        await asyncio.sleep(0)
                     except asyncio.CancelledError:
                         break
 
@@ -675,7 +680,9 @@ class TestMaintenanceTaskRunnerStandalone:
                 """Execute the main processing loop."""
                 try:
                     while self._running:
-                        await asyncio.sleep(0.01)
+                        # asyncio.sleep(0) is a zero-delay cancellation point —
+                        # sufficient for CancelledError to propagate without real waiting.
+                        await asyncio.sleep(0)
                 except asyncio.CancelledError:
                     self.cancellation_handled = True
                     raise  # Re-raise to properly handle cancellation
@@ -685,7 +692,7 @@ class TestMaintenanceTaskRunnerStandalone:
 
         # Start the loop and cancel it
         task = asyncio.create_task(runner._run_loop())
-        await asyncio.sleep(0.001)  # Let it start
+        await asyncio.sleep(0)  # Yield to the event loop so the task can start
         task.cancel()
 
         # Wait for cancellation to be handled

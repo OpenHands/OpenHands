@@ -1,3 +1,5 @@
+import logging
+from datetime import datetime
 from typing import Annotated, Any
 
 from pydantic import (
@@ -15,8 +17,10 @@ from storage.org_member import OrgMember
 from storage.role import Role
 
 from openhands.app_server.settings.settings_models import (
+    MarketplaceRegistration,
     _load_persisted_agent_settings,
     _load_persisted_conversation_settings,
+    validate_and_convert_marketplaces,
 )
 from openhands.app_server.utils.llm import MASKED_API_KEY, resolve_llm_base_url
 from openhands.sdk.settings import (
@@ -24,6 +28,8 @@ from openhands.sdk.settings import (
     ConversationSettings,
     OpenHandsAgentSettings,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class OrgCreationError(Exception):
@@ -91,6 +97,35 @@ class OrgNotFoundError(Exception):
     def __init__(self, org_id: str):
         self.org_id = org_id
         super().__init__(f'Organization with id "{org_id}" not found')
+
+
+class OrgConcurrentModificationError(Exception):
+    """Raised when a concurrent modification conflict is detected.
+
+    This occurs when optimistic locking detects that the resource was modified
+    by another request between when the client read it and when they attempted
+    to update it. The client should re-fetch the latest data and retry.
+
+    Note: The compared timestamp is generated and stored server-side; the client
+    only echoes back the value it last read, so client/server clock skew does not
+    affect conflict detection.
+    """
+
+    def __init__(
+        self,
+        org_id: str,
+        expected_version: datetime,
+        actual_version: datetime,
+    ):
+        self.org_id = org_id
+        self.expected_version = expected_version
+        self.actual_version = actual_version
+        super().__init__(
+            f'Organization "{org_id}" was modified by another request. '
+            f'Expected version: {expected_version.isoformat()}, '
+            f'actual version: {actual_version.isoformat()}. '
+            'Please refresh and retry.'
+        )
 
 
 class OrgMemberNotFoundError(Exception):
@@ -503,6 +538,9 @@ class MeResponse(BaseModel):
     user_id: str
     email: str
     role: str
+    # The caller's role-derived permissions, so clients can gate UI off a
+    # server-defined permission instead of re-deriving the role mapping.
+    permissions: list[str] = Field(default_factory=list)
     llm_api_key: str
     llm_api_key_for_byor: str | None = None
     agent_settings_diff: dict[str, Any] = Field(default_factory=dict)
@@ -529,12 +567,24 @@ class MeResponse(BaseModel):
         email: str,
     ) -> 'MeResponse':
         """Create a MeResponse from an OrgMember, Role, and user email."""
+        # Imported lazily: a module-level import would cycle
+        # (org_models -> authorization -> storage.org_member_store -> org_models).
+        from server.auth.authorization import get_role_permissions
+
+        # Only access member.llm_api_key when has_custom_llm_api_key is True
+        # to avoid decryption errors when the key is not set
+        llm_api_key = (
+            cls._mask_key(member.llm_api_key) if member.has_custom_llm_api_key else ''
+        )
         return cls(
             org_id=str(member.org_id),
             user_id=str(member.user_id),
             email=email,
             role=role.name,
-            llm_api_key=cls._mask_key(member.llm_api_key),
+            permissions=sorted(
+                permission.value for permission in get_role_permissions(role.name)
+            ),
+            llm_api_key=llm_api_key,
             llm_api_key_for_byor=cls._mask_key(member.llm_api_key_for_byor) or None,
             agent_settings_diff=dict(member.agent_settings_diff or {}),
             conversation_settings_diff=dict(member.conversation_settings_diff or {}),
@@ -547,6 +597,9 @@ class OrgAppSettingsResponse(BaseModel):
 
     enable_proactive_conversation_starters: bool = True
     max_budget_per_task: float | None = None
+    registered_marketplaces: list[MarketplaceRegistration] = Field(default_factory=list)
+    # Include updated_at in response for optimistic locking
+    updated_at: datetime | None = None
 
     @classmethod
     def from_org(cls, org: Org) -> 'OrgAppSettingsResponse':
@@ -558,11 +611,19 @@ class OrgAppSettingsResponse(BaseModel):
         Returns:
             OrgAppSettingsResponse with app settings
         """
+        # Get registered_marketplaces from dedicated column
+        marketplaces = validate_and_convert_marketplaces(
+            org.registered_marketplaces,
+            source_name=f"org '{org.name}'",
+        )
+
         return cls(
             enable_proactive_conversation_starters=org.enable_proactive_conversation_starters
             if org.enable_proactive_conversation_starters is not None
             else True,
             max_budget_per_task=org.max_budget_per_task,
+            registered_marketplaces=marketplaces,
+            updated_at=org.updated_at,
         )
 
 
@@ -571,6 +632,11 @@ class OrgAppSettingsUpdate(BaseModel):
 
     enable_proactive_conversation_starters: bool | None = None
     max_budget_per_task: float | None = None
+    registered_marketplaces: list[MarketplaceRegistration] | None = None
+    # Optimistic locking: client echoes back the server-generated updated_at it
+    # last read. If it no longer matches the DB, someone else modified the record
+    # and a 409 conflict is raised. (Server-generated, so clock skew is irrelevant.)
+    last_known_updated_at: datetime | None = None
 
     @field_validator('max_budget_per_task')
     @classmethod
@@ -653,3 +719,102 @@ class OrgMemberFinancialPage(BaseModel):
     current_page: int = 1
     per_page: int = 10
     next_page_id: str | None = None
+
+
+class OrgConversationResponse(BaseModel):
+    """Response model for a single conversation in an organization."""
+
+    id: str  # conversation_id
+    title: str | None = None
+    llm_model: str | None = None
+    agent_kind: str = 'openhands'
+    user_id: str  # UUID of user who created the conversation
+    user_email: str | None = None  # Email of user who created the conversation
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    sandbox_id: str | None = None
+    sandbox_status: str | None = None  # STARTING, RUNNING, PAUSED, ERROR, MISSING
+    runtime_url: str | None = None  # URL to access the conversation runtime
+    execution_status: str | None = (
+        None  # Agent execution status (requires agent server call)
+    )
+    selected_repository: str | None = None
+    selected_branch: str | None = None
+    trigger: str | None = None
+    tags: dict[str, str] = Field(default_factory=dict)
+    # Cost and token metrics
+    accumulated_cost: float = 0.0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+
+
+class OrgConversationPage(BaseModel):
+    """Paginated response for organization conversations."""
+
+    items: list[OrgConversationResponse]
+    total_items: int = 0  # Total count for pagination controls
+    page: int = 1  # Current page number
+    per_page: int = 100  # Items per page
+    total_pages: int = 0  # Total number of pages
+    pagination_accurate: bool = (
+        True  # False when sandbox_status filter lacks sandbox data
+    )
+
+
+class OrgConversationStats(BaseModel):
+    """Aggregated statistics for organization conversations."""
+
+    # Conversation counts
+    active_conversations: int = (
+        0  # Count of conversations with execution_status='running'
+    )
+    running_runtimes: int = 0  # Count of distinct sandboxes currently running
+
+    # Completion metrics
+    completed_24h: int = 0  # Conversations that finished (terminal status) in last 24h
+    completed_7d: int = 0  # Conversations that finished in last 7 days
+    completed_30d: int = 0  # Conversations that finished in last 30 days
+
+    # Cost and usage aggregation
+    total_cost: float = 0.0  # Sum of accumulated_cost
+    total_prompt_tokens: int = 0
+    total_completion_tokens: int = 0
+    total_tokens: int = 0  # Combined token count
+
+
+class DailyUsageData(BaseModel):
+    """Daily usage data for a single day."""
+
+    date: str  # ISO date string (YYYY-MM-DD)
+    tokens: int = 0
+    conversations: int = 0
+
+
+class TeamUsageData(BaseModel):
+    """Usage data for a single user/team."""
+
+    user_id: str
+    user_email: str | None = None
+    user_name: str | None = None
+    conversation_count: int = 0
+    total_tokens: int = 0
+    percentage: float = 0.0
+
+
+class OrgUsageStats(BaseModel):
+    """Detailed usage statistics for organization dashboard."""
+
+    # Top-level metrics
+    active_users: int = 0  # Users with activity in last 7 days
+    agent_runs: int = 0  # Total conversations in last 7 days
+    total_tokens: int = 0  # Total tokens in last 7 days
+    estimated_spend: float = 0.0  # Estimated cost in last 7 days
+
+    # Daily breakdown (last 7 days)
+    daily_usage: list[DailyUsageData] = Field(default_factory=list)
+
+    # Team breakdown (by user)
+    team_usage: list[TeamUsageData] = Field(default_factory=list)
