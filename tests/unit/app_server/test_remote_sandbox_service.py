@@ -2534,79 +2534,6 @@ class TestArchiveWorkspaceHelper:
         # tar.gz 500 is retryable + REQUIRED -> block the delete for a retry.
         assert ok is False
 
-
-class TestArchiveInitialWorkspaceHelper:
-    """Unit tests for the initial-state (pre-agent) workspace snapshot."""
-
-    @pytest.mark.asyncio
-    async def test_initial_archive_uploads_tar_gz_and_manifest(self, monkeypatch):
-        from openhands.app_server.sandbox import workspace_archive
-
-        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', 'true')
-        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
-
-        client = _stream_client(
-            _make_stream_response(
-                200,
-                b'tar-bytes',
-                {
-                    'X-Archive-Repo-Remote': 'https://github.com/example/repo.git',
-                    'X-Archive-Branch': 'feature-x',
-                    'X-Archive-Head-Commit': 'def456',
-                },
-            )
-        )
-        store = MagicMock()
-        writes: dict[str, bytes] = {}
-        store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
-        # Archive blobs are streamed from a tempfile via write_from_path (the OOM
-        # fix); record them too so blob-path assertions still see the .patch/.tar.gz.
-        store.write_from_path.side_effect = lambda path, src: writes.__setitem__(
-            path, open(src, 'rb').read()
-        )
-
-        with patch.object(
-            workspace_archive, '_get_archive_file_store', return_value=store
-        ):
-            ok = await workspace_archive.archive_initial_workspace(
-                client,
-                agent_server_url='https://sandbox.example.com',
-                session_api_key='sk',
-                project_dir='/workspace/project/repo',
-                sandbox_id='sandbox-1',
-                conversation_id='conv-1',
-                base_commit='deadbeef',
-            )
-
-        assert ok is True
-        # tar.gz requested at the (already-resolved) project dir; key forwarded.
-        _, kwargs = client.stream.call_args
-        assert kwargs['headers']['X-Session-API-Key'] == 'sk'
-        # tar.gz is the full capture, so default excludes are disabled.
-        assert kwargs['params'] == {
-            'path': '/workspace/project/repo',
-            'format': 'tar.gz',
-            'use_default_excludes': 'false',
-        }
-        # Keyed by conversation and nested under /initial/ so it can never collide
-        # with a sibling or with this conversation's final capture (which writes to
-        # {prefix}/{sandbox_id}/{conversation_key}/{ts}).
-        archive_path = next(p for p in writes if p.endswith('.tar.gz'))
-        assert '/sandbox-1/conv-1/initial/' in archive_path
-        manifest_path = next(p for p in writes if p.endswith('.manifest.json'))
-        # Shared contract: manifest = blob + '.manifest.json' (keeps the suffix).
-        assert manifest_path == archive_path + '.manifest.json'
-        manifest = json.loads(writes[manifest_path])
-        assert manifest['phase'] == 'initial'
-        assert manifest['base_commit'] == 'deadbeef'
-        assert manifest['conversation_id'] == 'conv-1'
-        assert manifest['format'] == 'tar.gz'
-        assert manifest['source_path'] == '/workspace/project/repo'
-        # Repo identity from the tar.gz response headers (self-describing snapshot).
-        assert manifest['repo_remote'] == 'https://github.com/example/repo.git'
-        assert manifest['branch'] == 'feature-x'
-        assert manifest['head_commit'] == 'def456'
-
     @pytest.mark.asyncio
     async def test_archive_sibling_conversations_distinct_keys(self, monkeypatch):
         """Two sibling conversations on the SAME grouped sandbox, captured in the
@@ -2652,108 +2579,6 @@ class TestArchiveInitialWorkspaceHelper:
         assert len(manifests) == 2
         assert any('/shared-sandbox/conva/' in p for p in patch_blobs)
         assert any('/shared-sandbox/convb/' in p for p in patch_blobs)
-
-    @pytest.mark.asyncio
-    async def test_initial_archive_sibling_conversations_distinct_keys(
-        self, monkeypatch
-    ):
-        """Same same-second path-collision guard for the initial snapshot under
-        grouping: sibling initial captures land at distinct keys."""
-        from datetime import datetime, timezone
-
-        from openhands.app_server.sandbox import workspace_archive
-
-        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', 'true')
-        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
-        fixed = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-        monkeypatch.setattr(workspace_archive, 'utc_now', lambda: fixed)
-
-        writes: dict[str, bytes] = {}
-        store = MagicMock()
-        store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
-        store.write_from_path.side_effect = lambda path, src: writes.__setitem__(
-            path, open(src, 'rb').read()
-        )
-
-        with patch.object(
-            workspace_archive, '_get_archive_file_store', return_value=store
-        ):
-            for conv in ('conva', 'convb'):
-                client = _stream_client(_make_stream_response(200, b'tar-bytes', {}))
-                ok = await workspace_archive.archive_initial_workspace(
-                    client,
-                    agent_server_url='https://sandbox.example.com',
-                    session_api_key='sk',
-                    project_dir=f'/workspace/project/{conv}',
-                    sandbox_id='shared-sandbox',
-                    conversation_id=conv,
-                )
-                assert ok is True
-
-        tarballs = [p for p in writes if p.endswith('.tar.gz')]
-        manifests = [p for p in writes if p.endswith('.manifest.json')]
-        assert len(tarballs) == 2
-        assert len(manifests) == 2
-        assert any('/shared-sandbox/conva/initial/' in p for p in tarballs)
-        assert any('/shared-sandbox/convb/initial/' in p for p in tarballs)
-
-    @pytest.mark.asyncio
-    async def test_initial_archive_disabled_is_noop(self, monkeypatch):
-        from openhands.app_server.sandbox import workspace_archive
-
-        monkeypatch.delenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', raising=False)
-        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
-
-        client = AsyncMock()
-
-        ok = await workspace_archive.archive_initial_workspace(
-            client,
-            agent_server_url='https://sandbox.example.com',
-            session_api_key='sk',
-            project_dir='/workspace/project/repo',
-            sandbox_id='sandbox-1',
-        )
-        # Off by default: no request, no upload.
-        assert ok is False
-        client.stream.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_initial_archive_non_200_returns_false(self, monkeypatch):
-        from openhands.app_server.sandbox import workspace_archive
-
-        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', 'true')
-        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
-
-        client = _stream_client(_make_stream_response(500))
-
-        ok = await workspace_archive.archive_initial_workspace(
-            client,
-            agent_server_url='https://sandbox.example.com',
-            session_api_key='sk',
-            project_dir='/workspace/project/repo',
-            sandbox_id='sandbox-1',
-        )
-        # Best-effort: a failed capture is swallowed (never blocks startup).
-        assert ok is False
-
-    @pytest.mark.asyncio
-    async def test_initial_archive_no_bucket_returns_false(self, monkeypatch):
-        from openhands.app_server.sandbox import workspace_archive
-
-        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', 'true')
-        monkeypatch.delenv('RUNTIME_FILE_ARCHIVE_BUCKET', raising=False)
-
-        client = AsyncMock()
-
-        ok = await workspace_archive.archive_initial_workspace(
-            client,
-            agent_server_url='https://sandbox.example.com',
-            session_api_key='sk',
-            project_dir='/workspace/project/repo',
-            sandbox_id='sandbox-1',
-        )
-        assert ok is False
-        client.stream.assert_not_called()
 
 
 class TestDeleteSandboxKeyHandling:
@@ -2897,25 +2722,16 @@ class TestArchiveEnvToggles:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_REQUIRED', value)
         assert workspace_archive.archive_required() is True
 
-    @pytest.mark.parametrize('value', ['1', 'true'])
-    def test_initial_archive_enabled_truthy(self, monkeypatch, value):
-        from openhands.app_server.sandbox import workspace_archive
-
-        monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', value)
-        assert workspace_archive.initial_archive_enabled() is True
-
     def test_toggles_default_off(self, monkeypatch):
         from openhands.app_server.sandbox import workspace_archive
 
         for var in (
             'RUNTIME_FILE_ARCHIVE_ENABLED',
             'RUNTIME_FILE_ARCHIVE_REQUIRED',
-            'RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED',
         ):
             monkeypatch.delenv(var, raising=False)
         assert workspace_archive.archive_enabled() is False
         assert workspace_archive.archive_required() is False
-        assert workspace_archive.initial_archive_enabled() is False
 
 
 class TestArchiveRequestParams:
