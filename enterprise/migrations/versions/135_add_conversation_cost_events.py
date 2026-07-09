@@ -1,7 +1,7 @@
 """Add conversation cost events table.
 
-Revision ID: 134
-Revises: 133
+Revision ID: 135
+Revises: 134
 Create Date: 2026-07-08
 
 """
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = '134'
-down_revision = '133'
+revision = '135'
+down_revision = '134'
 branch_labels = None
 depends_on = None
 
