@@ -1,20 +1,98 @@
-# Adds a git-tag name to existing Docker images.
-# Triggered when a tag is pushed: finds the images built at the tag's commit
-# (tagged `sha-<full>`) and adds the tag name as an alias for the same manifest.
-# Semver tags (X.Y.Z) also get X.Y, X, and latest aliases.
+# Adds git-tag names to existing Docker images: finds the images built at the
+# tag's commit (tagged `sha-<full>`) and adds the tag name as an alias for the
+# same manifest. Semver tags (X.Y.Z) also get X.Y, X, and latest aliases.
 # No rebuild — pure registry-side retag via `docker buildx imagetools create`.
+#
+# Release-please pushes the release tag a minute or so after the release PR
+# merges, while the Docker workflow is still building images for that same
+# commit — so no single event is safe to retag on. Two triggers cover each
+# other, and whichever fires second applies the tags:
+#   - push (tag): the image already exists (e.g. a manual tag on an old,
+#     already-built commit) → retag now. Build still in progress → hand off.
+#   - workflow_run (Docker completed): a git tag already points at the built
+#     commit (release-please tagged mid-build) → retag now. No tag → no-op.
+# Retagging twice is harmless: imagetools create is idempotent.
 name: Tag Docker images
 
 on:
   push:
     tags:
       - "*"
+  workflow_run:
+    workflows: [Docker]
+    types: [completed]
+
+# Serialize the two edges when they race on the same commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: false
 
 jobs:
+  resolve:
+    # Map either trigger to (commit, git tags to apply). Ordinary merges have
+    # no tag, so the workflow_run edge usually resolves to nothing and stops
+    # here. Allowlist the triggering event rather than the branch: fork PRs
+    # can spoof branch names, but never arrive as push/workflow_dispatch runs.
+    if: >-
+      github.event_name == 'push' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event))
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.find.outputs.sha }}
+      tags: ${{ steps.find.outputs.tags }}
+    steps:
+      - name: Resolve commit and git tags
+        id: find
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_SHA: ${{ github.sha }}
+          PUSH_TAG: ${{ github.ref_name }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == push ]]; then
+            sha="$PUSH_SHA"
+            tags="$PUSH_TAG"
+          else
+            sha="$RUN_SHA"
+            # ls-remote lists annotated tags twice (tag object and peeled ^{}
+            # commit); match on the commit and strip both to the bare name.
+            tags=$(git ls-remote --tags "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+              | awk -v sha="$sha" '$1 == sha { t = $2; sub("refs/tags/", "", t); sub(/\^\{\}$/, "", t); print t }' \
+              | sort -u)
+          fi
+          # Alias plain semver X.Y.Z with X.Y, X, and latest — the same set
+          # docker/metadata-action emitted (semver patterns + latest=auto).
+          # Anything else (cloud-X.Y.Z, prereleases) is applied verbatim only.
+          expanded=""
+          while IFS= read -r tag; do
+            [[ -z "$tag" ]] && continue
+            expanded+="${tag}"$'\n'
+            if [[ "$tag" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+$ ]]; then
+              expanded+="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"$'\n'
+              expanded+="${BASH_REMATCH[1]}"$'\n'
+              expanded+="latest"$'\n'
+            fi
+          done <<< "$tags"
+          {
+            echo "sha=${sha}"
+            echo "tags<<EOF"
+            printf '%s' "$expanded" | sort -u
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
   retag:
+    needs: resolve
+    if: needs.resolve.outputs.tags != ''
     runs-on: ubuntu-22.04
     permissions:
       packages: write
+      actions: read
     strategy:
       matrix:
         image:
@@ -29,32 +107,36 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
-      - name: Compute tags
-        id: meta
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
-        with:
-          images: ${{ matrix.image }}
-          flavor: latest=auto
-          tags: |
-            type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
       - name: Add tags to existing image
         env:
-          SRC: ${{ matrix.image }}:sha-${{ github.sha }}
-          TAGS: ${{ steps.meta.outputs.tags }}
-          COMMIT_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          IMAGE: ${{ matrix.image }}
+          COMMIT_SHA: ${{ needs.resolve.outputs.sha }}
+          TAGS: ${{ needs.resolve.outputs.tags }}
         shell: bash
         run: |
           set -euo pipefail
-          if ! docker buildx imagetools inspect "$SRC" > /dev/null 2>&1; then
-            echo "::error::Source image $SRC does not exist. The Docker workflow for commit $COMMIT_SHA may not have completed successfully. Re-run this workflow once the build finishes."
+          src="${IMAGE}:sha-${COMMIT_SHA}"
+          if ! docker buildx imagetools inspect "$src" > /dev/null 2>&1; then
+            if [[ "$EVENT_NAME" == push ]]; then
+              # One check, not a wait: if the Docker workflow is still running
+              # for this commit, its completion re-triggers this workflow and
+              # the workflow_run edge applies the tags.
+              pending=$(gh run list --repo "$GITHUB_REPOSITORY" \
+                --workflow ghcr-build.yml --commit "$COMMIT_SHA" \
+                --json status --jq '[.[] | select(.status != "completed")] | length')
+              if (( pending > 0 )); then
+                echo "::notice::$src is not published yet; the Docker workflow for $COMMIT_SHA is still running and will re-trigger this workflow on completion."
+                exit 0
+              fi
+            fi
+            echo "::error::Source image $src does not exist and no Docker workflow run is in progress for $COMMIT_SHA. Re-run the Docker workflow for this commit; its completion re-triggers this workflow."
             exit 1
           fi
           args=()
           while IFS= read -r tag; do
             [[ -z "$tag" ]] && continue
-            args+=(-t "$tag")
+            args+=(-t "${IMAGE}:${tag}")
           done <<< "$TAGS"
-          docker buildx imagetools create "${args[@]}" "$SRC"
+          docker buildx imagetools create "${args[@]}" "$src"

@@ -1,8 +1,7 @@
 # Opens a PR in OpenHands/OpenHands-Cloud pointing the openhands chart's
-# image.tag at the enterprise-server image that was just tagged. tag-image.yml
-# retags the sha-built image with the tag name (type=ref,event=tag)
-# concurrently, so the image tag matches the git tag verbatim — no prefix
-# stripping needed.
+# image.tag at the enterprise-server image for this tag. tag-image.yml applies
+# the tag name to the sha-built image (as soon as its Docker build completes),
+# so the image tag matches the git tag verbatim — no prefix stripping needed.
 name: Bump chart image tag
 
 on:
