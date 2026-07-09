@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from fastapi import BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -508,8 +509,12 @@ class TestOnEventStatsProcessing:
         with patch(
             'openhands.app_server.event_callback.webhook_router._run_callbacks_in_bg_and_close'
         ) as mock_callbacks:
+            # on_event now takes a BackgroundTasks dependency. We pass a real
+            # instance and verify it was scheduled rather than mocking it out.
+            background_tasks = BackgroundTasks()
             # Call on_event directly with dependencies
             await on_event(
+                background_tasks=background_tasks,
                 events=events,
                 conversation_id=conversation_id,
                 app_conversation_info=mock_app_conversation_info,
@@ -523,8 +528,9 @@ class TestOnEventStatsProcessing:
         # Verify stats event was processed
         mock_app_conversation_info_service.update_conversation_statistics.assert_called_once()
 
-        # Verify callbacks were scheduled
-        mock_callbacks.assert_called_once()
+        # Verify callbacks were scheduled via BackgroundTasks.add_task
+        assert len(background_tasks.tasks) == 1
+        assert background_tasks.tasks[0].func is mock_callbacks
 
     @pytest.mark.asyncio
     async def test_on_event_skips_non_stats_events(self):
@@ -558,6 +564,7 @@ class TestOnEventStatsProcessing:
         ):
             # Call on_event directly with dependencies
             await on_event(
+                background_tasks=BackgroundTasks(),
                 events=events,
                 conversation_id=conversation_id,
                 app_conversation_info=mock_app_conversation_info,
