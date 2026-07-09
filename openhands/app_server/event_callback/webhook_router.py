@@ -7,7 +7,15 @@ import pkgutil
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from fastapi.security import APIKeyHeader
 from jwt import InvalidTokenError
 from pydantic import SecretStr
@@ -36,8 +44,15 @@ from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.errors import AuthError
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventCallback
+from openhands.app_server.event_callback.event_callback_result_models import (
+    EventCallbackResultStatus,
+)
 from openhands.app_server.event_callback.set_title_callback_processor import (
     SetTitleCallbackProcessor,
+)
+from openhands.app_server.event_callback.sql_event_callback_service import (
+    StoredEventCallbackResult,
+    invoke_callback,
 )
 from openhands.app_server.integrations.provider import ProviderType
 from openhands.app_server.sandbox.sandbox_models import SandboxRecord
@@ -452,6 +467,7 @@ async def on_conversation_update(
 
 @router.post('/events/{conversation_id}')
 async def on_event(
+    background_tasks: BackgroundTasks,
     events: list[Event],
     conversation_id: UUID,
     app_conversation_info: AppConversationInfo = Depends(valid_conversation),
@@ -515,10 +531,11 @@ async def on_event(
             except Exception:
                 _logger.exception('analytics:conversation_terminal:failed')
 
-        asyncio.create_task(
-            _run_callbacks_in_bg_and_close(
-                conversation_id, app_conversation_info.created_by_user_id, events
-            )
+        background_tasks.add_task(
+            _run_callbacks_in_bg_and_close,
+            conversation_id,
+            app_conversation_info.created_by_user_id,
+            events,
         )
 
     except Exception:
@@ -568,14 +585,46 @@ async def _run_callbacks_in_bg_and_close(
     user_id: str | None,
     events: list[Event],
 ):
-    """Run all callbacks and close the session"""
+    """Run all active callbacks for the given events.
+
+    The ``SQLEventCallbackService`` opens its own short-lived ``AsyncSession``
+    per method call, so the SQLAlchemy pool connection is only checked out for
+    the SELECT (in :meth:`get_active_callbacks`) and the COMMIT (in
+    :meth:`persist_callback_results`). The slow callback processors run with
+    **no** connection held — which is what stops webhook bursts from
+    exhausting the 25+10 pool and starving subsequent ``asyncpg.connect``
+    attempts.
+    """
     state = InjectorState()
     setattr(state, USER_CONTEXT_ATTR, SpecifyUserContext(user_id=user_id))
 
-    async with get_event_callback_service(state) as event_callback_service:
-        # We don't use asynio.gather here because callbacks must be run in sequence.
+    async with get_event_callback_service(state) as service:
         for event in events:
-            await event_callback_service.execute_callbacks(conversation_id, event)
+            callbacks = await service.get_active_callbacks(conversation_id, event)
+            if not callbacks:
+                continue
+            outcomes = await asyncio.gather(
+                *[invoke_callback(cb, conversation_id, event) for cb in callbacks],
+                return_exceptions=True,
+            )
+            normalised: list[StoredEventCallbackResult | None] = []
+            for callback, outcome in zip(callbacks, outcomes, strict=False):
+                if isinstance(outcome, BaseException):
+                    _logger.exception(
+                        f'Exception in callback {callback.id}', stack_info=True
+                    )
+                    normalised.append(
+                        StoredEventCallbackResult(
+                            status=EventCallbackResultStatus.ERROR,
+                            event_callback_id=callback.id,
+                            event_id=event.id,
+                            conversation_id=conversation_id,
+                            detail=str(outcome),
+                        )
+                    )
+                else:
+                    normalised.append(outcome)
+            await service.persist_callback_results(callbacks, normalised)
 
 
 def _import_all_tools():
