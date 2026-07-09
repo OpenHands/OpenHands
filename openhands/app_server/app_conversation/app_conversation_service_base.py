@@ -23,6 +23,7 @@ from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
 )
 from openhands.app_server.app_conversation.skill_loader import (
+    authenticate_marketplace_sources,
     build_org_configs,
     build_sandbox_config,
     load_skills_from_agent_server,
@@ -143,6 +144,13 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
             # Build sandbox config (exposed URLs)
             sandbox_config = build_sandbox_config(sandbox)
+
+            # Swap marketplace sources for authenticated git URLs so the
+            # agent-server can clone private marketplace repos. Never raises;
+            # unresolvable sources pass through unchanged.
+            registered_marketplaces = await authenticate_marketplace_sources(
+                registered_marketplaces, self.user_context
+            )
 
             # Single API call to agent-server for ALL skills
             all_skills = await load_skills_from_agent_server(

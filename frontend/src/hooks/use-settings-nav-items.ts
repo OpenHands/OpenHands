@@ -92,7 +92,7 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
 
   // Hide admin dashboard for non-admins/owners or personal orgs
   if (!isAdminOrOwner || !organizationId || isPersonalOrg) {
-    items = items.filter((item) => item.to !== "/settings/admin-dashboard");
+    items = items.filter((item) => item.to !== "/settings/usage-monitoring");
   }
 
   const PERSONAL_LLM_PATHS = new Set([
