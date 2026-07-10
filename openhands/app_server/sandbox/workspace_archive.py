@@ -19,8 +19,6 @@ import json
 import logging
 import os
 import tempfile
-import uuid
-from datetime import datetime
 from typing import Any
 from urllib.parse import unquote
 
@@ -87,7 +85,7 @@ def archive_required() -> bool:
 
 
 def _manifest_enrichment_enabled() -> bool:
-    """Whether to probe packages/env/git-changes/run into the manifest (default on)."""
+    """Whether to probe packages and runtime versions into the manifest."""
     return os.getenv('RUNTIME_FILE_ARCHIVE_ENRICH', 'true').lower() in ('true', '1')
 
 
@@ -207,38 +205,13 @@ def _write_file_to_store(store: FileStore, name: str, path: str) -> None:
     store.write_from_path(name, path)
 
 
-# Per-command timeout and per-manager entry cap for the workspace probes. Bounds
-# both the added archive latency and a pathological manifest blow-up.
 _PROBE_TIMEOUT = 15.0
 _MAX_PACKAGES_PER_MANAGER = 2000
-
-# Declared-dependency files we hash so the dataset can detect env drift vs the
-# resolved `packages`. Absent files are simply skipped by sha256sum.
-_LOCKFILE_CANDIDATES = (
-    'requirements.txt',
-    'pyproject.toml',
-    'uv.lock',
-    'package.json',
-    'package-lock.json',
-    'pnpm-lock.yaml',
-    'yarn.lock',
-    'poetry.lock',
-    'Cargo.lock',
-    'go.sum',
-)
-_ENV_MARKER = '__LOCKFILES__'
-_NUMSTAT_MARKER = '__NUMSTAT__'
-
-# One shell round-trip for runtime versions + lockfile hashes. Runtime lines are
-# `key=value`; after the marker, sha256sum emits `<sha>  <file>` (absent files
-# skipped). Prefer a project .venv's python where the agent's installs live.
-_ENV_LOCKFILE_CMD = (
+_ENVIRONMENT_CMD = (
     'echo "python=$(.venv/bin/python --version 2>/dev/null '
     '|| python3 --version 2>/dev/null || true)"; '
     'echo "node=$(node --version 2>/dev/null || true)"; '
-    'echo "os=$(. /etc/os-release 2>/dev/null; echo "${ID:-} ${VERSION_ID:-}")"; '
-    'echo ' + _ENV_MARKER + '; '
-    'sha256sum ' + ' '.join(_LOCKFILE_CANDIDATES) + ' 2>/dev/null'
+    'echo "os=$(. /etc/os-release 2>/dev/null; echo "${ID:-} ${VERSION_ID:-}")"'
 )
 
 
@@ -292,58 +265,6 @@ def _parse_runtime(out: str) -> dict[str, str]:
     return result
 
 
-def _parse_lockfiles(out: str) -> dict[str, str]:
-    """Parse ``sha256sum`` output into ``{filename: sha256}``."""
-    result: dict[str, str] = {}
-    for line in out.splitlines():
-        parts = line.split()
-        if len(parts) == 2 and len(parts[0]) == 64:
-            result[parts[1].lstrip('*')] = parts[0]
-    return result
-
-
-def _split_env_lockfiles(out: str) -> tuple[dict[str, str], dict[str, str]]:
-    env_lines: list[str] = []
-    lock_lines: list[str] = []
-    in_locks = False
-    for line in out.splitlines():
-        if line.strip() == _ENV_MARKER:
-            in_locks = True
-            continue
-        (lock_lines if in_locks else env_lines).append(line)
-    return _parse_runtime('\n'.join(env_lines)), _parse_lockfiles('\n'.join(lock_lines))
-
-
-def _parse_git_changes(out: str) -> dict[str, Any]:
-    """Parse commits + ``git diff --numstat`` into an edit summary (no regex)."""
-    changes: dict[str, Any] = {}
-    files = insertions = deletions = 0
-    in_stat = False
-    for line in out.splitlines():
-        if line.strip() == _NUMSTAT_MARKER:
-            in_stat = True
-            continue
-        if not in_stat:
-            key, _, value = line.partition('=')
-            if key.strip() == 'commits' and value.strip().isdigit():
-                changes['commits'] = int(value.strip())
-            continue
-        cols = line.split('\t')
-        if len(cols) >= 3:
-            files += 1
-            if cols[0].isdigit():
-                insertions += int(cols[0])
-            if cols[1].isdigit():
-                deletions += int(cols[1])
-    if files:
-        changes.update(files_changed=files, insertions=insertions, deletions=deletions)
-    return changes
-
-
-def _is_sha(value: str) -> bool:
-    return bool(value) and all(c in '0123456789abcdef' for c in value.lower())
-
-
 async def _run_probe(
     agent_server_url: str, session_api_key: str | None, cwd: str, command: str
 ) -> str:
@@ -380,15 +301,7 @@ def _run_probe_in_thread(
 async def _probe_workspace(
     agent_server_url: str, session_api_key: str | None, cwd: str
 ) -> dict[str, Any]:
-    """Best-effort ``{packages, environment, lockfiles}`` from the live workspace.
-
-    Each tool emits its own machine-readable listing (JSON / sha256sum / version
-    strings) parsed structurally — no command-text regex — so package versions
-    are RESOLVED (capturing lockfile/transitive installs a ``pip install X`` line
-    never records). Any tool absent/erroring is silently omitted; never blocks
-    archiving. Runs in ``cwd`` (the archive path); a repo cloned into a nested
-    subdir may be missed for cwd-sensitive tools (npm/git), pip is env-global.
-    """
+    """Collect installed package and runtime versions."""
     if not _manifest_enrichment_enabled():
         return {}
 
@@ -414,106 +327,10 @@ async def _probe_workspace(
     if packages:
         result['packages'] = packages
 
-    environment, lockfiles = _split_env_lockfiles(await _run(_ENV_LOCKFILE_CMD))
+    environment = _parse_runtime(await _run(_ENVIRONMENT_CMD))
     if environment:
         result['environment'] = environment
-    if lockfiles:
-        result['lockfiles'] = lockfiles
     return result
-
-
-async def _probe_git_changes(
-    agent_server_url: str,
-    session_api_key: str | None,
-    cwd: str,
-    base_commit: str,
-    head_commit: str,
-) -> dict[str, Any]:
-    """Summarize commits and working-tree edits since the base commit."""
-    if not (
-        _manifest_enrichment_enabled() and _is_sha(base_commit) and _is_sha(head_commit)
-    ):
-        return {}
-    command = (
-        f'echo "commits=$(git rev-list --count {base_commit}..{head_commit} '
-        '2>/dev/null)"; '
-        f'echo {_NUMSTAT_MARKER}; '
-        'index=$(mktemp) || exit; rm -f "$index"; '
-        'trap \'rm -f "$index"\' EXIT; '
-        f'GIT_INDEX_FILE="$index" git read-tree {base_commit} 2>/dev/null && '
-        'GIT_INDEX_FILE="$index" git add -A 2>/dev/null && '
-        f'GIT_INDEX_FILE="$index" git diff --cached --numstat {base_commit} '
-        '2>/dev/null'
-    )
-    return _parse_git_changes(
-        await _run_probe(agent_server_url, session_api_key, cwd, command)
-    )
-
-
-async def _fetch_run_metrics(
-    httpx_client: httpx.AsyncClient,
-    agent_server_url: str,
-    headers: dict[str, str],
-    conversation_id: str | None,
-) -> dict[str, Any]:
-    """Run-level metrics (model/cost/tokens/status/duration) for a self-describing
-    blob; best-effort GET of the agent-server conversation record. '{}' on failure.
-    """
-    if not (_manifest_enrichment_enabled() and conversation_id):
-        return {}
-    try:
-        cid = str(uuid.UUID(conversation_id))  # normalize hex or hyphenated
-    except (ValueError, AttributeError):
-        cid = conversation_id
-    try:
-        response = await httpx_client.get(
-            f'{agent_server_url}/api/conversations/{cid}',
-            headers=headers,
-            timeout=_PROBE_TIMEOUT,
-        )
-        if response.status_code != 200:
-            return {}
-        data = response.json()
-    except Exception as e:
-        _logger.debug('Run-metrics fetch for %s failed: %s', conversation_id, e)
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    stats = data.get('stats') or {}
-    usage_to_metrics = stats.get('usage_to_metrics') or {}
-    metrics_items = [
-        metrics for metrics in usage_to_metrics.values() if isinstance(metrics, dict)
-    ]
-    if not metrics_items:
-        metrics = data.get('metrics') or {}
-        metrics_items = [metrics] if isinstance(metrics, dict) else []
-    run: dict[str, Any] = {}
-    for metrics in metrics_items:
-        model = metrics.get('model_name')
-        if model and model != 'default' and 'model' not in run:
-            run['model'] = model
-        cost = metrics.get('accumulated_cost')
-        if isinstance(cost, (int, float)):
-            run['cost'] = run.get('cost', 0) + cost
-        usage = metrics.get('accumulated_token_usage') or {}
-        prompt_tokens = usage.get('prompt_tokens')
-        if isinstance(prompt_tokens, int):
-            run['prompt_tokens'] = run.get('prompt_tokens', 0) + prompt_tokens
-        completion_tokens = usage.get('completion_tokens')
-        if isinstance(completion_tokens, int):
-            run['completion_tokens'] = (
-                run.get('completion_tokens', 0) + completion_tokens
-            )
-    if data.get('execution_status'):
-        run['status'] = data['execution_status']
-    created, updated = data.get('created_at'), data.get('updated_at')
-    if created and updated:
-        try:
-            delta = datetime.fromisoformat(updated) - datetime.fromisoformat(created)
-            run['duration_seconds'] = round(delta.total_seconds(), 1)
-        except (ValueError, TypeError):
-            pass
-    return run
 
 
 async def archive_workspace(
@@ -523,7 +340,6 @@ async def archive_workspace(
     *,
     archive_path: str,
     conversation_id: str | None = None,
-    run_metrics: dict[str, Any] | None = None,
 ) -> bool:
     """Archive the workspace at ``archive_path``; return whether delete may proceed.
 
@@ -607,15 +423,6 @@ async def archive_workspace(
     enrichment: dict[str, Any] = {}
     enrichment_probed = False
     probe_path = archive_path
-    if run_metrics is None:
-        try:
-            run_metrics = await _fetch_run_metrics(
-                httpx_client, agent_server_url, headers, conversation_id
-            )
-        except Exception as e:
-            _logger.debug('Run-metrics skipped for %s: %s', sandbox_id, e)
-            run_metrics = {}
-    git_changes: dict[str, Any] = {}
     # One store per call (not per format) — building it lazily spins up a client.
     store = _get_archive_file_store()
     for fmt in formats:
@@ -672,20 +479,6 @@ async def archive_workspace(
                         _logger.debug(
                             'Workspace enrichment skipped for %s: %s', sandbox_id, e
                         )
-                # Edit summary needs base + captured HEAD; compute once, reuse.
-                if not git_changes and base_commit and repo_metadata.get('head_commit'):
-                    try:
-                        git_changes = await _probe_git_changes(
-                            agent_server_url,
-                            session_api_key,
-                            probe_path,
-                            base_commit,
-                            repo_metadata['head_commit'],
-                        )
-                    except Exception as e:
-                        _logger.debug(
-                            'git-changes probe skipped for %s: %s', sandbox_id, e
-                        )
                 # Stream to disk so the archive never sits whole in RAM.
                 tmp_path, byte_count = await _stream_to_tempfile(response)
         except Exception as e:
@@ -711,9 +504,6 @@ async def archive_workspace(
                     **repo_metadata,
                     'packages': enrichment.get('packages', {}),
                     'environment': enrichment.get('environment', {}),
-                    'lockfiles': enrichment.get('lockfiles', {}),
-                    'git_changes': git_changes,
-                    'run': run_metrics,
                     'format': fmt,
                     'source_path': archive_path,
                     'byte_count': byte_count,

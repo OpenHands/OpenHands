@@ -2039,12 +2039,10 @@ class TestArchiveConversationWorkspace:
                 'test-sandbox-123',
                 conversation_id='conv-1',
                 workspace_path='/home/openhands/workspace/conv-1',
-                run_metrics={'cost': 1.25},
             )
         assert ok is True
         _, kwargs = mock_archive.call_args
         assert kwargs['archive_path'] == '/home/openhands/workspace/conv-1'
-        assert kwargs['run_metrics'] == {'cost': 1.25}
         remote_sandbox_service.sandbox_spec_service.get_sandbox_spec.assert_not_called()
 
     @pytest.mark.asyncio
@@ -2128,13 +2126,11 @@ class TestArchiveWorkspaceHelper:
         probe_workspace = AsyncMock(
             return_value={'packages': {'npm': {'example': '1.0.0'}}}
         )
-        probe_git_changes = AsyncMock(return_value={'commits': 1})
         with (
             patch.object(
                 workspace_archive, '_get_archive_file_store', return_value=store
             ),
             patch.object(workspace_archive, '_probe_workspace', probe_workspace),
-            patch.object(workspace_archive, '_probe_git_changes', probe_git_changes),
         ):
             ok = await workspace_archive.archive_workspace(
                 client,
@@ -2142,7 +2138,6 @@ class TestArchiveWorkspaceHelper:
                 'sandbox-1',
                 archive_path='/workspace/project',
                 conversation_id='conv-1',
-                run_metrics={'cost': 1.25},
             )
 
         assert ok is True
@@ -2160,24 +2155,18 @@ class TestArchiveWorkspaceHelper:
         assert manifest['base_commit'] == 'abc123'
         assert manifest['conversation_id'] == 'conv-1'
         assert manifest['source_path'] == '/workspace/project'
-        assert manifest['run'] == {'cost': 1.25}
         # Repo identity from the response headers makes the blob self-describing.
         assert manifest['repo_remote'] == 'https://github.com/example/repo.git'
         assert manifest['branch'] == 'feature-x'
         assert manifest['head_commit'] == 'def456'
         assert manifest['packages'] == {'npm': {'example': '1.0.0'}}
-        assert manifest['git_changes'] == {'commits': 1}
+        assert 'lockfiles' not in manifest
+        assert 'git_changes' not in manifest
+        assert 'run' not in manifest
         probe_workspace.assert_awaited_once_with(
             'https://sandbox.example.com',
             'test-session-key',
             '/workspace/project/repo',
-        )
-        probe_git_changes.assert_awaited_once_with(
-            'https://sandbox.example.com',
-            'test-session-key',
-            '/workspace/project/repo',
-            'abc123',
-            'def456',
         )
 
     @pytest.mark.asyncio
