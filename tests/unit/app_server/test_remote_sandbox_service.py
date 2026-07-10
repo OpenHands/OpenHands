@@ -2107,7 +2107,9 @@ class TestArchiveWorkspaceHelper:
                 b'patch-bytes',
                 {
                     'X-Archive-Base-Commit': 'abc123',
-                    'X-Archive-Repo-Remote': 'https://github.com/example/repo.git',
+                    'X-Archive-Repo-Remote': (
+                        'https%3A%2F%2Fgithub.com%2Fexample%2Frepo.git'
+                    ),
                     'X-Archive-Branch': 'feature-x',
                     'X-Archive-Head-Commit': 'def456',
                 },

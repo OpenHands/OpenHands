@@ -22,6 +22,7 @@ import tempfile
 import uuid
 from datetime import datetime
 from typing import Any
+from urllib.parse import unquote
 
 import httpx
 
@@ -54,7 +55,7 @@ def _extract_repo_metadata(
     """
     fallback = existing or {}
     return {
-        key: headers.get(header_name, '') or fallback.get(key, '')
+        key: unquote(headers.get(header_name, '')) or fallback.get(key, '')
         for key, header_name in _REPO_METADATA_HEADERS.items()
     }
 
@@ -232,8 +233,8 @@ _NUMSTAT_MARKER = '__NUMSTAT__'
 # skipped). Prefer a project .venv's python where the agent's installs live.
 _ENV_LOCKFILE_CMD = (
     'echo "python=$(.venv/bin/python --version 2>/dev/null '
-    '|| python3 --version 2>&1)"; '
-    'echo "node=$(node --version 2>&1)"; '
+    '|| python3 --version 2>/dev/null || true)"; '
+    'echo "node=$(node --version 2>/dev/null || true)"; '
     'echo "os=$(. /etc/os-release 2>/dev/null; echo "${ID:-} ${VERSION_ID:-}")"; '
     'echo ' + _ENV_MARKER + '; '
     'sha256sum ' + ' '.join(_LOCKFILE_CANDIDATES) + ' 2>/dev/null'
@@ -436,7 +437,12 @@ async def _probe_git_changes(
         f'echo "commits=$(git rev-list --count {base_commit}..{head_commit} '
         '2>/dev/null)"; '
         f'echo {_NUMSTAT_MARKER}; '
-        f'git diff --numstat {base_commit} 2>/dev/null'
+        'index=$(mktemp) || exit; rm -f "$index"; '
+        'trap \'rm -f "$index"\' EXIT; '
+        f'GIT_INDEX_FILE="$index" git read-tree {base_commit} 2>/dev/null && '
+        'GIT_INDEX_FILE="$index" git add -A 2>/dev/null && '
+        f'GIT_INDEX_FILE="$index" git diff --cached --numstat {base_commit} '
+        '2>/dev/null'
     )
     return _parse_git_changes(
         await _run_probe(agent_server_url, session_api_key, cwd, command)
@@ -472,18 +478,31 @@ async def _fetch_run_metrics(
         return {}
     if not isinstance(data, dict):
         return {}
-    metrics = data.get('metrics') or {}
-    usage = metrics.get('accumulated_token_usage') or {}
+    stats = data.get('stats') or {}
+    usage_to_metrics = stats.get('usage_to_metrics') or {}
+    metrics_items = [
+        metrics for metrics in usage_to_metrics.values() if isinstance(metrics, dict)
+    ]
+    if not metrics_items:
+        metrics = data.get('metrics') or {}
+        metrics_items = [metrics] if isinstance(metrics, dict) else []
     run: dict[str, Any] = {}
-    model = metrics.get('model_name')
-    if model and model != 'default':
-        run['model'] = model
-    if isinstance(metrics.get('accumulated_cost'), (int, float)):
-        run['cost'] = metrics['accumulated_cost']
-    if isinstance(usage.get('prompt_tokens'), int):
-        run['prompt_tokens'] = usage['prompt_tokens']
-    if isinstance(usage.get('completion_tokens'), int):
-        run['completion_tokens'] = usage['completion_tokens']
+    for metrics in metrics_items:
+        model = metrics.get('model_name')
+        if model and model != 'default' and 'model' not in run:
+            run['model'] = model
+        cost = metrics.get('accumulated_cost')
+        if isinstance(cost, (int, float)):
+            run['cost'] = run.get('cost', 0) + cost
+        usage = metrics.get('accumulated_token_usage') or {}
+        prompt_tokens = usage.get('prompt_tokens')
+        if isinstance(prompt_tokens, int):
+            run['prompt_tokens'] = run.get('prompt_tokens', 0) + prompt_tokens
+        completion_tokens = usage.get('completion_tokens')
+        if isinstance(completion_tokens, int):
+            run['completion_tokens'] = (
+                run.get('completion_tokens', 0) + completion_tokens
+            )
     if data.get('execution_status'):
         run['status'] = data['execution_status']
     created, updated = data.get('created_at'), data.get('updated_at')

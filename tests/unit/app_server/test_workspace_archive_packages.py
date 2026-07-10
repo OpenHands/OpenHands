@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import subprocess
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -68,6 +69,7 @@ def test_parse_runtime_strips_prefixes():
 def test_parse_runtime_omits_empty():
     # os with no /etc/os-release resolves to blank -> omitted
     assert wa._parse_runtime('python=Python 3.12\nnode=\nos= ') == {'python': '3.12'}
+    assert '2>&1' not in wa._ENV_LOCKFILE_CMD
 
 
 def test_parse_lockfiles():
@@ -89,6 +91,20 @@ def test_split_env_lockfiles():
     env, locks = wa._split_env_lockfiles(out)
     assert env == {'python': '3.12.4'}
     assert locks == {'uv.lock': 'a' * 64}
+
+
+def test_extract_repo_metadata_decodes_percent_encoding():
+    headers = {
+        'X-Archive-Repo-Remote': (
+            'https%3A%2F%2Fgithub.com%2Fexample%2Ffeature%252Frepo.git'
+        ),
+        'X-Archive-Branch': 'caf%C3%A9%25branch',
+    }
+    assert wa._extract_repo_metadata(headers) == {
+        'repo_remote': 'https://github.com/example/feature%2Frepo.git',
+        'branch': 'café%branch',
+        'head_commit': '',
+    }
 
 
 def test_parse_git_changes_numstat():
@@ -215,7 +231,67 @@ async def test_probe_git_changes_parses():
     ):
         gc = await wa._probe_git_changes('h', 'k', '/r', 'a' * 40, 'b' * 40)
     assert gc == {'commits': 2, 'files_changed': 1, 'insertions': 10, 'deletions': 2}
-    assert f'git diff --numstat {"a" * 40} 2>/dev/null' in commands[0]
+    assert 'GIT_INDEX_FILE="$index" git add -A' in commands[0]
+    assert (
+        f'GIT_INDEX_FILE="$index" git diff --cached --numstat {"a" * 40}' in commands[0]
+    )
+
+
+@pytest.mark.asyncio
+async def test_probe_git_changes_includes_untracked_files(tmp_path):
+    subprocess.run(['git', 'init'], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ['git', 'config', 'user.email', 'test@example.com'],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(['git', 'config', 'user.name', 'Test'], cwd=tmp_path, check=True)
+    tracked = tmp_path / 'tracked.txt'
+    tracked.write_text('original\n')
+    subprocess.run(['git', 'add', 'tracked.txt'], cwd=tmp_path, check=True)
+    subprocess.run(
+        ['git', 'commit', '-m', 'base'], cwd=tmp_path, check=True, capture_output=True
+    )
+    base = subprocess.run(
+        ['git', 'rev-parse', 'HEAD'],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    tracked.write_text('changed\n')
+    (tmp_path / 'untracked.txt').write_text('new\n')
+
+    async def execute(command, cwd, timeout):
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            shell=True,
+            executable='/bin/bash',
+            capture_output=True,
+            text=True,
+        )
+        return _Result(result.stdout, result.returncode)
+
+    with patch.object(wa.AsyncRemoteWorkspace, 'execute_command', side_effect=execute):
+        changes = await wa._probe_git_changes(
+            'http://host', 'key', str(tmp_path), base, base
+        )
+
+    assert changes == {
+        'commits': 0,
+        'files_changed': 2,
+        'insertions': 2,
+        'deletions': 1,
+    }
+    status = subprocess.run(
+        ['git', 'status', '--short'],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    assert status == [' M tracked.txt', '?? untracked.txt']
 
 
 @pytest.mark.asyncio
@@ -249,14 +325,27 @@ def _client_returning(payload, status=200):
 async def test_fetch_run_metrics_full():
     client = _client_returning(
         {
-            'metrics': {
-                'model_name': 'claude-opus-4-8',
-                'accumulated_cost': 0.42,
-                'accumulated_token_usage': {
-                    'prompt_tokens': 1200,
-                    'completion_tokens': 300,
+            'stats': {
+                'usage_to_metrics': {
+                    'agent': {
+                        'model_name': 'claude-opus-4-8',
+                        'accumulated_cost': 0.4,
+                        'accumulated_token_usage': {
+                            'prompt_tokens': 1000,
+                            'completion_tokens': 250,
+                        },
+                    },
+                    'condenser': {
+                        'model_name': 'claude-opus-4-8',
+                        'accumulated_cost': 0.02,
+                        'accumulated_token_usage': {
+                            'prompt_tokens': 200,
+                            'completion_tokens': 50,
+                        },
+                    },
                 },
             },
+            'metrics': {},
             'execution_status': 'finished',
             'created_at': '2026-07-10T00:00:00',
             'updated_at': '2026-07-10T00:01:30',
@@ -265,9 +354,10 @@ async def test_fetch_run_metrics_full():
     run = await wa._fetch_run_metrics(
         client, 'http://h', {}, 'c1425d4f35cc47d9804c125fe0af02aa'
     )
+    cost = run.pop('cost')
+    assert cost == pytest.approx(0.42)
     assert run == {
         'model': 'claude-opus-4-8',
-        'cost': 0.42,
         'prompt_tokens': 1200,
         'completion_tokens': 300,
         'status': 'finished',
@@ -286,6 +376,28 @@ async def test_fetch_run_metrics_skips_default_model():
     )
     run = await wa._fetch_run_metrics(client, 'http://h', {}, 'c1')
     assert 'model' not in run and run.get('cost') == 0
+
+
+@pytest.mark.asyncio
+async def test_fetch_run_metrics_falls_back_to_stored_metrics():
+    client = _client_returning(
+        {
+            'metrics': {
+                'model_name': 'gpt-5',
+                'accumulated_cost': 0.5,
+                'accumulated_token_usage': {
+                    'prompt_tokens': 50,
+                    'completion_tokens': 10,
+                },
+            }
+        }
+    )
+    assert await wa._fetch_run_metrics(client, 'http://h', {}, 'c1') == {
+        'model': 'gpt-5',
+        'cost': 0.5,
+        'prompt_tokens': 50,
+        'completion_tokens': 10,
+    }
 
 
 @pytest.mark.asyncio
