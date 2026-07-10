@@ -564,7 +564,12 @@ class RemoteSandboxService(SandboxService):
         """Pause a running sandbox.
 
         Security: Clears the session_api_key_hash to invalidate any existing
-        session keys, preventing leaked keys from being used while paused.
+        session keys, preventing leaked keys from being used while paused. The
+        clear is committed before the runtime /pause (releasing the pooled DB
+        connection for the slow call) and restored if the pause fails
+        transiently: the sandbox is still running then, and nothing re-sets the
+        hash for a running sandbox, so a committed NULL would permanently 401
+        its webhook/secrets auth.
         """
         try:
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
@@ -575,19 +580,35 @@ class RemoteSandboxService(SandboxService):
             # leaked keys from being used while the sandbox is paused.
             # Committed immediately: the revoke is durable up front, and the
             # pooled DB connection is released before the runtime-api calls.
+            old_key_hash = stored_sandbox.session_api_key_hash
             stored_sandbox.session_api_key_hash = None
             await self.db_session.commit()
 
-            runtime_data = await self._get_runtime(sandbox_id)
-            response = await self._send_runtime_api_request(
-                'POST',
-                '/pause',
-                json={'runtime_id': runtime_data['runtime_id']},
-            )
-            if response.status_code == 404:
-                return False
-            response.raise_for_status()
-            return True
+            try:
+                runtime_data = await self._get_runtime(sandbox_id)
+                response = await self._send_runtime_api_request(
+                    'POST',
+                    '/pause',
+                    json={'runtime_id': runtime_data['runtime_id']},
+                )
+                if response.status_code == 404:
+                    # Runtime already gone: not running, the revoke stands.
+                    return False
+                response.raise_for_status()
+                return True
+            except httpx.HTTPError as e:
+                runtime_gone = (
+                    isinstance(e, httpx.HTTPStatusError)
+                    and e.response.status_code == 404
+                )
+                if not runtime_gone and old_key_hash is not None:
+                    # The pause didn't happen, so the sandbox is still running
+                    # and its callbacks authenticate by this hash: restore it.
+                    # (When the runtime is gone, the revoke stands — nothing is
+                    # running, so a leaked key must stay dead.)
+                    stored_sandbox.session_api_key_hash = old_key_hash
+                    await self.db_session.commit()
+                raise
 
         except httpx.HTTPError as e:
             _logger.error(f'Error pausing sandbox {sandbox_id}: {e}')
@@ -611,10 +632,11 @@ class RemoteSandboxService(SandboxService):
         is never reported as 404.
 
         Security: the session_api_key_hash is invalidated and committed UP
-        FRONT (like ``pause_sandbox``) so a delete — commonly a revoke of a
-        leaked key — kills it promptly and no later rollback can resurrect it.
-        On a transient stop failure the row is kept for retry, with the key
-        already revoked.
+        FRONT so a delete — commonly a revoke of a leaked key — kills it
+        promptly and no later rollback can resurrect it. Unlike
+        ``pause_sandbox``, a transient stop failure does NOT restore the hash:
+        delete is a revoke intent, so the key stays dead and the row is kept
+        for retry.
         """
         try:
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)

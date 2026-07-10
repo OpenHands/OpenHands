@@ -623,7 +623,7 @@ class TestSandboxLifecycle:
     async def test_pause_sandbox_success(self, remote_sandbox_service):
         """Test successful sandbox pause."""
         # Setup
-        stored_sandbox = create_stored_sandbox()
+        stored_sandbox = create_stored_sandbox(session_api_key_hash='old-hash')
         runtime_data = create_runtime_data()
 
         remote_sandbox_service._get_stored_sandbox = AsyncMock(
@@ -646,6 +646,9 @@ class TestSandboxLifecycle:
             headers={'X-API-Key': 'test-api-key'},
             json={'runtime_id': 'runtime-456'},
         )
+        # The key revoke is committed up front, before the runtime /pause.
+        assert stored_sandbox.session_api_key_hash is None
+        assert remote_sandbox_service.db_session.commit.await_count == 1
 
     @pytest.mark.asyncio
     async def test_delete_sandbox_success(self, remote_sandbox_service):
@@ -1113,9 +1116,14 @@ class TestErrorHandling:
 
     @pytest.mark.asyncio
     async def test_pause_sandbox_http_error(self, remote_sandbox_service):
-        """Test pause sandbox with HTTP error."""
+        """A transient pause failure restores the committed key revoke.
+
+        The sandbox is still running, and nothing re-sets the hash for a
+        running sandbox — leaving the revoke committed would permanently 401
+        its webhook/secrets auth.
+        """
         # Setup
-        stored_sandbox = create_stored_sandbox()
+        stored_sandbox = create_stored_sandbox(session_api_key_hash='old-hash')
         runtime_data = create_runtime_data()
 
         remote_sandbox_service._get_stored_sandbox = AsyncMock(
@@ -1129,8 +1137,41 @@ class TestErrorHandling:
         # Execute
         result = await remote_sandbox_service.pause_sandbox('test-sandbox-123')
 
-        # Verify
+        # Verify: hash restored, committed twice (revoke, then restore)
         assert result is False
+        assert stored_sandbox.session_api_key_hash == 'old-hash'
+        assert remote_sandbox_service.db_session.commit.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_pause_sandbox_runtime_gone_keeps_revoke(
+        self, remote_sandbox_service
+    ):
+        """A 404 runtime lookup does NOT restore the key revoke.
+
+        The runtime is gone, so nothing is running: a leaked key must stay
+        dead rather than be restored to a row with no live runtime.
+        """
+        # Setup
+        stored_sandbox = create_stored_sandbox(session_api_key_hash='old-hash')
+
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                'Not Found',
+                request=httpx.Request('GET', 'https://api.example.com/sessions/x'),
+                response=httpx.Response(404),
+            )
+        )
+
+        # Execute
+        result = await remote_sandbox_service.pause_sandbox('test-sandbox-123')
+
+        # Verify: revoke stands, only the up-front commit happened
+        assert result is False
+        assert stored_sandbox.session_api_key_hash is None
+        assert remote_sandbox_service.db_session.commit.await_count == 1
 
     @pytest.mark.asyncio
     async def test_delete_sandbox_http_error(self, remote_sandbox_service):
