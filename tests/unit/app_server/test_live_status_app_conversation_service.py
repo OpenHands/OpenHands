@@ -1241,6 +1241,11 @@ class TestLiveStatusAppConversationService:
         )
 
         assert result.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(result.conversation_id),
+            'agent_kind': 'openhands',
+            'repo_name': 'test/repo',
+            'selected_branch': 'feature-x',
             'repo': 'test/repo',
             'branch': 'feature-x',
             'git_provider': 'github',
@@ -1282,6 +1287,11 @@ class TestLiveStatusAppConversationService:
         )
 
         assert result.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(result.conversation_id),
+            'agent_kind': 'openhands',
+            'repo_name': 'test/repo',
+            'selected_branch': 'feature-x',
             'repo': 'test/repo',
             'branch': 'feature-x',
             'git_provider': 'github',
@@ -1321,17 +1331,23 @@ class TestLiveStatusAppConversationService:
             selected_repository='test/repo',
         )
 
-        assert result.observability_metadata == {'repo': 'test/repo'}
+        assert result.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(result.conversation_id),
+            'agent_kind': 'openhands',
+            'repo_name': 'test/repo',
+            'repo': 'test/repo',
+        }
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
         return_value=[],
     )
     @pytest.mark.asyncio
-    async def test_build_request_no_repo_omits_observability_metadata(
+    async def test_build_request_no_repo_keeps_context_observability_metadata(
         self, _mock_tools
     ):
-        """A repo-less conversation adds no repo metadata to the trace."""
+        """A repo-less conversation keeps non-repo trace context metadata."""
         self.mock_user_context.get_user_info.return_value = self.mock_user
         self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
         self.service._configure_llm_and_mcp = AsyncMock(
@@ -1349,7 +1365,11 @@ class TestLiveStatusAppConversationService:
             selected_repository=None,
         )
 
-        assert result.observability_metadata == {}
+        assert result.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(result.conversation_id),
+            'agent_kind': 'openhands',
+        }
 
     @pytest.mark.asyncio
     async def test_build_request_routes_acp_user_to_observability_metadata(self):
@@ -1388,6 +1408,11 @@ class TestLiveStatusAppConversationService:
 
         assert result.agent.agent_kind == 'acp'
         assert result.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(result.conversation_id),
+            'agent_kind': 'acp',
+            'repo_name': 'test/repo',
+            'selected_branch': 'feature-x',
             'repo': 'test/repo',
             'branch': 'feature-x',
             'git_provider': 'github',
@@ -4269,6 +4294,11 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
 
         assert request.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(request.conversation_id),
+            'agent_kind': 'acp',
+            'repo_name': 'test/repo',
+            'selected_branch': 'feature-x',
             'repo': 'test/repo',
             'branch': 'feature-x',
             'git_provider': 'github',
@@ -4295,6 +4325,11 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
 
         assert request.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(request.conversation_id),
+            'agent_kind': 'acp',
+            'repo_name': 'test/repo',
+            'selected_branch': 'feature-x',
             'repo': 'test/repo',
             'branch': 'feature-x',
             'git_provider': 'github',
@@ -4302,10 +4337,16 @@ class TestBuildAcpStartConversationRequestSecrets:
         }
 
     @pytest.mark.asyncio
-    async def test_no_repo_omits_observability_metadata(self, service, tmp_path):
-        """A repo-less ACP conversation adds no repo metadata to the trace."""
+    async def test_no_repo_keeps_context_observability_metadata(
+        self, service, tmp_path
+    ):
+        """A repo-less ACP conversation keeps non-repo trace context metadata."""
         user = self._make_acp_user()
 
         request = await self._call_build(service, user, tmp_path)
 
-        assert request.observability_metadata == {}
+        assert request.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(request.conversation_id),
+            'agent_kind': 'acp',
+        }

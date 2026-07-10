@@ -20,6 +20,7 @@ import logging
 import os
 import tempfile
 from typing import Any
+from urllib.parse import unquote
 
 import httpx
 
@@ -32,6 +33,29 @@ _logger = logging.getLogger(__name__)
 # Formats the SDK GET /api/file/archive producer accepts (git-delta | tar.gz);
 # anything else 422s, so validate before issuing the request.
 _ARCHIVE_SUFFIX = {'git-delta': 'patch', 'tar.gz': 'tar.gz'}
+
+_REPO_METADATA_HEADERS = {
+    'repo_remote': 'X-Archive-Repo-Remote',
+    'branch': 'X-Archive-Branch',
+    'head_commit': 'X-Archive-Head-Commit',
+}
+_REPO_ROOT_HEADER = 'X-Archive-Repo-Root'
+
+
+def _extract_repo_metadata(
+    headers: Any, existing: dict[str, str] | None = None
+) -> dict[str, str]:
+    """Pull repo-identity fields from an archive response's headers.
+
+    Falls back to ``existing`` per-key so a later response missing a header
+    (e.g. a format the agent-server can't probe) doesn't clobber a value an
+    earlier response in the same capture already found.
+    """
+    fallback = existing or {}
+    return {
+        key: unquote(headers.get(header_name, '')) or fallback.get(key, '')
+        for key, header_name in _REPO_METADATA_HEADERS.items()
+    }
 
 
 def _archive_request_params(path: str, fmt: str) -> dict[str, str]:
@@ -57,6 +81,11 @@ def archive_enabled() -> bool:
 def archive_required() -> bool:
     """When true, an archive failure blocks deletion so it can be retried."""
     return os.getenv('RUNTIME_FILE_ARCHIVE_REQUIRED', 'false').lower() in ('true', '1')
+
+
+def _manifest_enrichment_enabled() -> bool:
+    """Whether to probe packages and runtime versions into the manifest."""
+    return os.getenv('RUNTIME_FILE_ARCHIVE_ENRICH', 'true').lower() in ('true', '1')
 
 
 def _archive_bucket() -> str:
@@ -119,8 +148,7 @@ def _archive_timeout() -> float:
     # Must cover the agent-server git build budget (read-tree 60 + add 300 + diff
     # 300 = up to ~660s) before the first response byte flows, or large repos
     # ReadTimeout and never capture. The final archive runs in the detached
-    # delete finalizer, so a long wait here doesn't block any user request; the
-    # initial snapshot is separately bounded by initial_archive_deadline().
+    # delete finalizer, so a long wait here doesn't block any user request.
     return _float_env('RUNTIME_FILE_ARCHIVE_TIMEOUT', 660.0)
 
 
@@ -174,6 +202,133 @@ def _write_file_to_store(store: FileStore, name: str, path: str) -> None:
     the whole file back with ``store.write(name, f.read())``.
     """
     store.write_from_path(name, path)
+
+
+_PROBE_TIMEOUT = 15.0
+_MAX_PACKAGES_PER_MANAGER = 2000
+_ENVIRONMENT_CMD = (
+    'echo "python=$(.venv/bin/python --version 2>/dev/null '
+    '|| python3 --version 2>/dev/null || true)"; '
+    'echo "node=$(node --version 2>/dev/null || true)"; '
+    'echo "os=$(. /etc/os-release 2>/dev/null; echo "${ID:-} ${VERSION_ID:-}")"'
+)
+
+
+def _parse_pip_list(out: str) -> dict[str, str]:
+    """Parse ``pip list --format=json`` output into ``{name: version}``."""
+    try:
+        data = json.loads(out or '[]')
+    except json.JSONDecodeError:
+        return {}
+    result: dict[str, str] = {}
+    for item in data if isinstance(data, list) else []:
+        if not isinstance(item, dict):
+            continue
+        name, version = item.get('name'), item.get('version')
+        if name and version:
+            result[name] = version
+        if len(result) >= _MAX_PACKAGES_PER_MANAGER:
+            break
+    return result
+
+
+def _parse_npm_ls(out: str) -> dict[str, str]:
+    """Parse ``npm ls --json`` output (top-level deps) into ``{name: version}``."""
+    try:
+        data = json.loads(out or '{}')
+    except json.JSONDecodeError:
+        return {}
+    deps = data.get('dependencies') if isinstance(data, dict) else None
+    if not isinstance(deps, dict):
+        return {}
+    result: dict[str, str] = {}
+    for name, meta in deps.items():
+        version = meta.get('version') if isinstance(meta, dict) else None
+        if name and version:
+            result[name] = version
+        if len(result) >= _MAX_PACKAGES_PER_MANAGER:
+            break
+    return result
+
+
+def _parse_runtime(out: str) -> dict[str, str]:
+    """Parse the `key=value` runtime lines into ``{python, node, os}``."""
+    result: dict[str, str] = {}
+    for line in out.splitlines():
+        key, _, value = line.partition('=')
+        key, value = key.strip(), value.strip()
+        if key not in ('python', 'node', 'os') or not value:
+            continue
+        if key == 'python':
+            value = value.removeprefix('Python ').strip()
+        elif key == 'node':
+            value = value.lstrip('v')
+        if value:
+            result[key] = value
+    return result
+
+
+async def _run_probe(
+    httpx_client: httpx.AsyncClient,
+    agent_server_url: str,
+    headers: dict[str, str],
+    cwd: str,
+    command: str,
+) -> str:
+    """Run one command in the workspace; '' on any failure (never raises)."""
+    try:
+        response = await httpx_client.post(
+            f'{agent_server_url}/api/bash/execute_bash_command',
+            json={'command': command, 'cwd': cwd, 'timeout': _PROBE_TIMEOUT},
+            headers=headers,
+            timeout=_PROBE_TIMEOUT + 1,
+        )
+        if response.status_code != 200:
+            return ''
+        data = response.json()
+    except Exception as e:
+        _logger.debug('Workspace probe %r failed: %s', command, e)
+        return ''
+    output = data.get('stdout') if isinstance(data, dict) else None
+    return output if isinstance(output, str) else ''
+
+
+async def _probe_workspace(
+    httpx_client: httpx.AsyncClient,
+    agent_server_url: str,
+    headers: dict[str, str],
+    cwd: str,
+) -> dict[str, Any]:
+    """Collect installed package and runtime versions."""
+    if not _manifest_enrichment_enabled():
+        return {}
+
+    async def _run(command: str) -> str:
+        return await _run_probe(httpx_client, agent_server_url, headers, cwd, command)
+
+    result: dict[str, Any] = {}
+    packages: dict[str, dict[str, str]] = {}
+    # Prefer a project venv / uv (where the agent's installs actually land)
+    # before the system interpreter; each emits the same --format=json shape.
+    pip = _parse_pip_list(
+        await _run(
+            '.venv/bin/python -m pip list --format=json 2>/dev/null '
+            '|| uv pip list --format=json 2>/dev/null '
+            '|| python3 -m pip list --format=json 2>/dev/null'
+        )
+    )
+    if pip:
+        packages['pip'] = pip
+    npm = _parse_npm_ls(await _run('npm ls --json --depth=0 2>/dev/null'))
+    if npm:
+        packages['npm'] = npm
+    if packages:
+        result['packages'] = packages
+
+    environment = _parse_runtime(await _run(_ENVIRONMENT_CMD))
+    if environment:
+        result['environment'] = environment
+    return result
 
 
 async def archive_workspace(
@@ -259,6 +414,13 @@ async def archive_workspace(
     # symptom this feature most needs to guard against, not "nothing to archive".
     unconfirmed_capture = False
     base_commit = ''
+    # Repo identity rides the response headers (empty against an agent-server
+    # image predating them — graceful) and is reused across formats so each
+    # manifest is self-describing (repo / branch / captured HEAD).
+    repo_metadata = dict.fromkeys(_REPO_METADATA_HEADERS, '')
+    enrichment: dict[str, Any] = {}
+    enrichment_probed = False
+    probe_path = archive_path
     # One store per call (not per format) — building it lazily spins up a client.
     store = _get_archive_file_store()
     for fmt in formats:
@@ -301,8 +463,25 @@ async def archive_workspace(
                 header_base = response.headers.get('X-Archive-Base-Commit', '')
                 if header_base:
                     base_commit = header_base
+                repo_metadata = _extract_repo_metadata(response.headers, repo_metadata)
+                response_repo_root = response.headers.get(_REPO_ROOT_HEADER, '')
+                if response_repo_root:
+                    probe_path = unquote(response_repo_root)
                 # Stream to disk so the archive never sits whole in RAM.
                 tmp_path, byte_count = await _stream_to_tempfile(response)
+            if not enrichment_probed:
+                enrichment_probed = True
+                try:
+                    enrichment = await _probe_workspace(
+                        httpx_client,
+                        agent_server_url,
+                        headers,
+                        probe_path,
+                    )
+                except Exception as e:
+                    _logger.debug(
+                        'Workspace enrichment skipped for %s: %s', sandbox_id, e
+                    )
         except Exception as e:
             # Network/timeout error: genuinely transient.
             _logger.warning(
@@ -323,6 +502,9 @@ async def archive_workspace(
                     'conversation_id': conversation_key,
                     'phase': 'final',
                     'base_commit': base_commit,
+                    **repo_metadata,
+                    'packages': enrichment.get('packages', {}),
+                    'environment': enrichment.get('environment', {}),
                     'format': fmt,
                     'source_path': archive_path,
                     'byte_count': byte_count,
@@ -355,170 +537,3 @@ async def archive_workspace(
     if archive_required() and (retryable_failure or unconfirmed_capture):
         return False
     return True
-
-
-def initial_archive_enabled() -> bool:
-    """Whether to capture the workspace's INITIAL state (before the first step).
-
-    Independent of ``RUNTIME_FILE_ARCHIVE_ENABLED`` (the delete/pause capture of
-    the *final* state) so the pre-agent snapshot can be toggled on its own. Off
-    by default — like every other capture knob, nothing happens until enabled.
-    """
-    return os.getenv('RUNTIME_FILE_ARCHIVE_INITIAL_ENABLED', 'false').lower() in (
-        'true',
-        '1',
-    )
-
-
-def initial_archive_deadline() -> float:
-    """Hard ceiling (seconds) on how long the inline, pre-setup initial snapshot
-    may delay conversation startup.
-
-    The snapshot is awaited before setup.sh so it captures the repo exactly as
-    cloned, with no concurrent mutation. ``wait_for`` only charges the time
-    actually spent, so a fast snapshot adds no latency; this caps the worst case
-    (a large repo or a hung endpoint) so it can never dominate startup. An overrun
-    is logged and startup proceeds without the snapshot. A fresh clone's tar.gz is
-    just the repo tree, so the default comfortably covers typical repos; raise it
-    for a very large monorepo.
-    """
-    return _float_env('RUNTIME_FILE_ARCHIVE_INITIAL_DEADLINE', 120.0)
-
-
-def _initial_archive_format() -> str:
-    """Format for the initial snapshot. Defaults to a self-contained tar.gz.
-
-    At conversation start the working tree has no changes yet, so a ``git-delta``
-    would be empty; a full ``tar.gz`` is the only format that captures anything
-    and, unlike a delta keyed to ``base_commit``, it survives the upstream repo
-    or branch later disappearing (the fragile re-clone path we want to avoid).
-    """
-    return os.getenv('RUNTIME_FILE_ARCHIVE_INITIAL_FORMAT', 'tar.gz')
-
-
-async def archive_initial_workspace(
-    httpx_client: httpx.AsyncClient,
-    *,
-    agent_server_url: str | None,
-    session_api_key: str | None,
-    project_dir: str,
-    sandbox_id: str,
-    conversation_id: str | None = None,
-    base_commit: str = '',
-) -> bool:
-    """Snapshot the workspace BEFORE the agent's first step; return success.
-
-    Captures the repo exactly as cloned (option A — the pre- vs post-setup choice
-    is the open design question tracked in All-Hands-AI/infra#1444) as a
-    self-contained ``tar.gz`` plus a ``phase=initial`` manifest, so the snapshot
-    records the true starting state even if the source repo later disappears.
-
-    This is strictly best-effort: it never raises and never blocks conversation
-    startup. A failure (feature off, misconfig, agent-server hiccup) just means no
-    initial snapshot for this run, logged and swallowed. Returns True only when an
-    archive was actually written.
-    """
-    if not initial_archive_enabled():
-        return False
-    if not agent_server_url:
-        _logger.warning(
-            'Initial workspace archive skipped for %s: no agent-server URL',
-            sandbox_id,
-        )
-        return False
-    if not _archive_bucket():
-        _logger.error(
-            'Initial workspace archive enabled for %s but '
-            'RUNTIME_FILE_ARCHIVE_BUCKET is not set; skipping initial snapshot',
-            sandbox_id,
-        )
-        return False
-
-    fmt = _initial_archive_format()
-    if fmt not in _ARCHIVE_SUFFIX:
-        _logger.error(
-            'Initial workspace archive for %s: unsupported '
-            'RUNTIME_FILE_ARCHIVE_INITIAL_FORMAT %r (valid: %s); skipping',
-            sandbox_id,
-            fmt,
-            sorted(_ARCHIVE_SUFFIX),
-        )
-        return False
-    suffix = _ARCHIVE_SUFFIX[fmt]
-    headers = {'X-Session-API-Key': session_api_key} if session_api_key else {}
-
-    tmp_path: str | None = None
-    byte_count = 0
-    try:
-        async with httpx_client.stream(
-            'GET',
-            f'{agent_server_url}/api/file/archive',
-            params=_archive_request_params(project_dir, fmt),
-            headers=headers,
-            timeout=_archive_timeout(),
-        ) as response:
-            if response.status_code != 200:
-                _logger.warning(
-                    'Initial workspace archive for %s: agent-server returned %s; '
-                    'no initial snapshot',
-                    sandbox_id,
-                    response.status_code,
-                )
-                return False
-            # tar.gz carries no base-commit header (git-delta sets it); fall back
-            # to the caller-provided HEAD sha so the snapshot still records the
-            # commit it came from.
-            captured_base = (
-                response.headers.get('X-Archive-Base-Commit', '') or base_commit
-            )
-            # Stream to disk so the archive never sits whole in RAM.
-            tmp_path, byte_count = await _stream_to_tempfile(response)
-    except Exception as e:
-        _logger.warning(
-            'Initial workspace archive fetch failed for %s: %s', sandbox_id, e
-        )
-        _cleanup_tempfile(tmp_path)
-        return False
-
-    assert tmp_path is not None  # set on the 200 path above
-    try:
-        store = _get_archive_file_store()
-        ts = utc_now().strftime('%Y%m%dT%H%M%SZ')
-        conversation_key = conversation_id or sandbox_id
-        # Key by conversation (siblings share a grouped sandbox) and nest under
-        # /initial/ so it never collides with that conversation's final capture
-        # ({prefix}/{sandbox_id}/{conversation_key}/{ts}).
-        blob_name = (
-            f'{_archive_prefix()}/{sandbox_id}/{conversation_key}/initial/{ts}.{suffix}'
-        )
-        await asyncio.to_thread(_write_file_to_store, store, blob_name, tmp_path)
-        manifest = json.dumps(
-            {
-                'sandbox_id': sandbox_id,
-                'conversation_id': conversation_key,
-                'phase': 'initial',
-                'base_commit': captured_base,
-                'format': fmt,
-                'source_path': project_dir,
-                'byte_count': byte_count,
-                'created_at': ts,
-            },
-            sort_keys=True,
-        ).encode('utf-8')
-        # Shared contract: manifest = blob + '.manifest.json' (was dropping the
-        # format suffix, so a downstream enricher could never locate it).
-        await asyncio.to_thread(store.write, f'{blob_name}.manifest.json', manifest)
-        _logger.info(
-            'Archived INITIAL workspace for %s (%d bytes) to %s',
-            sandbox_id,
-            byte_count,
-            blob_name,
-        )
-        return True
-    except Exception as e:
-        _logger.exception(
-            'Initial workspace archive upload failed for %s: %s', sandbox_id, e
-        )
-        return False
-    finally:
-        _cleanup_tempfile(tmp_path)
