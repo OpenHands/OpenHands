@@ -154,7 +154,7 @@ class StoredConversationCostEvent(Base):
     id: Mapped[int] = mapped_column(Identity(), primary_key=True)
     conversation_id: Mapped[str] = mapped_column(
         String,
-        ForeignKey('conversation_metadata.conversation_id'),
+        ForeignKey('conversation_metadata.conversation_id', ondelete='CASCADE'),
         nullable=False,
         index=True,
     )
