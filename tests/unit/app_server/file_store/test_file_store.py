@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import tempfile
 import threading
@@ -331,6 +332,24 @@ class TestInMemoryFileStore(TestCase, _StorageTest):
 class TestGoogleCloudFileStore(TestCase, _StorageTest):
     def setUp(self):
         self.store = GoogleCloudFileStore(bucket_name='dear-liza')
+
+
+@patch('boto3.client')
+class TestS3FileStoreEnv(TestCase):
+    def test_s3_secure_accepts_one(self, mock_boto_client):
+        os.environ['AWS_S3_ENDPOINT'] = 'minio.example.com:9000'
+        os.environ['AWS_S3_SECURE'] = '1'
+        try:
+            store = S3FileStore(bucket_name='dear-liza')
+            store.client
+        finally:
+            os.environ.pop('AWS_S3_ENDPOINT', None)
+            os.environ.pop('AWS_S3_SECURE', None)
+
+        mock_boto_client.assert_called_once()
+        _, kwargs = mock_boto_client.call_args
+        self.assertEqual(kwargs['endpoint_url'], 'https://minio.example.com:9000')
+        self.assertTrue(kwargs['use_ssl'])
 
 
 @patch('boto3.client', lambda service, **kwargs: _MockS3Client())

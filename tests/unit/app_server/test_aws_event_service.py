@@ -249,6 +249,16 @@ class TestGetDefaultAwsEndpointUrl:
         result = aws_event_service._get_default_aws_endpoint_url()
         assert result == 'https://minio.example.com:9000'
 
+    def test_endpoint_without_https_prefix_secure_one(self, monkeypatch):
+        """Test endpoint without https:// prefix when secure=1 adds it."""
+        monkeypatch.setenv('AWS_S3_ENDPOINT', 'minio.example.com:9000')
+        monkeypatch.setenv('AWS_S3_SECURE', '1')
+
+        importlib.reload(aws_event_service)
+
+        result = aws_event_service._get_default_aws_endpoint_url()
+        assert result == 'https://minio.example.com:9000'
+
     def test_endpoint_with_http_prefix_insecure(self, monkeypatch):
         """Test endpoint with http:// prefix when secure=false."""
         monkeypatch.setenv('AWS_S3_ENDPOINT', 'http://minio.example.com:9000')

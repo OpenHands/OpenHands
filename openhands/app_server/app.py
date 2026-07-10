@@ -72,7 +72,7 @@ app.include_router(v1_router.router)
 app.include_router(health_router)
 
 # Middleware and static file setup (merged from listen.py)
-if os.getenv('SERVE_FRONTEND', 'true').lower() == 'true':
+if os.getenv('SERVE_FRONTEND', 'true').lower() in ('true', '1'):
     if os.path.isdir('./frontend/build'):
         app.mount(
             '/', SPAStaticFiles(directory='./frontend/build', html=True), name='dist'
