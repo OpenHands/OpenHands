@@ -241,15 +241,26 @@ def _merge_launch_context(
     context: AgentContext | None,
     system_message_suffix: str | None,
     secrets: Mapping[str, Any] | None = None,
+    disabled_skills: Sequence[str] | None = None,
 ) -> AgentContext:
-    context = context or AgentContext()
-    updates: dict[str, Any] = {}
+    fresh_context = AgentContext()
+    context = context or fresh_context
+    updates: dict[str, Any] = {
+        'current_datetime': fresh_context.current_datetime,
+    }
     if system_message_suffix:
         updates['system_message_suffix'] = append_system_context(
             context.system_message_suffix, system_message_suffix
         )
     if secrets:
         updates['secrets'] = {**(context.secrets or {}), **secrets}
+    if disabled_skills is not None:
+        effective_disabled = list(dict.fromkeys(disabled_skills))
+        disabled = set(effective_disabled)
+        updates['disabled_skills'] = effective_disabled
+        updates['skills'] = [
+            skill for skill in context.skills if skill.name not in disabled
+        ]
     return context.model_copy(update=updates)
 
 
@@ -1844,6 +1855,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             user.agent_settings.agent_context,
             effective_suffix,
             secrets,
+            disabled_skills=launch_snapshot.disabled_skills,
         )
         configured_agent_settings = user.agent_settings.model_copy(
             update={

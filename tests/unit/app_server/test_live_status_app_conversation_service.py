@@ -30,6 +30,7 @@ from openhands.app_server.app_conversation.app_conversation_service import (
 )
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     LiveStatusAppConversationService,
+    _merge_launch_context,
     effective_disabled_skills,
 )
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
@@ -257,6 +258,18 @@ class TestConversationLaunchSnapshot:
             resolve_agent_profile=True,
             override_agent_profile_id=override_id,
         )
+
+    def test_merge_refreshes_persisted_current_datetime(self):
+        persisted = datetime(2020, 1, 1)
+        context = AgentContext(
+            current_datetime=persisted,
+            user_message_suffix='PERSISTED_SUFFIX',
+        )
+
+        merged = _merge_launch_context(context, None)
+
+        assert merged.current_datetime != persisted
+        assert merged.user_message_suffix == 'PERSISTED_SUFFIX'
 
 
 # Env var used by openhands SDK LLM to skip context-window validation (e.g. for gpt-4 in tests)
@@ -1314,12 +1327,16 @@ class TestLiveStatusAppConversationService:
 
     @pytest.mark.asyncio
     async def test_resolved_profile_context_is_launch_base(self):
-        skill = Skill(name='profile-skill', content='Profile skill content')
+        profile_skill = Skill(name='profile-skill', content='Profile skill content')
+        member_disabled_skill = Skill(
+            name='member-disabled-skill', content='Member-disabled skill content'
+        )
         user = _resolved_profile_user(
             tools=[],
             disabled_skills=['disabled-profile-skill'],
-            available_skills=[skill],
+            available_skills=[profile_skill, member_disabled_skill],
         )
+        user.disabled_skills = ['member-disabled-skill']
         profile_secret = StaticSecret(value=SecretStr('profile-value'))
         profile_context = user.agent_settings.agent_context.model_copy(
             update={
@@ -1354,7 +1371,10 @@ class TestLiveStatusAppConversationService:
         assert suffix.index('REQUEST_SUFFIX') < suffix.index('<HOST>')
         assert context.user_message_suffix == 'PROFILE_USER_SUFFIX'
         assert [loaded.name for loaded in context.skills] == ['profile-skill']
-        assert context.disabled_skills == ['disabled-profile-skill']
+        assert context.disabled_skills == [
+            'member-disabled-skill',
+            'disabled-profile-skill',
+        ]
         assert context.secrets['PROFILE_SECRET'] is profile_secret
         assert context.secrets['LAUNCH_SECRET'] is launch_secret
 
