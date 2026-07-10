@@ -48,7 +48,5 @@ class InMemoryFileStore(FileStore):
             for key in keys_to_delete:
                 del self.files[key]
             logger.debug(f'Cleared in-memory file store: {path}')
-        except Exception as e:
-            logger.exception(
-                f'Error clearing in-memory file store: {str(e)}', stack_info=True
-            )
+        except Exception:
+            logger.exception('Error clearing in-memory file store', stack_info=True)

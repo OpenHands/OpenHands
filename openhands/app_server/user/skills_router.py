@@ -431,7 +431,7 @@ async def get_marketplace_skills(
 
     except Exception as e:
         logger.exception(
-            f'Unexpected error in marketplace-skills endpoint: {e}', stack_info=True
+            'Unexpected error in marketplace-skills endpoint', stack_info=True
         )
         errors.append(f'Internal error: {str(e)}')
         # Clean up before raising

@@ -137,7 +137,7 @@ async def install_callback(
 
         return RedirectResponse(auth_url)
     except Exception:  # type: ignore
-        logger.exception('unexpected_error', exc_info=True, stack_info=True)
+        logger.exception('unexpected_error', stack_info=True)
         return _html_response(
             title='Error',
             description='Internal server Error',

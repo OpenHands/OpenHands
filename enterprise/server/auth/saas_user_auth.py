@@ -566,10 +566,10 @@ class SaasUserAuth(UserAuth):
                     provider_tokens[idp_type] = ProviderToken(
                         token=SecretStr(provider_token), user_id=None, host=host
                     )
-                except Exception as e:
+                except Exception:
                     # If there was a problem with a refresh token we log and delete it
                     logger.exception(
-                        f'Error refreshing provider_token token: {e}',
+                        'Error refreshing provider_token token',
                         extra={
                             'user_id': self.user_id,
                             'idp_type': token.identity_provider,
@@ -716,9 +716,9 @@ class SaasUserAuth(UserAuth):
         except HTTPException:
             # Propagate validation errors raised by get_effective_org_id().
             raise
-        except Exception as e:
+        except Exception:
             logger.exception(
-                f'Error fetching org info for user {self.user_id}: {e}', stack_info=True
+                f'Error fetching org info for user {self.user_id}', stack_info=True
             )
             return None
 

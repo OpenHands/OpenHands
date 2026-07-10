@@ -187,7 +187,6 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
                 error_detail,
                 payload,
                 dict(e.response.headers),
-                exc_info=True,
                 stack_info=True,
             )
             raise Exception(
@@ -200,7 +199,6 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
                 '[GitLab V1] %s. Request payload: %s',
                 error_detail,
                 payload,
-                exc_info=True,
                 stack_info=True,
             )
             raise Exception(error_detail)
@@ -211,7 +209,6 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
                 '[GitLab V1] %s. Request payload: %s',
                 error_detail,
                 payload,
-                exc_info=True,
                 stack_info=True,
             )
             raise Exception(error_detail) from e

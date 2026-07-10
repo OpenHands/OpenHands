@@ -137,8 +137,8 @@ class RemoteSandboxService(SandboxService):
                 f'No response received within timeout for URL: {url}', stack_info=True
             )
             raise
-        except httpx.HTTPError as e:
-            _logger.exception(f'HTTP error for URL {url}: {e}', stack_info=True)
+        except httpx.HTTPError:
+            _logger.exception(f'HTTP error for URL {url}', stack_info=True)
             raise
 
     def _to_sandbox_info(
@@ -501,7 +501,7 @@ class RemoteSandboxService(SandboxService):
             return self._to_sandbox_info(stored_sandbox, runtime_data)
 
         except httpx.HTTPError as e:
-            _logger.exception(f'Failed to start sandbox: {e}', stack_info=True)
+            _logger.exception('Failed to start sandbox', stack_info=True)
             raise SandboxError('Failed to start sandbox') from e
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
@@ -541,10 +541,8 @@ class RemoteSandboxService(SandboxService):
                 )
 
             return True
-        except httpx.HTTPError as e:
-            _logger.exception(
-                f'Error resuming sandbox {sandbox_id}: {e}', stack_info=True
-            )
+        except httpx.HTTPError:
+            _logger.exception(f'Error resuming sandbox {sandbox_id}', stack_info=True)
             return False
 
     async def pause_sandbox(self, sandbox_id: str) -> bool:
@@ -573,10 +571,8 @@ class RemoteSandboxService(SandboxService):
             response.raise_for_status()
             return True
 
-        except httpx.HTTPError as e:
-            _logger.exception(
-                f'Error pausing sandbox {sandbox_id}: {e}', stack_info=True
-            )
+        except httpx.HTTPError:
+            _logger.exception(f'Error pausing sandbox {sandbox_id}', stack_info=True)
             return False
 
     async def delete_sandbox(self, sandbox_id: str) -> bool:
@@ -639,9 +635,7 @@ class RemoteSandboxService(SandboxService):
             # signal retryable (503) — never a 404. Persist the key invalidation
             # now: the caller rolls back on this raise, which would otherwise
             # restore the hash and leave a just-revoked key valid.
-            _logger.exception(
-                f'Error deleting sandbox {sandbox_id}: {e}', stack_info=True
-            )
+            _logger.exception(f'Error deleting sandbox {sandbox_id}', stack_info=True)
             if had_key:
                 await self.db_session.commit()
             raise SandboxDeleteRetryError(

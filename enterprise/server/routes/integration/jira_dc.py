@@ -463,8 +463,8 @@ async def _process_jira_dc_event(
     except HTTPException:
         # Re-raise HTTP exceptions (like signature verification failures)
         raise
-    except Exception as e:
-        logger.exception(f'Error processing Jira DC webhook: {e}', stack_info=True)
+    except Exception:
+        logger.exception('Error processing Jira DC webhook', stack_info=True)
         return JSONResponse(
             status_code=500,
             content={'error': 'Internal server error processing webhook.'},
@@ -784,7 +784,7 @@ async def create_jira_dc_workspace(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error creating Jira DC workspace: {e}', stack_info=True)
+        logger.exception('Error creating Jira DC workspace', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to create workspace',
@@ -820,9 +820,7 @@ async def update_jira_dc_workspace_status(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(
-            f'Error updating Jira DC workspace status: {e}', stack_info=True
-        )
+        logger.exception('Error updating Jira DC workspace status', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to update workspace status',
@@ -901,7 +899,7 @@ async def create_workspace_link(request: Request, link_data: JiraDcLinkCreate):
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error registering Jira DC user: {e}', stack_info=True)
+        logger.exception('Error registering Jira DC user', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to register user',
@@ -1220,7 +1218,7 @@ async def get_current_workspace_link(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error retrieving Jira DC user: {e}', stack_info=True)
+        logger.exception('Error retrieving Jira DC user', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve user',
@@ -1299,7 +1297,7 @@ async def unlink_workspace(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error unlinking Jira DC user: {e}', stack_info=True)
+        logger.exception('Error unlinking Jira DC user', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to unlink user',
@@ -1348,7 +1346,7 @@ async def validate_workspace_integration(request: Request, workspace_name: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error validating Jira DC workspace: {e}', stack_info=True)
+        logger.exception('Error validating Jira DC workspace', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to validate workspace',

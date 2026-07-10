@@ -161,7 +161,6 @@ class JiraManager(Manager[JiraViewInterface]):
                 extra={
                     'issue_key': payload.issue_key,
                 },
-                exc_info=True,
                 stack_info=True,
             )
             await self._send_error_from_payload(
@@ -321,7 +320,6 @@ class JiraManager(Manager[JiraViewInterface]):
                 extra={
                     'issue_key': view.payload.issue_key,
                 },
-                exc_info=True,
                 stack_info=True,
             )
             msg_info = 'Sorry, there was an unexpected error starting the job. Please try again.'

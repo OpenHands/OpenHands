@@ -606,9 +606,9 @@ class TokenManager:
             return await self.get_idp_token_from_offline_token(
                 offline_token=offline_token, idp=idp
             )
-        except KeycloakConnectionError as e:
+        except KeycloakConnectionError:
             logger.exception(
-                f'KeycloakConnectionError when getting IDP token for IDP user_id {idp_user_id}: {str(e)}',
+                f'KeycloakConnectionError when getting IDP token for IDP user_id {idp_user_id}',
                 stack_info=True,
             )
             raise
@@ -784,9 +784,9 @@ class TokenManager:
                 'KeycloakConnectionError when checking duplicate email', stack_info=True
             )
             raise
-        except Exception as e:
+        except Exception:
             logger.exception(
-                f'Unexpected error checking duplicate email: {e}', stack_info=True
+                'Unexpected error checking duplicate email', stack_info=True
             )
             # On any error, allow signup to proceed (fail open)
             return False
@@ -827,9 +827,9 @@ class TokenManager:
                 extra={'user_id': user_id, 'error': str(e)},
             )
             return False
-        except Exception as e:
+        except Exception:
             logger.exception(
-                f'Unexpected error deleting Keycloak user {user_id}: {e}',
+                f'Unexpected error deleting Keycloak user {user_id}',
                 stack_info=True,
             )
             return False
@@ -979,12 +979,11 @@ class TokenManager:
                 logger.warning(
                     f'User not found in Keycloak when attempting to disable: {user_id}'
                 )
-        except Exception as e:
+        except Exception:
             # Log error but don't raise - the caller should handle the blocking regardless
             email_str = f', email: {email}' if email else ''
             logger.exception(
-                f'Failed to disable Keycloak account for user_id: {user_id}{email_str}: {str(e)}',
-                exc_info=True,
+                f'Failed to disable Keycloak account for user_id: {user_id}{email_str}',
                 stack_info=True,
             )
 

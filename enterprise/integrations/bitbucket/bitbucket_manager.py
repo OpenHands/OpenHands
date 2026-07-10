@@ -256,7 +256,7 @@ class BitbucketManager(Manager[BitbucketViewType]):
 
             await self.send_message(msg_info, bitbucket_view)
 
-        except Exception as e:
+        except Exception:
             logger.exception('[Bitbucket] Error starting job', stack_info=True)
             await self.send_message(
                 'Uh oh! There was an unexpected error starting the job :(',

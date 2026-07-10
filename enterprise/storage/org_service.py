@@ -384,7 +384,9 @@ class OrgService:
                 f'Cleanup also failed: {str(cleanup_error)}'
             ) from original_error
 
-        raise OrgDatabaseError(f'{error_message}: {str(original_error)}') from original_error
+        raise OrgDatabaseError(
+            f'{error_message}: {str(original_error)}'
+        ) from original_error
 
     @staticmethod
     async def _cleanup_litellm_resources(

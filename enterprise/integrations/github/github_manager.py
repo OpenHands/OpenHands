@@ -199,7 +199,7 @@ class GithubManager(Manager[GithubViewType]):
                 repo = github_client.get_repo(full_repo_name)
                 issue = repo.get_issue(number=issue_number)
                 issue.create_comment(get_user_not_found_message(username))
-        except Exception as e:
+        except Exception:
             logger.exception(
                 f'[GitHub] Failed to send user not found message to {username} '
                 f'on {full_repo_name}#{issue_number}',

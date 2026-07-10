@@ -1308,10 +1308,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
             mcp_servers.update(user_mcp)
 
-        except Exception as e:
+        except Exception:
             _logger.exception(
-                f'Error loading custom MCP config from user settings: {e}',
-                exc_info=True,
+                'Error loading custom MCP config from user settings',
                 stack_info=True,
             )
             # Continue with system config only, don't fail conversation startup
@@ -2469,11 +2468,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             # AppConversation extends AppConversationInfo, so we can use it directly
             return await self._delete_from_database(app_conversation)
 
-        except Exception as e:
+        except Exception:
             _logger.exception(
-                f'Error deleting V1 conversation {conversation_id}: {e}',
+                f'Error deleting V1 conversation {conversation_id}',
                 extra={'conversation_id': str(conversation_id)},
-                exc_info=True,
                 stack_info=True,
             )
             return False

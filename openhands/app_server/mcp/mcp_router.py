@@ -71,8 +71,8 @@ def init_tavily_proxy() -> None:
         # Mount under 'tavily' namespace so tools are accessible as tavily_*
         mcp_server.mount(namespace='tavily', server=proxy_server)
         logger.info('Tavily MCP proxy initialized successfully')
-    except Exception as e:
-        logger.exception(f'Failed to initialize Tavily MCP proxy: {e}', stack_info=True)
+    except Exception:
+        logger.exception('Failed to initialize Tavily MCP proxy', stack_info=True)
 
 
 async def get_conversation_link(

@@ -339,10 +339,8 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
                     stack_info=True,
                 )
                 raise
-            except Exception as e:
-                logger.exception(
-                    f'[Jira DC] Failed to send message: {e}', stack_info=True
-                )
+            except Exception:
+                logger.exception('[Jira DC] Failed to send message', stack_info=True)
                 raise
 
     def get_response_msg(self) -> str:

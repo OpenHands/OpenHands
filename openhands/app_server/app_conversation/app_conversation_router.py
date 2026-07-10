@@ -579,7 +579,7 @@ async def send_message_to_conversation(
             detail=f'Agent server error: {e.response.status_code}',
         ) from e
     except httpx.RequestError as e:
-        logger.exception(f'Failed to reach agent server: {e}', stack_info=True)
+        logger.exception('Failed to reach agent server', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail='Failed to reach agent server.',
@@ -760,7 +760,7 @@ async def switch_conversation_profile(
         ) from e
     except httpx.RequestError as e:
         logger.exception(
-            f'Failed to reach agent server during switch_llm: {e}', stack_info=True
+            'Failed to reach agent server during switch_llm', stack_info=True
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -859,7 +859,7 @@ async def switch_conversation_acp_model(
         ) from e
     except httpx.RequestError as e:
         logger.exception(
-            f'Failed to reach agent server during switch_acp_model: {e}',
+            'Failed to reach agent server during switch_acp_model',
             stack_info=True,
         )
         raise HTTPException(
@@ -1459,7 +1459,7 @@ async def get_conversation_skills(
 
     except Exception as e:
         logger.exception(
-            f'Error getting skills for conversation {conversation_id}: {e}',
+            f'Error getting skills for conversation {conversation_id}',
             stack_info=True,
         )
         return JSONResponse(
@@ -1606,7 +1606,7 @@ async def get_conversation_hooks(
 
     except Exception as e:
         logger.exception(
-            f'Error getting hooks for conversation {conversation_id}: {e}',
+            f'Error getting hooks for conversation {conversation_id}',
             stack_info=True,
         )
         return JSONResponse(

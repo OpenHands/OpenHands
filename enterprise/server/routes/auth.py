@@ -396,9 +396,9 @@ async def keycloak_callback(
                 error_url = f'{web_url}/login?recaptcha_blocked=true'
                 return RedirectResponse(error_url, status_code=302)
 
-        except Exception as e:
+        except Exception:
             logger.exception(
-                f'reCAPTCHA verification error at callback: {e}', stack_info=True
+                'reCAPTCHA verification error at callback', stack_info=True
             )
             # Fail open - continue with login if reCAPTCHA service unavailable
 

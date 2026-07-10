@@ -235,9 +235,7 @@ async def get_azure_devops_resources(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(
-            f'Error retrieving Azure DevOps resources: {e}', stack_info=True
-        )
+        logger.exception('Error retrieving Azure DevOps resources', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve Azure DevOps resources',
@@ -302,7 +300,7 @@ async def reinstall_azure_devops_webhook(
         raise
     except Exception as e:
         logger.exception(
-            f'Error installing Azure DevOps resolver hooks: {e}', stack_info=True
+            'Error installing Azure DevOps resolver hooks', stack_info=True
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -360,7 +358,7 @@ async def uninstall_azure_devops_webhook(
         raise
     except Exception as e:
         logger.exception(
-            f'Error uninstalling Azure DevOps resolver hooks: {e}', stack_info=True
+            'Error uninstalling Azure DevOps resolver hooks', stack_info=True
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -419,6 +417,6 @@ async def azure_devops_events(
         )
     except HTTPException:
         raise
-    except Exception as e:
-        logger.exception(f'Error processing Azure DevOps event: {e}', stack_info=True)
+    except Exception:
+        logger.exception('Error processing Azure DevOps event', stack_info=True)
         return JSONResponse(status_code=400, content={'error': 'Invalid payload.'})

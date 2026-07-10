@@ -444,7 +444,6 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
                     '[Slack V1] Failed to send message to conversation %s: %s',
                     self.conversation_id,
                     str(e),
-                    exc_info=True,
                     stack_info=True,
                 )
                 raise Exception('Failed to send message to v1 conversation') from e

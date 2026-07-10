@@ -108,7 +108,7 @@ async def update_email(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
         ) from e
     except Exception as e:
-        logger.exception(f'Error updating email: {str(e)}', stack_info=True)
+        logger.exception('Error updating email', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='An error occurred while updating the email',

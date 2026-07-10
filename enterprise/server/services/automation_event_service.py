@@ -123,22 +123,20 @@ class AutomationEventService:
             event_payload = self._build_event_payload(org_context, payload)
             await self._send_to_automation_service(provider, org_id, event_payload)
 
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError):
             # Network errors are expected and recoverable
             logger.exception(
                 f'[AutomationEventService] Network error forwarding '
-                f'{provider.value} event (org_id={org_id}): {e}',
-                exc_info=True,
+                f'{provider.value} event (org_id={org_id})',
                 extra={'installation_id': installation_id},
                 stack_info=True,
             )
-        except Exception as e:
+        except Exception:
             # Log unexpected errors. Note: This is a background task, so exceptions
             # won't surface to the HTTP caller - they're logged for debugging only.
             logger.exception(
                 f'[AutomationEventService] Unexpected error forwarding '
-                f'{provider.value} event (org_id={org_id}): {e}',
-                exc_info=True,
+                f'{provider.value} event (org_id={org_id})',
                 extra={'installation_id': installation_id},
                 stack_info=True,
             )
@@ -174,19 +172,17 @@ class AutomationEventService:
                 org_id=org_id,
                 payload=event_payload,
             )
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError):
             logger.exception(
                 f'[AutomationEventService] Network error forwarding '
-                f'jira_dc event (org_id={org_id}): {e}',
-                exc_info=True,
+                f'jira_dc event (org_id={org_id})',
                 extra={'delivery_id': delivery_id},
                 stack_info=True,
             )
-        except Exception as e:
+        except Exception:
             logger.exception(
                 f'[AutomationEventService] Unexpected error forwarding '
-                f'jira_dc event (org_id={org_id}): {e}',
-                exc_info=True,
+                f'jira_dc event (org_id={org_id})',
                 extra={'delivery_id': delivery_id},
                 stack_info=True,
             )
@@ -641,9 +637,9 @@ class AutomationEventService:
                 f'forwarding {source} event to automation service',
                 stack_info=True,
             )
-        except aiohttp.ClientError as e:
+        except aiohttp.ClientError:
             logger.exception(
                 f'[AutomationEventService] HTTP error forwarding '
-                f'{source} event to automation service: {e}',
+                f'{source} event to automation service',
                 stack_info=True,
             )

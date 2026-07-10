@@ -194,7 +194,6 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
                 url,
                 error_detail,
                 dict(e.response.headers),
-                exc_info=True,
                 stack_info=True,
             )
             raise Exception(
@@ -203,16 +202,12 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
 
         except httpx.TimeoutException:
             error_detail = f'Request timeout after 30 seconds to {url}'
-            _logger.exception(
-                '[Slack V1] %s', error_detail, exc_info=True, stack_info=True
-            )
+            _logger.exception('[Slack V1] %s', error_detail, stack_info=True)
             raise Exception(error_detail)
 
         except httpx.RequestError as e:
             error_detail = f'Request error to {url}: {str(e)}'
-            _logger.exception(
-                '[Slack V1] %s', error_detail, exc_info=True, stack_info=True
-            )
+            _logger.exception('[Slack V1] %s', error_detail, stack_info=True)
             raise Exception(error_detail) from e
 
     # -------------------------------------------------------------------------

@@ -635,9 +635,9 @@ def _import_all_tools():
         if is_pkg:  # Check if it's a subpackage
             try:
                 importlib.import_module(name)
-            except ImportError as e:
+            except ImportError:
                 _logger.exception(
-                    f"Warning: Could not import subpackage '{name}': {e}",
+                    f"Warning: Could not import subpackage '{name}'",
                     stack_info=True,
                 )
 
