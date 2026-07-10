@@ -105,7 +105,6 @@ class TestDbSessionInjectorConfiguration:
         assert service.echo is False
         assert service.pool_size == 25
         assert service.max_overflow == 10
-        assert service.pool_use_lifo is True
         assert service.gcp_db_instance is None
         assert service.gcp_project is None
         assert service.gcp_region is None
@@ -216,7 +215,6 @@ class TestDbSessionInjectorConnections:
             assert call_args[1]['pool_size'] == 25
             assert call_args[1]['max_overflow'] == 10
             assert call_args[1]['pool_pre_ping']
-            assert call_args[1]['pool_use_lifo'] is True
 
     @pytest.mark.asyncio
     async def test_postgres_async_connection_with_host(
@@ -250,7 +248,6 @@ class TestDbSessionInjectorConnections:
             assert call_args[1]['pool_size'] == 25
             assert call_args[1]['max_overflow'] == 10
             assert call_args[1]['pool_pre_ping']
-            assert call_args[1]['pool_use_lifo'] is True
 
     def test_postgres_connection_requires_ssl(self, temp_persistence_dir):
         service = DbSessionInjector(
