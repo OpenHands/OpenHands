@@ -2190,10 +2190,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         self._merge_custom_mcp_config(acp_mcp_servers, user)
         if acp_mcp_servers:
             settings_update['mcp_config'] = acp_mcp_servers
-        if system_message_suffix:
+        if system_message_suffix or launch_snapshot.disabled_skills:
             settings_update['agent_context'] = _merge_launch_context(
                 acp_settings.agent_context,
                 system_message_suffix,
+                disabled_skills=launch_snapshot.disabled_skills,
             )
         acp_settings_for_agent = acp_settings.model_copy(update=settings_update)
         acp_agent = acp_settings_for_agent.create_agent()

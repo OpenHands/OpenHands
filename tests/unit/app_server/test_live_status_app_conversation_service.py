@@ -4441,6 +4441,37 @@ class TestBuildAcpStartConversationRequestSecrets:
         assert 'ANTHROPIC_API_KEY' not in request.secrets
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize('system_message_suffix', [None, 'SHALLOW_CLONE_SUFFIX'])
+    async def test_disabled_skills_reach_runtime_context(
+        self, service, tmp_path, system_message_suffix
+    ):
+        user = self._make_acp_user()
+        user.disabled_skills = ['disabled-project-skill']
+        user.agent_settings = user.agent_settings.model_copy(
+            update={
+                'agent_context': AgentContext(
+                    load_project_skills=True,
+                    system_message_suffix='PROFILE_SUFFIX',
+                )
+            }
+        )
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            system_message_suffix=system_message_suffix,
+        )
+
+        context = request.agent.agent_context
+        assert context is not None
+        assert context.load_project_skills is True
+        assert context.disabled_skills == ['disabled-project-skill']
+        assert context.system_message_suffix.startswith('PROFILE_SUFFIX')
+        if system_message_suffix:
+            assert context.system_message_suffix.endswith(system_message_suffix)
+
+    @pytest.mark.asyncio
     async def test_secrets_forwarded_via_request_secrets(self, service, tmp_path):
         """Panel secrets flow through request.secrets; not pre-resolved into agent_context."""
         gh_secret = StaticSecret(value=SecretStr('ghp_test123'))
