@@ -1821,6 +1821,69 @@ class TestPollAgentServersSessionScoping:
         assert tracker.open == 0
 
 
+class TestWaitForSandboxRunningSessionScoping:
+    """wait_for_sandbox_running must not pin a DB connection while it sleeps.
+
+    The poll loop reads through the request-scoped ``self.db_session``. Its read
+    transaction (and the pooled connection behind it) would otherwise stay open
+    for the whole wait -- up to ``timeout`` seconds -- so the fix commits between
+    polls to return the connection to the pool. These tests guard that the
+    release happens before every sleep, and only on the sleep path.
+    """
+
+    @pytest.mark.asyncio
+    async def test_releases_db_connection_before_each_sleep(
+        self, remote_sandbox_service
+    ):
+        """Each poll that isn't RUNNING yet commits before sleeping."""
+        events: list[str] = []
+
+        async def _record_commit():
+            events.append('commit')
+
+        async def _record_sleep(_):
+            events.append('sleep')
+
+        remote_sandbox_service.db_session.commit = AsyncMock(side_effect=_record_commit)
+        starting = MagicMock(status=SandboxStatus.STARTING, exposed_urls=[])
+        running = MagicMock(status=SandboxStatus.RUNNING, exposed_urls=[])
+        remote_sandbox_service.get_sandbox = AsyncMock(
+            side_effect=[starting, starting, running]
+        )
+
+        with patch(
+            'openhands.app_server.sandbox.sandbox_service.asyncio.sleep',
+            new=AsyncMock(side_effect=_record_sleep),
+        ):
+            result = await remote_sandbox_service.wait_for_sandbox_running(
+                'sandbox-1', timeout=120, poll_interval=2
+            )
+
+        assert result is running
+        # Two non-running polls: each releases the connection *before* sleeping.
+        assert events == ['commit', 'sleep', 'commit', 'sleep']
+
+    @pytest.mark.asyncio
+    async def test_no_release_when_running_immediately(self, remote_sandbox_service):
+        """A sandbox already RUNNING returns without committing or sleeping."""
+        commit_mock = AsyncMock()
+        remote_sandbox_service.db_session.commit = commit_mock
+        remote_sandbox_service.get_sandbox = AsyncMock(
+            return_value=MagicMock(status=SandboxStatus.RUNNING, exposed_urls=[])
+        )
+
+        with patch(
+            'openhands.app_server.sandbox.sandbox_service.asyncio.sleep',
+            new=AsyncMock(),
+        ) as sleep_mock:
+            await remote_sandbox_service.wait_for_sandbox_running(
+                'sandbox-1', timeout=120, poll_interval=2
+            )
+
+        commit_mock.assert_not_awaited()
+        sleep_mock.assert_not_awaited()
+
+
 class TestBatchGetSandboxes:
     """Test cases for batch_get_sandboxes method."""
 

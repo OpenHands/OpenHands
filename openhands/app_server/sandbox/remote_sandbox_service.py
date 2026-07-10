@@ -354,6 +354,14 @@ class RemoteSandboxService(SandboxService):
 
         return self._to_sandbox_info(stored_sandbox, runtime)
 
+    async def _release_status_connection(self) -> None:
+        # End the read transaction opened by get_sandbox so the pooled DB
+        # connection returns to the pool while wait_for_sandbox_running sleeps.
+        # The poll loop only reads and start_sandbox has already committed the
+        # sandbox row by the time we wait, so nothing is pending: this commit
+        # just ends the transaction rather than persisting new state.
+        await self.db_session.commit()
+
     async def get_sandbox_by_session_api_key(
         self, session_api_key: str
     ) -> SandboxInfo | None:

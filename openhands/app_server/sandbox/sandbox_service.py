@@ -135,9 +135,29 @@ class SandboxService(ABC):
                 else:
                     return sandbox
 
+            # Release any pooled connection held by the get_sandbox read above
+            # so it is not kept checked out (idle in transaction) while we sleep
+            # between status checks. Without this, a single wait pins one
+            # connection for its entire duration (up to `timeout` seconds).
+            await self._release_status_connection()
             await asyncio.sleep(poll_interval)
 
         raise SandboxError(f'Sandbox failed to start within {timeout}s: {sandbox_id}')
+
+    async def _release_status_connection(self) -> None:  # noqa: B027
+        """Release any pooled connection held by the last ``get_sandbox`` read.
+
+        ``wait_for_sandbox_running`` polls ``get_sandbox`` and then sleeps
+        between checks. Implementations backed by a pooled resource (e.g. a
+        request-scoped SQLAlchemy session) read through a connection whose
+        transaction would otherwise stay open — idle in transaction — for the
+        whole wait, holding a pool slot while nothing runs but the sleep. Such
+        implementations override this to end that transaction so the connection
+        returns to the pool between polls.
+
+        Default: a no-op. Implementations that hold no pooled connection across
+        a ``get_sandbox`` call (e.g. Docker-backed sandboxes) need not override.
+        """
 
     async def _check_agent_server_alive(
         self, sandbox: SandboxInfo, httpx_client: httpx.AsyncClient
