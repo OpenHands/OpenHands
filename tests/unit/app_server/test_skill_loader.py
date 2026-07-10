@@ -21,6 +21,7 @@ from openhands.app_server.app_conversation.skill_loader import (
     _get_provider_type,
     _is_azure_devops_repository,
     _is_gitlab_repository,
+    authenticate_marketplace_sources,
     build_org_configs,
     build_sandbox_config,
     load_skills_from_agent_server,
@@ -1007,3 +1008,155 @@ class TestLoadSkillsWithMarketplaces:
         # Empty list is now preserved (semantic distinction from None)
         # Empty list = "explicitly no marketplaces", None = "not specified"
         assert payload.get('registered_marketplaces') == []
+
+
+# ===== Tests for authenticate_marketplace_sources =====
+
+
+AUTHENTICATED_URL = (
+    'https://x-access-token:token123@github.com/OpenHands/extensions-private.git'
+)
+
+
+def _make_registration(**overrides):
+    """Build a MarketplaceRegistration with private-repo defaults."""
+    from openhands.app_server.settings.settings_models import MarketplaceRegistration
+
+    fields = {
+        'name': 'extensions-private',
+        'source': 'github:OpenHands/extensions-private',
+        'auto_load': True,
+    }
+    fields.update(overrides)
+    return MarketplaceRegistration(**fields)
+
+
+class TestAuthenticateMarketplaceSources:
+    """Test authenticate_marketplace_sources source rewriting."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'source',
+        [
+            'github:OpenHands/extensions-private',
+            'OpenHands/extensions-private',
+            'https://github.com/OpenHands/extensions-private.git',
+        ],
+    )
+    async def test_rewrites_auto_load_source_to_authenticated_url(self, source):
+        """Any stored git source form is resolved and rewritten to a token URL."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_authenticated_git_url.return_value = AUTHENTICATED_URL
+        registrations = [_make_registration(source=source)]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        assert result[0].source == AUTHENTICATED_URL
+        mock_user_context.get_authenticated_git_url.assert_awaited_once_with(
+            'OpenHands/extensions-private', is_optional=True
+        )
+
+    @pytest.mark.asyncio
+    async def test_returns_copy_preserving_fields_without_mutating_input(self):
+        """The rewrite lands on a copy; other fields and the input stay intact."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_authenticated_git_url.return_value = AUTHENTICATED_URL
+        registration = _make_registration(ref='main', repo_path='marketplaces/team')
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            [registration], mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        rewritten = result[0]
+        assert (rewritten.name, rewritten.ref, rewritten.repo_path) == (
+            'extensions-private',
+            'main',
+            'marketplaces/team',
+        )
+        assert registration.source == 'github:OpenHands/extensions-private'
+
+    @pytest.mark.asyncio
+    async def test_keeps_source_when_resolution_fails(self):
+        """A failed token resolution degrades to the original source, not an error."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_authenticated_git_url.side_effect = Exception(
+            'no provider tokens'
+        )
+        registrations = [_make_registration()]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        assert result[0].source == 'github:OpenHands/extensions-private'
+
+    @pytest.mark.asyncio
+    async def test_skips_non_auto_load_registrations(self):
+        """Registrations that are not auto-loaded are never resolved."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        registrations = [_make_registration(auto_load=False)]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        assert result[0].source == 'github:OpenHands/extensions-private'
+        mock_user_context.get_authenticated_git_url.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'source',
+        [
+            'localskills',  # single segment: relative local path
+            'https://codeberg.org/owner/repo.git',  # unrecognized host keeps '://'
+        ],
+    )
+    async def test_skips_sources_without_provider_repo_shape(self, source):
+        """Sources that do not map to an owner/repo path pass through untouched."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        registrations = [_make_registration(source=source)]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        assert result[0].source == source
+        mock_user_context.get_authenticated_git_url.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('registrations', [None, []])
+    async def test_passes_through_falsy_input_untouched(self, registrations):
+        """None/empty inputs are returned as-is so wire semantics are preserved."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is registrations
+        mock_user_context.get_authenticated_git_url.assert_not_awaited()

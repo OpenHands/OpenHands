@@ -5,8 +5,8 @@ JSON could also contain plaintext secret leaves from legacy saves. Rewrite those
 payloads so non-secret JSON remains inspectable while secret leaf fields are
 Fernet-encrypted by the settings cipher.
 
-Revision ID: 131
-Revises: 130
+Revision ID: 137
+Revises: 136
 Create Date: 2026-07-03
 """
 
@@ -19,8 +19,8 @@ import sqlalchemy as sa
 from alembic import op
 from pydantic import SecretStr
 
-revision: str = '131'
-down_revision: Union[str, None] = '130'
+revision: str = '137'
+down_revision: Union[str, None] = '136'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

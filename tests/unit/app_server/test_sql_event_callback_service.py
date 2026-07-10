@@ -6,7 +6,6 @@ using SQLite as a mock database.
 """
 
 from datetime import datetime, timezone
-from typing import AsyncGenerator
 from uuid import uuid4
 
 import pytest
@@ -51,19 +50,15 @@ async def async_engine():
 
 
 @pytest.fixture
-async def async_db_session(async_engine) -> AsyncGenerator[AsyncSession, None]:
-    """Create an async db_session for testing."""
-    async_db_session_maker = async_sessionmaker(
-        async_engine, class_=AsyncSession, expire_on_commit=False
-    )
-    async with async_db_session_maker() as db_session:
-        yield db_session
+async def async_session_maker(async_engine):
+    """Create an async_sessionmaker that points at the test SQLite engine."""
+    return async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
 
 
 @pytest.fixture
-def service(async_db_session: AsyncSession) -> SQLEventCallbackService:
+def service(async_session_maker) -> SQLEventCallbackService:
     """Create a SQLEventCallbackService instance for testing."""
-    return SQLEventCallbackService(db_session=async_db_session)
+    return SQLEventCallbackService(async_session_maker=async_session_maker)
 
 
 @pytest.fixture
@@ -389,6 +384,7 @@ class TestSQLEventCallbackService:
     async def test_execute_callbacks_runs_conversation_specific_callback(
         self,
         service: SQLEventCallbackService,
+        async_session_maker,
         sample_processor: EventCallbackProcessor,
     ):
         """Test executing callbacks for the matching conversation."""
@@ -407,8 +403,9 @@ class TestSQLEventCallbackService:
 
         await service.execute_callbacks(conversation_id, event)
 
-        result = await service.db_session.execute(select(StoredEventCallbackResult))
-        callback_results = result.scalars().all()
+        async with async_session_maker() as db_session:
+            result = await db_session.execute(select(StoredEventCallbackResult))
+            callback_results = result.scalars().all()
         assert len(callback_results) == 1
         assert callback_results[0].event_callback_id == callback.id
         assert callback_results[0].conversation_id == conversation_id
@@ -416,20 +413,23 @@ class TestSQLEventCallbackService:
     async def test_execute_callbacks_ignores_legacy_null_conversation_callback(
         self,
         service: SQLEventCallbackService,
+        async_session_maker,
         sample_processor: EventCallbackProcessor,
     ):
         """Legacy callbacks without a conversation_id should not execute globally."""
         conversation_id = uuid4()
-        service.db_session.add(
-            StoredEventCallback(
-                id=uuid4(),
-                conversation_id=None,
-                status=EventCallbackStatus.ACTIVE,
-                processor=sample_processor,
-                event_kind='MessageEvent',
+        async with async_session_maker() as db_session:
+            db_session.add(
+                StoredEventCallback(
+                    id=uuid4(),
+                    conversation_id=None,
+                    status=EventCallbackStatus.ACTIVE,
+                    processor=sample_processor,
+                    event_kind='MessageEvent',
+                )
             )
-        )
-        await service.db_session.commit()
+            await db_session.commit()
+
         event = MessageEvent(
             source='user',
             llm_message=Message(role='user', content=[TextContent(text='hi')]),
@@ -437,27 +437,31 @@ class TestSQLEventCallbackService:
 
         await service.execute_callbacks(conversation_id, event)
 
-        result = await service.db_session.execute(select(StoredEventCallbackResult))
-        callback_results = result.scalars().all()
+        async with async_session_maker() as db_session:
+            result = await db_session.execute(select(StoredEventCallbackResult))
+            callback_results = result.scalars().all()
         assert callback_results == []
 
     async def test_execute_callbacks_ignores_legacy_null_event_kind_callback(
         self,
         service: SQLEventCallbackService,
+        async_session_maker,
         sample_processor: EventCallbackProcessor,
     ):
         """Legacy callbacks without an event_kind should not execute as event wildcards."""
         conversation_id = uuid4()
-        service.db_session.add(
-            StoredEventCallback(
-                id=uuid4(),
-                conversation_id=conversation_id,
-                status=EventCallbackStatus.ACTIVE,
-                processor=sample_processor,
-                event_kind=None,
+        async with async_session_maker() as db_session:
+            db_session.add(
+                StoredEventCallback(
+                    id=uuid4(),
+                    conversation_id=conversation_id,
+                    status=EventCallbackStatus.ACTIVE,
+                    processor=sample_processor,
+                    event_kind=None,
+                )
             )
-        )
-        await service.db_session.commit()
+            await db_session.commit()
+
         event = MessageEvent(
             source='user',
             llm_message=Message(role='user', content=[TextContent(text='hi')]),
@@ -465,8 +469,9 @@ class TestSQLEventCallbackService:
 
         await service.execute_callbacks(conversation_id, event)
 
-        result = await service.db_session.execute(select(StoredEventCallbackResult))
-        callback_results = result.scalars().all()
+        async with async_session_maker() as db_session:
+            result = await db_session.execute(select(StoredEventCallbackResult))
+            callback_results = result.scalars().all()
         assert callback_results == []
 
     async def test_save_event_callback_new(
@@ -499,9 +504,6 @@ class TestSQLEventCallbackService:
             else saved_callback.updated_at
         )
         assert saved_utc >= original_utc
-
-        # Commit the transaction to persist changes
-        await service.db_session.commit()
 
         # Verify the callback can be retrieved
         retrieved_callback = await service.get_event_callback(sample_callback.id)
@@ -548,9 +550,6 @@ class TestSQLEventCallbackService:
             else saved_callback.updated_at
         )
         assert saved_utc >= original_utc
-
-        # Commit the transaction to persist changes
-        await service.db_session.commit()
 
         # Verify the changes were persisted
         retrieved_callback = await service.get_event_callback(created_callback.id)
@@ -678,8 +677,6 @@ class TestSQLEventCallbackService:
             # Verify the status was preserved
             assert saved_callback.status == status
 
-            # Commit and verify persistence
-            await service.db_session.commit()
             retrieved_callback = await service.get_event_callback(callback.id)
             assert retrieved_callback is not None
             assert retrieved_callback.status == status
@@ -734,8 +731,6 @@ class TestSQLEventCallbackService:
         assert first_save.id == second_save.id
         assert first_save is second_save  # Same object instance
 
-        # Commit and verify only one record exists
-        await service.db_session.commit()
         retrieved_callback = await service.get_event_callback(sample_callback.id)
         assert retrieved_callback is not None
         assert retrieved_callback.id == sample_callback.id

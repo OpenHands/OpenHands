@@ -12,7 +12,7 @@ from server.routes.org_invitation_models import (
     InvitationInvalidError,
     UserAlreadyMemberError,
 )
-from server.services.email_service import EmailService
+from server.services.smtp_email_service import SMTPEmailService
 from storage.org_invitation import OrgInvitation
 from storage.org_invitation_store import OrgInvitationStore
 from storage.org_member_store import OrgMemberStore
@@ -133,7 +133,8 @@ class OrgInvitationService:
             if inviter_user and inviter_user.email:
                 inviter_name = inviter_user.email.split('@')[0]
 
-            EmailService.send_invitation_email(
+            await asyncio.to_thread(
+                SMTPEmailService.send_invitation_email,
                 to_email=email,
                 org_name=org.name,
                 inviter_name=inviter_name,

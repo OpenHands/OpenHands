@@ -1002,6 +1002,30 @@ async def test_main_settings_endpoint_ignores_llm_profiles_payload(
 
 
 @pytest.mark.asyncio
+async def test_main_settings_endpoint_ignores_active_agent_profile_pointer(
+    test_client, settings_store
+):
+    """The generic settings POST must ignore the agent-profile launch pointer.
+
+    ``active_agent_profile_id`` / ``active_agent_profile_revision`` are launch
+    provenance, not persisted settings — ``store()`` refuses instances that
+    carry them. A client echoing a non-null value back on a settings PUT must
+    be silently dropped (200), not written through to a 500 in ``store()``.
+    """
+    await _seed(settings_store, _base_settings())
+
+    resp = test_client.post(
+        '/api/v1/settings',
+        json={
+            'active_agent_profile_id': 'deadbeef-0000-0000-0000-000000000000',
+            'active_agent_profile_revision': 7,
+        },
+    )
+
+    assert resp.status_code == 200  # silently ignored, not a 500 from store()
+
+
+@pytest.mark.asyncio
 async def test_delete_active_profile_clears_active_and_allows_recovery(
     test_client, settings_store
 ):

@@ -41,7 +41,10 @@ from openhands.app_server.settings.settings_models import (
     _load_persisted_agent_settings,
     _load_persisted_conversation_settings,
 )
-from openhands.app_server.utils.jsonpatch_compat import deep_merge
+from openhands.app_server.utils.jsonpatch_compat import (
+    WHOLESALE_REPLACEMENT_KEYS,
+    deep_merge,
+)
 from openhands.app_server.utils.llm import is_openhands_model
 from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk.settings import (
@@ -423,7 +426,7 @@ class OrgStore:
                     setattr(org, key, value)
 
             if agent_settings_diff is not None:
-                org.agent_settings = OrgStore._merge_and_validate_settings(
+                org_agent_settings = OrgStore._merge_and_validate_settings(
                     org.agent_settings,
                     agent_settings_diff,
                     OpenHandsAgentSettings,
@@ -433,6 +436,12 @@ class OrgStore:
                     exclude_unset=True,
                     exclude={'llm': {'api_key'}},
                 )
+                # These keys are member-private. SDK validation may materialize
+                # defaults such as an empty mcp_config during org-version
+                # upgrades; do not persist them as org defaults.
+                for private_key in WHOLESALE_REPLACEMENT_KEYS:
+                    org_agent_settings.pop(private_key, None)
+                org.agent_settings = org_agent_settings
 
             if conversation_settings_diff is not None:
                 org.conversation_settings = OrgStore._merge_and_validate_settings(

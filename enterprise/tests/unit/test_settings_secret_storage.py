@@ -11,7 +11,7 @@ from openhands.app_server.settings.settings_models import Settings
 
 def _migration_module():
     return importlib.import_module(
-        'migrations.versions.131_rewrite_settings_secret_storage'
+        'migrations.versions.137_rewrite_settings_secret_storage'
     )
 
 

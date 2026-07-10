@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 
 from fastapi import Request
 from sqlalchemy import Enum, Index, String, and_, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column
 
 from openhands.agent_server.utils import utc_now
@@ -91,49 +91,61 @@ class StoredEventCallbackResult(Base):
 
 @dataclass
 class SQLEventCallbackService(EventCallbackService):
-    """SQL implementation of EventCallbackService."""
+    """SQL implementation of EventCallbackService.
 
-    db_session: AsyncSession
+    The service does **not** hold a long-lived ``AsyncSession``. Each public
+    method opens a short-lived session via ``self.async_session_maker`` for the
+    duration of its own DB work. This means:
+
+    * The pool connection is only checked out while the method runs an
+      actual SQL statement — it is released as soon as the method returns,
+      so callers never accidentally pin a connection across slow logic
+      (e.g. webhook deliveries, ``asyncio.gather`` of callback processors).
+    * Methods are independent: a failure in one (e.g. a flush error) cannot
+      leave another with a session in an unknown transactional state.
+    * The service itself is no longer an async-context-manager. There is
+      no per-service ``__aenter__``/``__aexit__`` lifecycle to get wrong.
+    """
+
+    async_session_maker: async_sessionmaker
 
     async def create_event_callback(
         self, request: CreateEventCallbackRequest
     ) -> EventCallback:
         """Create a new event callback."""
-        # Create EventCallback from request
         event_callback = EventCallback(
             conversation_id=request.conversation_id,
             processor=request.processor,
             event_kind=request.event_kind,
         )
-
-        # Create stored version and add to db_session
-        stored_callback = StoredEventCallback(**event_callback.model_dump())
-        self.db_session.add(stored_callback)
-        await self.db_session.commit()
-        await self.db_session.refresh(stored_callback)
-        return EventCallback.model_validate(row2dict(stored_callback))
+        async with self.async_session_maker() as db_session:
+            stored_callback = StoredEventCallback(**event_callback.model_dump())
+            db_session.add(stored_callback)
+            await db_session.commit()
+            await db_session.refresh(stored_callback)
+            return EventCallback.model_validate(row2dict(stored_callback))
 
     async def get_event_callback(self, id: UUID) -> EventCallback | None:
         """Get a single event callback, returning None if not found."""
-        stmt = select(StoredEventCallback).where(StoredEventCallback.id == id)
-        result = await self.db_session.execute(stmt)
-        stored_callback = result.scalar_one_or_none()
-        if stored_callback:
-            return EventCallback.model_validate(row2dict(stored_callback))
-        return None
+        async with self.async_session_maker() as db_session:
+            stmt = select(StoredEventCallback).where(StoredEventCallback.id == id)
+            result = await db_session.execute(stmt)
+            stored_callback = result.scalar_one_or_none()
+            if stored_callback:
+                return EventCallback.model_validate(row2dict(stored_callback))
+            return None
 
     async def delete_event_callback(self, id: UUID) -> bool:
         """Delete an event callback, returning True if deleted, False if not found."""
-        stmt = select(StoredEventCallback).where(StoredEventCallback.id == id)
-        result = await self.db_session.execute(stmt)
-        stored_callback = result.scalar_one_or_none()
-
-        if stored_callback is None:
-            return False
-
-        await self.db_session.delete(stored_callback)
-        await self.db_session.commit()
-        return True
+        async with self.async_session_maker() as db_session:
+            stmt = select(StoredEventCallback).where(StoredEventCallback.id == id)
+            result = await db_session.execute(stmt)
+            stored_callback = result.scalar_one_or_none()
+            if stored_callback is None:
+                return False
+            await db_session.delete(stored_callback)
+            await db_session.commit()
+            return True
 
     async def search_event_callbacks(
         self,
@@ -144,56 +156,38 @@ class SQLEventCallbackService(EventCallbackService):
         limit: int = 100,
     ) -> EventCallbackPage:
         """Search for event callbacks, optionally filtered by parameters."""
-        # Build the query with filters
         conditions = []
-
         if conversation_id__eq is not None:
             conditions.append(
                 StoredEventCallback.conversation_id == conversation_id__eq
             )
-
         if event_kind__eq is not None:
             conditions.append(StoredEventCallback.event_kind == event_kind__eq)
+        # Note: event_id__eq is not stored in the event_callbacks table; kept
+        # in the signature for ABI compatibility with the abstract service.
 
-        # Note: event_id__eq is not stored in the event_callbacks table
-        # This parameter might be used for filtering results after retrieval
-        # or might be intended for a different use case
-
-        # Build the base query
         stmt = select(StoredEventCallback)
-
         if conditions:
             stmt = stmt.where(and_(*conditions))
 
-        # Handle pagination
         if page_id is not None:
-            # Parse page_id to get offset or cursor
             try:
                 offset = int(page_id)
                 stmt = stmt.offset(offset)
             except ValueError:
-                # If page_id is not a valid integer, start from beginning
                 offset = 0
         else:
             offset = 0
-
-        # Apply limit and get one extra to check if there are more results
         stmt = stmt.limit(limit + 1).order_by(StoredEventCallback.created_at.desc())
 
-        result = await self.db_session.execute(stmt)
-        stored_callbacks = result.scalars().all()
+        async with self.async_session_maker() as db_session:
+            result = await db_session.execute(stmt)
+            stored_callbacks = result.scalars().all()
 
-        # Check if there are more results
         has_more = len(stored_callbacks) > limit
         if has_more:
             stored_callbacks = stored_callbacks[:limit]
-
-        # Calculate next page ID
-        next_page_id = None
-        if has_more:
-            next_page_id = str(offset + limit)
-
-        # Convert stored callbacks to domain models
+        next_page_id = str(offset + limit) if has_more else None
         callbacks = [
             EventCallback.model_validate(row2dict(cb)) for cb in stored_callbacks
         ]
@@ -201,64 +195,129 @@ class SQLEventCallbackService(EventCallbackService):
 
     async def save_event_callback(self, event_callback: EventCallback) -> EventCallback:
         event_callback.updated_at = utc_now()
-        stored_callback = StoredEventCallback(**event_callback.model_dump())
-        await self.db_session.merge(stored_callback)
+        async with self.async_session_maker() as db_session:
+            stored_callback = StoredEventCallback(**event_callback.model_dump())
+            await db_session.merge(stored_callback)
+            await db_session.commit()
         return event_callback
 
-    async def execute_callbacks(self, conversation_id: UUID, event: Event) -> None:
+    async def get_active_callbacks(
+        self, conversation_id: UUID, event: Event
+    ) -> list[EventCallback]:
+        """Return the active callbacks registered for this conversation+event kind.
+
+        Each returned ``EventCallback`` is detached from the session, so the
+        caller can run the (potentially slow) callback processors without
+        holding a pool connection. Use :meth:`persist_callback_results`
+        afterwards to save any status changes the callbacks made to themselves
+        plus the ``EventCallbackResult`` rows they produced.
+        """
         query = (
             select(StoredEventCallback)
             .where(StoredEventCallback.status == EventCallbackStatus.ACTIVE)
             .where(StoredEventCallback.event_kind == event.kind)
             .where(StoredEventCallback.conversation_id == conversation_id)
         )
-        result = await self.db_session.execute(query)
-        stored_callbacks = result.scalars().all()
-        if stored_callbacks:
-            callbacks = [
-                EventCallback.model_validate(row2dict(cb)) for cb in stored_callbacks
-            ]
-            await asyncio.gather(
-                *[
-                    self.execute_callback(conversation_id, callback, event)
-                    for callback in callbacks
-                ]
-            )
+        async with self.async_session_maker() as db_session:
+            result = await db_session.execute(query)
+            stored_callbacks = result.scalars().all()
+        return [EventCallback.model_validate(row2dict(cb)) for cb in stored_callbacks]
 
-            # Persist any new changes callbacks may have made to itself
-            for callback in callbacks:
-                await self.save_event_callback(callback)
-            await self.db_session.commit()
+    async def persist_callback_results(
+        self,
+        callbacks: list[EventCallback],
+        results: list[StoredEventCallbackResult | None],
+    ) -> None:
+        """Persist callback status changes and their results.
 
-    async def execute_callback(
-        self, conversation_id: UUID, callback: EventCallback, event: Event
-    ):
-        try:
-            result = await callback.processor(conversation_id, callback, event)
-            if result is None:
-                return
-            stored_result = StoredEventCallbackResult(**result.model_dump())
-        except Exception as exc:
-            _logger.exception(f'Exception in callback {callback.id}', stack_info=True)
-            stored_result = StoredEventCallbackResult(
-                status=EventCallbackResultStatus.ERROR,
-                event_callback_id=callback.id,
-                event_id=event.id,
-                conversation_id=conversation_id,
-                detail=str(exc),
-            )
-        self.db_session.add(stored_result)
+        Pairs up ``callbacks`` and ``results`` index-wise. ``results[i]`` may be
+        ``None`` if the callback returned ``None``. Opens its own short-lived
+        session so the pool connection is only held for the duration of the
+        COMMIT, not the entire callback execution.
+        """
+        async with self.async_session_maker() as db_session:
+            for callback, stored_result in zip(callbacks, results, strict=False):
+                callback.updated_at = utc_now()
+                stored_callback = StoredEventCallback(**callback.model_dump())
+                await db_session.merge(stored_callback)
+                if stored_result is not None:
+                    db_session.add(stored_result)
+            if any(r is not None for r in results):
+                await db_session.commit()
 
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        """Stop using this event callback service."""
-        pass
+    async def execute_callbacks(self, conversation_id: UUID, event: Event) -> None:
+        """Run all active callbacks for the event and persist their results.
+
+        Each step (``get_active_callbacks``, ``invoke_callback``,
+        ``persist_callback_results``) opens and closes its own session, so the
+        pool connection is never pinned while the (potentially slow) callback
+        processors run. Failed callbacks are turned into ERROR result rows so a
+        single failure doesn't abort the rest.
+        """
+        callbacks = await self.get_active_callbacks(conversation_id, event)
+        if not callbacks:
+            return
+        outcomes = await asyncio.gather(
+            *[invoke_callback(cb, conversation_id, event) for cb in callbacks],
+            return_exceptions=True,
+        )
+        normalised: list[StoredEventCallbackResult | None] = []
+        for callback, outcome in zip(callbacks, outcomes, strict=False):
+            if isinstance(outcome, BaseException):
+                _logger.exception(
+                    f'Exception in callback {callback.id}', stack_info=True
+                )
+                normalised.append(
+                    StoredEventCallbackResult(
+                        status=EventCallbackResultStatus.ERROR,
+                        event_callback_id=callback.id,
+                        event_id=event.id,
+                        conversation_id=conversation_id,
+                        detail=str(outcome),
+                    )
+                )
+            else:
+                normalised.append(outcome)
+        await self.persist_callback_results(callbacks, normalised)
+
+
+async def invoke_callback(
+    callback: EventCallback, conversation_id: UUID, event: Event
+) -> StoredEventCallbackResult | None:
+    """Run a single callback processor and convert its outcome into a stored
+    result row. No DB session is required to call the processor — the row is
+    only added to a session later by ``persist_callback_results``. This lets
+    the caller release the pool connection while the (potentially slow)
+    callbacks run, avoiding pool exhaustion when several webhooks fire in
+    burst."""
+    try:
+        result = await callback.processor(conversation_id, callback, event)
+    except Exception as exc:
+        _logger.exception(f'Exception in callback {callback.id}', stack_info=True)
+        return StoredEventCallbackResult(
+            status=EventCallbackResultStatus.ERROR,
+            event_callback_id=callback.id,
+            event_id=event.id,
+            conversation_id=conversation_id,
+            detail=str(exc),
+        )
+    if result is None:
+        return None
+    return StoredEventCallbackResult(**result.model_dump())
 
 
 class SQLEventCallbackServiceInjector(EventCallbackServiceInjector):
     async def inject(
         self, state: InjectorState, request: Request | None = None
     ) -> AsyncGenerator[EventCallbackService, None]:
-        from openhands.app_server.config import get_db_session
+        # No async-context-manager needed here: the service does not hold a
+        # session, so there is nothing to release on __aexit__. We just hand
+        # it the cached ``async_sessionmaker`` (which does not open a
+        # connection on its own) and let the service open short-lived
+        # sessions per method call.
+        from openhands.app_server.config import get_global_config
 
-        async with get_db_session(state) as db_session:
-            yield SQLEventCallbackService(db_session=db_session)
+        async_session_maker = (
+            await get_global_config().db_session.get_async_session_maker()
+        )
+        yield SQLEventCallbackService(async_session_maker=async_session_maker)

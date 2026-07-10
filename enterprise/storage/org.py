@@ -9,7 +9,12 @@ from server.constants import DEFAULT_BILLING_MARGIN
 from sqlalchemy import JSON, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from storage.base import Base
-from storage.encrypt_utils import SecretAwareJSON, decrypt_value, encrypt_value
+from storage.encrypt_utils import (
+    EncryptedJSON,
+    SecretAwareJSON,
+    decrypt_value,
+    encrypt_value,
+)
 
 from openhands.app_server.settings.settings_models import MarketplaceRegistration
 
@@ -72,6 +77,13 @@ class Org(Base):
     # JSON column with encrypted secret leaf fields for LLM profiles.
     llm_profiles: Mapped[dict[str, Any] | None] = mapped_column(
         SecretAwareJSON, nullable=True
+    )
+    # Encrypted column for agent profiles. Mirrors llm_profiles: the column is
+    # the at-rest encryption boundary, so secret-bearing skills[].mcp_tools ride
+    # in cleartext inside the encrypted blob. Envelope is
+    # ``{profiles: {<id>: AgentProfile}, active: <id> | null}`` (see AgentProfiles).
+    agent_profiles: Mapped[dict[str, Any] | None] = mapped_column(
+        EncryptedJSON, nullable=True
     )
     # Marks the bootstrapped default org on OHE installs; a partial unique
     # index allows at most one default org per install.

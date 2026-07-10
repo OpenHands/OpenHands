@@ -101,6 +101,12 @@ class Permission(str, Enum):
     # Organization Conversations (Admin/Owner only)
     VIEW_ORG_CONVERSATIONS = 'view_org_conversations'
 
+    # Instance-level super-role administration: grant/revoke the super-admin
+    # role (``user.role_id``) on other users. This is deliberately a distinct,
+    # explicit permission -- it is NOT implied by any org-scoped role and is
+    # granted only to the ``superadmin`` super role.
+    MANAGE_SUPER_ADMINS = 'manage_super_admins'
+
 
 class RoleName(str, Enum):
     """Role names used in the system.
@@ -225,14 +231,18 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
 # This keeps instance administration separate from organization-scoped
 # product/configuration administration.
 SUPER_ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
-    # Only superadmin is functional for now. It can create organizations
-    # and provision users into a selected organization without becoming
-    # an org member itself. Additional instance-admin capabilities should
-    # be added here explicitly as the corresponding routes are wired to
-    # permission checks.
+    # Only superadmin is functional for now. It can create organizations,
+    # provision users into a selected organization without becoming an org
+    # member itself, and grant/revoke the super-admin role on other users.
+    # Additional instance-admin capabilities should be added here explicitly
+    # as the corresponding routes are wired to permission checks.
     RoleName.OWNER: frozenset(),
     RoleName.ADMIN: frozenset(
-        [Permission.CREATE_ORGANIZATION, Permission.PROVISION_USER]
+        [
+            Permission.CREATE_ORGANIZATION,
+            Permission.PROVISION_USER,
+            Permission.MANAGE_SUPER_ADMINS,
+        ]
     ),
     RoleName.MEMBER: frozenset(),
 }
@@ -424,6 +434,20 @@ def require_permission(permission: Permission):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail='User not authenticated',
             )
+
+        # ``org_id`` is only trustworthy when the route actually declares an
+        # ``{org_id}`` path segment: FastAPI binds this parameter from the
+        # path in that case. Routes without that segment have no path source
+        # for it, so FastAPI silently falls back to binding it from an
+        # ordinary, client-controlled query string instead. Left unchecked, a
+        # caller could pass ``?org_id=<org-they-administer>`` to satisfy this
+        # permission check while the route handler itself operates on a
+        # *different* org (resolved separately from the ``X-Org-Id`` header
+        # via ``EFFECTIVE_ORG_ID``) -- a cross-org privilege escalation.
+        # Discard any such query-string value; routes with no path org_id
+        # always re-resolve the target org below instead.
+        if request.path_params.get('org_id') is None:
+            org_id = None
 
         # Validate API key organization binding
         api_key_org_id = await get_api_key_org_id_from_request(request)

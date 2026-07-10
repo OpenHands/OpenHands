@@ -61,6 +61,28 @@ class EventCallbackService(ABC):
     async def execute_callbacks(self, conversation_id: UUID, event: Event) -> None:
         """Execute any applicable callbacks for the event and store the results."""
 
+    @abstractmethod
+    async def get_active_callbacks(
+        self, conversation_id: UUID, event: Event
+    ) -> list[EventCallback]:
+        """Return active callbacks registered for the conversation+event kind.
+
+        Implementations should keep the DB session short-lived so the caller
+        can run (potentially slow) callback processors without holding a pool
+        connection. Pair with :meth:`persist_callback_results` afterwards."""
+
+    @abstractmethod
+    async def persist_callback_results(
+        self,
+        callbacks: list[EventCallback],
+        results: list,
+    ) -> None:
+        """Persist callback status changes and their results.
+
+        Pairs up ``callbacks`` and ``results`` index-wise. ``results[i]`` may be
+        ``None`` if the callback returned ``None``. Implementations should keep
+        the DB session short-lived."""
+
 
 class EventCallbackServiceInjector(
     DiscriminatedUnionMixin, Injector[EventCallbackService], ABC

@@ -27,6 +27,11 @@ from server.routes.org_models import (
     OrgAppSettingsResponse,
     OrgAppSettingsUpdate,
     OrgAuthorizationError,
+    OrgBudgetSettingsResponse,
+    OrgBudgetSettingsUpdate,
+    OrgBudgetThresholdResponse,
+    OrgBudgetUserOverrideUpdate,
+    OrgBudgetUserResponse,
     OrgConcurrentModificationError,
     OrgConversationPage,
     OrgConversationResponse,
@@ -45,12 +50,17 @@ from server.routes.org_models import (
     OrgResponse,
     OrgUpdate,
     OrgUsageStats,
+    OrgUserUsageStats,
     OrphanedUserError,
     RoleNotFoundError,
 )
 from server.services.org_app_settings_service import (
     OrgAppSettingsService,
     OrgAppSettingsServiceInjector,
+)
+from server.services.org_budget_service import (
+    OrgBudgetService,
+    OrgBudgetServiceInjector,
 )
 from server.services.org_conversation_service import (
     OrgConversationFilterError,
@@ -75,6 +85,10 @@ org_router = APIRouter(
     tags=['Orgs'],
     dependencies=[REJECT_X_ORG_ID_PATH_MISMATCH],
 )
+
+
+_org_budget_service_injector = OrgBudgetServiceInjector()
+org_budget_service_dependency = Depends(_org_budget_service_injector.depends)
 
 # Create injector instance and dependency at module level
 _org_app_settings_injector = OrgAppSettingsServiceInjector()
@@ -1091,6 +1105,156 @@ async def get_org_members_financial(
         )
 
 
+def _build_budget_response(state: dict) -> OrgBudgetSettingsResponse:
+    settings = state['settings']
+    thresholds = state['thresholds']
+    cycle = state['cycle']
+    current_spend = state['current_spend']
+    monthly_limit = settings.monthly_limit or 0
+    percentage = (current_spend / monthly_limit * 100) if monthly_limit else 0.0
+
+    return OrgBudgetSettingsResponse(
+        enabled=settings.enabled,
+        monthly_limit=settings.monthly_limit,
+        litellm_last_sync_at=settings.litellm_last_sync_at,
+        litellm_last_sync_status=settings.litellm_last_sync_status,
+        litellm_last_sync_error=settings.litellm_last_sync_error,
+        reset_day=settings.reset_day,
+        slack_channel=settings.slack_channel,
+        slack_team_id=settings.slack_team_id,
+        default_user_monthly_limit=settings.default_user_monthly_limit,
+        cycle_start_at=cycle.start_at,
+        cycle_end_at=cycle.end_at,
+        current_spend=current_spend,
+        current_spend_percentage=round(percentage, 1),
+        thresholds=[
+            OrgBudgetThresholdResponse(
+                id=threshold.id,
+                percentage=threshold.percentage,
+                email_enabled=threshold.email_enabled,
+                slack_enabled=threshold.slack_enabled,
+            )
+            for threshold in thresholds
+        ],
+        users=[OrgBudgetUserResponse(**user) for user in state['users']],
+        users_total=state['users_total'],
+        users_page=state['users_page'],
+        users_per_page=state['users_per_page'],
+    )
+
+
+@org_router.get(
+    '/{org_id}/budgets',
+    response_model=OrgBudgetSettingsResponse,
+)
+async def get_org_budget_settings(
+    org_id: UUID,
+    user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
+    users_page: int = Query(1, ge=1),
+    users_per_page: int = Query(50, ge=1, le=1000),
+    users_search: str | None = Query(None, max_length=200),
+    users_status: str | None = Query(None),
+    budget_service: OrgBudgetService = org_budget_service_dependency,
+) -> OrgBudgetSettingsResponse:
+    logger.info(
+        'Getting org budget settings',
+        extra={'org_id': str(org_id), 'user_id': user_id},
+    )
+    state = await budget_service.get_budget_state(
+        org_id,
+        users_page=users_page,
+        users_per_page=users_per_page,
+        users_search=users_search,
+        users_status=users_status,
+    )
+    return _build_budget_response(state)
+
+
+@org_router.patch(
+    '/{org_id}/budgets',
+    response_model=OrgBudgetSettingsResponse,
+)
+async def update_org_budget_settings(
+    org_id: UUID,
+    update: OrgBudgetSettingsUpdate,
+    user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
+    users_page: int = Query(1, ge=1),
+    users_per_page: int = Query(50, ge=1, le=1000),
+    users_search: str | None = Query(None, max_length=200),
+    users_status: str | None = Query(None),
+    budget_service: OrgBudgetService = org_budget_service_dependency,
+) -> OrgBudgetSettingsResponse:
+    logger.info(
+        'Updating org budget settings',
+        extra={'org_id': str(org_id), 'user_id': user_id},
+    )
+    state = await budget_service.update_budget_settings(
+        org_id,
+        update,
+        users_page=users_page,
+        users_per_page=users_per_page,
+        users_search=users_search,
+        users_status=users_status,
+    )
+    return _build_budget_response(state)
+
+
+@org_router.put(
+    '/{org_id}/budgets/overrides/{user_id}',
+    response_model=OrgBudgetUserResponse,
+)
+async def upsert_org_budget_override(
+    org_id: UUID,
+    user_id: str,
+    update: OrgBudgetUserOverrideUpdate,
+    current_user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
+    budget_service: OrgBudgetService = org_budget_service_dependency,
+) -> OrgBudgetUserResponse:
+    logger.info(
+        'Updating org budget override',
+        extra={
+            'org_id': str(org_id),
+            'user_id': user_id,
+            'actor_id': current_user_id,
+        },
+    )
+    await budget_service.upsert_user_override(
+        org_id,
+        UUID(user_id),
+        monthly_limit=update.monthly_limit,
+        is_disabled=update.is_disabled,
+    )
+    user_row = await budget_service.get_user_budget_row(org_id, UUID(user_id))
+    if not user_row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='User not found in organization',
+        )
+    return OrgBudgetUserResponse(**user_row)
+
+
+@org_router.delete(
+    '/{org_id}/budgets/overrides/{user_id}',
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_org_budget_override(
+    org_id: UUID,
+    user_id: str,
+    current_user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
+    budget_service: OrgBudgetService = org_budget_service_dependency,
+) -> None:
+    logger.info(
+        'Deleting org budget override',
+        extra={
+            'org_id': str(org_id),
+            'user_id': user_id,
+            'actor_id': current_user_id,
+        },
+    )
+    await budget_service.delete_user_override(org_id, UUID(user_id))
+    return None
+
+
 @org_router.delete(
     '/{org_id}/members/{user_id}',
 )
@@ -1761,8 +1925,15 @@ async def get_org_conversation_stats(
 )
 async def get_org_conversation_usage_stats(
     org_id: UUID,
-    days: int = Query(
-        default=7, ge=1, le=90, description='Number of days to look back'
+    time_window: Annotated[
+        str | None,
+        Query(
+            title='Time window filter',
+            description='Options: 7d, 30d, 90d, ytd (overrides days when provided)',
+        ),
+    ] = None,
+    days: int | None = Query(
+        default=None, ge=1, description='Number of days to look back'
     ),
     user_id: str = Depends(require_permission(Permission.VIEW_ORG_CONVERSATIONS)),
     service: OrgConversationService = org_conversation_service_dependency,
@@ -1776,25 +1947,47 @@ async def get_org_conversation_usage_stats(
 
     Args:
         org_id: The organization ID
-        days: Number of days to look back (1-90, default 7)
+        time_window: Time window filter (7d, 30d, 90d, ytd)
+        days: Number of days to look back (default 7)
 
     Returns:
         OrgUsageStats: Detailed usage statistics for the org
     """
+    now = datetime.now(timezone.utc)
+    resolved_days = days or 7
+
+    if time_window:
+        if time_window == 'ytd':
+            start_of_year = datetime(now.year, 1, 1, tzinfo=timezone.utc)
+            resolved_days = max(1, (now - start_of_year).days + 1)
+        elif time_window in {'7d', '30d', '90d'}:
+            resolved_days = int(time_window[:-1])
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='Invalid time_window. Use 7d, 30d, 90d, or ytd.',
+            )
+
     logger.info(
         'Getting organization conversation usage stats',
-        extra={'user_id': user_id, 'org_id': str(org_id), 'days': days},
+        extra={
+            'user_id': user_id,
+            'org_id': str(org_id),
+            'days': resolved_days,
+            'time_window': time_window,
+        },
     )
 
     try:
-        stats = await service.get_usage_stats(org_id=org_id, days=days)
+        stats = await service.get_usage_stats(org_id=org_id, days=resolved_days)
 
         logger.info(
             'Successfully retrieved organization conversation usage stats',
             extra={
                 'user_id': user_id,
                 'org_id': str(org_id),
-                'days': days,
+                'days': resolved_days,
+                'time_window': time_window,
                 'active_users': stats.active_users,
                 'agent_runs': stats.agent_runs,
                 'total_tokens': stats.total_tokens,
@@ -1811,6 +2004,79 @@ async def get_org_conversation_usage_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve organization conversation usage stats',
+        )
+
+
+@org_router.get(
+    '/{org_id}/conversations/user-usage',
+    response_model=OrgUserUsageStats,
+)
+async def get_org_conversation_user_usage_stats(
+    org_id: UUID,
+    limit: int = Query(
+        default=500,
+        ge=1,
+        le=2000,
+        description='Maximum number of user rows to return',
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        description='Offset for paginated user rows',
+    ),
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_CONVERSATIONS)),
+    service: OrgConversationService = org_conversation_service_dependency,
+) -> OrgUserUsageStats:
+    """Get per-user usage metrics for organization dashboard.
+
+    **Access Control**: Requires VIEW_ORG_CONVERSATIONS permission (Admin or Owner role).
+
+    Args:
+        org_id: The organization ID
+        limit: Maximum number of user rows to return
+        offset: Offset for paginated user rows
+
+    Returns:
+        OrgUserUsageStats: Usage statistics aggregated by user
+    """
+    logger.info(
+        'Getting organization user usage stats',
+        extra={
+            'user_id': user_id,
+            'org_id': str(org_id),
+            'limit': limit,
+            'offset': offset,
+        },
+    )
+
+    try:
+        stats = await service.get_user_usage_stats(
+            org_id=org_id,
+            limit=limit,
+            offset=offset,
+        )
+
+        logger.info(
+            'Successfully retrieved organization user usage stats',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'limit': limit,
+                'offset': offset,
+                'has_more': stats.has_more,
+            },
+        )
+
+        return stats
+
+    except Exception as e:
+        logger.exception(
+            'Unexpected error getting organization user usage stats',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve organization user usage stats',
         )
 
 
