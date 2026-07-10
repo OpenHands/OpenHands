@@ -21,6 +21,7 @@ import { getSelectedOrganizationIdFromStore } from "#/stores/selected-organizati
 import { rolePermissions } from "#/utils/org/permissions";
 import { isBillingHidden } from "#/utils/org/billing-visibility";
 import {
+  ADMIN_ONLY_SETTINGS_PATHS,
   isSettingsPageHidden,
   getFirstAvailablePath,
 } from "#/utils/settings-utils";
@@ -40,6 +41,7 @@ const SAAS_ONLY_PATHS = [
   "/settings/org-defaults/condenser",
   "/settings/org-defaults/verification",
   "/settings/usage-monitoring",
+  "/settings/budgets",
 ];
 
 const ORG_WIDE_BADGE_PATHS = new Set<string>([
@@ -51,6 +53,8 @@ const ORG_WIDE_BADGE_PATHS = new Set<string>([
 export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const url = new URL(request.url);
   const { pathname } = url;
+
+  const isAdminOnlyPath = ADMIN_ONLY_SETTINGS_PATHS.has(pathname);
 
   // Step 1: Get config first (needed for all checks, no user data required)
   const config = await queryClient.fetchQuery<WebClientConfig>({
@@ -116,17 +120,14 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
     }
   }
 
-  // Step 4: For routes that need permission checks, get user data
-  // Only fetch user data for billing and org routes that need permission validation
   if (
     pathname === "/settings/billing" ||
     pathname === "/settings/org" ||
     pathname === "/settings/org-members" ||
-    pathname === "/settings/usage-monitoring"
+    isAdminOnlyPath
   ) {
     const user = await getActiveOrganizationUser();
 
-    // Org-type detection for route protection
     const orgId = getSelectedOrganizationIdFromStore();
     const organizationsData = queryClient.getQueryData<{
       items: Organization[];
@@ -138,7 +139,6 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
     const isPersonalOrg = selectedOrg?.is_personal === true;
     const isTeamOrg = !!selectedOrg && !selectedOrg.is_personal;
 
-    // Billing route protection
     if (pathname === "/settings/billing") {
       if (
         !user ||
@@ -155,7 +155,6 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
       }
     }
 
-    // Org route protection: redirect if user lacks required permissions or personal org
     if (pathname === "/settings/org") {
       const role = user?.role ?? "member";
       if (
@@ -178,8 +177,7 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
       }
     }
 
-    // Usage & Monitoring route protection: only admins and owners can access
-    if (pathname === "/settings/usage-monitoring") {
+    if (isAdminOnlyPath) {
       const role = user?.role ?? "member";
       if (!user || (role !== "admin" && role !== "owner") || isPersonalOrg) {
         return redirect("/settings");
@@ -230,7 +228,7 @@ function SettingsScreen() {
   return (
     <main data-testid="settings-screen" className="h-full">
       <SettingsLayout navigationItems={navItems}>
-        <div className="flex flex-col gap-6 h-full">
+        <div className="flex flex-col gap-6 h-full min-h-0">
           {!shouldHideTitle && (
             <div className="flex items-center gap-3 flex-wrap">
               <Typography.H2>{t(currentSectionTitle)}</Typography.H2>
@@ -239,7 +237,7 @@ function SettingsScreen() {
               )}
             </div>
           )}
-          <div className="flex-1 overflow-auto custom-scrollbar-always">
+          <div className="flex-1 min-h-0 overflow-auto custom-scrollbar-always">
             <Outlet />
           </div>
         </div>

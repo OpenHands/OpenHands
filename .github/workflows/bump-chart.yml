@@ -26,4 +26,6 @@ jobs:
     with:
       component: openhands
       chart_file: charts/openhands/values.yaml
+      metadata_file: charts/openhands/Chart.yaml
+      metadata_path: .appVersion
       tag: ${{ github.event.workflow_run.head_branch }}

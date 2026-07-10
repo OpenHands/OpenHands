@@ -177,6 +177,10 @@ describe("useSettingsNavItems", () => {
       expect(
         findItemByPath(result.current, "/settings/org-members"),
       ).toBeDefined();
+      expect(
+        findItemByPath(result.current, "/settings/usage-monitoring"),
+      ).toBeDefined();
+      expect(findItemByPath(result.current, "/settings/budgets")).toBeDefined();
     });
 
     it("should hide org routes when isPersonalOrg is true", async () => {
@@ -202,6 +206,10 @@ describe("useSettingsNavItems", () => {
       expect(
         findItemByPath(result.current, "/settings/org-members"),
       ).toBeUndefined();
+      expect(
+        findItemByPath(result.current, "/settings/usage-monitoring"),
+      ).toBeUndefined();
+      expect(findItemByPath(result.current, "/settings/budgets")).toBeUndefined();
     });
 
     it("should hide org routes when user role is member", async () => {
@@ -227,6 +235,10 @@ describe("useSettingsNavItems", () => {
       expect(
         findItemByPath(result.current, "/settings/org-members"),
       ).toBeUndefined();
+      expect(
+        findItemByPath(result.current, "/settings/usage-monitoring"),
+      ).toBeUndefined();
+      expect(findItemByPath(result.current, "/settings/budgets")).toBeUndefined();
     });
 
     it("should hide org routes when no organization is selected", async () => {
@@ -253,6 +265,10 @@ describe("useSettingsNavItems", () => {
       expect(
         findItemByPath(result.current, "/settings/org-members"),
       ).toBeUndefined();
+      expect(
+        findItemByPath(result.current, "/settings/usage-monitoring"),
+      ).toBeUndefined();
+      expect(findItemByPath(result.current, "/settings/budgets")).toBeUndefined();
     });
 
     it("should hide billing route when isTeamOrg is true", async () => {

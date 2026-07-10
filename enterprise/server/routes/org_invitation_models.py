@@ -3,7 +3,7 @@ Pydantic models and custom exceptions for organization invitations.
 """
 
 from pydantic import BaseModel, EmailStr
-from server.services.email_service import EmailService
+from server.services.smtp_email_service import SMTPEmailService
 from storage.org_invitation import OrgInvitation
 from storage.role_store import RoleStore
 
@@ -110,7 +110,7 @@ class InvitationResponse(BaseModel):
             created_at=invitation.created_at.isoformat(),
             expires_at=invitation.expires_at.isoformat(),
             inviter_email=inviter_email,
-            invite_url=EmailService.build_invitation_url(invitation.token),
+            invite_url=SMTPEmailService.build_invitation_url(invitation.token),
         )
 
 
@@ -127,7 +127,7 @@ class BatchInvitationResponse(BaseModel):
     successful: list[InvitationResponse]
     failed: list[InvitationFailure]
     # False when no email provider is configured (e.g. OHE installs without
-    # RESEND_API_KEY): invitations were created but no email was sent, so the
+    # SMTP_HOST): invitations were created but no email was sent, so the
     # UI should tell the inviter to share the invite links directly.
     email_delivery_configured: bool = True
 
