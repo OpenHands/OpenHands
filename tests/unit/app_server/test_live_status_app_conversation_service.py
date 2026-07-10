@@ -104,6 +104,10 @@ def _build_test_user_agent_settings(user: SimpleNamespace) -> OpenHandsAgentSett
 
 
 class _TestUserInfo(SimpleNamespace):
+    def __init__(self, **kwargs):
+        kwargs.setdefault('disabled_skills', [])
+        super().__init__(**kwargs)
+
     @property
     def agent_settings(self) -> OpenHandsAgentSettings:
         override = getattr(self, '_agent_settings_override', None)
