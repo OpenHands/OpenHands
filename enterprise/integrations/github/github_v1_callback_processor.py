@@ -213,7 +213,6 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 url,
                 error_detail,
                 dict(e.response.headers),
-                exc_info=True,
                 stack_info=True,
             )
             raise Exception(
@@ -223,14 +222,14 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
         except httpx.TimeoutException:
             error_detail = f'Request timeout after 30 seconds to {url}'
             _logger.exception(
-                '[GitHub V1] %s', error_detail, exc_info=True, stack_info=True
+                '[GitHub V1] %s', error_detail, stack_info=True
             )
             raise Exception(error_detail)
 
         except httpx.RequestError as e:
-            error_detail = f'Request error to {url}: {str(e)}'
+            error_detail = f'Request error to {url}'
             _logger.exception(
-                '[GitHub V1] %s', error_detail, exc_info=True, stack_info=True
+                '[GitHub V1] %s', error_detail, stack_info=True
             )
             raise Exception(error_detail) from e
 

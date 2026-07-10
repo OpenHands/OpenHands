@@ -133,9 +133,7 @@ class BitbucketDCV1CallbackProcessor(EventCallbackProcessor):
             except Exception:  # noqa: BLE001
                 pass
             _logger.exception(
-                '[Bitbucket DC V1] HTTP error: %s',
-                error_detail,
-                exc_info=True,
+                '[Bitbucket DC V1] HTTP error',
                 stack_info=True,
             )
             raise Exception(

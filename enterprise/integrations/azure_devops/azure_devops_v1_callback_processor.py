@@ -143,14 +143,10 @@ class AzureDevOpsV1CallbackProcessor(EventCallbackProcessor):
             except Exception:
                 pass
             _logger.exception(
-                '[Azure DevOps V1] HTTP error: %s',
-                error_detail,
-                exc_info=True,
+                '[Azure DevOps V1] HTTP error',
                 stack_info=True,
             )
-            raise Exception(
-                f'Failed to send message to agent server: {error_detail}'
-            ) from e
+            raise Exception('Failed to send message to agent server') from e
         except httpx.TimeoutException:
             raise Exception(f'Request timeout after 30 seconds to {url}')
         except httpx.RequestError as e:

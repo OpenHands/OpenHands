@@ -552,7 +552,7 @@ class GitHubDataCollector:
                     break
 
             except Exception:
-                logger.warning('Error fetching PR data', exc_info=True)
+                logger.warning('Error fetching PR data')
                 return
 
         if not pr_data or not repo_data:

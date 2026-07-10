@@ -202,7 +202,7 @@ class GithubManager(Manager[GithubViewType]):
         except Exception as e:
             logger.exception(
                 f'[GitHub] Failed to send user not found message to {username} '
-                f'on {full_repo_name}#{issue_number}: {e}',
+                f'on {full_repo_name}#{issue_number}',
                 stack_info=True,
             )
 
@@ -265,7 +265,6 @@ class GithubManager(Manager[GithubViewType]):
         except Exception:
             logger.exception(
                 '[Github]: Error processing payload for gh interaction',
-                exc_info=True,
                 stack_info=True,
             )
 

@@ -73,7 +73,6 @@ async def resolve_org_for_repo(
     except Exception as e:
         logger.exception(
             f'[OrgResolver] Error resolving org for {provider}/{git_org}: {e}',
-            exc_info=True,
             stack_info=True,
         )
         return None

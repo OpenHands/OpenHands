@@ -155,7 +155,7 @@ class SaaSGitHubService(GitHubService):
                 return self.external_auth_id
             except Exception as e:
                 logger.warning(
-                    f'Could not determine external_auth_id from token: {e}',
+                    'Could not determine external_auth_id from token',
                     exc_info=True,
                 )
         return None
