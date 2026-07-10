@@ -2161,8 +2161,9 @@ class TestArchiveWorkspaceHelper:
         assert manifest['head_commit'] == 'def456'
         assert manifest['packages'] == {'npm': {'example': '1.0.0'}}
         probe_workspace.assert_awaited_once_with(
+            client,
             'https://sandbox.example.com',
-            'test-session-key',
+            {'X-Session-API-Key': 'test-session-key'},
             '/workspace/project/repo',
         )
 

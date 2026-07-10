@@ -1,9 +1,7 @@
 """Test package and runtime manifest enrichment."""
 
-import asyncio
 import json
-import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -84,10 +82,10 @@ def test_extract_repo_metadata_decodes_percent_encoding():
     }
 
 
-class _Result:
-    def __init__(self, stdout: str, exit_code: int = 0):
-        self.stdout = stdout
-        self.exit_code = exit_code
+def _response(stdout: str, status_code: int = 200):
+    response = MagicMock(status_code=status_code)
+    response.json.return_value = {'stdout': stdout}
+    return response
 
 
 _ENV_OUT = 'python=Python 3.12.4\nnode=v20.11.0\nos=ubuntu 24.04\n'
@@ -97,20 +95,13 @@ _ENV_OUT = 'python=Python 3.12.4\nnode=v20.11.0\nos=ubuntu 24.04\n'
 async def test_probe_workspace_full():
     pip_json = json.dumps([{'name': 'requests', 'version': '2.31.0'}])
     npm_json = json.dumps({'dependencies': {'express': {'version': '4.18.2'}}})
-
-    async def fake_exec(command, cwd, timeout):
-        if 'pip list' in command:
-            return _Result(pip_json)
-        if 'npm ls' in command:
-            return _Result(npm_json, exit_code=1)  # nonzero but valid JSON
-        if command == wa._ENVIRONMENT_CMD:
-            return _Result(_ENV_OUT)
-        return _Result('')
-
-    with patch.object(
-        wa.AsyncRemoteWorkspace, 'execute_command', side_effect=fake_exec
-    ):
-        result = await wa._probe_workspace('http://host', 'key', '/repo')
+    client = MagicMock()
+    client.post = AsyncMock(
+        side_effect=[_response(pip_json), _response(npm_json), _response(_ENV_OUT)]
+    )
+    result = await wa._probe_workspace(
+        client, 'http://host', {'X-Session-API-Key': 'key'}, '/repo'
+    )
 
     assert result == {
         'packages': {'pip': {'requests': '2.31.0'}, 'npm': {'express': '4.18.2'}},
@@ -120,50 +111,38 @@ async def test_probe_workspace_full():
 
 @pytest.mark.asyncio
 async def test_probe_workspace_omits_absent_tools():
-    async def fake_exec(command, cwd, timeout):
-        return _Result('')  # no tool present / no output
-
-    with patch.object(
-        wa.AsyncRemoteWorkspace, 'execute_command', side_effect=fake_exec
-    ):
-        assert await wa._probe_workspace('http://host', 'key', '/repo') == {}
+    client = MagicMock()
+    client.post = AsyncMock(side_effect=[_response(''), _response(''), _response('')])
+    assert await wa._probe_workspace(client, 'http://host', {}, '/repo') == {}
 
 
 @pytest.mark.asyncio
 async def test_probe_workspace_never_raises():
-    async def boom(command, cwd, timeout):
-        raise RuntimeError('agent-server unreachable')
-
-    with patch.object(wa.AsyncRemoteWorkspace, 'execute_command', side_effect=boom):
-        assert await wa._probe_workspace('http://host', 'key', '/repo') == {}
+    client = MagicMock()
+    client.post = AsyncMock(side_effect=RuntimeError('agent-server unreachable'))
+    assert await wa._probe_workspace(client, 'http://host', {}, '/repo') == {}
 
 
 @pytest.mark.asyncio
-async def test_run_probe_closes_client_without_blocking_event_loop(monkeypatch):
-    workspace = MagicMock()
+async def test_run_probe_posts_command():
+    client = MagicMock()
+    client.post = AsyncMock(return_value=_response('done'))
+    headers = {'X-Session-API-Key': 'key'}
 
-    async def execute_command(command, cwd, timeout):
-        time.sleep(0.05)
-        return _Result('done')
-
-    workspace.execute_command = execute_command
-    workspace.reset_client = AsyncMock()
-    monkeypatch.setattr(wa, 'AsyncRemoteWorkspace', lambda **kwargs: workspace)
-
-    probe = asyncio.create_task(wa._run_probe('http://host', 'key', '/repo', 'cmd'))
-    await asyncio.sleep(0.01)
-
-    assert not probe.done()
-    assert await probe == 'done'
-    workspace.reset_client.assert_awaited_once()
+    assert await wa._run_probe(client, 'http://host', headers, '/repo', 'cmd') == 'done'
+    client.post.assert_awaited_once_with(
+        'http://host/api/bash/execute_bash_command',
+        json={'command': 'cmd', 'cwd': '/repo', 'timeout': wa._PROBE_TIMEOUT},
+        headers=headers,
+        timeout=wa._PROBE_TIMEOUT + 1,
+    )
 
 
 @pytest.mark.asyncio
 async def test_probe_disabled_by_env(monkeypatch):
     monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_ENRICH', 'false')
+    client = MagicMock()
+    client.post = AsyncMock()
 
-    async def fail(command, cwd, timeout):
-        raise AssertionError('must not probe when disabled')
-
-    with patch.object(wa.AsyncRemoteWorkspace, 'execute_command', side_effect=fail):
-        assert await wa._probe_workspace('h', 'k', '/r') == {}
+    assert await wa._probe_workspace(client, 'h', {}, '/r') == {}
+    client.post.assert_not_awaited()

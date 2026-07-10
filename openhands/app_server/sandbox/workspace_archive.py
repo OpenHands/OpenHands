@@ -27,7 +27,6 @@ import httpx
 from openhands.agent_server.utils import utc_now
 from openhands.app_server.file_store import get_file_store
 from openhands.app_server.file_store.files import FileStore
-from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 _logger = logging.getLogger(__name__)
 
@@ -266,47 +265,42 @@ def _parse_runtime(out: str) -> dict[str, str]:
 
 
 async def _run_probe(
-    agent_server_url: str, session_api_key: str | None, cwd: str, command: str
+    httpx_client: httpx.AsyncClient,
+    agent_server_url: str,
+    headers: dict[str, str],
+    cwd: str,
+    command: str,
 ) -> str:
     """Run one command in the workspace; '' on any failure (never raises)."""
     try:
-        result = await asyncio.to_thread(
-            _run_probe_in_thread,
-            agent_server_url,
-            session_api_key,
-            cwd,
-            command,
+        response = await httpx_client.post(
+            f'{agent_server_url}/api/bash/execute_bash_command',
+            json={'command': command, 'cwd': cwd, 'timeout': _PROBE_TIMEOUT},
+            headers=headers,
+            timeout=_PROBE_TIMEOUT + 1,
         )
+        if response.status_code != 200:
+            return ''
+        data = response.json()
     except Exception as e:
         _logger.debug('Workspace probe %r failed: %s', command, e)
         return ''
-    return result.stdout or ''
-
-
-def _run_probe_in_thread(
-    agent_server_url: str, session_api_key: str | None, cwd: str, command: str
-) -> Any:
-    async def _execute() -> Any:
-        workspace = AsyncRemoteWorkspace(
-            host=agent_server_url, api_key=session_api_key, working_dir=cwd
-        )
-        try:
-            return await workspace.execute_command(command, cwd, timeout=_PROBE_TIMEOUT)
-        finally:
-            await workspace.reset_client()
-
-    return asyncio.run(_execute())
+    output = data.get('stdout') if isinstance(data, dict) else None
+    return output if isinstance(output, str) else ''
 
 
 async def _probe_workspace(
-    agent_server_url: str, session_api_key: str | None, cwd: str
+    httpx_client: httpx.AsyncClient,
+    agent_server_url: str,
+    headers: dict[str, str],
+    cwd: str,
 ) -> dict[str, Any]:
     """Collect installed package and runtime versions."""
     if not _manifest_enrichment_enabled():
         return {}
 
     async def _run(command: str) -> str:
-        return await _run_probe(agent_server_url, session_api_key, cwd, command)
+        return await _run_probe(httpx_client, agent_server_url, headers, cwd, command)
 
     result: dict[str, Any] = {}
     packages: dict[str, dict[str, str]] = {}
@@ -473,7 +467,10 @@ async def archive_workspace(
                     enrichment_probed = True
                     try:
                         enrichment = await _probe_workspace(
-                            agent_server_url, session_api_key, probe_path
+                            httpx_client,
+                            agent_server_url,
+                            headers,
+                            probe_path,
                         )
                     except Exception as e:
                         _logger.debug(
