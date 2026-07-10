@@ -171,10 +171,10 @@ async def list_user_orgs(
             current_org_id=current_org_id,
         )
 
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error listing organizations',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={'user_id': user_id},
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -236,28 +236,31 @@ async def create_org(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
         )
-    except LiteLLMIntegrationError as e:
-        logger.error(
+    except LiteLLMIntegrationError:
+        logger.exception(
             'LiteLLM integration failed',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={'user_id': user_id},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to create LiteLLM integration',
         )
-    except OrgDatabaseError as e:
-        logger.error(
+    except OrgDatabaseError:
+        logger.exception(
             'Database operation failed',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={'user_id': user_id},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to create organization',
         )
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error creating organization',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={'user_id': user_id},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -282,10 +285,11 @@ async def get_org_defaults_settings(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Error getting organization defaults settings',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -331,7 +335,7 @@ async def update_org_defaults_settings(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
-    except OrgDatabaseError as e:
+    except OrgDatabaseError:
         logger.exception(
             'Database error updating organization defaults settings',
             extra={'user_id': user_id, 'org_id': str(org_id)},
@@ -343,10 +347,10 @@ async def update_org_defaults_settings(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Error updating organization defaults settings',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
             stack_info=True,
         )
         raise HTTPException(
@@ -378,10 +382,11 @@ async def get_legacy_org_defaults_settings(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Error getting legacy organization defaults settings',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={'user_id': user_id},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -418,10 +423,11 @@ async def update_legacy_org_defaults_settings(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Error updating legacy organization defaults settings',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={'user_id': user_id},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -461,10 +467,10 @@ async def get_org_app_settings(
             status_code=status.HTTP_404_NOT_FOUND,
             detail='Current organization not found',
         )
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error retrieving organization app settings',
-            extra={'error': str(e)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -529,10 +535,10 @@ async def update_org_app_settings(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error updating organization app settings',
-            extra={'error': str(e)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -571,10 +577,11 @@ async def get_org(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error retrieving organization',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -633,10 +640,11 @@ async def get_me(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='An unexpected error occurred',
         )
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error retrieving member details',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -736,19 +744,21 @@ async def delete_org(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
-    except OrgDatabaseError as e:
-        logger.error(
+    except OrgDatabaseError:
+        logger.exception(
             'Database error during organization deletion',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to delete organization',
         )
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error during organization deletion',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -824,19 +834,21 @@ async def update_org(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
         )
-    except OrgDatabaseError as e:
-        logger.error(
+    except OrgDatabaseError:
+        logger.exception(
             'Database operation failed',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to update organization',
         )
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error updating organization',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1414,19 +1426,21 @@ async def switch_org(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
         )
-    except OrgDatabaseError as e:
-        logger.error(
+    except OrgDatabaseError:
+        logger.exception(
             'Database operation failed during organization switch',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to switch organization',
         )
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error switching organization',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1859,10 +1873,11 @@ async def list_org_conversations(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=e.message,
         )
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error listing organization conversations',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1910,10 +1925,11 @@ async def get_org_conversation_stats(
 
         return stats
 
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error getting organization conversation stats',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1998,10 +2014,11 @@ async def get_org_conversation_usage_stats(
 
         return stats
 
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error getting organization conversation usage stats',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -2071,10 +2088,11 @@ async def get_org_conversation_user_usage_stats(
 
         return stats
 
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error getting organization user usage stats',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -2235,10 +2253,11 @@ async def export_org_conversations_csv(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=e.message,
         )
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error exporting organization conversations',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -2290,15 +2309,15 @@ async def get_org_conversation(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error getting organization conversation',
             extra={
                 'user_id': user_id,
                 'org_id': str(org_id),
                 'conversation_id': conversation_id,
-                'error': str(e),
             },
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -2369,15 +2388,15 @@ async def stop_org_conversation(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error stopping organization conversation',
             extra={
                 'user_id': user_id,
                 'org_id': str(org_id),
                 'conversation_id': conversation_id,
-                'error': str(e),
             },
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
