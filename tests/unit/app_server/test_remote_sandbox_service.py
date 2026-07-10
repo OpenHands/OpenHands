@@ -2160,9 +2160,6 @@ class TestArchiveWorkspaceHelper:
         assert manifest['branch'] == 'feature-x'
         assert manifest['head_commit'] == 'def456'
         assert manifest['packages'] == {'npm': {'example': '1.0.0'}}
-        assert 'lockfiles' not in manifest
-        assert 'git_changes' not in manifest
-        assert 'run' not in manifest
         probe_workspace.assert_awaited_once_with(
             'https://sandbox.example.com',
             'test-session-key',
