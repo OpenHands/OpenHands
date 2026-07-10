@@ -222,6 +222,8 @@ def _parse_pip_list(out: str) -> dict[str, str]:
         return {}
     result: dict[str, str] = {}
     for item in data if isinstance(data, list) else []:
+        if not isinstance(item, dict):
+            continue
         name, version = item.get('name'), item.get('version')
         if name and version:
             result[name] = version
@@ -237,8 +239,10 @@ def _parse_npm_ls(out: str) -> dict[str, str]:
     except json.JSONDecodeError:
         return {}
     deps = data.get('dependencies') if isinstance(data, dict) else None
+    if not isinstance(deps, dict):
+        return {}
     result: dict[str, str] = {}
-    for name, meta in (deps or {}).items():
+    for name, meta in deps.items():
         version = meta.get('version') if isinstance(meta, dict) else None
         if name and version:
             result[name] = version
@@ -463,21 +467,21 @@ async def archive_workspace(
                 response_repo_root = response.headers.get(_REPO_ROOT_HEADER, '')
                 if response_repo_root:
                     probe_path = unquote(response_repo_root)
-                if not enrichment_probed:
-                    enrichment_probed = True
-                    try:
-                        enrichment = await _probe_workspace(
-                            httpx_client,
-                            agent_server_url,
-                            headers,
-                            probe_path,
-                        )
-                    except Exception as e:
-                        _logger.debug(
-                            'Workspace enrichment skipped for %s: %s', sandbox_id, e
-                        )
                 # Stream to disk so the archive never sits whole in RAM.
                 tmp_path, byte_count = await _stream_to_tempfile(response)
+            if not enrichment_probed:
+                enrichment_probed = True
+                try:
+                    enrichment = await _probe_workspace(
+                        httpx_client,
+                        agent_server_url,
+                        headers,
+                        probe_path,
+                    )
+                except Exception as e:
+                    _logger.debug(
+                        'Workspace enrichment skipped for %s: %s', sandbox_id, e
+                    )
         except Exception as e:
             # Network/timeout error: genuinely transient.
             _logger.warning(

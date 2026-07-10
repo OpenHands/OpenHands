@@ -936,7 +936,6 @@ async def delete_app_conversation(
         app_conversation_info_service_dependency
     ),
     sandbox_service: SandboxService = sandbox_service_dependency,
-    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
     db_session: AsyncSession = db_session_dependency,
     httpx_client: httpx.AsyncClient = httpx_client_dependency,
 ) -> Success:

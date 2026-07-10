@@ -763,10 +763,7 @@ class RemoteSandboxService(SandboxService):
             )
             return not workspace_archive.archive_required()
         archived = await self._archive_workspace(
-            stored_sandbox,
-            conversation_id,
-            runtime_data,
-            workspace_path,
+            stored_sandbox, conversation_id, runtime_data, workspace_path
         )
         if not archived:
             _logger.warning(

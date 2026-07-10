@@ -24,6 +24,7 @@ def test_parse_pip_list_bad_input():
     assert wa._parse_pip_list('not json') == {}
     assert wa._parse_pip_list('') == {}
     assert wa._parse_pip_list('{"unexpected": "shape"}') == {}
+    assert wa._parse_pip_list('[1]') == {}
 
 
 def test_parse_npm_ls_top_level():
@@ -42,6 +43,7 @@ def test_parse_npm_ls_bad_input():
     assert wa._parse_npm_ls('') == {}
     assert wa._parse_npm_ls('not json') == {}
     assert wa._parse_npm_ls(json.dumps({'no': 'deps'})) == {}
+    assert wa._parse_npm_ls(json.dumps({'dependencies': []})) == {}
 
 
 def test_parse_caps_entries():

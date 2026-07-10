@@ -106,6 +106,7 @@ def _make_stream_response(
     resp = MagicMock()
     resp.status_code = status_code
     resp.headers = headers or {}
+    resp.stream_closed = False
 
     async def _aiter_bytes():
         yield content
@@ -124,9 +125,13 @@ def _stream_client(resp_or_map):
     @asynccontextmanager
     async def _stream(method, url, **kwargs):
         if isinstance(resp_or_map, dict):
-            yield resp_or_map[kwargs['params']['format']]
+            response = resp_or_map[kwargs['params']['format']]
         else:
-            yield resp_or_map
+            response = resp_or_map
+        try:
+            yield response
+        finally:
+            response.stream_closed = True
 
     client.stream = MagicMock(side_effect=_stream)
     return client
@@ -2099,21 +2104,20 @@ class TestArchiveWorkspaceHelper:
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_BUCKET', 'archive-bkt')
         monkeypatch.setenv('RUNTIME_FILE_ARCHIVE_FORMAT', 'git-delta')
 
-        client = _stream_client(
-            _make_stream_response(
-                200,
-                b'patch-bytes',
-                {
-                    'X-Archive-Base-Commit': 'abc123',
-                    'X-Archive-Repo-Remote': (
-                        'https%3A%2F%2Fgithub.com%2Fexample%2Frepo.git'
-                    ),
-                    'X-Archive-Branch': 'feature-x',
-                    'X-Archive-Head-Commit': 'def456',
-                    'X-Archive-Repo-Root': '%2Fworkspace%2Fproject%2Frepo',
-                },
-            )
+        archive_response = _make_stream_response(
+            200,
+            b'patch-bytes',
+            {
+                'X-Archive-Base-Commit': 'abc123',
+                'X-Archive-Repo-Remote': (
+                    'https%3A%2F%2Fgithub.com%2Fexample%2Frepo.git'
+                ),
+                'X-Archive-Branch': 'feature-x',
+                'X-Archive-Head-Commit': 'def456',
+                'X-Archive-Repo-Root': '%2Fworkspace%2Fproject%2Frepo',
+            },
         )
+        client = _stream_client(archive_response)
         store = MagicMock()
         writes: dict[str, bytes] = {}
         store.write.side_effect = lambda path, data: writes.__setitem__(path, data)
@@ -2123,9 +2127,13 @@ class TestArchiveWorkspaceHelper:
             path, open(src, 'rb').read()
         )
 
-        probe_workspace = AsyncMock(
-            return_value={'packages': {'npm': {'example': '1.0.0'}}}
-        )
+        probe_workspace = AsyncMock()
+
+        async def _probe(*args):
+            assert archive_response.stream_closed
+            return {'packages': {'npm': {'example': '1.0.0'}}}
+
+        probe_workspace.side_effect = _probe
         with (
             patch.object(
                 workspace_archive, '_get_archive_file_store', return_value=store
