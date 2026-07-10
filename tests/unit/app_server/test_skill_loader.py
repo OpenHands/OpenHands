@@ -21,6 +21,7 @@ from openhands.app_server.app_conversation.skill_loader import (
     _get_provider_type,
     _is_azure_devops_repository,
     _is_gitlab_repository,
+    authenticate_marketplace_sources,
     build_org_configs,
     build_sandbox_config,
     load_skills_from_agent_server,
@@ -857,3 +858,305 @@ class TestGetOrgRepositoryUrl:
 
         # Assert
         assert result is None
+
+
+# ===== Tests for registered_marketplaces support =====
+
+
+class TestLoadSkillsWithMarketplaces:
+    """Test load_skills_from_agent_server with registered_marketplaces parameter."""
+
+    @pytest.mark.asyncio
+    @patch('httpx.AsyncClient')
+    async def test_passes_registered_marketplaces_in_payload(self, mock_client_class):
+        """Test that registered_marketplaces is included in the API payload."""
+        from openhands.app_server.settings.settings_models import (
+            MarketplaceRegistration,
+        )
+
+        # Arrange
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'skills': [],
+            'sources': {},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        marketplaces = [
+            MarketplaceRegistration(
+                name='public',
+                source='github:OpenHands/skills',
+                auto_load=True,
+            ),
+            MarketplaceRegistration(
+                name='team',
+                source='github:acme/plugins',
+                ref='v1.0.0',
+                repo_path='marketplaces/internal',
+            ),
+        ]
+
+        # Act
+        await load_skills_from_agent_server(
+            agent_server_url='http://localhost:8000',
+            session_api_key='test-key',
+            project_dir='/workspace/project',
+            registered_marketplaces=marketplaces,
+        )
+
+        # Assert
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        payload = call_args[1]['json']
+
+        assert 'registered_marketplaces' in payload
+        assert len(payload['registered_marketplaces']) == 2
+
+        # Verify first marketplace
+        mp1 = payload['registered_marketplaces'][0]
+        assert mp1['name'] == 'public'
+        assert mp1['source'] == 'github:OpenHands/skills'
+        assert mp1['auto_load']
+        # None values are stripped by model_dump()
+        assert 'ref' not in mp1
+        assert 'repo_path' not in mp1
+
+        # Verify second marketplace
+        mp2 = payload['registered_marketplaces'][1]
+        assert mp2['name'] == 'team'
+        assert mp2['source'] == 'github:acme/plugins'
+        assert mp2['ref'] == 'v1.0.0'
+        assert mp2['repo_path'] == 'marketplaces/internal'
+        # auto_load=False is included (not stripped like None values)
+        assert mp2['auto_load'] is False
+
+    @pytest.mark.asyncio
+    @patch('httpx.AsyncClient')
+    async def test_handles_none_registered_marketplaces(self, mock_client_class):
+        """None registered_marketplaces omits the key entirely from the payload.
+
+        The agent-server field is a non-optional list, so sending ``null`` would
+        fail validation and drop all skills; omitting the key uses its default.
+        """
+        # Arrange
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'skills': [],
+            'sources': {},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        # Act
+        await load_skills_from_agent_server(
+            agent_server_url='http://localhost:8000',
+            session_api_key='test-key',
+            project_dir='/workspace/project',
+            registered_marketplaces=None,
+        )
+
+        # Assert
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        payload = call_args[1]['json']
+
+        # The key is omitted entirely (not sent as null) when not provided.
+        assert 'registered_marketplaces' not in payload
+
+    @pytest.mark.asyncio
+    @patch('httpx.AsyncClient')
+    async def test_handles_empty_registered_marketplaces(self, mock_client_class):
+        """Test that empty registered_marketplaces list is handled correctly."""
+        # Arrange
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'skills': [],
+            'sources': {},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        # Act
+        await load_skills_from_agent_server(
+            agent_server_url='http://localhost:8000',
+            session_api_key='test-key',
+            project_dir='/workspace/project',
+            registered_marketplaces=[],
+        )
+
+        # Assert
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        payload = call_args[1]['json']
+
+        # Empty list is now preserved (semantic distinction from None)
+        # Empty list = "explicitly no marketplaces", None = "not specified"
+        assert payload.get('registered_marketplaces') == []
+
+
+# ===== Tests for authenticate_marketplace_sources =====
+
+
+AUTHENTICATED_URL = (
+    'https://x-access-token:token123@github.com/OpenHands/extensions-private.git'
+)
+
+
+def _make_registration(**overrides):
+    """Build a MarketplaceRegistration with private-repo defaults."""
+    from openhands.app_server.settings.settings_models import MarketplaceRegistration
+
+    fields = {
+        'name': 'extensions-private',
+        'source': 'github:OpenHands/extensions-private',
+        'auto_load': True,
+    }
+    fields.update(overrides)
+    return MarketplaceRegistration(**fields)
+
+
+class TestAuthenticateMarketplaceSources:
+    """Test authenticate_marketplace_sources source rewriting."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'source',
+        [
+            'github:OpenHands/extensions-private',
+            'OpenHands/extensions-private',
+            'https://github.com/OpenHands/extensions-private.git',
+        ],
+    )
+    async def test_rewrites_auto_load_source_to_authenticated_url(self, source):
+        """Any stored git source form is resolved and rewritten to a token URL."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_authenticated_git_url.return_value = AUTHENTICATED_URL
+        registrations = [_make_registration(source=source)]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        assert result[0].source == AUTHENTICATED_URL
+        mock_user_context.get_authenticated_git_url.assert_awaited_once_with(
+            'OpenHands/extensions-private', is_optional=True
+        )
+
+    @pytest.mark.asyncio
+    async def test_returns_copy_preserving_fields_without_mutating_input(self):
+        """The rewrite lands on a copy; other fields and the input stay intact."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_authenticated_git_url.return_value = AUTHENTICATED_URL
+        registration = _make_registration(ref='main', repo_path='marketplaces/team')
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            [registration], mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        rewritten = result[0]
+        assert (rewritten.name, rewritten.ref, rewritten.repo_path) == (
+            'extensions-private',
+            'main',
+            'marketplaces/team',
+        )
+        assert registration.source == 'github:OpenHands/extensions-private'
+
+    @pytest.mark.asyncio
+    async def test_keeps_source_when_resolution_fails(self):
+        """A failed token resolution degrades to the original source, not an error."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_authenticated_git_url.side_effect = Exception(
+            'no provider tokens'
+        )
+        registrations = [_make_registration()]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        assert result[0].source == 'github:OpenHands/extensions-private'
+
+    @pytest.mark.asyncio
+    async def test_skips_non_auto_load_registrations(self):
+        """Registrations that are not auto-loaded are never resolved."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        registrations = [_make_registration(auto_load=False)]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        assert result[0].source == 'github:OpenHands/extensions-private'
+        mock_user_context.get_authenticated_git_url.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'source',
+        [
+            'localskills',  # single segment: relative local path
+            'https://codeberg.org/owner/repo.git',  # unrecognized host keeps '://'
+        ],
+    )
+    async def test_skips_sources_without_provider_repo_shape(self, source):
+        """Sources that do not map to an owner/repo path pass through untouched."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        registrations = [_make_registration(source=source)]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        assert result[0].source == source
+        mock_user_context.get_authenticated_git_url.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('registrations', [None, []])
+    async def test_passes_through_falsy_input_untouched(self, registrations):
+        """None/empty inputs are returned as-is so wire semantics are preserved."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is registrations
+        mock_user_context.get_authenticated_git_url.assert_not_awaited()

@@ -33,7 +33,10 @@ class WebClientFeatureFlags(BaseModel):
     # existing installs are unaffected. UI-level only — previously saved BYOK
     # settings keep working at runtime.
     allow_user_llm_configuration: bool = True
-    enable_acp: bool = False
+    # Defaults to True so the ACP agent configuration UI (Settings > Agent) is
+    # visible on SaaS and existing installs, matching Agent Canvas. Set
+    # ENABLE_ACP=false to hide it. UI-level only.
+    enable_acp: bool = True
     deployment_mode: DeploymentMode | None = None
     enable_onboarding: bool = False
     enable_automations: bool = True
@@ -76,6 +79,7 @@ class WebClientConfig(DiscriminatedUnionMixin):
     gitlab_enabled: bool = False
     provider_default_hosts: dict[str, str] = Field(default_factory=dict)
     slack_enabled: bool = False
+    email_enabled: bool = False
     acp_providers: list[ACPProviderConfig] = Field(default_factory=list)
     # Hostname of the Jira Data Center server when DC OAuth is configured, so the
     # configure form can pre-fill and lock the host field (the OAuth callback only

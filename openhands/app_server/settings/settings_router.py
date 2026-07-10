@@ -26,6 +26,11 @@ from openhands.app_server.settings.llm_profiles import (
     StrictLLM,
     has_real_api_key,
 )
+from openhands.app_server.settings.marketplace_composition import (
+    compose_marketplaces,
+    duplicate_marketplace_names,
+    get_instance_default_marketplaces,
+)
 from openhands.app_server.settings.settings_models import (
     GETSettingsModel,
     Settings,
@@ -55,6 +60,36 @@ from openhands.sdk.settings import (
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
 )
+
+
+def _get_instance_default_marketplaces() -> list[dict[str, Any]]:
+    """Instance-level default marketplaces from the environment.
+
+    Thin wrapper over :func:`marketplace_composition.get_instance_default_marketplaces`
+    (the single source of truth), kept for import stability.
+    """
+    return get_instance_default_marketplaces()
+
+
+def _merge_marketplaces(
+    instance_marketplaces: list[dict[str, Any]],
+    org_marketplaces: list[dict[str, Any]],
+    user_marketplaces: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Compose marketplaces across scopes, keyed on ``name`` (additive).
+
+    Thin wrapper over :func:`marketplace_composition.compose_marketplaces`.
+    Returns ``(inherited, personal)`` as JSON-ready dicts (instance + org are
+    inherited/read-only; user-only names are personal).
+    """
+    composed = compose_marketplaces(
+        instance_marketplaces, org_marketplaces, user_marketplaces
+    )
+    return (
+        [mp.model_dump(mode='json') for mp in composed.inherited],
+        [mp.model_dump(mode='json') for mp in composed.personal],
+    )
+
 
 # Create router with /api/v1/settings prefix
 router = APIRouter(
@@ -98,6 +133,7 @@ async def load_settings(
     settings_store: SettingsStore = Depends(get_user_settings_store),
     settings: Settings = Depends(get_user_settings),
     secrets_store: SecretsStore = Depends(get_secrets_store),
+    user_id: str | None = Depends(get_user_id),
 ) -> GETSettingsModel | JSONResponse:
     """Load user settings.
 
@@ -158,6 +194,19 @@ async def load_settings(
         resp_llm.api_key = None
         settings_with_token_data.search_api_key = None
         settings_with_token_data.sandbox_api_key = None
+
+        # Marketplace composition: Instance -> Org -> User (additive, name-keyed).
+        # ``inherited`` (instance + org) is read-only; ``personal`` is the user's
+        # own set. Composition validates + dedupes defensively so a bad stored row
+        # can never break settings loading.
+        composed = compose_marketplaces(
+            get_instance_default_marketplaces(),
+            await settings_store.get_org_marketplaces(user_id),
+            settings.registered_marketplaces,
+        )
+        settings_with_token_data.inherited_marketplaces = composed.inherited
+        settings_with_token_data.registered_marketplaces = composed.personal
+
         return settings_with_token_data
     except Exception as e:
         logger.warning(f'Invalid token: {e}')
@@ -217,6 +266,28 @@ async def store_settings(
         settings = existing_settings.model_copy() if existing_settings else Settings()
         settings.update(payload)
 
+        # When the user edits their marketplaces, reject names that duplicate each
+        # other or collide with inherited (instance/org) names. Enforcing this on
+        # write (the model validator does not run on model_copy/setattr) prevents a
+        # bad row that would later break settings loading (self-lockout).
+        if 'registered_marketplaces' in payload:
+            inherited_names = [
+                name
+                for mp in (
+                    *get_instance_default_marketplaces(),
+                    *(await settings_store.get_org_marketplaces(user_id)),
+                )
+                if (name := mp.get('name'))
+            ]
+            conflicts = duplicate_marketplace_names(
+                settings.registered_marketplaces, inherited_names
+            )
+            if conflicts:
+                raise ValueError(
+                    'Marketplace name(s) already in use or duplicated: '
+                    + ', '.join(sorted(conflicts))
+                )
+
         _post_merge_llm_fixups(settings)
 
         if existing_settings:
@@ -255,6 +326,13 @@ async def store_settings(
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={'message': 'Settings stored'},
+        )
+    except ValueError as e:
+        # Validation errors (e.g., invalid marketplace data) return 400
+        logger.warning(f'Settings validation error: {e}')
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={'error': str(e)},
         )
     except Exception as e:
         logger.warning(f'Something went wrong storing settings: {e}')

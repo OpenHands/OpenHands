@@ -20,8 +20,8 @@ from server.routes.org_invitation_models import (
     PendingInvitationsResponse,
     UserAlreadyMemberError,
 )
-from server.services.email_service import EmailService
 from server.services.org_invitation_service import OrgInvitationService
+from server.services.smtp_email_service import SMTPEmailService
 from server.utils.rate_limit_utils import (
     RATE_LIMIT_ORG_INVITATION_USER_SECONDS,
     check_rate_limit_by_user_id,
@@ -149,7 +149,7 @@ async def create_invitation(
             failed=[
                 InvitationFailure(email=email, error=error) for email, error in failed
             ],
-            email_delivery_configured=EmailService.is_configured(),
+            email_delivery_configured=SMTPEmailService.is_configured(),
         )
 
     except InsufficientPermissionError as e:
@@ -194,7 +194,7 @@ async def list_pending_invitations(
         items = [await InvitationResponse.from_invitation(inv) for inv in invitations]
         return PendingInvitationsResponse(
             items=items,
-            email_delivery_configured=EmailService.is_configured(),
+            email_delivery_configured=SMTPEmailService.is_configured(),
             auto_add_enabled=await _org_auto_adds_users(org_id),
         )
     except HTTPException:

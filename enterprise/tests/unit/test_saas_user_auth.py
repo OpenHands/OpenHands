@@ -662,9 +662,10 @@ async def test_saas_user_auth_from_bearer_success():
 
 @pytest.mark.asyncio
 async def test_saas_user_auth_from_bearer_no_auth_header():
-    """Test that saas_user_auth_from_bearer returns None if no auth header."""
+    """Test that saas_user_auth_from_bearer returns None if no auth header or cookie."""
     mock_request = MagicMock()
     mock_request.headers = {}
+    mock_request.cookies = {}
 
     result = await saas_user_auth_from_bearer(mock_request)
 
@@ -842,10 +843,11 @@ def test_get_api_key_from_header_with_both_headers():
 
 
 def test_get_api_key_from_header_with_no_headers():
-    """Test that get_api_key_from_header returns None when no relevant headers are present."""
-    # Create a mock request with no relevant headers
+    """Test that get_api_key_from_header returns None when no relevant headers or cookies are present."""
+    # Create a mock request with no relevant headers or cookies
     mock_request = MagicMock(spec=Request)
     mock_request.headers = {'Other-Header': 'some_value'}
+    mock_request.cookies = {}
 
     # Call the function
     api_key = get_api_key_from_header(mock_request)
@@ -859,6 +861,7 @@ def test_get_api_key_from_header_with_invalid_authorization_format():
     # Create a mock request with incorrectly formatted Authorization header
     mock_request = MagicMock(spec=Request)
     mock_request.headers = {'Authorization': 'InvalidFormat api_key'}
+    mock_request.cookies = {}
 
     # Call the function
     api_key = get_api_key_from_header(mock_request)
@@ -977,6 +980,134 @@ def test_get_api_key_from_header_bearer_with_empty_token():
     # Assert that empty string from Bearer is returned (current behavior)
     # This tests the current implementation behavior
     assert api_key == ''
+
+
+def test_get_api_key_from_header_with_api_key_cookie():
+    """Test that get_api_key_from_header extracts API key from the api_key cookie."""
+    # Create a mock request with the api_key cookie set
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {}
+    mock_request.cookies = {'api_key': 'cookie_api_key'}
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that the API key from the cookie was correctly extracted
+    assert api_key == 'cookie_api_key'
+
+
+def test_get_api_key_from_header_priority_authorization_over_api_key_cookie():
+    """Test that the Authorization header takes priority over the api_key cookie."""
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {'Authorization': 'Bearer auth_api_key'}
+    mock_request.cookies = {'api_key': 'cookie_api_key'}
+
+    api_key = get_api_key_from_header(mock_request)
+
+    # The Authorization header value should win.
+    assert api_key == 'auth_api_key'
+
+
+def test_get_api_key_from_header_priority_x_session_over_api_key_cookie():
+    """Test that the X-Session-API-Key header takes priority over the api_key cookie."""
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {'X-Session-API-Key': 'session_api_key'}
+    mock_request.cookies = {'api_key': 'cookie_api_key'}
+
+    api_key = get_api_key_from_header(mock_request)
+
+    # The X-Session-API-Key header value should win.
+    assert api_key == 'session_api_key'
+
+
+def test_get_api_key_from_header_priority_x_access_token_over_api_key_cookie():
+    """Test that the X-Access-Token header takes priority over the api_key cookie."""
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {'X-Access-Token': 'access_token_key'}
+    mock_request.cookies = {'api_key': 'cookie_api_key'}
+
+    api_key = get_api_key_from_header(mock_request)
+
+    # The X-Access-Token header value should win over the cookie.
+    assert api_key == 'access_token_key'
+
+
+def test_get_api_key_from_header_with_empty_api_key_cookie():
+    """An empty api_key cookie value should be treated as absent and fall through."""
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {}
+    mock_request.cookies = {'api_key': ''}
+
+    api_key = get_api_key_from_header(mock_request)
+
+    # Empty cookie value yields an empty string (mirrors the empty-header
+    # behaviour). Callers like `saas_user_auth_from_bearer` treat falsy
+    # values as missing credentials.
+    assert api_key == ''
+
+
+def test_get_api_key_from_header_with_unrelated_cookies():
+    """Unrelated cookies must not be picked up as an API key."""
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {}
+    mock_request.cookies = {'session': 'abc123', 'preferences': 'dark'}
+
+    api_key = get_api_key_from_header(mock_request)
+
+    assert api_key is None
+
+
+@pytest.mark.asyncio
+async def test_saas_user_auth_from_bearer_via_api_key_cookie():
+    """A valid api_key cookie should authenticate the same as an X-Access-Token header."""
+    mock_request = MagicMock()
+    mock_request.headers = {}
+    mock_request.cookies = {'api_key': 'cookie_api_key'}
+
+    mock_org_id = uuid.uuid4()
+    mock_validation_result = ApiKeyValidationResult(
+        user_id='test_user_id',
+        org_id=mock_org_id,
+        key_id=7,
+        key_name='Cookie Key',
+    )
+
+    with patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls:
+        mock_api_key_store = MagicMock()
+        mock_api_key_store.validate_api_key = AsyncMock(
+            return_value=mock_validation_result
+        )
+        mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+
+        result = await saas_user_auth_from_bearer(mock_request)
+
+        assert isinstance(result, SaasUserAuth)
+        assert result.user_id == 'test_user_id'
+        assert result.api_key_org_id == mock_org_id
+        assert result.api_key_id == 7
+        assert result.api_key_name == 'Cookie Key'
+        assert result.auth_type == AuthType.BEARER
+        mock_api_key_store.validate_api_key.assert_called_once_with('cookie_api_key')
+
+
+@pytest.mark.asyncio
+async def test_saas_user_auth_from_bearer_via_api_key_cookie_invalid():
+    """An api_key cookie with an invalid key should produce no auth, same as a bad header."""
+    mock_request = MagicMock()
+    mock_request.headers = {}
+    mock_request.cookies = {'api_key': 'invalid_cookie_key'}
+
+    with patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls:
+        mock_api_key_store = MagicMock()
+        mock_api_key_store.validate_api_key = AsyncMock(return_value=None)
+        mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+
+        result = await saas_user_auth_from_bearer(mock_request)
+
+        assert result is None
+        mock_api_key_store.validate_api_key.assert_called_once_with(
+            'invalid_cookie_key'
+        )
 
 
 @pytest.mark.asyncio

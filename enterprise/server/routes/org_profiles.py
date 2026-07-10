@@ -20,6 +20,10 @@ from server.constants import LITE_LLM_API_URL
 from server.routes.org_models import OrgNotFoundError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from storage.agent_profile_resolution import (
+    OrgLLMProfileMutator,
+    load_agent_profiles,
+)
 from storage.database import a_session_maker
 from storage.org import Org
 from storage.org_member import OrgMember
@@ -38,6 +42,12 @@ from openhands.app_server.settings.settings_models import (
 from openhands.app_server.utils.llm import MASKED_API_KEY, is_openhands_model
 from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk.llm import LLM
+from openhands.sdk.profiles import (
+    ProfileReferenced,
+    delete_llm_profile,
+    rename_llm_profile,
+)
+from openhands.sdk.profiles.agent_profile_store import PROFILE_NAME_PATTERN
 
 from ..auth.authorization import Permission, require_permission
 
@@ -96,9 +106,21 @@ class SaveProfileRequest(BaseModel):
 
 
 class RenameProfileRequest(BaseModel):
-    """Request body for renaming a profile."""
+    """Request body for renaming a profile.
 
-    new_name: str = Field(..., min_length=1, max_length=100)
+    ``new_name`` is constrained to ``PROFILE_NAME_PATTERN`` because
+    ``rename_llm_profile`` (the SDK FK-cascade helper backing this endpoint)
+    validates the new name against that same pattern before renaming and
+    repointing any referencing Agent Profiles — a name outside it always 422s
+    there. Declaring the constraint here makes the schema honest and gives a
+    field-level 422 instead of one raised deep inside the handler. ``save``
+    (create/update) is intentionally left permissive: it never calls the FK
+    helper, so it has no such requirement.
+    """
+
+    new_name: str = Field(
+        ..., min_length=1, max_length=64, pattern=PROFILE_NAME_PATTERN
+    )
 
 
 # ── Helper Functions ────────────────────────────────────────────────────────
@@ -247,17 +269,28 @@ async def delete_profile(
     name: str = Path(..., min_length=1),
     user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
 ) -> ProfileMutationResponse:
-    """Delete an LLM profile."""
+    """Delete an LLM profile.
+
+    Blocked with 409 if any of the org's Agent Profiles still reference this LLM
+    profile by ``llm_profile_ref`` (the SDK ``find_referrers`` FK guard) — both
+    collections live on the same org row, so the ``SELECT ... FOR UPDATE`` lock
+    makes the referrer check and the delete atomic.
+    """
     async with _org_profiles_transaction(org_id, user_id) as (
         _session,
-        _org,
+        org,
         profiles,
     ):
-        if not profiles.delete(name):
+        if not profiles.has(name):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Profile '{name}' not found",
             )
+        agent_profiles = load_agent_profiles(org)
+        try:
+            delete_llm_profile(agent_profiles, OrgLLMProfileMutator(profiles), name)
+        except ProfileReferenced as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
     return ProfileMutationResponse(name=name, message=f"Profile '{name}' deleted")
 
@@ -359,18 +392,47 @@ async def rename_profile(
     request: RenameProfileRequest = Body(...),
     user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
 ) -> ProfileMutationResponse:
-    """Rename an LLM profile."""
+    """Rename an LLM profile, cascading the rename to any Agent Profiles that
+    reference it.
+
+    The SDK ``rename_llm_profile`` renames the LLM profile and repoints every
+    ``agent_profiles.*.llm_profile_ref == name`` to ``new_name`` under the org
+    row lock, so a referencing Agent Profile never dangles. Both collections are
+    written back in the same transaction.
+    """
     async with _org_profiles_transaction(org_id, user_id) as (
         _session,
-        _org,
+        org,
         profiles,
     ):
+        agent_profiles = load_agent_profiles(org)
+        # Loading is best-effort (invalid entries are dropped), so only write
+        # the collection back when the cascade actually repointed a ref — an
+        # unconditional write-back would erase a stored profile that merely
+        # failed to parse.
+        before = agent_profiles.model_dump(
+            mode='json', context={'expose_secrets': True}
+        )
         try:
-            profiles.rename(name, request.new_name)
+            rename_llm_profile(
+                agent_profiles,
+                OrgLLMProfileMutator(profiles),
+                name,
+                request.new_name,
+            )
         except ProfileNotFoundError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
         except ProfileAlreadyExistsError as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        except ValueError as exc:
+            # rename_llm_profile validates new_name against PROFILE_NAME_PATTERN.
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            )
+        # The cascade may have repointed agent-profile refs — persist them too.
+        after = agent_profiles.model_dump(mode='json', context={'expose_secrets': True})
+        if after != before:
+            org.agent_profiles = after
 
     return ProfileMutationResponse(
         name=request.new_name,

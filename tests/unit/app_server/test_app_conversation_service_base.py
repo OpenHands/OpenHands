@@ -1279,6 +1279,8 @@ class TestLoadAndMergeAllSkills:
             assert call_kwargs['agent_server_url'] == 'http://localhost:8000'
             assert call_kwargs['session_api_key'] == 'test-api-key'
             assert call_kwargs['project_dir'] == '/workspace/repo'
+            # Verify registered_marketplaces is passed (can be None or a list)
+            assert 'registered_marketplaces' in call_kwargs
 
     @pytest.mark.asyncio
     @patch(
@@ -1401,3 +1403,105 @@ class TestLoadAndMergeAllSkills:
 
             # Assert
             assert result == []
+
+    @pytest.mark.asyncio
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_skills_from_agent_server'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.build_org_configs'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.build_sandbox_config'
+    )
+    async def test_sends_authenticated_marketplace_sources_to_agent_server(
+        self,
+        mock_build_sandbox_config,
+        mock_build_org_configs,
+        mock_load_skills,
+    ):
+        """Auto-load marketplace sources reach the agent-server as token URLs."""
+        # Arrange
+        from openhands.app_server.settings.settings_models import (
+            MarketplaceRegistration,
+        )
+
+        authenticated_url = 'https://x-access-token:tok@github.com/o/private.git'
+        mock_user_context = Mock(spec=UserContext)
+        mock_user_context.get_authenticated_git_url = AsyncMock(
+            return_value=authenticated_url
+        )
+        with patch.object(AppConversationServiceBase, '__abstractmethods__', set()):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True, user_context=mock_user_context
+            )
+
+            sandbox = Mock(spec=SandboxInfo)
+            sandbox.exposed_urls = []
+            sandbox.session_api_key = 'test-key'
+
+            mock_load_skills.return_value = []
+            mock_build_org_configs.return_value = []
+            mock_build_sandbox_config.return_value = None
+
+            marketplaces = [
+                MarketplaceRegistration(
+                    name='private', source='github:o/private', auto_load=True
+                )
+            ]
+
+            # Act
+            await service.load_and_merge_all_skills(
+                sandbox,
+                'owner/repo',
+                '/workspace/repo',
+                'http://localhost:8000',
+                registered_marketplaces=marketplaces,
+            )
+
+            # Assert
+            sent = mock_load_skills.call_args.kwargs['registered_marketplaces']
+            assert [reg.source for reg in sent] == [authenticated_url]
+
+
+class TestLoadSkillsAndUpdateAgent:
+    """_load_skills_and_update_agent threads marketplaces into skill loading."""
+
+    @pytest.mark.asyncio
+    async def test_forwards_registered_marketplaces(self):
+        """Registered marketplaces reach load_and_merge_all_skills at startup."""
+        # Arrange
+        from openhands.app_server.settings.settings_models import (
+            MarketplaceRegistration,
+        )
+
+        mock_user_context = Mock(spec=UserContext)
+        with patch.object(AppConversationServiceBase, '__abstractmethods__', set()):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True, user_context=mock_user_context
+            )
+            service.load_and_merge_all_skills = AsyncMock(return_value=[])
+            service._create_agent_with_skills = Mock(return_value='updated-agent')
+
+            remote_workspace = AsyncMock()
+            remote_workspace.host = 'http://agent:8000'
+            marketplaces = [
+                MarketplaceRegistration(name='team', source='github:o/team')
+            ]
+
+            # Act
+            result = await service._load_skills_and_update_agent(
+                Mock(spec=SandboxInfo),
+                Mock(),
+                remote_workspace,
+                'owner/repo',
+                '/workspace/repo',
+                registered_marketplaces=marketplaces,
+            )
+
+            # Assert
+            assert result == 'updated-agent'
+            forwarded = service.load_and_merge_all_skills.call_args.kwargs[
+                'registered_marketplaces'
+            ]
+            assert forwarded == marketplaces

@@ -14,15 +14,23 @@ from uuid import UUID
 
 from fastapi import Request
 from server.routes.org_models import (
+    AgentUsageData,
     DailyUsageData,
+    ModelUsageData,
     OrgConversationPage,
     OrgConversationResponse,
     OrgConversationStats,
     OrgUsageStats,
+    OrgUserUsageRow,
+    OrgUserUsageStats,
     TeamUsageData,
 )
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
+from storage.openhands_pr import OpenhandsPR
+from storage.org_budget_settings import OrgBudgetSettings
+from storage.org_user_budget_override import OrgUserBudgetOverride
+from storage.stored_conversation_cost_event import StoredConversationCostEvent
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.user import User
@@ -47,6 +55,36 @@ TIME_WINDOW_OPTIONS = {
     '30d': 30,
     '90d': 90,
 }
+
+
+AGENT_LABELS = {
+    'openhands': 'OpenHands',
+    'acp': 'ACP',
+}
+
+
+def _format_acp_agent_label(llm_model: str | None) -> str:
+    if not llm_model:
+        return AGENT_LABELS['acp']
+    llm_model_lower = llm_model.lower()
+    if 'claude' in llm_model_lower:
+        return 'Claude'
+    if 'codex' in llm_model_lower:
+        return 'Codex'
+    if 'gpt' in llm_model_lower or 'openai' in llm_model_lower:
+        return 'OpenAI'
+    if 'gemini' in llm_model_lower:
+        return 'Gemini'
+    return llm_model
+
+
+def _format_agent_label(agent_kind: str | None, llm_model: str | None) -> str:
+    if agent_kind == 'acp':
+        return _format_acp_agent_label(llm_model)
+    if not agent_kind:
+        return AGENT_LABELS['openhands']
+    return AGENT_LABELS.get(agent_kind, agent_kind)
+
 
 MAX_SANDBOX_STATUS_FILTER_ROWS = 5000
 
@@ -75,6 +113,7 @@ class OrgConversationService:
         saas_metadata: StoredConversationMetadataSaas,
         user: User | None,
         sandbox_info: SandboxInfo | None,
+        pr_merged: bool | None = None,
     ) -> OrgConversationResponse:
         """Build an OrgConversationResponse from a row and sandbox info."""
         resolved_sandbox_status = sandbox_info.status.value if sandbox_info else None
@@ -125,7 +164,10 @@ class OrgConversationService:
             execution_status=metadata.execution_status,
             selected_repository=metadata.selected_repository,
             selected_branch=metadata.selected_branch,
+            git_provider=metadata.git_provider,
             trigger=metadata.trigger,
+            pr_number=metadata.pr_number or [],
+            pr_merged=pr_merged,
             tags=metadata.tags or {},
             accumulated_cost=metrics.accumulated_cost,
             prompt_tokens=metrics.accumulated_token_usage.prompt_tokens,  # type: ignore[union-attr]
@@ -149,6 +191,52 @@ class OrgConversationService:
         )
         result = await self.db_session.execute(count_query)
         return result.scalar() or 0
+
+    async def _load_pr_merge_map(
+        self, pr_keys: set[tuple[str, str, int]]
+    ) -> dict[tuple[str, str, int], bool | None]:
+        if not pr_keys:
+            return {}
+
+        query = select(
+            OpenhandsPR.provider,
+            OpenhandsPR.repo_name,
+            OpenhandsPR.pr_number,
+            OpenhandsPR.merged,
+        ).where(
+            tuple_(
+                OpenhandsPR.provider, OpenhandsPR.repo_name, OpenhandsPR.pr_number
+            ).in_(pr_keys)
+        )
+        result = await self.db_session.execute(query)
+        return {
+            (provider, repo_name, pr_number): merged
+            for provider, repo_name, pr_number, merged in result.all()
+        }
+
+    def _resolve_pr_merged(
+        self,
+        metadata: StoredConversationMetadata,
+        pr_map: dict[tuple[str, str, int], bool | None],
+    ) -> bool | None:
+        if not metadata.pr_number:
+            return None
+        if not metadata.selected_repository or not metadata.git_provider:
+            return None
+
+        statuses: list[bool | None] = []
+        for pr_number in metadata.pr_number or []:
+            key = (metadata.git_provider, metadata.selected_repository, pr_number)
+            if key in pr_map:
+                statuses.append(pr_map[key])
+
+        if not statuses:
+            return None
+        if any(status is True for status in statuses):
+            return True
+        if any(status is False for status in statuses):
+            return False
+        return None
 
     async def list_org_conversations(
         self,
@@ -306,13 +394,31 @@ class OrgConversationService:
                         extra={'org_id': str(org_id), 'error': str(e)},
                     )
 
+        pr_keys: set[tuple[str, str, int]] = set()
+        for metadata, _, _ in rows:
+            if (
+                metadata.pr_number
+                and metadata.selected_repository
+                and metadata.git_provider
+            ):
+                for pr_number in metadata.pr_number:
+                    pr_keys.add(
+                        (metadata.git_provider, metadata.selected_repository, pr_number)
+                    )
+
+        pr_merge_map = await self._load_pr_merge_map(pr_keys)
+
         # Build response items
         items: list[OrgConversationResponse] = []
         for metadata, saas_metadata, user in rows:
             sandbox_info = sandbox_info_map.get(metadata.sandbox_id)
             items.append(
                 self._build_conversation_response(
-                    metadata, saas_metadata, user, sandbox_info
+                    metadata,
+                    saas_metadata,
+                    user,
+                    sandbox_info,
+                    pr_merged=self._resolve_pr_merged(metadata, pr_merge_map),
                 )
             )
 
@@ -643,6 +749,102 @@ class OrgConversationService:
                 )
             )
 
+        # 6. Model usage (by model)
+        model_query = (
+            select(
+                StoredConversationMetadata.llm_model,
+                func.count(StoredConversationMetadata.conversation_id).label(
+                    'conv_count'
+                ),
+                func.coalesce(
+                    func.sum(
+                        StoredConversationMetadata.prompt_tokens
+                        + StoredConversationMetadata.completion_tokens
+                    ),
+                    0,
+                ).label('token_count'),
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.accumulated_cost), 0
+                ).label('total_cost'),
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationMetadata.created_at >= cutoff)
+            .group_by(StoredConversationMetadata.llm_model)
+            .order_by(
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.accumulated_cost), 0
+                ).desc()
+            )
+        )
+        result = await self.db_session.execute(model_query)
+        model_rows = result.all()
+        model_usage = []
+        for row in model_rows:
+            model_usage.append(
+                ModelUsageData(
+                    model_name=row.llm_model or 'Unknown',
+                    conversation_count=int(row.conv_count or 0),
+                    total_tokens=int(row.token_count or 0),
+                    total_cost=float(row.total_cost or 0.0),
+                )
+            )
+
+        agent_query = (
+            select(
+                StoredConversationMetadata.agent_kind,
+                StoredConversationMetadata.llm_model,
+                func.count(StoredConversationMetadata.conversation_id).label(
+                    'conv_count'
+                ),
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.accumulated_cost), 0
+                ).label('total_cost'),
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationMetadata.created_at >= cutoff)
+            .group_by(
+                StoredConversationMetadata.agent_kind,
+                StoredConversationMetadata.llm_model,
+            )
+            .order_by(
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.accumulated_cost), 0
+                ).desc()
+            )
+        )
+        result = await self.db_session.execute(agent_query)
+        agent_rows = result.all()
+        agent_counts: dict[str, int] = {}
+        agent_costs: dict[str, float] = {}
+        for row in agent_rows:
+            label = _format_agent_label(row.agent_kind, row.llm_model)
+            agent_counts[label] = agent_counts.get(label, 0) + int(row.conv_count or 0)
+            agent_costs[label] = agent_costs.get(label, 0.0) + float(
+                row.total_cost or 0.0
+            )
+
+        agent_usage = [
+            AgentUsageData(
+                agent_name=label,
+                conversation_count=agent_counts[label],
+                total_cost=agent_costs[label],
+            )
+            for label in agent_counts
+        ]
+        agent_usage.sort(key=lambda item: item.total_cost, reverse=True)
+
         return OrgUsageStats(
             active_users=int(active_users),
             agent_runs=int(agent_runs),
@@ -651,7 +853,221 @@ class OrgConversationService:
             estimated_spend=float(total_cost or 0),
             daily_usage=daily_usage,
             team_usage=team_usage,
+            model_usage=model_usage,
+            agent_usage=agent_usage,
         )
+
+    async def get_user_usage_stats(
+        self,
+        org_id: UUID,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> OrgUserUsageStats:
+        now = datetime.now(UTC)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        year_start = now.replace(
+            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+        )
+
+        base_filter = [
+            StoredConversationMetadata.conversation_version == 'V1',
+            StoredConversationMetadataSaas.org_id == org_id,
+        ]
+
+        cost_events_subquery = (
+            select(
+                StoredConversationMetadataSaas.user_id.label('user_id'),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                StoredConversationCostEvent.occurred_at >= month_start,
+                                StoredConversationCostEvent.cost_delta,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label('spend_mtd'),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                StoredConversationCostEvent.occurred_at >= year_start,
+                                StoredConversationCostEvent.cost_delta,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label('spend_ytd'),
+            )
+            .select_from(StoredConversationCostEvent)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationCostEvent.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .join(
+                StoredConversationMetadata,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .group_by(StoredConversationMetadataSaas.user_id)
+        ).subquery()
+
+        user_query = (
+            select(
+                StoredConversationMetadataSaas.user_id,
+                User.email,
+                User.git_user_name,
+                User.first_login_at,
+                User.last_login_at,
+                func.count(StoredConversationMetadata.conversation_id).label(
+                    'conversation_count'
+                ),
+                func.min(StoredConversationMetadata.created_at).label(
+                    'first_conversation_at'
+                ),
+                func.max(StoredConversationMetadata.created_at).label(
+                    'last_conversation_at'
+                ),
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.accumulated_cost), 0
+                ).label('lifetime_spend'),
+                func.coalesce(func.max(cost_events_subquery.c.spend_mtd), 0).label(
+                    'spend_mtd'
+                ),
+                func.coalesce(func.max(cost_events_subquery.c.spend_ytd), 0).label(
+                    'spend_ytd'
+                ),
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .outerjoin(
+                cost_events_subquery,
+                cost_events_subquery.c.user_id
+                == StoredConversationMetadataSaas.user_id,
+            )
+            .outerjoin(User, StoredConversationMetadataSaas.user_id == User.id)
+            .where(*base_filter)
+            .group_by(
+                StoredConversationMetadataSaas.user_id,
+                User.email,
+                User.git_user_name,
+                User.first_login_at,
+                User.last_login_at,
+            )
+            .order_by(
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.accumulated_cost), 0
+                ).desc()
+            )
+        )
+
+        fetch_limit = limit + 1
+        result = await self.db_session.execute(
+            user_query.limit(fetch_limit).offset(offset)
+        )
+        user_rows = result.all()
+        has_more = False
+        if len(user_rows) > limit:
+            has_more = True
+            user_rows = user_rows[:limit]
+
+        settings_result = await self.db_session.execute(
+            select(OrgBudgetSettings).where(OrgBudgetSettings.org_id == org_id)
+        )
+        budget_settings = settings_result.scalar_one_or_none()
+
+        overrides_result = await self.db_session.execute(
+            select(OrgUserBudgetOverride).where(OrgUserBudgetOverride.org_id == org_id)
+        )
+        override_map = {
+            override.user_id: override for override in overrides_result.scalars().all()
+        }
+
+        pr_rows_result = await self.db_session.execute(
+            select(
+                StoredConversationMetadataSaas.user_id,
+                StoredConversationMetadata.selected_repository,
+                StoredConversationMetadata.git_provider,
+                StoredConversationMetadata.pr_number,
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationMetadata.pr_number.is_not(None))
+        )
+        pr_rows = pr_rows_result.all()
+
+        user_pr_keys: dict[UUID, set[tuple[str, str, int]]] = {}
+        pr_keys: set[tuple[str, str, int]] = set()
+        for row in pr_rows:
+            if not row.selected_repository or not row.git_provider or not row.pr_number:
+                continue
+            for pr_number in row.pr_number:
+                key = (row.git_provider, row.selected_repository, pr_number)
+                pr_keys.add(key)
+                user_pr_keys.setdefault(row.user_id, set()).add(key)
+
+        pr_merge_map = await self._load_pr_merge_map(pr_keys)
+        merged_counts: dict[UUID, int] = {}
+        for user_id, keys in user_pr_keys.items():
+            merged_counts[user_id] = sum(
+                1 for key in keys if pr_merge_map.get(key) is True
+            )
+
+        items: list[OrgUserUsageRow] = []
+        for row in user_rows:
+            budget_monthly_limit = None
+            budget_is_disabled = False
+            if budget_settings and budget_settings.enabled:
+                override = override_map.get(row.user_id)
+                if override:
+                    budget_is_disabled = override.is_disabled
+                    if not override.is_disabled:
+                        budget_monthly_limit = (
+                            override.monthly_limit
+                            if override.monthly_limit is not None
+                            else budget_settings.default_user_monthly_limit
+                        )
+                else:
+                    budget_monthly_limit = budget_settings.default_user_monthly_limit
+
+            items.append(
+                OrgUserUsageRow(
+                    user_id=str(row.user_id),
+                    user_email=row.email,
+                    user_name=row.git_user_name,
+                    conversation_count=int(row.conversation_count or 0),
+                    first_conversation_at=row.first_conversation_at,
+                    last_conversation_at=row.last_conversation_at,
+                    first_login_at=row.first_login_at,
+                    last_login_at=row.last_login_at,
+                    spend_mtd=float(row.spend_mtd or 0.0),
+                    spend_ytd=float(row.spend_ytd or 0.0),
+                    spend_lifetime=float(row.lifetime_spend or 0.0),
+                    budget_monthly_limit=budget_monthly_limit,
+                    budget_is_disabled=budget_is_disabled,
+                    prs_merged=(
+                        merged_counts.get(row.user_id)
+                        if row.user_id in user_pr_keys
+                        else None
+                    ),
+                )
+            )
+
+        return OrgUserUsageStats(items=items, has_more=has_more)
 
     async def get_org_conversation(
         self,
@@ -688,6 +1104,18 @@ class OrgConversationService:
 
         metadata, saas_metadata, user = row
 
+        pr_keys: set[tuple[str, str, int]] = set()
+        if (
+            metadata.pr_number
+            and metadata.selected_repository
+            and metadata.git_provider
+        ):
+            for pr_number in metadata.pr_number:
+                pr_keys.add(
+                    (metadata.git_provider, metadata.selected_repository, pr_number)
+                )
+        pr_merge_map = await self._load_pr_merge_map(pr_keys)
+
         # Get sandbox info if available
         sandbox_info = None
         if metadata.sandbox_id and self.sandbox_service:
@@ -702,7 +1130,11 @@ class OrgConversationService:
                 )
 
         return self._build_conversation_response(
-            metadata, saas_metadata, user, sandbox_info
+            metadata,
+            saas_metadata,
+            user,
+            sandbox_info,
+            pr_merged=self._resolve_pr_merged(metadata, pr_merge_map),
         )
 
     async def stop_conversation(

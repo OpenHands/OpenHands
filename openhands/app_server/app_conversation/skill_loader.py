@@ -12,6 +12,7 @@ All source-specific skill loading is handled by the agent-server.
 
 import asyncio
 import logging
+from typing import Any
 
 import httpx
 from pydantic import BaseModel
@@ -19,6 +20,7 @@ from pydantic import BaseModel
 from openhands.app_server.integrations.provider import ProviderHandler, ProviderType
 from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
+from openhands.app_server.settings.settings_models import MarketplaceRegistration
 from openhands.app_server.user.user_context import UserContext
 from openhands.sdk.skills import KeywordTrigger, Skill, TaskTrigger
 
@@ -370,6 +372,116 @@ async def build_org_configs(
     return configs
 
 
+def parse_marketplace_source(source: str) -> tuple[str, str]:
+    """Parse marketplace source into provider and repo path.
+
+    Args:
+        source: Marketplace source (e.g., 'github:owner/repo', 'gitlab:owner/repo',
+                'https://github.com/owner/repo.git')
+
+    Returns:
+        Tuple of (provider, repo_path) where provider is 'github', 'gitlab', etc.
+    """
+    # Handle github:owner/repo format
+    if source.startswith('github:'):
+        return ('github', source[7:].lstrip('/'))
+    if source.startswith('gitlab:'):
+        return ('gitlab', source[7:].lstrip('/'))
+    if source.startswith('bitbucket:'):
+        return ('bitbucket', source[10:].lstrip('/'))
+    if source.startswith('azure-devops:'):
+        return ('azure-devops', source[13:].lstrip('/'))
+
+    # Handle URL format
+    lower = source.lower()
+    if 'github.com' in lower:
+        path = source.split('github.com', 1)[1].lstrip('/').rstrip('/')
+        # Remove .git suffix if present (use removesuffix to avoid character-by-character stripping)
+        if path.endswith('.git'):
+            path = path[:-4]
+        return ('github', path)
+    if 'gitlab.com' in lower or 'gitlab' in lower:
+        path = (
+            source.split(('gitlab.com' if 'gitlab.com' in lower else 'gitlab'), 1)[1]
+            .lstrip('/')
+            .rstrip('/')
+        )
+        if path.endswith('.git'):
+            path = path[:-4]
+        return ('gitlab', path)
+    if 'bitbucket.org' in lower:
+        path = source.split('bitbucket.org', 1)[1].lstrip('/').rstrip('/')
+        if path.endswith('.git'):
+            path = path[:-4]
+        return ('bitbucket', path)
+
+    # Default to github
+    path = source.rstrip('/')
+    if path.endswith('.git'):
+        path = path[:-4]
+    return ('github', path)
+
+
+async def authenticate_marketplace_sources(
+    registered_marketplaces: list[MarketplaceRegistration] | None,
+    user_context: UserContext,
+) -> list[MarketplaceRegistration] | None:
+    """Swap auto-load marketplace sources for authenticated git URLs.
+
+    The agent-server clones ``auto_load`` marketplace registrations itself but
+    has no provider credentials, so private repositories fail to clone (and a
+    bare ``owner/repo`` source is misread as a nonexistent local path). Resolve
+    each such source to an authenticated URL via the user's provider tokens and
+    return copies with ``source`` replaced. Registrations that cannot be
+    resolved (local sources, missing tokens, inaccessible repos) pass through
+    unchanged and failures never raise, so public/local behavior is unaffected.
+
+    The rewritten URLs embed credentials (like ``OrgConfig.org_repo_url``):
+    never log or persist them.
+
+    Args:
+        registered_marketplaces: Composed marketplace registrations, or None.
+        user_context: UserContext to resolve authenticated URLs.
+
+    Returns:
+        New list with rewritten copies (input not mutated), or the input
+        itself when None/empty.
+    """
+    if not registered_marketplaces:
+        return registered_marketplaces
+
+    sem = asyncio.Semaphore(_URL_RESOLVE_CONCURRENCY)
+
+    async def _authenticate(reg: MarketplaceRegistration) -> MarketplaceRegistration:
+        # Only auto_load registrations are cloned during /api/skills.
+        if not reg.auto_load:
+            return reg
+        _, repo_name = parse_marketplace_source(reg.source)
+        # Skip sources that are not owner/repo-shaped: single-segment local
+        # paths and URLs on hosts that did not map to a provider repo path.
+        if not repo_name or '/' not in repo_name or '://' in repo_name:
+            return reg
+        try:
+            async with sem:
+                url = await user_context.get_authenticated_git_url(
+                    repo_name, is_optional=True
+                )
+        except Exception as e:
+            _logger.debug(
+                f'Could not resolve authenticated URL for marketplace '
+                f'{reg.name} ({repo_name}); keeping original source: {e}'
+            )
+            return reg
+        # model_copy() intentionally skips re-validation: validate_source
+        # rejects credentialed URLs, and the rewritten value is wire-only
+        # (never persisted or returned via the settings API).
+        return reg.model_copy(update={'source': url})
+
+    return list(
+        await asyncio.gather(*[_authenticate(reg) for reg in registered_marketplaces])
+    )
+
+
 def build_sandbox_config(sandbox: SandboxInfo) -> SandboxConfig | None:
     """Build sandbox config for agent-server API request.
 
@@ -400,6 +512,7 @@ async def load_skills_from_agent_server(
     load_user: bool = True,
     load_project: bool = True,
     load_org: bool = True,
+    registered_marketplaces: list[MarketplaceRegistration] | None = None,
 ) -> list[Skill]:
     """Load all skills from the agent-server.
 
@@ -416,6 +529,7 @@ async def load_skills_from_agent_server(
         load_user: Whether to load user skills (default: True)
         load_project: Whether to load project skills (default: True)
         load_org: Whether to load organization skills (default: True)
+        registered_marketplaces: List of marketplace registrations (optional)
 
     Returns:
         List of Skill objects merged from all sources.
@@ -425,7 +539,7 @@ async def load_skills_from_agent_server(
         # Build request payload. ``org_configs`` is the current list form;
         # ``org_config`` (the first entry) is kept for backward compatibility
         # with older agent-server images that only understand a single config.
-        payload = {
+        payload: dict[str, Any] = {
             'load_public': load_public,
             'load_user': load_user,
             'load_project': load_project,
@@ -437,6 +551,17 @@ async def load_skills_from_agent_server(
             'org_config': org_configs[0].model_dump() if org_configs else None,
             'sandbox_config': sandbox_config.model_dump() if sandbox_config else None,
         }
+
+        # Only include ``registered_marketplaces`` when we actually have a value.
+        # The agent-server field is a non-Optional ``list`` with a default, so an
+        # explicit ``null`` fails validation (422) and would drop *all* skills.
+        # Omitting the key lets the agent-server apply its own default, and older
+        # agent-servers without the field simply ignore an absent key.
+        if registered_marketplaces is not None:
+            payload['registered_marketplaces'] = [
+                reg.model_dump(exclude_none=True, exclude={'scope'})
+                for reg in registered_marketplaces
+            ]
 
         # Build headers
         headers = {'Content-Type': 'application/json'}
