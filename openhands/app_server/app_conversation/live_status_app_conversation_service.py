@@ -1384,13 +1384,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         target: dict[str, Any], metadata: Mapping[str, Any]
     ) -> None:
         for key, value in metadata.items():
-            if not value:
+            if value is None:
+                continue
+            if isinstance(value, str) and value == '':
                 continue
             if key in target:
                 if target[key] != value:
                     _logger.warning(
-                        'Conflicting observability metadata for %s; keeping existing value',
+                        'Conflicting observability metadata for %s (existing=%r, incoming=%r); keeping existing value',
                         key,
+                        target[key],
+                        value,
                     )
                 continue
             target[key] = value
