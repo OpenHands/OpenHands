@@ -84,6 +84,40 @@ def test_extract_repo_metadata_decodes_percent_encoding():
     }
 
 
+def test_final_snapshot_trace_metadata():
+    metadata = wa._final_snapshot_trace_metadata(
+        {
+            'format': 'tar.gz',
+            'created_at': '20260710T120000Z',
+            'source_path': '/workspace/project',
+            'base_commit': 'abc123',
+            'packages': {
+                'pip': {'pytest': '9.0.3'},
+                'npm': {'react': '19.0.0'},
+            },
+            'environment': {
+                'python': '3.13.7',
+                'node': '22.1.0',
+                'os': 'ubuntu 24.04',
+            },
+            'byte_count': 42,
+        },
+        'app_server',
+        'gs://bucket/archive.tar.gz',
+        'gs://bucket/archive.tar.gz.manifest.json',
+    )
+
+    assert metadata['final_snapshot_captured'] is True
+    assert metadata['final_snapshot_source'] == 'app_server'
+    assert metadata['final_snapshot_base_commit'] == 'abc123'
+    assert metadata['final_snapshot_pip_package_count'] == 1
+    assert metadata['final_snapshot_npm_dependency_count'] == 1
+    assert metadata['final_snapshot_python_version'] == '3.13.7'
+    assert metadata['final_snapshot_tar_gz_bytes'] == 42
+    assert metadata['final_snapshot_tar_gz_manifest_uri'].endswith('.manifest.json')
+    assert len(metadata['final_snapshot_package_inventory_sha256']) == 64
+
+
 def _response(stdout: str, status_code: int = 200):
     response = MagicMock(status_code=status_code)
     response.json.return_value = {'stdout': stdout}

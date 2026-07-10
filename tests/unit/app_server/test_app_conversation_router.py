@@ -24,6 +24,7 @@ from openhands.app_server.app_conversation.app_conversation_router import (
     _finalize_sandbox_delete,
     batch_get_app_conversations,
     count_app_conversations,
+    delete_app_conversation,
     get_conversation_git_changes,
     get_conversation_git_diff,
     search_app_conversations,
@@ -1169,3 +1170,48 @@ class TestFinalizeSandboxDelete:
             conversation_id=conv.hex,
             workspace_path='/home/openhands/workspace/' + conv.hex,
         )
+
+
+@pytest.mark.asyncio
+async def test_delete_keeps_agent_conversation_active_for_finalizer():
+    conversation_id = uuid4()
+    app_info = MagicMock(sandbox_id='sbx-1', tags={}, created_by_user_id=None)
+    app_service = MagicMock()
+    app_service.delete_app_conversation = AsyncMock(return_value=True)
+    info_service = MagicMock()
+    info_service.get_app_conversation_info = AsyncMock(return_value=app_info)
+    info_service.count_conversations_by_sandbox_id = AsyncMock()
+    sandbox_service = MagicMock()
+    db_session = AsyncMock()
+    httpx_client = AsyncMock()
+    request = MagicMock()
+    coroutines = []
+
+    def _capture(coroutine):
+        coroutines.append(coroutine)
+        coroutine.close()
+        return MagicMock()
+
+    with (
+        patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            'get_analytics_service',
+            return_value=None,
+        ),
+        patch('asyncio.create_task', side_effect=_capture),
+    ):
+        await delete_app_conversation(
+            request,
+            str(conversation_id),
+            app_service,
+            info_service,
+            sandbox_service,
+            db_session,
+            httpx_client,
+        )
+
+    app_service.delete_app_conversation.assert_awaited_once_with(
+        conversation_id, skip_agent_server_delete=True
+    )
+    info_service.count_conversations_by_sandbox_id.assert_not_awaited()
+    assert len(coroutines) == 1

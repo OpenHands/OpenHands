@@ -960,20 +960,9 @@ async def delete_app_conversation(
 
     sandbox_id = app_conversation_info.sandbox_id
 
-    # Check if sandbox is shared with other conversations
-    sandbox_is_shared = False
-    if sandbox_id:
-        conversation_count = (
-            await app_conversation_info_service.count_conversations_by_sandbox_id(
-                sandbox_id
-            )
-        )
-        sandbox_is_shared = conversation_count > 1
-
-    # Delete the conversation (skip agent server DELETE if sandbox is shared)
     deleted = await app_conversation_service.delete_app_conversation(
         conversation_uuid,
-        skip_agent_server_delete=sandbox_is_shared,
+        skip_agent_server_delete=bool(sandbox_id),
     )
     if not deleted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, 'Failed to delete conversation')

@@ -2168,6 +2168,13 @@ class TestArchiveWorkspaceHelper:
         assert manifest['branch'] == 'feature-x'
         assert manifest['head_commit'] == 'def456'
         assert manifest['packages'] == {'npm': {'example': '1.0.0'}}
+        trace_call = client.post.call_args
+        assert trace_call.args[0].endswith(
+            '/api/conversations/conv-1/observability/metadata'
+        )
+        assert trace_call.kwargs['json']['metadata'][
+            'final_snapshot_git_delta_manifest_uri'
+        ].startswith('gs://archive-bkt/')
         probe_workspace.assert_awaited_once_with(
             client,
             'https://sandbox.example.com',

@@ -15,6 +15,7 @@ Configuration is environment-driven and the feature is a no-op unless
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -40,6 +41,7 @@ _REPO_METADATA_HEADERS = {
     'head_commit': 'X-Archive-Head-Commit',
 }
 _REPO_ROOT_HEADER = 'X-Archive-Repo-Root'
+_TRACE_FORMAT_KEY = {'git-delta': 'git_delta', 'tar.gz': 'tar_gz'}
 
 
 def _extract_repo_metadata(
@@ -331,6 +333,76 @@ async def _probe_workspace(
     return result
 
 
+def _archive_object_uri(path: str) -> str:
+    store_type = _archive_store_type()
+    if store_type == 'google_cloud':
+        return f'gs://{_archive_bucket()}/{path}'
+    if store_type == 's3':
+        return f's3://{_archive_bucket()}/{path}'
+    return path
+
+
+def _final_snapshot_trace_metadata(
+    manifest: dict[str, Any], source: str, archive_uri: str, manifest_uri: str
+) -> dict[str, str | bool | int]:
+    packages = manifest.get('packages') or {}
+    environment = manifest.get('environment') or {}
+    fmt = _TRACE_FORMAT_KEY[manifest['format']]
+    metadata: dict[str, str | bool | int] = {
+        'final_snapshot_captured': True,
+        'final_snapshot_source': source,
+        'final_snapshot_created_at': manifest['created_at'],
+        'final_snapshot_source_path': manifest['source_path'],
+        'final_snapshot_pip_package_count': len(packages.get('pip') or {}),
+        'final_snapshot_npm_dependency_count': len(packages.get('npm') or {}),
+        'final_snapshot_package_inventory_sha256': hashlib.sha256(
+            json.dumps(packages, sort_keys=True, separators=(',', ':')).encode()
+        ).hexdigest(),
+        f'final_snapshot_{fmt}_captured': True,
+        f'final_snapshot_{fmt}_bytes': manifest['byte_count'],
+        f'final_snapshot_{fmt}_archive_uri': archive_uri,
+        f'final_snapshot_{fmt}_manifest_uri': manifest_uri,
+    }
+    for key in ('base_commit', 'repo_remote', 'branch', 'head_commit'):
+        if value := manifest.get(key):
+            metadata[f'final_snapshot_{key}'] = value
+    for key in ('python', 'node', 'os'):
+        if value := environment.get(key):
+            metadata[f'final_snapshot_{key}_version'] = value
+    return metadata
+
+
+async def _publish_final_snapshot_trace_metadata(
+    httpx_client: httpx.AsyncClient,
+    agent_server_url: str,
+    conversation_id: str,
+    headers: dict[str, str],
+    manifest: dict[str, Any],
+    archive_uri: str,
+    manifest_uri: str,
+) -> None:
+    try:
+        response = await httpx_client.post(
+            f'{agent_server_url}/api/conversations/{conversation_id}'
+            '/observability/metadata',
+            json={
+                'metadata': _final_snapshot_trace_metadata(
+                    manifest, 'app_server', archive_uri, manifest_uri
+                )
+            },
+            headers=headers,
+            timeout=_PROBE_TIMEOUT,
+        )
+        if response.status_code != 200:
+            _logger.debug(
+                'Trace metadata update for %s returned %s',
+                conversation_id,
+                response.status_code,
+            )
+    except Exception as e:
+        _logger.debug('Trace metadata update skipped for %s: %s', conversation_id, e)
+
+
 async def archive_workspace(
     httpx_client: httpx.AsyncClient,
     runtime: dict[str, Any],
@@ -496,24 +568,31 @@ async def archive_workspace(
             await asyncio.to_thread(
                 _write_file_to_store, store, f'{base_path}.{suffix}', tmp_path
             )
-            manifest = json.dumps(
-                {
-                    'sandbox_id': sandbox_id,
-                    'conversation_id': conversation_key,
-                    'phase': 'final',
-                    'base_commit': base_commit,
-                    **repo_metadata,
-                    'packages': enrichment.get('packages', {}),
-                    'environment': enrichment.get('environment', {}),
-                    'format': fmt,
-                    'source_path': archive_path,
-                    'byte_count': byte_count,
-                    'created_at': ts,
-                },
-                sort_keys=True,
-            ).encode('utf-8')
-            await asyncio.to_thread(
-                store.write, f'{base_path}.{suffix}.manifest.json', manifest
+            manifest_data = {
+                'sandbox_id': sandbox_id,
+                'conversation_id': conversation_key,
+                'phase': 'final',
+                'base_commit': base_commit,
+                **repo_metadata,
+                'packages': enrichment.get('packages', {}),
+                'environment': enrichment.get('environment', {}),
+                'format': fmt,
+                'source_path': archive_path,
+                'byte_count': byte_count,
+                'created_at': ts,
+            }
+            manifest = json.dumps(manifest_data, sort_keys=True).encode('utf-8')
+            archive_path_key = f'{base_path}.{suffix}'
+            manifest_path_key = f'{archive_path_key}.manifest.json'
+            await asyncio.to_thread(store.write, manifest_path_key, manifest)
+            await _publish_final_snapshot_trace_metadata(
+                httpx_client,
+                agent_server_url,
+                conversation_key,
+                headers,
+                manifest_data,
+                _archive_object_uri(archive_path_key),
+                _archive_object_uri(manifest_path_key),
             )
             _logger.info(
                 'Archived workspace (%s) for %s (%d bytes) to %s.%s',
