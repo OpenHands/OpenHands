@@ -2205,8 +2205,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     ) -> None:
         """Process pending messages queued before conversation was ready.
 
-        Messages are delivered concurrently to the agent server. After processing,
-        all messages are deleted from the database regardless of success or failure.
+        Messages are delivered sequentially to the agent server. Successfully
+        delivered messages are deleted from the database. If delivery fails, that
+        message and all later messages remain queued to preserve their order.
 
         Args:
             task_id: The start task ID (may have been used as conversation_id initially)
@@ -2247,6 +2248,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             f'conversation {conversation_id_str}'
         )
 
+        delivered_count = 0
+
         # Process messages sequentially to preserve order
         for msg in pending_messages:
             try:
@@ -2264,19 +2267,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     timeout=30.0,
                 )
                 response.raise_for_status()
-                _logger.debug(f'Delivered pending message {msg.id}')
             except Exception as e:
                 _logger.warning(f'Failed to deliver pending message {msg.id}: {e}')
+                break
 
-        # Delete all pending messages after processing (regardless of success/failure)
-        deleted_count = (
-            await self.pending_message_service.delete_messages_for_conversation(
-                conversation_id_str
-            )
-        )
+            await self.pending_message_service.delete_message(msg.id)
+            delivered_count += 1
+            _logger.debug(f'Delivered pending message {msg.id}')
+
+        retained_count = len(pending_messages) - delivered_count
         _logger.info(
             f'Finished processing pending messages for conversation {conversation_id_str}. '
-            f'Deleted {deleted_count} messages.'
+            f'Delivered {delivered_count} messages; retained {retained_count} messages.'
         )
 
     async def update_agent_server_conversation_title(

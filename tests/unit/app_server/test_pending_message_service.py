@@ -214,6 +214,34 @@ class TestSQLPendingMessageService:
         assert await service.count_pending_messages(other_conversation_id) == 1
 
     @pytest.mark.asyncio
+    async def test_delete_message_removes_only_matching_message(
+        self,
+        service: SQLPendingMessageService,
+        sample_content: list[TextContent],
+    ):
+        """Test that delete_message removes only the requested message."""
+        # Arrange
+        conversation_id = f'task-{uuid4().hex}'
+        first = await service.add_message(conversation_id, sample_content)
+        second = await service.add_message(conversation_id, sample_content)
+
+        # Act
+        deleted = await service.delete_message(first.id)
+
+        # Assert
+        assert deleted is True
+        messages = await service.get_pending_messages(conversation_id)
+        assert [message.id for message in messages] == [second.id]
+
+    @pytest.mark.asyncio
+    async def test_delete_message_returns_false_when_not_found(
+        self,
+        service: SQLPendingMessageService,
+    ):
+        """Test that delete_message returns False for an unknown message."""
+        assert await service.delete_message(str(uuid4())) is False
+
+    @pytest.mark.asyncio
     async def test_delete_messages_for_conversation_returns_zero_when_none_exist(
         self,
         service: SQLPendingMessageService,

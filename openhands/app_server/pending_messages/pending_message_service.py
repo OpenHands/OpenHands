@@ -59,6 +59,10 @@ class PendingMessageService(ABC):
         """Count pending messages for a conversation."""
 
     @abstractmethod
+    async def delete_message(self, message_id: str) -> bool:
+        """Delete a pending message, returning True if deleted."""
+
+    @abstractmethod
     async def delete_messages_for_conversation(self, conversation_id: str) -> int:
         """Delete all pending messages for a conversation, returning count deleted."""
 
@@ -147,6 +151,18 @@ class SQLPendingMessageService(PendingMessageService):
         )
         result = await self.db_session.execute(count_stmt)
         return result.scalar() or 0
+
+    async def delete_message(self, message_id: str) -> bool:
+        """Delete a pending message, returning True if deleted."""
+        stmt = select(StoredPendingMessage).where(StoredPendingMessage.id == message_id)
+        result = await self.db_session.execute(stmt)
+        stored_message = result.scalar_one_or_none()
+        if stored_message is None:
+            return False
+
+        await self.db_session.delete(stored_message)
+        await self.db_session.commit()
+        return True
 
     async def delete_messages_for_conversation(self, conversation_id: str) -> int:
         """Delete all pending messages for a conversation, returning count deleted."""

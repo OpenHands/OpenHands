@@ -6,7 +6,7 @@ import os
 import zipfile
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, call, patch
 from uuid import uuid4
 
 import pytest
@@ -34,6 +34,7 @@ from openhands.app_server.app_conversation.live_status_app_conversation_service 
 )
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.integrations.service_types import SuggestedTask, TaskType
+from openhands.app_server.pending_messages.pending_message_models import PendingMessage
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     ExposedUrl,
@@ -279,6 +280,91 @@ class TestLiveStatusAppConversationService:
         # Default mock for hooks loading - returns None (no hooks found)
         # Tests that specifically test hooks loading can override this mock
         self.service._load_hooks_from_workspace = AsyncMock(return_value=None)
+
+    @pytest.mark.asyncio
+    async def test_process_pending_messages_deletes_delivered_messages(self):
+        """Successfully delivered pending messages are removed from the queue."""
+        task_id = uuid4()
+        conversation_id = uuid4()
+        messages = [
+            PendingMessage(
+                conversation_id=str(conversation_id),
+                content=[TextContent(text='first')],
+            ),
+            PendingMessage(
+                conversation_id=str(conversation_id),
+                content=[TextContent(text='second')],
+            ),
+        ]
+        self.mock_pending_message_service.update_conversation_id = AsyncMock(
+            return_value=2
+        )
+        self.mock_pending_message_service.get_pending_messages = AsyncMock(
+            return_value=messages
+        )
+        self.mock_pending_message_service.delete_message = AsyncMock(return_value=True)
+        response = Mock()
+        response.raise_for_status = Mock()
+        self.mock_httpx_client.post = AsyncMock(return_value=response)
+
+        await self.service._process_pending_messages(
+            task_id=task_id,
+            conversation_id=conversation_id,
+            agent_server_url='http://agent-server:8000',
+            session_api_key='test-key',
+        )
+
+        assert self.mock_httpx_client.post.await_count == 2
+        assert self.mock_pending_message_service.delete_message.await_args_list == [
+            call(messages[0].id),
+            call(messages[1].id),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_process_pending_messages_retains_failed_and_later_messages(self):
+        """A failed message and later messages remain queued in FIFO order."""
+        task_id = uuid4()
+        conversation_id = uuid4()
+        messages = [
+            PendingMessage(
+                conversation_id=str(conversation_id),
+                content=[TextContent(text='first')],
+            ),
+            PendingMessage(
+                conversation_id=str(conversation_id),
+                content=[TextContent(text='second')],
+            ),
+            PendingMessage(
+                conversation_id=str(conversation_id),
+                content=[TextContent(text='third')],
+            ),
+        ]
+        self.mock_pending_message_service.update_conversation_id = AsyncMock(
+            return_value=3
+        )
+        self.mock_pending_message_service.get_pending_messages = AsyncMock(
+            return_value=messages
+        )
+        self.mock_pending_message_service.delete_message = AsyncMock(return_value=True)
+        success_response = Mock()
+        success_response.raise_for_status = Mock()
+        failed_response = Mock()
+        failed_response.raise_for_status = Mock(side_effect=RuntimeError('unavailable'))
+        self.mock_httpx_client.post = AsyncMock(
+            side_effect=[success_response, failed_response]
+        )
+
+        await self.service._process_pending_messages(
+            task_id=task_id,
+            conversation_id=conversation_id,
+            agent_server_url='http://agent-server:8000',
+            session_api_key='test-key',
+        )
+
+        assert self.mock_httpx_client.post.await_count == 2
+        self.mock_pending_message_service.delete_message.assert_awaited_once_with(
+            messages[0].id
+        )
 
     @pytest.mark.asyncio
     async def test_seed_sandbox_profiles_upserts_resolved_keys_and_prunes(self):

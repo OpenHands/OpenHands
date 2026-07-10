@@ -13,8 +13,8 @@ class PendingMessage(BaseModel):
     """A message queued for delivery when conversation becomes ready.
 
     Pending messages are stored in the database and delivered to the agent_server
-    when the conversation transitions to READY status. Messages are deleted after
-    processing, regardless of success or failure.
+    when the conversation transitions to READY status. Successfully delivered
+    messages are deleted after processing; failed messages remain queued.
     """
 
     id: str = Field(default_factory=lambda: str(uuid4()))
