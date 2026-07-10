@@ -12,6 +12,8 @@ import { useAgentState } from "#/hooks/use-agent-state";
 import { processFiles, processImages } from "#/utils/file-processing";
 import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
 import { isTaskPolling } from "#/utils/utils";
+import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useModelStore } from "#/stores/model-store";
 
 interface InteractiveChatBoxProps {
   onSubmit: (message: string, images: File[], files: File[]) => void;
@@ -36,6 +38,10 @@ export function InteractiveChatBox({
   } = useConversationStore();
   const { curAgentState } = useAgentState();
   const { data: conversation } = useActiveConversation();
+  const { data: profilesData } = useLlmProfiles();
+  const activeProfileByConversation = useModelStore(
+    (s) => s.activeProfileByConversation,
+  );
 
   // Poll sub-conversation task to check if it's loading
   const { taskStatus: subConversationTaskStatus } =
@@ -158,6 +164,20 @@ export function InteractiveChatBox({
     curAgentState === AgentState.AWAITING_USER_CONFIRMATION ||
     isTaskPolling(subConversationTaskStatus);
 
+  // Determine if the current model supports vision
+  let supportsVision = true; // Default to true for backwards compatibility
+  if (conversationId && profilesData?.profiles) {
+    const activeProfileName = activeProfileByConversation[conversationId];
+    if (activeProfileName) {
+      const profile = profilesData.profiles.find(
+        (p) => p.name === activeProfileName,
+      );
+      if (profile) {
+        supportsVision = profile.supports_vision;
+      }
+    }
+  }
+
   return (
     <div data-testid="interactive-chat-box">
       <CustomChatInput
@@ -166,6 +186,7 @@ export function InteractiveChatBox({
         onSubmit={handleSubmit}
         onFilesPaste={handleUpload}
         sandboxStatus={conversation?.sandbox_status || null}
+        supportsVision={supportsVision}
       />
       <div className="mt-4">
         <GitControlBar onSuggestionsClick={handleSuggestionsClick} />

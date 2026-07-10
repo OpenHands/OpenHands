@@ -303,3 +303,62 @@ def get_supported_llm_models(
 
 def remove_error_modelId(model_list: list[str]) -> list[str]:
     return list(filter(lambda m: not m.startswith('bedrock'), model_list))
+
+
+# ---------------------------------------------------------------------------
+# Vision (multimodal) capability detection.
+#
+# Models known to support vision - used as a fallback when litellm's
+# supports_vision() is unavailable or throws. The authoritative source
+# is always litellm.supports_vision(); this pattern list is a backup.
+# ---------------------------------------------------------------------------
+VISION_CAPABLE_MODEL_PATTERNS: tuple[tuple[str, ...], ...] = (
+    # OpenAI
+    ('gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4-vision'),
+    # Anthropic
+    (
+        'claude-3-opus',
+        'claude-3-sonnet',
+        'claude-3-haiku',
+        'claude-3.5-sonnet',
+        'claude-3.5-haiku',
+        'claude-4-opus',
+        'claude-4-sonnet',
+        'claude-4-haiku',
+    ),
+    # Google
+    ('gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0', 'gemini-pro-vision'),
+    # Other known multimodal models - substring matches
+    ('vision', '4o'),
+)
+
+
+def supports_vision(model: str | None) -> bool:
+    """Check if a model supports vision (multimodal input).
+
+    Uses litellm's built-in detection as the authoritative source,
+    with fallback to known pattern matching.
+
+    Args:
+        model: The model name (e.g., "gpt-4o", "claude-3.5-sonnet")
+
+    Returns:
+        True if the model supports vision, False otherwise.
+    """
+    if not model:
+        return False
+
+    # Try litellm's built-in detection first (authoritative source)
+    try:
+        if litellm.supports_vision(model):
+            return True
+    except Exception:
+        pass
+
+    # Fallback: check against known patterns (substring match)
+    model_lower = model.lower()
+    for patterns in VISION_CAPABLE_MODEL_PATTERNS:
+        if any(p in model_lower for p in patterns):
+            return True
+
+    return False

@@ -408,12 +408,17 @@ class ProfileInfo(BaseModel):
     ``api_key_set`` follows the same convention as ``llm_api_key_set`` on
     the main settings response — the frontend uses it to show "key stored"
     without exposing (or accidentally round-tripping) a mask string.
+
+    ``supports_vision`` reports whether the profile's model supports
+    multimodal (image) input, allowing the UI to adapt file upload
+    controls accordingly.
     """
 
     name: str
     model: str | None = None
     base_url: str | None = None
     api_key_set: bool = False
+    supports_vision: bool = False
 
 
 class ProfileListResponse(BaseModel):

@@ -22,6 +22,8 @@ export interface CustomChatInputProps {
   onFilesPaste?: (files: File[]) => void;
   className?: React.HTMLAttributes<HTMLDivElement>["className"];
   buttonClassName?: React.HTMLAttributes<HTMLButtonElement>["className"];
+  /** Whether the current model supports vision (multimodal input). Defaults to true. */
+  supportsVision?: boolean;
 }
 
 export function CustomChatInput({
@@ -35,6 +37,7 @@ export function CustomChatInput({
   onFilesPaste,
   className = "",
   buttonClassName = "",
+  supportsVision = true,
 }: CustomChatInputProps) {
   const {
     submittedMessage,
@@ -127,12 +130,20 @@ export function CustomChatInput({
     },
     [setShouldHideSuggestions, clearAllFiles],
   );
+
+  // Compute the accept attribute based on vision support
+  // When vision is not supported, exclude image/* MIME types
+  const fileAcceptAttribute = supportsVision
+    ? '*/*'
+    : '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.tsv,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.js,.ts,.jsx,.tsx,.py,.java,.c,.cpp,.h,.go,.rs,.rb,.php,.swift,.kt,.scala,.r,.html,.css,.scss,.sass,.less,.sh,.bash,.zsh,.ps1,.bat,.cmd,.env,.gitignore,.dockerfile,.makefile';
+
   return (
     <div className={`w-full ${className}`}>
       {/* Hidden file input */}
       <HiddenFileInput
         fileInputRef={fileInputRef}
         onChange={handleFileInputChange}
+        accept={fileAcceptAttribute}
       />
 
       {/* Container with grip */}
@@ -177,6 +188,7 @@ export function CustomChatInput({
           slashItems={slashItems}
           slashSelectedIndex={slashSelectedIndex}
           onSlashSelect={selectSlashItem}
+          supportsVision={supportsVision}
         />
       </div>
     </div>

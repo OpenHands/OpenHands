@@ -14,7 +14,7 @@ from pydantic import (
     model_validator,
 )
 
-from openhands.app_server.utils.llm import resolve_llm_base_url
+from openhands.app_server.utils.llm import resolve_llm_base_url, supports_vision
 from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk.llm import LLM
 
@@ -202,11 +202,14 @@ class LLMProfiles(BaseModel):
     def summaries(
         self, *, managed_proxy_url: str | None = None
     ) -> list[dict[str, Any]]:
-        """Return a ``{name, model, base_url, api_key_set}`` dict per profile.
+        """Return a ``{name, model, base_url, api_key_set, supports_vision}`` dict per profile.
 
         ``api_key_set`` mirrors the ``llm_api_key_set`` convention the main
         settings endpoint already uses, so the frontend can render
         "key stored" vs. "needs key" without fetching each profile.
+
+        ``supports_vision`` reports whether the profile's model supports
+        multimodal (image) input.
 
         When ``managed_proxy_url`` is provided, ``base_url`` is resolved to the
         value the profile will actually use at runtime for public OpenHands
@@ -224,6 +227,7 @@ class LLMProfiles(BaseModel):
                     else llm.base_url
                 ),
                 'api_key_set': has_real_api_key(llm.api_key),
+                'supports_vision': supports_vision(llm.model),
             }
             for name, llm in self.profiles.items()
         ]

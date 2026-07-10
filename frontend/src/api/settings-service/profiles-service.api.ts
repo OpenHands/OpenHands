@@ -5,6 +5,8 @@ export interface LlmProfileSummary {
   model: string | null;
   base_url: string | null;
   api_key_set: boolean;
+  /** Whether the profile's model supports multimodal (image) input. */
+  supports_vision: boolean;
 }
 
 // Not exported — only `listProfiles` reads it as its response shape.

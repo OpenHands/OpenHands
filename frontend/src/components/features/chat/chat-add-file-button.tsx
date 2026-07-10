@@ -4,12 +4,17 @@ import { cn } from "#/utils/utils";
 export interface ChatAddFileButtonProps {
   handleFileIconClick: () => void;
   disabled?: boolean;
+  /** Whether the current model supports vision. Determines button text. */
+  supportsVision?: boolean;
 }
 
 export function ChatAddFileButton({
   handleFileIconClick,
   disabled = false,
+  supportsVision = true,
 }: ChatAddFileButtonProps) {
+  const buttonText = supportsVision ? "Add Files and Images" : "Add Files";
+
   return (
     <button
       type="button"
@@ -19,6 +24,7 @@ export function ChatAddFileButton({
       )}
       data-name="Shape"
       data-testid="paperclip-icon"
+      title={disabled ? undefined : buttonText}
       onClick={handleFileIconClick}
     >
       <PaperclipIcon

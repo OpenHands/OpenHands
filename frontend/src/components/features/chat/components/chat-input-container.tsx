@@ -30,6 +30,8 @@ interface ChatInputContainerProps {
   slashItems?: SlashCommandItem[];
   slashSelectedIndex?: number;
   onSlashSelect?: (item: SlashCommandItem) => void;
+  /** Whether the current model supports vision. Passed to ChatInputRow. */
+  supportsVision?: boolean;
 }
 
 export function ChatInputContainer({
@@ -54,6 +56,7 @@ export function ChatInputContainer({
   slashItems = [],
   slashSelectedIndex = 0,
   onSlashSelect,
+  supportsVision = true,
 }: ChatInputContainerProps) {
   const conversationMode = useConversationStore(
     (state) => state.conversationMode,
@@ -99,6 +102,7 @@ export function ChatInputContainer({
           onKeyDown={onKeyDown}
           onFocus={onFocus}
           onBlur={onBlur}
+          supportsVision={supportsVision}
         />
       </div>
 
