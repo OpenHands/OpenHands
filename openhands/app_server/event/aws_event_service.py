@@ -61,19 +61,22 @@ class AwsEventService(EventServiceBase):
             Body=json_str.encode('utf-8'),
         )
 
-    def _search_paths(self, prefix: Path, page_id: str | None = None) -> list[Path]:
-        """Search paths."""
+    def _search_paths(self, prefix: Path) -> list[Path]:
+        """Search all paths, following S3 continuation tokens."""
         kwargs: dict[str, Any] = {
             'Bucket': self.bucket_name,
             'Prefix': str(prefix),
         }
-        if page_id:
-            kwargs['ContinuationToken'] = page_id
+        paths: list[Path] = []
+        while True:
+            response = self.s3_client.list_objects_v2(**kwargs)
+            contents = response.get('Contents', [])
+            paths.extend(Path(obj['Key']) for obj in contents)
 
-        response = self.s3_client.list_objects_v2(**kwargs)
-        contents = response.get('Contents', [])
-        paths = [Path(obj['Key']) for obj in contents]
-        return paths
+            continuation_token = response.get('NextContinuationToken')
+            if not continuation_token:
+                return paths
+            kwargs['ContinuationToken'] = continuation_token
 
 
 def _get_default_aws_endpoint_url() -> str | None:

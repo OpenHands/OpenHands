@@ -7,7 +7,7 @@ focusing on search functionality and S3 operations.
 import importlib
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 from uuid import uuid4
 
 import botocore.exceptions
@@ -156,19 +156,29 @@ class TestAwsEventServiceSearchPaths:
 
         assert len(result) == 0
 
-    def test_search_paths_with_page_id(self, service: AwsEventService, mock_s3_client):
-        """Test that _search_paths uses continuation token."""
-        mock_s3_client.list_objects_v2.return_value = {
-            'Contents': [{'Key': 'event.json'}]
-        }
+    def test_search_paths_follows_continuation_tokens(
+        self, service: AwsEventService, mock_s3_client
+    ):
+        """Test that _search_paths returns objects from every S3 page."""
+        mock_s3_client.list_objects_v2.side_effect = [
+            {
+                'Contents': [{'Key': 'event1.json'}],
+                'NextContinuationToken': 'continuation_token',
+            },
+            {'Contents': [{'Key': 'event2.json'}]},
+        ]
 
-        service._search_paths(Path('prefix'), page_id='continuation_token')
+        result = service._search_paths(Path('prefix'))
 
-        mock_s3_client.list_objects_v2.assert_called_once_with(
-            Bucket='test-bucket',
-            Prefix='prefix',
-            ContinuationToken='continuation_token',
-        )
+        assert result == [Path('event1.json'), Path('event2.json')]
+        assert mock_s3_client.list_objects_v2.call_args_list == [
+            call(Bucket='test-bucket', Prefix='prefix'),
+            call(
+                Bucket='test-bucket',
+                Prefix='prefix',
+                ContinuationToken='continuation_token',
+            ),
+        ]
 
 
 class TestAwsEventServiceIntegration:
