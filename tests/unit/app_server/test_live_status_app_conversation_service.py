@@ -236,7 +236,9 @@ class TestEffectiveDisabledSkills:
 
 class TestConversationLaunchSnapshot:
     @pytest.mark.asyncio
-    @pytest.mark.parametrize('override_id', [None, str(uuid4())])
+    @pytest.mark.parametrize(
+        'override_id', [None, '11111111-1111-1111-1111-111111111111']
+    )
     async def test_resolves_ambient_or_requested_profile_once(self, override_id):
         user = _resolved_profile_user()
         user_context = Mock(spec=UserContext)
