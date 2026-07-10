@@ -140,7 +140,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
 
         except Exception as e:
             _logger.exception(
-                '[Slack V1] Failed to post message to Slack: %s', e, stack_info=True
+                '[Slack V1] Failed to post message to Slack', stack_info=True
             )
             raise
 
