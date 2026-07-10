@@ -153,9 +153,10 @@ class SaasUserAuth(UserAuth):
         try:
             user_uuid = UUID(self.user_id)
         except ValueError as exc:
-            logger.error(
+            logger.exception(
                 'effective_org_id_override_invalid_user_id',
                 extra={'user_id': self.user_id},
+                stack_info=True,
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -266,9 +267,10 @@ class SaasUserAuth(UserAuth):
                 user_uuid = UUID(self.user_id)
             except ValueError as exc:
                 # Shouldn't happen, but treat as not-a-member.
-                logger.error(
+                logger.exception(
                     'x_org_id_invalid_user_id',
                     extra={'user_id': self.user_id},
+                    stack_info=True,
                 )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -566,12 +568,13 @@ class SaasUserAuth(UserAuth):
                     )
                 except Exception as e:
                     # If there was a problem with a refresh token we log and delete it
-                    logger.error(
+                    logger.exception(
                         f'Error refreshing provider_token token: {e}',
                         extra={
                             'user_id': self.user_id,
                             'idp_type': token.identity_provider,
                         },
+                        stack_info=True,
                     )
                     async with a_session_maker() as session:
                         await session.execute(
@@ -714,7 +717,9 @@ class SaasUserAuth(UserAuth):
             # Propagate validation errors raised by get_effective_org_id().
             raise
         except Exception as e:
-            logger.error(f'Error fetching org info for user {self.user_id}: {e}')
+            logger.exception(
+                f'Error fetching org info for user {self.user_id}: {e}', stack_info=True
+            )
             return None
 
     @classmethod

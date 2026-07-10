@@ -231,7 +231,7 @@ class AzureDevOpsManager(Manager[AzureDevOpsViewType]):
             await self.send_message(msg_info, azure_view)
 
         except Exception as e:
-            logger.exception(f'[Azure DevOps] Error starting job: {e}')
+            logger.exception(f'[Azure DevOps] Error starting job: {e}', stack_info=True)
             await self.send_message(
                 'Uh oh! There was an unexpected error starting the job :(',
                 azure_view,

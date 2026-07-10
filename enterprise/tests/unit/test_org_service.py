@@ -388,7 +388,7 @@ async def test_create_org_with_owner_database_failure_triggers_cleanup(
 
         # Verify cleanup was called
         assert cleanup_called
-        assert 'Database connection failed' in str(exc_info.value)
+        assert 'Database connection failed' in str(exc_info.value.__cause__)
 
 
 @pytest.mark.asyncio
@@ -1137,7 +1137,7 @@ async def test_delete_org_with_cleanup_database_failure(session_maker, owner_rol
         with pytest.raises(OrgDatabaseError) as exc_info:
             await OrgService.delete_org_with_cleanup(user_id, org_id)
 
-        assert 'Database connection failed' in str(exc_info.value)
+        assert 'Database connection failed' in str(exc_info.value.__cause__)
 
 
 @pytest.mark.asyncio
@@ -1164,7 +1164,7 @@ async def test_delete_org_with_cleanup_unexpected_none_result(
         with pytest.raises(OrgDatabaseError) as exc_info:
             await OrgService.delete_org_with_cleanup(user_id, org_id)
 
-        assert 'not found during deletion' in str(exc_info.value)
+        assert 'not found during deletion' in str(exc_info.value.__cause__)
 
 
 @pytest.mark.asyncio

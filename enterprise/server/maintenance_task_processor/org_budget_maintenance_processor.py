@@ -30,7 +30,10 @@ class OrgBudgetMaintenanceProcessor(MaintenanceTaskProcessor):
                 except Exception as exc:
                     logger.exception(
                         'org_budget_maintenance_failed',
-                        extra={'org_id': org_id, 'error': str(exc)},
+                        extra={
+                            'org_id': org_id,
+                        },
+                        stack_info=True,
                     )
                     errors.append({'org_id': org_id, 'error': str(exc)})
 

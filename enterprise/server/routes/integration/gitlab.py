@@ -128,7 +128,7 @@ async def gitlab_events(
         )
 
     except Exception as e:
-        logger.exception(f'Error processing GitLab event: {e}')
+        logger.exception(f'Error processing GitLab event: {e}', stack_info=True)
         return JSONResponse(status_code=400, content={'error': 'Invalid payload.'})
 
 
@@ -259,11 +259,11 @@ async def get_gitlab_resources(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error retrieving GitLab resources: {e}')
+        logger.exception(f'Error retrieving GitLab resources: {e}', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve GitLab resources',
-        )
+        ) from e
 
 
 @gitlab_integration_router.post('/gitlab/reinstall-webhook')
@@ -388,8 +388,8 @@ async def reinstall_gitlab_webhook(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error reinstalling GitLab webhook: {e}')
+        logger.exception(f'Error reinstalling GitLab webhook: {e}', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to reinstall webhook',
-        )
+        ) from e

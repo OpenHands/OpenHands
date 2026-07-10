@@ -258,7 +258,7 @@ class GitlabManager(Manager[GitlabViewType]):
             await self.send_message(msg_info, gitlab_view)
 
         except Exception as e:
-            logger.exception(f'[GitLab] Error starting job: {str(e)}')
+            logger.exception(f'[GitLab] Error starting job: {str(e)}', stack_info=True)
             await self.send_message(
                 'Uh oh! There was an unexpected error starting the job :(', gitlab_view
             )

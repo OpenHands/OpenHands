@@ -57,7 +57,8 @@ async def main():
             )
         except Exception as e:
             logger.exception(
-                f'Error processing PR #{pr.pr_number} from repo {pr.repo_name}: {str(e)}'
+                f'Error processing PR #{pr.pr_number} from repo {pr.repo_name}: {str(e)}',
+                stack_info=True,
             )
 
     logger.info('PR data enrichment process completed')

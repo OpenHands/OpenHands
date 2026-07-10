@@ -209,7 +209,9 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
                 dict(e.response.headers),
                 stack_info=True,
             )
-            raise Exception(f'Failed to send message to agent server: {error_detail}')
+            raise Exception(
+                f'Failed to send message to agent server: {error_detail}'
+            ) from e
 
         except httpx.TimeoutException:
             error_detail = (

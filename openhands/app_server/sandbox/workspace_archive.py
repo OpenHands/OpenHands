@@ -525,7 +525,11 @@ async def archive_workspace(
             )
         except Exception as e:
             _logger.exception(
-                'Workspace archive upload (%s) failed for %s: %s', fmt, sandbox_id, e
+                'Workspace archive upload (%s) failed for %s: %s',
+                fmt,
+                sandbox_id,
+                e,
+                stack_info=True,
             )
             retryable_failure = True
         finally:

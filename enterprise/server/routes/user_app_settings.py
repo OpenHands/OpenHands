@@ -52,21 +52,20 @@ async def get_user_app_settings(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
-        )
+        ) from e
     except UserNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
-        )
+        ) from e
     except Exception as e:
         logger.exception(
-            'Unexpected error retrieving user app settings',
-            extra={'error': str(e)},
+            'Unexpected error retrieving user app settings', stack_info=True
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve user app settings',
-        )
+        ) from e
 
 
 @user_app_settings_router.post('/app', response_model=UserAppSettingsResponse)
@@ -98,18 +97,15 @@ async def update_user_app_settings(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
-        )
+        ) from e
     except UserNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
-        )
+        ) from e
     except Exception as e:
-        logger.exception(
-            'Failed to update user app settings',
-            extra={'error': str(e)},
-        )
+        logger.exception('Failed to update user app settings', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to update user app settings',
-        )
+        ) from e

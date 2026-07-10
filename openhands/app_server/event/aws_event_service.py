@@ -45,10 +45,10 @@ class AwsEventService(EventServiceBase):
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchKey':
                 return None
-            _logger.exception(f'Error reading event from {path}')
+            _logger.exception(f'Error reading event from {path}', stack_info=True)
             return None
         except Exception:
-            _logger.exception(f'Error reading event from {path}')
+            _logger.exception(f'Error reading event from {path}', stack_info=True)
             return None
 
     def _store_event(self, path: Path, event: Event):

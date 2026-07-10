@@ -139,7 +139,7 @@ async def create_invitation(
                     role=invitation_data.role,
                 )
         except Exception:
-            logger.exception('analytics:team_members_invited:failed')
+            logger.exception('analytics:team_members_invited:failed', stack_info=True)
 
         successful_responses = [
             await InvitationResponse.from_invitation(inv) for inv in successful
@@ -156,21 +156,24 @@ async def create_invitation(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
-        )
+        ) from e
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
     except Exception as e:
         logger.exception(
             'Unexpected error creating batch invitations',
-            extra={'org_id': str(org_id), 'error': str(e)},
+            extra={
+                'org_id': str(org_id),
+            },
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='An unexpected error occurred',
-        )
+        ) from e
 
 
 @invitation_router.get(
@@ -203,6 +206,7 @@ async def list_pending_invitations(
         logger.exception(
             'Error listing pending invitations',
             extra={'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -240,11 +244,12 @@ async def revoke_invitation(
     try:
         revoked = await OrgInvitationService.revoke_invitation(org_id, invitation_id)
     except InvitationInvalidError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except Exception:
         logger.exception(
             'Error revoking invitation',
             extra={'org_id': str(org_id), 'invitation_id': invitation_id},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -359,7 +364,7 @@ async def accept_invitation(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail='invitation_invalid',
-        )
+        ) from e
 
     except UserAlreadyMemberError:
         logger.info(
@@ -383,7 +388,7 @@ async def accept_invitation(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail='email_mismatch',
-        )
+        ) from e
 
     except Exception as e:
         logger.exception(
@@ -391,10 +396,10 @@ async def accept_invitation(
             extra={
                 'token_prefix': token[:10] + '...',
                 'user_id': user_id,
-                'error': str(e),
             },
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='An unexpected error occurred',
-        )
+        ) from e

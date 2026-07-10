@@ -444,7 +444,7 @@ class BitbucketDCManager(Manager[BitbucketDCViewType]):
             await self.send_message(msg_info, bitbucket_view)
 
         except Exception as e:
-            logger.exception(f'[Bitbucket DC] Error starting job: {e}')
+            logger.exception(f'[Bitbucket DC] Error starting job: {e}', stack_info=True)
             await self.send_message(
                 'Uh oh! There was an unexpected error starting the job :(',
                 bitbucket_view,

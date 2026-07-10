@@ -82,10 +82,13 @@ async def generate_byor_key(user_id: str, org_id: UUID) -> str | None:
             },
         )
         return key
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Error generating BYOR key',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={
+                'user_id': user_id,
+            },
+            stack_info=True,
         )
         return None
 
@@ -106,10 +109,13 @@ async def delete_byor_key_from_litellm(
             extra={'user_id': user_id},
         )
         return True
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Error deleting BYOR key from LiteLLM',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={
+                'user_id': user_id,
+            },
+            stack_info=True,
         )
         return False
 
@@ -216,13 +222,11 @@ async def check_byor_permitted(
         )
         return ByorPermittedResponse(permitted=permitted)
     except Exception as e:
-        logger.exception(
-            'Error checking BYOR export permission', extra={'error': str(e)}
-        )
+        logger.exception('Error checking BYOR export permission', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to check BYOR export permission',
-        )
+        ) from e
 
 
 @api_router.post('', tags=['Keys'])
@@ -310,7 +314,7 @@ async def create_api_key(
     except HTTPException:
         raise
     except Exception:
-        logger.exception('Error creating API key')
+        logger.exception('Error creating API key', stack_info=True)
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail='Failed to create API key',
@@ -327,7 +331,7 @@ async def list_api_keys(
         keys = await api_key_store.list_api_keys(user_id, org_id=effective_org_id)
         return [api_key_to_response(key) for key in keys]
     except Exception:
-        logger.exception('Error listing API keys')
+        logger.exception('Error listing API keys', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to list API keys',
@@ -369,7 +373,7 @@ async def delete_api_key(
     except HTTPException:
         raise
     except Exception:
-        logger.exception('Error deleting API key')
+        logger.exception('Error deleting API key', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to delete API key',
@@ -492,11 +496,11 @@ async def get_llm_api_key_for_byor(
         # Re-raise HTTP exceptions as-is
         raise
     except Exception as e:
-        logger.exception('Error retrieving BYOR LLM API key', extra={'error': str(e)})
+        logger.exception('Error retrieving BYOR LLM API key', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve BYOR LLM API key',
-        )
+        ) from e
 
 
 @api_router.post('/llm/byor/refresh', tags=['Keys'])
@@ -560,7 +564,7 @@ async def refresh_llm_api_key_for_byor(
         )
         return LlmApiKeyResponse(key=key)
     except HTTPException as he:
-        logger.error(
+        logger.exception(
             'HTTP exception during BYOR LLM API key refresh',
             extra={
                 'user_id': user_id,
@@ -568,6 +572,7 @@ async def refresh_llm_api_key_for_byor(
                 'detail': he.detail,
                 'exception_type': type(he).__name__,
             },
+            stack_info=True,
         )
         raise
     except Exception as e:
@@ -575,11 +580,11 @@ async def refresh_llm_api_key_for_byor(
             'Unexpected error refreshing BYOR LLM API key',
             extra={
                 'user_id': user_id,
-                'error': str(e),
                 'exception_type': type(e).__name__,
             },
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to refresh BYOR LLM API key',
-        )
+        ) from e

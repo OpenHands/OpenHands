@@ -207,9 +207,10 @@ class ProviderHandler:
             return SecretStr(data.token)
 
         except Exception as e:
-            logger.error(
+            logger.exception(
                 f'Failed to fetch latest token for provider {provider}: {e}',
                 exc_info=True,
+                stack_info=True,
             )
 
         return None

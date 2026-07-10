@@ -142,7 +142,7 @@ class JwtService:
             payload = jwt.decode(token, secret_key, algorithms=['HS256'])
             return payload
         except jwt.InvalidTokenError as e:
-            raise jwt.InvalidTokenError(f'Token verification failed: {str(e)}')
+            raise jwt.InvalidTokenError('Token verification failed') from e
 
     def create_jwe_token(
         self,
@@ -244,7 +244,7 @@ class JwtService:
                 raise ValueError('Decryption produced no plaintext')
             return json.loads(result.plaintext)
         except Exception as e:
-            raise Exception(f'Token decryption failed: {str(e)}')
+            raise Exception('Token decryption failed') from e
 
     # ------------------------------------------------------------------
     # Symmetric encrypt / decrypt helpers (JWE with legacy Fernet fallback)

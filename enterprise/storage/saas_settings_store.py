@@ -771,7 +771,7 @@ class SaasSettingsStore(SettingsStore):
                 return normalized
             return []
         except Exception as e:
-            logger.error(f'Error fetching org marketplaces: {e}')
+            logger.exception(f'Error fetching org marketplaces: {e}', stack_info=True)
             return []
 
     async def _ensure_api_key(

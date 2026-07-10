@@ -328,7 +328,7 @@ async def jira_events(
         # Re-raise HTTP exceptions (like signature verification failures)
         raise
     except Exception as e:
-        logger.exception(f'Error processing Jira webhook: {e}')
+        logger.exception(f'Error processing Jira webhook: {e}', stack_info=True)
         return JSONResponse(
             status_code=500,
             content={'error': 'Internal server error processing webhook.'},
@@ -392,11 +392,11 @@ async def create_jira_workspace(request: Request, workspace_data: JiraWorkspaceC
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error creating Jira workspace: {e}')
+        logger.exception(f'Error creating Jira workspace: {e}', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to create workspace',
-        )
+        ) from e
 
 
 @jira_integration_router.post('/workspaces/link')
@@ -451,11 +451,11 @@ async def create_workspace_link(request: Request, link_data: JiraLinkCreate):
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error registering Jira user: {e}')
+        logger.exception(f'Error registering Jira user: {e}', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to register user',
-        )
+        ) from e
 
 
 @jira_integration_router.get('/callback')
@@ -655,11 +655,11 @@ async def get_current_workspace_link(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error retrieving Jira user: {e}')
+        logger.exception(f'Error retrieving Jira user: {e}', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve user',
-        )
+        ) from e
 
 
 @jira_integration_router.post('/workspaces/unlink')
@@ -707,11 +707,11 @@ async def unlink_workspace(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error unlinking Jira user: {e}')
+        logger.exception(f'Error unlinking Jira user: {e}', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to unlink user',
-        )
+        ) from e
 
 
 @jira_integration_router.get(
@@ -762,8 +762,8 @@ async def validate_workspace_integration(request: Request, workspace_name: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error validating Jira organization: {e}')
+        logger.exception(f'Error validating Jira organization: {e}', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to validate organization',
-        )
+        ) from e

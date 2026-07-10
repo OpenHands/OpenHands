@@ -24,7 +24,9 @@ class GoogleSheetsClient:
             self.client = gspread.authorize(credentials)
             logger.info('Successfully initialized Google Sheets API service')
         except Exception:
-            logger.exception('Failed to initialize Google Sheets client')
+            logger.exception(
+                'Failed to initialize Google Sheets client', stack_info=True
+            )
             self.client = None
 
     def _get_from_cache(
@@ -102,10 +104,13 @@ class GoogleSheetsClient:
             return usernames
 
         except gspread.exceptions.APIError:
-            logger.exception(f'Error accessing Google Sheet {spreadsheet_id}')
+            logger.exception(
+                f'Error accessing Google Sheet {spreadsheet_id}', stack_info=True
+            )
             return []
         except Exception:
             logger.exception(
-                f'Unexpected error accessing Google Sheet {spreadsheet_id}'
+                f'Unexpected error accessing Google Sheet {spreadsheet_id}',
+                stack_info=True,
             )
             return []
