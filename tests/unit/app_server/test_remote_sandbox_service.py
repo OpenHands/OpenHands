@@ -2112,6 +2112,7 @@ class TestArchiveWorkspaceHelper:
                     ),
                     'X-Archive-Branch': 'feature-x',
                     'X-Archive-Head-Commit': 'def456',
+                    'X-Archive-Repo-Root': '%2Fworkspace%2Fproject%2Frepo',
                 },
             )
         )
@@ -2124,8 +2125,16 @@ class TestArchiveWorkspaceHelper:
             path, open(src, 'rb').read()
         )
 
-        with patch.object(
-            workspace_archive, '_get_archive_file_store', return_value=store
+        probe_workspace = AsyncMock(
+            return_value={'packages': {'npm': {'example': '1.0.0'}}}
+        )
+        probe_git_changes = AsyncMock(return_value={'commits': 1})
+        with (
+            patch.object(
+                workspace_archive, '_get_archive_file_store', return_value=store
+            ),
+            patch.object(workspace_archive, '_probe_workspace', probe_workspace),
+            patch.object(workspace_archive, '_probe_git_changes', probe_git_changes),
         ):
             ok = await workspace_archive.archive_workspace(
                 client,
@@ -2156,6 +2165,20 @@ class TestArchiveWorkspaceHelper:
         assert manifest['repo_remote'] == 'https://github.com/example/repo.git'
         assert manifest['branch'] == 'feature-x'
         assert manifest['head_commit'] == 'def456'
+        assert manifest['packages'] == {'npm': {'example': '1.0.0'}}
+        assert manifest['git_changes'] == {'commits': 1}
+        probe_workspace.assert_awaited_once_with(
+            'https://sandbox.example.com',
+            'test-session-key',
+            '/workspace/project/repo',
+        )
+        probe_git_changes.assert_awaited_once_with(
+            'https://sandbox.example.com',
+            'test-session-key',
+            '/workspace/project/repo',
+            'abc123',
+            'def456',
+        )
 
     @pytest.mark.asyncio
     async def test_archive_missing_base_commit_header_defaults_empty(self, monkeypatch):

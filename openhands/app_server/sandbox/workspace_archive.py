@@ -42,6 +42,7 @@ _REPO_METADATA_HEADERS = {
     'branch': 'X-Archive-Branch',
     'head_commit': 'X-Archive-Head-Commit',
 }
+_REPO_ROOT_HEADER = 'X-Archive-Repo-Root'
 
 
 def _extract_repo_metadata(
@@ -603,17 +604,9 @@ async def archive_workspace(
     # image predating them — graceful) and is reused across formats so each
     # manifest is self-describing (repo / branch / captured HEAD).
     repo_metadata = dict.fromkeys(_REPO_METADATA_HEADERS, '')
-    # Manifest enrichment, probed once from the live workspace and reused across
-    # formats (resolved versions/env the git delta / tar.gz cannot supply —
-    # .venv/node_modules are excluded). All best-effort; never blocks archiving.
-    # git_changes needs base+head, so it is filled inside the loop once known.
-    try:
-        enrichment = await _probe_workspace(
-            agent_server_url, session_api_key, archive_path
-        )
-    except Exception as e:
-        _logger.debug('Workspace enrichment skipped for %s: %s', sandbox_id, e)
-        enrichment = {}
+    enrichment: dict[str, Any] = {}
+    enrichment_probed = False
+    probe_path = archive_path
     if run_metrics is None:
         try:
             run_metrics = await _fetch_run_metrics(
@@ -666,13 +659,26 @@ async def archive_workspace(
                 if header_base:
                     base_commit = header_base
                 repo_metadata = _extract_repo_metadata(response.headers, repo_metadata)
+                response_repo_root = response.headers.get(_REPO_ROOT_HEADER, '')
+                if response_repo_root:
+                    probe_path = unquote(response_repo_root)
+                if not enrichment_probed:
+                    enrichment_probed = True
+                    try:
+                        enrichment = await _probe_workspace(
+                            agent_server_url, session_api_key, probe_path
+                        )
+                    except Exception as e:
+                        _logger.debug(
+                            'Workspace enrichment skipped for %s: %s', sandbox_id, e
+                        )
                 # Edit summary needs base + captured HEAD; compute once, reuse.
                 if not git_changes and base_commit and repo_metadata.get('head_commit'):
                     try:
                         git_changes = await _probe_git_changes(
                             agent_server_url,
                             session_api_key,
-                            archive_path,
+                            probe_path,
                             base_commit,
                             repo_metadata['head_commit'],
                         )
