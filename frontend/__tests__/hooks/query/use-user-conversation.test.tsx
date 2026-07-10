@@ -50,7 +50,7 @@ describe("useUserConversation", () => {
     vi.restoreAllMocks();
   });
 
-  it("retries rate-limited conversation fetches after the Retry-After delay", async () => {
+  it("backs off exponentially between rate-limited conversation fetches", async () => {
     const rateLimitError = {
       response: {
         status: 429,
@@ -63,7 +63,9 @@ describe("useUserConversation", () => {
     const batchGetAppConversations = vi
       .spyOn(V1ConversationService, "batchGetAppConversations")
       .mockRejectedValueOnce(rateLimitError)
+      .mockRejectedValueOnce(rateLimitError)
       .mockResolvedValueOnce([createConversation()]);
+    vi.spyOn(Math, "random").mockReturnValue(0);
 
     const { result } = renderHook(() => useUserConversation("conversation-1"), {
       wrapper: createWrapper(),
@@ -81,6 +83,17 @@ describe("useUserConversation", () => {
     });
 
     expect(batchGetAppConversations).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1999);
+    });
+    expect(batchGetAppConversations).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+
+    expect(batchGetAppConversations).toHaveBeenCalledTimes(3);
     await vi.waitFor(() => {
       expect(result.current.data?.id).toBe("conversation-1");
     });

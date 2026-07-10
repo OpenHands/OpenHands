@@ -1,7 +1,8 @@
 import { AxiosError } from "axios";
 
-const DEFAULT_RETRY_AFTER_MS = 1000;
-const MAX_RETRY_DELAY_MS = 60_000;
+const INITIAL_RETRY_DELAY_MS = 1000;
+const MAX_BASE_RETRY_DELAY_MS = 60_000;
+const MAX_JITTER_MS = 5000;
 const RETRY_AFTER_HEADER = "retry-after";
 
 function getHeaderValue(headers: unknown, name: string): string | undefined {
@@ -36,7 +37,7 @@ export function isRateLimitError(error: unknown): boolean {
   return axiosError?.response?.status === 429 || axiosError?.status === 429;
 }
 
-export function getRateLimitRetryDelayMs(error: unknown): number {
+function getRetryAfterDelayMs(error: unknown): number | undefined {
   const axiosError = error as AxiosError | undefined;
   const retryAfter = getHeaderValue(
     axiosError?.response?.headers,
@@ -44,18 +45,36 @@ export function getRateLimitRetryDelayMs(error: unknown): number {
   );
 
   if (!retryAfter) {
-    return DEFAULT_RETRY_AFTER_MS;
+    return undefined;
   }
 
   const seconds = Number(retryAfter);
   if (Number.isFinite(seconds) && seconds >= 0) {
-    return Math.min(seconds * 1000, MAX_RETRY_DELAY_MS);
+    return Math.min(seconds * 1000, MAX_BASE_RETRY_DELAY_MS);
   }
 
   const retryAt = Date.parse(retryAfter);
   if (Number.isNaN(retryAt)) {
-    return DEFAULT_RETRY_AFTER_MS;
+    return undefined;
   }
 
-  return Math.min(Math.max(retryAt - Date.now(), 0), MAX_RETRY_DELAY_MS);
+  return Math.min(Math.max(retryAt - Date.now(), 0), MAX_BASE_RETRY_DELAY_MS);
+}
+
+export function getRateLimitRetryDelayMs(
+  failureCount: number,
+  error: unknown,
+): number {
+  const exponentialDelay = Math.min(
+    INITIAL_RETRY_DELAY_MS * 2 ** failureCount,
+    MAX_BASE_RETRY_DELAY_MS,
+  );
+  const retryAfterDelay = getRetryAfterDelayMs(error);
+  // Retry-After is a server-directed minimum; jitter only delays further.
+  const minimumDelay = Math.max(retryAfterDelay ?? 0, exponentialDelay);
+  const jitter = Math.floor(
+    Math.random() * Math.min(exponentialDelay, MAX_JITTER_MS),
+  );
+
+  return minimumDelay + jitter;
 }
