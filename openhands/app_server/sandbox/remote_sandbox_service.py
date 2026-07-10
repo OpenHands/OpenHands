@@ -447,14 +447,14 @@ class RemoteSandboxService(SandboxService):
             # get user id
             user_id = await self.user_context.get_user_id()
 
-            # Store the sandbox
+            # Built now, but only added + committed after the runtime /start
+            # succeeds, so a failed start leaves no row behind.
             stored_sandbox = StoredRemoteSandbox(
                 id=sandbox_id,
                 created_by_user_id=user_id,
                 sandbox_spec_id=sandbox_spec.id,
                 created_at=utc_now(),
             )
-            self.db_session.add(stored_sandbox)
 
             # Prepare environment variables
             environment = await self._init_environment(sandbox_spec, sandbox_id)
@@ -476,6 +476,13 @@ class RemoteSandboxService(SandboxService):
             if self.runtime_class == 'sysbox':
                 start_request['runtime_class'] = 'sysbox-runc'
 
+            # Runtime /start can block for up to start_sandbox_timeout waiting
+            # for a warm runtime to be claimable; end the transaction opened by
+            # the reads above so no pooled DB connection sits idle-in-transaction
+            # for that long. This also persists any pause_old_sandboxes key
+            # invalidations.
+            await self.db_session.commit()
+
             # Start the runtime
             response = await self._send_runtime_api_request(
                 'POST',
@@ -491,6 +498,11 @@ class RemoteSandboxService(SandboxService):
                 stored_sandbox.session_api_key_hash = _hash_session_api_key(
                     session_api_key
                 )
+            self.db_session.add(stored_sandbox)
+            # Commit in a short transaction of its own: the runtime is up, so
+            # the row (and key hash the webhook auth looks up) must be visible
+            # to other workers before callbacks start arriving.
+            await self.db_session.commit()
 
             # Log runtime assignment for observability
             runtime_id = runtime_data.get('runtime_id', 'unknown')
@@ -516,6 +528,8 @@ class RemoteSandboxService(SandboxService):
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
             if not stored_sandbox:
                 return False
+            # Release the pooled DB connection before the runtime-api calls.
+            await self.db_session.commit()
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
                 'POST',
@@ -534,6 +548,9 @@ class RemoteSandboxService(SandboxService):
                 stored_sandbox.session_api_key_hash = _hash_session_api_key(
                     new_session_api_key
                 )
+                # Commit now so other workers' webhook-auth lookups see the
+                # new hash as soon as the resumed runtime starts calling back.
+                await self.db_session.commit()
                 _logger.info(
                     f'Updated session_api_key_hash for sandbox {sandbox_id} after resume'
                 )
@@ -556,7 +573,10 @@ class RemoteSandboxService(SandboxService):
 
             # Security: Invalidate the session API key hash to prevent
             # leaked keys from being used while the sandbox is paused.
+            # Committed immediately: the revoke is durable up front, and the
+            # pooled DB connection is released before the runtime-api calls.
             stored_sandbox.session_api_key_hash = None
+            await self.db_session.commit()
 
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
@@ -590,22 +610,21 @@ class RemoteSandboxService(SandboxService):
         (router -> 503) and keeps the row + runtime for a retry — so a live sandbox
         is never reported as 404.
 
-        Security: the session_api_key_hash is invalidated UP FRONT (like
-        ``pause_sandbox`` clears it before pausing) so a delete — commonly a
-        revoke of a leaked key — kills it promptly. This goes further than pause:
-        on a transient stop failure the invalidation is committed before raising,
-        so the caller's rollback cannot resurrect the just-revoked key (pause does
-        not commit, so its clear can still be rolled back). The row is kept for
-        retry.
+        Security: the session_api_key_hash is invalidated and committed UP
+        FRONT (like ``pause_sandbox``) so a delete — commonly a revoke of a
+        leaked key — kills it promptly and no later rollback can resurrect it.
+        On a transient stop failure the row is kept for retry, with the key
+        already revoked.
         """
-        had_key = False
         try:
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
             if not stored_sandbox:
                 return False
             # Security: drop the key now, before the (fallible) runtime stop.
-            had_key = stored_sandbox.session_api_key_hash is not None
+            # Committed immediately so the revoke is durable and the pooled DB
+            # connection is released before the runtime-api calls below.
             stored_sandbox.session_api_key_hash = None
+            await self.db_session.commit()
             try:
                 runtime_data = await self._get_runtime(sandbox_id)
             except httpx.HTTPStatusError as e:
@@ -617,6 +636,7 @@ class RemoteSandboxService(SandboxService):
                     'deleting record'
                 )
                 await self.db_session.delete(stored_sandbox)
+                await self.db_session.commit()
                 return True
 
             response = await self._send_runtime_api_request(
@@ -627,15 +647,13 @@ class RemoteSandboxService(SandboxService):
             if response.status_code != 404:
                 response.raise_for_status()
             await self.db_session.delete(stored_sandbox)
+            await self.db_session.commit()
             return True
         except httpx.HTTPError as e:
             # Transient runtime lookup/stop failure: keep the row + runtime and
-            # signal retryable (503) — never a 404. Persist the key invalidation
-            # now: the caller rolls back on this raise, which would otherwise
-            # restore the hash and leave a just-revoked key valid.
+            # signal retryable (503) — never a 404. The key invalidation was
+            # already committed above, so this raise cannot resurrect it.
             _logger.error(f'Error deleting sandbox {sandbox_id}: {e}')
-            if had_key:
-                await self.db_session.commit()
             raise SandboxDeleteRetryError(
                 f'Could not complete delete for sandbox {sandbox_id}: {e}'
             ) from e
@@ -696,6 +714,10 @@ class RemoteSandboxService(SandboxService):
             url = runtime.get('url')
             if url:
                 runtime['url'] = replace_localhost_hostname_for_docker(url)
+            # Archiving can take minutes on a large workspace; end any read
+            # transaction (_resolve_archive_path's fallback queries) so no
+            # pooled DB connection is held while it runs.
+            await self.db_session.commit()
             return await workspace_archive.archive_workspace(
                 self.httpx_client,
                 runtime,
@@ -742,6 +764,8 @@ class RemoteSandboxService(SandboxService):
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
             if not stored_sandbox:
                 return True
+            # Release the pooled DB connection before the runtime-api calls.
+            await self.db_session.commit()
             runtime_data = await self._get_runtime(sandbox_id)
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:

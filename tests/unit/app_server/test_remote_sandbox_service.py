@@ -447,7 +447,10 @@ class TestSandboxLifecycle:
             9
         )  # max_num_sandboxes - 1
         remote_sandbox_service.db_session.add.assert_called_once()
-        remote_sandbox_service.db_session.commit.assert_not_called()
+        # start_sandbox commits twice: once to release the pooled connection
+        # before the (slow) runtime /start call, once to persist the new row
+        # right after the runtime is up.
+        assert remote_sandbox_service.db_session.commit.await_count == 2
 
     @pytest.mark.asyncio
     async def test_start_sandbox_with_specific_spec(
@@ -668,9 +671,10 @@ class TestSandboxLifecycle:
         # Verify
         assert result is True
         remote_sandbox_service.db_session.delete.assert_called_once_with(stored_sandbox)
-        # delete_sandbox no longer commits internally: the session key is dropped
-        # atomically with the row delete, which the caller commits.
-        remote_sandbox_service.db_session.commit.assert_not_awaited()
+        # delete_sandbox commits twice: the up-front key revoke (which also
+        # releases the pooled connection before the runtime-api calls) and the
+        # row delete after /stop succeeds.
+        assert remote_sandbox_service.db_session.commit.await_count == 2
         remote_sandbox_service.httpx_client.request.assert_called_once_with(
             'POST',
             'https://api.example.com/stop',
