@@ -754,6 +754,7 @@ class LiteLlmManager:
         team_id: str,
         team_alias: str | None,
         max_budget: float | None,
+        clear_budget: bool = False,
     ):
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
@@ -766,7 +767,7 @@ class LiteLlmManager:
             },
         }
 
-        if max_budget is not None:
+        if max_budget is not None or clear_budget:
             json_data['max_budget'] = max_budget
 
         if team_alias is not None:
@@ -1233,6 +1234,7 @@ class LiteLlmManager:
         keycloak_user_id: str,
         team_id: str,
         max_budget: float | None,
+        clear_budget: bool = False,
     ):
         """Update a user's budget in a team.
 
@@ -1252,7 +1254,7 @@ class LiteLlmManager:
             'user_id': keycloak_user_id,
         }
 
-        if max_budget is not None:
+        if max_budget is not None or clear_budget:
             json_data['max_budget_in_team'] = max_budget
 
         response = await client.post(

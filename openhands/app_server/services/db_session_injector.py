@@ -1,6 +1,7 @@
 """Database configuration and session management for OpenHands App Server."""
 
 import asyncio
+import contextlib
 import logging
 import os
 from pathlib import Path
@@ -320,7 +321,46 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
                     # Clean up the session from request state
                     if hasattr(state, DB_SESSION_ATTR):
                         delattr(state, DB_SESSION_ATTR)
-                    await db_session.close()
+                    # ``close`` is async, so it can still fail (e.g. the pool
+                    # is in an inconsistent state because we were cancelled
+                    # mid-query). Suppress secondary failures so the original
+                    # exception keeps propagating.
+                    with contextlib.suppress(Exception):
+                        await db_session.close()
+
+    async def close(self) -> None:
+        """Release long-lived resources owned by this injector.
+
+        Currently this closes the GCP Cloud SQL connector (which in turn stops
+        its background cert-refresh tasks and aiohttp ClientSession) and
+        disposes the async SQLAlchemy engine. ``close`` is idempotent and
+        safe to call multiple times.
+
+        Call this from the application lifespan ``__aexit__`` so that workers
+        exiting gracefully don't leak the connector's background resources
+        across respawns.
+        """
+        connector = self._gcp_connector
+        if connector is not None:
+            # ``close_async`` may not exist on older connector versions; fall
+            # back to ``close`` if so.
+            close = getattr(connector, 'close_async', None)
+            if close is None:
+                close = connector.close
+            try:
+                result = close()
+                if asyncio.iscoroutine(result):
+                    await result
+            except Exception:
+                _logger.exception('Error closing GCP Cloud SQL connector')
+            self._gcp_connector = None
+
+        engine = self._async_engine
+        if engine is not None:
+            try:
+                await engine.dispose()
+            except Exception:
+                _logger.exception('Error disposing async DB engine')
 
 
 def set_db_session_keep_open(state: InjectorState, keep_open: bool):

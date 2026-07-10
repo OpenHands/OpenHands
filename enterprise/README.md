@@ -46,11 +46,11 @@ The github service is responsible for interacting with Github APIs. As a consequ
 
 NOTE: in the future we will simply replace the `GithubTokenManager` with keycloak. The `SaaSGithubService` should interact with keycloack instead.
 
-### Email delivery (SMTP)
+### Email delivery (SMTP for invitations & budget alerts)
 
-Budget alert emails and other SMTP-backed notifications are sent via SMTP when configured.
-If `SMTP_HOST` is unset, email delivery is disabled and the UI can surface manual links
-instead of attempting to send mail.
+Organization invitation emails and budget alert emails are sent via SMTP when configured. If
+`SMTP_HOST` is unset, invitations are still created but no email is sent (the UI surfaces
+copyable invite links instead).
 
 | Env var | Purpose | Default |
 | --- | --- | --- |
