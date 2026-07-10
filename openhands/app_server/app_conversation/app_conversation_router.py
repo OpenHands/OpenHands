@@ -66,6 +66,7 @@ from openhands.app_server.config import (
     depends_user_context,
     get_app_conversation_service,
 )
+from openhands.app_server.sandbox import workspace_archive
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     SandboxInfo,
@@ -874,6 +875,7 @@ async def _finalize_sandbox_delete(
     httpx_client: httpx.AsyncClient,
     conversation_id: UUID | None = None,
     workspace_path: str | None = None,
+    run_metrics: dict[str, Any] | None = None,
 ) -> None:
     """Archive the conversation's workspace, then delete the sandbox if unreferenced.
 
@@ -887,10 +889,14 @@ async def _finalize_sandbox_delete(
     is sandbox-scoped (stop + delete) and knows nothing about conversations.
     """
     try:
+        archive_kwargs: dict[str, Any] = {
+            'conversation_id': conversation_id.hex if conversation_id else None,
+            'workspace_path': workspace_path,
+        }
+        if run_metrics is not None:
+            archive_kwargs['run_metrics'] = run_metrics
         archived = await sandbox_service.archive_conversation_workspace(
-            sandbox_id,
-            conversation_id=conversation_id.hex if conversation_id else None,
-            workspace_path=workspace_path,
+            sandbox_id, **archive_kwargs
         )
         if not archived:
             # REQUIRED archive failed: keep the sandbox + running runtime for the
@@ -936,6 +942,7 @@ async def delete_app_conversation(
         app_conversation_info_service_dependency
     ),
     sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
     db_session: AsyncSession = db_session_dependency,
     httpx_client: httpx.AsyncClient = httpx_client_dependency,
 ) -> Success:
@@ -969,6 +976,31 @@ async def delete_app_conversation(
             )
         )
         sandbox_is_shared = conversation_count > 1
+
+    run_metrics: dict[str, Any] | None = None
+    if workspace_archive.archive_enabled():
+        run_metrics = {}
+        try:
+            ctx = await _get_agent_server_context(
+                conversation_uuid,
+                app_conversation_service,
+                sandbox_service,
+                sandbox_spec_service,
+            )
+            if isinstance(ctx, AgentServerContext):
+                headers = (
+                    {'X-Session-API-Key': ctx.session_api_key}
+                    if ctx.session_api_key
+                    else {}
+                )
+                run_metrics = await workspace_archive._fetch_run_metrics(
+                    httpx_client,
+                    ctx.agent_server_url,
+                    headers,
+                    conversation_id,
+                )
+        except Exception as e:
+            logger.debug('Run-metrics snapshot skipped for %s: %s', conversation_id, e)
 
     # Delete the conversation (skip agent server DELETE if sandbox is shared)
     deleted = await app_conversation_service.delete_app_conversation(
@@ -1012,6 +1044,7 @@ async def delete_app_conversation(
                 httpx_client,
                 conversation_id=conversation_uuid,
                 workspace_path=workspace_path,
+                run_metrics=run_metrics,
             )
         )
 

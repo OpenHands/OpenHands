@@ -1,6 +1,8 @@
 """Manifest enrichment probes (packages / runtime / lockfiles / git / run)."""
 
+import asyncio
 import json
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -171,6 +173,26 @@ async def test_probe_workspace_never_raises():
 
 
 @pytest.mark.asyncio
+async def test_run_probe_closes_client_without_blocking_event_loop(monkeypatch):
+    workspace = MagicMock()
+
+    async def execute_command(command, cwd, timeout):
+        time.sleep(0.05)
+        return _Result('done')
+
+    workspace.execute_command = execute_command
+    workspace.reset_client = AsyncMock()
+    monkeypatch.setattr(wa, 'AsyncRemoteWorkspace', lambda **kwargs: workspace)
+
+    probe = asyncio.create_task(wa._run_probe('http://host', 'key', '/repo', 'cmd'))
+    await asyncio.sleep(0.01)
+
+    assert not probe.done()
+    assert await probe == 'done'
+    workspace.reset_client.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_probe_git_changes_requires_shas():
     async def fail(command, cwd, timeout):
         raise AssertionError('must not run git for non-sha refs')
@@ -182,8 +204,10 @@ async def test_probe_git_changes_requires_shas():
 @pytest.mark.asyncio
 async def test_probe_git_changes_parses():
     git_out = f'commits=2\n{wa._NUMSTAT_MARKER}\n10\t2\tf.py'
+    commands = []
 
     async def fake_exec(command, cwd, timeout):
+        commands.append(command)
         return _Result(git_out)
 
     with patch.object(
@@ -191,6 +215,7 @@ async def test_probe_git_changes_parses():
     ):
         gc = await wa._probe_git_changes('h', 'k', '/r', 'a' * 40, 'b' * 40)
     assert gc == {'commits': 2, 'files_changed': 1, 'insertions': 10, 'deletions': 2}
+    assert f'git diff --numstat {"a" * 40} 2>/dev/null' in commands[0]
 
 
 @pytest.mark.asyncio

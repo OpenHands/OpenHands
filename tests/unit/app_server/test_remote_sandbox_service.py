@@ -2039,10 +2039,12 @@ class TestArchiveConversationWorkspace:
                 'test-sandbox-123',
                 conversation_id='conv-1',
                 workspace_path='/home/openhands/workspace/conv-1',
+                run_metrics={'cost': 1.25},
             )
         assert ok is True
         _, kwargs = mock_archive.call_args
         assert kwargs['archive_path'] == '/home/openhands/workspace/conv-1'
+        assert kwargs['run_metrics'] == {'cost': 1.25}
         remote_sandbox_service.sandbox_spec_service.get_sandbox_spec.assert_not_called()
 
     @pytest.mark.asyncio
@@ -2129,6 +2131,7 @@ class TestArchiveWorkspaceHelper:
                 'sandbox-1',
                 archive_path='/workspace/project',
                 conversation_id='conv-1',
+                run_metrics={'cost': 1.25},
             )
 
         assert ok is True
@@ -2146,6 +2149,7 @@ class TestArchiveWorkspaceHelper:
         assert manifest['base_commit'] == 'abc123'
         assert manifest['conversation_id'] == 'conv-1'
         assert manifest['source_path'] == '/workspace/project'
+        assert manifest['run'] == {'cost': 1.25}
         # Repo identity from the response headers makes the blob self-describing.
         assert manifest['repo_remote'] == 'https://github.com/example/repo.git'
         assert manifest['branch'] == 'feature-x'

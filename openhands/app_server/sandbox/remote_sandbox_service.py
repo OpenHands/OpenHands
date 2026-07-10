@@ -678,6 +678,7 @@ class RemoteSandboxService(SandboxService):
         conversation_id: str | None,
         runtime_data: dict,
         workspace_path: str | None,
+        run_metrics: dict[str, Any] | None,
     ) -> bool:
         """Archive one workspace via the in-pod agent-server; return may-proceed.
 
@@ -702,6 +703,7 @@ class RemoteSandboxService(SandboxService):
                 stored_sandbox.id,
                 archive_path=archive_path,
                 conversation_id=conversation_id,
+                run_metrics=run_metrics,
             )
         except Exception:
             # Could not resolve the workspace layout: never archive to the wrong
@@ -716,6 +718,7 @@ class RemoteSandboxService(SandboxService):
         sandbox_id: str,
         conversation_id: str | None = None,
         workspace_path: str | None = None,
+        run_metrics: dict[str, Any] | None = None,
     ) -> bool:
         """Archive ONE conversation's workspace; return whether delete may proceed.
 
@@ -763,7 +766,11 @@ class RemoteSandboxService(SandboxService):
             )
             return not workspace_archive.archive_required()
         archived = await self._archive_workspace(
-            stored_sandbox, conversation_id, runtime_data, workspace_path
+            stored_sandbox,
+            conversation_id,
+            runtime_data,
+            workspace_path,
+            run_metrics,
         )
         if not archived:
             _logger.warning(

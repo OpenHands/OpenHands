@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 from abc import ABC, abstractmethod
+from typing import Any
 
 import httpx
 
@@ -208,6 +209,7 @@ class SandboxService(ABC):
         sandbox_id: str,
         conversation_id: str | None = None,
         workspace_path: str | None = None,
+        run_metrics: dict[str, Any] | None = None,
     ) -> bool:
         """Archive one conversation's workspace; return whether delete may proceed.
 

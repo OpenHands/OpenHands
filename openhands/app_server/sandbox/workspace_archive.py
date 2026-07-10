@@ -346,15 +346,33 @@ async def _run_probe(
     agent_server_url: str, session_api_key: str | None, cwd: str, command: str
 ) -> str:
     """Run one command in the workspace; '' on any failure (never raises)."""
-    workspace = AsyncRemoteWorkspace(
-        host=agent_server_url, api_key=session_api_key, working_dir=cwd
-    )
     try:
-        result = await workspace.execute_command(command, cwd, timeout=_PROBE_TIMEOUT)
+        result = await asyncio.to_thread(
+            _run_probe_in_thread,
+            agent_server_url,
+            session_api_key,
+            cwd,
+            command,
+        )
     except Exception as e:
         _logger.debug('Workspace probe %r failed: %s', command, e)
         return ''
     return result.stdout or ''
+
+
+def _run_probe_in_thread(
+    agent_server_url: str, session_api_key: str | None, cwd: str, command: str
+) -> Any:
+    async def _execute() -> Any:
+        workspace = AsyncRemoteWorkspace(
+            host=agent_server_url, api_key=session_api_key, working_dir=cwd
+        )
+        try:
+            return await workspace.execute_command(command, cwd, timeout=_PROBE_TIMEOUT)
+        finally:
+            await workspace.reset_client()
+
+    return asyncio.run(_execute())
 
 
 async def _probe_workspace(
@@ -409,7 +427,7 @@ async def _probe_git_changes(
     base_commit: str,
     head_commit: str,
 ) -> dict[str, Any]:
-    """Edit summary (files/insertions/deletions/commits) of base..head."""
+    """Summarize commits and working-tree edits since the base commit."""
     if not (
         _manifest_enrichment_enabled() and _is_sha(base_commit) and _is_sha(head_commit)
     ):
@@ -418,7 +436,7 @@ async def _probe_git_changes(
         f'echo "commits=$(git rev-list --count {base_commit}..{head_commit} '
         '2>/dev/null)"; '
         f'echo {_NUMSTAT_MARKER}; '
-        f'git diff --numstat {base_commit}..{head_commit} 2>/dev/null'
+        f'git diff --numstat {base_commit} 2>/dev/null'
     )
     return _parse_git_changes(
         await _run_probe(agent_server_url, session_api_key, cwd, command)
@@ -485,6 +503,7 @@ async def archive_workspace(
     *,
     archive_path: str,
     conversation_id: str | None = None,
+    run_metrics: dict[str, Any] | None = None,
 ) -> bool:
     """Archive the workspace at ``archive_path``; return whether delete may proceed.
 
@@ -576,13 +595,14 @@ async def archive_workspace(
     except Exception as e:
         _logger.debug('Workspace enrichment skipped for %s: %s', sandbox_id, e)
         enrichment = {}
-    try:
-        run_metrics = await _fetch_run_metrics(
-            httpx_client, agent_server_url, headers, conversation_id
-        )
-    except Exception as e:
-        _logger.debug('Run-metrics skipped for %s: %s', sandbox_id, e)
-        run_metrics = {}
+    if run_metrics is None:
+        try:
+            run_metrics = await _fetch_run_metrics(
+                httpx_client, agent_server_url, headers, conversation_id
+            )
+        except Exception as e:
+            _logger.debug('Run-metrics skipped for %s: %s', sandbox_id, e)
+            run_metrics = {}
     git_changes: dict[str, Any] = {}
     # One store per call (not per format) — building it lazily spins up a client.
     store = _get_archive_file_store()
