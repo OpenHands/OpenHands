@@ -596,15 +596,7 @@ class OrgService:
             return updated_org
 
         except Exception as e:
-            logger.error(
-                'Failed to update organization',
-                extra={
-                    'org_id': str(org_id),
-                    'user_id': user_id,
-                    'error': str(e),
-                },
-            )
-            raise OrgDatabaseError(f'Failed to update organization: {str(e)}')
+            raise OrgDatabaseError('Failed to update organization') from e
 
     @staticmethod
     async def get_org_credits(user_id: str, org_id: UUID) -> float | None:

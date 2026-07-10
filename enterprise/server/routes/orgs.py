@@ -332,9 +332,10 @@ async def update_org_defaults_settings(
             detail=str(e),
         )
     except OrgDatabaseError as e:
-        logger.error(
+        logger.exception(
             'Database error updating organization defaults settings',
-            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -346,6 +347,7 @@ async def update_org_defaults_settings(
         logger.exception(
             'Error updating organization defaults settings',
             extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
