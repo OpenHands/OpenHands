@@ -242,12 +242,15 @@ def _merge_launch_context(
     system_message_suffix: str | None,
     secrets: Mapping[str, Any] | None = None,
     disabled_skills: Sequence[str] | None = None,
+    refresh_current_datetime: bool = True,
 ) -> AgentContext:
     fresh_context = AgentContext()
     context = context or fresh_context
-    updates: dict[str, Any] = {
-        'current_datetime': fresh_context.current_datetime,
-    }
+    updates: dict[str, Any] = {}
+    if refresh_current_datetime:
+        updates['current_datetime'] = fresh_context.current_datetime
+    elif context is fresh_context:
+        updates['current_datetime'] = None
     if system_message_suffix:
         updates['system_message_suffix'] = append_system_context(
             context.system_message_suffix, system_message_suffix
@@ -2195,6 +2198,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 acp_settings.agent_context,
                 system_message_suffix,
                 disabled_skills=launch_snapshot.disabled_skills,
+                refresh_current_datetime=False,
             )
         acp_settings_for_agent = acp_settings.model_copy(update=settings_update)
         acp_agent = acp_settings_for_agent.create_agent()

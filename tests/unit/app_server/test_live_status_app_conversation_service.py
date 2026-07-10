@@ -4450,6 +4450,7 @@ class TestBuildAcpStartConversationRequestSecrets:
         user.agent_settings = user.agent_settings.model_copy(
             update={
                 'agent_context': AgentContext(
+                    current_datetime=None,
                     load_project_skills=True,
                     system_message_suffix='PROFILE_SUFFIX',
                 )
@@ -4465,6 +4466,7 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         context = request.agent.agent_context
         assert context is not None
+        assert context.current_datetime is None
         assert context.load_project_skills is True
         assert context.disabled_skills == ['disabled-project-skill']
         assert context.system_message_suffix.startswith('PROFILE_SUFFIX')
