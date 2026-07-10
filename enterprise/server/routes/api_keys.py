@@ -7,6 +7,7 @@ from pydantic import BaseModel, SecretStr, field_validator, model_validator
 from server.auth.authorization import get_user_super_role
 from server.auth.org_context import EFFECTIVE_ORG_ID
 from server.auth.saas_user_auth import SaasUserAuth
+from server.constants import BYOR_KEY_ALIAS_PATTERN
 from storage.api_key import ApiKey
 from storage.api_key_store import ApiKeyStore
 from storage.lite_llm_manager import LiteLlmManager
@@ -56,6 +57,11 @@ async def store_byor_key_in_db(user_id: str, org_id: UUID, key: str) -> None:
     await OrgMemberStore.update_org_member(org_member)
 
 
+def _create_byor_key_alias(user_id: str, org_id: str) -> str:
+    alias = BYOR_KEY_ALIAS_PATTERN.format(user_id=user_id, org_id=org_id)
+    return alias
+
+
 async def generate_byor_key(user_id: str, org_id: UUID) -> str | None:
     """Generate a new BYOR key for a user in a specific org."""
     try:
@@ -63,7 +69,7 @@ async def generate_byor_key(user_id: str, org_id: UUID) -> str | None:
         key = await LiteLlmManager.generate_key(
             user_id,
             org_id_str,
-            f'BYOR Key - user {user_id}, org {org_id_str}',
+            _create_byor_key_alias(user_id, org_id_str),
             {'type': 'byor'},
         )
 
@@ -93,7 +99,7 @@ async def delete_byor_key_from_litellm(
     to clean up orphaned aliases that could block key regeneration.
     """
     try:
-        key_alias = f'BYOR Key - user {user_id}, org {org_id}'
+        key_alias = _create_byor_key_alias(user_id, str(org_id))
         await LiteLlmManager.delete_key(byor_key, key_alias=key_alias)
         logger.info(
             'Successfully deleted BYOR key from LiteLLM',

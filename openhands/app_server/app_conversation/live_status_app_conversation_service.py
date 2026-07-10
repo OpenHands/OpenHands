@@ -1380,6 +1380,26 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         return metadata, tags
 
     @staticmethod
+    def _extend_observability_metadata(
+        target: dict[str, Any], metadata: Mapping[str, Any]
+    ) -> None:
+        for key, value in metadata.items():
+            if value is None:
+                continue
+            if isinstance(value, str) and value == '':
+                continue
+            if key in target:
+                if target[key] != value:
+                    _logger.warning(
+                        'Conflicting observability metadata for %s (existing=%r, incoming=%r); keeping existing value',
+                        key,
+                        target[key],
+                        value,
+                    )
+                continue
+            target[key] = value
+
+    @staticmethod
     def _apply_server_agent_overrides(
         agent: Agent,
         agent_type: AgentType,
@@ -1887,12 +1907,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # injects it directly into the JSON body as a forward-compatible
         # fallback.
         laminar_user_id = await self.user_context.get_user_email() or user.id
-        observability_metadata = await self._build_observability_metadata(
+        resolved_observability_metadata = await self._build_observability_metadata(
             remote_workspace,
             project_dir,
             selected_repository,
             selected_branch,
             git_provider,
+        )
+        self._extend_observability_metadata(
+            observability_metadata, resolved_observability_metadata
         )
         create_kwargs: dict[str, Any] = {'agent': agent, 'user_id': laminar_user_id}
         if observability_metadata:
@@ -2152,12 +2175,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # prefer email over the internal id so Laminar traces are immediately
         # attributable, falling back to ``user.id`` when no email is available.
         laminar_user_id = await self.user_context.get_user_email() or user.id
-        observability_metadata = await self._build_observability_metadata(
+        resolved_observability_metadata = await self._build_observability_metadata(
             remote_workspace,
             project_dir,
             selected_repository,
             selected_branch,
             git_provider,
+        )
+        self._extend_observability_metadata(
+            observability_metadata, resolved_observability_metadata
         )
         create_kwargs: dict[str, Any] = {
             'agent': acp_agent,

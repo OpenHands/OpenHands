@@ -37,6 +37,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
     pool_size: int = 25
     max_overflow: int = 10
     pool_recycle: int = 1800
+    pool_use_lifo: bool = True
     gcp_db_instance: str | None = None
     gcp_project: str | None = None
     gcp_region: str | None = None
@@ -125,6 +126,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
             pool_size=self.pool_size,
             max_overflow=self.max_overflow,
             pool_pre_ping=True,
+            pool_use_lifo=self.pool_use_lifo,
         )
         return engine
 
@@ -162,6 +164,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
             max_overflow=self.max_overflow,
             pool_pre_ping=True,
             pool_recycle=self.pool_recycle,
+            pool_use_lifo=self.pool_use_lifo,
         )
 
     async def get_async_db_engine(self) -> AsyncEngine:
@@ -199,6 +202,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
                     max_overflow=self.max_overflow,
                     pool_recycle=self.pool_recycle,
                     pool_pre_ping=True,
+                    pool_use_lifo=self.pool_use_lifo,
                 )
             else:
                 async_engine = create_async_engine(
@@ -243,6 +247,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
                 max_overflow=self.max_overflow,
                 pool_recycle=self.pool_recycle,
                 pool_pre_ping=True,
+                pool_use_lifo=self.pool_use_lifo,
             )
         assert engine is not None  # Always assigned in either branch above
         self._engine = engine
