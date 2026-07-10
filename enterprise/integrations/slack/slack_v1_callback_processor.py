@@ -138,7 +138,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
                 channel_id,
             )
 
-        except Exception as e:
+        except Exception:
             _logger.exception(
                 '[Slack V1] Failed to post message to Slack', stack_info=True
             )
