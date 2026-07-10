@@ -4474,6 +4474,20 @@ class TestBuildAcpStartConversationRequestSecrets:
             assert context.system_message_suffix.endswith(system_message_suffix)
 
     @pytest.mark.asyncio
+    async def test_disabled_skills_without_context_omit_datetime(
+        self, service, tmp_path
+    ):
+        user = self._make_acp_user()
+        user.disabled_skills = ['disabled-project-skill']
+
+        request = await self._call_build(service, user, tmp_path)
+
+        context = request.agent.agent_context
+        assert context is not None
+        assert context.current_datetime is None
+        assert context.disabled_skills == ['disabled-project-skill']
+
+    @pytest.mark.asyncio
     async def test_secrets_forwarded_via_request_secrets(self, service, tmp_path):
         """Panel secrets flow through request.secrets; not pre-resolved into agent_context."""
         gh_secret = StaticSecret(value=SecretStr('ghp_test123'))
