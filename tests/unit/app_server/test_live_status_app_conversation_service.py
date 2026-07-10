@@ -4466,7 +4466,7 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         context = request.agent.agent_context
         assert context is not None
-        assert context.current_datetime is None
+        assert isinstance(context.current_datetime, datetime)
         assert context.load_project_skills is True
         assert context.disabled_skills == ['disabled-project-skill']
         assert context.system_message_suffix.startswith('PROFILE_SUFFIX')
@@ -4474,18 +4474,15 @@ class TestBuildAcpStartConversationRequestSecrets:
             assert context.system_message_suffix.endswith(system_message_suffix)
 
     @pytest.mark.asyncio
-    async def test_disabled_skills_without_context_omit_datetime(
-        self, service, tmp_path
-    ):
+    async def test_without_context_gets_launch_datetime(self, service, tmp_path):
         user = self._make_acp_user()
-        user.disabled_skills = ['disabled-project-skill']
 
         request = await self._call_build(service, user, tmp_path)
 
         context = request.agent.agent_context
         assert context is not None
-        assert context.current_datetime is None
-        assert context.disabled_skills == ['disabled-project-skill']
+        assert isinstance(context.current_datetime, datetime)
+        assert context.disabled_skills == []
 
     @pytest.mark.asyncio
     async def test_secrets_forwarded_via_request_secrets(self, service, tmp_path):
