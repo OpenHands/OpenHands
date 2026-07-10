@@ -188,8 +188,8 @@ export function OrganizationBudgetTab({
               <div className="mt-2 space-y-1 text-xs text-amber-400">
                 {!emailIntegrationEnabled && (
                   <p>
-                    Email alerts require RESEND_API_KEY set in the deployment
-                    environment and a restart.
+                    Email alerts require RESEND_API_KEY or SMTP_* env vars set
+                    in the deployment environment and a restart.
                   </p>
                 )}
                 {!slackIntegrationEnabled && (
@@ -249,7 +249,7 @@ export function OrganizationBudgetTab({
                     title={
                       emailIntegrationEnabled
                         ? "Email org admins"
-                        : "Email alerts require RESEND_API_KEY in deployment (restart required)"
+                        : "Email alerts require RESEND_API_KEY or SMTP_* env vars in deployment (restart required)"
                     }
                   >
                     <PillBadge
