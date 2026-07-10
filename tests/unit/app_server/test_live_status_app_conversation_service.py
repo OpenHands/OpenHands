@@ -221,6 +221,12 @@ class TestLiveStatusAppConversationService:
         self.mock_user_auth = Mock()
         self.mock_user_context.user_auth = self.mock_user_auth
         self.mock_user_context.get_user_email = AsyncMock(return_value=None)
+        # APP-2678: ``ensure_managed_llm_key`` defaults to a no-op
+        # pass-through; mirror that here so tests do not have to wire an
+        # AsyncMock that returns a coroutine.
+        self.mock_user_context.ensure_managed_llm_key = AsyncMock(
+            side_effect=lambda user: user
+        )
         self.mock_jwt_service = Mock()
         self.mock_sandbox_service = Mock()
         self.mock_sandbox_spec_service = Mock()
@@ -2985,6 +2991,12 @@ class TestPluginHandling:
         self.mock_user_auth = Mock()
         self.mock_user_context.user_auth = self.mock_user_auth
         self.mock_user_context.get_user_email = AsyncMock(return_value=None)
+        # APP-2678: ``ensure_managed_llm_key`` defaults to a no-op
+        # pass-through; mirror that here so tests do not have to wire an
+        # AsyncMock that returns a coroutine.
+        self.mock_user_context.ensure_managed_llm_key = AsyncMock(
+            side_effect=lambda user: user
+        )
         self.mock_jwt_service = Mock()
         self.mock_sandbox_service = Mock()
         self.mock_sandbox_spec_service = Mock()

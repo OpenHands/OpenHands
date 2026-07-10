@@ -178,6 +178,19 @@ class AuthUserContext(UserContext):
         user_info = await self.get_user_info()
         return user_info.default_sandbox_spec_id
 
+    async def ensure_managed_llm_key(self, user_info: UserInfo) -> UserInfo:
+        """Delegate to the underlying :class:`UserAuth` so SaaS-specific
+        implementations can verify the managed LLM key in the upstream
+        proxy and regenerate it on miss (see APP-2678).
+
+        For non-SaaS ``UserAuth`` subclasses this is a no-op. ``UserInfo``
+        extends ``Settings`` and the underlying implementations mutate the
+        passed-in object in place, so we can safely return the same
+        reference as the caller's ``UserInfo``.
+        """
+        await self.user_auth.ensure_managed_llm_key(user_info)
+        return user_info
+
 
 USER_ID_ATTR = 'user_id'
 

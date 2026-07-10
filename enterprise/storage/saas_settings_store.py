@@ -144,7 +144,7 @@ class SaasSettingsStore(SettingsStore):
 
     @staticmethod
     def _get_persisted_agent_settings(item: Settings) -> dict[str, Any]:
-        return item.agent_settings.model_dump(mode='json')
+        return item.agent_settings.model_dump(mode="json")
 
     def _resolve_active_agent_profile(
         self,
@@ -185,8 +185,8 @@ class SaasSettingsStore(SettingsStore):
         name = agent_profiles.name_for_id(active_id)
         if name is None:
             logger.warning(
-                'Active agent profile %s not found for user %s in org %s; '
-                'falling back to composed settings',
+                "Active agent profile %s not found for user %s in org %s; "
+                "falling back to composed settings",
                 active_id,
                 self.user_id,
                 org.id,
@@ -198,7 +198,7 @@ class SaasSettingsStore(SettingsStore):
             return None
 
         mcp_config: dict[str, MCPServer] = {}
-        mcp_raw = merged_agent_settings.get('mcp_config')
+        mcp_raw = merged_agent_settings.get("mcp_config")
         if mcp_raw:
             try:
                 mcp_config = coerce_mcp_config(mcp_raw)
@@ -219,10 +219,10 @@ class SaasSettingsStore(SettingsStore):
             # (OpenHands kind only), so managed OpenHands keys and provider-default
             # base URLs behave exactly as the non-profile path. Reuses the existing
             # resolve_profile_llm helper rather than re-deriving key resolution.
-            if resolved.agent_kind == 'openhands':
+            if resolved.agent_kind == "openhands":
                 resolved = resolved.model_copy(
                     update={
-                        'llm': resolve_profile_llm(
+                        "llm": resolve_profile_llm(
                             resolved.llm,
                             managed_proxy_url=LITE_LLM_API_URL,
                             fallback_api_key=effective_llm_api_key,
@@ -234,23 +234,23 @@ class SaasSettingsStore(SettingsStore):
             # same way the composed path sets
             # merged_agent_settings['llm']['api_key'].
             resolved_dump = resolved.model_dump(
-                mode='json', context={'expose_secrets': True}
+                mode="json", context={"expose_secrets": True}
             )
             # Canonicalize legacy managed OpenHands model names/base_urls on the
             # resolved LLM, mirroring the composed path (merged_agent_settings
             # ['llm'], line ~348) so a profile launch and a non-profile launch
             # normalize an org's pre-canonical llm_profiles identically.
-            resolved_llm = resolved_dump.get('llm')
+            resolved_llm = resolved_dump.get("llm")
             if isinstance(resolved_llm, dict):
-                resolved_dump['llm'] = canonicalize_openhands_llm_payload(resolved_llm)
+                resolved_dump["llm"] = canonicalize_openhands_llm_payload(resolved_llm)
         except Exception as exc:
             # Never-brick contract: catch broadly, not just the known resolver
             # errors — SDK contract drift (e.g. a new required kwarg raising
             # TypeError) must degrade to the composed settings, not 500 every
             # settings load.
             logger.warning(
-                'Failed to resolve active agent profile %r for user %s: %s; '
-                'falling back to composed settings',
+                "Failed to resolve active agent profile %r for user %s: %s; "
+                "falling back to composed settings",
                 name,
                 self.user_id,
                 exc,
@@ -286,7 +286,7 @@ class SaasSettingsStore(SettingsStore):
         """
         user = await UserStore.get_user_by_id(self.user_id)
         if not user:
-            logger.error(f'User not found for ID {self.user_id}')
+            logger.error(f"User not found for ID {self.user_id}")
             return None
 
         org_id = self._resolve_org_id(user)
@@ -300,7 +300,7 @@ class SaasSettingsStore(SettingsStore):
         org = await OrgStore.get_org_by_id_async(org_id)
         if not org:
             logger.error(
-                f'Org not found for ID {org_id} as the current org for user {self.user_id}'
+                f"Org not found for ID {org_id} as the current org for user {self.user_id}"
             )
             return None
         org_agent_settings = OrgStore.get_agent_settings_from_org(org)
@@ -311,23 +311,23 @@ class SaasSettingsStore(SettingsStore):
                 normalized: getattr(org, c.name)
                 for c in Org.__table__.columns
                 if (
-                    normalized := c.name.removeprefix('_default_')
-                    .removeprefix('default_')
-                    .lstrip('_')
+                    normalized := c.name.removeprefix("_default_")
+                    .removeprefix("default_")
+                    .lstrip("_")
                 )
                 in Settings.model_fields
             },
             **{
                 normalized: getattr(user, c.name)
                 for c in User.__table__.columns
-                if (normalized := c.name.lstrip('_')) in Settings.model_fields
+                if (normalized := c.name.lstrip("_")) in Settings.model_fields
             },
         }
         # Drop member-private keys from the org dump before merging so
         # legacy org-level values (older code paths broadcast mcp_config)
         # can no longer leak one member's private config to another. Each
         # member's own ``agent_settings_diff`` still supplies their values.
-        org_agent_settings_dump = org_agent_settings.model_dump(mode='json')
+        org_agent_settings_dump = org_agent_settings.model_dump(mode="json")
         for private_key in MEMBER_PRIVATE_AGENT_KEYS:
             org_agent_settings_dump.pop(private_key, None)
         merged_agent_settings = deep_merge(
@@ -336,41 +336,41 @@ class SaasSettingsStore(SettingsStore):
         )
         effective_llm_api_key = self._get_effective_llm_api_key(org, org_member)
         if effective_llm_api_key is not None:
-            merged_agent_settings.setdefault('llm', {})['api_key'] = (
+            merged_agent_settings.setdefault("llm", {})["api_key"] = (
                 effective_llm_api_key.get_secret_value()
                 if isinstance(effective_llm_api_key, SecretStr)
                 else effective_llm_api_key
             )
         else:
             logger.warning(
-                f'No effective LLM API key found for user {self.user_id} '
-                f'in org {org_id} (org key and member key are both unset)'
+                f"No effective LLM API key found for user {self.user_id} "
+                f"in org {org_id} (org key and member key are both unset)"
             )
         # Canonicalize legacy managed OpenHands LLM payloads before Settings
         # validation so current settings and seeded profiles use the public
         # openhands/ prefix.
-        llm_dict = merged_agent_settings.get('llm')
+        llm_dict = merged_agent_settings.get("llm")
         if isinstance(llm_dict, dict):
-            merged_agent_settings['llm'] = canonicalize_openhands_llm_payload(llm_dict)
+            merged_agent_settings["llm"] = canonicalize_openhands_llm_payload(llm_dict)
 
-        kwargs['agent_settings'] = merged_agent_settings
+        kwargs["agent_settings"] = merged_agent_settings
         org_conversation = OrgStore.get_conversation_settings_from_org(org)
         member_conversation_diff = dict(org_member.conversation_settings_diff)
-        kwargs['conversation_settings'] = deep_merge(
-            org_conversation.model_dump(mode='json'),
+        kwargs["conversation_settings"] = deep_merge(
+            org_conversation.model_dump(mode="json"),
             member_conversation_diff,
         )
         if org.v1_enabled is None:
-            kwargs['v1_enabled'] = True
+            kwargs["v1_enabled"] = True
         # Apply default if sandbox_grouping_strategy is None in the database
-        if kwargs.get('sandbox_grouping_strategy') is None:
-            kwargs.pop('sandbox_grouping_strategy', None)
+        if kwargs.get("sandbox_grouping_strategy") is None:
+            kwargs.pop("sandbox_grouping_strategy", None)
         # Apply default if git_full_clone is None in the database (pre-existing rows)
-        if kwargs.get('git_full_clone') is None:
-            kwargs.pop('git_full_clone', None)
+        if kwargs.get("git_full_clone") is None:
+            kwargs.pop("git_full_clone", None)
         # Apply default if registered_marketplaces is None in the database
-        if kwargs.get('registered_marketplaces') is None:
-            kwargs.pop('registered_marketplaces', None)
+        if kwargs.get("registered_marketplaces") is None:
+            kwargs.pop("registered_marketplaces", None)
 
         # Load personal registered_marketplaces from user_settings table
         user_settings = await self._get_user_settings_by_keycloak_id_async(self.user_id)
@@ -380,13 +380,13 @@ class SaasSettingsStore(SettingsStore):
             normalized_mps: list[dict[str, Any]] = []
             for mp in user_settings.registered_marketplaces:
                 if isinstance(mp, dict):
-                    if mp.get('scope') is None:
-                        mp = {**mp, 'scope': 'personal'}
+                    if mp.get("scope") is None:
+                        mp = {**mp, "scope": "personal"}
                     normalized_mps.append(mp)
                 else:
                     # Convert MarketplaceRegistration to dict
                     normalized_mps.append(mp.model_dump())
-            kwargs['registered_marketplaces'] = normalized_mps
+            kwargs["registered_marketplaces"] = normalized_mps
         # Profiles in SaaS live on the org (managed via
         # /api/organizations/{org_id}/profiles). Surface them through
         # Settings.llm_profiles so the chat-layer endpoints
@@ -396,15 +396,15 @@ class SaasSettingsStore(SettingsStore):
         # never moved to the org column.
         if org.llm_profiles:
             profiles_data = dict(org.llm_profiles)
-            raw_profiles = profiles_data.get('profiles')
+            raw_profiles = profiles_data.get("profiles")
             if isinstance(raw_profiles, dict):
-                profiles_data['profiles'] = {
+                profiles_data["profiles"] = {
                     name: canonicalize_openhands_llm_payload(prof)
                     if isinstance(prof, dict)
                     else prof
                     for name, prof in raw_profiles.items()
                 }
-            kwargs['llm_profiles'] = profiles_data
+            kwargs["llm_profiles"] = profiles_data
         # When no profiles exist yet, seed a Default profile from the legacy
         # LLM config so users (and orgs) upgrading from pre-llm_profiles
         # settings keep their previous LLM as the active profile instead of
@@ -412,18 +412,18 @@ class SaasSettingsStore(SettingsStore):
         # Covers both pre-migration rows (llm_profiles is None) and
         # already-migrated orgs whose profiles map is empty.
         seeded_default = False
-        if not (kwargs.get('llm_profiles') or {}).get('profiles'):
-            legacy_llm = merged_agent_settings.get('llm')
-            if isinstance(legacy_llm, dict) and legacy_llm.get('model'):
-                kwargs['llm_profiles'] = {
-                    'profiles': {'Default': dict(legacy_llm)},
-                    'active': 'Default',
+        if not (kwargs.get("llm_profiles") or {}).get("profiles"):
+            legacy_llm = merged_agent_settings.get("llm")
+            if isinstance(legacy_llm, dict) and legacy_llm.get("model"):
+                kwargs["llm_profiles"] = {
+                    "profiles": {"Default": dict(legacy_llm)},
+                    "active": "Default",
                 }
                 seeded_default = True
             else:
                 # No legacy LLM to seed; drop a None value so the non-nullable
                 # Settings.llm_profiles falls back to its default_factory.
-                kwargs.pop('llm_profiles', None)
+                kwargs.pop("llm_profiles", None)
 
         # Agent Profiles: only on a resolve-requested load (conversation
         # start), resolve the active agent profile and let the result REPLACE
@@ -444,9 +444,9 @@ class SaasSettingsStore(SettingsStore):
             )
             if resolved is not None:
                 resolved_dump, resolved_id, resolved_revision = resolved
-                kwargs['agent_settings'] = resolved_dump
-                kwargs['active_agent_profile_id'] = resolved_id
-                kwargs['active_agent_profile_revision'] = resolved_revision
+                kwargs["agent_settings"] = resolved_dump
+                kwargs["active_agent_profile_id"] = resolved_id
+                kwargs["active_agent_profile_revision"] = resolved_revision
 
         settings = Settings(**kwargs)
         if resolution_requested:
@@ -467,7 +467,7 @@ class SaasSettingsStore(SettingsStore):
                 )
             except Exception:
                 logger.warning(
-                    'Failed to persist seeded Default profile for org %s',
+                    "Failed to persist seeded Default profile for org %s",
                     org_id,
                     exc_info=True,
                 )
@@ -487,7 +487,7 @@ class SaasSettingsStore(SettingsStore):
         through the management API is never clobbered.
         """
         serialized = llm_profiles.model_dump(
-            mode='json', context={'expose_secrets': True}
+            mode="json", context={"expose_secrets": True}
         )
         async with a_session_maker() as session:
             result = await session.execute(
@@ -498,7 +498,7 @@ class SaasSettingsStore(SettingsStore):
                 return
             # Only seed while the column is still empty — another request may
             # have populated it between this load() and acquiring the lock.
-            if (org.llm_profiles or {}).get('profiles'):
+            if (org.llm_profiles or {}).get("profiles"):
                 return
             org.llm_profiles = serialized
             await session.commit()
@@ -513,8 +513,8 @@ class SaasSettingsStore(SettingsStore):
             # ref-filtered mcp_config and the referenced LLM profile's key into
             # the member/org rows. Only plain load() results may round-trip.
             raise ValueError(
-                'Refusing to persist a resolved Agent-Profile settings view; '
-                'store() only accepts persisted settings from a plain load()'
+                "Refusing to persist a resolved Agent-Profile settings view; "
+                "store() only accepts persisted settings from a plain load()"
             )
         async with a_session_maker() as session:
             if not item:
@@ -539,16 +539,16 @@ class SaasSettingsStore(SettingsStore):
                         self.user_id
                     )
                     if not user_info:
-                        logger.error(f'User info not found for ID {self.user_id}')
+                        logger.error(f"User info not found for ID {self.user_id}")
                         return None
                     user = await UserStore.migrate_user(
                         self.user_id, user_settings, user_info
                     )
                     if not user:
-                        logger.error(f'Failed to migrate user {self.user_id}')
+                        logger.error(f"Failed to migrate user {self.user_id}")
                         return None
                 else:
-                    logger.error(f'User not found for ID {self.user_id}')
+                    logger.error(f"User not found for ID {self.user_id}")
                     return None
 
             org_id = self._resolve_org_id(user)
@@ -565,14 +565,14 @@ class SaasSettingsStore(SettingsStore):
             org = result.scalars().first()
             if not org:
                 logger.error(
-                    f'Org not found for ID {org_id} as the current org for user {self.user_id}'
+                    f"Org not found for ID {org_id} as the current org for user {self.user_id}"
                 )
                 return None
 
             llm_model = item.agent_settings.llm.model
             llm_base_url = item.agent_settings.llm.base_url
-            normalized_llm_base_url = llm_base_url.rstrip('/') if llm_base_url else None
-            normalized_managed_base_url = LITE_LLM_API_URL.rstrip('/')
+            normalized_llm_base_url = llm_base_url.rstrip("/") if llm_base_url else None
+            normalized_managed_base_url = LITE_LLM_API_URL.rstrip("/")
             uses_managed_llm_key = (
                 normalized_llm_base_url == normalized_managed_base_url
                 or (normalized_llm_base_url is None and is_openhands_model(llm_model))
@@ -599,7 +599,7 @@ class SaasSettingsStore(SettingsStore):
             # cleaned up on the next save and stop leaking to other members.
             org_agent_settings_dump = OrgStore.get_agent_settings_from_org(
                 org
-            ).model_dump(mode='json')
+            ).model_dump(mode="json")
             for private_key in MEMBER_PRIVATE_AGENT_KEYS:
                 org_agent_settings_dump.pop(private_key, None)
 
@@ -610,18 +610,18 @@ class SaasSettingsStore(SettingsStore):
             )
 
             effective_conversation_diff = item.conversation_settings.model_dump(
-                mode='json'
+                mode="json"
             )
             org.conversation_settings = deep_merge(
                 OrgStore.get_conversation_settings_from_org(org).model_dump(
-                    mode='json'
+                    mode="json"
                 ),
                 effective_conversation_diff,
             )
 
-            kwargs = item.model_dump(context={'expose_secrets': True})
-            kwargs.pop('agent_settings', None)
-            kwargs.pop('conversation_settings', None)
+            kwargs = item.model_dump(context={"expose_secrets": True})
+            kwargs.pop("agent_settings", None)
+            kwargs.pop("conversation_settings", None)
 
             # Get or create user_settings for this user
             user_settings_result = await session.execute(
@@ -637,13 +637,13 @@ class SaasSettingsStore(SettingsStore):
             for key, value in kwargs.items():
                 if hasattr(user, key):
                     setattr(user, key, value)
-                if key == 'registered_marketplaces':
+                if key == "registered_marketplaces":
                     # Save personal marketplace settings to user_settings table
                     user_settings.registered_marketplaces = value
                 elif hasattr(org, key) and key not in {
-                    'llm_api_key',
-                    'agent_settings',
-                    'conversation_settings',
+                    "llm_api_key",
+                    "agent_settings",
+                    "conversation_settings",
                 }:
                     setattr(org, key, value)
 
@@ -714,7 +714,7 @@ class SaasSettingsStore(SettingsStore):
 
         TODO: This method should be replaced with dependency injection.
         """
-        logger.debug(f'saas_settings_store.get_instance::{user_id}')
+        logger.debug(f"saas_settings_store.get_instance::{user_id}")
         return SaasSettingsStore(user_id, effective_org_id=effective_org_id)
 
     async def get_org_marketplaces(self, user_id: str | None) -> list[dict]:
@@ -729,12 +729,12 @@ class SaasSettingsStore(SettingsStore):
         try:
             user = await UserStore.get_user_by_id(user_id)
             if not user:
-                logger.debug(f'No user found for ID {user_id}')
+                logger.debug(f"No user found for ID {user_id}")
                 return []
 
             org_id = self.effective_org_id or user.current_org_id
             if not org_id:
-                logger.debug(f'No org_id for user {user_id}')
+                logger.debug(f"No org_id for user {user_id}")
                 return []
 
             # Validate org_id is a valid UUID before calling get_org_by_id_async
@@ -744,13 +744,13 @@ class SaasSettingsStore(SettingsStore):
                 UUID(str(org_id))
             except (ValueError, AttributeError, TypeError) as uuid_error:
                 logger.warning(
-                    f'Invalid org_id format for user {user_id}: {org_id} - {uuid_error}'
+                    f"Invalid org_id format for user {user_id}: {org_id} - {uuid_error}"
                 )
                 return []
 
             org = await OrgStore.get_org_by_id_async(org_id)
             if not org:
-                logger.debug(f'Org {org_id} not found for user {user_id}')
+                logger.debug(f"Org {org_id} not found for user {user_id}")
                 return []
 
             if org.registered_marketplaces:
@@ -759,11 +759,11 @@ class SaasSettingsStore(SettingsStore):
                 for mp in org.registered_marketplaces:
                     if isinstance(mp, dict):
                         # Set scope='org' if missing (backward compatibility)
-                        if mp.get('scope') is None:
-                            mp = {**mp, 'scope': 'org'}
+                        if mp.get("scope") is None:
+                            mp = {**mp, "scope": "org"}
                         # Ensure auto_load defaults to False if missing
-                        if 'auto_load' not in mp:
-                            mp = {**mp, 'auto_load': False}
+                        if "auto_load" not in mp:
+                            mp = {**mp, "auto_load": False}
                         normalized.append(mp)
                     else:
                         # Convert MarketplaceRegistration to dict
@@ -771,7 +771,7 @@ class SaasSettingsStore(SettingsStore):
                 return normalized
             return []
         except Exception as e:
-            logger.error(f'Error fetching org marketplaces: {e}')
+            logger.error(f"Error fetching org marketplaces: {e}")
             return []
 
     async def _ensure_api_key(
@@ -801,11 +801,141 @@ class SaasSettingsStore(SettingsStore):
                 self.user_id,
                 org_id,
                 key_alias,
-                {'type': 'openhands'} if openhands_type else None,
+                {"type": "openhands"} if openhands_type else None,
             )
 
             item.agent_settings.llm.api_key = SecretStr(generated_key)
             logger.info(
-                'saas_settings_store:store:generated_openhands_key',
-                extra={'user_id': self.user_id},
+                "saas_settings_store:store:generated_openhands_key",
+                extra={"user_id": self.user_id},
             )
+
+    async def verify_and_fix_managed_llm_key(self, settings: Settings) -> Settings:
+        """Verify the managed LLM API key against LiteLLM, and regenerate it.
+
+        Regenerates (persisting the new value to the org member row) if it
+        has been lost on the proxy side.
+
+        Self-heals the "Invalid proxy server token passed" runtime 401
+        (APP-2678) on the *read* path that conversation start goes through,
+        where ``_ensure_api_key`` (only called from ``store()``) can't
+        reach. No-op for BYOR keys and unmanaged ``base_url``.
+
+        Args:
+            settings: The user settings (persisted or resolved) whose
+                ``agent_settings.llm.api_key`` should be checked. The
+                function never persists ``settings`` itself — it only
+                mutates ``agent_settings.llm.api_key`` in place when a
+                new key is minted, plus writes the encrypted value to
+                ``org_member._llm_api_key`` so subsequent loads pick it up.
+
+        Returns:
+            The same ``settings`` with ``agent_settings.llm.api_key``
+            updated in place if the key was regenerated; unchanged otherwise.
+        """
+        llm = settings.agent_settings.llm
+        base_url = (llm.base_url or "").rstrip("/") or None
+        managed_base = LITE_LLM_API_URL.rstrip("/")
+        # Mirror the ``uses_managed_llm_key`` predicate from ``store()``:
+        # the user is on the OpenHands proxy if their base_url is the
+        # proxy, *or* they have no base_url set and picked an openhands/*
+        # model — both are the cases that should authenticate against the
+        # proxy and would 401 with "Invalid proxy server token" if the
+        # member row's key is out of sync.
+        uses_managed = base_url == managed_base or (
+            base_url is None and is_openhands_model(llm.model)
+        )
+        if not uses_managed:
+            return settings
+
+        # BYOR lives outside the proxy and has no key to heal here; the
+        # store path also skips it, so we do the same on the read path.
+        # (Detection requires the DB; we treat BYOR as "nothing to do"
+        # rather than fetching the row, since the caller's effective LLM
+        # key for a BYOR user is ``llm.api_key`` and a verify against the
+        # proxy with a BYOR key would just 401 again, hiding the real
+        # issue.)
+        api_key = llm.api_key
+        key_value: str | None = None
+        if isinstance(api_key, SecretStr):
+            key_value = api_key.get_secret_value() or None
+        elif isinstance(api_key, str):
+            key_value = api_key or None
+        if not key_value:
+            return settings
+
+        # Determine the org. Honor ``effective_org_id`` for request-scoped
+        # org overrides (X-Org-Id, API key binding) — the verification
+        # checks the key against the proxy's team_id, so we have to ask
+        # the store the same question the rest of the request does.
+        org_id = self.effective_org_id
+        if org_id is None:
+            async with a_session_maker() as session:
+                result = await session.execute(
+                    select(User).filter(User.id == uuid.UUID(self.user_id))
+                )
+                user = result.scalars().first()
+                if user is None:
+                    return settings
+                org_id = user.current_org_id
+
+        org_id_str = str(org_id)
+        is_openhands = is_openhands_model(llm.model)
+
+        if await LiteLlmManager.verify_existing_key(
+            key_value,
+            self.user_id,
+            org_id_str,
+            openhands_type=is_openhands,
+        ):
+            return settings
+
+        # Key is stale on the proxy. Mint a fresh one under the same
+        # deterministic alias and persist it to the member row.
+        key_alias = get_openhands_cloud_key_alias(self.user_id, org_id_str)
+        try:
+            await LiteLlmManager.delete_key_by_alias(key_alias=key_alias)
+        except Exception:
+            # 404 (no prior key) is the common case and is fine; we
+            # don't want a one-time cleanup glitch to block the
+            # self-heal.
+            logger.info(
+                "saas_settings_store:verify_and_fix_managed_llm_key:"
+                "delete_key_by_alias_failed_continuing",
+                extra={"user_id": self.user_id, "org_id": org_id_str},
+            )
+        generated_key = await LiteLlmManager.generate_key(
+            self.user_id,
+            org_id_str,
+            key_alias,
+            {"type": "openhands"} if is_openhands else None,
+        )
+
+        # Persist the encrypted key on the member row so the next
+        # SaasSettingsStore.load() picks it up via the normal
+        # ``_get_effective_llm_api_key`` path. Pass as SecretStr so the
+        # model_dump never emits the raw key in logs (per the
+        # ``OrgMemberSettingsUpdate`` docstring contract).
+        async with a_session_maker() as session:
+            await OrgMemberStore.update_all_members_settings_async(
+                session,
+                org_id,
+                OrgMemberSettingsUpdate(llm_api_key=SecretStr(generated_key)),
+            )
+
+        # Update the in-memory settings so the caller (which is about to
+        # hand this LLM to the runtime) sees the fresh key on this
+        # request, not just on the next one.
+        llm.api_key = SecretStr(generated_key)
+        logger.warning(
+            "saas_settings_store:verify_and_fix_managed_llm_key:"
+            "regenerated_stale_managed_key",
+            extra={
+                "user_id": self.user_id,
+                "org_id": org_id_str,
+                "key_suffix": generated_key[-4:]
+                if len(generated_key) >= 4
+                else generated_key,
+            },
+        )
+        return settings

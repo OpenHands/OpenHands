@@ -1331,6 +1331,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             ``{server_name: server_dict}`` shape the SDK 1.31.x
             ``Agent.mcp_config`` field expects)
         """
+        # Self-heal stale managed LLM API keys (APP-2678): if the user is
+        # on the OpenHands proxy and the key we just loaded is no longer
+        # registered in the proxy, regenerate it and persist the new
+        # value before the LLM is shipped to the runtime. The default
+        # ``UserContext.ensure_managed_llm_key`` is a no-op for non-SaaS
+        # (OSS, admin) contexts; SaaS overrides it to do the
+        # verify-and-fix dance.
+        user = await self.user_context.ensure_managed_llm_key(user)
+
         # Configure LLM
         llm = self._configure_llm(user, llm_model)
 

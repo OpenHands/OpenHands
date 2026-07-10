@@ -55,6 +55,10 @@ class SpecifyUserContext(UserContext):
     async def get_default_sandbox_spec_id(self) -> str | None:
         return None
 
+    async def ensure_managed_llm_key(self, user_info: UserInfo) -> UserInfo:
+        """Admin context never starts a conversation; no managed key to heal."""
+        return user_info
+
 
 USER_CONTEXT_ATTR = 'user_context'
 ADMIN = SpecifyUserContext(user_id=None)

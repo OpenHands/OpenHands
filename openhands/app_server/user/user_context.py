@@ -97,6 +97,39 @@ class UserContext(ABC):
     async def get_default_sandbox_spec_id(self) -> str | None:
         """Get the user's preferred default sandbox spec ID, or None to use the global default."""
 
+    async def ensure_managed_llm_key(self, user_info: UserInfo) -> UserInfo:
+        """Verify the user's managed (OpenHands-proxy) LLM API key is still
+        valid in the upstream proxy, and regenerate / persist a fresh one if
+        it has been lost.
+
+        Background: the user's encrypted ``llm_api_key`` is minted against
+        the upstream LLM proxy at onboarding and stored on the member row.
+        If the proxy-side record is ever wiped (admin action, DB restore,
+        etc.) the cached value in our DB no longer authenticates and the
+        runtime 401s on every call — see APP-2678. The store-path
+        ``_ensure_api_key`` self-heals, but nothing verifies the key on the
+        read path used to *start* a conversation, which is when the 401
+        actually surfaces.
+
+        Default implementation is a no-op so non-SaaS contexts (OSS, admin)
+        don't have to know about the proxy. SaaS overrides it to call
+        ``LiteLlmManager.verify_existing_key`` and, on miss, mint a new key
+        under the deterministic ``get_openhands_cloud_key_alias`` and
+        persist it back to the org member row.
+
+        Args:
+            user_info: The user info whose ``agent_settings.llm.api_key``
+                should be checked. May be the resolved (Agent-Profile) view
+                — the implementation is expected to map that back to the
+                persisted member row.
+
+        Returns:
+            The same ``user_info`` with ``agent_settings.llm.api_key``
+            updated in place if a regeneration happened. BYOR (custom)
+            keys and unmanaged ``base_url`` are left untouched.
+        """
+        return user_info
+
     async def get_provider_handler(self) -> ProviderHandler:
         """Get a ProviderHandler bound to this user's provider tokens.
 
