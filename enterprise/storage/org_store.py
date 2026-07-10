@@ -444,18 +444,19 @@ class OrgStore:
                     or effective_managed_key is not None
                 )
                 if effective_managed_key is not None:
-                    # Self-heal every member's managed LLM key (analogous to
-                    # ``LiteLlmManager.migrate_entries``). LiteLLM keys can
-                    # silently go stale — e.g. after a proxy restart or manual
-                    # cleanup — so verify each member's stored key and
-                    # regenerate it individually rather than reusing one
-                    # member's key for the whole org.
-                    await OrgStore._self_heal_org_member_keys(
-                        session,
-                        org,
-                        acting_user_id=user_id,
-                        acting_user_key=effective_managed_key,
+                    # Stamp the (possibly freshly minted) key onto the acting
+                    # member's row. We deliberately do NOT iterate every
+                    # OrgMember here — that's O(N) LiteLLM calls per org-defaults
+                    # save, which doesn't scale past a few thousand members
+                    # and would also overwrite BYOR members' stored keys.
+                    # Other members self-heal lazily in
+                    # SaasSettingsStore._ensure_api_key when they next save
+                    # their own settings.
+                    acting_member = await OrgStore._get_member_for_user(
+                        session, org_id, user_id
                     )
+                    if acting_member is not None:
+                        acting_member.llm_api_key = SecretStr(effective_managed_key)
                     if member_updates is None:
                         member_updates = OrgMemberSettingsUpdate()
 
@@ -836,13 +837,9 @@ class OrgStore:
         if not uses_managed_llm_key:
             return None
 
-        result = await session.execute(
-            select(OrgMember).where(
-                OrgMember.org_id == updated_org.id,
-                OrgMember.user_id == UUID(user_id),
-            )
+        acting_member = await OrgStore._get_member_for_user(
+            session, updated_org.id, user_id
         )
-        acting_member = result.scalars().first()
         if acting_member is None:
             logger.error(
                 'Acting member row not found during managed LLM key '
@@ -879,68 +876,19 @@ class OrgStore:
         )
 
     @staticmethod
-    async def _self_heal_org_member_keys(
+    async def _get_member_for_user(
         session,
-        org: Org,
-        *,
-        acting_user_id: str,
-        acting_user_key: str,
-    ) -> None:
-        """Verify every org member's managed LLM key and regenerate stale ones.
-
-        Mirrors the self-healing pattern in
-        ``LiteLlmManager.migrate_entries``: for each member of the org, check
-        whether their stored key still exists in LiteLLM and, if not, mint a
-        fresh one under their own deterministic alias. The acting user's key
-        has already been validated/rotated by
-        :meth:`_maybe_get_managed_llm_key_for_user`; we just stamp that result
-        onto their row instead of re-verifying it.
-
-        Each member keeps their own per-(user, org) LiteLLM key — we no longer
-        overwrite every row with the acting user's key, which used to silently
-        give every member the same identity in LiteLLM.
-        """
-        llm_settings = OrgStore.get_agent_settings_from_org(org).llm
-        llm_model = llm_settings.model
-        openhands_type = is_openhands_model(llm_model)
-
-        org_id_str = str(org.id)
+        org_id: UUID,
+        user_id: str,
+    ) -> OrgMember | None:
+        """Look up a single OrgMember row by (org_id, user_id)."""
         result = await session.execute(
-            select(OrgMember).where(OrgMember.org_id == org.id)
+            select(OrgMember).where(
+                OrgMember.org_id == org_id,
+                OrgMember.user_id == UUID(user_id),
+            )
         )
-        members = list(result.scalars().all())
-
-        for member in members:
-            member_user_id = str(member.user_id)
-            if member_user_id == acting_user_id:
-                member.llm_api_key = SecretStr(acting_user_key)
-                continue
-
-            existing_key = member.llm_api_key
-            existing_key_raw = (
-                existing_key.get_secret_value() if existing_key else None
-            )
-            if existing_key_raw and await LiteLlmManager.verify_existing_key(
-                existing_key_raw,
-                member_user_id,
-                org_id_str,
-                openhands_type=openhands_type,
-            ):
-                continue
-
-            key_alias = get_openhands_cloud_key_alias(member_user_id, org_id_str)
-            await LiteLlmManager.delete_key_by_alias(key_alias=key_alias)
-            new_key = await LiteLlmManager.generate_key(
-                member_user_id,
-                org_id_str,
-                key_alias,
-                {'type': 'openhands'} if openhands_type else None,
-            )
-            member.llm_api_key = SecretStr(new_key)
-            logger.info(
-                'OrgStore:_self_heal_org_member_keys:regenerated_member_key',
-                extra={'org_id': org_id_str, 'user_id': member_user_id},
-            )
+        return result.scalars().first()
 
     @staticmethod
     async def update_org_defaults_async(

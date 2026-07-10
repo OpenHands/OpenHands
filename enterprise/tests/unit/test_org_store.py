@@ -1450,17 +1450,19 @@ async def test_update_org_defaults_async_with_llm_api_key():
 
 
 @pytest.mark.asyncio
-async def test_update_org_defaults_async_self_heals_member_keys_and_resets_flag():
+async def test_update_org_defaults_async_stamps_acting_user_key_and_resets_flag():
     """GIVEN: A unified OrgUpdate save that resolves to a managed org key
     WHEN: update_org_defaults_async is called
-    THEN: per-member self-healing runs, the bulk member update no longer
-          carries the acting user's key, and ``has_custom_llm_api_key`` is
-          still reset on every member.
+    THEN: the acting user's row gets that key, the bulk member update no
+          longer overwrites every member with the acting user's key, and
+          ``has_custom_llm_api_key`` is reset on every member. Other
+          members self-heal lazily — we do NOT iterate the whole org here.
     """
     from server.routes.org_models import OrgUpdate
 
     org_id = uuid.uuid4()
     user_id = str(uuid.uuid4())
+    acting_member = _make_member(org_id, uuid.UUID(user_id), 'stale-acting')
     mock_org = Org(
         id=org_id,
         name='Test Organization',
@@ -1470,10 +1472,15 @@ async def test_update_org_defaults_async_self_heals_member_keys_and_resets_flag(
         agent_settings_diff={'llm': {'model': 'openhands/claude-3'}}
     )
 
+    org_result = MagicMock()
+    org_result.scalars.return_value.first.return_value = mock_org
+    member_result = MagicMock()
+    member_result.scalars.return_value.first.return_value = acting_member
+
     mock_session = AsyncMock()
-    mock_result = MagicMock()
-    mock_result.scalars.return_value.first.return_value = mock_org
-    mock_session.execute.return_value = mock_result
+    # First execute() returns the org row; the second one (member lookup)
+    # returns the acting member.
+    mock_session.execute.side_effect = [org_result, member_result]
     mock_session.commit = AsyncMock()
     mock_session.refresh = AsyncMock()
 
@@ -1488,10 +1495,6 @@ async def test_update_org_defaults_async_self_heals_member_keys_and_resets_flag(
             AsyncMock(return_value='managed-key'),
         ),
         patch(
-            'storage.org_store.OrgStore._self_heal_org_member_keys',
-            AsyncMock(),
-        ) as mock_self_heal,
-        patch(
             'storage.org_member_store.OrgMemberStore.update_all_members_settings_async',
             AsyncMock(),
         ) as mock_member_update,
@@ -1501,14 +1504,12 @@ async def test_update_org_defaults_async_self_heals_member_keys_and_resets_flag(
     assert result is not None
     agent_settings = OrgStore.get_agent_settings_from_org(result)
     assert agent_settings.llm.model == 'openhands/claude-3'
-    mock_self_heal.assert_awaited_once()
-    heal_kwargs = mock_self_heal.call_args.kwargs
-    assert heal_kwargs['acting_user_id'] == user_id
-    assert heal_kwargs['acting_user_key'] == 'managed-key'
+    # Acting user's row gets the (possibly freshly minted) key.
+    assert acting_member.llm_api_key.get_secret_value() == 'managed-key'
     mock_member_update.assert_called_once()
     member_settings = mock_member_update.call_args[0][2]
-    # The bulk member update no longer carries the acting user's key —
-    # each member's row was rewritten by _self_heal_org_member_keys.
+    # The bulk member update no longer overwrites every member with the
+    # acting user's key — that's the bug fix.
     assert member_settings.llm_api_key is None
     assert member_settings.has_custom_llm_api_key is False
 
@@ -1612,19 +1613,6 @@ async def test_count_team_orgs_excludes_personal_workspaces(async_session_maker)
         assert await OrgStore.count_team_orgs() == 1
 
 
-# =============================================================================
-# Tests for _self_heal_org_member_keys (per-member managed-key regeneration)
-# =============================================================================
-
-
-def _make_org_with_openhands_llm(org_id: uuid.UUID) -> Org:
-    return Org(
-        id=org_id,
-        name='Self-heal Org',
-        agent_settings=OpenHandsAgentSettings(llm={'model': 'openhands/claude-3'}),
-    )
-
-
 def _make_member(
     org_id: uuid.UUID,
     user_id: uuid.UUID,
@@ -1636,189 +1624,3 @@ def _make_member(
         role_id=1,
         llm_api_key=llm_api_key,
     )
-
-
-@pytest.mark.asyncio
-async def test_self_heal_org_member_keys_writes_acting_user_key_to_row():
-    """GIVEN: An acting user whose key was just minted by
-            ``_maybe_get_managed_llm_key_for_user``
-        WHEN: ``_self_heal_org_member_keys`` runs
-        THEN: their row is rewritten with that key — no re-verification, no
-              second ``generate_key`` call.
-    """
-    org_id = uuid.uuid4()
-    acting_user_id = str(uuid.uuid4())
-    other_user_id = str(uuid.uuid4())
-    acting_member = _make_member(org_id, uuid.UUID(acting_user_id), 'stale-acting')
-    other_member = _make_member(org_id, uuid.UUID(other_user_id), 'stale-other')
-    org = _make_org_with_openhands_llm(org_id)
-
-    members_result = MagicMock()
-    members_result.scalars.return_value.all.return_value = [
-        acting_member,
-        other_member,
-    ]
-    session = AsyncMock()
-    session.execute.return_value = members_result
-
-    with (
-        patch(
-            'storage.org_store.LiteLlmManager.verify_existing_key',
-            AsyncMock(return_value=True),
-        ) as mock_verify,
-        patch(
-            'storage.org_store.LiteLlmManager.generate_key',
-            AsyncMock(return_value='unused'),
-        ) as mock_generate,
-    ):
-        await OrgStore._self_heal_org_member_keys(
-            session,
-            org,
-            acting_user_id=acting_user_id,
-            acting_user_key='fresh-acting-key',
-        )
-
-    assert acting_member.llm_api_key.get_secret_value() == 'fresh-acting-key'
-    # The acting user's key was never re-verified or regenerated.
-    mock_generate.assert_not_awaited()
-    # verify_existing_key is called once — for the *other* member, not the
-    # acting user (whose key was already validated upstream).
-    mock_verify.assert_awaited_once()
-    assert mock_verify.call_args.args[1] == other_user_id
-    # The other member still has their original (stale-looking) key in DB;
-    # verify_existing_key returned True so we left it alone.
-    assert other_member.llm_api_key.get_secret_value() == 'stale-other'
-
-
-@pytest.mark.asyncio
-async def test_self_heal_org_member_keys_regenerates_invalid_member_key():
-    """GIVEN: A non-acting member whose stored key no longer exists in LiteLLM
-        WHEN: ``_self_heal_org_member_keys`` runs
-        THEN: a fresh key is generated under their alias and written to the row.
-    """
-    org_id = uuid.uuid4()
-    acting_user_id = str(uuid.uuid4())
-    other_user_id = str(uuid.uuid4())
-    acting_member = _make_member(org_id, uuid.UUID(acting_user_id), 'acting')
-    other_member = _make_member(org_id, uuid.UUID(other_user_id), 'stale-other')
-    org = _make_org_with_openhands_llm(org_id)
-
-    members_result = MagicMock()
-    members_result.scalars.return_value.all.return_value = [
-        acting_member,
-        other_member,
-    ]
-    session = AsyncMock()
-    session.execute.return_value = members_result
-
-    async def verify_side_effect(key, user_id_arg, org_id_arg, **_):
-        return user_id_arg == acting_user_id and key == 'acting'
-
-    with (
-        patch(
-            'storage.org_store.LiteLlmManager.verify_existing_key',
-            AsyncMock(side_effect=verify_side_effect),
-        ),
-        patch(
-            'storage.org_store.LiteLlmManager.delete_key_by_alias',
-            AsyncMock(),
-        ),
-        patch(
-            'storage.org_store.LiteLlmManager.generate_key',
-            AsyncMock(return_value='new-other-key'),
-        ) as mock_generate,
-    ):
-        await OrgStore._self_heal_org_member_keys(
-            session,
-            org,
-            acting_user_id=acting_user_id,
-            acting_user_key='fresh-acting-key',
-        )
-
-    assert acting_member.llm_api_key.get_secret_value() == 'fresh-acting-key'
-    assert other_member.llm_api_key.get_secret_value() == 'new-other-key'
-    mock_generate.assert_awaited_once()
-    # The new key is minted for *this* member, not the acting user.
-    positional_user_id = mock_generate.call_args.args[0]
-    assert positional_user_id == other_user_id
-
-
-@pytest.mark.asyncio
-async def test_self_heal_org_member_keys_skips_members_with_valid_keys():
-    """GIVEN: A non-acting member whose stored key is still valid in LiteLLM
-        WHEN: ``_self_heal_org_member_keys`` runs
-        THEN: we don't touch their row or regenerate their key.
-    """
-    org_id = uuid.uuid4()
-    acting_user_id = str(uuid.uuid4())
-    other_user_id = str(uuid.uuid4())
-    acting_member = _make_member(org_id, uuid.UUID(acting_user_id), 'acting')
-    other_member = _make_member(org_id, uuid.UUID(other_user_id), 'valid-other')
-    org = _make_org_with_openhands_llm(org_id)
-
-    members_result = MagicMock()
-    members_result.scalars.return_value.all.return_value = [
-        acting_member,
-        other_member,
-    ]
-    session = AsyncMock()
-    session.execute.return_value = members_result
-
-    with (
-        patch(
-            'storage.org_store.LiteLlmManager.verify_existing_key',
-            AsyncMock(return_value=True),
-        ),
-        patch(
-            'storage.org_store.LiteLlmManager.generate_key',
-            AsyncMock(return_value='unused'),
-        ) as mock_generate,
-    ):
-        await OrgStore._self_heal_org_member_keys(
-            session,
-            org,
-            acting_user_id=acting_user_id,
-            acting_user_key='fresh-acting-key',
-        )
-
-    assert other_member.llm_api_key.get_secret_value() == 'valid-other'
-    mock_generate.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_self_heal_org_member_keys_handles_no_other_members():
-    """GIVEN: An org with only the acting user as a member
-        WHEN: ``_self_heal_org_member_keys`` runs
-        THEN: it stamps the acting user's key onto their row and exits without
-              any LiteLLM API calls.
-    """
-    org_id = uuid.uuid4()
-    acting_user_id = str(uuid.uuid4())
-    acting_member = _make_member(org_id, uuid.UUID(acting_user_id), 'acting')
-    org = _make_org_with_openhands_llm(org_id)
-
-    members_result = MagicMock()
-    members_result.scalars.return_value.all.return_value = [acting_member]
-    session = AsyncMock()
-    session.execute.return_value = members_result
-
-    with (
-        patch(
-            'storage.org_store.LiteLlmManager.verify_existing_key',
-            AsyncMock(return_value=True),
-        ) as mock_verify,
-        patch(
-            'storage.org_store.LiteLlmManager.generate_key',
-            AsyncMock(return_value='unused'),
-        ) as mock_generate,
-    ):
-        await OrgStore._self_heal_org_member_keys(
-            session,
-            org,
-            acting_user_id=acting_user_id,
-            acting_user_key='fresh-acting-key',
-        )
-
-    assert acting_member.llm_api_key.get_secret_value() == 'fresh-acting-key'
-    mock_verify.assert_not_awaited()
-    mock_generate.assert_not_awaited()
