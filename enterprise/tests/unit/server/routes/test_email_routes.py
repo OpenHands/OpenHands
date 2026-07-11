@@ -114,6 +114,38 @@ async def test_verify_email_https_scheme(mock_request):
 
 
 @pytest.mark.asyncio
+async def test_verify_email_raises_and_logs_on_send_failure(mock_request):
+    """Test verify_email logs a structured failure and raises a 502 when the
+    Keycloak admin call to send the verification email fails, instead of
+    silently swallowing the error or letting it bubble up as an opaque 500."""
+    # Arrange
+    user_id = 'test_user_id'
+    mock_keycloak_admin = AsyncMock()
+    mock_keycloak_admin.a_send_verify_email = AsyncMock(
+        side_effect=Exception('SMTP relay unavailable')
+    )
+
+    # Act
+    with (
+        patch(
+            'server.routes.email.get_keycloak_admin', return_value=mock_keycloak_admin
+        ),
+        patch('server.routes.email.logger') as mock_logger,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_email(request=mock_request, user_id=user_id)
+
+    # Assert
+    assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
+    mock_keycloak_admin.a_send_verify_email.assert_called_once()
+    # Failure must be logged with enough context (user_id) to correlate with
+    # the Keycloak SMTP/ESP delivery pipeline
+    assert mock_logger.error.called
+    error_call = mock_logger.error.call_args
+    assert user_id in str(error_call)
+
+
+@pytest.mark.asyncio
 async def test_verified_email_default_redirect(mock_request, mock_user_auth):
     """Test verified_email redirects to /settings/user by default."""
     # Arrange
@@ -278,6 +310,39 @@ async def test_resend_email_verification_rate_limit_exceeded_returns_429(mock_re
         assert exc_info.value.status_code == status.HTTP_429_TOO_MANY_REQUESTS
         assert 'Too many requests' in exc_info.value.detail
         mock_rate_limit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_resend_email_verification_returns_502_when_send_fails(mock_request):
+    """Test resend_email_verification surfaces a 502 error instead of a false
+    'Email verification message sent' success response when the underlying
+    Keycloak send call fails. This is the regression guard for the reported
+    bug where users clicked "Resend verification" repeatedly, always saw
+    success, but never received an email."""
+    # Arrange
+    user_id = 'test_user_id'
+    body = ResendEmailVerificationRequest(user_id=user_id)
+    mock_keycloak_admin = AsyncMock()
+    mock_keycloak_admin.a_send_verify_email = AsyncMock(
+        side_effect=Exception('Keycloak admin API error')
+    )
+
+    with (
+        patch('server.routes.email.check_rate_limit_by_user_id') as mock_rate_limit,
+        patch(
+            'server.routes.email.get_keycloak_admin', return_value=mock_keycloak_admin
+        ),
+        patch('server.routes.email.logger') as mock_logger,
+    ):
+        mock_rate_limit.return_value = None
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await resend_email_verification(request=mock_request, body=body)
+
+        assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
+        mock_keycloak_admin.a_send_verify_email.assert_called_once()
+        assert mock_logger.error.called
 
 
 @pytest.mark.asyncio

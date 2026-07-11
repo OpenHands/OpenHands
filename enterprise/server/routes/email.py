@@ -192,8 +192,24 @@ async def verify_email(request: Request, user_id: str, is_auth_flow: bool = Fals
     else:
         redirect_uri = f'{get_web_url(request)}/api/email/verified'
     logger.info(f'Redirect URI: {redirect_uri}')
-    await keycloak_admin.a_send_verify_email(
-        user_id=user_id,
-        redirect_uri=redirect_uri,
-        client_id=KEYCLOAK_CLIENT_ID,
-    )
+    try:
+        await keycloak_admin.a_send_verify_email(
+            user_id=user_id,
+            redirect_uri=redirect_uri,
+            client_id=KEYCLOAK_CLIENT_ID,
+        )
+    except Exception as e:
+        # A failure here must never be treated as a successful send: without
+        # this, a Keycloak SMTP/API failure either raises an opaque 500 with
+        # no diagnostic context or (depending on the admin client) is
+        # swallowed entirely, leaving operators with no way to correlate a
+        # "user never received the verification email" report with an
+        # actual delivery failure in the Keycloak SMTP relay/ESP logs.
+        logger.error(
+            f'Failed to send verification email for user {user_id}: {str(e)}',
+            extra={'user_id': user_id, 'is_auth_flow': is_auth_flow},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Failed to send verification email',
+        )
