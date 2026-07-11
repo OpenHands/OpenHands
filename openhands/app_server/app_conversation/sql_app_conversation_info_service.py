@@ -28,6 +28,9 @@ from fastapi import Request
 from sqlalchemy import (
     ColumnElement,
     DateTime,
+    Float,
+    ForeignKey,
+    Identity,
     Select,
     String,
     func,
@@ -58,6 +61,29 @@ from openhands.app_server.utils.sql_utils import (
 from openhands.sdk import ConversationStats
 from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.sdk.llm import MetricsSnapshot, TokenUsage
+
+
+def _parse_event_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        if value.endswith('Z'):
+            value = f'{value[:-1]}+00:00'
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+def _normalize_event_timestamp(value: datetime | None) -> datetime:
+    if value is None:
+        return utc_now()
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value
+
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +145,22 @@ class StoredConversationMetadata(Base):
     # Tags for conversation metadata (e.g., automation context, skills used)
     tags: Mapped[dict[str, str] | None] = mapped_column(
         create_json_type_decorator(dict[str, str]), nullable=True
+    )
+
+
+class StoredConversationCostEvent(Base):
+    __tablename__ = 'conversation_cost_events'
+
+    id: Mapped[int] = mapped_column(Identity(), primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey('conversation_metadata.conversation_id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
+    cost_delta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, index=True
     )
 
 
@@ -355,6 +397,28 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         metrics = info.metrics or MetricsSnapshot()
         usage = metrics.accumulated_token_usage or TokenUsage()
 
+        # Preserve the original creation time on update.
+        #
+        # ``save`` is an upsert (``merge`` on the primary key), and several
+        # callers rebuild an ``AppConversationInfo`` from scratch rather than
+        # mutating the loaded row (e.g. the ``on_conversation_update`` webhook,
+        # which fires on every start/pause/resume/interrupt). Those callers do
+        # not carry ``created_at`` forward, so ``AppConversationInfo`` fills it
+        # from ``default_factory=utc_now``. Without this guard the merge would
+        # overwrite the persisted ``created_at`` with "now" on every lifecycle
+        # webhook, corrupting created-at ordering and the usage/billing
+        # dashboards that bucket conversations by creation time. Look up the
+        # stored value directly by primary key (not via ``_secure_select``) so
+        # this works under the ADMIN webhook context as well.
+        created_at = info.created_at
+        existing_created_at = await self.db_session.scalar(
+            select(StoredConversationMetadata.created_at).where(
+                StoredConversationMetadata.conversation_id == str(info.id)
+            )
+        )
+        if existing_created_at is not None:
+            created_at = existing_created_at
+
         stored = StoredConversationMetadata(
             conversation_id=str(info.id),
             selected_repository=info.selected_repository,
@@ -362,7 +426,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             git_provider=info.git_provider.value if info.git_provider else None,
             title=info.title,
             last_updated_at=info.updated_at,
-            created_at=info.created_at,
+            created_at=created_at,
             trigger=info.trigger.value if info.trigger else None,
             pr_number=info.pr_number or [],
             # Cost and token metrics
@@ -393,13 +457,17 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         return info
 
     async def update_conversation_statistics(
-        self, conversation_id: UUID, stats: ConversationStats
+        self,
+        conversation_id: UUID,
+        stats: ConversationStats,
+        event_timestamp: datetime | None = None,
     ) -> None:
         """Update conversation statistics from stats event data.
 
         Args:
             conversation_id: The ID of the conversation to update
             stats: ConversationStats object containing usage_to_metrics data from stats event
+            event_timestamp: Timestamp of the stats event (UTC if naive)
         """
         # Extract agent metrics from usage_to_metrics
         usage_to_metrics = stats.usage_to_metrics
@@ -426,9 +494,30 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             )
             return
 
+        event_timestamp = _normalize_event_timestamp(event_timestamp)
+
         # Extract accumulated_cost and max_budget_per_task from Metrics object
         accumulated_cost = agent_metrics.accumulated_cost
         max_budget_per_task = agent_metrics.max_budget_per_task
+
+        if accumulated_cost is not None:
+            previous_cost = stored.accumulated_cost or 0.0
+            delta_cost = float(accumulated_cost) - float(previous_cost)
+            if delta_cost > 0:
+                self.db_session.add(
+                    StoredConversationCostEvent(
+                        conversation_id=stored.conversation_id,
+                        cost_delta=delta_cost,
+                        occurred_at=event_timestamp,
+                    )
+                )
+            elif delta_cost < 0:
+                logger.debug(
+                    'Accumulated cost decreased for conversation %s (prev=%s, new=%s)',
+                    conversation_id,
+                    previous_cost,
+                    accumulated_cost,
+                )
 
         # Extract accumulated_token_usage from Metrics object
         accumulated_token_usage = agent_metrics.accumulated_token_usage
@@ -504,10 +593,14 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                 stats_dict = {'usage_to_metrics': event_value.usage_to_metrics}
                 conversation_stats = ConversationStats.model_validate(stats_dict)
 
+            event_timestamp = _parse_event_timestamp(event.timestamp)
+
             if conversation_stats and conversation_stats.usage_to_metrics:
                 # Pass ConversationStats object directly for type safety
                 await self.update_conversation_statistics(
-                    conversation_id, conversation_stats
+                    conversation_id,
+                    conversation_stats,
+                    event_timestamp=event_timestamp,
                 )
         except Exception:
             logger.exception(

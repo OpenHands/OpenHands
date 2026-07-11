@@ -34,6 +34,7 @@ from server.middleware import (  # noqa: E402
     SetAuthCookieMiddleware,
 )
 from server.rate_limit import setup_rate_limit_handler  # noqa: E402
+from server.routes.agent_profiles import router as agent_profiles_router  # noqa: E402
 from server.routes.analytics_events import analytics_events_router  # noqa: E402
 from server.routes.api_keys import api_router as api_keys_router  # noqa: E402
 from server.routes.auth import api_router, oauth_router  # noqa: E402
@@ -167,6 +168,9 @@ if USER_PROVISIONING_ENABLED:
 base_app.include_router(
     org_profiles_router, prefix='/api/organizations'
 )  # Add routes for org LLM profiles
+base_app.include_router(
+    agent_profiles_router
+)  # Add flat /api/agent-profiles routes for org Agent Profiles
 base_app.include_router(
     verified_models_router
 )  # Add routes for verified models management

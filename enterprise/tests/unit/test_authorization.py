@@ -145,6 +145,8 @@ class TestRolePermissions:
         assert Permission.MANAGE_MCP in owner_perms
         assert Permission.VIEW_LLM_SETTINGS in owner_perms
         assert Permission.EDIT_LLM_SETTINGS in owner_perms
+        assert Permission.VIEW_ORG_SETTINGS in owner_perms
+        assert Permission.EDIT_ORG_SETTINGS in owner_perms
         assert Permission.VIEW_BILLING in owner_perms
         assert Permission.ADD_CREDITS in owner_perms
         assert Permission.INVITE_USER_TO_ORGANIZATION in owner_perms
@@ -168,6 +170,8 @@ class TestRolePermissions:
         assert Permission.MANAGE_MCP in admin_perms
         assert Permission.VIEW_LLM_SETTINGS in admin_perms
         assert Permission.EDIT_LLM_SETTINGS in admin_perms
+        assert Permission.VIEW_ORG_SETTINGS in admin_perms
+        assert Permission.EDIT_ORG_SETTINGS in admin_perms
         assert Permission.VIEW_BILLING in admin_perms
         assert Permission.ADD_CREDITS in admin_perms
         assert Permission.INVITE_USER_TO_ORGANIZATION in admin_perms
@@ -199,6 +203,7 @@ class TestRolePermissions:
         assert Permission.VIEW_ORG_SETTINGS in member_perms
         # Member should NOT have admin/owner permissions
         assert Permission.EDIT_LLM_SETTINGS not in member_perms
+        assert Permission.EDIT_ORG_SETTINGS not in member_perms
         assert Permission.MANAGE_INTEGRATION_PROVIDERS not in member_perms
         assert Permission.VIEW_BILLING not in member_perms
         assert Permission.ADD_CREDITS not in member_perms
@@ -726,6 +731,143 @@ class TestRequirePermission:
 
             assert exc_info.value.status_code == 403
             assert 'not a member' in exc_info.value.detail
+
+
+@pytest.mark.usefixtures('_no_super_role')
+class TestRequirePermissionQueryStringOrgIdBypass:
+    """Regression tests for a cross-org privilege-escalation bypass.
+
+    On routes with no ``{org_id}`` path segment (e.g. the flat
+    ``EFFECTIVE_ORG_ID``-scoped routes), FastAPI has no path value to bind
+    ``permission_checker``'s own ``org_id`` parameter to, so it silently
+    falls back to binding it from an ordinary, client-controlled query
+    string. Previously that query-string value was trusted directly,
+    letting a caller supply ``?org_id=<org they administer>`` to pass the
+    permission check while the route handler itself operates on a
+    *different* org (resolved separately from ``X-Org-Id`` via
+    ``EFFECTIVE_ORG_ID``). These tests pin the fix: such a route must
+    always ignore query-string ``org_id`` and re-resolve the target org via
+    ``resolve_target_org_id_for_permission_check`` -- the same resolver
+    ``EFFECTIVE_ORG_ID`` uses -- so the two can never diverge.
+    """
+
+    @pytest.mark.asyncio
+    async def test_query_string_org_id_is_ignored_without_path_org_id(self):
+        """
+        GIVEN: A route with no {org_id} path segment; the caller is only a
+               MEMBER of org_a (the request's real effective org) but is
+               OWNER of org_b
+        WHEN: The caller supplies ?org_id=<org_b> as a query-string override
+        THEN: org_b is discarded -- the permission check queries org_a (via
+              resolve_target_org_id_for_permission_check) and denies the
+              member-role caller EDIT_ORG_SETTINGS
+        """
+        user_id = str(uuid4())
+        org_a = uuid4()  # the request's real effective org; caller is a mere member
+        org_b = uuid4()  # an org the caller owns -- smuggled in via ?org_id=
+
+        mock_request = _create_mock_request()
+        mock_request.path_params = {}
+
+        member_role = MagicMock()
+        member_role.name = 'member'
+
+        async def fake_get_user_org_role(_user_id, queried_org_id):
+            assert queried_org_id == org_a, (
+                'permission check queried the attacker-supplied org_id '
+                "instead of the request's real effective org"
+            )
+            return member_role
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(side_effect=fake_get_user_org_role),
+            ),
+            patch(
+                'server.auth.org_context.resolve_target_org_id_for_permission_check',
+                AsyncMock(return_value=org_a),
+            ),
+        ):
+            permission_checker = require_permission(Permission.EDIT_ORG_SETTINGS)
+            with pytest.raises(HTTPException) as exc_info:
+                await permission_checker(
+                    request=mock_request, org_id=org_b, user_id=user_id
+                )
+
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_legitimate_no_query_org_id_still_resolves_effective_org(self):
+        """
+        GIVEN: A route with no {org_id} path segment and no query-string
+               org_id supplied (the only legitimate shape before this fix)
+        WHEN: Permission checker runs
+        THEN: It still falls through to
+              resolve_target_org_id_for_permission_check -- unchanged
+              pre-existing behavior for the honest case
+        """
+        user_id = str(uuid4())
+        org_a = uuid4()
+
+        mock_request = _create_mock_request()
+        mock_request.path_params = {}
+
+        admin_role = MagicMock()
+        admin_role.name = 'admin'
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=admin_role),
+            ) as mock_get_role,
+            patch(
+                'server.auth.org_context.resolve_target_org_id_for_permission_check',
+                AsyncMock(return_value=org_a),
+            ),
+        ):
+            permission_checker = require_permission(Permission.EDIT_ORG_SETTINGS)
+            result = await permission_checker(
+                request=mock_request, org_id=None, user_id=user_id
+            )
+
+        assert result == user_id
+        mock_get_role.assert_awaited_once_with(user_id, org_a)
+
+    @pytest.mark.asyncio
+    async def test_path_scoped_org_id_is_still_trusted_directly(self):
+        """
+        GIVEN: A route WITH an {org_id} path segment (path_params carries it)
+        WHEN: Permission checker runs
+        THEN: The path-bound org_id is used directly with no fallback
+              resolver call -- preserving org_profiles.py-style semantics
+        """
+        user_id = str(uuid4())
+        org_id = uuid4()
+
+        mock_request = _create_mock_request()
+        mock_request.path_params = {'org_id': str(org_id)}
+
+        admin_role = MagicMock()
+        admin_role.name = 'admin'
+
+        with (
+            patch(
+                'server.auth.authorization.get_user_org_role',
+                AsyncMock(return_value=admin_role),
+            ) as mock_get_role,
+            patch(
+                'server.auth.org_context.resolve_target_org_id_for_permission_check',
+                AsyncMock(side_effect=AssertionError('should not be called')),
+            ),
+        ):
+            permission_checker = require_permission(Permission.EDIT_ORG_SETTINGS)
+            result = await permission_checker(
+                request=mock_request, org_id=org_id, user_id=user_id
+            )
+
+        assert result == user_id
+        mock_get_role.assert_awaited_once_with(user_id, org_id)
 
 
 # =============================================================================

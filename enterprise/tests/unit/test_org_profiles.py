@@ -155,16 +155,26 @@ class TestRenameProfileRequest:
     def test_name_validation(self):
         """Test name length validation."""
         # Should accept reasonable names
-        request = RenameProfileRequest(new_name='a' * 100)
-        assert len(request.new_name) == 100
+        request = RenameProfileRequest(new_name='a' * 64)
+        assert len(request.new_name) == 64
 
         # Should reject empty names (min_length=1)
         with pytest.raises(ValueError):
             RenameProfileRequest(new_name='')
 
-        # Should reject too-long names (max_length=100)
+        # Should reject too-long names (max_length=64, matching the SDK's
+        # PROFILE_NAME_PATTERN enforced by rename_llm_profile).
         with pytest.raises(ValueError):
-            RenameProfileRequest(new_name='a' * 101)
+            RenameProfileRequest(new_name='a' * 65)
+
+    def test_name_pattern_validation(self):
+        """new_name must satisfy PROFILE_NAME_PATTERN, matching what
+        rename_llm_profile actually enforces (else this 422s deep in the
+        handler instead of at the request-schema boundary)."""
+        with pytest.raises(ValueError):
+            RenameProfileRequest(new_name='has a space')
+        with pytest.raises(ValueError):
+            RenameProfileRequest(new_name='has/slash')
 
 
 # ── Integration tests ──────────────────────────────────────────────────────

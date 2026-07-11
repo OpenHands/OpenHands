@@ -1,4 +1,9 @@
-import { FiUsers, FiBriefcase, FiBarChart2 } from "react-icons/fi";
+import {
+  FiUsers,
+  FiBriefcase,
+  FiBarChart2,
+  FiDollarSign,
+} from "react-icons/fi";
 import CreditCardIcon from "#/icons/credit-card.svg?react";
 import KeyIcon from "#/icons/key.svg?react";
 import LightbulbIcon from "#/icons/lightbulb.svg?react";
@@ -51,6 +56,12 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
     icon: <FiBarChart2 size={22} />,
     to: "/settings/usage-monitoring",
     text: "SETTINGS$NAV_ADMIN_DASHBOARD",
+    section: "org",
+  },
+  {
+    icon: <FiDollarSign size={22} />,
+    to: "/settings/budgets",
+    text: "SETTINGS$NAV_BUDGETS",
     section: "org",
   },
   {

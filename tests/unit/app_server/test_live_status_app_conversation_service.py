@@ -30,6 +30,7 @@ from openhands.app_server.app_conversation.app_conversation_service import (
 )
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     LiveStatusAppConversationService,
+    effective_disabled_skills,
 )
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.integrations.service_types import SuggestedTask, TaskType
@@ -150,6 +151,46 @@ class _TestUserInfo(SimpleNamespace):
 
     def to_agent_settings(self) -> OpenHandsAgentSettings:
         return self.agent_settings
+
+
+class TestEffectiveDisabledSkills:
+    """effective_disabled_skills() unions the member- and profile-level deny-lists.
+
+    A skill disabled at either level stays off. The profile's deny-list rides the
+    resolved agent_settings.agent_context.disabled_skills (stamped by the SDK
+    resolver, #4017); the member's rides user.disabled_skills.
+    """
+
+    def _user(self, member, profile_disabled):
+        user = _TestUserInfo(disabled_skills=member)
+        user.agent_settings = OpenHandsAgentSettings(
+            agent_context=AgentContext(disabled_skills=profile_disabled)
+        )
+        return user
+
+    def test_unions_member_and_profile_dedup_order_preserving(self):
+        assert effective_disabled_skills(self._user(['a', 'b'], ['b', 'c'])) == [
+            'a',
+            'b',
+            'c',
+        ]
+
+    def test_profile_only(self):
+        assert effective_disabled_skills(self._user([], ['x'])) == ['x']
+
+    def test_member_only_on_non_profile_launch(self):
+        # Non-profile launch: resolved context carries no profile deny-list.
+        user = _TestUserInfo(disabled_skills=['m'])
+        user.agent_settings = OpenHandsAgentSettings(agent_context=AgentContext())
+        assert effective_disabled_skills(user) == ['m']
+
+    def test_missing_name_carried_as_noop_never_raises(self):
+        # A disabled name absent from any catalog is still returned; the deny is a
+        # no-op at load time (nothing to remove), never an error.
+        assert effective_disabled_skills(self._user([], ['nope'])) == ['nope']
+
+    def test_empty_when_nothing_disabled(self):
+        assert effective_disabled_skills(self._user([], [])) == []
 
 
 # Env var used by openhands SDK LLM to skip context-window validation (e.g. for gpt-4 in tests)
@@ -976,6 +1017,47 @@ class TestLiveStatusAppConversationService:
         return_value=[],
     )
     @pytest.mark.asyncio
+    async def test_build_request_passes_profile_and_member_disabled_skills(
+        self, _mock_tools
+    ):
+        """Skill loading gets member ∪ launched-profile disabled_skills (#4017)."""
+        # Member disables one skill; the launched profile (resolved agent_context)
+        # disables another. Both must reach _load_skills_and_update_agent.
+        self.mock_user.disabled_skills = ['member-skill']
+        self.mock_user.agent_settings = OpenHandsAgentSettings(
+            llm=LLM(model='gpt-4', api_key=SecretStr('test-key')),
+            agent_context=AgentContext(disabled_skills=['profile-skill']),
+        )
+        self.mock_user_context.get_user_info.return_value = self.mock_user
+
+        real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
+        mock_agent = Mock(spec=Agent)
+        mock_agent.llm = real_llm
+        mock_agent.condenser = None
+
+        self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
+        self.service._configure_llm_and_mcp = AsyncMock(return_value=(real_llm, {}))
+        self.service._load_skills_and_update_agent = AsyncMock(return_value=mock_agent)
+
+        await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+            remote_workspace=Mock(spec=AsyncRemoteWorkspace),
+            selected_repository='test_repo',
+        )
+
+        kwargs = self.service._load_skills_and_update_agent.call_args.kwargs
+        assert set(kwargs['disabled_skills']) == {'member-skill', 'profile-skill'}
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+        return_value=[],
+    )
+    @pytest.mark.asyncio
     async def test_build_request_without_remote_workspace(self, _mock_tools):
         """Skills loading is skipped when no remote_workspace is provided."""
         self.mock_user_context.get_user_info.return_value = self.mock_user
@@ -1153,6 +1235,11 @@ class TestLiveStatusAppConversationService:
         )
 
         assert result.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(result.conversation_id),
+            'agent_kind': 'openhands',
+            'repo_name': 'test/repo',
+            'selected_branch': 'feature-x',
             'repo': 'test/repo',
             'branch': 'feature-x',
             'git_provider': 'github',
@@ -1194,6 +1281,11 @@ class TestLiveStatusAppConversationService:
         )
 
         assert result.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(result.conversation_id),
+            'agent_kind': 'openhands',
+            'repo_name': 'test/repo',
+            'selected_branch': 'feature-x',
             'repo': 'test/repo',
             'branch': 'feature-x',
             'git_provider': 'github',
@@ -1233,17 +1325,23 @@ class TestLiveStatusAppConversationService:
             selected_repository='test/repo',
         )
 
-        assert result.observability_metadata == {'repo': 'test/repo'}
+        assert result.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(result.conversation_id),
+            'agent_kind': 'openhands',
+            'repo_name': 'test/repo',
+            'repo': 'test/repo',
+        }
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
         return_value=[],
     )
     @pytest.mark.asyncio
-    async def test_build_request_no_repo_omits_observability_metadata(
+    async def test_build_request_no_repo_keeps_context_observability_metadata(
         self, _mock_tools
     ):
-        """A repo-less conversation adds no repo metadata to the trace."""
+        """A repo-less conversation keeps non-repo trace context metadata."""
         self.mock_user_context.get_user_info.return_value = self.mock_user
         self.service._setup_secrets_for_git_providers = AsyncMock(return_value={})
         self.service._configure_llm_and_mcp = AsyncMock(
@@ -1261,7 +1359,11 @@ class TestLiveStatusAppConversationService:
             selected_repository=None,
         )
 
-        assert result.observability_metadata == {}
+        assert result.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(result.conversation_id),
+            'agent_kind': 'openhands',
+        }
 
     @pytest.mark.asyncio
     async def test_build_request_routes_acp_user_to_observability_metadata(self):
@@ -1300,6 +1402,11 @@ class TestLiveStatusAppConversationService:
 
         assert result.agent.agent_kind == 'acp'
         assert result.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(result.conversation_id),
+            'agent_kind': 'acp',
+            'repo_name': 'test/repo',
+            'selected_branch': 'feature-x',
             'repo': 'test/repo',
             'branch': 'feature-x',
             'git_provider': 'github',
@@ -4332,6 +4439,11 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
 
         assert request.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(request.conversation_id),
+            'agent_kind': 'acp',
+            'repo_name': 'test/repo',
+            'selected_branch': 'feature-x',
             'repo': 'test/repo',
             'branch': 'feature-x',
             'git_provider': 'github',
@@ -4358,6 +4470,11 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
 
         assert request.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(request.conversation_id),
+            'agent_kind': 'acp',
+            'repo_name': 'test/repo',
+            'selected_branch': 'feature-x',
             'repo': 'test/repo',
             'branch': 'feature-x',
             'git_provider': 'github',
@@ -4365,10 +4482,16 @@ class TestBuildAcpStartConversationRequestSecrets:
         }
 
     @pytest.mark.asyncio
-    async def test_no_repo_omits_observability_metadata(self, service, tmp_path):
-        """A repo-less ACP conversation adds no repo metadata to the trace."""
+    async def test_no_repo_keeps_context_observability_metadata(
+        self, service, tmp_path
+    ):
+        """A repo-less ACP conversation keeps non-repo trace context metadata."""
         user = self._make_acp_user()
 
         request = await self._call_build(service, user, tmp_path)
 
-        assert request.observability_metadata == {}
+        assert request.observability_metadata == {
+            'app': 'openhands',
+            'conversation_id': str(request.conversation_id),
+            'agent_kind': 'acp',
+        }

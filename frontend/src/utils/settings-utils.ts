@@ -55,6 +55,11 @@ export const extractSettings = (
   };
 };
 
+export const ADMIN_ONLY_SETTINGS_PATHS = new Set<string>([
+  "/settings/usage-monitoring",
+  "/settings/budgets",
+]);
+
 /**
  * Checks if a settings page should be hidden based on feature flags.
  * Used by both the route loader and navigation hook to keep logic in sync.

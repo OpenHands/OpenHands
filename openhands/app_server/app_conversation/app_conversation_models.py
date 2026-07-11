@@ -23,6 +23,7 @@ from openhands.app_server.settings.settings_models import SandboxGroupingStrateg
 from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.plugin import PluginSource
+from openhands.sdk.profiles import LaunchedAgentProfile
 
 __all__ = ['SandboxGroupingStrategy']
 
@@ -37,6 +38,13 @@ ACP_SERVER_TAG_KEY = 'acpserver'
 # from settings that may have changed. Must satisfy the SDK ^[a-z0-9]+$ tag-key
 # rule — no underscores.
 ARCHIVE_WORKSPACE_PATH_TAG_KEY = 'archiveworkspacepath'
+
+# Conversation-tag keys recording which Agent Profile launched the conversation
+# (provenance). Ride the tags dict + a @computed_field exactly like
+# ``acp_server`` so the projection is zero-migration. The SDK ^[a-z0-9]+$
+# tag-key rule forbids underscores, hence the squashed keys.
+AGENT_PROFILE_ID_TAG_KEY = 'agentprofileid'
+AGENT_PROFILE_REVISION_TAG_KEY = 'agentprofilerevision'
 
 
 class ConversationTrigger(Enum):
@@ -145,6 +153,30 @@ class AppConversationInfo(BaseModel):
             return None
         return self.tags.get(ACP_SERVER_TAG_KEY)
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def launched_agent_profile(self) -> LaunchedAgentProfile | None:
+        """Provenance of the Agent Profile that launched this conversation, else None.
+
+        A typed projection of the ``agentprofileid`` / ``agentprofilerevision``
+        tags (same pattern as ``acp_server``), so it round-trips through the DB
+        ``tags`` column for free. Canvas reads exactly
+        ``launched_agent_profile { agent_profile_id, revision }``.
+        """
+        pid = self.tags.get(AGENT_PROFILE_ID_TAG_KEY)
+        if not pid:
+            return None
+        rev_raw = self.tags.get(AGENT_PROFILE_REVISION_TAG_KEY)
+        try:
+            revision = int(rev_raw) if rev_raw is not None else 0
+        except (TypeError, ValueError):
+            revision = 0
+        try:
+            return LaunchedAgentProfile(agent_profile_id=UUID(pid), revision=revision)
+        except ValueError:
+            # Malformed id tag — surface no provenance rather than 500 the list.
+            return None
+
 
 class AppConversationSortOrder(Enum):
     CREATED_AT = 'CREATED_AT'
@@ -200,6 +232,10 @@ class AppConversationStartRequest(OpenHandsModel):
     system_message_suffix: str | None = None
     processors: list[EventCallbackProcessor] | None = Field(default=None)
     llm_model: str | None = None
+    # One-off launch override: run THIS conversation from a specific Agent
+    # Profile (by id) without changing the member's active pointer. When unset,
+    # the member's active_agent_profile_id is used.
+    agent_profile_id: str | None = None
 
     # Git parameters
     selected_repository: str | None = None
