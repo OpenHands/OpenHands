@@ -1463,6 +1463,70 @@ class TestLoadAndMergeAllSkills:
             sent = mock_load_skills.call_args.kwargs['registered_marketplaces']
             assert [reg.source for reg in sent] == [authenticated_url]
 
+    @pytest.mark.asyncio
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_skills_from_agent_server'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.build_org_configs'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.build_sandbox_config'
+    )
+    async def test_keeps_loading_public_skills_when_auto_load_marketplace_present(
+        self,
+        mock_build_sandbox_config,
+        mock_build_org_configs,
+        mock_load_skills,
+    ):
+        """Default public/user/org/project skill loading must stay enabled even
+        when an auto-load repository marketplace is registered (regression
+        guard for #15237: registering a repo for auto-load must not suppress
+        the default public skills, e.g. ``openhands-automation``)."""
+        # Arrange
+        from openhands.app_server.settings.settings_models import (
+            MarketplaceRegistration,
+        )
+
+        mock_user_context = Mock(spec=UserContext)
+        mock_user_context.get_authenticated_git_url = AsyncMock(
+            return_value='https://x-access-token:tok@github.com/o/repo.git'
+        )
+        with patch.object(AppConversationServiceBase, '__abstractmethods__', set()):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True, user_context=mock_user_context
+            )
+
+            sandbox = Mock(spec=SandboxInfo)
+            sandbox.exposed_urls = []
+            sandbox.session_api_key = 'test-key'
+
+            mock_load_skills.return_value = []
+            mock_build_org_configs.return_value = []
+            mock_build_sandbox_config.return_value = None
+
+            marketplaces = [
+                MarketplaceRegistration(
+                    name='team', source='github:o/repo', auto_load=True
+                )
+            ]
+
+            # Act
+            await service.load_and_merge_all_skills(
+                sandbox,
+                'owner/repo',
+                '/workspace/repo',
+                'http://localhost:8000',
+                registered_marketplaces=marketplaces,
+            )
+
+            # Assert
+            call_kwargs = mock_load_skills.call_args.kwargs
+            assert call_kwargs['load_public'] is True
+            assert call_kwargs['load_user'] is True
+            assert call_kwargs['load_org'] is True
+            assert call_kwargs['load_project'] is True
+
 
 class TestLoadSkillsAndUpdateAgent:
     """_load_skills_and_update_agent threads marketplaces into skill loading."""
