@@ -50,6 +50,12 @@ then re-run the command to ensure it passes. Common issues include:
 - GitHub-authored (`actions/*`, `github/*`) and first-party (`OpenHands/*`) actions are currently exempt.
 - Dependabot's `github-actions` ecosystem bumps the pinned SHA and the trailing comment under the configured cooldown, so pinning does not block security or version updates.
 
+## Formal Specifications
+
+- Executable Quint models live under `spec/`. Keep desired contracts separate from current-code counterexample models, put deterministic scenarios in filename-matched `*_tests.qnt` modules, and pin the CLI to `@informalsystems/quint@0.32.0`.
+- The complete local/CI commands and witness semantics are documented in `spec/README.md`. Every `.qnt` file must be type-checked and every `*_tests.qnt` module must run in `.github/workflows/quint.yml`.
+- Maintain `spec/CHANGELOG.md` as a formal-spec research log with pending discrepancies first and dated entries newest first. It is separate from product release notes in GitHub Releases.
+
 ## Lockfile Regeneration (Preserve Original Tool Versions)
 
 When regenerating lockfiles (poetry.lock, uv.lock, etc.), you MUST use the same tool version that originally generated the lockfile to avoid unnecessary diff noise. Each lockfile contains a version header indicating which tool version was used.

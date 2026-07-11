@@ -1,0 +1,68 @@
+# Workflow that checks the Quint formal specification.
+name: Quint Model Checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "spec/**"
+      - "openhands/app_server/app_conversation/**"
+      - "tests/unit/app_server/test_*app_conversation*.py"
+      - ".github/workflows/quint.yml"
+  pull_request:
+    paths:
+      - "spec/**"
+      - "openhands/app_server/app_conversation/**"
+      - "tests/unit/app_server/test_*app_conversation*.py"
+      - ".github/workflows/quint.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ (github.head_ref && github.ref) || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quint:
+    name: Quint type-check, tests, and simulation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install pinned Quint
+        run: npm install --global @informalsystems/quint@0.32.0
+
+      - name: Show Quint version
+        run: quint --version
+
+      - name: Type-check every Quint file
+        run: |
+          for spec_file in spec/*.qnt; do
+            quint typecheck "$spec_file"
+          done
+
+      - name: Run deterministic scenarios and witnesses
+        run: |
+          for test_file in spec/*_tests.qnt; do
+            main_module="${test_file##*/}"
+            main_module="${main_module%.qnt}"
+            quint test "$test_file" --main="$main_module" --match='.*Test'
+          done
+
+      # A violation means the desired lifecycle contract regressed.
+      - name: Simulate app-conversation start safety properties
+        run: |
+          quint run spec/app_conversation_start.qnt \
+            --main=app_conversation_start \
+            --invariant=allSafetyProperties \
+            --max-steps=30 --max-samples=1000
