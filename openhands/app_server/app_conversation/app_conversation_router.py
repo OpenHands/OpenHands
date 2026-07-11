@@ -968,7 +968,13 @@ async def delete_app_conversation(
                 sandbox_id
             )
         )
-        sandbox_is_shared = conversation_count > 1
+        # Exclude conversations that will be cascade-deleted (this conversation + its
+        # direct sub-conversations) from the external-sharing count.  A sandbox is
+        # only truly shared when OTHER independent conversations still reference it.
+        sub_conv_ids = await app_conversation_info_service.get_sub_conversation_ids(
+            conversation_uuid
+        )
+        sandbox_is_shared = conversation_count > (1 + len(sub_conv_ids))
 
     # Delete the conversation (skip agent server DELETE if sandbox is shared)
     deleted = await app_conversation_service.delete_app_conversation(

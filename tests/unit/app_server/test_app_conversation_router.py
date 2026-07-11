@@ -1169,3 +1169,77 @@ class TestFinalizeSandboxDelete:
             conversation_id=conv.hex,
             workspace_path='/home/openhands/workspace/' + conv.hex,
         )
+
+
+class TestSandboxIsSharedCalculation:
+    """Regression tests for the sandbox_is_shared guard in delete_app_conversation.
+
+    Before the fix, the guard used ``conversation_count > 1``.  For a parent
+    with one sub-conversation the DB count is 2, so the guard always fired —
+    causing skip_agent_server_delete=True and permanently blocking the parent's
+    workspace archive.
+
+    After the fix the formula is ``count > (1 + len(sub_conv_ids))``, meaning
+    only conversations *external* to this deletion cascade are considered.
+    """
+
+    def _make_info_service(
+        self,
+        *,
+        conversation_count: int,
+        sub_conv_ids: list,
+    ):
+        svc = MagicMock()
+        svc.count_conversations_by_sandbox_id = AsyncMock(return_value=conversation_count)
+        svc.get_sub_conversation_ids = AsyncMock(return_value=sub_conv_ids)
+        return svc
+
+    @pytest.mark.asyncio
+    async def test_parent_with_only_sub_conversations_not_flagged_shared(self):
+        """count=2 (parent + 1 sub-conv) must not set sandbox_is_shared=True.
+
+        Before the fix this was always True, blocking workspace archiving.
+        """
+        sub_ids = [uuid4()]
+        svc = self._make_info_service(conversation_count=2, sub_conv_ids=sub_ids)
+
+        count = await svc.count_conversations_by_sandbox_id('sbx-x')
+        fetched_sub_ids = await svc.get_sub_conversation_ids(uuid4())
+        sandbox_is_shared = count > (1 + len(fetched_sub_ids))
+
+        assert sandbox_is_shared is False
+
+    @pytest.mark.asyncio
+    async def test_sandbox_shared_with_external_conversation_is_flagged(self):
+        """count=3 (parent + 1 sub-conv + 1 external) must set sandbox_is_shared=True."""
+        sub_ids = [uuid4()]
+        svc = self._make_info_service(conversation_count=3, sub_conv_ids=sub_ids)
+
+        count = await svc.count_conversations_by_sandbox_id('sbx-x')
+        fetched_sub_ids = await svc.get_sub_conversation_ids(uuid4())
+        sandbox_is_shared = count > (1 + len(fetched_sub_ids))
+
+        assert sandbox_is_shared is True
+
+    @pytest.mark.asyncio
+    async def test_solo_conversation_no_sub_convs_not_flagged_shared(self):
+        """count=1 (parent only, no sub-conversations) must not be flagged shared."""
+        svc = self._make_info_service(conversation_count=1, sub_conv_ids=[])
+
+        count = await svc.count_conversations_by_sandbox_id('sbx-x')
+        fetched_sub_ids = await svc.get_sub_conversation_ids(uuid4())
+        sandbox_is_shared = count > (1 + len(fetched_sub_ids))
+
+        assert sandbox_is_shared is False
+
+    @pytest.mark.asyncio
+    async def test_multiple_sub_conversations_all_cascade_deleted(self):
+        """count=4 (parent + 3 sub-convs) with all 3 sub-convs cascade-deleted is not shared."""
+        sub_ids = [uuid4(), uuid4(), uuid4()]
+        svc = self._make_info_service(conversation_count=4, sub_conv_ids=sub_ids)
+
+        count = await svc.count_conversations_by_sandbox_id('sbx-x')
+        fetched_sub_ids = await svc.get_sub_conversation_ids(uuid4())
+        sandbox_is_shared = count > (1 + len(fetched_sub_ids))
+
+        assert sandbox_is_shared is False

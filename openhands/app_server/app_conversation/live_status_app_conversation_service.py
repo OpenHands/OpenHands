@@ -2357,7 +2357,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 return False
 
             # Delete all sub-conversations first (to maintain referential integrity)
-            await self._delete_sub_conversations(conversation_id)
+            await self._delete_sub_conversations(app_conversation)
 
             # Now delete the parent conversation
             # Delete from agent server if sandbox is running (skip if sandbox is shared)
@@ -2376,18 +2376,21 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
             return False
 
-    async def _delete_sub_conversations(self, parent_conversation_id: UUID) -> None:
-        """Delete all sub-conversations of a parent conversation.
+    async def _delete_sub_conversations(
+        self, parent_conversation: AppConversation
+    ) -> None:
+        """Delete all direct sub-conversations of *parent_conversation*.
 
-        This method handles errors gracefully, continuing to delete remaining
-        sub-conversations even if one fails.
+        Agent-server deletion is skipped for sub-conversations that share the
+        parent's sandbox — the parent's own ``_delete_from_agent_server`` call
+        handles the single workspace archive + teardown after all DB rows are
+        removed.
 
-        Args:
-            parent_conversation_id: The UUID of the parent conversation.
+        Errors are logged but do not abort remaining deletions.
         """
         sub_conversation_ids = (
             await self.app_conversation_info_service.get_sub_conversation_ids(
-                parent_conversation_id
+                parent_conversation.id
             )
         )
 
@@ -2395,16 +2398,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             try:
                 sub_conversation = await self.get_app_conversation(sub_id)
                 if sub_conversation:
-                    # Delete from agent server if sandbox is running
-                    await self._delete_from_agent_server(sub_conversation)
-                    # Delete from database
+                    # Only call the agent server when the sub-conversation has its
+                    # own independent sandbox; shared-sandbox teardown is deferred
+                    # to the parent so the workspace archive isn't lost.
+                    if sub_conversation.sandbox_id != parent_conversation.sandbox_id:
+                        await self._delete_from_agent_server(sub_conversation)
                     await self._delete_from_database(sub_conversation)
                     _logger.info(
                         f'Successfully deleted sub-conversation {sub_id}',
                         extra={'conversation_id': str(sub_id)},
                     )
             except Exception as e:
-                # Log error but continue deleting remaining sub-conversations
                 _logger.warning(
                     f'Error deleting sub-conversation {sub_id}: {e}',
                     extra={'conversation_id': str(sub_id)},

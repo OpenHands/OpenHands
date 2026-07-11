@@ -6,7 +6,7 @@ import os
 import zipfile
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import uuid4
 
 import pytest
@@ -2891,6 +2891,163 @@ class TestLiveStatusAppConversationService:
 
         # Verify empty results
         assert len(result.items) == 0
+
+
+
+class TestDeleteSubConversations:
+    """Regression tests for premature sandbox teardown during cascade deletion.
+
+    Before the fix, _delete_sub_conversations unconditionally called
+    _delete_from_agent_server for every sub-conversation.  Because
+    sub-conversations inherit their parent's sandbox_id the very first
+    sub-conversation deletion tore down the shared sandbox, preventing the
+    parent from archiving its workspace.
+    """
+
+    def setup_method(self):
+        self.mock_app_conversation_info_service = MagicMock()
+        self.mock_app_conversation_start_task_service = MagicMock()
+        self.service = LiveStatusAppConversationService(
+            init_git_in_empty_workspace=False,
+            user_context=MagicMock(),
+            app_conversation_info_service=self.mock_app_conversation_info_service,
+            app_conversation_start_task_service=self.mock_app_conversation_start_task_service,
+            event_callback_service=MagicMock(),
+            event_service=MagicMock(),
+            sandbox_service=MagicMock(),
+            sandbox_spec_service=MagicMock(),
+            jwt_service=MagicMock(),
+            pending_message_service=MagicMock(),
+            sandbox_startup_timeout=30,
+            sandbox_startup_poll_frequency=1,
+            max_num_conversations_per_sandbox=20,
+            httpx_client=MagicMock(),
+            web_url='https://test.example.com',
+            openhands_provider_base_url='https://provider.example.com',
+            access_token_hard_timeout=None,
+            app_mode='test',
+        )
+
+    def _make_conversation(self, sandbox_id: str, **kwargs) -> 'AppConversation':
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            AppConversation,
+        )
+        from openhands.app_server.sandbox.sandbox_models import SandboxStatus
+
+        return AppConversation(
+            id=uuid4(),
+            created_by_user_id='user-1',
+            sandbox_id=sandbox_id,
+            sandbox_status=SandboxStatus.RUNNING,
+            session_api_key='key-abc',
+            **kwargs,
+        )
+
+    @pytest.mark.asyncio
+    async def test_shared_sandbox_skips_agent_server_delete(self):
+        """Sub-conversations sharing the parent sandbox must not call _delete_from_agent_server.
+
+        Calling it would stop the sandbox, blocking the parent's workspace archive.
+        """
+        shared_sandbox = 'sbx-shared'
+        parent = self._make_conversation(shared_sandbox)
+        sub = self._make_conversation(shared_sandbox)  # same sandbox
+
+        self.mock_app_conversation_info_service.get_sub_conversation_ids = AsyncMock(
+            return_value=[sub.id]
+        )
+        self.service.get_app_conversation = AsyncMock(return_value=sub)
+        self.service._delete_from_agent_server = AsyncMock()
+        self.service._delete_from_database = AsyncMock(return_value=True)
+
+        await self.service._delete_sub_conversations(parent)
+
+        self.service._delete_from_agent_server.assert_not_called()
+        self.service._delete_from_database.assert_awaited_once_with(sub)
+
+    @pytest.mark.asyncio
+    async def test_independent_sandbox_calls_agent_server_delete(self):
+        """Sub-conversations with their own sandbox must still call _delete_from_agent_server."""
+        parent = self._make_conversation('sbx-parent')
+        sub = self._make_conversation('sbx-sub-independent')  # different sandbox
+
+        self.mock_app_conversation_info_service.get_sub_conversation_ids = AsyncMock(
+            return_value=[sub.id]
+        )
+        self.service.get_app_conversation = AsyncMock(return_value=sub)
+        self.service._delete_from_agent_server = AsyncMock()
+        self.service._delete_from_database = AsyncMock(return_value=True)
+
+        await self.service._delete_sub_conversations(parent)
+
+        self.service._delete_from_agent_server.assert_awaited_once_with(sub)
+        self.service._delete_from_database.assert_awaited_once_with(sub)
+
+    @pytest.mark.asyncio
+    async def test_multiple_sub_conversations_mixed_sandboxes(self):
+        """Only sub-conversations with independent sandboxes trigger agent-server deletion."""
+        parent = self._make_conversation('sbx-parent')
+        sub_shared = self._make_conversation('sbx-parent')  # same sandbox
+        sub_own = self._make_conversation('sbx-other')  # different sandbox
+
+        self.mock_app_conversation_info_service.get_sub_conversation_ids = AsyncMock(
+            return_value=[sub_shared.id, sub_own.id]
+        )
+
+        async def _get(conv_id):
+            return sub_shared if conv_id == sub_shared.id else sub_own
+
+        self.service.get_app_conversation = AsyncMock(side_effect=_get)
+        self.service._delete_from_agent_server = AsyncMock()
+        self.service._delete_from_database = AsyncMock(return_value=True)
+
+        await self.service._delete_sub_conversations(parent)
+
+        # Only the independently-sandboxed sub-conversation reaches the agent server
+        self.service._delete_from_agent_server.assert_awaited_once_with(sub_own)
+        assert self.service._delete_from_database.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_no_sub_conversations_is_noop(self):
+        """Parent with no sub-conversations performs no deletions."""
+        parent = self._make_conversation('sbx-parent')
+
+        self.mock_app_conversation_info_service.get_sub_conversation_ids = AsyncMock(
+            return_value=[]
+        )
+        self.service._delete_from_agent_server = AsyncMock()
+        self.service._delete_from_database = AsyncMock()
+
+        await self.service._delete_sub_conversations(parent)
+
+        self.service._delete_from_agent_server.assert_not_called()
+        self.service._delete_from_database.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_error_in_one_sub_conversation_does_not_abort_others(self):
+        """A failure deleting one sub-conversation must not prevent others from being deleted."""
+        parent = self._make_conversation('sbx-parent')
+        sub_bad = self._make_conversation('sbx-other-a')
+        sub_good = self._make_conversation('sbx-other-b')
+
+        self.mock_app_conversation_info_service.get_sub_conversation_ids = AsyncMock(
+            return_value=[sub_bad.id, sub_good.id]
+        )
+
+        async def _get(conv_id):
+            return sub_bad if conv_id == sub_bad.id else sub_good
+
+        self.service.get_app_conversation = AsyncMock(side_effect=_get)
+        self.service._delete_from_agent_server = AsyncMock(
+            side_effect=[RuntimeError('agent down'), None]
+        )
+        self.service._delete_from_database = AsyncMock(return_value=True)
+
+        # Must not raise even though sub_bad fails
+        await self.service._delete_sub_conversations(parent)
+
+        # sub_good database deletion still runs despite sub_bad's error
+        self.service._delete_from_database.assert_awaited_once_with(sub_good)
 
 
 class TestPluginHandling:
