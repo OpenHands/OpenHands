@@ -1,0 +1,47 @@
+=== API GET /api/v1/settings (MCP section) ===
+Shows MCP servers stored with redacted secrets in API response
+
+Server: test-http-server
+  url: https://mcp-test.example.com/sse
+  transport: sse
+  auth.strategy: bearer
+  auth.value: <REDACTED - not in API response>
+  env: <not exposed or empty>
+
+Server: test-stdio-server
+  url: N/A
+  transport: N/A
+  auth.strategy: N/A
+  auth.value: <REDACTED - not in API response>
+  env: <not exposed or empty>
+
+
+=== Settings at rest (~/.openhands/settings.json, MCP section) ===
+Shows Fernet-encrypted secret values at rest - no raw secrets visible
+
+Server: test-http-server
+  {
+  "url": "https://mcp-test.example.com/sse",
+  "transport": "sse",
+  "auth": {
+    "strategy": "bearer",
+    "value": "gAAAAABqUf9GRiEVciyV47WFNv_H-dXFSWEuVvoM981WZ6dO04vxpvJ4HYy4bbGmEqNiapc5Eat-1AdP0hT-91Kb1pvX8spPqAq5c5jJ6BAhlzPk3Us6QJI="
+  }
+}
+  OK: no raw HTTP secret found
+  OK: no raw stdio env secret found
+
+Server: test-stdio-server
+  {
+  "command": "npx",
+  "args": [
+    "-y",
+    "@modelcontextprotocol/server-memory"
+  ],
+  "env": {
+    "API_KEY": "gAAAAABqUf9GE2iVn_bKSvOndLiAb9_O2DdLwcVGAoALx3YZdaYNwMm3tKDns1Cizxo6yuocrURjYqyU3Jx2FSvidojJtJPRkqGALLMaeXaWVHi97unqu9c=",
+    "OTHER_VAR": "gAAAAABqUf9GrimWICPdWqkKCt8u-SiFUrZyC6UPwM8CMbke7_07FvFoI7x7GhL6gnmN3XMxt7eZ-YVhmpWZpUGW60Fsjlx8GQ=="
+  }
+}
+  OK: no raw HTTP secret found
+  OK: no raw stdio env secret found

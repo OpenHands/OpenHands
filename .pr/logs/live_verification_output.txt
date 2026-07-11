@@ -1,0 +1,16 @@
+======================================================================
+PASS live SaasSettingsStore verification
+head_sha=ff24b96e00a3d9630063845737d89af33f9cd3db
+production_paths=Settings.update -> SaasSettingsStore.store -> ORM JSON/secret serializers -> SaasSettingsStore.load
+checks_passed=10
+  PASS: org row strips mcp_config (member-private)
+  PASS: org row has no raw MCP/LLM secret values
+  PASS: acting member row keeps encrypted MCP config, no raw secrets
+  PASS: peer member does not inherit MCP config
+  PASS: HTTP bearer auth header preserved after store->load round-trip
+  PASS: stdio env secret (API_KEY) preserved after store->load round-trip
+  PASS: LLM API key present in loaded settings (value preserved)
+  PASS: legacy org-level mcp_config not leaked to acting member on load
+  PASS: secrets redacted in API response (no expose_secrets context)
+  PASS: secrets visible in authorized API response (expose_secrets=True)
+======================================================================
