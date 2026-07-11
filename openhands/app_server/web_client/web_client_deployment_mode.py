@@ -4,15 +4,18 @@ from typing import Literal
 DeploymentMode = Literal['cloud', 'self_hosted']
 
 
-# This can be removed / replaced when a DeploymentMode (or similar) env var is created.
+# Honors an explicit OH_DEPLOYMENT_MODE; the OH_WEB_HOST/WEB_HOST heuristic is the fallback.
 def get_deployment_mode() -> DeploymentMode | None:
-    """Get deployment mode based on OH_WEB_HOST environment variable.
+    """Get deployment mode.
 
-    Returns:
-        'cloud' for All-Hands managed infrastructure (app.all-hands.dev, etc.)
-        'self_hosted' for enterprise self-hosted deployments (customer domains)
-        None if WEB_HOST is not set
+    Honors an explicit OH_DEPLOYMENT_MODE ('cloud' | 'self_hosted'); otherwise
+    infers from OH_WEB_HOST/WEB_HOST (managed domain -> 'cloud'), or None if unset.
     """
+    explicit = os.getenv('OH_DEPLOYMENT_MODE', '').strip().lower()
+    if explicit == 'cloud':
+        return 'cloud'
+    if explicit == 'self_hosted':
+        return 'self_hosted'
     web_host = os.getenv('OH_WEB_HOST', os.getenv('WEB_HOST', '')).strip()
     if not web_host:
         return None

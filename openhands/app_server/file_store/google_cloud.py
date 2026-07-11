@@ -50,6 +50,11 @@ class GoogleCloudFileStore(FileStore):
         with blob.open(mode) as f:
             f.write(contents)
 
+    def write_from_path(self, path: str, source_path: str) -> None:
+        # Streams the file to GCS in chunks; never buffers the whole blob in RAM.
+        blob: Blob = self.bucket.blob(path)
+        blob.upload_from_filename(source_path)
+
     def read(self, path: str) -> str:
         blob: Blob = self.bucket.blob(path)
         try:

@@ -15,6 +15,7 @@ from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.saas_user_auth import SaasUserAuth, token_manager
 from server.routes.auth import set_response_cookie
 from server.utils.url_utils import get_cookie_domain, get_cookie_samesite
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from openhands.app_server.user_auth.user_auth import AuthType, UserAuth, get_user_auth
 from openhands.app_server.utils.logger import openhands_logger as logger
@@ -116,12 +117,14 @@ class SetAuthCookieMiddleware:
         auth_header = request.headers.get('Authorization')
         mcp_auth_header = request.headers.get('X-Session-API-Key')
         api_auth_header = request.headers.get('X-Access-Token')
+        api_key_cookie = request.cookies.get('api_key')
         accepted_tos: bool | None = False
         if (
             keycloak_auth_cookie is None
             and (auth_header is None or not auth_header.startswith('Bearer '))
             and mcp_auth_header is None
             and api_auth_header is None
+            and api_key_cookie is None
         ):
             raise NoCredentialsError
 
@@ -229,6 +232,26 @@ _CREDENTIALLESS_PATH_PREFIXES = (
 )
 
 
+class _OriginStrippingApp:
+    """Hide Origin from inner middleware after outer CORS classifies the request."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope['type'] != 'http':
+            await self.app(scope, receive, send)
+            return
+
+        inner_scope = dict(scope)
+        inner_scope['headers'] = tuple(
+            (name, value)
+            for name, value in scope['headers']
+            if name.lower() != b'origin'
+        )
+        await self.app(inner_scope, receive, send)
+
+
 class ApiKeyAwareCORSMiddleware:
     """CORS dispatcher that loosens the policy for credential-less requests.
 
@@ -244,9 +267,9 @@ class ApiKeyAwareCORSMiddleware:
     credentials enabled.
     """
 
-    def __init__(self, app, allow_origins):
+    def __init__(self, app: ASGIApp, allow_origins: list[str]) -> None:
         self._permissive = CORSMiddleware(
-            app,
+            _OriginStrippingApp(app),
             allow_origins=['*'],
             allow_credentials=False,
             allow_methods=['*'],
@@ -260,14 +283,14 @@ class ApiKeyAwareCORSMiddleware:
             allow_headers=['*'],
         )
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope['type'] == 'http' and self._is_credentialless(scope):
             await self._permissive(scope, receive, send)
         else:
             await self._strict(scope, receive, send)
 
     @staticmethod
-    def _is_credentialless(scope) -> bool:
+    def _is_credentialless(scope: Scope) -> bool:
         path = scope.get('path', '')
         if any(path.startswith(prefix) for prefix in _CREDENTIALLESS_PATH_PREFIXES):
             return True

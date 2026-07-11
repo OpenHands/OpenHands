@@ -179,7 +179,7 @@ class V1ConversationService {
   }
 
   /**
-   * Pause a V1 conversation
+   * Interrupt a V1 conversation
    * Uses the custom runtime URL from the conversation
    *
    * @param conversationId The conversation ID
@@ -187,14 +187,14 @@ class V1ConversationService {
    * @param sessionApiKey Session API key for authentication (required for V1)
    * @returns Success response
    */
-  static async pauseConversation(
+  static async interruptConversation(
     conversationId: string,
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
   ): Promise<{ success: boolean }> {
     const url = this.buildRuntimeUrl(
       conversationUrl,
-      `/api/conversations/${conversationId}/pause`,
+      `/api/conversations/${conversationId}/interrupt`,
     );
     const headers = buildSessionHeaders(sessionApiKey);
 

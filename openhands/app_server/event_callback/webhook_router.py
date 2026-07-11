@@ -4,9 +4,18 @@ import asyncio
 import importlib
 import logging
 import pkgutil
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from fastapi.security import APIKeyHeader
 from jwt import InvalidTokenError
 from pydantic import SecretStr
@@ -14,10 +23,12 @@ from pydantic import SecretStr
 from openhands import tools  # type: ignore[attr-defined]
 from openhands.agent_server.models import ConversationInfo, Success
 from openhands.analytics import get_analytics_service, resolve_analytics_context
+from openhands.app_server import shared
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
+    ACP_SERVER_TAG_KEY,
     AppConversationInfo,
     ConversationTrigger,
 )
@@ -33,8 +44,15 @@ from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.errors import AuthError
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventCallback
+from openhands.app_server.event_callback.event_callback_result_models import (
+    EventCallbackResultStatus,
+)
 from openhands.app_server.event_callback.set_title_callback_processor import (
     SetTitleCallbackProcessor,
+)
+from openhands.app_server.event_callback.sql_event_callback_service import (
+    StoredEventCallbackResult,
+    invoke_callback,
 )
 from openhands.app_server.integrations.provider import ProviderType
 from openhands.app_server.sandbox.sandbox_models import SandboxRecord
@@ -52,6 +70,8 @@ from openhands.app_server.user_auth.user_auth import (
 )
 from openhands.sdk import ConversationExecutionStatus, Event
 from openhands.sdk.event import ConversationStateUpdateEvent, ObservationEvent
+from openhands.sdk.settings import ACPAgentSettings
+from openhands.sdk.settings.acp_providers import detect_acp_provider_by_command
 from openhands.sdk.tool.builtins import SwitchLLMObservation
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
@@ -296,6 +316,35 @@ async def valid_conversation(
     return app_conversation_info
 
 
+async def _resolve_acp_server_key(agent: Any, user_id: str | None) -> str | None:
+    """Resolve the ACP provider key for a conversation whose tag is not yet set.
+
+    Prefer the conversation's own launch command (``ACPAgent.acp_command``): it
+    is authoritative for the agent that is actually running and matched against
+    the SDK registry by ``detect_acp_provider_by_command``. Only fall back to the
+    user's saved settings when the command is unknown (a custom server) or absent
+    (older agent payloads) — the global setting can have drifted to a different
+    provider since this conversation was created, so it must not win over the
+    conversation's own command.
+    """
+    command = getattr(agent, 'acp_command', None)
+    if command:
+        provider = detect_acp_provider_by_command(command)
+        if provider is not None:
+            return provider.key
+    try:
+        settings_store = await shared.SettingsStoreImpl.get_instance(user_id)
+        settings = await settings_store.load() if settings_store else None
+        agent_settings = getattr(settings, 'agent_settings', None)
+        if isinstance(agent_settings, ACPAgentSettings):
+            return agent_settings.acp_server
+    except Exception:
+        _logger.warning(
+            'Failed to resolve ACP server key for user %s', user_id, exc_info=True
+        )
+    return None
+
+
 @router.post('/conversations')
 async def on_conversation_update(
     conversation_info: ConversationInfo,
@@ -332,16 +381,27 @@ async def on_conversation_update(
         sandbox_id=sandbox_record.id,
     )
 
-    # Trust the discriminated-union payload over any stored ``agent_kind``
-    # on ``existing``: a webhook is always authoritative for the agent
-    # currently running, and a drifted row (e.g. mid-migration data) must
-    # not lock us into the wrong branch. Branch on the ``agent_kind``
-    # discriminator (an ``AgentBase`` property) so we don't import a
-    # concrete SDK subclass just to do a kind check.
     agent = conversation_info.agent
     if agent.agent_kind == 'acp':
         agent_kind = 'acp'
-        llm_model = None
+        # Prefer the model the ACP server is actually running
+        # (``current_model_id`` is reconciled from the live session response, so
+        # it survives a provider-side remap, e.g. gemini flash). Fall back to the
+        # requested ``acp_model``, then to the last-persisted value so a payload
+        # that hasn't reported a live model yet doesn't wipe a user-set model.
+        llm_model = (
+            conversation_info.current_model_id
+            or getattr(agent, 'acp_model', None)
+            or existing.llm_model
+        )
+        # Re-derive provider key if not in tags (race with creation, or a
+        # conversation created directly on the agent-server).
+        if ACP_SERVER_TAG_KEY not in merged_tags:
+            acp_server_key = await _resolve_acp_server_key(
+                agent, sandbox_record.created_by_user_id
+            )
+            if acp_server_key:
+                merged_tags[ACP_SERVER_TAG_KEY] = acp_server_key
     else:
         # ``AgentBase.llm: LLM`` is non-optional on both arms of the union.
         agent_kind = 'openhands'
@@ -407,6 +467,7 @@ async def on_conversation_update(
 
 @router.post('/events/{conversation_id}')
 async def on_event(
+    background_tasks: BackgroundTasks,
     events: list[Event],
     conversation_id: UUID,
     app_conversation_info: AppConversationInfo = Depends(valid_conversation),
@@ -451,6 +512,7 @@ async def on_event(
                 await app_conversation_info_service.save_app_conversation_info(info)
 
         # Analytics: conversation terminal state detection
+        # Also persist execution status to database for dashboard queries
         for event in events:
             if not isinstance(event, ConversationStateUpdateEvent):
                 continue
@@ -458,6 +520,10 @@ async def on_event(
                 continue
             try:
                 exec_status = ConversationExecutionStatus(event.value)
+                # Persist execution status for org-wide dashboard
+                await app_conversation_info_service.update_execution_status(
+                    conversation_id, exec_status.value
+                )
                 if exec_status.is_terminal():
                     await _track_conversation_terminal(
                         conversation_id, app_conversation_info, events, exec_status
@@ -465,10 +531,11 @@ async def on_event(
             except Exception:
                 _logger.exception('analytics:conversation_terminal:failed')
 
-        asyncio.create_task(
-            _run_callbacks_in_bg_and_close(
-                conversation_id, app_conversation_info.created_by_user_id, events
-            )
+        background_tasks.add_task(
+            _run_callbacks_in_bg_and_close,
+            conversation_id,
+            app_conversation_info.created_by_user_id,
+            events,
         )
 
     except Exception:
@@ -518,14 +585,46 @@ async def _run_callbacks_in_bg_and_close(
     user_id: str | None,
     events: list[Event],
 ):
-    """Run all callbacks and close the session"""
+    """Run all active callbacks for the given events.
+
+    The ``SQLEventCallbackService`` opens its own short-lived ``AsyncSession``
+    per method call, so the SQLAlchemy pool connection is only checked out for
+    the SELECT (in :meth:`get_active_callbacks`) and the COMMIT (in
+    :meth:`persist_callback_results`). The slow callback processors run with
+    **no** connection held — which is what stops webhook bursts from
+    exhausting the 25+10 pool and starving subsequent ``asyncpg.connect``
+    attempts.
+    """
     state = InjectorState()
     setattr(state, USER_CONTEXT_ATTR, SpecifyUserContext(user_id=user_id))
 
-    async with get_event_callback_service(state) as event_callback_service:
-        # We don't use asynio.gather here because callbacks must be run in sequence.
+    async with get_event_callback_service(state) as service:
         for event in events:
-            await event_callback_service.execute_callbacks(conversation_id, event)
+            callbacks = await service.get_active_callbacks(conversation_id, event)
+            if not callbacks:
+                continue
+            outcomes = await asyncio.gather(
+                *[invoke_callback(cb, conversation_id, event) for cb in callbacks],
+                return_exceptions=True,
+            )
+            normalised: list[StoredEventCallbackResult | None] = []
+            for callback, outcome in zip(callbacks, outcomes, strict=False):
+                if isinstance(outcome, BaseException):
+                    _logger.exception(
+                        f'Exception in callback {callback.id}', stack_info=True
+                    )
+                    normalised.append(
+                        StoredEventCallbackResult(
+                            status=EventCallbackResultStatus.ERROR,
+                            event_callback_id=callback.id,
+                            event_id=event.id,
+                            conversation_id=conversation_id,
+                            detail=str(outcome),
+                        )
+                    )
+                else:
+                    normalised.append(outcome)
+            await service.persist_callback_results(callbacks, normalised)
 
 
 def _import_all_tools():

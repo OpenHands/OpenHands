@@ -11,7 +11,6 @@ import OptionService from "#/api/option-service/option-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { WebClientConfig } from "#/api/option-service/option.types";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
-import * as FeatureFlags from "#/utils/feature-flags";
 
 // Helper to create mock config with sensible defaults
 const createMockConfig = (
@@ -189,14 +188,10 @@ describe("Sidebar", () => {
   });
 
   describe("Automations button visibility", () => {
-    let enableAutomationsSpy: ReturnType<typeof vi.spyOn>;
-
-    beforeEach(() => {
-      enableAutomationsSpy = vi.spyOn(FeatureFlags, "ENABLE_AUTOMATIONS");
-    });
-
-    it("should show automations button when ENABLE_AUTOMATIONS flag is on", async () => {
-      enableAutomationsSpy.mockReturnValue(true);
+    it("should show automations button when feature_flags.enable_automations is true", async () => {
+      getConfigSpy.mockResolvedValue(
+        createMockConfig({ feature_flags: { enable_automations: true } }),
+      );
 
       renderSidebar();
 
@@ -207,8 +202,10 @@ describe("Sidebar", () => {
       });
     });
 
-    it("should hide automations button when ENABLE_AUTOMATIONS flag is off", async () => {
-      enableAutomationsSpy.mockReturnValue(false);
+    it("should hide automations button when feature_flags.enable_automations is false", async () => {
+      getConfigSpy.mockResolvedValue(
+        createMockConfig({ feature_flags: { enable_automations: false } }),
+      );
 
       renderSidebar();
 

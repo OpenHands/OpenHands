@@ -443,6 +443,8 @@ async def keycloak_callback(
         response = RedirectResponse(verification_redirect_url, status_code=302)
         return response
 
+    await UserStore.record_login(user_id)
+
     # default to github IDP for now.
     # TODO: remove default once Keycloak is updated universally with the new attribute.
     idp: str = user_info.identity_provider or ProviderType.GITHUB.value
@@ -465,9 +467,7 @@ async def keycloak_callback(
         else True
     )
 
-    logger.debug(
-        f'keycloakAccessToken: {keycloak_access_token}, keycloakUserId: {user_id}'
-    )
+    logger.debug('keycloak_user_authenticated', extra={'user_id': user_id})
 
     # Server-side identity — defer to background to avoid blocking auth response
     consented = user.user_consents_to_analytics is True
@@ -581,6 +581,21 @@ async def keycloak_callback(
                 redirect_url = f'{redirect_url}&invitation_error=true'
             else:
                 redirect_url = f'{redirect_url}?invitation_error=true'
+
+    # Accept pending invitations addressed to the user's email. Runs before
+    # the default-org bootstrap so an invitation's role (e.g. admin) wins
+    # over the bootstrap's auto-add member role for the same org.
+    try:
+        accepted_invitations = (
+            await OrgInvitationService.accept_pending_invitations_for_user(user)
+        )
+        if accepted_invitations:
+            user = await UserStore.get_user_by_id(user_id) or user
+    except Exception as e:
+        logger.exception(
+            'Unexpected error accepting pending invitations at login',
+            extra={'user_id': user_id, 'error': str(e)},
+        )
 
     try:
         user = await DefaultOrgBootstrapService.apply_for_user(
@@ -878,7 +893,12 @@ async def accept_tos(request: Request):
 
     if not access_token or not refresh_token or not user_id:
         logger.warning(
-            f'accept_tos: One or more is None: access_token {access_token}, refresh_token {refresh_token}, user_id {user_id}'
+            'accept_tos: missing authentication state',
+            extra={
+                'has_access_token': bool(access_token),
+                'has_refresh_token': bool(refresh_token),
+                'user_id': user_id,
+            },
         )
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -1049,6 +1069,16 @@ async def complete_onboarding(
         analytics = get_analytics_service()
         if analytics:
             ctx = await resolve_analytics_context(user_id)
+            # Stamp email on the person profile so person_display_name
+            # is set when the onboarding event is viewed in PostHog.
+            # identify_user was a no-op at login (consent was False),
+            # and accept_tos never re-triggered it, so this is the
+            # first opportunity after consent is granted.
+            if user.email:
+                analytics.set_person_properties(
+                    ctx=ctx,
+                    properties={'email': user.email},
+                )
             analytics.track_onboarding_completed(
                 ctx=ctx,
                 selections=selections,

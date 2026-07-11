@@ -10,6 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from fastapi import BackgroundTasks
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -18,6 +20,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 )
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
+    StoredConversationCostEvent,
     StoredConversationMetadata,
 )
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
@@ -225,6 +228,39 @@ class TestUpdateConversationStatistics:
         assert stored.prompt_tokens == 200
         # completion_tokens should remain unchanged (not None in stats)
         assert stored.completion_tokens == 0
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_records_cost_delta(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """Test that cost deltas are recorded for stats updates."""
+        conversation_id, stored = v1_conversation_metadata
+
+        stored.accumulated_cost = 0.01
+        await async_session.commit()
+
+        event_timestamp = datetime(2025, 1, 15, tzinfo=timezone.utc)
+        agent_metrics = Metrics(
+            model_name='test-model',
+            accumulated_cost=0.05,
+        )
+        stats = ConversationStats(usage_to_metrics={'agent': agent_metrics})
+
+        await service.update_conversation_statistics(
+            conversation_id, stats, event_timestamp=event_timestamp
+        )
+
+        result = await async_session.execute(
+            select(StoredConversationCostEvent).where(
+                StoredConversationCostEvent.conversation_id == str(conversation_id)
+            )
+        )
+        cost_event = result.scalar_one()
+        assert cost_event.cost_delta == pytest.approx(0.04)
+        occurred_at = cost_event.occurred_at
+        if occurred_at.tzinfo is None:
+            occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+        assert occurred_at == event_timestamp
 
     @pytest.mark.asyncio
     async def test_update_statistics_no_agent_metrics(
@@ -508,8 +544,12 @@ class TestOnEventStatsProcessing:
         with patch(
             'openhands.app_server.event_callback.webhook_router._run_callbacks_in_bg_and_close'
         ) as mock_callbacks:
+            # on_event now takes a BackgroundTasks dependency. We pass a real
+            # instance and verify it was scheduled rather than mocking it out.
+            background_tasks = BackgroundTasks()
             # Call on_event directly with dependencies
             await on_event(
+                background_tasks=background_tasks,
                 events=events,
                 conversation_id=conversation_id,
                 app_conversation_info=mock_app_conversation_info,
@@ -523,8 +563,9 @@ class TestOnEventStatsProcessing:
         # Verify stats event was processed
         mock_app_conversation_info_service.update_conversation_statistics.assert_called_once()
 
-        # Verify callbacks were scheduled
-        mock_callbacks.assert_called_once()
+        # Verify callbacks were scheduled via BackgroundTasks.add_task
+        assert len(background_tasks.tasks) == 1
+        assert background_tasks.tasks[0].func is mock_callbacks
 
     @pytest.mark.asyncio
     async def test_on_event_skips_non_stats_events(self):
@@ -558,6 +599,7 @@ class TestOnEventStatsProcessing:
         ):
             # Call on_event directly with dependencies
             await on_event(
+                background_tasks=BackgroundTasks(),
                 events=events,
                 conversation_id=conversation_id,
                 app_conversation_info=mock_app_conversation_info,

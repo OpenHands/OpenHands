@@ -39,6 +39,7 @@ from fastapi import Depends, HTTPException, Request, status
 from storage.org_member_store import OrgMemberStore
 from storage.role import Role
 from storage.role_store import RoleStore
+from storage.user_store import UserStore
 
 from openhands.app_server.user_auth import get_user_auth, get_user_id
 from openhands.app_server.utils.logger import openhands_logger as logger
@@ -55,6 +56,9 @@ class Permission(str, Enum):
 
     # Integrations
     MANAGE_INTEGRATIONS = 'manage_integrations'
+    # Setting up an integration connection (admin/owner) vs the member-level
+    # MANAGE_INTEGRATIONS (linking/using an already-configured integration).
+    MANAGE_INTEGRATION_PROVIDERS = 'manage_integration_providers'
 
     # Application Settings
     MANAGE_APPLICATION_SETTINGS = 'manage_application_settings'
@@ -80,6 +84,7 @@ class Permission(str, Enum):
     VIEW_ORG_SETTINGS = 'view_org_settings'
     CHANGE_ORGANIZATION_NAME = 'change_organization_name'
     DELETE_ORGANIZATION = 'delete_organization'
+    CREATE_ORGANIZATION = 'create_organization'
 
     # Temporary permissions until we finish the API updates.
     EDIT_ORG_SETTINGS = 'edit_org_settings'
@@ -90,16 +95,52 @@ class Permission(str, Enum):
     # Manage Automations
     MANAGE_AUTOMATIONS = 'manage_automations'
 
+    # User provisioning (create new Keycloak/OpenHands users directly in an org)
+    PROVISION_USER = 'provision_user'
+
+    # Organization Conversations (Admin/Owner only)
+    VIEW_ORG_CONVERSATIONS = 'view_org_conversations'
+
+    # Instance-level super-role administration: grant/revoke the super-admin
+    # role (``user.role_id``) on other users. This is deliberately a distinct,
+    # explicit permission -- it is NOT implied by any org-scoped role and is
+    # granted only to the ``superadmin`` super role.
+    MANAGE_SUPER_ADMINS = 'manage_super_admins'
+
 
 class RoleName(str, Enum):
-    """Role names used in the system."""
+    """Role names used in the system.
+
+    The same role rows (``owner``, ``admin``, ``member``) can be
+    assigned in two distinct places:
+
+    * **Org-scoped role** -- stored on ``org_member.role_id``. Applies
+      only to the user's membership in that organization. Permissions
+      are looked up via :data:`ROLE_PERMISSIONS`.
+    * **Super role** -- stored on ``user.role_id``. Applies at the
+      instance level across organizations. The only functional super
+      role currently defined is ``superadmin`` (``role_id`` pointing to
+      the ``admin`` role row). Super permissions are defined explicitly
+      in :data:`SUPER_ROLE_PERMISSIONS`; they do not inherit
+      org-scoped role permissions.
+    """
 
     OWNER = 'owner'
     ADMIN = 'admin'
     MEMBER = 'member'
 
 
-# Permission mappings for each role
+def super_role_name(role_name: str) -> str:
+    """Return the conceptual super-role label for a regular role name.
+
+    For example, ``super_role_name('admin') == 'superadmin'``. Used only
+    for logging / API responses -- super roles share the same database
+    rows as their parallel regular roles.
+    """
+    return f'super{role_name}'
+
+
+# Base permission mappings for the regular (org-scoped) roles.
 ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
     RoleName.OWNER: frozenset(
         [
@@ -128,6 +169,12 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.MANAGE_ORG_CLAIMS,
             # Manage Automations
             Permission.MANAGE_AUTOMATIONS,
+            # User provisioning
+            Permission.PROVISION_USER,
+            # Organization Conversations (Admin/Owner only)
+            Permission.VIEW_ORG_CONVERSATIONS,
+            # Integration provider setup (Admin/Owner only)
+            Permission.MANAGE_INTEGRATION_PROVIDERS,
         ]
     ),
     RoleName.ADMIN: frozenset(
@@ -153,6 +200,12 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.MANAGE_ORG_CLAIMS,
             # Manage Automations
             Permission.MANAGE_AUTOMATIONS,
+            # User provisioning
+            Permission.PROVISION_USER,
+            # Organization Conversations (Admin/Owner only)
+            Permission.VIEW_ORG_CONVERSATIONS,
+            # Integration provider setup (Admin/Owner only)
+            Permission.MANAGE_INTEGRATION_PROVIDERS,
         ]
     ),
     RoleName.MEMBER: frozenset(
@@ -170,6 +223,28 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.MANAGE_AUTOMATIONS,
         ]
     ),
+}
+
+
+# Instance-level permissions for super roles. These are intentionally
+# explicit and do not inherit the parallel org-scoped role permissions.
+# This keeps instance administration separate from organization-scoped
+# product/configuration administration.
+SUPER_ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
+    # Only superadmin is functional for now. It can create organizations,
+    # provision users into a selected organization without becoming an org
+    # member itself, and grant/revoke the super-admin role on other users.
+    # Additional instance-admin capabilities should be added here explicitly
+    # as the corresponding routes are wired to permission checks.
+    RoleName.OWNER: frozenset(),
+    RoleName.ADMIN: frozenset(
+        [
+            Permission.CREATE_ORGANIZATION,
+            Permission.PROVISION_USER,
+            Permission.MANAGE_SUPER_ADMINS,
+        ]
+    ),
+    RoleName.MEMBER: frozenset(),
 }
 
 
@@ -198,15 +273,37 @@ async def get_user_org_role(user_id: str, org_id: UUID | None) -> Role | None:
     return await RoleStore.get_role_by_id(org_member.role_id)
 
 
+async def get_user_super_role(user_id: str) -> Role | None:
+    """
+    Get the user's cross-organization ("super") role.
+
+    Super roles live on the ``user`` table (``user.role_id``) and apply to
+    the user across **every** organization, in contrast to the
+    organization-scoped role stored on ``org_member.role_id``.
+
+    Args:
+        user_id: User ID (string that will be converted to UUID)
+
+    Returns:
+        The :class:`Role` referenced by ``user.role_id`` if one is set,
+        otherwise ``None``.
+    """
+    user = await UserStore.get_user_by_id(user_id)
+    if not user or user.role_id is None:
+        return None
+
+    return await RoleStore.get_role_by_id(user.role_id)
+
+
 def get_role_permissions(role_name: str) -> frozenset[Permission]:
     """
-    Get the permissions for a role.
+    Get the org-scoped permissions for a role.
 
     Args:
         role_name: Name of the role
 
     Returns:
-        Set of permissions for the role
+        Set of permissions for the org-scoped role
     """
     try:
         role_enum = RoleName(role_name)
@@ -215,27 +312,85 @@ def get_role_permissions(role_name: str) -> frozenset[Permission]:
         return frozenset()
 
 
-def has_permission(user_role: Role, permission: Permission) -> bool:
+def get_super_role_permissions(role_name: str) -> frozenset[Permission]:
+    """
+    Get the permissions for a "super" role.
+
+    A super role is the same role row (``owner`` / ``admin`` / ``member``)
+    referenced via ``user.role_id`` rather than ``org_member.role_id``;
+    its effective permissions are defined explicitly and do not inherit
+    org-scoped permissions.
+
+    Args:
+        role_name: Name of the role (e.g. ``'admin'`` for ``superadmin``)
+
+    Returns:
+        Set of permissions for the super role
+    """
+    try:
+        role_enum = RoleName(role_name)
+        return SUPER_ROLE_PERMISSIONS.get(role_enum, frozenset())
+    except ValueError:
+        return frozenset()
+
+
+def has_permission(
+    user_role: Role, permission: Permission, *, is_super: bool = False
+) -> bool:
     """
     Check if a role has a specific permission.
 
     Args:
         user_role: User's Role object
         permission: Permission to check
+        is_super: If ``True`` the role was looked up from ``user.role_id``
+            and should be treated as a "super" role -- i.e. permissions
+            are read from the explicit :data:`SUPER_ROLE_PERMISSIONS` mapping
+            instead of :data:`ROLE_PERMISSIONS`.
 
     Returns:
         True if the role has the permission
     """
-    permissions = get_role_permissions(user_role.name)
-    return permission in permissions
+    if is_super:
+        return permission in get_super_role_permissions(user_role.name)
+    return permission in get_role_permissions(user_role.name)
+
+
+async def authorize_permission(
+    request: Request, user_id: str, permission: Permission
+) -> None:
+    """Enforce that ``user_id`` has ``permission`` in the request's target org.
+
+    Raises ``HTTPException(403)`` otherwise. Programmatic counterpart to
+    :func:`require_permission` for handlers that must enforce a stricter
+    permission for only part of a request (e.g. org-wide marketplace edits on an
+    otherwise member-editable endpoint). Mirrors the org-role then super-role
+    fallback used by ``require_permission``.
+    """
+    # Local import to avoid circular import via saas_user_auth.
+    from server.auth.org_context import resolve_target_org_id_for_permission_check
+
+    org_id = await resolve_target_org_id_for_permission_check(request)
+    user_role = await get_user_org_role(user_id, org_id)
+    if user_role and has_permission(user_role, permission):
+        return
+    super_role = await get_user_super_role(user_id)
+    if super_role and has_permission(super_role, permission, is_super=True):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f'Missing required permission: {permission.value}',
+    )
 
 
 async def get_api_key_org_id_from_request(request: Request) -> UUID | None:
     """Get the org_id bound to the API key used for authentication.
 
     Returns None if:
-    - Not authenticated via API key (cookie auth)
-    - API key is a legacy key without org binding
+    - Not authenticated via API key (cookie auth), or
+    - The API key is *unbound* -- the request's effective org is then
+      resolved per-request via the ``X-Org-Id`` header or the caller's
+      ``user.current_org_id`` (see ``SaasUserAuth._resolve_org_id``).
     """
     user_auth = getattr(request.state, 'user_auth', None)
     if user_auth and hasattr(user_auth, 'get_api_key_org_id'):
@@ -280,6 +435,20 @@ def require_permission(permission: Permission):
                 detail='User not authenticated',
             )
 
+        # ``org_id`` is only trustworthy when the route actually declares an
+        # ``{org_id}`` path segment: FastAPI binds this parameter from the
+        # path in that case. Routes without that segment have no path source
+        # for it, so FastAPI silently falls back to binding it from an
+        # ordinary, client-controlled query string instead. Left unchecked, a
+        # caller could pass ``?org_id=<org-they-administer>`` to satisfy this
+        # permission check while the route handler itself operates on a
+        # *different* org (resolved separately from the ``X-Org-Id`` header
+        # via ``EFFECTIVE_ORG_ID``) -- a cross-org privilege escalation.
+        # Discard any such query-string value; routes with no path org_id
+        # always re-resolve the target org below instead.
+        if request.path_params.get('org_id') is None:
+            org_id = None
+
         # Validate API key organization binding
         api_key_org_id = await get_api_key_org_id_from_request(request)
         if api_key_org_id is not None and org_id is not None:
@@ -298,45 +467,80 @@ def require_permission(permission: Permission):
                 )
 
         # If the route does not carry an ``{org_id}`` path parameter,
-        # resolve the effective org for the request — which honors any
-        # ``X-Org-Id`` header override (and validates membership /
-        # API-key binding in the process). This keeps endpoints that
-        # implicitly operate on the "current org" consistent with the
-        # rest of the codebase.
+        # resolve the target org for the request -- honoring any
+        # ``X-Org-Id`` header override and the API-key binding, but
+        # *without* requiring the user to already be a member of that
+        # org. Membership is checked below via ``get_user_org_role``;
+        # if the user is not a member but has a super role with the
+        # required permission, they are still granted access. Routes
+        # that *do* carry ``{org_id}`` use the path value directly and
+        # skip this resolver, so their semantics are unchanged.
         if org_id is None:
             # Local import to avoid circular import via saas_user_auth.
-            from server.auth.org_context import maybe_resolve_effective_org_id
+            from server.auth.org_context import (
+                resolve_target_org_id_for_permission_check,
+            )
 
-            org_id = await maybe_resolve_effective_org_id(request)
+            org_id = await resolve_target_org_id_for_permission_check(request)
 
         user_role = await get_user_org_role(user_id, org_id)
 
+        # 1. Org-scoped role check (existing behavior).
+        if user_role and has_permission(user_role, permission):
+            return user_id
+
+        # 2. Fall back to the user's "super" role. The role row is the
+        #    same as a regular role, but because it is attached via
+        #    ``user.role_id`` it grants the super-role permission set
+        #    (parallel role perms + super-only extras) across every
+        #    organization the user touches.
+        super_role = await get_user_super_role(user_id)
+        if super_role and has_permission(super_role, permission, is_super=True):
+            logger.debug(
+                'Permission granted via super role',
+                extra={
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                    'super_role': super_role_name(super_role.name),
+                    'required_permission': permission.value,
+                },
+            )
+            return user_id
+
+        # 3. Neither path granted access -- deny.
         if not user_role:
             logger.warning(
-                'User not a member of organization',
-                extra={'user_id': user_id, 'org_id': str(org_id)},
+                'User not a member of organization and lacks super-role permission',
+                extra={
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                    'super_role': (
+                        super_role_name(super_role.name) if super_role else None
+                    ),
+                    'required_permission': permission.value,
+                },
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail='User is not a member of this organization',
             )
 
-        if not has_permission(user_role, permission):
-            logger.warning(
-                'Insufficient permissions',
-                extra={
-                    'user_id': user_id,
-                    'org_id': str(org_id),
-                    'user_role': user_role.name,
-                    'required_permission': permission.value,
-                },
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f'Requires {permission.value} permission',
-            )
-
-        return user_id
+        logger.warning(
+            'Insufficient permissions',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'user_role': user_role.name,
+                'super_role': (
+                    super_role_name(super_role.name) if super_role else None
+                ),
+                'required_permission': permission.value,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f'Requires {permission.value} permission',
+        )
 
     return permission_checker
 

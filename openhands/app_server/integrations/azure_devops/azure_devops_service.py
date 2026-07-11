@@ -19,6 +19,9 @@ from openhands.app_server.integrations.azure_devops.service.repos import (
 from openhands.app_server.integrations.azure_devops.service.resolver import (
     AzureDevOpsResolverMixin,
 )
+from openhands.app_server.integrations.azure_devops.service.webhooks import (
+    AzureDevOpsWebhooksMixin,
+)
 from openhands.app_server.integrations.azure_devops.service.work_items import (
     AzureDevOpsWorkItemsMixin,
 )
@@ -40,6 +43,7 @@ class AzureDevOpsService(
     AzureDevOpsPRsMixin,
     AzureDevOpsWorkItemsMixin,
     AzureDevOpsFeaturesMixin,
+    AzureDevOpsWebhooksMixin,
     BaseGitService,
     HTTPClient,
     GitService,
@@ -53,6 +57,7 @@ class AzureDevOpsService(
     - AzureDevOpsPRsMixin: Pull request operations
     - AzureDevOpsWorkItemsMixin: Work item operations (unique to Azure DevOps)
     - AzureDevOpsFeaturesMixin: Microagents, suggested tasks, user info
+    - AzureDevOpsWebhooksMixin: Service hook lifecycle operations
 
     This is an extension point in OpenHands that allows applications to customize Azure DevOps
     integration behavior. Applications can substitute their own implementation by:
@@ -200,6 +205,9 @@ class AzureDevOpsService(
                 headers = {}
                 if 'Link' in response.headers:
                     headers['Link'] = response.headers['Link']
+
+                if not response.content:
+                    return {}, headers
 
                 return response.json(), headers
 

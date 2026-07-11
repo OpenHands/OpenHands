@@ -1,6 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "last-release-sha": "94c60d78545895e198bb1df9d9463c96e2e2b7b2",
+  "draft-pull-request": true,
+  "extra-label": "release-line: gui",
   "packages": {
     ".": {
       "release-type": "simple",
@@ -11,10 +13,26 @@
       "include-v-in-release-name": false,
       "exclude-paths": ["enterprise"],
       "extra-files": [
-        { "type": "toml", "path": "pyproject.toml", "jsonpath": "$.tool.poetry.version" },
-        { "type": "json", "path": "frontend/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "frontend/package-lock.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "frontend/package-lock.json", "jsonpath": "$.packages[''].version" }
+        {
+          "type": "toml",
+          "path": "pyproject.toml",
+          "jsonpath": "$.tool.poetry.version"
+        },
+        {
+          "type": "json",
+          "path": "frontend/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "frontend/package-lock.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "frontend/package-lock.json",
+          "jsonpath": "$.packages[''].version"
+        }
       ]
     }
   }

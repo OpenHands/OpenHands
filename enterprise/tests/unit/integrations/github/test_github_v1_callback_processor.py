@@ -3,7 +3,7 @@ Tests for the GithubV1CallbackProcessor.
 
 Covers:
 - Event filtering
-- Successful summary + GitHub posting
+- Successful final response + GitHub posting
 - Inline PR comments
 - Error conditions (missing IDs/credentials, conversation/sandbox issues)
 - Agent server HTTP/timeout errors
@@ -152,7 +152,7 @@ async def _setup_happy_path_services(
     mock_response = MagicMock()
     mock_response.json.return_value = {'response': agent_response_text}
     mock_response.raise_for_status.return_value = None
-    mock_httpx_client.post.return_value = mock_response
+    mock_httpx_client.get.return_value = mock_response
     mock_get_httpx_client.return_value.__aenter__.return_value = mock_httpx_client
 
     return mock_httpx_client
@@ -211,7 +211,6 @@ class TestGithubV1CallbackProcessor:
     @patch('openhands.app_server.config.get_app_conversation_info_service')
     @patch('openhands.app_server.config.get_sandbox_service')
     @patch('openhands.app_server.config.get_httpx_client')
-    @patch('integrations.github.github_v1_callback_processor.get_summary_instruction')
     @patch('integrations.github.github_v1_callback_processor.Auth')
     @patch('integrations.github.github_v1_callback_processor.GithubIntegration')
     @patch('integrations.github.github_v1_callback_processor.Github')
@@ -220,7 +219,6 @@ class TestGithubV1CallbackProcessor:
         mock_github,
         mock_github_integration,
         mock_auth,
-        mock_get_summary_instruction,
         mock_get_httpx_client,
         mock_get_sandbox_service,
         mock_get_app_conversation_info_service,
@@ -240,8 +238,6 @@ class TestGithubV1CallbackProcessor:
             mock_app_conversation_info,
             mock_sandbox_info,
         )
-
-        mock_get_summary_instruction.return_value = 'Please provide a summary'
 
         # Auth.AppAuth and Auth.Token mock
         mock_app_auth_instance = MagicMock()
@@ -288,12 +284,12 @@ class TestGithubV1CallbackProcessor:
         mock_repo.get_issue.assert_called_once_with(number=42)
         mock_issue.create_comment.assert_called_once_with('Test summary from agent')
 
-        mock_httpx_client.post.assert_called_once()
-        url_arg, kwargs = mock_httpx_client.post.call_args
+        mock_httpx_client.get.assert_called_once()
+        url_arg, kwargs = mock_httpx_client.get.call_args
         url = url_arg[0] if url_arg else kwargs['url']
-        assert 'ask_agent' in url
+        assert 'agent_final_response' in url
         assert kwargs['headers']['X-Session-API-Key'] == 'test_api_key'
-        assert kwargs['json']['question'] == 'Please provide a summary'
+        assert 'json' not in kwargs
 
     @patch(
         'integrations.github.github_v1_callback_processor.GITHUB_APP_CLIENT_ID',
@@ -306,14 +302,12 @@ class TestGithubV1CallbackProcessor:
     @patch('openhands.app_server.config.get_app_conversation_info_service')
     @patch('openhands.app_server.config.get_sandbox_service')
     @patch('openhands.app_server.config.get_httpx_client')
-    @patch('integrations.github.github_v1_callback_processor.get_summary_instruction')
     @patch('integrations.github.github_v1_callback_processor.GithubIntegration')
     @patch('integrations.github.github_v1_callback_processor.Github')
     async def test_successful_inline_pr_comment(
         self,
         mock_github,
         mock_github_integration,
-        mock_get_summary_instruction,
         mock_get_httpx_client,
         mock_get_sandbox_service,
         mock_get_app_conversation_info_service,
@@ -332,8 +326,6 @@ class TestGithubV1CallbackProcessor:
             mock_app_conversation_info,
             mock_sandbox_info,
         )
-
-        mock_get_summary_instruction.return_value = 'Please provide a summary'
 
         mock_token_data = MagicMock()
         mock_token_data.token = 'test_access_token'
@@ -366,7 +358,6 @@ class TestGithubV1CallbackProcessor:
     # Error paths
     # ------------------------------------------------------------------ #
 
-    @patch('integrations.github.github_v1_callback_processor.get_summary_instruction')
     @patch('openhands.app_server.config.get_httpx_client')
     @patch('openhands.app_server.config.get_sandbox_service')
     @patch('openhands.app_server.config.get_app_conversation_info_service')
@@ -375,7 +366,6 @@ class TestGithubV1CallbackProcessor:
         mock_get_app_conversation_info_service,
         mock_get_sandbox_service,
         mock_get_httpx_client,
-        mock_get_summary_instruction,
         conversation_state_update_event,
         event_callback,
         mock_app_conversation_info,
@@ -393,8 +383,6 @@ class TestGithubV1CallbackProcessor:
             mock_app_conversation_info,
             mock_sandbox_info,
         )
-
-        mock_get_summary_instruction.return_value = 'Please provide a summary'
 
         result = await processor(
             conversation_id=conversation_id,
@@ -414,7 +402,6 @@ class TestGithubV1CallbackProcessor:
         'integrations.github.github_v1_callback_processor.GITHUB_APP_PRIVATE_KEY',
         '',
     )
-    @patch('integrations.github.github_v1_callback_processor.get_summary_instruction')
     @patch('openhands.app_server.config.get_httpx_client')
     @patch('openhands.app_server.config.get_sandbox_service')
     @patch('openhands.app_server.config.get_app_conversation_info_service')
@@ -423,7 +410,6 @@ class TestGithubV1CallbackProcessor:
         mock_get_app_conversation_info_service,
         mock_get_sandbox_service,
         mock_get_httpx_client,
-        mock_get_summary_instruction,
         github_callback_processor,
         conversation_state_update_event,
         event_callback,
@@ -439,8 +425,6 @@ class TestGithubV1CallbackProcessor:
             mock_app_conversation_info,
             mock_sandbox_info,
         )
-
-        mock_get_summary_instruction.return_value = 'Please provide a summary'
 
         result = await github_callback_processor(
             conversation_id=conversation_id,
@@ -515,10 +499,8 @@ class TestGithubV1CallbackProcessor:
     @patch('openhands.app_server.config.get_app_conversation_info_service')
     @patch('openhands.app_server.config.get_sandbox_service')
     @patch('openhands.app_server.config.get_httpx_client')
-    @patch('integrations.github.github_v1_callback_processor.get_summary_instruction')
     async def test_agent_server_http_error(
         self,
-        mock_get_summary_instruction,
         mock_get_httpx_client,
         mock_get_sandbox_service,
         mock_get_app_conversation_info_service,
@@ -539,8 +521,6 @@ class TestGithubV1CallbackProcessor:
             mock_sandbox_info,
         )
 
-        mock_get_summary_instruction.return_value = 'Please provide a summary'
-
         mock_httpx_client = mock_get_httpx_client.return_value.__aenter__.return_value
         mock_response = MagicMock()
         mock_response.status_code = 500
@@ -549,7 +529,7 @@ class TestGithubV1CallbackProcessor:
         mock_error = httpx.HTTPStatusError(
             'HTTP 500 error', request=MagicMock(), response=mock_response
         )
-        mock_httpx_client.post.side_effect = mock_error
+        mock_httpx_client.get.side_effect = mock_error
 
         result = await github_callback_processor(
             conversation_id=conversation_id,
@@ -559,7 +539,7 @@ class TestGithubV1CallbackProcessor:
 
         assert result is not None
         assert result.status == EventCallbackResultStatus.ERROR
-        assert 'Failed to send message to agent server' in result.detail
+        assert 'Failed to fetch final response from agent server' in result.detail
 
     @patch(
         'integrations.github.github_v1_callback_processor.GITHUB_APP_CLIENT_ID',
@@ -572,10 +552,8 @@ class TestGithubV1CallbackProcessor:
     @patch('openhands.app_server.config.get_app_conversation_info_service')
     @patch('openhands.app_server.config.get_sandbox_service')
     @patch('openhands.app_server.config.get_httpx_client')
-    @patch('integrations.github.github_v1_callback_processor.get_summary_instruction')
     async def test_agent_server_timeout(
         self,
-        mock_get_summary_instruction,
         mock_get_httpx_client,
         mock_get_sandbox_service,
         mock_get_app_conversation_info_service,
@@ -595,10 +573,8 @@ class TestGithubV1CallbackProcessor:
             mock_sandbox_info,
         )
 
-        mock_get_summary_instruction.return_value = 'Please provide a summary'
-
         mock_httpx_client = mock_get_httpx_client.return_value.__aenter__.return_value
-        mock_httpx_client.post.side_effect = httpx.TimeoutException('Request timeout')
+        mock_httpx_client.get.side_effect = httpx.TimeoutException('Request timeout')
 
         result = await github_callback_processor(
             conversation_id=conversation_id,
@@ -772,7 +748,6 @@ class TestGithubV1CallbackProcessor:
         'integrations.github.github_v1_callback_processor.GITHUB_APP_PRIVATE_KEY',
         'test_private_key',
     )
-    @patch('integrations.github.github_v1_callback_processor.get_summary_instruction')
     @patch('openhands.app_server.config.get_httpx_client')
     @patch('openhands.app_server.config.get_sandbox_service')
     @patch('openhands.app_server.config.get_app_conversation_info_service')
@@ -781,7 +756,6 @@ class TestGithubV1CallbackProcessor:
         mock_get_app_conversation_info_service,
         mock_get_sandbox_service,
         mock_get_httpx_client,
-        mock_get_summary_instruction,
         github_callback_processor,
         conversation_state_update_event,
         event_callback,
@@ -798,8 +772,7 @@ class TestGithubV1CallbackProcessor:
             mock_app_conversation_info,
             mock_sandbox_info,
         )
-        mock_httpx_client.post.side_effect = Exception('Simulated agent server error')
-        mock_get_summary_instruction.return_value = 'Please provide a summary'
+        mock_httpx_client.get.side_effect = Exception('Simulated agent server error')
 
         with (
             patch(
@@ -848,7 +821,6 @@ class TestGithubV1CallbackProcessor:
         'integrations.github.github_v1_callback_processor.GITHUB_APP_PRIVATE_KEY',
         'test_private_key',
     )
-    @patch('integrations.github.github_v1_callback_processor.get_summary_instruction')
     @patch('openhands.app_server.config.get_httpx_client')
     @patch('openhands.app_server.config.get_sandbox_service')
     @patch('openhands.app_server.config.get_app_conversation_info_service')
@@ -859,7 +831,6 @@ class TestGithubV1CallbackProcessor:
         mock_get_app_conversation_info_service,
         mock_get_sandbox_service,
         mock_get_httpx_client,
-        mock_get_summary_instruction,
         github_callback_processor,
         conversation_state_update_event,
         event_callback,
@@ -882,8 +853,7 @@ class TestGithubV1CallbackProcessor:
             '"exception":"litellm.BadRequestError: Litellm_proxyException - '
             'Budget has been exceeded! Current cost: 12.65, Max budget: 12.62"}'
         )
-        mock_httpx_client.post.side_effect = Exception(budget_error_msg)
-        mock_get_summary_instruction.return_value = 'Please provide a summary'
+        mock_httpx_client.get.side_effect = Exception(budget_error_msg)
 
         with (
             patch(

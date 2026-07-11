@@ -6,14 +6,15 @@ import { RepositorySelection } from "#/api/open-hands.types";
 import { V1SandboxStatus } from "#/api/sandbox-service/sandbox-service.types";
 import { ConversationRepoLink } from "./conversation-repo-link";
 import { NoRepository } from "./no-repository";
-import CircuitIcon from "#/icons/u-circuit.svg?react";
+import { AgentChipIcon } from "#/components/shared/agent-chip-icon";
+import type { AgentChip } from "#/utils/agent-display-label";
 
 interface ConversationCardFooterProps {
   selectedRepository: RepositorySelection | null;
   lastUpdatedAt: string; // ISO 8601
   createdAt?: string; // ISO 8601
   sandboxStatus?: V1SandboxStatus;
-  llmModel?: string | null;
+  agentChip?: AgentChip | null;
 }
 
 export function ConversationCardFooter({
@@ -21,7 +22,7 @@ export function ConversationCardFooter({
   lastUpdatedAt,
   createdAt,
   sandboxStatus,
-  llmModel,
+  agentChip,
 }: ConversationCardFooterProps) {
   const { t } = useTranslation();
 
@@ -40,14 +41,14 @@ export function ConversationCardFooter({
         <NoRepository />
       )}
       <div className="flex items-center gap-2 flex-1 justify-end">
-        {llmModel && (
+        {agentChip && (
           <span
             className="text-xs text-[#A3A3A3] max-w-[120px] flex items-center gap-1 overflow-hidden"
-            title={llmModel}
+            title={agentChip.tooltip}
             data-testid="conversation-card-llm-model"
           >
-            <CircuitIcon width={12} height={12} className="shrink-0" />
-            <span className="truncate">{llmModel}</span>
+            <AgentChipIcon kind={agentChip.kind} />
+            <span className="truncate">{agentChip.text}</span>
           </span>
         )}
         {(createdAt ?? lastUpdatedAt) && (

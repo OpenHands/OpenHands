@@ -9,7 +9,12 @@ Precedence (highest first):
 
 2. ``X-Org-Id`` header — explicit, per-request override sent by the
    client. Validated against the authenticated user's org memberships;
-   rejected with 403 if the user is not a member of that org.
+   rejected with 403 if the user is not a member of that org **and**
+   has no "super" role assigned. Super-role users may target orgs they
+   have not joined so that this resolver stays consistent with
+   ``require_permission``'s super-role fallback; the route's
+   ``require_permission`` dependency remains the authoritative check
+   for the specific permission needed.
 
 3. ``user.current_org_id`` — the user's currently selected org (as
    mutated by ``POST /api/organizations/{org_id}/switch``). Default
@@ -39,9 +44,10 @@ async def resolve_effective_org_id(request: Request) -> UUID:
 
     Raises:
         HTTPException 400: ``X-Org-Id`` header is present but is not a UUID.
-        HTTPException 403: User is not a member of the requested org, or
-            the request authenticates with an org-bound API key whose
-            org does not match the ``X-Org-Id`` header.
+        HTTPException 403: User is not a member of the requested org and
+            has no super role assigned, or the request authenticates
+            with an org-bound API key whose org does not match the
+            ``X-Org-Id`` header.
         HTTPException 404: No effective org could be determined (e.g.
             user has no current org and did not supply the header).
     """
@@ -66,16 +72,27 @@ async def resolve_effective_org_id(request: Request) -> UUID:
     return effective_org_id
 
 
-async def maybe_resolve_effective_org_id(request: Request) -> UUID | None:
-    """Variant of :func:`resolve_effective_org_id` that returns ``None``
-    rather than 404 when no effective org can be determined.
+async def resolve_target_org_id_for_permission_check(
+    request: Request,
+) -> UUID | None:
+    """Resolve the target org id for a permission check **without**
+    requiring the authenticated user to be a member of that org.
 
-    Still raises 400/403 for malformed or unauthorized ``X-Org-Id`` headers.
+    This is the entry point used by ``require_permission`` for routes
+    that do not carry an explicit ``{org_id}`` path parameter. It lets
+    "super" role users (whose role is assigned via ``user.role_id``)
+    act on organizations they have not joined, while still enforcing
+    the API-key/header conflict checks performed by
+    :meth:`SaasUserAuth.get_target_org_id_for_permission_check`.
+
+    The membership check is intentionally skipped here -- callers must
+    follow up with an org/super role lookup, which is exactly what
+    ``require_permission`` already does.
     """
     user_auth = await get_user_auth(request)
     if not isinstance(user_auth, SaasUserAuth):
         return None
-    return await user_auth.get_effective_org_id()
+    return await user_auth.get_target_org_id_for_permission_check()
 
 
 async def reject_x_org_id_path_mismatch(
@@ -149,5 +166,4 @@ async def reject_x_org_id_path_mismatch(
 # Module-level Depends shortcuts so call sites read tidily:
 #     effective_org_id: UUID = EFFECTIVE_ORG_ID,
 EFFECTIVE_ORG_ID = Depends(resolve_effective_org_id)
-MAYBE_EFFECTIVE_ORG_ID = Depends(maybe_resolve_effective_org_id)
 REJECT_X_ORG_ID_PATH_MISMATCH = Depends(reject_x_org_id_path_mismatch)

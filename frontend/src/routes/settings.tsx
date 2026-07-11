@@ -21,6 +21,7 @@ import { getSelectedOrganizationIdFromStore } from "#/stores/selected-organizati
 import { rolePermissions } from "#/utils/org/permissions";
 import { isBillingHidden } from "#/utils/org/billing-visibility";
 import {
+  ADMIN_ONLY_SETTINGS_PATHS,
   isSettingsPageHidden,
   getFirstAvailablePath,
 } from "#/utils/settings-utils";
@@ -39,6 +40,8 @@ const SAAS_ONLY_PATHS = [
   "/settings/org-defaults",
   "/settings/org-defaults/condenser",
   "/settings/org-defaults/verification",
+  "/settings/usage-monitoring",
+  "/settings/budgets",
 ];
 
 const ORG_WIDE_BADGE_PATHS = new Set<string>([
@@ -51,6 +54,8 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const url = new URL(request.url);
   const { pathname } = url;
 
+  const isAdminOnlyPath = ADMIN_ONLY_SETTINGS_PATHS.has(pathname);
+
   // Step 1: Get config first (needed for all checks, no user data required)
   const config = await queryClient.fetchQuery<WebClientConfig>({
     queryKey: QUERY_KEYS.WEB_CLIENT_CONFIG,
@@ -60,6 +65,10 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
 
   const isSaas = config?.app_mode === "saas";
   const featureFlags = config?.feature_flags;
+
+  if (pathname === "/settings/admin-dashboard") {
+    return redirect(isSaas ? "/settings/usage-monitoring" : "/settings");
+  }
 
   // Step 2: Check SAAS_ONLY_PATHS for OSS mode (no user data required)
   if (!isSaas && SAAS_ONLY_PATHS.includes(pathname)) {
@@ -111,16 +120,14 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
     }
   }
 
-  // Step 4: For routes that need permission checks, get user data
-  // Only fetch user data for billing and org routes that need permission validation
   if (
     pathname === "/settings/billing" ||
     pathname === "/settings/org" ||
-    pathname === "/settings/org-members"
+    pathname === "/settings/org-members" ||
+    isAdminOnlyPath
   ) {
     const user = await getActiveOrganizationUser();
 
-    // Org-type detection for route protection
     const orgId = getSelectedOrganizationIdFromStore();
     const organizationsData = queryClient.getQueryData<{
       items: Organization[];
@@ -132,7 +139,6 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
     const isPersonalOrg = selectedOrg?.is_personal === true;
     const isTeamOrg = !!selectedOrg && !selectedOrg.is_personal;
 
-    // Billing route protection
     if (pathname === "/settings/billing") {
       if (
         !user ||
@@ -149,19 +155,31 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
       }
     }
 
-    // Org route protection: redirect if user lacks required permissions or personal org
-    if (pathname === "/settings/org" || pathname === "/settings/org-members") {
+    if (pathname === "/settings/org") {
       const role = user?.role ?? "member";
-      const requiredPermission =
-        pathname === "/settings/org"
-          ? "view_billing"
-          : "invite_user_to_organization";
-
       if (
         !user ||
-        !rolePermissions[role].includes(requiredPermission) ||
+        !rolePermissions[role].includes("view_billing") ||
         isPersonalOrg
       ) {
+        return redirect("/settings");
+      }
+    }
+
+    if (pathname === "/settings/org-members") {
+      const role = user?.role ?? "member";
+      if (
+        !user ||
+        !rolePermissions[role].includes("invite_user_to_organization") ||
+        isPersonalOrg
+      ) {
+        return redirect("/settings");
+      }
+    }
+
+    if (isAdminOnlyPath) {
+      const role = user?.role ?? "member";
+      if (!user || (role !== "admin" && role !== "owner") || isPersonalOrg) {
         return redirect("/settings");
       }
     }
@@ -210,7 +228,7 @@ function SettingsScreen() {
   return (
     <main data-testid="settings-screen" className="h-full">
       <SettingsLayout navigationItems={navItems}>
-        <div className="flex flex-col gap-6 h-full">
+        <div className="flex flex-col gap-6 h-full min-h-0">
           {!shouldHideTitle && (
             <div className="flex items-center gap-3 flex-wrap">
               <Typography.H2>{t(currentSectionTitle)}</Typography.H2>
@@ -219,7 +237,7 @@ function SettingsScreen() {
               )}
             </div>
           )}
-          <div className="flex-1 overflow-auto custom-scrollbar-always">
+          <div className="flex-1 min-h-0 overflow-auto custom-scrollbar-always">
             <Outlet />
           </div>
         </div>

@@ -279,9 +279,22 @@ class TokenManager:
     ) -> str:
         # Get user info to determine user_id and idp
         user_info = await self.get_user_info(access_token=access_token)
-        user_id = user_info.sub
-        username = user_info.preferred_username
-        logger.info(f'Getting token for user {username} and IDP {idp}')
+        return await self.get_idp_token_by_user_id(user_info.sub, idp)
+
+    async def get_idp_token_by_user_id(
+        self,
+        user_id: str,
+        idp: ProviderType,
+    ) -> str:
+        """Load (and refresh if needed) a provider IDP token using only the user_id.
+
+        This path is independent of the user's Keycloak *offline session*: the
+        encrypted provider tokens are read from the ``auth_tokens`` table and
+        refreshed via the provider's own OAuth endpoint (see
+        ``_check_expiration_and_refresh``). No Keycloak round-trip is required,
+        so it keeps working after the offline session is revoked or expires.
+        """
+        logger.info(f'Getting token for user {user_id} and IDP {idp}')
         token_store = await AuthTokenStore.get_instance(
             keycloak_user_id=user_id, idp=idp
         )
@@ -291,9 +304,9 @@ class TokenManager:
                 self._check_expiration_and_refresh
             )
             if not token_info:
-                logger.info(f'No tokens for user: {username}, identity provider: {idp}')
+                logger.info(f'No tokens for user: {user_id}, identity provider: {idp}')
                 raise ValueError(
-                    f'No tokens for user: {username}, identity provider: {idp}'
+                    f'No tokens for user: {user_id}, identity provider: {idp}'
                 )
             access_token = self.decrypt_text(str(token_info['access_token']))
             logger.info(f'Got {idp} token: {access_token[0:5]}')
@@ -301,12 +314,12 @@ class TokenManager:
         except httpx.HTTPStatusError as e:
             # Log the full response details including the body
             logger.error(
-                f'Failed to get tokens for user {username}, identity provider {idp} from URL {e.response.url}. '
+                f'Failed to get tokens for user {user_id}, identity provider {idp} from URL {e.response.url}. '
                 f'Status code: {e.response.status_code}, '
                 f'Response body: {e.response.text}'
             )
             raise ValueError(
-                f'Failed to get token for user: {username}, identity provider: {idp}. '
+                f'Failed to get token for user: {user_id}, identity provider: {idp}. '
                 f'Status code: {e.response.status_code}, '
                 f'Response body: {e.response.text}'
             ) from e
@@ -611,10 +624,19 @@ class TokenManager:
     async def get_user_id_from_user_email(self, email: str) -> str | None:
         keycloak_admin = get_keycloak_admin(self.external)
         users = await keycloak_admin.a_get_users({'q': f'email:{email}'})
-        if not users:
+        # Keycloak's email query is a substring match, so narrow to an exact,
+        # unique match -- otherwise users[0] could be a different user whose email
+        # merely contains this one (e.g. bob@acme.com vs bob@acme.com.au).
+        exact = [u for u in users if (u.get('email') or '').lower() == email.lower()]
+        if not exact:
             logger.error(f'User with email {email} not found.')
             return None
-        keycloak_user_id = users[0]['id']
+        if len(exact) > 1:
+            logger.error(
+                f'Multiple users with email {email}; refusing ambiguous match.'
+            )
+            return None
+        keycloak_user_id = exact[0]['id']
         logger.info(f'Got user ID {keycloak_user_id} from email: {email}')
         return keycloak_user_id
 
@@ -798,6 +820,98 @@ class TokenManager:
         except Exception as e:
             logger.exception(f'Unexpected error deleting Keycloak user {user_id}: {e}')
             return False
+
+    @retry(
+        stop=stop_after_attempt(2),
+        retry=retry_if_exception_type(KeycloakConnectionError),
+        before_sleep=_before_sleep_callback,
+    )
+    async def create_keycloak_user(
+        self,
+        email: str,
+        password: str,
+        email_verified: bool = True,
+    ) -> str:
+        """Create a new Keycloak user in the configured realm.
+
+        Used by the provisioning endpoint to seed accounts on behalf of an
+        org admin. The password is set as a non-temporary credential so the
+        provisioned user can authenticate directly with the returned
+        credentials without going through Keycloak's "update password"
+        flow.
+
+        Args:
+            email: Email address. Used as both ``email`` and ``username``.
+            password: Initial password to set on the account.
+            email_verified: Persisted to Keycloak's ``emailVerified`` flag.
+
+        Returns:
+            The Keycloak user ID (``sub``) of the newly created user.
+
+        Raises:
+            KeycloakError: If creation fails (e.g. user already exists).
+        """
+        keycloak_admin = get_keycloak_admin(self.external)
+        # Include the password inline in the UserRepresentation's
+        # ``credentials`` array so creation and password setup are a
+        # single atomic Keycloak call. If the password violates the
+        # realm's password policy, Keycloak rejects the whole request
+        # and no user row is created — there is no orphan window
+        # between an existing user and a failed password setup.
+        # See https://www.keycloak.org/docs-api/26.0.0/rest-api/index.html#UserRepresentation
+        payload: dict = {
+            'email': email,
+            'username': email,
+            'enabled': True,
+            'emailVerified': email_verified,
+            'credentials': [
+                {
+                    'type': 'password',
+                    'value': password,
+                    'temporary': False,
+                }
+            ],
+        }
+        user_id = await keycloak_admin.a_create_user(payload, exist_ok=False)
+        logger.info(
+            'Created Keycloak user',
+            extra={'user_id': user_id, 'email': email},
+        )
+        return user_id
+
+    async def request_offline_token(self, username: str, password: str) -> str:
+        """Exchange password credentials for an offline refresh token.
+
+        Uses the Resource Owner Password Credentials (ROPC) grant with the
+        ``offline_access`` scope. The returned ``refresh_token`` is an
+        offline token: it persists across browser sessions and is what
+        ``store_offline_token`` expects.
+
+        Args:
+            username: Keycloak username (typically the email).
+            password: The user's password.
+
+        Returns:
+            The offline refresh token.
+
+        Raises:
+            KeycloakError: If the token endpoint rejects the credentials
+                or the realm does not have ROPC enabled.
+            ValueError: If the response is missing ``refresh_token``.
+        """
+        token_response = await get_keycloak_openid(self.external).a_token(
+            username=username,
+            password=password,
+            grant_type='password',
+            scope='openid offline_access',
+        )
+        refresh_token = token_response.get('refresh_token')
+        if not refresh_token:
+            raise ValueError(
+                'Keycloak token response did not include a refresh_token; '
+                'offline_access scope may not be granted'
+            )
+        return refresh_token
 
     async def get_user_info_from_user_id(self, user_id: str) -> dict | None:
         keycloak_admin = get_keycloak_admin(self.external)

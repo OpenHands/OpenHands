@@ -1,8 +1,10 @@
 import asyncio
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import AsyncGenerator
 from uuid import UUID
 
 from openhands.agent_server.models import EventPage, EventSortOrder
@@ -17,6 +19,13 @@ from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
 from openhands.sdk.utils.paging import page_iterator
+
+
+def _event_load_concurrency() -> int:
+    try:
+        return max(1, int(os.getenv('EVENT_SERVICE_LOAD_EVENT_CONCURRENCY', '10')))
+    except ValueError:
+        return 10
 
 
 @dataclass
@@ -43,6 +52,16 @@ class EventServiceBase(EventService, ABC):
     @abstractmethod
     def _search_paths(self, prefix: Path) -> list[Path]:
         """Search paths."""
+
+    async def _load_events_from_paths(self, paths: list[Path]) -> list[Event | None]:
+        loop = asyncio.get_running_loop()
+        semaphore = asyncio.Semaphore(_event_load_concurrency())
+
+        async def load_event(path: Path) -> Event | None:
+            async with semaphore:
+                return await loop.run_in_executor(None, self._load_event, path)
+
+        return await asyncio.gather(*(load_event(path) for path in paths))
 
     async def get_conversation_path(self, conversation_id: UUID) -> Path:
         """Get a path for a conversation. Ensure user_id is included if possible."""
@@ -87,10 +106,7 @@ class EventServiceBase(EventService, ABC):
         prefix = await self.get_conversation_path(conversation_id)
         paths = await loop.run_in_executor(None, self._search_paths, prefix)
 
-        # Type error: run_in_executor expects a return value, but self._load_event is typed return Event | None.
-        events = await asyncio.gather(
-            *[loop.run_in_executor(None, self._load_event, path) for path in paths]  # type: ignore[arg-type]
-        )
+        events = await self._load_events_from_paths(paths)
         # Convert datetime filters to ISO strings so they can be compared
         # against event.timestamp (which is stored as an ISO 8601 string).
         timestamp_gte_str = timestamp__gte.isoformat() if timestamp__gte else None
@@ -125,6 +141,19 @@ class EventServiceBase(EventService, ABC):
             items = items[:limit]
 
         return EventPage(items=items, next_page_id=next_page_id)
+
+    async def iter_events_for_export(
+        self, conversation_id: UUID
+    ) -> AsyncGenerator[Event, None]:
+        """Iterate all events once in timestamp order for trajectory export."""
+        loop = asyncio.get_running_loop()
+        prefix = await self.get_conversation_path(conversation_id)
+        paths = await loop.run_in_executor(None, self._search_paths, prefix)
+        events = await self._load_events_from_paths(paths)
+        items = [event for event in events if event]
+        items.sort(key=lambda event: event.timestamp)
+        for event in items:
+            yield event
 
     async def count_events(
         self,

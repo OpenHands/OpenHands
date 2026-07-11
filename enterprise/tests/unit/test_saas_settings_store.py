@@ -1,5 +1,5 @@
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 from pydantic import SecretStr
@@ -167,6 +167,9 @@ def settings_store(async_session_maker):
                 del item_dict['secrets_store']
             if 'llm_profiles' in item_dict:
                 del item_dict['llm_profiles']
+            # inherited_marketplaces is computed at runtime, not persisted
+            if 'inherited_marketplaces' in item_dict:
+                del item_dict['inherited_marketplaces']
 
             # Encrypt the data before storing
             for key in ('llm_api_key', 'search_api_key', 'sandbox_api_key'):
@@ -196,7 +199,13 @@ def settings_store(async_session_maker):
                     await session.merge(existing)
                 else:
                     item_dict['keycloak_user_id'] = store.user_id
-                    settings = UserSettings(**item_dict)
+                    settings = UserSettings(
+                        **{
+                            key: value
+                            for key, value in item_dict.items()
+                            if key in UserSettings.__table__.columns
+                        }
+                    )
                     session.add(settings)
                 await session.commit()
 
@@ -328,10 +337,15 @@ async def test_ensure_api_key_keeps_valid_key():
 
 @pytest.mark.asyncio
 async def test_ensure_api_key_generates_new_key_when_verification_fails():
-    """When verification fails, a new key should be generated."""
+    """When verification fails, a new managed key is minted under the shared
+    alias after deleting any prior key — symmetric across model types so
+    switching to/from an openhands/* model never orphans a key."""
+    from storage.lite_llm_manager import get_openhands_cloud_key_alias
+
     store = SaasSettingsStore('test-user-id-123')
     new_key = 'sk-new-key'
     item = _make_settings(model='openhands/gpt-4', api_key='sk-invalid-key')
+    expected_alias = get_openhands_cloud_key_alias('test-user-id-123', 'org-123')
 
     with (
         patch(
@@ -340,15 +354,24 @@ async def test_ensure_api_key_generates_new_key_when_verification_fails():
             return_value=False,
         ),
         patch(
+            'storage.saas_settings_store.LiteLlmManager.delete_key_by_alias',
+            new_callable=AsyncMock,
+        ) as mock_delete,
+        patch(
             'storage.saas_settings_store.LiteLlmManager.generate_key',
             new_callable=AsyncMock,
             return_value=new_key,
-        ),
+        ) as mock_generate,
     ):
         await store._ensure_api_key(item, 'org-123', openhands_type=True)
 
-        assert _secret_value(item, 'llm.api_key') is not None
         assert _secret_value(item, 'llm.api_key') == new_key
+        # The openhands branch now deletes the prior key under the shared alias
+        # before minting (previously it skipped the delete and orphaned keys).
+        mock_delete.assert_awaited_once_with(key_alias=expected_alias)
+        mock_generate.assert_awaited_once_with(
+            'test-user-id-123', 'org-123', expected_alias, {'type': 'openhands'}
+        )
 
 
 @pytest.fixture
@@ -451,6 +474,110 @@ def org_with_multiple_members_fixture(session_maker):
 
 
 @pytest.mark.asyncio
+async def test_load_canonicalizes_legacy_litellm_proxy_active_llm(
+    async_session_maker, org_with_multiple_members_fixture
+):
+    from sqlalchemy import update
+    from storage.org_member import OrgMember
+    from storage.user import User
+
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = fixture['admin_user_id']
+    org_id = fixture['org_id']
+
+    async with async_session_maker() as session:
+        await session.execute(
+            update(OrgMember)
+            .where(OrgMember.org_id == org_id, OrgMember.user_id == admin_user_id)
+            .values(
+                agent_settings_diff={
+                    'llm': {
+                        'model': 'litellm_proxy/claude-opus-4-8',
+                        'base_url': LITE_LLM_API_URL,
+                    },
+                }
+            )
+        )
+        await session.execute(
+            update(User)
+            .where(User.id == admin_user_id)
+            .values(enable_sound_notifications=False)
+        )
+        await session.commit()
+
+    store = SaasSettingsStore(str(admin_user_id))
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+    ):
+        loaded = await store.load()
+
+    assert loaded is not None
+    assert loaded.agent_settings.llm.model == 'openhands/claude-opus-4-8'
+    assert loaded.agent_settings.llm.base_url is None
+
+
+@pytest.mark.asyncio
+async def test_load_canonicalizes_legacy_litellm_proxy_llm_profiles(
+    async_session_maker, org_with_multiple_members_fixture
+):
+    from sqlalchemy import update
+    from storage.org import Org
+    from storage.user import User
+
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = fixture['admin_user_id']
+    org_id = fixture['org_id']
+
+    async with async_session_maker() as session:
+        await session.execute(
+            update(Org)
+            .where(Org.id == org_id)
+            .values(
+                llm_profiles={
+                    'profiles': {
+                        'legacy': {
+                            'model': 'litellm_proxy/claude-opus-4-8',
+                            'base_url': LITE_LLM_API_URL,
+                        },
+                        'custom': {
+                            'model': 'litellm_proxy/custom-alias',
+                            'base_url': LITE_LLM_API_URL,
+                        },
+                    },
+                    'active': 'legacy',
+                }
+            )
+        )
+        await session.execute(
+            update(User)
+            .where(User.id == admin_user_id)
+            .values(enable_sound_notifications=False)
+        )
+        await session.commit()
+
+    store = SaasSettingsStore(str(admin_user_id))
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+    ):
+        loaded = await store.load()
+
+    assert loaded is not None
+    assert loaded.llm_profiles.active == 'legacy'
+
+    legacy = loaded.llm_profiles.require('legacy')
+    assert legacy.model == 'openhands/claude-opus-4-8'
+    assert legacy.base_url is None
+
+    custom = loaded.llm_profiles.require('custom')
+    assert custom.model == 'litellm_proxy/custom-alias'
+    assert custom.base_url == LITE_LLM_API_URL
+
+
+@pytest.mark.asyncio
 async def test_store_updates_org_defaults_and_all_members_for_shared_keys(
     session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
@@ -502,6 +629,71 @@ async def test_store_updates_org_defaults_and_all_members_for_shared_keys(
             )
             assert member.conversation_settings_diff['max_iterations'] == 100
             assert decrypt_value(member._llm_api_key) == 'shared-external-api-key'
+
+
+@pytest.mark.asyncio
+async def test_store_rejects_resolved_profile_settings_view(
+    session_maker, async_session_maker, org_with_multiple_members_fixture
+):
+    """``store()`` refuses a resolved Agent-Profile launch view outright.
+
+    A resolved view (``load(resolve_agent_profile=True)`` / an override) is
+    the profile's dump — ref-filtered ``mcp_config``, the referenced LLM
+    profile's key — not user-authored settings. Persisting it would corrupt
+    the member/org rows, so ``store()`` raises before writing anything.
+    """
+    from sqlalchemy import select
+    from storage.org import Org
+    from storage.org_member import OrgMember
+
+    fixture = org_with_multiple_members_fixture
+    org_id = fixture['org_id']
+    admin_user_id = str(fixture['admin_user_id'])
+
+    store = SaasSettingsStore(admin_user_id)
+    resolved_settings = _make_settings(
+        model='anthropic/claude-sonnet-4',
+        base_url='https://api.anthropic.com/v1',
+        api_key='profile-resolved-secret-key',
+    )
+    # Marks agent_settings as profile-resolved, exactly as load() would when
+    # the caller requested resolution and the member has an active profile.
+    resolved_settings.active_agent_profile_id = 'profile-1'
+    resolved_settings.active_agent_profile_revision = 3
+    resolved_settings.enable_sound_notifications = True
+
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        with pytest.raises(ValueError, match='resolved Agent-Profile'):
+            await store.store(resolved_settings)
+
+        # The private marker alone (a resolved load that fell back carries no
+        # active_agent_profile_id) must also be refused.
+        marked_settings = _make_settings(model='gpt-4o')
+        marked_settings._resolved_view = True
+        with pytest.raises(ValueError, match='resolved Agent-Profile'):
+            await store.store(marked_settings)
+
+    with session_maker() as session:
+        org = session.execute(select(Org).where(Org.id == org_id)).scalars().first()
+        assert org is not None
+        # Nothing was written before the guard fired.
+        assert (org.agent_settings or {}).get('llm', {}).get('model') != (
+            'anthropic/claude-sonnet-4'
+        )
+
+        members = {
+            str(member.user_id): member
+            for member in session.execute(
+                select(OrgMember).where(OrgMember.org_id == org_id)
+            )
+            .scalars()
+            .all()
+        }
+        member1 = members[str(fixture['member1_user_id'])]
+        member2 = members[str(fixture['member2_user_id'])]
+        # Other members keep their own pre-existing LLM, untouched.
+        assert member1.agent_settings_diff['llm']['model'] == 'old-model-v2'
+        assert member2.agent_settings_diff['llm']['model'] == 'old-model-v3'
 
 
 @pytest.mark.asyncio
@@ -599,6 +791,13 @@ async def test_store_keeps_mcp_config_private_to_acting_member(
             'user1': {'url': 'https://user1-mcp-server.com', 'transport': 'sse'}
         },
     }
+    # The SDK 1.31.x wire format stores ``mcp_config`` as a flat server
+    # map; ``Settings.update`` still accepts the legacy wrapper for
+    # backwards compatibility, but ``model_dump(mode='json')`` — which is
+    # what ``_get_persisted_agent_settings`` uses — no longer wraps.
+    persisted_mcp_config = {
+        'user1': {'url': 'https://user1-mcp-server.com', 'transport': 'sse'},
+    }
     new_settings = DataSettings()
     new_settings.update(
         {
@@ -633,7 +832,8 @@ async def test_store_keeps_mcp_config_private_to_acting_member(
 
     assert 'mcp_config' not in org.agent_settings
     assert (
-        members[admin_user_id].agent_settings_diff.get('mcp_config') == user_mcp_config
+        members[admin_user_id].agent_settings_diff.get('mcp_config')
+        == persisted_mcp_config
     )
     assert 'mcp_config' not in members[member1_user_id].agent_settings_diff
     assert 'mcp_config' not in members[member2_user_id].agent_settings_diff
@@ -758,7 +958,7 @@ async def test_store_and_load_mcp_config_via_agent_settings(
     assert loaded is not None
     assert loaded.agent_settings.mcp_config is not None
     assert (
-        loaded.agent_settings.mcp_config.mcpServers['admin'].url
+        loaded.agent_settings.mcp_config['admin'].url
         == 'https://admin-private-server.com'
     )
 
@@ -814,7 +1014,9 @@ async def test_load_drops_legacy_org_level_mcp_config(
 
     # Assert — legacy org mcp_config is not inherited by member1
     assert loaded is not None
-    assert loaded.agent_settings.mcp_config is None
+    # The SDK normalizes ``None`` to ``{}`` so the absence of an MCP config
+    # surfaces as an empty server map rather than ``None``.
+    assert loaded.agent_settings.mcp_config == {}
 
 
 @pytest.mark.asyncio
@@ -1150,10 +1352,100 @@ async def test_store_replaces_mcp_config_on_delete(
             .all()
         }
 
-    admin_servers = (
-        members[admin_user_id]
-        .agent_settings_diff.get('mcp_config', {})
-        .get('mcpServers', {})
-    )
+    # The persisted ``mcp_config`` is the SDK 1.31.x flat server map (no
+    # ``mcpServers`` wrapper), so reach directly into it instead of going
+    # through the legacy wrapper key.
+    admin_servers = members[admin_user_id].agent_settings_diff.get('mcp_config', {})
     assert set(admin_servers.keys()) == {'server1', 'server2'}
     assert 'mcp_config' not in members[member1_user_id].agent_settings_diff
+
+
+class TestGetEffectiveLlmApiKey:
+    """Regression tests for SaasSettingsStore._get_effective_llm_api_key() - GitHub #14898."""
+
+    def test_returns_member_key_when_has_custom_is_true(self):
+        """When has_custom_llm_api_key is True, returns member's LLM API key."""
+        from pydantic import SecretStr
+        from storage.saas_settings_store import SaasSettingsStore
+
+        org = MagicMock()
+        org.llm_api_key = SecretStr('org-api-key')
+
+        member = MagicMock()
+        member.has_custom_llm_api_key = True
+        member.llm_api_key = SecretStr('member-api-key')
+
+        result = SaasSettingsStore._get_effective_llm_api_key(org, member)
+
+        assert result == SecretStr('member-api-key')
+
+    def test_returns_org_key_and_does_not_access_member_key_when_has_custom_is_false(
+        self,
+    ):
+        """When has_custom_llm_api_key is False, returns org key without accessing member key.
+
+        This is a regression test for GitHub #14898. Previously, the code would fall back
+        to org_member.llm_api_key even when has_custom_llm_api_key was False, which
+        caused decryption errors when the member had no custom key set (empty/null stored value).
+        """
+        from pydantic import SecretStr
+        from storage.saas_settings_store import SaasSettingsStore
+
+        org = MagicMock()
+        org.llm_api_key = SecretStr('org-api-key')
+
+        member = MagicMock()
+        member.has_custom_llm_api_key = False
+
+        # Set llm_api_key to raise an error if accessed - this verifies we don't access it
+        def raise_on_access():
+            raise AssertionError(
+                'member.llm_api_key should not be accessed when has_custom_llm_api_key is False'
+            )
+
+        type(member).llm_api_key = PropertyMock(side_effect=raise_on_access)
+
+        result = SaasSettingsStore._get_effective_llm_api_key(org, member)
+
+        # Must return org key when has_custom_llm_api_key is False
+        assert result == SecretStr('org-api-key')
+
+    def test_falls_back_to_managed_member_key_when_org_key_unset(self):
+        """has_custom False + no org key: fall back to the managed key on the member row.
+
+        Managed/proxy keys are persisted on org_member.llm_api_key with
+        has_custom_llm_api_key=False. #14898 dropped this fallback entirely, which
+        left managed-key users with no key (and wiped it on settings save).
+        """
+        from pydantic import SecretStr
+        from storage.saas_settings_store import SaasSettingsStore
+
+        org = MagicMock()
+        org.llm_api_key = None
+
+        member = MagicMock()
+        member.has_custom_llm_api_key = False
+        member._llm_api_key = 'encrypted-managed-key'  # truthy => set
+        type(member).llm_api_key = PropertyMock(return_value=SecretStr('managed-key'))
+
+        result = SaasSettingsStore._get_effective_llm_api_key(org, member)
+
+        assert result == SecretStr('managed-key')
+
+    def test_returns_none_without_decrypting_when_member_key_unset(self):
+        """has_custom False, no org key, empty member key: None, never decrypt (#14898)."""
+        from storage.saas_settings_store import SaasSettingsStore
+
+        org = MagicMock()
+        org.llm_api_key = None
+
+        member = MagicMock()
+        member.has_custom_llm_api_key = False
+        member._llm_api_key = ''  # falsy => not set; must NOT decrypt
+        type(member).llm_api_key = PropertyMock(
+            side_effect=AssertionError('should not decrypt an unset member key')
+        )
+
+        result = SaasSettingsStore._get_effective_llm_api_key(org, member)
+
+        assert result is None

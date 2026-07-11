@@ -122,6 +122,44 @@ async def test_middleware_with_cookie_and_refresh(
             )
 
 
+@pytest.mark.asyncio
+async def test_middleware_with_api_key_cookie_only(
+    middleware, mock_request, mock_response
+):
+    """A request authenticated solely via the api_key cookie must not be treated as unauthenticated.
+
+    The middleware's _check_tos would otherwise raise NoCredentialsError
+    when the only credential on the request is the new ``api_key`` cookie.
+    """
+    mock_request.cookies = {'api_key': 'test_api_key'}
+    mock_request.headers = {}
+    mock_request.url = MagicMock()
+    mock_request.url.hostname = 'localhost'
+    mock_request.url.path = '/api/some/endpoint'
+    mock_call_next = AsyncMock(return_value=mock_response)
+
+    result = await middleware(mock_request, mock_call_next)
+
+    assert result == mock_response
+    mock_call_next.assert_called_once_with(mock_request)
+
+
+@pytest.mark.asyncio
+async def test_middleware_no_auth_at_all(middleware, mock_request):
+    """Without any credential source the middleware should still surface NoCredentialsError."""
+    mock_request.cookies = {}
+    mock_request.headers = {}
+    mock_request.url = MagicMock()
+    mock_request.url.hostname = 'localhost'
+    mock_request.url.path = '/api/some/endpoint'
+    mock_call_next = AsyncMock(return_value=MagicMock(spec=Response))
+
+    result = await middleware(mock_request, mock_call_next)
+
+    assert isinstance(result, JSONResponse)
+    assert result.status_code == status.HTTP_401_UNAUTHORIZED
+
+
 def decode_body(body: bytes | memoryview):
     if isinstance(body, memoryview):
         return body.tobytes().decode()

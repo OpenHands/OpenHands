@@ -1,14 +1,14 @@
 import asyncio
+import importlib.metadata
+import io
 import json
 import logging
-import os
-import tempfile
 import zipfile
 from collections import defaultdict
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, AsyncGenerator, Sequence, cast
+from typing import Any, AsyncGenerator, BinaryIO, Sequence, cast
 from uuid import UUID, uuid4
 
 import httpx
@@ -25,6 +25,10 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
     AppConversationInfoService,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
+    ACP_SERVER_TAG_KEY,
+    AGENT_PROFILE_ID_TAG_KEY,
+    AGENT_PROFILE_REVISION_TAG_KEY,
+    ARCHIVE_WORKSPACE_PATH_TAG_KEY,
     AgentType,
     AppConversation,
     AppConversationInfo,
@@ -41,6 +45,9 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
     AppConversationServiceInjector,
+    ConversationExportAlreadyRunning,
+    ConversationExportLockUnavailable,
+    ConversationExportTooLarge,
 )
 from openhands.app_server.app_conversation.app_conversation_service_base import (
     AppConversationServiceBase,
@@ -48,6 +55,9 @@ from openhands.app_server.app_conversation.app_conversation_service_base import 
 )
 from openhands.app_server.app_conversation.app_conversation_start_task_service import (
     AppConversationStartTaskService,
+)
+from openhands.app_server.app_conversation.conversation_secret_enricher import (
+    ConversationSecretEnricher,
 )
 from openhands.app_server.app_conversation.hook_loader import (
     load_hooks_from_agent_server,
@@ -80,30 +90,48 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import SandboxService
-from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
+from openhands.app_server.sandbox.sandbox_spec_service import (
+    SandboxSpecService,
+    is_custom_sandbox_spec,
+)
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.settings.llm_profiles import resolve_profile_llm
+from openhands.app_server.settings.marketplace_composition import (
+    load_composed_marketplaces,
+    marketplace_plugin_loading_enabled,
+)
+from openhands.app_server.settings.settings_models import (
+    MarketplaceRegistration,
+    grouped_workspace_dir,
+)
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
 from openhands.app_server.utils.git import ensure_valid_git_branch_name
+from openhands.app_server.utils.import_utils import get_impl
 from openhands.app_server.utils.llm_metadata import (
     get_llm_metadata,
     should_set_litellm_extra_body,
+)
+from openhands.app_server.utils.redis_lock import (
+    LockError,
+    RedisLockUnavailable,
+    refresh_lock_periodically,
+    try_acquire_redis_lock,
 )
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.llm.llm_profile_store import PROFILE_NAME_REGEX
+from openhands.sdk.mcp.config import MCPServer
 from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ACPAgentSettings
 from openhands.sdk.subagent import get_registered_agent_definitions
 from openhands.sdk.tool.builtins import SwitchLLMTool
-from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.utils.redact import (
     redact_api_key_literals,
     redact_text_secrets,
@@ -122,6 +150,45 @@ from openhands.tools.preset.planning import (
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
 
+_EXPORT_LOCK_KEY_PREFIX = 'app_conversation_export'
+
+
+class _StreamingZipBuffer(io.RawIOBase):
+    """Small non-seekable writer used by zipfile to emit chunks incrementally.
+
+    zipfile.ZipFile only needs write() and tell() from its underlying file
+    object when writing to a non-seekable stream.  Everything else
+    (flush, writable, seekable) is either unused by zipfile or already
+    handled by the io.RawIOBase defaults.
+    """
+
+    def __init__(self):
+        self._chunks: list[bytes] = []
+        self._position = 0
+
+    def write(self, data) -> int:
+        chunk = bytes(data)
+        if chunk:
+            self._chunks.append(chunk)
+            self._position += len(chunk)
+        return len(data)
+
+    def tell(self) -> int:
+        return self._position
+
+    def drain(self) -> list[bytes]:
+        chunks = self._chunks
+        self._chunks = []
+        return chunks
+
+
+def _expected_sdk_version() -> str | None:
+    """App's pinned openhands-sdk version, or None if its metadata is unresolvable."""
+    try:
+        return importlib.metadata.version('openhands-sdk')
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
 
 # Planning agent instruction to prevent "Ready to proceed?" behavior
 PLANNING_AGENT_INSTRUCTION = """<IMPORTANT_PLANNING_BOUNDARIES>
@@ -136,6 +203,37 @@ After you finalize the plan in PLAN.md:
 
 Your role ends when the plan is finalized. Implementation is handled by the code agent.
 </IMPORTANT_PLANNING_BOUNDARIES>"""
+
+GIT_SHALLOW_CLONE_CONTEXT = """<GIT_WORKSPACE_CONTEXT>
+The selected repository was cloned as a shallow clone. Git history may be incomplete. Before using operations that depend on full history, tags, merge bases, historical blame, or arbitrary commit checkout, run `git rev-parse --is-shallow-repository`. If full history is needed, run `git fetch --unshallow` or `git fetch --deepen=<n>`.
+</GIT_WORKSPACE_CONTEXT>"""
+
+
+def append_system_context(existing: str | None, block: str) -> str:
+    if not existing:
+        return block
+    if block in existing:
+        return existing
+    return f'{existing.rstrip()}\n\n{block}'
+
+
+def effective_disabled_skills(user: UserInfo) -> list[str]:
+    """Union of the member-level and launched-profile-level skill deny-lists.
+
+    A skill disabled at EITHER level stays off. The member's deny-list rides
+    ``user.disabled_skills``; the launched Agent Profile's rides the resolved
+    ``agent_settings.agent_context.disabled_skills`` (the SDK resolver stamps the
+    profile's ``disabled_skills`` there — #4017). On a non-profile launch the
+    resolved context's deny-list is empty, so this is just the member's list.
+    Order-preserving de-dup. Because it is a deny-list, a name absent from the
+    discovered catalog is a harmless no-op, so no reconciliation is needed
+    between the two sources.
+    """
+    member = list(user.disabled_skills or [])
+    agent_settings = getattr(user, 'agent_settings', None)
+    agent_context = getattr(agent_settings, 'agent_context', None)
+    profile = list(getattr(agent_context, 'disabled_skills', None) or [])
+    return list(dict.fromkeys([*member, *profile]))
 
 
 @dataclass
@@ -158,7 +256,26 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     web_url: str | None
     openhands_provider_base_url: str | None
     access_token_hard_timeout: timedelta | None
+    conversation_secret_enricher: ConversationSecretEnricher = field(
+        default_factory=ConversationSecretEnricher
+    )
     app_mode: str | None = None
+    export_max_events: int = 10000
+    export_lock_ttl_seconds: int = 3600
+    export_lock_refresh_interval_seconds: int = 30
+    export_lock_required: bool | None = None
+
+    def _maybe_append_shallow_clone_context(
+        self,
+        user: UserInfo,
+        selected_repository: str | None,
+        system_message_suffix: str | None,
+    ) -> str | None:
+        if selected_repository and not bool(getattr(user, 'git_full_clone', False)):
+            return append_system_context(
+                system_message_suffix, GIT_SHALLOW_CLONE_CONTEXT
+            )
+        return system_message_suffix
 
     async def _get_sandbox_grouping_strategy(self) -> SandboxGroupingStrategy:
         """Get the sandbox grouping strategy from user settings."""
@@ -300,10 +417,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             conversation_id = request.conversation_id or uuid4()
 
             # Setup working dir based on grouping
-            working_dir = sandbox_spec.working_dir
             sandbox_grouping_strategy = await self._get_sandbox_grouping_strategy()
-            if sandbox_grouping_strategy != SandboxGroupingStrategy.NO_GROUPING:
-                working_dir = f'{working_dir}/{conversation_id.hex}'
+            working_dir = grouped_workspace_dir(
+                sandbox_spec.working_dir,
+                sandbox_grouping_strategy,
+                conversation_id.hex,
+            )
 
             # Run setup scripts
             remote_workspace = AsyncRemoteWorkspace(
@@ -312,7 +431,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 working_dir=working_dir,
             )
             async for updated_task in self.run_setup_scripts(
-                task, sandbox, remote_workspace, agent_server_url
+                task, sandbox, remote_workspace, agent_server_url, conversation_id
             ):
                 yield updated_task
 
@@ -327,10 +446,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     working_dir,
                     request.agent_type,
                     request.llm_model,
+                    trigger=request.trigger,
                     remote_workspace=remote_workspace,
                     selected_repository=request.selected_repository,
+                    selected_branch=request.selected_branch,
                     plugins=request.plugins,
                     api_secrets=request.secrets,
+                    agent_profile_id=request.agent_profile_id,
                 )
             )
 
@@ -368,25 +490,75 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 timeout=self.sandbox_startup_timeout,
             )
 
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                # A custom image that 500s on create is usually an openhands-sdk
+                # mismatch /server_info couldn't reveal; add an actionable hint.
+                if is_custom_sandbox_spec(sandbox.sandbox_spec_id):
+                    expected = _expected_sdk_version()
+                    raise SandboxError(
+                        f'Conversation create failed (HTTP '
+                        f'{exc.response.status_code}) on custom sandbox image '
+                        f'{sandbox.sandbox_spec_id}. Verify its openhands-sdk '
+                        f'matches this release'
+                        + (f' ({expected})' if expected else '')
+                        + '; rebuild/re-pin the image if not.'
+                    ) from exc
+                raise
             info = ConversationInfo.model_validate(response.json())
             # Determine kind / llm_model from the request we built (its
             # ``agent`` is the source of truth here): the response echoes
             # the same agent back through the AgentBase discriminator.
             request_agent = start_conversation_request.agent
             tags: dict[str, str] = {}
+            # Pin where the workspace was actually created so the delete-time
+            # archive captures the right directory without re-deriving the path
+            # from settings (e.g. grouping) that may change before delete.
+            tags[ARCHIVE_WORKSPACE_PATH_TAG_KEY] = working_dir
+            # Stamp Agent Profile provenance. The launched profile resolved into
+            # the launched ``agent_settings`` (a resolve-requested load carries
+            # its id + revision onto UserInfo); ride the tags dict so it
+            # round-trips and surfaces as the ``launched_agent_profile``
+            # computed field. Resolves with the same override the launch itself
+            # used, so provenance reflects what actually ran even when the
+            # request carried a one-off ``agent_profile_id``.
+            profile_user = await self.user_context.get_user_info(
+                resolve_agent_profile=True,
+                override_agent_profile_id=request.agent_profile_id,
+            )
+            launched_profile_id = getattr(profile_user, 'active_agent_profile_id', None)
+            if isinstance(launched_profile_id, str) and launched_profile_id:
+                tags[AGENT_PROFILE_ID_TAG_KEY] = launched_profile_id
+                launched_revision = getattr(
+                    profile_user, 'active_agent_profile_revision', None
+                )
+                if isinstance(launched_revision, int):
+                    tags[AGENT_PROFILE_REVISION_TAG_KEY] = str(launched_revision)
             if request_agent.agent_kind == 'acp':
-                llm_model = None
+                llm_model = request_agent.acp_model
                 agent_kind = 'acp'
                 # Persist the active ACP provider key so the conversation UI
                 # can resolve a brand label ("Claude Code", "Codex", …) via
                 # the SDK registry without keeping a per-conversation column.
-                acp_user = await self.user_context.get_user_info()
-                if isinstance(acp_user.agent_settings, ACPAgentSettings):
-                    tags['acp_server'] = acp_user.agent_settings.acp_server
+                # Surfaced to the UI as the projected ``acp_server`` field.
+                # Reuses ``profile_user`` (resolved above with the same
+                # override) rather than re-fetching — a second fetch would
+                # both double the settings-resolution cost and risk a
+                # different profile resolving if it changed in between.
+                if isinstance(profile_user.agent_settings, ACPAgentSettings):
+                    tags[ACP_SERVER_TAG_KEY] = profile_user.agent_settings.acp_server
             else:
                 llm_model = request_agent.llm.model
                 agent_kind = 'openhands'
+
+            conversation_tags: dict[str, str] = dict(tags)
+            if request.selected_repository:
+                conversation_tags['repo_name'] = request.selected_repository
+            if request.git_provider:
+                conversation_tags['git_provider'] = request.git_provider.value
+            if request.selected_branch:
+                conversation_tags['selected_branch'] = request.selected_branch
 
             app_conversation_info = AppConversationInfo(
                 id=info.id,
@@ -395,7 +567,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 created_by_user_id=user_id,
                 llm_model=llm_model,
                 agent_kind=agent_kind,
-                tags=tags,
                 # Git parameters
                 selected_repository=request.selected_repository,
                 selected_branch=request.selected_branch,
@@ -403,6 +574,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 trigger=request.trigger,
                 pr_number=request.pr_number,
                 parent_conversation_id=request.parent_conversation_id,
+                tags=conversation_tags,
             )
             await self.app_conversation_info_service.save_app_conversation_info(
                 app_conversation_info
@@ -967,42 +1139,78 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             PROVIDER_TOKEN_TYPE | None,
             await self.user_context.get_provider_tokens(),
         )
-        if not provider_tokens:
-            return secrets
+        if provider_tokens:
+            # Create secrets for each provider token
+            for provider_type, provider_token in provider_tokens.items():
+                if not provider_token.token:
+                    continue
 
-        # Create secrets for each provider token
-        for provider_type, provider_token in provider_tokens.items():
-            if not provider_token.token:
-                continue
+                secret_name = f'{provider_type.name}_TOKEN'
+                description = f'{provider_type.name} authentication token'
 
-            secret_name = f'{provider_type.name}_TOKEN'
-            description = f'{provider_type.name} authentication token'
-
-            if self.web_url:
-                # Create an access token for web-based authentication
-                access_token = self.jwt_service.create_jws_token(
-                    payload={
-                        'user_id': user.id,
-                        'provider_type': provider_type.value,
-                    },
-                    expires_in=self.access_token_hard_timeout,
-                )
-                headers = {'X-Access-Token': access_token}
-
-                secrets[secret_name] = LookupSecret(
-                    url=self.web_url + '/api/v1/webhooks/secrets',
-                    headers=headers,
-                    description=description,
-                )
-            else:
-                # Use static token for environments without web URL access
-                static_token = await self.user_context.get_latest_token(provider_type)
-                if static_token:
-                    secrets[secret_name] = StaticSecret(
-                        value=SecretStr(static_token), description=description
+                if self.web_url:
+                    # Create an access token for web-based authentication
+                    access_token = self.jwt_service.create_jws_token(
+                        payload={
+                            'user_id': user.id,
+                            'provider_type': provider_type.value,
+                        },
+                        expires_in=self.access_token_hard_timeout,
                     )
+                    headers = {'X-Access-Token': access_token}
+
+                    secrets[secret_name] = LookupSecret(
+                        url=self.web_url + '/api/v1/webhooks/secrets',
+                        headers=headers,
+                        description=description,
+                    )
+                else:
+                    # Use static token for environments without web URL access
+                    static_token = await self.user_context.get_latest_token(
+                        provider_type
+                    )
+                    if static_token:
+                        secrets[secret_name] = StaticSecret(
+                            value=SecretStr(static_token), description=description
+                        )
 
         return secrets
+
+    async def _setup_conversation_secrets(
+        self,
+        user: UserInfo,
+        trigger: ConversationTrigger | None,
+        system_message_suffix: str | None,
+    ) -> tuple[dict, str | None]:
+        """Set up custom, git provider, and integration-scoped secrets.
+
+        Args:
+            user: User information containing authentication details
+            trigger: Trigger that started the conversation.
+            system_message_suffix: Current system message suffix.
+
+        Returns:
+            Tuple of secrets and updated system message suffix.
+        """
+        secrets = await self._setup_secrets_for_git_providers(user)
+
+        enrichment = await self.conversation_secret_enricher.enrich(
+            user_context=self.user_context,
+            user=user,
+            trigger=trigger,
+            system_message_suffix=system_message_suffix,
+            web_url=self.web_url,
+            jwt_service=self.jwt_service,
+            access_token_hard_timeout=self.access_token_hard_timeout,
+        )
+        for name, source in enrichment.secrets.items():
+            if name in secrets:
+                _logger.warning(
+                    'Integration-provided secret %r overrides existing secret', name
+                )
+            secrets[name] = source
+
+        return secrets, enrichment.system_message_suffix
 
     def _configure_llm(self, user: UserInfo, llm_model: str | None) -> LLM:
         """Configure LLM settings.
@@ -1038,11 +1246,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 'base_url': base_url,
                 'api_key': user.agent_settings.llm.api_key,
                 'usage_id': 'agent',
+                # Force streaming on (the SDK LLM defaults stream=False).
+                'stream': True,
             }
         )
 
     async def _add_system_mcp_servers(
-        self, mcp_servers: dict[str, Any], conversation_id: UUID
+        self, mcp_servers: dict[str, MCPServer], conversation_id: UUID
     ) -> None:
         """Add system-generated MCP servers (default OpenHands server).
 
@@ -1057,46 +1267,44 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not self.web_url:
             return
 
-        # Add default OpenHands MCP server (includes Tavily proxy if configured)
-        mcp_url = f'{self.web_url}/mcp/mcp'
-        mcp_servers['default'] = {
-            'url': mcp_url,
-            'headers': {'X-OpenHands-ServerConversation-ID': str(conversation_id)},
-        }
+        headers = {'X-OpenHands-ServerConversation-ID': SecretStr(str(conversation_id))}
 
         # Add API key if available
         mcp_api_key = await self.user_context.get_mcp_api_key()
         if mcp_api_key:
-            mcp_servers['default']['headers']['X-Session-API-Key'] = mcp_api_key
+            headers['X-Session-API-Key'] = SecretStr(mcp_api_key)
+
+        # Add default OpenHands MCP server (includes Tavily proxy if configured)
+        mcp_url = f'{self.web_url}/mcp/mcp'
+        mcp_servers['default'] = MCPServer(
+            url=mcp_url,
+            headers=headers,
+        )
 
     def _merge_custom_mcp_config(
-        self, mcp_servers: dict[str, Any], user: UserInfo
+        self, mcp_servers: dict[str, MCPServer], user: UserInfo
     ) -> None:
         """Merge custom MCP configuration from user settings.
 
         Args:
             mcp_servers: Dictionary to add servers to
             user: User information containing custom MCP config
-        """
-        if isinstance(user.agent_settings, ACPAgentSettings):
-            return
 
-        sdk_mcp = user.agent_settings.mcp_config
-        if not sdk_mcp or not sdk_mcp.mcpServers:
+        Handles both OpenHands and ACP agent settings: a resolved ACP profile's
+        ref-filtered ``mcp_config`` rides on ``ACPAgentSettings.mcp_config`` and
+        must reach ``create_agent`` (the ACP-only early-return that previously
+        dropped it is gone — SDK#3705 remainder, #15044 §7).
+        """
+        user_mcp = user.agent_settings.mcp_config
+        if not user_mcp:
             return
 
         try:
-            count = len(sdk_mcp.mcpServers)
+            count = len(user_mcp)
             _logger.info(
                 f'Loading custom MCP config from user settings: {count} servers'
             )
-
-            for name, server in sdk_mcp.mcpServers.items():
-                mcp_servers[name] = server.model_dump(exclude_none=True)
-
-            _logger.info(
-                f'Successfully merged custom MCP config: added {count} servers'
-            )
+            mcp_servers.update(user_mcp)
 
         except Exception as e:
             _logger.error(
@@ -1110,7 +1318,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
     async def _configure_llm_and_mcp(
         self, user: UserInfo, llm_model: str | None, conversation_id: UUID
-    ) -> tuple[LLM, dict]:
+    ) -> tuple[LLM, dict[str, MCPServer]]:
         """Configure LLM and MCP (Model Context Protocol) settings.
 
         Args:
@@ -1119,12 +1327,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             conversation_id: Conversation ID forwarded to the OpenHands MCP server
 
         Returns:
-            Tuple of (configured LLM instance, MCP config dictionary)
+            Tuple of (configured LLM instance, MCP config dict in the flat
+            ``{server_name: server_dict}`` shape the SDK 1.31.x
+            ``Agent.mcp_config`` field expects)
         """
         # Configure LLM
         llm = self._configure_llm(user, llm_model)
 
-        # Configure MCP - SDK expects format: {'mcpServers': {'server_name': {...}}}
         mcp_servers: dict[str, Any] = {}
 
         # Add system-generated servers (default MCP server with Tavily proxy)
@@ -1133,19 +1342,72 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Merge custom servers from user settings
         self._merge_custom_mcp_config(mcp_servers, user)
 
-        # Wrap in the mcpServers structure required by the SDK
-        mcp_config = {'mcpServers': mcp_servers} if mcp_servers else {}
-        _logger.info(f'Final MCP configuration: {sanitize_config(mcp_config)}')
+        return llm, mcp_servers
 
-        return llm, mcp_config
+    @staticmethod
+    def _build_observability_context(
+        conversation_id: UUID,
+        *,
+        agent_kind: str,
+        selected_repository: str | None = None,
+        selected_branch: str | None = None,
+        git_provider: ProviderType | None = None,
+    ) -> tuple[dict[str, Any], list[str]]:
+        """Build trace metadata and tag filters for a conversation.
+
+        Metadata uses explicit field names such as ``repo_name`` and
+        ``selected_branch``. Tags intentionally keep the concise
+        ``repo:`` / ``branch:`` prefixes used by LiteLLM metadata filters.
+        """
+        metadata: dict[str, Any] = {
+            'app': 'openhands',
+            'conversation_id': str(conversation_id),
+            'agent_kind': agent_kind,
+        }
+        tags = ['app:openhands', f'agent_kind:{agent_kind}']
+
+        if selected_repository:
+            metadata['repo_name'] = selected_repository
+            tags.append(f'repo:{selected_repository}')
+        if selected_branch:
+            metadata['selected_branch'] = selected_branch
+            tags.append(f'branch:{selected_branch}')
+        if git_provider:
+            provider = git_provider.value
+            metadata['git_provider'] = provider
+            tags.append(f'git_provider:{provider}')
+
+        return metadata, tags
+
+    @staticmethod
+    def _extend_observability_metadata(
+        target: dict[str, Any], metadata: Mapping[str, Any]
+    ) -> None:
+        for key, value in metadata.items():
+            if value is None:
+                continue
+            if isinstance(value, str) and value == '':
+                continue
+            if key in target:
+                if target[key] != value:
+                    _logger.warning(
+                        'Conflicting observability metadata for %s (existing=%r, incoming=%r); keeping existing value',
+                        key,
+                        target[key],
+                        value,
+                    )
+                continue
+            target[key] = value
 
     @staticmethod
     def _apply_server_agent_overrides(
         agent: Agent,
         agent_type: AgentType,
-        mcp_config: dict,
         conversation_id: UUID,
         user_id: str | None,
+        repo_name: str | None = None,
+        git_provider: ProviderType | None = None,
+        selected_branch: str | None = None,
     ) -> Agent:
         """Apply server-only fields that have no place in ``AgentSettings``.
 
@@ -1168,6 +1430,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 llm_type=agent.llm.usage_id or 'agent',
                 conversation_id=conversation_id,
                 user_id=user_id,
+                repo_name=repo_name,
+                git_provider=git_provider.value if git_provider else None,
+                selected_branch=selected_branch,
             )
             overrides['llm'] = agent.llm.model_copy(
                 update={'litellm_extra_body': {'metadata': llm_metadata}}
@@ -1185,6 +1450,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     llm_type='condenser',
                     conversation_id=conversation_id,
                     user_id=user_id,
+                    repo_name=repo_name,
+                    git_provider=git_provider.value if git_provider else None,
+                    selected_branch=selected_branch,
                 )
                 condenser_updates['litellm_extra_body'] = {
                     'metadata': condenser_metadata
@@ -1309,6 +1577,56 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             httpx_client=self.httpx_client,
         )
 
+    @staticmethod
+    async def _resolve_head_commit(
+        remote_workspace: AsyncRemoteWorkspace, project_dir: str
+    ) -> str:
+        """Best-effort post-clone HEAD sha for the Laminar trace; '' on failure.
+
+        ``--verify --quiet`` guarantees stdout is a validated object id (never
+        the literal ``HEAD`` an unborn repo would echo) and fails silently
+        rather than logging a ``fatal:`` line. The short timeout keeps this
+        trace-only lookup from delaying conversation startup if the workspace is
+        unresponsive — the metadata is simply dropped instead.
+        """
+        try:
+            result = await remote_workspace.execute_command(
+                'git rev-parse --verify --quiet HEAD', project_dir, timeout=10.0
+            )
+        except Exception as e:
+            _logger.debug('HEAD commit lookup for trace metadata failed: %s', e)
+            return ''
+        return result.stdout.strip() if not result.exit_code else ''
+
+    async def _build_observability_metadata(
+        self,
+        remote_workspace: AsyncRemoteWorkspace | None,
+        project_dir: str,
+        selected_repository: str | None,
+        selected_branch: str | None,
+        git_provider: ProviderType | None,
+    ) -> dict[str, str]:
+        """Repo identity for the Laminar trace so trajectories are searchable
+        by repo / branch / commit (the trace UI has no DB to join against).
+
+        Shared by the OpenHands and ACP request builders. The commit is the
+        post-clone HEAD, resolved best-effort from the (already-cloned)
+        workspace; omitted entirely for a repo-less conversation.
+        """
+        commit = ''
+        if selected_repository and remote_workspace is not None:
+            commit = await self._resolve_head_commit(remote_workspace, project_dir)
+        return {
+            key: value
+            for key, value in (
+                ('repo', selected_repository),
+                ('branch', selected_branch),
+                ('git_provider', git_provider.value if git_provider else None),
+                ('commit', commit),
+            )
+            if value
+        }
+
     async def _build_start_conversation_request_for_user(
         self,
         sandbox: SandboxInfo,
@@ -1319,10 +1637,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         working_dir: str,
         agent_type: AgentType = AgentType.DEFAULT,
         llm_model: str | None = None,
+        trigger: ConversationTrigger | None = None,
         remote_workspace: AsyncRemoteWorkspace | None = None,
         selected_repository: str | None = None,
+        selected_branch: str | None = None,
         plugins: list[PluginSpec] | None = None,
         api_secrets: dict[str, SecretStr] | None = None,
+        agent_profile_id: str | None = None,
     ) -> StartConversationRequest:
         """Build a complete StartConversationRequest for a user.
 
@@ -1343,15 +1664,31 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             working_dir: Working directory path
             agent_type: Type of agent (DEFAULT or PLAN)
             llm_model: Optional specific LLM model to use
+            trigger: Optional conversation trigger.
             remote_workspace: Optional remote workspace instance
             selected_repository: Optional repository name
+            selected_branch: Optional selected branch name
             plugins: Optional list of plugins to load
             api_secrets: Optional secrets passed directly via the API.
                 These are merged with existing secrets (from database
                 and git providers), with API-provided secrets taking
                 precedence.
+            agent_profile_id: One-off Agent Profile override for this
+                conversation only (cloud-only; does not change the member's
+                active pointer). ``None`` uses the ambient active profile.
         """
-        user = await self.user_context.get_user_info()
+        # Conversation start builds the agent, so it consumes the RESOLVED
+        # (effective launch) view; plain settings reads/round-trips elsewhere
+        # stay on the persisted view.
+        user = await self.user_context.get_user_info(
+            resolve_agent_profile=True,
+            override_agent_profile_id=agent_profile_id,
+        )
+
+        # Compose instance + org + user marketplaces once for both arms below.
+        # Enabled by default; inert (None) only when ENABLE_MARKETPLACE_PLUGIN_LOADING
+        # is explicitly disabled or no marketplaces are configured.
+        registered_marketplaces = await self._resolve_registered_marketplaces(user)
 
         # Route ACP agent settings to the ACP-specific builder
         if isinstance(user.agent_settings, ACPAgentSettings):
@@ -1359,10 +1696,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 sandbox=sandbox,
                 conversation_id=conversation_id,
                 initial_message=initial_message,
+                system_message_suffix=system_message_suffix,
+                trigger=trigger,
                 working_dir=working_dir,
+                git_provider=git_provider,
                 selected_repository=selected_repository,
+                selected_branch=selected_branch,
+                remote_workspace=remote_workspace,
                 plugins=plugins,
                 api_secrets=api_secrets,
+                agent_profile_id=agent_profile_id,
             )
             if remote_workspace:
                 acp_request = await self._load_skills_onto_request(
@@ -1371,7 +1714,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     remote_workspace,
                     selected_repository,
                     get_project_dir(working_dir, selected_repository),
-                    user.disabled_skills,
+                    effective_disabled_skills(user),
+                    registered_marketplaces,
                 )
             return acp_request
 
@@ -1380,7 +1724,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # --- secrets --------------------------------------------------------
         # Start with secrets from git providers and database
-        secrets = await self._setup_secrets_for_git_providers(user)
+        secrets, system_message_suffix = await self._setup_conversation_secrets(
+            user,
+            trigger,
+            system_message_suffix,
+        )
 
         # Merge API-provided secrets (they take precedence over existing ones)
         if api_secrets:
@@ -1400,6 +1748,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                         'API-provided secret %r overrides existing secret', name
                     )
                 secrets[name] = StaticSecret(value=value)
+
+        system_message_suffix = self._maybe_append_shallow_clone_context(
+            user, selected_repository, system_message_suffix
+        )
 
         # --- LLM + MCP -----------------------------------------------------
         llm, mcp_config = await self._configure_llm_and_mcp(
@@ -1442,13 +1794,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 agent_definitions = list(get_registered_agent_definitions())
 
         # --- build AgentSettings and create agent ---------------------------
-        from fastmcp.mcp_config import MCPConfig
-
         configured_agent_settings = user.agent_settings.model_copy(
             update={
                 'llm': llm,
                 'tools': tools,
-                'mcp_config': MCPConfig(**mcp_config) if mcp_config else None,
+                'mcp_config': mcp_config if mcp_config else {},
                 'agent_context': AgentContext(
                     system_message_suffix=effective_suffix,
                     secrets=secrets,
@@ -1481,7 +1831,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
 
         agent = self._apply_server_agent_overrides(
-            agent, agent_type, mcp_config, conversation_id, user.id
+            agent,
+            agent_type,
+            conversation_id,
+            user.id,
+            repo_name=selected_repository,
+            git_provider=git_provider,
+            selected_branch=selected_branch,
         )
 
         # --- hooks (require remote workspace; must precede request build) -----
@@ -1519,6 +1875,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 for p in plugins
             ]
 
+        observability_metadata, observability_tags = self._build_observability_context(
+            conversation_id,
+            agent_kind='openhands',
+            selected_repository=selected_repository,
+            selected_branch=selected_branch,
+            git_provider=git_provider,
+        )
+
         # --- populate ConversationSettings and build request ----------------
         conv_settings = user.conversation_settings.model_copy(
             update={
@@ -1543,8 +1907,23 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # injects it directly into the JSON body as a forward-compatible
         # fallback.
         laminar_user_id = await self.user_context.get_user_email() or user.id
+        resolved_observability_metadata = await self._build_observability_metadata(
+            remote_workspace,
+            project_dir,
+            selected_repository,
+            selected_branch,
+            git_provider,
+        )
+        self._extend_observability_metadata(
+            observability_metadata, resolved_observability_metadata
+        )
+        create_kwargs: dict[str, Any] = {'agent': agent, 'user_id': laminar_user_id}
+        if observability_metadata:
+            create_kwargs['observability_metadata'] = observability_metadata
+        if observability_tags:
+            create_kwargs['observability_tags'] = observability_tags
         request = conv_settings.create_request(
-            StartConversationRequest, agent=agent, user_id=laminar_user_id
+            StartConversationRequest, **create_kwargs
         )
 
         # --- skills (require remote workspace) ------------------------------
@@ -1555,10 +1934,38 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 remote_workspace,
                 selected_repository,
                 project_dir,
-                user.disabled_skills,
+                effective_disabled_skills(user),
+                registered_marketplaces,
             )
 
         return request
+
+    async def _resolve_registered_marketplaces(
+        self, user: UserInfo
+    ) -> list[MarketplaceRegistration] | None:
+        """Compose instance + org + user marketplaces for conversation start.
+
+        Enabled by default; returns ``None`` (feature inert) when
+        ENABLE_MARKETPLACE_PLUGIN_LOADING is explicitly disabled. Never raises:
+        any failure degrades to no marketplaces so it can never block
+        conversation creation.
+        """
+        if not marketplace_plugin_loading_enabled():
+            return None
+        try:
+            from openhands.app_server.shared import SettingsStoreImpl
+
+            user_id = await self.user_context.get_user_id()
+            settings_store = await SettingsStoreImpl.get_instance(user_id)
+            composed = await load_composed_marketplaces(
+                user_id, user.registered_marketplaces, settings_store
+            )
+            return composed.all or None
+        except Exception as e:
+            _logger.warning(
+                'Failed to compose marketplaces for conversation start: %s', e
+            )
+            return None
 
     async def _load_skills_onto_request(
         self,
@@ -1568,6 +1975,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         selected_repository: str | None,
         project_dir: str,
         disabled_skills: list[str] | None,
+        registered_marketplaces: list[MarketplaceRegistration] | None = None,
     ) -> StartConversationRequest:
         """Load workspace skills onto a conversation request's agent.
 
@@ -1583,6 +1991,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 selected_repository,
                 project_dir,
                 disabled_skills=disabled_skills,
+                registered_marketplaces=registered_marketplaces,
             )
             return request.model_copy(update={'agent': updated_agent})
         except Exception as e:
@@ -1595,9 +2004,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         conversation_id: UUID,
         initial_message: SendMessageRequest | None,
         working_dir: str,
+        system_message_suffix: str | None = None,
+        trigger: ConversationTrigger | None = None,
+        git_provider: ProviderType | None = None,
         selected_repository: str | None = None,
+        selected_branch: str | None = None,
+        remote_workspace: AsyncRemoteWorkspace | None = None,
         plugins: list[PluginSpec] | None = None,
         api_secrets: dict[str, SecretStr] | None = None,
+        agent_profile_id: str | None = None,
     ) -> StartConversationRequest:
         """Build a StartConversationRequest for ACP agent conversations.
 
@@ -1608,19 +2023,31 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         values are never materialised in this process.  In OSS mode (no
         ``web_url``) they remain ``StaticSecret``.  Secrets are passed
         directly as ``secrets=`` to ``create_request()``; no ``AgentContext``
-        relay is needed.  This avoids the deprecated ``acp_env`` channel
-        (software-agent-sdk #3464; OpenHands/agent-canvas#1039).
+        relay is needed (software-agent-sdk #3464;
+        OpenHands/agent-canvas#1039).
 
         Args:
             sandbox: Sandbox information
             conversation_id: Unique conversation identifier
             initial_message: Optional initial message to send
             working_dir: Working directory path
+            system_message_suffix: Optional suffix for system message.
+            trigger: Optional conversation trigger.
+            git_provider: Optional git provider type
             selected_repository: Optional repository name
+            selected_branch: Optional selected branch name
+            remote_workspace: Optional remote workspace instance, used to
+                resolve the HEAD commit for the Laminar trace metadata.
             plugins: Optional list of plugins to load
             api_secrets: Optional secrets passed directly via the API.
+            agent_profile_id: One-off Agent Profile override for this
+                conversation only (cloud-only; does not change the member's
+                active pointer). ``None`` uses the ambient active profile.
         """
-        user = await self.user_context.get_user_info()
+        user = await self.user_context.get_user_info(
+            resolve_agent_profile=True,
+            override_agent_profile_id=agent_profile_id,
+        )
 
         project_dir = get_project_dir(working_dir, selected_repository)
         workspace = LocalWorkspace(working_dir=project_dir)
@@ -1630,9 +2057,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # (e.g. X-Access-Token) are redacted by the SDK serializer because
         # "TOKEN" matches SECRET_KEY_PATTERNS, leaving headers: {} and
         # causing provider auth to silently fail at subprocess launch.
-        # Use the raw custom secrets directly, then fold in git provider tokens
-        # as StaticSecrets (bypassing the LookupSecret wrapping that
-        # _setup_secrets_for_git_providers does for non-ACP paths).
+        # Use raw custom secrets, static git provider tokens, and static
+        # integration-scoped secrets for ACP conversations.
         secrets: dict = await self.user_context.get_secrets()
         provider_tokens = cast(
             PROVIDER_TOKEN_TYPE | None,
@@ -1650,6 +2076,23 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                         description=f'{provider_type.name} authentication token',
                     )
 
+        enrichment = await self.conversation_secret_enricher.enrich(
+            user_context=self.user_context,
+            user=user,
+            trigger=trigger,
+            system_message_suffix=system_message_suffix,
+            web_url=None,
+            jwt_service=self.jwt_service,
+            access_token_hard_timeout=self.access_token_hard_timeout,
+        )
+        for name, source in enrichment.secrets.items():
+            if name in secrets:
+                _logger.warning(
+                    'Integration-provided secret %r overrides existing secret', name
+                )
+            secrets[name] = source
+        system_message_suffix = enrichment.system_message_suffix
+
         if api_secrets:
             from openhands.app_server.constants import (
                 validate_secret_name,
@@ -1665,6 +2108,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     )
                 secrets[name] = StaticSecret(value=value)
 
+        system_message_suffix = self._maybe_append_shallow_clone_context(
+            user, selected_repository, system_message_suffix
+        )
+
         # --- build the ACP agent ------------------------------------------
         acp_settings = user.agent_settings  # already verified to be ACPAgentSettings
         assert isinstance(acp_settings, ACPAgentSettings)
@@ -1674,14 +2121,25 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # across pause/resume — matching the regular-agent lifecycle (#1274).
         # Strip llm.api_key/base_url to prevent proxy settings from leaking
         # into the subprocess env (ACP CLIs handle their own LLM calls).
-        acp_settings_for_agent = acp_settings.model_copy(
-            update={
-                'acp_isolate_data_dir': True,
-                'llm': acp_settings.llm.model_copy(
-                    update={'api_key': None, 'base_url': None}
-                ),
-            }
-        )
+        settings_update: dict[str, Any] = {
+            'acp_isolate_data_dir': True,
+            'llm': acp_settings.llm.model_copy(
+                update={'api_key': None, 'base_url': None}
+            ),
+        }
+        # Forward the resolved profile's / user's custom MCP servers to the ACP
+        # subprocess (#15044 §7). Only custom servers — the system OpenHands MCP
+        # server (Tavily proxy) is runtime-internal and unreachable by an external
+        # ACP CLI, so it is intentionally not injected here.
+        acp_mcp_servers: dict[str, MCPServer] = {}
+        self._merge_custom_mcp_config(acp_mcp_servers, user)
+        if acp_mcp_servers:
+            settings_update['mcp_config'] = acp_mcp_servers
+        if system_message_suffix:
+            settings_update['agent_context'] = AgentContext(
+                system_message_suffix=system_message_suffix
+            )
+        acp_settings_for_agent = acp_settings.model_copy(update=settings_update)
         acp_agent = acp_settings_for_agent.create_agent()
 
         sdk_plugins: list[PluginSource] | None = None
@@ -1690,6 +2148,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 PluginSource(source=p.source, ref=p.ref, repo_path=p.repo_path)
                 for p in plugins
             ]
+
+        observability_metadata, observability_tags = self._build_observability_context(
+            conversation_id,
+            agent_kind='acp',
+            selected_repository=selected_repository,
+            selected_branch=selected_branch,
+            git_provider=git_provider,
+        )
 
         # Mirror the regular path: populate ConversationSettings and delegate
         # to create_request() so that max_iterations, confirmation_mode, and
@@ -1709,12 +2175,26 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # prefer email over the internal id so Laminar traces are immediately
         # attributable, falling back to ``user.id`` when no email is available.
         laminar_user_id = await self.user_context.get_user_email() or user.id
-        return conv_settings.create_request(
-            StartConversationRequest,
-            agent=acp_agent,
-            user_id=laminar_user_id,
-            secrets=secrets,
+        resolved_observability_metadata = await self._build_observability_metadata(
+            remote_workspace,
+            project_dir,
+            selected_repository,
+            selected_branch,
+            git_provider,
         )
+        self._extend_observability_metadata(
+            observability_metadata, resolved_observability_metadata
+        )
+        create_kwargs: dict[str, Any] = {
+            'agent': acp_agent,
+            'user_id': laminar_user_id,
+            'secrets': secrets,
+        }
+        if observability_metadata:
+            create_kwargs['observability_metadata'] = observability_metadata
+        if observability_tags:
+            create_kwargs['observability_tags'] = observability_tags
+        return conv_settings.create_request(StartConversationRequest, **create_kwargs)
 
     async def _process_pending_messages(
         self,
@@ -2083,6 +2563,137 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         return deleted_info or deleted_tasks
 
+    async def _get_conversation_export_info(
+        self, conversation_id: UUID
+    ) -> AppConversationInfo:
+        conversation_info = (
+            await self.app_conversation_info_service.get_app_conversation_info(
+                conversation_id
+            )
+        )
+        if not conversation_info:
+            raise ValueError(f'Conversation not found: {conversation_id}')
+        return conversation_info
+
+    async def _validate_conversation_export_size(self, conversation_id: UUID):
+        if self.export_max_events <= 0:
+            return
+
+        event_count = await self.event_service.count_events(conversation_id)
+        if event_count > self.export_max_events:
+            raise ConversationExportTooLarge(
+                f'Conversation export contains {event_count} events, '
+                f'exceeding the limit of {self.export_max_events}'
+            )
+
+    def _conversation_export_lock_key(self, conversation_id: UUID) -> str:
+        return f'{_EXPORT_LOCK_KEY_PREFIX}:{conversation_id.hex}'
+
+    def _conversation_export_lock_refresh_interval(self) -> int:
+        ttl_seconds = max(1, self.export_lock_ttl_seconds)
+        configured_interval = max(1, self.export_lock_refresh_interval_seconds)
+        return min(configured_interval, max(1, ttl_seconds // 2))
+
+    def _conversation_export_lock_required(self) -> bool:
+        if self.export_lock_required is not None:
+            return self.export_lock_required
+        return (self.app_mode or '').lower() == 'saas'
+
+    async def _stream_conversation_zip(
+        self, conversation_id: UUID, conversation_info: AppConversationInfo
+    ) -> AsyncGenerator[bytes, None]:
+        zip_buffer = _StreamingZipBuffer()
+        with zipfile.ZipFile(
+            cast(BinaryIO, zip_buffer), 'w', zipfile.ZIP_DEFLATED
+        ) as zipf:
+            zipf.writestr('meta.json', conversation_info.model_dump_json(indent=2))
+            for chunk in zip_buffer.drain():
+                yield chunk
+
+            i = 0
+            async for event in self.event_service.iter_events_for_export(
+                conversation_id
+            ):
+                event_filename = f'event_{i:06d}_{event.id}.json'
+                event_data = event.model_dump(mode='json')
+                event_json = json.dumps(event_data, indent=2)
+                zipf.writestr(event_filename, event_json)
+                for chunk in zip_buffer.drain():
+                    yield chunk
+                i += 1
+
+        for chunk in zip_buffer.drain():
+            yield chunk
+
+    async def open_conversation_export(
+        self, conversation_id: UUID
+    ) -> AsyncGenerator[bytes, None]:
+        """Prepare a locked streaming conversation trajectory export."""
+        conversation_info = await self._get_conversation_export_info(conversation_id)
+        lock_key = self._conversation_export_lock_key(conversation_id)
+        lock_unavailable = False
+        try:
+            export_lock = await try_acquire_redis_lock(
+                lock_key, max(1, self.export_lock_ttl_seconds)
+            )
+        except RedisLockUnavailable as e:
+            if self._conversation_export_lock_required():
+                raise ConversationExportLockUnavailable(
+                    f'Could not acquire export lock for conversation {conversation_id}'
+                ) from e
+            _logger.warning(
+                'conversation_export:lock_unavailable_proceeding_without_lock',
+                extra={'conversation_id': str(conversation_id)},
+            )
+            export_lock = None
+            lock_unavailable = True
+
+        if export_lock is None and not lock_unavailable:
+            raise ConversationExportAlreadyRunning(
+                f'Conversation export already running: {conversation_id}'
+            )
+
+        try:
+            await self._validate_conversation_export_size(conversation_id)
+        except Exception:
+            if export_lock:
+                try:
+                    await export_lock.release()
+                except LockError:
+                    pass
+            raise
+
+        refresh_interval = self._conversation_export_lock_refresh_interval()
+
+        async def stream():
+            # Refresh the lock in a background task so the streaming loop stays
+            # simple and lock maintenance doesn't block chunk generation.
+            refresh_task = (
+                asyncio.create_task(
+                    refresh_lock_periodically(export_lock, refresh_interval)
+                )
+                if export_lock
+                else None
+            )
+            try:
+                async for chunk in self._stream_conversation_zip(
+                    conversation_id, conversation_info
+                ):
+                    yield chunk
+            finally:
+                if refresh_task is not None:
+                    refresh_task.cancel()
+                if export_lock:
+                    try:
+                        await export_lock.release()
+                    except LockError:
+                        _logger.warning(
+                            'conversation_export:lock_release_failed',
+                            extra={'conversation_id': str(conversation_id)},
+                        )
+
+        return stream()
+
     async def export_conversation(self, conversation_id: UUID) -> bytes:
         """Download a conversation trajectory as a zip file.
 
@@ -2091,52 +2702,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         Returns the zip file as bytes.
         """
-        # Get the conversation info to verify it exists and user has access
-        conversation_info = (
-            await self.app_conversation_info_service.get_app_conversation_info(
-                conversation_id
-            )
-        )
-        if not conversation_info:
-            raise ValueError(f'Conversation not found: {conversation_id}')
+        conversation_info = await self._get_conversation_export_info(conversation_id)
+        await self._validate_conversation_export_size(conversation_id)
 
-        # Create a temporary directory to store files
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Get all events for this conversation
-            i = 0
-            async for event in page_iterator(
-                self.event_service.search_events, conversation_id=conversation_id
-            ):
-                event_filename = f'event_{i:06d}_{event.id}.json'
-                event_path = os.path.join(temp_dir, event_filename)
+        chunks = []
+        async for chunk in self._stream_conversation_zip(
+            conversation_id, conversation_info
+        ):
+            chunks.append(chunk)
 
-                with open(event_path, 'w') as f:
-                    # Use model_dump with mode='json' to handle UUID serialization
-                    event_data = event.model_dump(mode='json')
-                    json.dump(event_data, f, indent=2)
-                i += 1
-
-            # Create meta.json with conversation info
-            meta_path = os.path.join(temp_dir, 'meta.json')
-            with open(meta_path, 'w') as f:
-                f.write(conversation_info.model_dump_json(indent=2))
-
-            # Create zip file in memory
-            zip_buffer = tempfile.NamedTemporaryFile()
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                # Add all files from temp directory to zip
-                for root, dirs, files in os.walk(temp_dir):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, temp_dir)
-                        zipf.write(file_path, arcname)
-
-            # Read the zip file content
-            zip_buffer.seek(0)
-            zip_content = zip_buffer.read()
-            zip_buffer.close()
-
-            return zip_content
+        return b''.join(chunks)
 
 
 class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
@@ -2159,6 +2734,25 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
         description=(
             'A security measure - the time after which git tokens may no longer '
             'be retrieved by a sandboxed conversation.'
+        ),
+    )
+    export_max_events: int = Field(
+        default=10000,
+        description='The maximum number of events allowed in a conversation export',
+    )
+    export_lock_ttl_seconds: int = Field(
+        default=3600,
+        description='Redis lock TTL for a single conversation export',
+    )
+    export_lock_refresh_interval_seconds: int = Field(
+        default=30,
+        description='How often to refresh the Redis lock during a conversation export',
+    )
+    export_lock_required: bool | None = Field(
+        default=None,
+        description=(
+            'Whether Redis export locking is required. Defaults to required in '
+            'SAAS mode and best-effort elsewhere.'
         ),
     )
 
@@ -2209,12 +2803,18 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
 
             # Get app_mode for SaaS mode
             app_mode = None
+            conversation_secret_enricher = ConversationSecretEnricher()
             try:
                 from openhands.app_server.shared import server_config
 
                 app_mode = (
                     server_config.app_mode.value if server_config.app_mode else None
                 )
+                enricher_cls = get_impl(
+                    ConversationSecretEnricher,
+                    server_config.conversation_secret_enricher_class,
+                )
+                conversation_secret_enricher = enricher_cls()
             except (ImportError, AttributeError):
                 # If server_config is not available (e.g., in tests), continue without it
                 pass
@@ -2237,5 +2837,12 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 web_url=web_url,
                 openhands_provider_base_url=config.openhands_provider_base_url,
                 access_token_hard_timeout=access_token_hard_timeout,
+                conversation_secret_enricher=conversation_secret_enricher,
                 app_mode=app_mode,
+                export_max_events=self.export_max_events,
+                export_lock_ttl_seconds=self.export_lock_ttl_seconds,
+                export_lock_refresh_interval_seconds=(
+                    self.export_lock_refresh_interval_seconds
+                ),
+                export_lock_required=self.export_lock_required,
             )
