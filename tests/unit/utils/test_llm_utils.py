@@ -135,8 +135,9 @@ class TestGetProviderApiBase:
         assert get_provider_api_base('gpt-4') == 'https://api.openai.com'
         assert get_provider_api_base('openai/gpt-4') == 'https://api.openai.com'
 
-    def test_anthropic_model_returns_anthropic_api_base(self):
+    def test_anthropic_model_returns_anthropic_api_base(self, monkeypatch):
         """Test that Anthropic models return the Anthropic API base URL."""
+        monkeypatch.delenv('ANTHROPIC_BASE_URL', raising=False)
         assert (
             get_provider_api_base('anthropic/claude-sonnet-4-5-20250929')
             == 'https://api.anthropic.com'

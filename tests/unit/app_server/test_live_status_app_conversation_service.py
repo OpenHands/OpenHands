@@ -19,6 +19,7 @@ from openhands.agent_server.models import (
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     AgentType,
+    AppConversation,
     AppConversationInfo,
     AppConversationStartRequest,
     ConversationTrigger,
@@ -3000,7 +3001,6 @@ class TestLiveStatusAppConversationService:
         assert len(result.items) == 0
 
 
-
 class TestDeleteSubConversations:
     """Regression tests for premature sandbox teardown during cascade deletion.
 
@@ -3035,10 +3035,7 @@ class TestDeleteSubConversations:
             app_mode='test',
         )
 
-    def _make_conversation(self, sandbox_id: str, **kwargs) -> 'AppConversation':
-        from openhands.app_server.app_conversation.app_conversation_models import (
-            AppConversation,
-        )
+    def _make_conversation(self, sandbox_id: str, **kwargs) -> AppConversation:
         from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 
         return AppConversation(

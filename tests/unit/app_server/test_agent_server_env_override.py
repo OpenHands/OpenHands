@@ -12,6 +12,7 @@ The functionality includes:
 """
 
 import os
+import sys
 from unittest.mock import patch
 
 import pytest
@@ -29,6 +30,8 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
     AUTO_FORWARD_PREFIXES,
     get_agent_server_env,
 )
+
+_ON_WINDOWS = sys.platform == 'win32'
 
 
 class TestGetAgentServerEnv:
@@ -278,6 +281,7 @@ class TestLLMAutoForwarding:
             result = get_agent_server_env()
             assert result == {}
 
+    @pytest.mark.skipif(_ON_WINDOWS, reason='Windows env vars are case-insensitive')
     def test_llm_prefix_is_case_sensitive(self):
         """Test that LLM_ prefix matching is case-sensitive."""
         env_vars = {
@@ -340,6 +344,7 @@ class TestLMNRAutoForwarding:
             assert result['LMNR_BASE_URL'] == 'https://app.lmnr.ai'
             assert result['LMNR_VERBOSITY'] == 'debug'
 
+    @pytest.mark.skipif(_ON_WINDOWS, reason='Windows env vars are case-insensitive')
     def test_lmnr_prefix_is_case_sensitive(self):
         """Test that LMNR_ prefix matching is case-sensitive."""
         env_vars = {

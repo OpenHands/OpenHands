@@ -80,12 +80,13 @@ class TestAwsEventServiceLoadEvent:
         mock_body.__exit__ = MagicMock(return_value=False)
         mock_s3_client.get_object.return_value = {'Body': mock_body}
 
-        result = service._load_event(Path('some/path/event.json'))
+        event_path = Path('some/path/event.json')
+        result = service._load_event(event_path)
 
         assert result is not None
         assert result.kind == 'TokenEvent'
         mock_s3_client.get_object.assert_called_once_with(
-            Bucket='test-bucket', Key='some/path/event.json'
+            Bucket='test-bucket', Key=str(event_path)
         )
 
     def test_load_event_not_found(self, service: AwsEventService, mock_s3_client):
@@ -118,12 +119,13 @@ class TestAwsEventServiceStoreEvent:
         """Test that _store_event successfully stores an event to S3."""
         event = create_token_event()
 
-        service._store_event(Path('some/path/event.json'), event)
+        event_path = Path('some/path/event.json')
+        service._store_event(event_path, event)
 
         mock_s3_client.put_object.assert_called_once()
         call_args = mock_s3_client.put_object.call_args
         assert call_args.kwargs['Bucket'] == 'test-bucket'
-        assert call_args.kwargs['Key'] == 'some/path/event.json'
+        assert call_args.kwargs['Key'] == str(event_path)
         # Verify the body is valid JSON
         body = call_args.kwargs['Body'].decode('utf-8')
         data = json.loads(body)

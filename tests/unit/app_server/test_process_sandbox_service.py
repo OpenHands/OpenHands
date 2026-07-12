@@ -358,7 +358,8 @@ class TestProcessSandboxServiceInjector:
         """Test default configuration values."""
         injector = ProcessSandboxServiceInjector()
 
-        assert injector.base_working_dir == '/tmp/openhands-sandboxes'
+        expected_dir = os.path.join(tempfile.gettempdir(), 'openhands-sandboxes')
+        assert injector.base_working_dir == expected_dir
         assert injector.base_port == 8000
         assert injector.health_check_path == '/alive'
         assert injector.agent_server_module == 'openhands.agent_server'

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import shutil
+import sys
 import tempfile
 import threading
+import unittest
 from abc import ABC
 from dataclasses import dataclass, field
 from io import BytesIO, StringIO
@@ -18,6 +20,8 @@ from openhands.app_server.file_store.google_cloud import GoogleCloudFileStore
 from openhands.app_server.file_store.local import LocalFileStore
 from openhands.app_server.file_store.memory import InMemoryFileStore
 from openhands.app_server.file_store.s3 import S3FileStore
+
+_ON_WINDOWS = sys.platform == 'win32'
 
 # =============================================================================
 # Mock classes for cloud storage tests
@@ -267,6 +271,7 @@ class TestLocalFileStore(TestCase, _StorageTest):
                 f'Failed to remove temporary directory {self.temp_dir}: {e}'
             )
 
+    @unittest.skipIf(_ON_WINDOWS, 'Concurrent writes not supported on Windows due to exclusive file locking')
     def test_concurrent_writes_no_corruption(self):
         """Test that concurrent writes don't corrupt file content.
 

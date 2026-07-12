@@ -1190,7 +1190,9 @@ class TestSandboxIsSharedCalculation:
         sub_conv_ids: list,
     ):
         svc = MagicMock()
-        svc.count_conversations_by_sandbox_id = AsyncMock(return_value=conversation_count)
+        svc.count_conversations_by_sandbox_id = AsyncMock(
+            return_value=conversation_count
+        )
         svc.get_sub_conversation_ids = AsyncMock(return_value=sub_conv_ids)
         return svc
 

@@ -28,7 +28,7 @@ def _get_clean_env():
     """Get a base environment dict with essential system vars preserved."""
     # Preserve essential system environment variables
     env = {}
-    for key in ['PATH', 'HOME', 'PYTHONPATH', 'VIRTUAL_ENV', 'TMPDIR', 'TMP', 'TEMP']:
+    for key in ['PATH', 'HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'PYTHONPATH', 'VIRTUAL_ENV', 'TMPDIR', 'TMP', 'TEMP']:
         if key in os.environ:
             env[key] = os.environ[key]
     return env
