@@ -81,7 +81,7 @@ def _get_default_aws_endpoint_url() -> str | None:
     endpoint_url = os.getenv('AWS_S3_ENDPOINT')
     if not endpoint_url:
         return None
-    secure = os.getenv('AWS_S3_SECURE', 'true').lower() == 'true'
+    secure = os.getenv('AWS_S3_SECURE', 'true').lower() in ('true', '1')
     if secure:
         if not endpoint_url.startswith('https://'):
             endpoint_url = 'https://' + endpoint_url.removeprefix('http://')

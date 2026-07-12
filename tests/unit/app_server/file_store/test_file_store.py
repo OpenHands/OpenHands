@@ -11,6 +11,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 import botocore.exceptions
+import pytest
 from google.api_core.exceptions import NotFound
 
 from openhands.app_server.file_store.files import FileStore
@@ -337,3 +338,27 @@ class TestGoogleCloudFileStore(TestCase, _StorageTest):
 class TestS3FileStore(TestCase, _StorageTest):
     def setUp(self):
         self.store = S3FileStore(bucket_name='dear-liza')
+
+
+@pytest.mark.parametrize(
+    ('secure_env', 'expected'),
+    [(None, True), ('true', True), ('1', True), ('false', False), ('0', False)],
+)
+def test_s3_file_store_secure_env(secure_env, expected, monkeypatch):
+    if secure_env is None:
+        monkeypatch.delenv('AWS_S3_SECURE', raising=False)
+    else:
+        monkeypatch.setenv('AWS_S3_SECURE', secure_env)
+
+    client_kwargs = {}
+
+    def create_client(service, **kwargs):
+        assert service == 's3'
+        client_kwargs.update(kwargs)
+        return _MockS3Client()
+
+    monkeypatch.setattr('boto3.client', create_client)
+
+    S3FileStore(bucket_name='dear-liza').client
+
+    assert client_kwargs['use_ssl'] is expected

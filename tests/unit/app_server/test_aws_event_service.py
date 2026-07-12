@@ -299,6 +299,27 @@ class TestGetDefaultAwsEndpointUrl:
         result = aws_event_service._get_default_aws_endpoint_url()
         assert result == 'https://minio.example.com:9000'
 
+    @pytest.mark.parametrize(
+        ('secure_env', 'expected_scheme'),
+        [
+            (None, 'https://'),
+            ('true', 'https://'),
+            ('1', 'https://'),
+            ('false', 'http://'),
+            ('0', 'http://'),
+        ],
+    )
+    def test_secure_env_values(self, monkeypatch, secure_env, expected_scheme):
+        monkeypatch.setenv('AWS_S3_ENDPOINT', 'minio.example.com:9000')
+        if secure_env is None:
+            monkeypatch.delenv('AWS_S3_SECURE', raising=False)
+        else:
+            monkeypatch.setenv('AWS_S3_SECURE', secure_env)
+
+        result = aws_event_service._get_default_aws_endpoint_url()
+
+        assert result == f'{expected_scheme}minio.example.com:9000'
+
 
 class TestAwsEventServiceInjectorEndpointUrl:
     """Test cases for AwsEventServiceInjector endpoint_url field."""

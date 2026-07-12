@@ -43,7 +43,7 @@ class S3FileStore(FileStore):
         if self._client is None:
             access_key = os.getenv('AWS_ACCESS_KEY_ID')
             secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
-            secure = os.getenv('AWS_S3_SECURE', 'true').lower() == 'true'
+            secure = os.getenv('AWS_S3_SECURE', 'true').lower() in ('true', '1')
             endpoint = self._ensure_url_scheme(secure, os.getenv('AWS_S3_ENDPOINT'))
             self._client = boto3.client(
                 's3',

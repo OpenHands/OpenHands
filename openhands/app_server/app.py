@@ -71,8 +71,13 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
 app.include_router(v1_router.router)
 app.include_router(health_router)
 
+
+def _should_serve_frontend() -> bool:
+    return os.getenv('SERVE_FRONTEND', 'true').lower() in ('true', '1')
+
+
 # Middleware and static file setup (merged from listen.py)
-if os.getenv('SERVE_FRONTEND', 'true').lower() == 'true':
+if _should_serve_frontend():
     if os.path.isdir('./frontend/build'):
         app.mount(
             '/', SPAStaticFiles(directory='./frontend/build', html=True), name='dist'
