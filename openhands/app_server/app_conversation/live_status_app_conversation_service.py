@@ -997,6 +997,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     profile_llm,
                     managed_proxy_url=LITE_LLM_API_URL,
                     fallback_api_key=fallback_api_key,
+                    jules_api_key=getattr(user, 'jules_api_key', None),
                 )
                 response = await self.httpx_client.post(
                     f'{base_url}/{name}',
@@ -1240,16 +1241,35 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             provider_base_url=self.openhands_provider_base_url,
         )
 
-        return user.agent_settings.llm.model_copy(
-            update={
-                'model': model,
-                'base_url': base_url,
-                'api_key': user.agent_settings.llm.api_key,
-                'usage_id': 'agent',
-                # Force streaming on (the SDK LLM defaults stream=False).
-                'stream': True,
-            }
-        )
+        updates: dict[str, Any] = {
+            'model': model,
+            'base_url': base_url,
+            'api_key': user.agent_settings.llm.api_key,
+            'usage_id': 'agent',
+            # Force streaming on (the SDK LLM defaults stream=False).
+            'stream': True,
+        }
+
+        if model.startswith('jules/'):
+            if not base_url:
+                updates['base_url'] = 'https://jules.googleapis.com/v1'
+            jules_key = getattr(user, 'jules_api_key', None)
+            if jules_key:
+                updates['api_key'] = jules_key
+                api_key_val = jules_key.get_secret_value()
+            else:
+                api_key_val = (
+                    user.agent_settings.llm.api_key.get_secret_value()
+                    if hasattr(user.agent_settings.llm.api_key, 'get_secret_value')
+                    else str(user.agent_settings.llm.api_key)
+                    if user.agent_settings.llm.api_key
+                    else None
+                )
+            if api_key_val:
+                extra_headers = user.agent_settings.llm.extra_headers or {}
+                updates['extra_headers'] = {**extra_headers, 'x-goog-api-key': api_key_val}
+
+        return user.agent_settings.llm.model_copy(update=updates)
 
     async def _add_system_mcp_servers(
         self, mcp_servers: dict[str, MCPServer], conversation_id: UUID

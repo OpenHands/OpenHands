@@ -176,6 +176,8 @@ async def load_settings(
             llm_api_key_set=settings.llm_api_key_is_set,
             search_api_key_set=settings.search_api_key is not None
             and bool(settings.search_api_key),
+            jules_api_key_set=settings.jules_api_key is not None
+            and bool(settings.jules_api_key),
             provider_tokens_set=provider_tokens_set,
         )
 
@@ -194,6 +196,7 @@ async def load_settings(
         resp_llm.api_key = None
         settings_with_token_data.search_api_key = None
         settings_with_token_data.sandbox_api_key = None
+        settings_with_token_data.jules_api_key = None
 
         # Marketplace composition: Instance -> Org -> User (additive, name-keyed).
         # ``inherited`` (instance + org) is read-only; ``personal`` is the user's
@@ -293,6 +296,8 @@ async def store_settings(
         if existing_settings:
             if 'search_api_key' not in payload and settings.search_api_key is None:
                 settings.search_api_key = existing_settings.search_api_key
+            if 'jules_api_key' not in payload and settings.jules_api_key is None:
+                settings.jules_api_key = existing_settings.jules_api_key
             if settings.user_consents_to_analytics is None:
                 settings.user_consents_to_analytics = (
                     existing_settings.user_consents_to_analytics

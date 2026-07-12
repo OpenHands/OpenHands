@@ -59,7 +59,7 @@ CLARIFAI_MODELS = [
 # instead of ``openai/gpt-5.2``).  The backend uses these sets to assign
 # the canonical provider prefix *before* sending the list to the frontend.
 # ---------------------------------------------------------------------------
-VERIFIED_PROVIDERS: list[str] = list(_SDK_VERIFIED_MODELS.keys())
+VERIFIED_PROVIDERS: list[str] = list(_SDK_VERIFIED_MODELS.keys()) + ['jules']
 
 _BARE_OPENAI_MODELS: set[str] = set(_SDK_OPENAI)
 _BARE_ANTHROPIC_MODELS: set[str] = set(_SDK_ANTHROPIC)
@@ -173,6 +173,9 @@ def get_provider_api_base(model: str) -> str | None:
     Returns:
         The API base URL if found, None otherwise.
     """
+    if model.startswith('jules/'):
+        return 'https://jules.googleapis.com/v1'
+
     # First try get_api_base (handles OpenAI, Gemini with specific URL patterns)
     try:
         api_base = litellm.get_api_base(model, {})
@@ -289,13 +292,13 @@ def get_supported_llm_models(
 
     # Assign canonical provider prefixes to bare LiteLLM names, then dedupe.
     all_models = (
-        openhands_models + CLARIFAI_MODELS + [_assign_provider(m) for m in model_list]
+        openhands_models + CLARIFAI_MODELS + ['jules/gemini-3.5-flash'] + [_assign_provider(m) for m in model_list]
     )
     unique_models = sorted(set(all_models))
 
     return ModelsResponse(
         models=unique_models,
-        verified_models=_derive_verified_models(openhands_models),
+        verified_models=_derive_verified_models(openhands_models) + ['gemini-3.5-flash'],
         verified_providers=VERIFIED_PROVIDERS,
         default_model=DEFAULT_OPENHANDS_MODEL,
     )

@@ -165,3 +165,37 @@ class TestGetProviderApiBase:
         # May return None or an API base depending on litellm behavior
         # The function should not raise an exception
         assert result is None or isinstance(result, str)
+
+
+class TestJulesLLM:
+    """Tests for Jules provider and model support."""
+
+    def test_jules_model_returns_jules_api_base(self):
+        """Test that Jules models return the correct Jules API base URL."""
+        assert get_provider_api_base('jules/gemini-3.5-flash') == 'https://jules.googleapis.com/v1'
+
+    def test_jules_supported_llm_models(self):
+        """Test that Jules provider and models are returned in supported models."""
+        response = llm_utils.get_supported_llm_models()
+        assert 'jules' in response.verified_providers
+        assert 'gemini-3.5-flash' in response.verified_models
+        assert 'jules/gemini-3.5-flash' in response.models
+
+    def test_resolve_profile_llm_with_jules_key(self):
+        """Test that resolve_profile_llm correctly sets keys and headers for jules/ models."""
+        from openhands.app_server.settings.llm_profiles import resolve_profile_llm
+        from openhands.sdk.llm import LLM
+        from pydantic import SecretStr
+
+        profile_llm = LLM(model='jules/gemini-3.5-flash')
+        jules_key = SecretStr('jules-secret-123')
+
+        resolved = resolve_profile_llm(
+            profile_llm,
+            managed_proxy_url='https://proxy',
+            jules_api_key=jules_key,
+        )
+
+        assert resolved.api_key == jules_key
+        assert resolved.extra_headers is not None
+        assert resolved.extra_headers.get('x-goog-api-key') == 'jules-secret-123'

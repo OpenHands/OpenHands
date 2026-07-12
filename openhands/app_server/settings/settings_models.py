@@ -365,6 +365,7 @@ class Settings(BaseModel):
     sandbox_runtime_container_image: str | None = None
     disabled_skills: list[str] | None = None
     search_api_key: SecretStr | None = None
+    jules_api_key: SecretStr | None = None
     sandbox_api_key: SecretStr | None = None
     max_budget_per_task: float | None = None
     email: str | None = None
@@ -591,6 +592,18 @@ class Settings(BaseModel):
             return secret_value
         return str(api_key)
 
+    @field_serializer('jules_api_key')
+    def jules_api_key_serializer(self, api_key: SecretStr | None, info: SerializationInfo):
+        if api_key is None:
+            return None
+        secret_value = api_key.get_secret_value()
+        if not secret_value or not secret_value.strip():
+            return None
+        context = info.context
+        if context and context.get('expose_secrets', False):
+            return secret_value
+        return str(api_key)
+
     @field_serializer('agent_settings')
     def agent_settings_serializer(
         self,
@@ -740,6 +753,7 @@ class GETSettingsModel(Settings):
     )
     llm_api_key_set: bool
     search_api_key_set: bool = False
+    jules_api_key_set: bool = False
 
     model_config = ConfigDict(use_enum_values=True)
 

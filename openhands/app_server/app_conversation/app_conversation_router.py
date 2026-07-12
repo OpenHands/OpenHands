@@ -667,6 +667,7 @@ async def switch_conversation_profile(
         profile_llm,
         managed_proxy_url=LITE_LLM_API_URL,
         fallback_api_key=getattr(settings_llm, 'api_key', None),
+        jules_api_key=getattr(user_settings, 'jules_api_key', None),
     )
 
     # The agent-server's LLM registry is first-write-wins by ``usage_id``:

@@ -352,3 +352,34 @@ def test_store_settings_rejects_duplicate_personal_marketplace_names(test_client
     # Assert
     assert response.status_code == 400
     assert 'dup' in response.json()['error']
+
+
+def test_jules_api_key_settings(test_client):
+    """Test that jules_api_key can be saved, retrieved as a masked/set flag, and is preserved when omitted."""
+    # 1. Save settings with jules_api_key
+    response = test_client.post(
+        '/api/v1/settings',
+        json={'jules_api_key': 'my-super-secret-jules-key'},
+    )
+    assert response.status_code == 200
+
+    # 2. Retrieve settings and check that jules_api_key_set is True and jules_api_key is null/masked on GET
+    response = test_client.get('/api/v1/settings')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['jules_api_key_set'] is True
+    assert data.get('jules_api_key') is None
+
+    # 3. Post a different field and verify that jules_api_key is preserved (not deleted)
+    response = test_client.post(
+        '/api/v1/settings',
+        json={'language': 'ja'},
+    )
+    assert response.status_code == 200
+
+    # 4. Verify it's still set
+    response = test_client.get('/api/v1/settings')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['jules_api_key_set'] is True
+    assert data['language'] == 'ja'
