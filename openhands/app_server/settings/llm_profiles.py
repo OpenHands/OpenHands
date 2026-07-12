@@ -61,16 +61,23 @@ def resolve_profile_llm(
         }
     )
     if resolved.model and resolved.model.startswith('jules/'):
-        actual_key = jules_api_key if has_real_api_key(jules_api_key) else resolved.api_key
+        actual_key = (
+            jules_api_key if has_real_api_key(jules_api_key) else resolved.api_key
+        )
         if not has_real_api_key(actual_key) and has_real_api_key(fallback_api_key):
             actual_key = fallback_api_key
         if has_real_api_key(actual_key):
             resolved = resolved.model_copy(update={'api_key': actual_key})
-            api_key_val = actual_key.get_secret_value() if hasattr(actual_key, 'get_secret_value') else str(actual_key)
+            if isinstance(actual_key, SecretStr):
+                api_key_val = actual_key.get_secret_value()
+            else:
+                api_key_val = str(actual_key) if actual_key is not None else ''
             extra_headers = resolved.extra_headers or {}
             resolved.extra_headers = {**extra_headers, 'x-goog-api-key': api_key_val}
     else:
-        if not has_real_api_key(resolved.api_key) and has_real_api_key(fallback_api_key):
+        if not has_real_api_key(resolved.api_key) and has_real_api_key(
+            fallback_api_key
+        ):
             resolved = resolved.model_copy(update={'api_key': fallback_api_key})
     return resolved
 

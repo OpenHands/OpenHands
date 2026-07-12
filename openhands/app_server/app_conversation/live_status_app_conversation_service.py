@@ -1254,20 +1254,24 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             if not base_url:
                 updates['base_url'] = 'https://jules.googleapis.com/v1'
             jules_key = getattr(user, 'jules_api_key', None)
-            if jules_key:
+            if jules_key and isinstance(jules_key, SecretStr):
                 updates['api_key'] = jules_key
                 api_key_val = jules_key.get_secret_value()
+            elif jules_key:
+                updates['api_key'] = jules_key
+                api_key_val = str(jules_key)
             else:
-                api_key_val = (
-                    user.agent_settings.llm.api_key.get_secret_value()
-                    if hasattr(user.agent_settings.llm.api_key, 'get_secret_value')
-                    else str(user.agent_settings.llm.api_key)
-                    if user.agent_settings.llm.api_key
-                    else None
-                )
+                llm_key = user.agent_settings.llm.api_key
+                if isinstance(llm_key, SecretStr):
+                    api_key_val = llm_key.get_secret_value()
+                else:
+                    api_key_val = str(llm_key) if llm_key else None
             if api_key_val:
                 extra_headers = user.agent_settings.llm.extra_headers or {}
-                updates['extra_headers'] = {**extra_headers, 'x-goog-api-key': api_key_val}
+                updates['extra_headers'] = {
+                    **extra_headers,
+                    'x-goog-api-key': api_key_val,
+                }
 
         return user.agent_settings.llm.model_copy(update=updates)
 
