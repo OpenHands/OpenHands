@@ -122,6 +122,34 @@ Useful targeted verification for the isolated dev launcher:
 npm run test -- __tests__/api/agent-server-config.test.ts __tests__/scripts/dev-safe.test.ts
 ```
 
+### Mutation testing
+
+Stryker checks whether the Vitest suite detects deliberate changes to the
+first-party TypeScript source under `src/`. The default configuration excludes
+tests, declarations, generated files, fixtures, mocks, and development seeds.
+
+```sh
+# Full mutation run (expensive for the whole frontend)
+npm run test:mutation
+
+# Reuse results from the previous run
+npm run test:mutation:incremental
+
+# Mutate only production files changed from the local main branch
+npm run test:mutation:diff
+
+# Compare with another base ref, such as the latest remote main
+npm run test:mutation:diff -- origin/main
+```
+
+The HTML report is written to `reports/mutation.html`. Mutation scores are
+report-only initially; establish a stable baseline before adding a failing
+threshold.
+
+Stryker does not cover the small Python surface in this repository. Most Python
+files support CI or mock-LLM tests; `tools/canvas_ui_tool.py` is shipped runtime
+code and would need a Python test harness and Python-specific mutation tool.
+
 ## CSS isolation and host-app customization
 
 The standalone app and the exported provider/root wrapper now scope all bundled CSS under a dedicated shell element with the `data-agent-server-ui` attribute. That means Tailwind utilities, HeroUI component styles, xterm styles, and local CSS only apply inside the OpenHands UI subtree instead of leaking into a host app.
