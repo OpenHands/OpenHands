@@ -172,7 +172,10 @@ class TestJulesLLM:
 
     def test_jules_model_returns_jules_api_base(self):
         """Test that Jules models return the correct Jules API base URL."""
-        assert get_provider_api_base('jules/gemini-3.5-flash') == 'https://jules.googleapis.com/v1'
+        assert (
+            get_provider_api_base('jules/gemini-3.5-flash')
+            == 'https://jules.googleapis.com/v1'
+        )
 
     def test_jules_supported_llm_models(self):
         """Test that Jules provider and models are returned in supported models."""

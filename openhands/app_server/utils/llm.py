@@ -292,13 +292,17 @@ def get_supported_llm_models(
 
     # Assign canonical provider prefixes to bare LiteLLM names, then dedupe.
     all_models = (
-        openhands_models + CLARIFAI_MODELS + ['jules/gemini-3.5-flash'] + [_assign_provider(m) for m in model_list]
+        openhands_models
+        + CLARIFAI_MODELS
+        + ['jules/gemini-3.5-flash']
+        + [_assign_provider(m) for m in model_list]
     )
     unique_models = sorted(set(all_models))
 
     return ModelsResponse(
         models=unique_models,
-        verified_models=_derive_verified_models(openhands_models) + ['gemini-3.5-flash'],
+        verified_models=_derive_verified_models(openhands_models)
+        + ['gemini-3.5-flash'],
         verified_providers=VERIFIED_PROVIDERS,
         default_model=DEFAULT_OPENHANDS_MODEL,
     )

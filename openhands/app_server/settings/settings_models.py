@@ -593,7 +593,9 @@ class Settings(BaseModel):
         return str(api_key)
 
     @field_serializer('jules_api_key')
-    def jules_api_key_serializer(self, api_key: SecretStr | None, info: SerializationInfo):
+    def jules_api_key_serializer(
+        self, api_key: SecretStr | None, info: SerializationInfo
+    ):
         if api_key is None:
             return None
         secret_value = api_key.get_secret_value()
