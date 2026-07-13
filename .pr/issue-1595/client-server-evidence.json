@@ -1,0 +1,389 @@
+{
+  "purpose": "Issue #1595 sanitized client/server evidence. No raw tokens, cookies, account IDs, conversation IDs, or API keys are included.",
+  "currentMain": {
+    "label": "current-main",
+    "mode": "subscription",
+    "expected": "missing-scopes",
+    "generatedAt": "2026-07-13T09:42:47.488Z",
+    "commitSha": "ed02badba37c3ff7aadd8be3c7499fb71d84a5d8",
+    "serverInfo": {
+      "version": "1.35.0",
+      "sdk_version": "1.35.0",
+      "build_git_sha": "2eff609f9cd4ae31b219d36bd429f74f5348aeef"
+    },
+    "configuredLlm": {
+      "model": "gpt-5.5",
+      "auth_type": "subscription",
+      "subscription_vendor": "openai",
+      "base_url": "https://chatgpt.com/backend-api/codex",
+      "api_key": "<redacted>"
+    },
+    "subscriptionStatus": {
+      "vendor": "openai",
+      "connected": true,
+      "account_email": "<redacted-or-null>",
+      "expires_at_present": true
+    },
+    "browserOutcome": "missing-scopes-visible",
+    "pageAssertions": {
+      "missingScopeVisible": true,
+      "agentReplyVisible": false
+    },
+    "clientConversationRequest": {
+      "requestHasBaseUrl": false,
+      "llm": {
+        "model": "openai/gpt-5.5",
+        "auth_type": "subscription",
+        "subscription_vendor": "openai",
+        "api_version": null,
+        "aws_access_key_id": null,
+        "aws_secret_access_key": null,
+        "aws_session_token": null,
+        "aws_region_name": null,
+        "aws_profile_name": null,
+        "aws_role_name": null,
+        "aws_session_name": null,
+        "aws_bedrock_runtime_endpoint": null,
+        "openrouter_site_url": "https://docs.all-hands.dev/",
+        "openrouter_app_name": "OpenHands",
+        "num_retries": 5,
+        "retry_multiplier": 8,
+        "retry_min_wait": 8,
+        "retry_max_wait": 64,
+        "timeout": 300,
+        "max_message_chars": 30000,
+        "temperature": null,
+        "top_p": null,
+        "top_k": null,
+        "max_input_tokens": null,
+        "max_output_tokens": null,
+        "model_canonical_name": null,
+        "extra_headers": {
+          "originator": "codex_cli_rs",
+          "OpenAI-Beta": "responses=experimental",
+          "User-Agent": "openhands-sdk (Linux; x86_64)",
+          "chatgpt-account-id": "<redacted>"
+        },
+        "input_cost_per_token": null,
+        "output_cost_per_token": null,
+        "ollama_base_url": null,
+        "stream": true,
+        "drop_params": true,
+        "modify_params": true,
+        "disable_vision": null,
+        "disable_stop_word": false,
+        "caching_prompt": true,
+        "log_completions": false,
+        "log_completions_folder": "logs/completions",
+        "custom_tokenizer": null,
+        "native_tool_calling": true,
+        "force_string_serializer": null,
+        "inline_image_urls": null,
+        "reasoning_effort": "high",
+        "reasoning_summary": null,
+        "enable_encrypted_reasoning": true,
+        "prompt_cache_retention": "24h",
+        "extended_thinking_budget": 200000,
+        "seed": null,
+        "usage_id": "<redacted>",
+        "litellm_extra_body": {
+          "store": false
+        },
+        "is_subscription": true
+      },
+      "tools": [
+        {
+          "name": "terminal"
+        },
+        {
+          "name": "file_editor"
+        },
+        {
+          "name": "task_tracker"
+        },
+        {
+          "name": "browser_tool_set"
+        }
+      ],
+      "initial_message_run": true
+    },
+    "serverConversation": {
+      "execution_status": "error",
+      "current_model_id": null,
+      "workspace_kind": "LocalWorkspace"
+    },
+    "serverEventEvidence": [
+      {
+        "kind": "MessageEvent",
+        "source": "user",
+        "llm_role": "user",
+        "markers": [
+          "ISSUE1595_PR_SUCCESS"
+        ],
+        "excerpt": "{\"id\":\"<redacted>\",\"timestamp\":\"2026-07-13T09:42:16.658399\",\"source\":\"user\",\"llm_message\":{\"role\":\"user\",\"content\":[{\"cache_prompt\":false,\"type\":\"text\",\"text\":\"Reply exactly with ISSUE1595_PR_SUCCESS and do not use tools.\"}],\"thinking_blocks\":[]},\"activated_skills\":[],\"extended_content\":[],\"kind\":\"MessageEvent\"}"
+      },
+      {
+        "kind": "ConversationErrorEvent",
+        "source": "environment",
+        "llm_role": null,
+        "markers": [
+          "Missing scopes: api.responses.write"
+        ],
+        "excerpt": "\"2026-07-13T09:42:17.289599\",\"source\":\"environment\",\"code\":\"BaseLLMException\",\"detail\":\"{\\n  \\\"error\\\": {\\n    \\\"message\\\": \\\"You have insufficient permissions for this operation. Missing scopes: api.responses.write. Check that you have the correct role in your organization (Reader, Writer, Owner) and project (Member, Owner), and if you're using a restricted API key, that it has the necessary"
+      }
+    ]
+  },
+  "prHead": {
+    "label": "pr-head",
+    "mode": "subscription",
+    "expected": "success",
+    "generatedAt": "2026-07-13T09:31:44.215Z",
+    "commitSha": "6728c155dff20a480ae9408ab51609c4fa4920da",
+    "serverInfo": {
+      "version": "1.35.0",
+      "sdk_version": "1.35.0",
+      "build_git_sha": "2eff609f9cd4ae31b219d36bd429f74f5348aeef"
+    },
+    "configuredLlm": {
+      "model": "gpt-5.5",
+      "auth_type": "subscription",
+      "subscription_vendor": "openai",
+      "base_url": "https://chatgpt.com/backend-api/codex",
+      "api_key": "<redacted>"
+    },
+    "subscriptionStatus": {
+      "vendor": "openai",
+      "connected": true,
+      "account_email": "<redacted-or-null>",
+      "expires_at_present": true
+    },
+    "browserOutcome": "agent-reply-visible",
+    "pageAssertions": {
+      "missingScopeVisible": false,
+      "agentReplyVisible": true
+    },
+    "clientConversationRequest": {
+      "requestHasBaseUrl": true,
+      "llm": {
+        "model": "openai/gpt-5.5",
+        "auth_type": "subscription",
+        "subscription_vendor": "openai",
+        "base_url": "https://chatgpt.com/backend-api/codex",
+        "api_version": null,
+        "aws_access_key_id": null,
+        "aws_secret_access_key": null,
+        "aws_session_token": null,
+        "aws_region_name": null,
+        "aws_profile_name": null,
+        "aws_role_name": null,
+        "aws_session_name": null,
+        "aws_bedrock_runtime_endpoint": null,
+        "openrouter_site_url": "https://docs.all-hands.dev/",
+        "openrouter_app_name": "OpenHands",
+        "num_retries": 5,
+        "retry_multiplier": 8,
+        "retry_min_wait": 8,
+        "retry_max_wait": 64,
+        "timeout": 300,
+        "max_message_chars": 30000,
+        "temperature": null,
+        "top_p": null,
+        "top_k": null,
+        "max_input_tokens": null,
+        "max_output_tokens": null,
+        "model_canonical_name": null,
+        "extra_headers": {
+          "originator": "codex_cli_rs",
+          "OpenAI-Beta": "responses=experimental",
+          "User-Agent": "openhands-sdk (Linux; x86_64)",
+          "chatgpt-account-id": "<redacted>"
+        },
+        "input_cost_per_token": null,
+        "output_cost_per_token": null,
+        "ollama_base_url": null,
+        "stream": true,
+        "drop_params": true,
+        "modify_params": true,
+        "disable_vision": null,
+        "disable_stop_word": false,
+        "caching_prompt": true,
+        "log_completions": false,
+        "log_completions_folder": "logs/completions",
+        "custom_tokenizer": null,
+        "native_tool_calling": true,
+        "force_string_serializer": null,
+        "inline_image_urls": null,
+        "reasoning_effort": "high",
+        "reasoning_summary": null,
+        "enable_encrypted_reasoning": true,
+        "prompt_cache_retention": "24h",
+        "extended_thinking_budget": 200000,
+        "seed": null,
+        "usage_id": "<redacted>",
+        "litellm_extra_body": {
+          "store": false
+        },
+        "is_subscription": true
+      },
+      "tools": [
+        {
+          "name": "terminal"
+        },
+        {
+          "name": "file_editor"
+        },
+        {
+          "name": "task_tracker"
+        },
+        {
+          "name": "browser_tool_set"
+        }
+      ],
+      "initial_message_run": true
+    },
+    "serverConversation": {
+      "execution_status": "finished",
+      "current_model_id": null,
+      "workspace_kind": "LocalWorkspace"
+    },
+    "serverEventEvidence": [
+      {
+        "kind": "MessageEvent",
+        "source": "user",
+        "llm_role": "user",
+        "markers": [
+          "ISSUE1595_PR_SUCCESS"
+        ],
+        "excerpt": "{\"id\":\"<redacted>\",\"timestamp\":\"2026-07-13T09:31:41.514507\",\"source\":\"user\",\"llm_message\":{\"role\":\"user\",\"content\":[{\"cache_prompt\":false,\"type\":\"text\",\"text\":\"Reply exactly with ISSUE1595_PR_SUCCESS and do not use tools.\"}],\"thinking_blocks\":[]},\"activated_skills\":[],\"extended_content\":[],\"kind\":\"MessageEvent\"}"
+      },
+      {
+        "kind": "MessageEvent",
+        "source": "agent",
+        "llm_role": "assistant",
+        "markers": [
+          "ISSUE1595_PR_SUCCESS"
+        ],
+        "excerpt": "{\"id\":\"<redacted>\",\"timestamp\":\"2026-07-13T09:31:43.686187\",\"source\":\"agent\",\"llm_message\":{\"role\":\"assistant\",\"content\":[{\"cache_prompt\":false,\"type\":\"text\",\"text\":\"ISSUE1595_PR_SUCCESS\"}],\"thinking_blocks\":[]},\"llm_response_id\":\"<redacted>\",\"activated_skills\":[],\"extended_content\":[],\"kind\":\"MessageEvent\"}"
+      }
+    ]
+  },
+  "prHeadNonSubscription": {
+    "label": "pr-head-non-sub",
+    "mode": "api",
+    "expected": "success",
+    "generatedAt": "2026-07-13T09:38:39.064Z",
+    "commitSha": "6728c155dff20a480ae9408ab51609c4fa4920da",
+    "serverInfo": {
+      "version": "1.35.0",
+      "sdk_version": "1.35.0",
+      "build_git_sha": "2eff609f9cd4ae31b219d36bd429f74f5348aeef"
+    },
+    "configuredLlm": {
+      "model": "openhands/claude-sonnet-4-5-20250929",
+      "auth_type": "api_key",
+      "subscription_vendor": null,
+      "base_url": "https://llm-proxy.app.all-hands.dev",
+      "api_key": "<redacted>"
+    },
+    "subscriptionStatus": null,
+    "browserOutcome": "error: locator.waitFor: Timeout 180000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('agent-message').filter({ hasText: 'ISSUE1595_API_KEY_SUCCESS' }).first() to be visible\u001b[22m\n",
+    "pageAssertions": {
+      "missingScopeVisible": false,
+      "agentReplyVisible": false
+    },
+    "clientConversationRequest": {
+      "requestHasBaseUrl": false,
+      "llm": {
+        "model": "openhands/claude-sonnet-4-5-20250929",
+        "api_key": "<redacted>",
+        "api_version": null,
+        "aws_access_key_id": null,
+        "aws_secret_access_key": null,
+        "aws_session_token": null,
+        "aws_region_name": null,
+        "aws_profile_name": null,
+        "aws_role_name": null,
+        "aws_session_name": null,
+        "aws_bedrock_runtime_endpoint": null,
+        "openrouter_site_url": "https://docs.all-hands.dev/",
+        "openrouter_app_name": "OpenHands",
+        "num_retries": 5,
+        "retry_multiplier": 8,
+        "retry_min_wait": 8,
+        "retry_max_wait": 64,
+        "timeout": 300,
+        "max_message_chars": 30000,
+        "temperature": null,
+        "top_p": null,
+        "top_k": null,
+        "max_input_tokens": null,
+        "max_output_tokens": null,
+        "model_canonical_name": null,
+        "extra_headers": null,
+        "input_cost_per_token": null,
+        "output_cost_per_token": null,
+        "ollama_base_url": null,
+        "stream": true,
+        "drop_params": true,
+        "modify_params": true,
+        "disable_vision": null,
+        "disable_stop_word": false,
+        "caching_prompt": true,
+        "log_completions": false,
+        "log_completions_folder": "logs/completions",
+        "custom_tokenizer": null,
+        "native_tool_calling": true,
+        "force_string_serializer": null,
+        "inline_image_urls": null,
+        "reasoning_effort": "high",
+        "reasoning_summary": null,
+        "enable_encrypted_reasoning": true,
+        "prompt_cache_retention": "24h",
+        "extended_thinking_budget": 200000,
+        "seed": null,
+        "usage_id": "<redacted>",
+        "litellm_extra_body": {},
+        "is_subscription": false
+      },
+      "tools": [
+        {
+          "name": "terminal"
+        },
+        {
+          "name": "file_editor"
+        },
+        {
+          "name": "task_tracker"
+        },
+        {
+          "name": "browser_tool_set"
+        }
+      ],
+      "initial_message_run": true
+    },
+    "serverConversation": {
+      "execution_status": "error",
+      "current_model_id": null,
+      "workspace_kind": "LocalWorkspace"
+    },
+    "serverEventEvidence": [
+      {
+        "kind": "MessageEvent",
+        "source": "user",
+        "llm_role": "user",
+        "markers": [
+          "ISSUE1595_API_KEY_SUCCESS"
+        ],
+        "excerpt": "{\"id\":\"<redacted>\",\"timestamp\":\"2026-07-13T09:35:38.441084\",\"source\":\"user\",\"llm_message\":{\"role\":\"user\",\"content\":[{\"cache_prompt\":false,\"type\":\"text\",\"text\":\"Reply exactly with ISSUE1595_API_KEY_SUCCESS and do not use tools.\"}],\"thinking_blocks\":[]},\"activated_skills\":[],\"extended_content\":[],\"kind\":\"MessageEvent\"}"
+      },
+      {
+        "kind": "ConversationErrorEvent",
+        "source": "environment",
+        "llm_role": null,
+        "markers": [],
+        "excerpt": null
+      }
+    ],
+    "accessBlocker": "The available API-key profile reached the real agent-server/frontend flow, but the LLM proxy rejected the provided credential with HTTP 401 token_not_found_in_db. Live non-subscription completion is therefore not marked successful."
+  }
+}

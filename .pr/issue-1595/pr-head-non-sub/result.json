@@ -1,0 +1,628 @@
+{
+  "label": "pr-head-non-sub",
+  "mode": "api",
+  "expected": "success",
+  "commitSha": "6728c155dff20a480ae9408ab51609c4fa4920da",
+  "baseUrl": "http://127.0.0.1:19303",
+  "serverInfo": {
+    "uptime": 265,
+    "idle_time": 200,
+    "title": "OpenHands Agent Server",
+    "version": "1.35.0",
+    "sdk_version": "1.35.0",
+    "tools_version": "1.35.0",
+    "workspace_version": "1.35.0",
+    "build_git_sha": "2eff609f9cd4ae31b219d36bd429f74f5348aeef",
+    "build_git_ref": "refs/tags/v1.34.0",
+    "python_version": "3.13.13 (main, Apr  7 2026, 20:49:46) [Clang 22.1.1 ]",
+    "usable_tools": [
+      "file_editor",
+      "task_tool_set",
+      "task",
+      "task_tracker",
+      "terminal",
+      "workflow_tool_set",
+      "workflow",
+      "browser_tool_set",
+      "edit",
+      "list_directory",
+      "read_file",
+      "write_file",
+      "glob",
+      "grep",
+      "planning_file_editor"
+    ],
+    "runtime_idle_timeout_seconds": 1200,
+    "max_foreground_terminal_timeout_seconds": 1080,
+    "docs": "/docs",
+    "redoc": "/redoc"
+  },
+  "configuration": {
+    "model": "openhands/claude-sonnet-4-5-20250929",
+    "llm": {
+      "model": "openhands/claude-sonnet-4-5-20250929",
+      "api_key": "<redacted>",
+      "base_url": "https://llm-proxy.app.all-hands.dev",
+      "auth_type": "api_key"
+    },
+    "settings": {
+      "agent_settings": {
+        "schema_version": 4,
+        "agent_kind": "openhands",
+        "agent": "CodeActAgent",
+        "llm": {
+          "model": "openhands/claude-sonnet-4-5-20250929",
+          "api_key": "<redacted>",
+          "auth_type": "api_key",
+          "subscription_vendor": null,
+          "base_url": null,
+          "api_version": null,
+          "aws_access_key_id": null,
+          "aws_secret_access_key": null,
+          "aws_session_token": null,
+          "aws_region_name": null,
+          "aws_profile_name": null,
+          "aws_role_name": null,
+          "aws_session_name": null,
+          "aws_bedrock_runtime_endpoint": null,
+          "openrouter_site_url": "https://docs.all-hands.dev/",
+          "openrouter_app_name": "OpenHands",
+          "num_retries": 5,
+          "retry_multiplier": 8,
+          "retry_min_wait": 8,
+          "retry_max_wait": 64,
+          "timeout": 300,
+          "max_message_chars": 30000,
+          "temperature": null,
+          "top_p": null,
+          "top_k": null,
+          "max_input_tokens": null,
+          "max_output_tokens": null,
+          "model_canonical_name": null,
+          "extra_headers": null,
+          "input_cost_per_token": null,
+          "output_cost_per_token": null,
+          "ollama_base_url": null,
+          "stream": false,
+          "drop_params": true,
+          "modify_params": true,
+          "disable_vision": null,
+          "disable_stop_word": false,
+          "caching_prompt": true,
+          "log_completions": false,
+          "log_completions_folder": "logs/completions",
+          "custom_tokenizer": null,
+          "native_tool_calling": true,
+          "force_string_serializer": null,
+          "inline_image_urls": null,
+          "reasoning_effort": "high",
+          "reasoning_summary": null,
+          "enable_encrypted_reasoning": true,
+          "prompt_cache_retention": "24h",
+          "extended_thinking_budget": 200000,
+          "seed": null,
+          "usage_id": "<redacted>",
+          "litellm_extra_body": {},
+          "is_subscription": false
+        },
+        "tools": null,
+        "enable_sub_agents": false,
+        "enable_switch_llm_tool": true,
+        "tool_concurrency_limit": 1,
+        "mcp_config": {},
+        "agent_context": {
+          "skills": [],
+          "system_message_suffix": null,
+          "user_message_suffix": null,
+          "load_user_skills": false,
+          "load_public_skills": false,
+          "marketplace_path": "marketplaces/default.json",
+          "registered_marketplaces": [],
+          "load_project_skills": false,
+          "disabled_skills": [],
+          "secrets": null,
+          "current_datetime": "2026-07-13T09:31:37.847633Z"
+        },
+        "condenser": {
+          "enabled": false,
+          "max_size": 240,
+          "condenser_kind": "llm_summarizing",
+          "max_tokens": null,
+          "keep_first": 2,
+          "minimum_progress": 0.1,
+          "hard_context_reset_max_retries": 5,
+          "hard_context_reset_context_scaling": 0.8
+        },
+        "verification": {
+          "critic_enabled": false,
+          "critic_mode": "finish_and_message",
+          "enable_iterative_refinement": false,
+          "critic_threshold": 0.6,
+          "max_refinement_iterations": 3,
+          "critic_server_url": null,
+          "critic_model_name": null,
+          "critic_api_key": null
+        }
+      },
+      "conversation_settings": {
+        "schema_version": 1,
+        "max_iterations": 4,
+        "confirmation_mode": false,
+        "security_analyzer": "llm"
+      },
+      "llm_api_key_is_set": true,
+      "active_profile": "issue-1595-api-key",
+      "active_agent_profile_id": "<redacted>",
+      "misc_settings": {
+        "app_preferences": {
+          "user_consents_to_analytics": false
+        }
+      }
+    },
+    "profile": {
+      "name": "issue-1595-api-key",
+      "config": {
+        "model": "openhands/claude-sonnet-4-5-20250929",
+        "api_key": "<redacted>",
+        "auth_type": "api_key",
+        "subscription_vendor": null,
+        "base_url": null,
+        "api_version": null,
+        "aws_access_key_id": null,
+        "aws_secret_access_key": null,
+        "aws_session_token": null,
+        "aws_region_name": null,
+        "aws_profile_name": null,
+        "aws_role_name": null,
+        "aws_session_name": null,
+        "aws_bedrock_runtime_endpoint": null,
+        "openrouter_site_url": "https://docs.all-hands.dev/",
+        "openrouter_app_name": "OpenHands",
+        "num_retries": 5,
+        "retry_multiplier": 8,
+        "retry_min_wait": 8,
+        "retry_max_wait": 64,
+        "timeout": 300,
+        "max_message_chars": 30000,
+        "temperature": null,
+        "top_p": null,
+        "top_k": null,
+        "max_input_tokens": null,
+        "max_output_tokens": null,
+        "model_canonical_name": null,
+        "extra_headers": null,
+        "input_cost_per_token": null,
+        "output_cost_per_token": null,
+        "ollama_base_url": null,
+        "stream": false,
+        "drop_params": true,
+        "modify_params": true,
+        "disable_vision": null,
+        "disable_stop_word": false,
+        "caching_prompt": true,
+        "log_completions": false,
+        "log_completions_folder": "logs/completions",
+        "custom_tokenizer": null,
+        "native_tool_calling": true,
+        "force_string_serializer": null,
+        "inline_image_urls": null,
+        "reasoning_effort": "high",
+        "reasoning_summary": null,
+        "enable_encrypted_reasoning": true,
+        "prompt_cache_retention": "24h",
+        "extended_thinking_budget": 200000,
+        "seed": null,
+        "usage_id": "<redacted>",
+        "litellm_extra_body": {},
+        "is_subscription": false
+      },
+      "api_key_set": true
+    },
+    "agentProfile": {
+      "name": "default",
+      "profile": {
+        "schema_version": 1,
+        "id": "<redacted>",
+        "name": "default",
+        "revision": 2,
+        "mcp_server_refs": null,
+        "agent_kind": "openhands",
+        "llm_profile_ref": "issue-1595-api-key",
+        "agent": "CodeActAgent",
+        "tools": null,
+        "system_message_suffix": null,
+        "disabled_skills": [],
+        "condenser": {
+          "enabled": true,
+          "max_size": 240,
+          "condenser_kind": "llm_summarizing",
+          "max_tokens": null,
+          "keep_first": 2,
+          "minimum_progress": 0.1,
+          "hard_context_reset_max_retries": 5,
+          "hard_context_reset_context_scaling": 0.8
+        },
+        "verification": {
+          "critic_enabled": false,
+          "critic_mode": "finish_and_message",
+          "enable_iterative_refinement": false,
+          "critic_threshold": 0.6,
+          "max_refinement_iterations": 3,
+          "critic_server_url": null,
+          "critic_model_name": null
+        },
+        "enable_sub_agents": false,
+        "enable_switch_llm_tool": true,
+        "tool_concurrency_limit": 1
+      }
+    }
+  },
+  "browser": {
+    "outcome": "error: locator.waitFor: Timeout 180000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('agent-message').filter({ hasText: 'ISSUE1595_API_KEY_SUCCESS' }).first() to be visible\u001b[22m\n",
+    "conversationId": "<redacted>",
+    "capturedConversationPayload": {
+      "agent_settings": {
+        "agent_kind": "openhands",
+        "agent": "CodeActAgent",
+        "llm": {
+          "model": "openhands/claude-sonnet-4-5-20250929",
+          "api_key": "<redacted>",
+          "api_version": null,
+          "aws_access_key_id": null,
+          "aws_secret_access_key": null,
+          "aws_session_token": null,
+          "aws_region_name": null,
+          "aws_profile_name": null,
+          "aws_role_name": null,
+          "aws_session_name": null,
+          "aws_bedrock_runtime_endpoint": null,
+          "openrouter_site_url": "https://docs.all-hands.dev/",
+          "openrouter_app_name": "OpenHands",
+          "num_retries": 5,
+          "retry_multiplier": 8,
+          "retry_min_wait": 8,
+          "retry_max_wait": 64,
+          "timeout": 300,
+          "max_message_chars": 30000,
+          "temperature": null,
+          "top_p": null,
+          "top_k": null,
+          "max_input_tokens": null,
+          "max_output_tokens": null,
+          "model_canonical_name": null,
+          "extra_headers": null,
+          "input_cost_per_token": null,
+          "output_cost_per_token": null,
+          "ollama_base_url": null,
+          "stream": true,
+          "drop_params": true,
+          "modify_params": true,
+          "disable_vision": null,
+          "disable_stop_word": false,
+          "caching_prompt": true,
+          "log_completions": false,
+          "log_completions_folder": "logs/completions",
+          "custom_tokenizer": null,
+          "native_tool_calling": true,
+          "force_string_serializer": null,
+          "inline_image_urls": null,
+          "reasoning_effort": "high",
+          "reasoning_summary": null,
+          "enable_encrypted_reasoning": true,
+          "prompt_cache_retention": "24h",
+          "extended_thinking_budget": 200000,
+          "seed": null,
+          "usage_id": "<redacted>",
+          "litellm_extra_body": {},
+          "is_subscription": false
+        },
+        "tools": [
+          {
+            "name": "terminal"
+          },
+          {
+            "name": "file_editor"
+          },
+          {
+            "name": "task_tracker"
+          },
+          {
+            "name": "browser_tool_set"
+          }
+        ],
+        "runtime_services_suffix_present": true
+      },
+      "workspace": {
+        "kind": "LocalWorkspace",
+        "working_dir": "<redacted>"
+      },
+      "confirmation_policy": {
+        "kind": "NeverConfirm"
+      },
+      "max_iterations": 4,
+      "stuck_detection": true,
+      "worktree": true,
+      "secrets_encrypted": true,
+      "initial_message_run": true,
+      "secret_names": []
+    },
+    "clientRequests": [
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "POST",
+        "path": "/api/conversations",
+        "postDataSummary": {
+          "agent_settings": {
+            "agent_kind": "openhands",
+            "agent": "CodeActAgent",
+            "llm": {
+              "model": "openhands/claude-sonnet-4-5-20250929",
+              "api_key": "<redacted>",
+              "api_version": null,
+              "aws_access_key_id": null,
+              "aws_secret_access_key": null,
+              "aws_session_token": null,
+              "aws_region_name": null,
+              "aws_profile_name": null,
+              "aws_role_name": null,
+              "aws_session_name": null,
+              "aws_bedrock_runtime_endpoint": null,
+              "openrouter_site_url": "https://docs.all-hands.dev/",
+              "openrouter_app_name": "OpenHands",
+              "num_retries": 5,
+              "retry_multiplier": 8,
+              "retry_min_wait": 8,
+              "retry_max_wait": 64,
+              "timeout": 300,
+              "max_message_chars": 30000,
+              "temperature": null,
+              "top_p": null,
+              "top_k": null,
+              "max_input_tokens": null,
+              "max_output_tokens": null,
+              "model_canonical_name": null,
+              "extra_headers": null,
+              "input_cost_per_token": null,
+              "output_cost_per_token": null,
+              "ollama_base_url": null,
+              "stream": true,
+              "drop_params": true,
+              "modify_params": true,
+              "disable_vision": null,
+              "disable_stop_word": false,
+              "caching_prompt": true,
+              "log_completions": false,
+              "log_completions_folder": "logs/completions",
+              "custom_tokenizer": null,
+              "native_tool_calling": true,
+              "force_string_serializer": null,
+              "inline_image_urls": null,
+              "reasoning_effort": "high",
+              "reasoning_summary": null,
+              "enable_encrypted_reasoning": true,
+              "prompt_cache_retention": "24h",
+              "extended_thinking_budget": 200000,
+              "seed": null,
+              "usage_id": "<redacted>",
+              "litellm_extra_body": {},
+              "is_subscription": false
+            },
+            "tools": [
+              {
+                "name": "terminal"
+              },
+              {
+                "name": "file_editor"
+              },
+              {
+                "name": "task_tracker"
+              },
+              {
+                "name": "browser_tool_set"
+              }
+            ],
+            "runtime_services_suffix_present": true
+          },
+          "workspace": {
+            "kind": "LocalWorkspace",
+            "working_dir": "<redacted>"
+          },
+          "confirmation_policy": {
+            "kind": "NeverConfirm"
+          },
+          "max_iterations": 4,
+          "stuck_detection": true,
+          "worktree": true,
+          "secrets_encrypted": true,
+          "initial_message_run": true,
+          "secret_names": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/conversations"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/conversations"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/conversations"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/conversations"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/conversations"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/conversations"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      }
+    ],
+    "consoleMessages": [
+      {
+        "type": "log",
+        "text": "💿 Hey developer 👋. You can provide a way better UX than this when your app is loading JS modules and/or running `clientLoader` functions. Check out https://reactrouter.com/start/framework/route-module#hydratefallback for more information."
+      }
+    ],
+    "pageErrors": [],
+    "pageText": "Search commands⌘KNew ChatCustomizeAutomateConversationsReply exactly with ISSUE1595_API_KEY_SUCCESS an...2mclaude-sonnet-4-5-20250929Reply exactly with ISSUE1595_API_KEY_SUCCESS an...6mclaude-sonnet-4-5-20250929Reply exactly with ISSUE1595_PR_SUCCESS and do ...6mgpt-5.5Server StoppedReply exactly with ISSUE1595_API_KEY_SUCCESS an...Reply exactly with ISSUE1595_API_KEY_SUCCESS and do not use tools.Error code: 401 - {'error': {'message': 'Authentication Error, Invalid proxy server token passed. API Key = <redacted>, Key Hash (Token) =<hex-redacted>. Unable to find token in cache or `LiteLLM_VerificationTokenTable`', 'type': 'token_not_found_in_db', 'param': 'key', 'code': '401'}}View Moreissue-1595-api-keyErrorFilesTerminalBrowserDiffFilesRichPlainSelect a file to view its contentswindow.__reactRouterContext.streamController.enqueue(\"[{\\\"_1\\\":2,\\\"_3\\\":-5,\\\"_4\\\":-5},\\\"loaderData\\\",{},\\\"actionData\\\",\\\"errors\\\"]\\n\");window.__reactRouterContext.streamController.close();pr-head-non-sub 6728c155 | api-key non-subscriptionpr-head-non-sub 6728c155 | api-key non-subscriptionpr-head-non-sub 6728c155 | api-key non-subscription | error: locator.waitFor: Timeout 180000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTest",
+    "pageAssertions": {
+      "missingScopeVisible": false,
+      "agentReplyVisible": false
+    },
+    "apiConversation": {
+      "conversation": {
+        "execution_status": "error",
+        "current_model_id": null,
+        "workspace_kind": "LocalWorkspace"
+      },
+      "eventEvidence": [
+        {
+          "kind": "ConversationStateUpdateEvent",
+          "source": "environment",
+          "markers": [],
+          "excerpt": null
+        },
+        {
+          "kind": "SystemPromptEvent",
+          "source": "agent",
+          "markers": [],
+          "excerpt": null
+        },
+        {
+          "kind": "MessageEvent",
+          "source": "user",
+          "llm_role": "user",
+          "markers": [
+            "ISSUE1595_API_KEY_SUCCESS"
+          ],
+          "excerpt": "{\"id\":\"<redacted>\",\"timestamp\":\"2026-07-13T09:35:38.441084\",\"source\":\"user\",\"llm_message\":{\"role\":\"user\",\"content\":[{\"cache_prompt\":false,\"type\":\"text\",\"text\":\"Reply exactly with ISSUE1595_API_KEY_SUCCESS and do not use tools.\"}],\"thinking_blocks\":[]},\"activated_skills\":[],\"extended_content\":[],\"kind\":\"MessageEvent\"}"
+        },
+        {
+          "kind": "ConversationStateUpdateEvent",
+          "source": "environment",
+          "markers": [],
+          "excerpt": null
+        },
+        {
+          "kind": "ConversationStateUpdateEvent",
+          "source": "environment",
+          "markers": [],
+          "excerpt": null
+        },
+        {
+          "kind": "ConversationStateUpdateEvent",
+          "source": "environment",
+          "markers": [],
+          "excerpt": null
+        },
+        {
+          "kind": "ConversationErrorEvent",
+          "source": "environment",
+          "markers": [],
+          "excerpt": null
+        }
+      ]
+    },
+    "videos": [
+      "source recording omitted from committed evidence; see .pr/issue-1595/current-main-then-pr.gif"
+    ]
+  },
+  "generatedAt": "2026-07-13T09:38:39.064Z"
+}

@@ -1,0 +1,595 @@
+{
+  "label": "current-main",
+  "mode": "subscription",
+  "expected": "missing-scopes",
+  "commitSha": "ed02badba37c3ff7aadd8be3c7499fb71d84a5d8",
+  "baseUrl": "http://127.0.0.1:19403",
+  "serverInfo": {
+    "uptime": 148,
+    "idle_time": 30,
+    "title": "OpenHands Agent Server",
+    "version": "1.35.0",
+    "sdk_version": "1.35.0",
+    "tools_version": "1.35.0",
+    "workspace_version": "1.35.0",
+    "build_git_sha": "2eff609f9cd4ae31b219d36bd429f74f5348aeef",
+    "build_git_ref": "refs/tags/v1.34.0",
+    "python_version": "3.13.13 (main, Apr  7 2026, 20:49:46) [Clang 22.1.1 ]",
+    "usable_tools": [
+      "file_editor",
+      "task_tool_set",
+      "task",
+      "task_tracker",
+      "terminal",
+      "workflow_tool_set",
+      "workflow",
+      "browser_tool_set",
+      "edit",
+      "list_directory",
+      "read_file",
+      "write_file",
+      "glob",
+      "grep",
+      "planning_file_editor"
+    ],
+    "runtime_idle_timeout_seconds": 1200,
+    "max_foreground_terminal_timeout_seconds": 1080,
+    "docs": "/docs",
+    "redoc": "/redoc"
+  },
+  "configuration": {
+    "model": "gpt-5.5",
+    "llm": {
+      "model": "gpt-5.5",
+      "api_key": "<redacted>",
+      "base_url": "https://chatgpt.com/backend-api/codex",
+      "auth_type": "subscription",
+      "subscription_vendor": "openai"
+    },
+    "status": {
+      "vendor": "openai",
+      "connected": true,
+      "account_email": null,
+      "expires_at": 1784786011000
+    },
+    "settings": {
+      "agent_settings": {
+        "schema_version": 4,
+        "agent_kind": "openhands",
+        "agent": "CodeActAgent",
+        "llm": {
+          "model": "openai/gpt-5.5",
+          "api_key": null,
+          "auth_type": "subscription",
+          "subscription_vendor": "openai",
+          "base_url": "https://chatgpt.com/backend-api/codex",
+          "api_version": null,
+          "aws_access_key_id": null,
+          "aws_secret_access_key": null,
+          "aws_session_token": null,
+          "aws_region_name": null,
+          "aws_profile_name": null,
+          "aws_role_name": null,
+          "aws_session_name": null,
+          "aws_bedrock_runtime_endpoint": null,
+          "openrouter_site_url": "https://docs.all-hands.dev/",
+          "openrouter_app_name": "OpenHands",
+          "num_retries": 5,
+          "retry_multiplier": 8,
+          "retry_min_wait": 8,
+          "retry_max_wait": 64,
+          "timeout": 300,
+          "max_message_chars": 30000,
+          "temperature": null,
+          "top_p": null,
+          "top_k": null,
+          "max_input_tokens": null,
+          "max_output_tokens": null,
+          "model_canonical_name": null,
+          "extra_headers": {
+            "originator": "codex_cli_rs",
+            "OpenAI-Beta": "responses=experimental",
+            "User-Agent": "openhands-sdk (Linux; x86_64)",
+            "chatgpt-account-id": "<redacted>"
+          },
+          "input_cost_per_token": null,
+          "output_cost_per_token": null,
+          "ollama_base_url": null,
+          "stream": true,
+          "drop_params": true,
+          "modify_params": true,
+          "disable_vision": null,
+          "disable_stop_word": false,
+          "caching_prompt": true,
+          "log_completions": false,
+          "log_completions_folder": "logs/completions",
+          "custom_tokenizer": null,
+          "native_tool_calling": true,
+          "force_string_serializer": null,
+          "inline_image_urls": null,
+          "reasoning_effort": "high",
+          "reasoning_summary": null,
+          "enable_encrypted_reasoning": true,
+          "prompt_cache_retention": "24h",
+          "extended_thinking_budget": 200000,
+          "seed": null,
+          "usage_id": "<redacted>",
+          "litellm_extra_body": {
+            "store": false
+          },
+          "is_subscription": true
+        },
+        "tools": null,
+        "enable_sub_agents": false,
+        "enable_switch_llm_tool": true,
+        "tool_concurrency_limit": 1,
+        "mcp_config": {},
+        "agent_context": {
+          "skills": [],
+          "system_message_suffix": null,
+          "user_message_suffix": null,
+          "load_user_skills": false,
+          "load_public_skills": false,
+          "marketplace_path": "marketplaces/default.json",
+          "registered_marketplaces": [],
+          "load_project_skills": false,
+          "disabled_skills": [],
+          "secrets": null,
+          "current_datetime": "2026-07-13T09:41:38.740302Z"
+        },
+        "condenser": {
+          "enabled": false,
+          "max_size": 240,
+          "condenser_kind": "llm_summarizing",
+          "max_tokens": null,
+          "keep_first": 2,
+          "minimum_progress": 0.1,
+          "hard_context_reset_max_retries": 5,
+          "hard_context_reset_context_scaling": 0.8
+        },
+        "verification": {
+          "critic_enabled": false,
+          "critic_mode": "finish_and_message",
+          "enable_iterative_refinement": false,
+          "critic_threshold": 0.6,
+          "max_refinement_iterations": 3,
+          "critic_server_url": null,
+          "critic_model_name": null,
+          "critic_api_key": null
+        }
+      },
+      "conversation_settings": {
+        "schema_version": 1,
+        "max_iterations": 4,
+        "confirmation_mode": false,
+        "security_analyzer": "llm"
+      },
+      "llm_api_key_is_set": false,
+      "active_profile": "issue-1595-subscription",
+      "active_agent_profile_id": "<redacted>",
+      "misc_settings": {
+        "app_preferences": {
+          "user_consents_to_analytics": false
+        }
+      }
+    },
+    "profile": {
+      "name": "issue-1595-subscription",
+      "config": {
+        "model": "openai/gpt-5.5",
+        "api_key": null,
+        "auth_type": "subscription",
+        "subscription_vendor": "openai",
+        "base_url": "https://chatgpt.com/backend-api/codex",
+        "api_version": null,
+        "aws_access_key_id": null,
+        "aws_secret_access_key": null,
+        "aws_session_token": null,
+        "aws_region_name": null,
+        "aws_profile_name": null,
+        "aws_role_name": null,
+        "aws_session_name": null,
+        "aws_bedrock_runtime_endpoint": null,
+        "openrouter_site_url": "https://docs.all-hands.dev/",
+        "openrouter_app_name": "OpenHands",
+        "num_retries": 5,
+        "retry_multiplier": 8,
+        "retry_min_wait": 8,
+        "retry_max_wait": 64,
+        "timeout": 300,
+        "max_message_chars": 30000,
+        "temperature": null,
+        "top_p": null,
+        "top_k": null,
+        "max_input_tokens": null,
+        "max_output_tokens": null,
+        "model_canonical_name": null,
+        "extra_headers": {
+          "originator": "codex_cli_rs",
+          "OpenAI-Beta": "responses=experimental",
+          "User-Agent": "openhands-sdk (Linux; x86_64)",
+          "chatgpt-account-id": "<redacted>"
+        },
+        "input_cost_per_token": null,
+        "output_cost_per_token": null,
+        "ollama_base_url": null,
+        "stream": true,
+        "drop_params": true,
+        "modify_params": true,
+        "disable_vision": null,
+        "disable_stop_word": false,
+        "caching_prompt": true,
+        "log_completions": false,
+        "log_completions_folder": "logs/completions",
+        "custom_tokenizer": null,
+        "native_tool_calling": true,
+        "force_string_serializer": null,
+        "inline_image_urls": null,
+        "reasoning_effort": "high",
+        "reasoning_summary": null,
+        "enable_encrypted_reasoning": true,
+        "prompt_cache_retention": "24h",
+        "extended_thinking_budget": 200000,
+        "seed": null,
+        "usage_id": "<redacted>",
+        "litellm_extra_body": {
+          "store": false
+        },
+        "is_subscription": true
+      },
+      "api_key_set": false
+    },
+    "agentProfile": {
+      "name": "default",
+      "profile": {
+        "schema_version": 1,
+        "id": "<redacted>",
+        "name": "default",
+        "revision": 1,
+        "mcp_server_refs": null,
+        "agent_kind": "openhands",
+        "llm_profile_ref": "issue-1595-subscription",
+        "agent": "CodeActAgent",
+        "tools": null,
+        "system_message_suffix": null,
+        "disabled_skills": [],
+        "condenser": {
+          "enabled": true,
+          "max_size": 240,
+          "condenser_kind": "llm_summarizing",
+          "max_tokens": null,
+          "keep_first": 2,
+          "minimum_progress": 0.1,
+          "hard_context_reset_max_retries": 5,
+          "hard_context_reset_context_scaling": 0.8
+        },
+        "verification": {
+          "critic_enabled": false,
+          "critic_mode": "finish_and_message",
+          "enable_iterative_refinement": false,
+          "critic_threshold": 0.6,
+          "max_refinement_iterations": 3,
+          "critic_server_url": null,
+          "critic_model_name": null
+        },
+        "enable_sub_agents": false,
+        "enable_switch_llm_tool": true,
+        "tool_concurrency_limit": 1
+      }
+    }
+  },
+  "browser": {
+    "outcome": "missing-scopes-visible",
+    "conversationId": "<redacted>",
+    "capturedConversationPayload": {
+      "agent_settings": {
+        "agent_kind": "openhands",
+        "agent": "CodeActAgent",
+        "llm": {
+          "model": "openai/gpt-5.5",
+          "auth_type": "subscription",
+          "subscription_vendor": "openai",
+          "api_version": null,
+          "aws_access_key_id": null,
+          "aws_secret_access_key": null,
+          "aws_session_token": null,
+          "aws_region_name": null,
+          "aws_profile_name": null,
+          "aws_role_name": null,
+          "aws_session_name": null,
+          "aws_bedrock_runtime_endpoint": null,
+          "openrouter_site_url": "https://docs.all-hands.dev/",
+          "openrouter_app_name": "OpenHands",
+          "num_retries": 5,
+          "retry_multiplier": 8,
+          "retry_min_wait": 8,
+          "retry_max_wait": 64,
+          "timeout": 300,
+          "max_message_chars": 30000,
+          "temperature": null,
+          "top_p": null,
+          "top_k": null,
+          "max_input_tokens": null,
+          "max_output_tokens": null,
+          "model_canonical_name": null,
+          "extra_headers": {
+            "originator": "codex_cli_rs",
+            "OpenAI-Beta": "responses=experimental",
+            "User-Agent": "openhands-sdk (Linux; x86_64)",
+            "chatgpt-account-id": "<redacted>"
+          },
+          "input_cost_per_token": null,
+          "output_cost_per_token": null,
+          "ollama_base_url": null,
+          "stream": true,
+          "drop_params": true,
+          "modify_params": true,
+          "disable_vision": null,
+          "disable_stop_word": false,
+          "caching_prompt": true,
+          "log_completions": false,
+          "log_completions_folder": "logs/completions",
+          "custom_tokenizer": null,
+          "native_tool_calling": true,
+          "force_string_serializer": null,
+          "inline_image_urls": null,
+          "reasoning_effort": "high",
+          "reasoning_summary": null,
+          "enable_encrypted_reasoning": true,
+          "prompt_cache_retention": "24h",
+          "extended_thinking_budget": 200000,
+          "seed": null,
+          "usage_id": "<redacted>",
+          "litellm_extra_body": {
+            "store": false
+          },
+          "is_subscription": true
+        },
+        "tools": [
+          {
+            "name": "terminal"
+          },
+          {
+            "name": "file_editor"
+          },
+          {
+            "name": "task_tracker"
+          },
+          {
+            "name": "browser_tool_set"
+          }
+        ],
+        "runtime_services_suffix_present": true
+      },
+      "workspace": {
+        "kind": "LocalWorkspace",
+        "working_dir": "<redacted>"
+      },
+      "confirmation_policy": {
+        "kind": "NeverConfirm"
+      },
+      "max_iterations": 4,
+      "stuck_detection": true,
+      "worktree": true,
+      "secrets_encrypted": true,
+      "initial_message_run": true,
+      "secret_names": []
+    },
+    "clientRequests": [
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/llm/subscription/openai/status"
+      },
+      {
+        "method": "POST",
+        "path": "/api/conversations",
+        "postDataSummary": {
+          "agent_settings": {
+            "agent_kind": "openhands",
+            "agent": "CodeActAgent",
+            "llm": {
+              "model": "openai/gpt-5.5",
+              "auth_type": "subscription",
+              "subscription_vendor": "openai",
+              "api_version": null,
+              "aws_access_key_id": null,
+              "aws_secret_access_key": null,
+              "aws_session_token": null,
+              "aws_region_name": null,
+              "aws_profile_name": null,
+              "aws_role_name": null,
+              "aws_session_name": null,
+              "aws_bedrock_runtime_endpoint": null,
+              "openrouter_site_url": "https://docs.all-hands.dev/",
+              "openrouter_app_name": "OpenHands",
+              "num_retries": 5,
+              "retry_multiplier": 8,
+              "retry_min_wait": 8,
+              "retry_max_wait": 64,
+              "timeout": 300,
+              "max_message_chars": 30000,
+              "temperature": null,
+              "top_p": null,
+              "top_k": null,
+              "max_input_tokens": null,
+              "max_output_tokens": null,
+              "model_canonical_name": null,
+              "extra_headers": {
+                "originator": "codex_cli_rs",
+                "OpenAI-Beta": "responses=experimental",
+                "User-Agent": "openhands-sdk (Linux; x86_64)",
+                "chatgpt-account-id": "<redacted>"
+              },
+              "input_cost_per_token": null,
+              "output_cost_per_token": null,
+              "ollama_base_url": null,
+              "stream": true,
+              "drop_params": true,
+              "modify_params": true,
+              "disable_vision": null,
+              "disable_stop_word": false,
+              "caching_prompt": true,
+              "log_completions": false,
+              "log_completions_folder": "logs/completions",
+              "custom_tokenizer": null,
+              "native_tool_calling": true,
+              "force_string_serializer": null,
+              "inline_image_urls": null,
+              "reasoning_effort": "high",
+              "reasoning_summary": null,
+              "enable_encrypted_reasoning": true,
+              "prompt_cache_retention": "24h",
+              "extended_thinking_budget": 200000,
+              "seed": null,
+              "usage_id": "<redacted>",
+              "litellm_extra_body": {
+                "store": false
+              },
+              "is_subscription": true
+            },
+            "tools": [
+              {
+                "name": "terminal"
+              },
+              {
+                "name": "file_editor"
+              },
+              {
+                "name": "task_tracker"
+              },
+              {
+                "name": "browser_tool_set"
+              }
+            ],
+            "runtime_services_suffix_present": true
+          },
+          "workspace": {
+            "kind": "LocalWorkspace",
+            "working_dir": "<redacted>"
+          },
+          "confirmation_policy": {
+            "kind": "NeverConfirm"
+          },
+          "max_iterations": 4,
+          "stuck_detection": true,
+          "worktree": true,
+          "secrets_encrypted": true,
+          "initial_message_run": true,
+          "secret_names": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/conversations"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/conversations"
+      }
+    ],
+    "consoleMessages": [
+      {
+        "type": "log",
+        "text": "💿 Hey developer 👋. You can provide a way better UX than this when your app is loading JS modules and/or running `clientLoader` functions. Check out https://reactrouter.com/start/framework/route-module#hydratefallback for more information."
+      }
+    ],
+    "pageErrors": [],
+    "pageText": "Search commands⌘KNew ChatCustomizeAutomateConversationsReply exactly with ISSUE1595_PR_SUCCESS and do ...29sgpt-5.5Reply exactly with ISSUE1595_PR_SUCCESS and do ...1mgpt-5.5Server StoppedReply exactly with ISSUE1595_PR_SUCCESS and do ...Reply exactly with ISSUE1595_PR_SUCCESS and do not use tools.{\n  \"error\": {\n    \"message\": \"You have insufficient permissions for this operation. Missing scopes: api.responses.write. Check that you have the correct role in your organization (Reader, Writer, Owner) and project (Member, Owner), and if you're using a restricted API key, that it has the necessary scopes.\",\n    \"type\": \"invalid_request_error\",\n    \"param\": null,\n    \"code\": null\n  }\n}View Moreissue-1595-subscri…ErrorOpenHands/agent-canvasqa-main-issue-1595-ed02badPullPushPull RequestFilesTerminalBrowserDiffFilesRichPlainSelect a file to view its contentswindow.__reactRouterContext.streamController.enqueue(\"[{\\\"_1\\\":2,\\\"_3\\\":-5,\\\"_4\\\":-5},\\\"loaderData\\\",{},\\\"actionData\\\",\\\"errors\\\"]\\n\");window.__reactRouterContext.streamController.close();current-main ed02badb | subscription missing-scopescurrent-main ed02badb | subscription missing-scopescurrent-main ed02badb | subscription missing-scopes | missing-scopes-visible",
+    "pageAssertions": {
+      "missingScopeVisible": true,
+      "agentReplyVisible": false
+    },
+    "apiConversation": {
+      "conversation": {
+        "execution_status": "error",
+        "current_model_id": null,
+        "workspace_kind": "LocalWorkspace"
+      },
+      "eventEvidence": [
+        {
+          "kind": "ConversationStateUpdateEvent",
+          "source": "environment",
+          "markers": [],
+          "excerpt": null
+        },
+        {
+          "kind": "SystemPromptEvent",
+          "source": "agent",
+          "markers": [],
+          "excerpt": null
+        },
+        {
+          "kind": "MessageEvent",
+          "source": "user",
+          "llm_role": "user",
+          "markers": [
+            "ISSUE1595_PR_SUCCESS"
+          ],
+          "excerpt": "{\"id\":\"<redacted>\",\"timestamp\":\"2026-07-13T09:42:16.658399\",\"source\":\"user\",\"llm_message\":{\"role\":\"user\",\"content\":[{\"cache_prompt\":false,\"type\":\"text\",\"text\":\"Reply exactly with ISSUE1595_PR_SUCCESS and do not use tools.\"}],\"thinking_blocks\":[]},\"activated_skills\":[],\"extended_content\":[],\"kind\":\"MessageEvent\"}"
+        },
+        {
+          "kind": "ConversationStateUpdateEvent",
+          "source": "environment",
+          "markers": [],
+          "excerpt": null
+        },
+        {
+          "kind": "ConversationStateUpdateEvent",
+          "source": "environment",
+          "markers": [],
+          "excerpt": null
+        },
+        {
+          "kind": "ConversationStateUpdateEvent",
+          "source": "environment",
+          "markers": [],
+          "excerpt": null
+        },
+        {
+          "kind": "ConversationErrorEvent",
+          "source": "environment",
+          "markers": [
+            "Missing scopes: api.responses.write"
+          ],
+          "excerpt": "\"2026-07-13T09:42:17.289599\",\"source\":\"environment\",\"code\":\"BaseLLMException\",\"detail\":\"{\\n  \\\"error\\\": {\\n    \\\"message\\\": \\\"You have insufficient permissions for this operation. Missing scopes: api.responses.write. Check that you have the correct role in your organization (Reader, Writer, Owner) and project (Member, Owner), and if you're using a restricted API key, that it has the necessary"
+        }
+      ]
+    },
+    "videos": [
+      "source recording omitted from committed evidence; see .pr/issue-1595/current-main-then-pr.gif"
+    ]
+  },
+  "generatedAt": "2026-07-13T09:42:47.488Z"
+}
