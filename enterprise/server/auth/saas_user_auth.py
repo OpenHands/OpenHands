@@ -358,7 +358,7 @@ class SaasUserAuth(UserAuth):
         # refreshes against Keycloak — still resolve the email. Cookie auth
         # already has ``self.email`` set from the signed token, so the lookup
         # is skipped in that case.
-        if self.email is None:
+        if self.email is None or not self.email_verified:
             user = await UserStore.get_user_by_id(self.user_id)
             if user:
                 self.email = user.email

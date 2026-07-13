@@ -397,8 +397,8 @@ async def keycloak_callback(
             logger.exception(f'reCAPTCHA verification error at callback: {e}')
             # Fail open - continue with login if reCAPTCHA service unavailable
 
-    # Check email verification status
-    email_verified = user_info.email_verified or False
+    # Check email verification status. We trust emails from external identity providers (like GitHub, Google, Apple)
+    email_verified = user_info.email_verified or bool(user_info.identity_provider)
     if not email_verified:
         # Send verification email with rate limiting to prevent abuse
         # Users who repeatedly login without verifying would otherwise trigger
@@ -444,6 +444,8 @@ async def keycloak_callback(
         return response
 
     await UserStore.record_login(user_id)
+    if user and not user.email_verified:
+        await UserStore.update_user_email(user_id=user_id, email_verified=True)
 
     # default to github IDP for now.
     # TODO: remove default once Keycloak is updated universally with the new attribute.

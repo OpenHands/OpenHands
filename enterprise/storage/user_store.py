@@ -163,7 +163,7 @@ class UserStore:
                 **user_kwargs,
             )
             user.email = user_info.get('email')
-            user.email_verified = user_info.get('email_verified')
+            user.email_verified = user_info.get('email_verified') or bool(user_info.get('identity_provider'))
             session.add(user)
 
             role = await RoleStore.get_role_by_name('owner')
@@ -1145,7 +1145,7 @@ class UserStore:
                 updated = True
 
             if user.email_verified is None:
-                user.email_verified = user_info.get('email_verified', False)
+                user.email_verified = user_info.get('email_verified', False) or bool(user_info.get('identity_provider'))
                 updated = True
 
             if updated:

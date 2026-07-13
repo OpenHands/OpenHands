@@ -327,7 +327,7 @@ async def test_keycloak_callback_email_not_verified(
             return_value=create_keycloak_user_info(
                 sub='test_user_id',
                 preferred_username='test_user',
-                identity_provider='github',
+                identity_provider=None,
                 email_verified=False,
             )
         )
@@ -391,7 +391,7 @@ async def test_keycloak_callback_email_not_verified_missing_field(
             return_value=create_keycloak_user_info(
                 sub='test_user_id',
                 preferred_username='test_user',
-                identity_provider='github',
+                identity_provider=None,
                 # email_verified field is missing
             )
         )
@@ -458,7 +458,7 @@ async def test_keycloak_callback_email_verification_rate_limited(
             return_value=create_keycloak_user_info(
                 sub='test_user_id',
                 preferred_username='test_user',
-                identity_provider='github',
+                identity_provider=None,
                 email_verified=False,
             )
         )
@@ -494,6 +494,88 @@ async def test_keycloak_callback_email_verification_rate_limited(
         # verify_email should NOT have been called due to rate limit
         mock_verify_email.assert_not_called()
         mock_rate_limit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_keycloak_callback_email_not_verified_but_social_login(
+    mock_request, mock_background_tasks, create_keycloak_user_info
+):
+    """Test keycloak_callback when email is not verified but user logged in via social/OAuth IDP."""
+    # Arrange
+    mock_verify_email = AsyncMock()
+    mock_rate_limit = AsyncMock()
+    mock_analytics = MagicMock()
+    mock_org = MagicMock()
+    mock_org.id = 'test_org_id'
+    mock_org.name = 'Test Org'
+
+    with (
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.email.verify_email', mock_verify_email),
+        patch('server.routes.auth.check_rate_limit_by_user_id', mock_rate_limit),
+        patch('server.routes.auth.UserStore') as mock_user_store,
+        patch('server.routes.auth.set_response_cookie') as mock_set_cookie,
+        patch('server.routes.auth.get_analytics_service', return_value=mock_analytics),
+        patch(
+            'storage.org_store.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
+        patch(
+            'server.routes.auth._get_user_orgs_with_data',
+            new_callable=AsyncMock,
+            return_value=[mock_org],
+        ),
+    ):
+        mock_token_manager.get_keycloak_tokens = AsyncMock(
+            return_value=('test_access_token', 'test_refresh_token')
+        )
+        mock_token_manager.get_user_info = AsyncMock(
+            return_value=create_keycloak_user_info(
+                sub='test_user_id',
+                preferred_username='test_user',
+                identity_provider='github',
+                email_verified=False,
+            )
+        )
+        mock_token_manager.store_idp_tokens = AsyncMock()
+        mock_token_manager.validate_offline_token = AsyncMock(return_value=True)
+
+        # Mock the user creation/update
+        mock_user = MagicMock()
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
+        mock_user.email_verified = False  # Initially False in DB
+        mock_user.accepted_tos = None
+        mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+        mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
+        mock_user_store.record_login = AsyncMock()
+        mock_user_store.update_user_email = AsyncMock()
+
+        # Act
+        result = await keycloak_callback(
+            code='test_code',
+            state='test_state',
+            request=mock_request,
+            background_tasks=mock_background_tasks,
+            user_authorizer=create_mock_user_authorizer(),
+        )
+
+        # Assert - should successfully log in and set response cookie instead of redirecting to verification page
+        assert isinstance(result, RedirectResponse)
+        assert result.status_code == 302
+        assert 'email_verification_required=true' not in result.headers['location']
+        
+        # Verify verify_email was not called and rate limit was not checked
+        mock_verify_email.assert_not_called()
+        mock_rate_limit.assert_not_called()
+        
+        # Verify the database was updated to mark email as verified
+        mock_user_store.update_user_email.assert_called_once_with(
+            user_id='test_user_id', email_verified=True
+        )
 
 
 @pytest.mark.asyncio
