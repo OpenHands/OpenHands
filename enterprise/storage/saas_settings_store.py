@@ -9,7 +9,10 @@ from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 from server.constants import LITE_LLM_API_URL
 from server.logger import logger
-from server.routes.org_models import OrgMemberSettingsUpdate
+from server.routes.org_models import (
+    MEMBER_PRIVATE_AGENT_KEYS,
+    OrgMemberSettingsUpdate,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from storage.agent_profile_resolution import (
@@ -31,7 +34,6 @@ from openhands.app_server.settings.llm_profiles import LLMProfiles, resolve_prof
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.utils.jsonpatch_compat import (
-    WHOLESALE_REPLACEMENT_KEYS,
     deep_merge,
     deep_merge_with_wholesale_keys,
 )
@@ -41,13 +43,6 @@ from openhands.sdk.llm.utils.openhands_provider import (
 )
 from openhands.sdk.mcp.config import MCPServer, coerce_mcp_config
 from openhands.sdk.profiles import resolve_agent_profile
-
-# Agent-settings keys private to each org member: never written to
-# org-level defaults nor broadcast across the org. Covers ``mcp_config``
-# (per-user MCP server set, a dict-of-items collection). ACP provider
-# creds are not here — they ride the per-user Secrets panel
-# (``request.secrets`` -> ``state.secret_registry``), not agent_settings.
-MEMBER_PRIVATE_AGENT_KEYS: frozenset[str] = WHOLESALE_REPLACEMENT_KEYS
 
 
 @dataclass

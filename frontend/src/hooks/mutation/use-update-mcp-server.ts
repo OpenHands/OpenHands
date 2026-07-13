@@ -23,6 +23,19 @@ interface MCPServerConfig {
   env?: Record<string, string>;
 }
 
+function withExplicitMcpAuthClear(
+  serialized: NonNullable<ReturnType<typeof toSdkMcpConfig>>,
+  server: string | MCPSSEServer | MCPSHTTPServer,
+) {
+  if (typeof server !== "object" || !server.name || !serialized[server.name]) {
+    return serialized;
+  }
+  return {
+    ...serialized,
+    [server.name]: { ...serialized[server.name], auth: null },
+  };
+}
+
 export function useUpdateMcpServer() {
   const queryClient = useQueryClient();
   const { organizationId } = useSelectedOrganizationId();
@@ -79,19 +92,15 @@ export function useUpdateMcpServer() {
         newConfig.shttp_servers[index] = shttpServer;
       }
 
-      const serialized = toSdkMcpConfig(newConfig);
-      if (
-        (serverType === "sse" || serverType === "shttp") &&
-        !server.api_key &&
-        serialized
-      ) {
+      let serialized = toSdkMcpConfig(newConfig);
+      const remoteApiKeyRemoved =
+        (serverType === "sse" || serverType === "shttp") && !server.api_key;
+      if (remoteApiKeyRemoved && serialized) {
         const updated =
           serverType === "sse"
             ? newConfig.sse_servers[index]
             : newConfig.shttp_servers[index];
-        if (typeof updated === "object" && updated.name) {
-          serialized[updated.name].auth = null;
-        }
+        serialized = withExplicitMcpAuthClear(serialized, updated);
       }
       const payload = {
         agent_settings_diff: { mcp_config: serialized },

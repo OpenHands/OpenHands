@@ -13,6 +13,7 @@ down_revision = '136'
 branch_labels = None
 depends_on = None
 
+# Pin the SDK marker present in data written before revision 137.
 _REDACTED_SECRET = '**********'
 
 

@@ -5,7 +5,10 @@ Store class for managing organization-member relationships.
 from typing import Any, Optional
 from uuid import UUID
 
-from server.routes.org_models import OrgMemberSettingsUpdate
+from server.routes.org_models import (
+    MEMBER_PRIVATE_AGENT_KEYS,
+    OrgMemberSettingsUpdate,
+)
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -296,10 +299,10 @@ class OrgMemberStore:
         raw_key = values.pop('llm_api_key', None)
         agent_settings_diff = values.pop('agent_settings_diff', None)
         conversation_settings_diff = values.pop('conversation_settings_diff', None)
-        mcp_config = _MISSING
         if agent_settings_diff is not None:
             agent_settings_diff = dict(agent_settings_diff)
-            mcp_config = _pop_mcp_config(agent_settings_diff)
+            for key in MEMBER_PRIVATE_AGENT_KEYS:
+                agent_settings_diff.pop(key, None)
 
         for org_member in org_members:
             if raw_key is not None:
@@ -310,9 +313,6 @@ class OrgMemberStore:
                     org_member.agent_settings_diff,
                     agent_settings_diff,
                 )
-
-            if mcp_config is not _MISSING:
-                org_member.mcp_config = serialize_mcp_config(mcp_config)
 
             if conversation_settings_diff is not None:
                 org_member.conversation_settings_diff = deep_merge(

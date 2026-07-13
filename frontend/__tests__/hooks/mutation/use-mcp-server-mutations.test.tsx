@@ -6,6 +6,7 @@ import { useAddMcpServer } from "#/hooks/mutation/use-add-mcp-server";
 import { useDeleteMcpServer } from "#/hooks/mutation/use-delete-mcp-server";
 import { useUpdateMcpServer } from "#/hooks/mutation/use-update-mcp-server";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
+import type { Settings } from "#/types/settings";
 
 describe("MCP Server Mutation Hooks", () => {
   beforeEach(() => {
@@ -283,6 +284,45 @@ describe("MCP Server Mutation Hooks", () => {
       const serverUrls = Object.values(savedConfig).map((s) => s.url);
       expect(serverUrls).toContain("https://new-url.com");
       expect(savedConfig).toHaveProperty("myserver");
+    });
+
+    it("sends explicit null when removing remote auth", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+        agent_settings: {
+          mcp_config: {
+            myserver: {
+              url: "https://server.example.com",
+              auth: { strategy: "bearer", value: "**********" },
+            },
+          },
+        },
+      } as unknown as Settings);
+
+      const saveSettingsSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+      const { result } = renderHook(() => useUpdateMcpServer(), {
+        wrapper: createWrapper(),
+      });
+
+      result.current.mutate({
+        serverId: "shttp-0",
+        server: {
+          type: "shttp",
+          url: "https://server.example.com",
+        },
+      });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      const savedPayload = saveSettingsSpy.mock.calls[0][0] as {
+        agent_settings_diff: {
+          mcp_config: Record<string, { auth?: unknown }>;
+        };
+      };
+      const savedConfig = savedPayload.agent_settings_diff.mcp_config;
       expect(savedConfig.myserver).toHaveProperty("auth", null);
     });
   });

@@ -1550,6 +1550,92 @@ async def test_update_org_defaults_async_non_key_changes_keep_custom_key_flags()
 
 
 @pytest.mark.asyncio
+async def test_update_org_defaults_async_does_not_broadcast_mcp_config(
+    async_session_maker,
+):
+    async with async_session_maker() as session:
+        org = Org(
+            name='test-org',
+            agent_settings=OpenHandsAgentSettings(
+                llm={'model': 'old-model'}
+            ).model_dump(mode='json'),
+        )
+        role = Role(name='member', rank=2)
+        session.add_all([org, role])
+        await session.flush()
+
+        users = [
+            User(
+                id=uuid.uuid4(),
+                current_org_id=org.id,
+                email=f'user{i}@example.com',
+            )
+            for i in range(2)
+        ]
+        session.add_all(users)
+        await session.flush()
+        session.add_all(
+            [
+                OrgMember(
+                    org_id=org.id,
+                    user_id=user.id,
+                    role_id=role.id,
+                    llm_api_key='test-key',
+                    mcp_config={f'private-{i}': {'url': f'https://mcp{i}.example.com'}},
+                    status='active',
+                )
+                for i, user in enumerate(users)
+            ]
+        )
+        org_id = org.id
+        user_ids = [user.id for user in users]
+        await session.commit()
+        acting_user_id = str(user_ids[0])
+
+    update_data = OrgUpdate(
+        agent_settings_diff={
+            'llm': {'model': 'new-model'},
+            'mcp_config': {
+                'admin': {
+                    'url': 'https://admin.example.com',
+                    'auth': {'strategy': 'bearer', 'value': 'admin-secret'},
+                }
+            },
+        }
+    )
+    assert update_data.agent_settings_diff == {'llm': {'model': 'new-model'}}
+
+    with (
+        patch('storage.org_store.a_session_maker', async_session_maker),
+        patch(
+            'storage.org_store.OrgStore._maybe_get_managed_llm_key_for_user',
+            AsyncMock(return_value=None),
+        ),
+    ):
+        updated_org = await OrgStore.update_org_defaults_async(
+            org_id,
+            update_data,
+            acting_user_id,
+        )
+
+    assert updated_org is not None
+    assert not updated_org.agent_settings.get('mcp_config')
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(OrgMember).where(OrgMember.org_id == org_id)
+        )
+        members = {member.user_id: member for member in result.scalars().all()}
+
+    for i, user_id in enumerate(user_ids):
+        member = members[user_id]
+        assert member.mcp_config == {
+            f'private-{i}': {'url': f'https://mcp{i}.example.com'}
+        }
+        assert 'mcp_config' not in member.agent_settings_diff
+        assert member.agent_settings_diff['llm']['model'] == 'new-model'
+
+
+@pytest.mark.asyncio
 async def test_update_org_defaults_async_org_not_found():
     """GIVEN: Non-existent organization ID
     WHEN: update_org_defaults_async is called

@@ -1163,10 +1163,10 @@ async def test_update_all_members_settings_async_with_empty_settings(
 
 
 @pytest.mark.asyncio
-async def test_update_all_members_settings_async_replaces_mcp_config(
+async def test_update_all_members_settings_async_does_not_replace_mcp_config(
     async_session_maker,
 ):
-    """Replace MCP servers instead of resurrecting deleted entries."""
+    """Ignore member-private MCP config in bulk updates."""
     from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange - Create org with member that has 3 MCP servers
@@ -1219,7 +1219,6 @@ async def test_update_all_members_settings_async_replaces_mcp_config(
         )
         await session.commit()
 
-    # Assert - Only 2 servers should remain, server3 should NOT be resurrected
     async with async_session_maker() as session:
         from sqlalchemy import select
 
@@ -1230,12 +1229,10 @@ async def test_update_all_members_settings_async_replaces_mcp_config(
 
         mcp_servers = member.mcp_config or {}
         assert 'mcp_config' not in member.agent_settings_diff
-        assert len(mcp_servers) == 2, f'Expected 2 servers, got {len(mcp_servers)}'
+        assert len(mcp_servers) == 3
         assert 'server1' in mcp_servers
         assert 'server2' in mcp_servers
-        assert 'server3' not in mcp_servers, (
-            'Deleted server was resurrected by deep_merge'
-        )
+        assert 'server3' in mcp_servers
 
 
 @pytest.mark.asyncio
@@ -1307,10 +1304,10 @@ async def test_update_all_members_settings_async_mcp_config_not_in_payload(
 
 
 @pytest.mark.asyncio
-async def test_update_all_members_settings_async_empty_mcp_config(
+async def test_update_all_members_settings_async_does_not_clear_mcp_config(
     async_session_maker,
 ):
-    """Clear MCP servers when the update contains an empty config."""
+    """Ignore an empty MCP config in bulk updates."""
     from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange - Create org with member that has MCP servers
@@ -1358,7 +1355,6 @@ async def test_update_all_members_settings_async_empty_mcp_config(
         )
         await session.commit()
 
-    # Assert - mcp_config should be empty
     async with async_session_maker() as session:
         from sqlalchemy import select
 
@@ -1369,14 +1365,14 @@ async def test_update_all_members_settings_async_empty_mcp_config(
 
         mcp_servers = member.mcp_config or {}
         assert 'mcp_config' not in member.agent_settings_diff
-        assert len(mcp_servers) == 0, f'Expected 0 servers, got {len(mcp_servers)}'
+        assert len(mcp_servers) == 2
 
 
 @pytest.mark.asyncio
-async def test_update_all_members_settings_async_add_first_mcp_server(
+async def test_update_all_members_settings_async_does_not_add_mcp_config(
     async_session_maker,
 ):
-    """Add the first MCP server to encrypted member storage."""
+    """Do not add member-private MCP config in a bulk update."""
     from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange - Create org with member that has NO mcp_config
@@ -1425,7 +1421,6 @@ async def test_update_all_members_settings_async_add_first_mcp_server(
         )
         await session.commit()
 
-    # Assert - Server should be added
     async with async_session_maker() as session:
         from sqlalchemy import select
 
@@ -1436,15 +1431,14 @@ async def test_update_all_members_settings_async_add_first_mcp_server(
 
         mcp_servers = member.mcp_config or {}
         assert 'mcp_config' not in member.agent_settings_diff
-        assert len(mcp_servers) == 1
-        assert 'first-server' in mcp_servers
+        assert not mcp_servers
 
 
 @pytest.mark.asyncio
-async def test_update_all_members_settings_async_update_server_url(
+async def test_update_all_members_settings_async_does_not_update_mcp_server_url(
     async_session_maker,
 ):
-    """Replace an existing MCP server endpoint without duplication."""
+    """Keep member-private MCP endpoints unchanged in bulk updates."""
     from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange
@@ -1499,7 +1493,6 @@ async def test_update_all_members_settings_async_update_server_url(
         )
         await session.commit()
 
-    # Assert - URL should be updated
     async with async_session_maker() as session:
         from sqlalchemy import select
 
@@ -1511,4 +1504,4 @@ async def test_update_all_members_settings_async_update_server_url(
         mcp_servers = member.mcp_config or {}
         assert 'mcp_config' not in member.agent_settings_diff
         assert len(mcp_servers) == 1
-        assert mcp_servers['myserver']['url'] == 'https://new-url.com'
+        assert mcp_servers['myserver']['url'] == 'https://old-url.com'
