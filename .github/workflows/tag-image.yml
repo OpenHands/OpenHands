@@ -3,6 +3,12 @@
 # (tagged `sha-<full>`) and adds the tag name as an alias for the same manifest.
 # Semver tags (X.Y.Z) also get X.Y, X, and latest aliases.
 # No rebuild — pure registry-side retag via `docker buildx imagetools create`.
+#
+# Release-please pushes the release tag a minute or so after the release PR
+# merges, while the Docker workflow is still building images for that same
+# commit — so wait-for-build blocks (a few minutes) until that run completes
+# before retagging. Tags pushed to already-built commits pass straight
+# through: watching a completed run returns immediately.
 name: Tag Docker images
 
 on:
@@ -11,7 +17,38 @@ on:
       - "*"
 
 jobs:
+  wait-for-build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    permissions:
+      actions: read
+    steps:
+      - name: Wait for the Docker workflow run on this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMIT_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          # The Docker run is registered by the branch push, which normally
+          # lands a minute or more before the tag does — but retry briefly in
+          # case this tag arrived first.
+          run_id=""
+          for _ in $(seq 1 10); do
+            run_id=$(gh run list --repo "$GITHUB_REPOSITORY" \
+              --workflow ghcr-build.yml --commit "$COMMIT_SHA" \
+              --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+            [[ -n "$run_id" ]] && break
+            sleep 30
+          done
+          if [[ -z "$run_id" ]]; then
+            echo "::error::No Docker workflow run found for $COMMIT_SHA — images were never built for this commit."
+            exit 1
+          fi
+          echo "Waiting on Docker run $run_id for $COMMIT_SHA."
+          gh run watch --repo "$GITHUB_REPOSITORY" "$run_id" --interval 30 --exit-status
+
   retag:
+    needs: wait-for-build
     runs-on: ubuntu-22.04
     permissions:
       packages: write

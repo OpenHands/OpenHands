@@ -397,6 +397,28 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         metrics = info.metrics or MetricsSnapshot()
         usage = metrics.accumulated_token_usage or TokenUsage()
 
+        # Preserve the original creation time on update.
+        #
+        # ``save`` is an upsert (``merge`` on the primary key), and several
+        # callers rebuild an ``AppConversationInfo`` from scratch rather than
+        # mutating the loaded row (e.g. the ``on_conversation_update`` webhook,
+        # which fires on every start/pause/resume/interrupt). Those callers do
+        # not carry ``created_at`` forward, so ``AppConversationInfo`` fills it
+        # from ``default_factory=utc_now``. Without this guard the merge would
+        # overwrite the persisted ``created_at`` with "now" on every lifecycle
+        # webhook, corrupting created-at ordering and the usage/billing
+        # dashboards that bucket conversations by creation time. Look up the
+        # stored value directly by primary key (not via ``_secure_select``) so
+        # this works under the ADMIN webhook context as well.
+        created_at = info.created_at
+        existing_created_at = await self.db_session.scalar(
+            select(StoredConversationMetadata.created_at).where(
+                StoredConversationMetadata.conversation_id == str(info.id)
+            )
+        )
+        if existing_created_at is not None:
+            created_at = existing_created_at
+
         stored = StoredConversationMetadata(
             conversation_id=str(info.id),
             selected_repository=info.selected_repository,
@@ -404,7 +426,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             git_provider=info.git_provider.value if info.git_provider else None,
             title=info.title,
             last_updated_at=info.updated_at,
-            created_at=info.created_at,
+            created_at=created_at,
             trigger=info.trigger.value if info.trigger else None,
             pr_number=info.pr_number or [],
             # Cost and token metrics
