@@ -37,10 +37,10 @@ def create_mock_user_authorizer(success: bool = True, error_detail: str | None =
 def mock_request():
     request = MagicMock(spec=Request)
     request.url = MagicMock()
-    request.url.hostname = "localhost"
-    request.url.netloc = "localhost:8000"
-    request.url.path = "/oauth/keycloak/callback"
-    request.base_url = "http://localhost:8000/"
+    request.url.hostname = 'localhost'
+    request.url.netloc = 'localhost:8000'
+    request.url.path = '/oauth/keycloak/callback'
+    request.base_url = 'http://localhost:8000/'
     request.headers = {}
     request.cookies = {}
     return request
@@ -62,20 +62,20 @@ def test_set_response_cookie(mock_response, mock_request):
     from openhands.app_server.utils.encryption_key import EncryptionKey
 
     jwt_svc = JwtService(
-        keys=[EncryptionKey(kid="test", key=SecretStr("test_secret"), active=True)]
+        keys=[EncryptionKey(kid='test', key=SecretStr('test_secret'), active=True)]
     )
 
     with (
-        patch("storage.encrypt_utils.get_jwt_service", return_value=jwt_svc),
-        patch("server.utils.url_utils.get_global_config") as get_global_config,
+        patch('storage.encrypt_utils.get_jwt_service', return_value=jwt_svc),
+        patch('server.utils.url_utils.get_global_config') as get_global_config,
     ):
-        get_global_config.return_value = MagicMock(web_url="https://example.com")
+        get_global_config.return_value = MagicMock(web_url='https://example.com')
 
         set_response_cookie(
             request=mock_request,
             response=mock_response,
-            keycloak_access_token="test_access_token",
-            keycloak_refresh_token="test_refresh_token",
+            keycloak_access_token='test_access_token',
+            keycloak_refresh_token='test_refresh_token',
             secure=True,
             accepted_tos=True,
         )
@@ -83,18 +83,18 @@ def test_set_response_cookie(mock_response, mock_request):
         mock_response.set_cookie.assert_called_once()
         args, kwargs = mock_response.set_cookie.call_args
 
-        assert kwargs["key"] == "keycloak_auth"
-        assert "value" in kwargs
-        assert kwargs["httponly"] is True
-        assert kwargs["secure"] is True
-        assert kwargs["samesite"] == "strict"
-        assert kwargs["domain"] == "example.com"
+        assert kwargs['key'] == 'keycloak_auth'
+        assert 'value' in kwargs
+        assert kwargs['httponly'] is True
+        assert kwargs['secure'] is True
+        assert kwargs['samesite'] == 'strict'
+        assert kwargs['domain'] == 'example.com'
 
         # Verify the JWT token contains the correct data
-        token_data = jwt_svc.verify_jws_token(kwargs["value"])
-        assert token_data["access_token"] == "test_access_token"
-        assert token_data["refresh_token"] == "test_refresh_token"
-        assert token_data["accepted_tos"] is True
+        token_data = jwt_svc.verify_jws_token(kwargs['value'])
+        assert token_data['access_token'] == 'test_access_token'
+        assert token_data['refresh_token'] == 'test_refresh_token'
+        assert token_data['accepted_tos'] is True
 
 
 @pytest.mark.asyncio
@@ -102,15 +102,15 @@ async def test_keycloak_callback_missing_code(mock_request, mock_background_task
     """Test keycloak_callback with missing code."""
     with pytest.raises(HTTPException) as exc_info:
         await keycloak_callback(
-            code="",
-            state="test_state",
+            code='',
+            state='test_state',
             request=mock_request,
             background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
         )
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-    assert "Missing code" in exc_info.value.detail
+    assert 'Missing code' in exc_info.value.detail
 
 
 @pytest.mark.asyncio
@@ -120,19 +120,19 @@ async def test_keycloak_callback_token_retrieval_failure(
     """Test keycloak_callback when token retrieval fails."""
     get_keycloak_tokens_mock = AsyncMock(return_value=(None, None))
     with patch(
-        "server.routes.auth.token_manager.get_keycloak_tokens", get_keycloak_tokens_mock
+        'server.routes.auth.token_manager.get_keycloak_tokens', get_keycloak_tokens_mock
     ):
         with pytest.raises(HTTPException) as exc_info:
             await keycloak_callback(
-                code="test_code",
-                state="test_state",
+                code='test_code',
+                state='test_state',
                 request=mock_request,
                 background_tasks=mock_background_tasks,
                 user_authorizer=create_mock_user_authorizer(),
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Problem retrieving Keycloak tokens" in exc_info.value.detail
+        assert 'Problem retrieving Keycloak tokens' in exc_info.value.detail
         get_keycloak_tokens_mock.assert_called_once()
 
 
@@ -147,17 +147,17 @@ async def test_keycloak_callback_user_not_authorized(
 ):
     """Test keycloak_callback when user authorization fails."""
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.auth.UserStore") as mock_user_store,
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="test_user_id",
-                preferred_username="test_user",
-                identity_provider="github",
+                sub='test_user_id',
+                preferred_username='test_user',
+                identity_provider='github',
                 email_verified=True,
             )
         )
@@ -165,8 +165,8 @@ async def test_keycloak_callback_user_not_authorized(
 
         # Mock the user creation
         mock_user = MagicMock()
-        mock_user.id = "test_user_id"
-        mock_user.current_org_id = "test_org_id"
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
         mock_user.accepted_tos = None
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
@@ -177,20 +177,20 @@ async def test_keycloak_callback_user_not_authorized(
 
         # Create mock user authorizer that denies authorization
         mock_authorizer = create_mock_user_authorizer(
-            success=False, error_detail="blocked"
+            success=False, error_detail='blocked'
         )
 
         with pytest.raises(HTTPException) as exc_info:
             await keycloak_callback(
-                code="test_code",
-                state="test_state",
+                code='test_code',
+                state='test_state',
                 request=mock_request,
                 background_tasks=mock_background_tasks,
                 user_authorizer=mock_authorizer,
             )
 
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert exc_info.value.detail == "blocked"
+        assert exc_info.value.detail == 'blocked'
 
 
 @pytest.mark.asyncio
@@ -200,40 +200,40 @@ async def test_keycloak_callback_success_with_valid_offline_token(
     """Test successful keycloak_callback with valid offline token."""
     mock_analytics = MagicMock()
     mock_org = MagicMock()
-    mock_org.id = "test_org_id"
-    mock_org.name = "Test Org"
+    mock_org.id = 'test_org_id'
+    mock_org.name = 'Test Org'
 
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.auth.set_response_cookie") as mock_set_cookie,
-        patch("server.routes.auth.UserStore") as mock_user_store,
-        patch("server.routes.auth.get_analytics_service", return_value=mock_analytics),
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.set_response_cookie') as mock_set_cookie,
+        patch('server.routes.auth.UserStore') as mock_user_store,
+        patch('server.routes.auth.get_analytics_service', return_value=mock_analytics),
         patch(
-            "storage.org_store.OrgStore.get_org_by_id",
+            'storage.org_store.OrgStore.get_org_by_id',
             new_callable=AsyncMock,
             return_value=mock_org,
         ),
         patch(
-            "storage.org_store.OrgStore.get_orgs_by_ids",
+            'storage.org_store.OrgStore.get_orgs_by_ids',
             new_callable=AsyncMock,
             return_value=[mock_org],
         ),
         patch(
-            "storage.org_member_store.OrgMemberStore.get_org_members_count",
+            'storage.org_member_store.OrgMemberStore.get_org_members_count',
             new_callable=AsyncMock,
             return_value=1,
         ),
         patch(
-            "server.routes.auth._should_redirect_to_onboarding",
+            'server.routes.auth._should_redirect_to_onboarding',
             new_callable=AsyncMock,
             return_value=False,
         ),
     ):
         # Mock user with accepted_tos and analytics consent
         mock_user = MagicMock()
-        mock_user.id = "test_user_id"
-        mock_user.current_org_id = "test_org_id"
-        mock_user.accepted_tos = "2025-01-01"
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
+        mock_user.accepted_tos = '2025-01-01'
         mock_user.user_consents_to_analytics = True
         mock_user.org_members = []
 
@@ -246,13 +246,13 @@ async def test_keycloak_callback_success_with_valid_offline_token(
         mock_user_store.record_login = AsyncMock()
 
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="test_user_id",
-                preferred_username="test_user",
-                identity_provider="github",
+                sub='test_user_id',
+                preferred_username='test_user',
+                identity_provider='github',
                 email_verified=True,
             )
         )
@@ -260,8 +260,8 @@ async def test_keycloak_callback_success_with_valid_offline_token(
         mock_token_manager.validate_offline_token = AsyncMock(return_value=True)
 
         result = await keycloak_callback(
-            code="test_code",
-            state="test_state",
+            code='test_code',
+            state='test_state',
             request=mock_request,
             background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
@@ -269,16 +269,16 @@ async def test_keycloak_callback_success_with_valid_offline_token(
 
         assert isinstance(result, RedirectResponse)
         assert result.status_code == 302
-        assert result.headers["location"] == "test_state"
+        assert result.headers['location'] == 'test_state'
 
         mock_token_manager.store_idp_tokens.assert_called_once_with(
-            ProviderType.GITHUB, "test_user_id", "test_access_token"
+            ProviderType.GITHUB, 'test_user_id', 'test_access_token'
         )
         mock_set_cookie.assert_called_once_with(
             request=mock_request,
             response=result,
-            keycloak_access_token="test_access_token",
-            keycloak_refresh_token="test_refresh_token",
+            keycloak_access_token='test_access_token',
+            keycloak_refresh_token='test_refresh_token',
             secure=False,
             accepted_tos=True,
         )
@@ -294,16 +294,16 @@ async def test_keycloak_callback_success_with_valid_offline_token(
         # Verify analytics service was called correctly
         mock_analytics.identify_user.assert_called_once()
         identify_kwargs = mock_analytics.identify_user.call_args.kwargs
-        assert identify_kwargs["ctx"].user_id == "test_user_id"
-        assert identify_kwargs["ctx"].consented is True
-        assert identify_kwargs["idp"] == "github"
+        assert identify_kwargs['ctx'].user_id == 'test_user_id'
+        assert identify_kwargs['ctx'].consented is True
+        assert identify_kwargs['idp'] == 'github'
 
         mock_analytics.track_user_logged_in.assert_called_once()
         track_kwargs = mock_analytics.track_user_logged_in.call_args.kwargs
-        assert track_kwargs["ctx"].user_id == "test_user_id"
-        assert track_kwargs["ctx"].org_id == "test_org_id"
-        assert track_kwargs["ctx"].consented is True
-        assert track_kwargs["idp"] == "github"
+        assert track_kwargs['ctx'].user_id == 'test_user_id'
+        assert track_kwargs['ctx'].org_id == 'test_org_id'
+        assert track_kwargs['ctx'].consented is True
+        assert track_kwargs['idp'] == 'github'
 
 
 @pytest.mark.asyncio
@@ -315,18 +315,18 @@ async def test_keycloak_callback_email_not_verified(
     mock_verify_email = AsyncMock()
     mock_rate_limit = AsyncMock()
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.email.verify_email", mock_verify_email),
-        patch("server.routes.auth.check_rate_limit_by_user_id", mock_rate_limit),
-        patch("server.routes.auth.UserStore") as mock_user_store,
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.email.verify_email', mock_verify_email),
+        patch('server.routes.auth.check_rate_limit_by_user_id', mock_rate_limit),
+        patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="test_user_id",
-                preferred_username="test_user",
+                sub='test_user_id',
+                preferred_username='test_user',
                 identity_provider=None,
                 email_verified=False,
             )
@@ -335,8 +335,8 @@ async def test_keycloak_callback_email_not_verified(
 
         # Mock the user creation
         mock_user = MagicMock()
-        mock_user.id = "test_user_id"
-        mock_user.current_org_id = "test_org_id"
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
         mock_user_store.backfill_contact_name = AsyncMock()
@@ -345,8 +345,8 @@ async def test_keycloak_callback_email_not_verified(
 
         # Act
         result = await keycloak_callback(
-            code="test_code",
-            state="test_state",
+            code='test_code',
+            state='test_state',
             request=mock_request,
             background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
@@ -355,16 +355,16 @@ async def test_keycloak_callback_email_not_verified(
         # Assert
         assert isinstance(result, RedirectResponse)
         assert result.status_code == 302
-        assert "email_verification_required=true" in result.headers["location"]
-        assert "user_id=test_user_id" in result.headers["location"]
+        assert 'email_verification_required=true' in result.headers['location']
+        assert 'user_id=test_user_id' in result.headers['location']
         mock_verify_email.assert_called_once_with(
-            request=mock_request, user_id="test_user_id", is_auth_flow=True
+            request=mock_request, user_id='test_user_id', is_auth_flow=True
         )
         # Verify rate limit was checked
         mock_rate_limit.assert_called_once_with(
             request=mock_request,
-            key_prefix="auth_verify_email",
-            user_id="test_user_id",
+            key_prefix='auth_verify_email',
+            user_id='test_user_id',
             user_rate_limit_seconds=60,
             ip_rate_limit_seconds=120,
         )
@@ -379,18 +379,18 @@ async def test_keycloak_callback_email_not_verified_missing_field(
     mock_verify_email = AsyncMock()
     mock_rate_limit = AsyncMock()
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.email.verify_email", mock_verify_email),
-        patch("server.routes.auth.check_rate_limit_by_user_id", mock_rate_limit),
-        patch("server.routes.auth.UserStore") as mock_user_store,
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.email.verify_email', mock_verify_email),
+        patch('server.routes.auth.check_rate_limit_by_user_id', mock_rate_limit),
+        patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="test_user_id",
-                preferred_username="test_user",
+                sub='test_user_id',
+                preferred_username='test_user',
                 identity_provider=None,
                 # email_verified field is missing
             )
@@ -399,8 +399,8 @@ async def test_keycloak_callback_email_not_verified_missing_field(
 
         # Mock the user creation
         mock_user = MagicMock()
-        mock_user.id = "test_user_id"
-        mock_user.current_org_id = "test_org_id"
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
         mock_user_store.backfill_contact_name = AsyncMock()
@@ -409,8 +409,8 @@ async def test_keycloak_callback_email_not_verified_missing_field(
 
         # Act
         result = await keycloak_callback(
-            code="test_code",
-            state="test_state",
+            code='test_code',
+            state='test_state',
             request=mock_request,
             background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
@@ -419,10 +419,10 @@ async def test_keycloak_callback_email_not_verified_missing_field(
         # Assert
         assert isinstance(result, RedirectResponse)
         assert result.status_code == 302
-        assert "email_verification_required=true" in result.headers["location"]
-        assert "user_id=test_user_id" in result.headers["location"]
+        assert 'email_verification_required=true' in result.headers['location']
+        assert 'user_id=test_user_id' in result.headers['location']
         mock_verify_email.assert_called_once_with(
-            request=mock_request, user_id="test_user_id", is_auth_flow=True
+            request=mock_request, user_id='test_user_id', is_auth_flow=True
         )
 
 
@@ -442,22 +442,22 @@ async def test_keycloak_callback_email_verification_rate_limited(
     mock_rate_limit = AsyncMock(
         side_effect=HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many requests. Please wait 1 minute before trying again.",
+            detail='Too many requests. Please wait 1 minute before trying again.',
         )
     )
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.email.verify_email", mock_verify_email),
-        patch("server.routes.auth.check_rate_limit_by_user_id", mock_rate_limit),
-        patch("server.routes.auth.UserStore") as mock_user_store,
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.email.verify_email', mock_verify_email),
+        patch('server.routes.auth.check_rate_limit_by_user_id', mock_rate_limit),
+        patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="test_user_id",
-                preferred_username="test_user",
+                sub='test_user_id',
+                preferred_username='test_user',
                 identity_provider=None,
                 email_verified=False,
             )
@@ -466,8 +466,8 @@ async def test_keycloak_callback_email_verification_rate_limited(
 
         # Mock the user creation
         mock_user = MagicMock()
-        mock_user.id = "test_user_id"
-        mock_user.current_org_id = "test_org_id"
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
         mock_user_store.backfill_contact_name = AsyncMock()
@@ -476,8 +476,8 @@ async def test_keycloak_callback_email_verification_rate_limited(
 
         # Act
         result = await keycloak_callback(
-            code="test_code",
-            state="test_state",
+            code='test_code',
+            state='test_state',
             request=mock_request,
             background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
@@ -486,11 +486,11 @@ async def test_keycloak_callback_email_verification_rate_limited(
         # Assert - should still redirect to verification page but NOT send email
         assert isinstance(result, RedirectResponse)
         assert result.status_code == 302
-        assert "email_verification_required=true" in result.headers["location"]
-        assert "user_id=test_user_id" in result.headers["location"]
+        assert 'email_verification_required=true' in result.headers['location']
+        assert 'user_id=test_user_id' in result.headers['location']
         # When rate limited, the redirect URL should include rate_limited=true
         # so the frontend can show an appropriate message
-        assert "rate_limited=true" in result.headers["location"]
+        assert 'rate_limited=true' in result.headers['location']
         # verify_email should NOT have been called due to rate limit
         mock_verify_email.assert_not_called()
         mock_rate_limit.assert_called_once()
@@ -506,35 +506,35 @@ async def test_keycloak_callback_email_not_verified_but_social_login(
     mock_rate_limit = AsyncMock()
     mock_analytics = MagicMock()
     mock_org = MagicMock()
-    mock_org.id = "test_org_id"
-    mock_org.name = "Test Org"
+    mock_org.id = 'test_org_id'
+    mock_org.name = 'Test Org'
 
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.email.verify_email", mock_verify_email),
-        patch("server.routes.auth.check_rate_limit_by_user_id", mock_rate_limit),
-        patch("server.routes.auth.UserStore") as mock_user_store,
-        patch("server.routes.auth.set_response_cookie") as mock_set_cookie,
-        patch("server.routes.auth.get_analytics_service", return_value=mock_analytics),
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.email.verify_email', mock_verify_email),
+        patch('server.routes.auth.check_rate_limit_by_user_id', mock_rate_limit),
+        patch('server.routes.auth.UserStore') as mock_user_store,
+        patch('server.routes.auth.set_response_cookie') as mock_set_cookie,
+        patch('server.routes.auth.get_analytics_service', return_value=mock_analytics),
         patch(
-            "storage.org_store.OrgStore.get_org_by_id",
+            'storage.org_store.OrgStore.get_org_by_id',
             new_callable=AsyncMock,
             return_value=mock_org,
         ),
         patch(
-            "server.routes.auth._get_user_orgs_with_data",
+            'server.routes.auth._get_user_orgs_with_data',
             new_callable=AsyncMock,
             return_value=[mock_org],
         ),
     ):
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="test_user_id",
-                preferred_username="test_user",
-                identity_provider="github",
+                sub='test_user_id',
+                preferred_username='test_user',
+                identity_provider='github',
                 email_verified=False,
             )
         )
@@ -543,8 +543,8 @@ async def test_keycloak_callback_email_not_verified_but_social_login(
 
         # Mock the user creation/update
         mock_user = MagicMock()
-        mock_user.id = "test_user_id"
-        mock_user.current_org_id = "test_org_id"
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
         mock_user.email_verified = False  # Initially False in DB
         mock_user.accepted_tos = None
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
@@ -556,8 +556,8 @@ async def test_keycloak_callback_email_not_verified_but_social_login(
 
         # Act
         result = await keycloak_callback(
-            code="test_code",
-            state="test_state",
+            code='test_code',
+            state='test_state',
             request=mock_request,
             background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
@@ -566,7 +566,7 @@ async def test_keycloak_callback_email_not_verified_but_social_login(
         # Assert - should successfully log in and set response cookie instead of redirecting to verification page
         assert isinstance(result, RedirectResponse)
         assert result.status_code == 302
-        assert "email_verification_required=true" not in result.headers["location"]
+        assert 'email_verification_required=true' not in result.headers['location']
 
         # Verify verify_email was not called and rate limit was not checked
         mock_verify_email.assert_not_called()
@@ -574,7 +574,7 @@ async def test_keycloak_callback_email_not_verified_but_social_login(
 
         # Verify the database was updated to mark email as verified
         mock_user_store.update_user_email.assert_called_once_with(
-            user_id="test_user_id", email_verified=True
+            user_id='test_user_id', email_verified=True
         )
         # Verify the cookie was set
         mock_set_cookie.assert_called_once()
@@ -587,45 +587,45 @@ async def test_keycloak_callback_success_without_offline_token(
     """Test successful keycloak_callback without valid offline token."""
     mock_analytics = MagicMock()
     mock_org = MagicMock()
-    mock_org.id = "test_org_id"
-    mock_org.name = "Test Org"
+    mock_org.id = 'test_org_id'
+    mock_org.name = 'Test Org'
 
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.auth.set_response_cookie") as mock_set_cookie,
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.set_response_cookie') as mock_set_cookie,
         patch(
-            "server.routes.auth.KEYCLOAK_SERVER_URL_EXT", "https://keycloak.example.com"
+            'server.routes.auth.KEYCLOAK_SERVER_URL_EXT', 'https://keycloak.example.com'
         ),
-        patch("server.routes.auth.KEYCLOAK_REALM_NAME", "test-realm"),
-        patch("server.routes.auth.KEYCLOAK_CLIENT_ID", "test-client"),
-        patch("server.routes.auth.UserStore") as mock_user_store,
-        patch("server.routes.auth.get_analytics_service", return_value=mock_analytics),
+        patch('server.routes.auth.KEYCLOAK_REALM_NAME', 'test-realm'),
+        patch('server.routes.auth.KEYCLOAK_CLIENT_ID', 'test-client'),
+        patch('server.routes.auth.UserStore') as mock_user_store,
+        patch('server.routes.auth.get_analytics_service', return_value=mock_analytics),
         patch(
-            "storage.org_store.OrgStore.get_org_by_id",
+            'storage.org_store.OrgStore.get_org_by_id',
             new_callable=AsyncMock,
             return_value=mock_org,
         ),
         patch(
-            "storage.org_store.OrgStore.get_orgs_by_ids",
+            'storage.org_store.OrgStore.get_orgs_by_ids',
             new_callable=AsyncMock,
             return_value=[mock_org],
         ),
         patch(
-            "storage.org_member_store.OrgMemberStore.get_org_members_count",
+            'storage.org_member_store.OrgMemberStore.get_org_members_count',
             new_callable=AsyncMock,
             return_value=1,
         ),
         patch(
-            "server.routes.auth._should_redirect_to_onboarding",
+            'server.routes.auth._should_redirect_to_onboarding',
             new_callable=AsyncMock,
             return_value=False,
         ),
     ):
         # Mock user with accepted_tos and analytics consent
         mock_user = MagicMock()
-        mock_user.id = "test_user_id"
-        mock_user.current_org_id = "test_org_id"
-        mock_user.accepted_tos = "2025-01-01"
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
+        mock_user.accepted_tos = '2025-01-01'
         mock_user.user_consents_to_analytics = True
         mock_user.org_members = []
 
@@ -638,13 +638,13 @@ async def test_keycloak_callback_success_without_offline_token(
         mock_user_store.record_login = AsyncMock()
 
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="test_user_id",
-                preferred_username="test_user",
-                identity_provider="github",
+                sub='test_user_id',
+                preferred_username='test_user',
+                identity_provider='github',
                 email_verified=True,
             )
         )
@@ -653,8 +653,8 @@ async def test_keycloak_callback_success_without_offline_token(
         mock_token_manager.validate_offline_token = AsyncMock(return_value=False)
 
         result = await keycloak_callback(
-            code="test_code",
-            state="test_state",
+            code='test_code',
+            state='test_state',
             request=mock_request,
             background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
@@ -663,19 +663,19 @@ async def test_keycloak_callback_success_without_offline_token(
         assert isinstance(result, RedirectResponse)
         assert result.status_code == 302
         # In this case, we should be redirected to the Keycloak offline token URL
-        assert "keycloak.example.com" in result.headers["location"]
-        assert "offline_access" in result.headers["location"]
+        assert 'keycloak.example.com' in result.headers['location']
+        assert 'offline_access' in result.headers['location']
 
         mock_token_manager.store_idp_tokens.assert_called_once_with(
-            ProviderType.GITHUB, "test_user_id", "test_access_token"
+            ProviderType.GITHUB, 'test_user_id', 'test_access_token'
         )
         # secure is based on web_url (http://localhost:8000/), not redirect_url
         # So secure=False because web_url starts with 'http://'
         mock_set_cookie.assert_called_once_with(
             request=mock_request,
             response=result,
-            keycloak_access_token="test_access_token",
-            keycloak_refresh_token="test_refresh_token",
+            keycloak_access_token='test_access_token',
+            keycloak_refresh_token='test_refresh_token',
             secure=False,
             accepted_tos=True,
         )
@@ -691,16 +691,16 @@ async def test_keycloak_callback_success_without_offline_token(
         # Verify analytics service was called correctly
         mock_analytics.identify_user.assert_called_once()
         identify_kwargs = mock_analytics.identify_user.call_args.kwargs
-        assert identify_kwargs["ctx"].user_id == "test_user_id"
-        assert identify_kwargs["ctx"].consented is True
-        assert identify_kwargs["idp"] == "github"
+        assert identify_kwargs['ctx'].user_id == 'test_user_id'
+        assert identify_kwargs['ctx'].consented is True
+        assert identify_kwargs['idp'] == 'github'
 
         mock_analytics.track_user_logged_in.assert_called_once()
         track_kwargs = mock_analytics.track_user_logged_in.call_args.kwargs
-        assert track_kwargs["ctx"].user_id == "test_user_id"
-        assert track_kwargs["ctx"].org_id == "test_org_id"
-        assert track_kwargs["ctx"].consented is True
-        assert track_kwargs["idp"] == "github"
+        assert track_kwargs['ctx'].user_id == 'test_user_id'
+        assert track_kwargs['ctx'].org_id == 'test_org_id'
+        assert track_kwargs['ctx'].consented is True
+        assert track_kwargs['idp'] == 'github'
 
 
 @pytest.mark.asyncio
@@ -713,28 +713,28 @@ async def test_keycloak_callback_redirects_to_keycloak_when_offline_token_invali
     to Keycloak to obtain one, rather than proceeding with invitation processing.
     """
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.auth.set_response_cookie") as mock_set_cookie,
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.set_response_cookie') as mock_set_cookie,
         patch(
-            "server.routes.auth.KEYCLOAK_SERVER_URL_EXT", "https://keycloak.example.com"
+            'server.routes.auth.KEYCLOAK_SERVER_URL_EXT', 'https://keycloak.example.com'
         ),
-        patch("server.routes.auth.KEYCLOAK_REALM_NAME", "test-realm"),
-        patch("server.routes.auth.KEYCLOAK_CLIENT_ID", "test-client"),
-        patch("server.routes.auth.UserStore") as mock_user_store,
-        patch("server.routes.auth.get_analytics_service"),
-        patch("storage.org_store.OrgStore.get_org_by_id", new_callable=AsyncMock),
-        patch("server.routes.auth.OrgInvitationService") as mock_invitation_service,
+        patch('server.routes.auth.KEYCLOAK_REALM_NAME', 'test-realm'),
+        patch('server.routes.auth.KEYCLOAK_CLIENT_ID', 'test-client'),
+        patch('server.routes.auth.UserStore') as mock_user_store,
+        patch('server.routes.auth.get_analytics_service'),
+        patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
+        patch('server.routes.auth.OrgInvitationService') as mock_invitation_service,
         patch(
-            "server.routes.auth._should_redirect_to_onboarding",
+            'server.routes.auth._should_redirect_to_onboarding',
             new_callable=AsyncMock,
             return_value=False,
         ),
     ):
         # Mock user with accepted_tos
         mock_user = MagicMock()
-        mock_user.id = "test_user_id"
-        mock_user.current_org_id = "test_org_id"
-        mock_user.accepted_tos = "2025-01-01"
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
+        mock_user.accepted_tos = '2025-01-01'
 
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
         mock_user_store.backfill_contact_name = AsyncMock()
@@ -742,13 +742,13 @@ async def test_keycloak_callback_redirects_to_keycloak_when_offline_token_invali
         mock_user_store.record_login = AsyncMock()
 
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="test_user_id",
-                preferred_username="test_user",
-                identity_provider="github",
+                sub='test_user_id',
+                preferred_username='test_user',
+                identity_provider='github',
                 email_verified=True,
             )
         )
@@ -760,15 +760,15 @@ async def test_keycloak_callback_redirects_to_keycloak_when_offline_token_invali
         import json
 
         state_data = {
-            "redirect_url": "https://example.com/original-page",
-            "invitation_token": "inv-test-token-123",
+            'redirect_url': 'https://example.com/original-page',
+            'invitation_token': 'inv-test-token-123',
         }
         encoded_state = base64.urlsafe_b64encode(
             json.dumps(state_data).encode()
         ).decode()
 
         result = await keycloak_callback(
-            code="test_code",
+            code='test_code',
             state=encoded_state,
             request=mock_request,
             background_tasks=mock_background_tasks,
@@ -777,12 +777,12 @@ async def test_keycloak_callback_redirects_to_keycloak_when_offline_token_invali
 
         # Should redirect to Keycloak for offline token
         assert isinstance(result, RedirectResponse)
-        assert "keycloak.example.com" in result.headers["location"]
-        assert "offline_access" in result.headers["location"]
+        assert 'keycloak.example.com' in result.headers['location']
+        assert 'offline_access' in result.headers['location']
 
         # Cookie should be set with accepted_tos=True (user has accepted TOS)
         mock_set_cookie.assert_called_once()
-        assert mock_set_cookie.call_args[1]["accepted_tos"] is True
+        assert mock_set_cookie.call_args[1]['accepted_tos'] is True
 
         # Invitation service should NOT be called (early return before invitation processing)
         mock_invitation_service.accept_invitation.assert_not_called()
@@ -796,9 +796,9 @@ async def test_keycloak_callback_account_linking_error(
     # Test the case where error is 'temporarily_unavailable' and error_description is 'authentication_expired'
     result = await keycloak_callback(
         code=None,
-        state="http://redirect.example.com",
-        error="temporarily_unavailable",
-        error_description="authentication_expired",
+        state='http://redirect.example.com',
+        error='temporarily_unavailable',
+        error_description='authentication_expired',
         request=mock_request,
         background_tasks=mock_background_tasks,
         user_authorizer=create_mock_user_authorizer(),
@@ -806,34 +806,34 @@ async def test_keycloak_callback_account_linking_error(
 
     assert isinstance(result, RedirectResponse)
     assert result.status_code == 302
-    assert result.headers["location"] == "http://redirect.example.com"
+    assert result.headers['location'] == 'http://redirect.example.com'
 
 
 @pytest.mark.asyncio
 async def test_keycloak_offline_callback_missing_code(mock_request):
     """Test keycloak_offline_callback with missing code."""
-    result = await keycloak_offline_callback("", "test_state", mock_request)
+    result = await keycloak_offline_callback('', 'test_state', mock_request)
 
     assert isinstance(result, JSONResponse)
     assert result.status_code == status.HTTP_400_BAD_REQUEST
-    assert "error" in result.body.decode()
-    assert "Missing code" in result.body.decode()
+    assert 'error' in result.body.decode()
+    assert 'Missing code' in result.body.decode()
 
 
 @pytest.mark.asyncio
 async def test_keycloak_offline_callback_token_retrieval_failure(mock_request):
     """Test keycloak_offline_callback when token retrieval fails."""
-    with patch("server.routes.auth.token_manager") as mock_token_manager:
+    with patch('server.routes.auth.token_manager') as mock_token_manager:
         mock_token_manager.get_keycloak_tokens = AsyncMock(return_value=(None, None))
 
         result = await keycloak_offline_callback(
-            "test_code", "test_state", mock_request
+            'test_code', 'test_state', mock_request
         )
 
         assert isinstance(result, JSONResponse)
         assert result.status_code == status.HTTP_400_BAD_REQUEST
-        assert "error" in result.body.decode()
-        assert "Problem retrieving Keycloak tokens" in result.body.decode()
+        assert 'error' in result.body.decode()
+        assert 'Problem retrieving Keycloak tokens' in result.body.decode()
 
 
 @pytest.mark.asyncio
@@ -841,19 +841,19 @@ async def test_keycloak_offline_callback_missing_user_info(mock_request):
     """Test keycloak_offline_callback when user info is missing required fields."""
     from pydantic import ValidationError
 
-    with patch("server.routes.auth.token_manager") as mock_token_manager:
+    with patch('server.routes.auth.token_manager') as mock_token_manager:
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         # With Pydantic model, missing 'sub' raises ValidationError during get_user_info
         mock_token_manager.get_user_info = AsyncMock(
             side_effect=ValidationError.from_exception_data(
-                "KeycloakUserInfo",
+                'KeycloakUserInfo',
                 [
                     {
-                        "type": "missing",
-                        "loc": ("sub",),
-                        "input": {"some_field": "value"},
+                        'type': 'missing',
+                        'loc': ('sub',),
+                        'input': {'some_field': 'value'},
                     }
                 ],
             )
@@ -861,7 +861,7 @@ async def test_keycloak_offline_callback_missing_user_info(mock_request):
 
         # The endpoint should propagate the error (or handle it gracefully)
         with pytest.raises(ValidationError):
-            await keycloak_offline_callback("test_code", "test_state", mock_request)
+            await keycloak_offline_callback('test_code', 'test_state', mock_request)
 
 
 @pytest.mark.asyncio
@@ -870,39 +870,39 @@ async def test_keycloak_offline_callback_success(
 ):
     """Test successful keycloak_offline_callback."""
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.auth.UserStore") as mock_user_store,
-        patch("server.routes.auth.set_response_cookie"),
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.UserStore') as mock_user_store,
+        patch('server.routes.auth.set_response_cookie'),
         patch(
-            "server.routes.auth._get_post_auth_redirect",
+            'server.routes.auth._get_post_auth_redirect',
             new_callable=AsyncMock,
-            return_value="test_state",
+            return_value='test_state',
         ),
     ):
         # Mock user with accepted_tos
         mock_user = MagicMock()
-        mock_user.accepted_tos = "2025-01-01"
+        mock_user.accepted_tos = '2025-01-01'
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
 
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
-            return_value=create_keycloak_user_info(sub="test_user_id")
+            return_value=create_keycloak_user_info(sub='test_user_id')
         )
         mock_token_manager.store_idp_tokens = AsyncMock()
         mock_token_manager.store_offline_token = AsyncMock()
 
         result = await keycloak_offline_callback(
-            "test_code", "test_state", mock_request
+            'test_code', 'test_state', mock_request
         )
 
         assert isinstance(result, RedirectResponse)
         assert result.status_code == 302
-        assert result.headers["location"] == "test_state"
+        assert result.headers['location'] == 'test_state'
 
         mock_token_manager.store_offline_token.assert_called_once_with(
-            user_id="test_user_id", offline_token="test_refresh_token"
+            user_id='test_user_id', offline_token='test_refresh_token'
         )
 
 
@@ -912,68 +912,68 @@ async def test_keycloak_offline_callback_redirects_to_onboarding(
 ):
     """Test keycloak_offline_callback redirects to onboarding when needed."""
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.auth.UserStore") as mock_user_store,
-        patch("server.routes.auth.set_response_cookie"),
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.UserStore') as mock_user_store,
+        patch('server.routes.auth.set_response_cookie'),
         patch(
-            "server.routes.auth._get_post_auth_redirect",
+            'server.routes.auth._get_post_auth_redirect',
             new_callable=AsyncMock,
-            return_value="http://localhost:8000/onboarding",
+            return_value='http://localhost:8000/onboarding',
         ),
     ):
         # Mock user with accepted_tos
         mock_user = MagicMock()
-        mock_user.accepted_tos = "2025-01-01"
+        mock_user.accepted_tos = '2025-01-01'
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
 
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
-            return_value=create_keycloak_user_info(sub="test_user_id")
+            return_value=create_keycloak_user_info(sub='test_user_id')
         )
         mock_token_manager.store_offline_token = AsyncMock()
 
         result = await keycloak_offline_callback(
-            "test_code", "test_state", mock_request
+            'test_code', 'test_state', mock_request
         )
 
         assert isinstance(result, RedirectResponse)
         assert result.status_code == 302
-        assert result.headers["location"] == "http://localhost:8000/onboarding"
+        assert result.headers['location'] == 'http://localhost:8000/onboarding'
 
 
 @pytest.mark.asyncio
 async def test_authenticate_success():
     """Test successful authentication."""
-    with patch("server.routes.auth.get_access_token") as mock_get_token:
-        mock_get_token.return_value = "test_access_token"
+    with patch('server.routes.auth.get_access_token') as mock_get_token:
+        mock_get_token.return_value = 'test_access_token'
 
         result = await authenticate(MagicMock())
 
         assert isinstance(result, JSONResponse)
         assert result.status_code == status.HTTP_200_OK
-        assert "message" in result.body.decode()
-        assert "User authenticated" in result.body.decode()
+        assert 'message' in result.body.decode()
+        assert 'User authenticated' in result.body.decode()
 
 
 @pytest.mark.asyncio
 async def test_authenticate_failure():
     """Test authentication failure."""
-    with patch("server.routes.auth.get_access_token") as mock_get_token:
+    with patch('server.routes.auth.get_access_token') as mock_get_token:
         mock_get_token.side_effect = AuthError()
 
         # request.cookies is a real Mapping[str, str] in production; give the
         # mock a concrete dict so the cookie-clearing path (which now
         # reassembles chunked cookies) reads strings rather than MagicMocks.
         request = MagicMock()
-        request.cookies = {"keycloak_auth": "some-token"}
+        request.cookies = {'keycloak_auth': 'some-token'}
         result = await authenticate(request)
 
         assert isinstance(result, JSONResponse)
         assert result.status_code == status.HTTP_401_UNAUTHORIZED
-        assert "error" in result.body.decode()
-        assert "User is not authenticated" in result.body.decode()
+        assert 'error' in result.body.decode()
+        assert 'User is not authenticated' in result.body.decode()
 
 
 @pytest.mark.asyncio
@@ -981,21 +981,21 @@ async def test_logout_with_refresh_token():
     """Test logout with refresh token."""
     mock_request = MagicMock()
     mock_request.state.user_auth = SaasUserAuth(
-        refresh_token=SecretStr("test-refresh-token"), user_id="test_user_id"
+        refresh_token=SecretStr('test-refresh-token'), user_id='test_user_id'
     )
 
-    with patch("server.routes.auth.token_manager") as mock_token_manager:
+    with patch('server.routes.auth.token_manager') as mock_token_manager:
         mock_token_manager.logout = AsyncMock()
         result = await logout(mock_request)
 
         assert isinstance(result, JSONResponse)
         assert result.status_code == status.HTTP_200_OK
-        assert "message" in result.body.decode()
-        assert "User logged out" in result.body.decode()
+        assert 'message' in result.body.decode()
+        assert 'User logged out' in result.body.decode()
 
-        mock_token_manager.logout.assert_called_once_with("test-refresh-token")
+        mock_token_manager.logout.assert_called_once_with('test-refresh-token')
         # Cookie should be deleted
-        assert "set-cookie" in result.headers
+        assert 'set-cookie' in result.headers
 
 
 @pytest.mark.asyncio
@@ -1004,20 +1004,20 @@ async def test_logout_without_refresh_token():
     mock_request = MagicMock(state=MagicMock(user_auth=None))
     # No refresh_token attribute
 
-    with patch("server.routes.auth.token_manager") as mock_token_manager:
+    with patch('server.routes.auth.token_manager') as mock_token_manager:
         with patch(
-            "openhands.app_server.user_auth.default_user_auth.DefaultUserAuth.get_instance"
+            'openhands.app_server.user_auth.default_user_auth.DefaultUserAuth.get_instance'
         ) as mock_get_instance:
             mock_get_instance.side_effect = AuthError()
             result = await logout(mock_request)
 
             assert isinstance(result, JSONResponse)
             assert result.status_code == status.HTTP_200_OK
-            assert "message" in result.body.decode()
-            assert "User logged out" in result.body.decode()
+            assert 'message' in result.body.decode()
+            assert 'User logged out' in result.body.decode()
 
             mock_token_manager.logout.assert_not_called()
-            assert "set-cookie" in result.headers
+            assert 'set-cookie' in result.headers
 
 
 @pytest.mark.asyncio
@@ -1032,23 +1032,23 @@ async def test_logout_with_bearer_auth_does_not_revoke_offline_token():
     """
     mock_request = MagicMock()
     mock_request.state.user_auth = SaasUserAuth(
-        refresh_token=SecretStr("the-users-offline-token"),
-        user_id="test_user_id",
+        refresh_token=SecretStr('the-users-offline-token'),
+        user_id='test_user_id',
         auth_type=AuthType.BEARER,
     )
 
-    with patch("server.routes.auth.token_manager") as mock_token_manager:
+    with patch('server.routes.auth.token_manager') as mock_token_manager:
         mock_token_manager.logout = AsyncMock()
         result = await logout(mock_request)
 
         assert isinstance(result, JSONResponse)
         assert result.status_code == status.HTTP_200_OK
-        assert "User logged out" in result.body.decode()
+        assert 'User logged out' in result.body.decode()
 
         # The offline token must NOT be revoked by a browser logout click.
         mock_token_manager.logout.assert_not_called()
         # The cookie itself is always removed.
-        assert "set-cookie" in result.headers
+        assert 'set-cookie' in result.headers
 
 
 @pytest.mark.asyncio
@@ -1060,19 +1060,19 @@ async def test_logout_with_cookie_auth_terminates_keycloak_session():
     """
     mock_request = MagicMock()
     mock_request.state.user_auth = SaasUserAuth(
-        refresh_token=SecretStr("cookie-refresh-token"),
-        user_id="test_user_id",
+        refresh_token=SecretStr('cookie-refresh-token'),
+        user_id='test_user_id',
         auth_type=AuthType.COOKIE,
     )
 
-    with patch("server.routes.auth.token_manager") as mock_token_manager:
+    with patch('server.routes.auth.token_manager') as mock_token_manager:
         mock_token_manager.logout = AsyncMock()
         result = await logout(mock_request)
 
         assert isinstance(result, JSONResponse)
         assert result.status_code == status.HTTP_200_OK
-        mock_token_manager.logout.assert_awaited_once_with("cookie-refresh-token")
-        assert "set-cookie" in result.headers
+        mock_token_manager.logout.assert_awaited_once_with('cookie-refresh-token')
+        assert 'set-cookie' in result.headers
 
 
 @pytest.mark.asyncio
@@ -1082,25 +1082,25 @@ async def test_keycloak_callback_blocked_email_domain(
     """Test keycloak_callback when user authorization fails (blocked email domain)."""
     # Arrange
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.auth.UserStore") as mock_user_store,
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="test_user_id",
-                preferred_username="test_user",
-                email="user@colsch.us",
-                identity_provider="github",
+                sub='test_user_id',
+                preferred_username='test_user',
+                email='user@colsch.us',
+                identity_provider='github',
             )
         )
 
         # Mock the user creation
         mock_user = MagicMock()
-        mock_user.id = "test_user_id"
-        mock_user.current_org_id = "test_org_id"
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
         mock_user_store.backfill_contact_name = AsyncMock()
@@ -1109,14 +1109,14 @@ async def test_keycloak_callback_blocked_email_domain(
 
         # Create mock user authorizer that blocks the user
         mock_authorizer = create_mock_user_authorizer(
-            success=False, error_detail="blocked"
+            success=False, error_detail='blocked'
         )
 
         # Act
         with pytest.raises(HTTPException) as exc_info:
             await keycloak_callback(
-                code="test_code",
-                state="test_state",
+                code='test_code',
+                state='test_state',
                 request=mock_request,
                 background_tasks=mock_background_tasks,
                 user_authorizer=mock_authorizer,
@@ -1124,7 +1124,7 @@ async def test_keycloak_callback_blocked_email_domain(
 
         # Assert
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert exc_info.value.detail == "blocked"
+        assert exc_info.value.detail == 'blocked'
 
 
 # Note: test_keycloak_callback_allowed_email_domain was simplified as part of
@@ -1145,12 +1145,12 @@ async def test_keycloak_callback_missing_email(
     """Test keycloak_callback when user info does not contain email."""
     # Arrange
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
+        patch('server.routes.auth.token_manager') as mock_token_manager,
         patch(
-            "storage.user_authorization_store.UserAuthorizationStore"
+            'storage.user_authorization_store.UserAuthorizationStore'
         ) as mock_user_auth_store,
-        patch("server.routes.auth.a_session_maker") as mock_session_maker,
-        patch("server.routes.auth.UserStore") as mock_user_store,
+        patch('server.routes.auth.a_session_maker') as mock_session_maker,
+        patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         mock_session = MagicMock()
         mock_session_maker.return_value.__enter__.return_value = mock_session
@@ -1159,17 +1159,17 @@ async def test_keycloak_callback_missing_email(
         mock_query.filter.return_value = mock_query
 
         mock_user_settings = MagicMock()
-        mock_user_settings.accepted_tos = "2025-01-01"
+        mock_user_settings.accepted_tos = '2025-01-01'
         mock_query.first.return_value = mock_user_settings
 
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="test_user_id",
-                preferred_username="test_user",
-                identity_provider="github",
+                sub='test_user_id',
+                preferred_username='test_user',
+                identity_provider='github',
                 email_verified=True,
                 # No email field
             )
@@ -1179,9 +1179,9 @@ async def test_keycloak_callback_missing_email(
 
         # Mock the user creation
         mock_user = MagicMock()
-        mock_user.id = "test_user_id"
-        mock_user.current_org_id = "test_org_id"
-        mock_user.accepted_tos = "2025-01-01"
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
+        mock_user.accepted_tos = '2025-01-01'
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
         mock_user_store.backfill_contact_name = AsyncMock()
@@ -1190,8 +1190,8 @@ async def test_keycloak_callback_missing_email(
 
         # Act
         result = await keycloak_callback(
-            code="test_code",
-            state="test_state",
+            code='test_code',
+            state='test_state',
             request=mock_request,
             background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
@@ -1214,26 +1214,26 @@ async def test_keycloak_callback_duplicate_email_detected(
     failure when a duplicate email is detected.
     """
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.auth.UserStore") as mock_user_store,
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         # Arrange
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="test_user_id",
-                preferred_username="test_user",
-                email="joe+test@example.com",
-                identity_provider="github",
+                sub='test_user_id',
+                preferred_username='test_user',
+                email='joe+test@example.com',
+                identity_provider='github',
             )
         )
 
         # Mock the user creation
         mock_user = MagicMock()
-        mock_user.id = "test_user_id"
-        mock_user.current_org_id = "test_org_id"
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
         mock_user_store.backfill_contact_name = AsyncMock()
@@ -1242,21 +1242,21 @@ async def test_keycloak_callback_duplicate_email_detected(
 
         # Create mock authorizer that returns duplicate_email error
         mock_authorizer = create_mock_user_authorizer(
-            success=False, error_detail="duplicate_email"
+            success=False, error_detail='duplicate_email'
         )
 
         # Act & Assert - should raise HTTPException with 401
         with pytest.raises(HTTPException) as exc_info:
             await keycloak_callback(
-                code="test_code",
-                state="test_state",
+                code='test_code',
+                state='test_state',
                 request=mock_request,
                 background_tasks=mock_background_tasks,
                 user_authorizer=mock_authorizer,
             )
 
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert exc_info.value.detail == "duplicate_email"
+        assert exc_info.value.detail == 'duplicate_email'
 
 
 @pytest.mark.asyncio
@@ -1270,19 +1270,19 @@ async def test_keycloak_callback_duplicate_email_deletes_new_keycloak_user(
     user should be deleted to prevent orphaned accounts from blocking future sign-ins.
     """
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.auth.UserStore") as mock_user_store,
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         # Arrange
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="new_user_id",
-                preferred_username="test_user",
-                email="joe+1@example.com",
-                identity_provider="github",
+                sub='new_user_id',
+                preferred_username='test_user',
+                email='joe+1@example.com',
+                identity_provider='github',
             )
         )
         mock_token_manager.delete_keycloak_user = AsyncMock(return_value=True)
@@ -1292,23 +1292,23 @@ async def test_keycloak_callback_duplicate_email_deletes_new_keycloak_user(
 
         # Create mock authorizer that returns duplicate_email error
         mock_authorizer = create_mock_user_authorizer(
-            success=False, error_detail="duplicate_email"
+            success=False, error_detail='duplicate_email'
         )
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
             await keycloak_callback(
-                code="test_code",
-                state="test_state",
+                code='test_code',
+                state='test_state',
                 request=mock_request,
                 background_tasks=mock_background_tasks,
                 user_authorizer=mock_authorizer,
             )
 
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert exc_info.value.detail == "duplicate_email"
+        assert exc_info.value.detail == 'duplicate_email'
         # Keycloak user should be deleted since user doesn't exist in UserStore
-        mock_token_manager.delete_keycloak_user.assert_called_once_with("new_user_id")
+        mock_token_manager.delete_keycloak_user.assert_called_once_with('new_user_id')
 
 
 @pytest.mark.asyncio
@@ -1322,45 +1322,45 @@ async def test_keycloak_callback_duplicate_email_preserves_existing_user(
     was disabled), the existing user's Keycloak account should NOT be deleted.
     """
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.auth.UserStore") as mock_user_store,
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         # Arrange
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="existing_user_id",
-                preferred_username="test_user",
-                email="joe@example.com",
-                identity_provider="github",
+                sub='existing_user_id',
+                preferred_username='test_user',
+                email='joe@example.com',
+                identity_provider='github',
             )
         )
         mock_token_manager.delete_keycloak_user = AsyncMock(return_value=True)
 
         # User EXISTS in UserStore (legitimate existing user)
         mock_existing_user = MagicMock()
-        mock_existing_user.id = "existing_user_id"
+        mock_existing_user.id = 'existing_user_id'
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_existing_user)
 
         # Create mock authorizer that returns duplicate_email error
         mock_authorizer = create_mock_user_authorizer(
-            success=False, error_detail="duplicate_email"
+            success=False, error_detail='duplicate_email'
         )
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
             await keycloak_callback(
-                code="test_code",
-                state="test_state",
+                code='test_code',
+                state='test_state',
                 request=mock_request,
                 background_tasks=mock_background_tasks,
                 user_authorizer=mock_authorizer,
             )
 
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert exc_info.value.detail == "duplicate_email"
+        assert exc_info.value.detail == 'duplicate_email'
         # Keycloak user should NOT be deleted since user exists in UserStore
         mock_token_manager.delete_keycloak_user.assert_not_called()
 
@@ -1371,9 +1371,9 @@ async def test_keycloak_callback_duplicate_check_exception(
 ):
     """Test keycloak_callback when duplicate check raises exception."""
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.auth.a_session_maker") as mock_session_maker,
-        patch("server.routes.auth.UserStore") as mock_user_store,
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.a_session_maker') as mock_session_maker,
+        patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         # Arrange
         mock_session = MagicMock()
@@ -1382,32 +1382,32 @@ async def test_keycloak_callback_duplicate_check_exception(
         mock_session.query.return_value = mock_query
         mock_query.filter.return_value = mock_query
         mock_user_settings = MagicMock()
-        mock_user_settings.accepted_tos = "2025-01-01"
+        mock_user_settings.accepted_tos = '2025-01-01'
         mock_query.first.return_value = mock_user_settings
 
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="test_user_id",
-                preferred_username="test_user",
-                email="joe+test@example.com",
-                identity_provider="github",
+                sub='test_user_id',
+                preferred_username='test_user',
+                email='joe+test@example.com',
+                identity_provider='github',
                 email_verified=True,
             )
         )
         mock_token_manager.check_duplicate_base_email = AsyncMock(
-            side_effect=Exception("Check failed")
+            side_effect=Exception('Check failed')
         )
         mock_token_manager.store_idp_tokens = AsyncMock()
         mock_token_manager.validate_offline_token = AsyncMock(return_value=True)
 
         # Mock the user creation
         mock_user = MagicMock()
-        mock_user.id = "test_user_id"
-        mock_user.current_org_id = "test_org_id"
-        mock_user.accepted_tos = "2025-01-01"
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
+        mock_user.accepted_tos = '2025-01-01'
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
         mock_user_store.backfill_contact_name = AsyncMock()
@@ -1416,8 +1416,8 @@ async def test_keycloak_callback_duplicate_check_exception(
 
         # Act
         result = await keycloak_callback(
-            code="test_code",
-            state="test_state",
+            code='test_code',
+            state='test_state',
             request=mock_request,
             background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
@@ -1439,9 +1439,9 @@ async def test_keycloak_callback_no_duplicate_email(
     This test verifies the normal flow when authorization is successful.
     """
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.auth.a_session_maker") as mock_session_maker,
-        patch("server.routes.auth.UserStore") as mock_user_store,
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.a_session_maker') as mock_session_maker,
+        patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         # Arrange
         mock_session = MagicMock()
@@ -1450,18 +1450,18 @@ async def test_keycloak_callback_no_duplicate_email(
         mock_session.query.return_value = mock_query
         mock_query.filter.return_value = mock_query
         mock_user_settings = MagicMock()
-        mock_user_settings.accepted_tos = "2025-01-01"
+        mock_user_settings.accepted_tos = '2025-01-01'
         mock_query.first.return_value = mock_user_settings
 
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="test_user_id",
-                preferred_username="test_user",
-                email="joe+test@example.com",
-                identity_provider="github",
+                sub='test_user_id',
+                preferred_username='test_user',
+                email='joe+test@example.com',
+                identity_provider='github',
                 email_verified=True,
             )
         )
@@ -1470,9 +1470,9 @@ async def test_keycloak_callback_no_duplicate_email(
 
         # Mock the user creation
         mock_user = MagicMock()
-        mock_user.id = "test_user_id"
-        mock_user.current_org_id = "test_org_id"
-        mock_user.accepted_tos = "2025-01-01"
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
+        mock_user.accepted_tos = '2025-01-01'
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
         mock_user_store.backfill_contact_name = AsyncMock()
@@ -1481,8 +1481,8 @@ async def test_keycloak_callback_no_duplicate_email(
 
         # Act - use successful authorizer (no duplicate detected)
         result = await keycloak_callback(
-            code="test_code",
-            state="test_state",
+            code='test_code',
+            state='test_state',
             request=mock_request,
             background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(success=True),
@@ -1499,9 +1499,9 @@ async def test_keycloak_callback_no_email_in_user_info(
 ):
     """Test keycloak_callback when email is not in user_info."""
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.auth.a_session_maker") as mock_session_maker,
-        patch("server.routes.auth.UserStore") as mock_user_store,
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.a_session_maker') as mock_session_maker,
+        patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         # Arrange
         mock_session = MagicMock()
@@ -1510,18 +1510,18 @@ async def test_keycloak_callback_no_email_in_user_info(
         mock_session.query.return_value = mock_query
         mock_query.filter.return_value = mock_query
         mock_user_settings = MagicMock()
-        mock_user_settings.accepted_tos = "2025-01-01"
+        mock_user_settings.accepted_tos = '2025-01-01'
         mock_query.first.return_value = mock_user_settings
 
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(
             return_value=create_keycloak_user_info(
-                sub="test_user_id",
-                preferred_username="test_user",
+                sub='test_user_id',
+                preferred_username='test_user',
                 # No email field
-                identity_provider="github",
+                identity_provider='github',
                 email_verified=True,
             )
         )
@@ -1530,9 +1530,9 @@ async def test_keycloak_callback_no_email_in_user_info(
 
         # Mock the user creation
         mock_user = MagicMock()
-        mock_user.id = "test_user_id"
-        mock_user.current_org_id = "test_org_id"
-        mock_user.accepted_tos = "2025-01-01"
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
+        mock_user.accepted_tos = '2025-01-01'
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
         mock_user_store.backfill_contact_name = AsyncMock()
@@ -1541,8 +1541,8 @@ async def test_keycloak_callback_no_email_in_user_info(
 
         # Act
         result = await keycloak_callback(
-            code="test_code",
-            state="test_state",
+            code='test_code',
+            state='test_state',
             request=mock_request,
             background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
@@ -1565,8 +1565,8 @@ class TestKeycloakCallbackRecaptcha:
         """Test that login proceeds when reCAPTCHA score is high."""
         # Arrange
         state_data = {
-            "redirect_url": "https://example.com",
-            "recaptcha_token": "test-token",
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
         }
         encoded_state = base64.urlsafe_b64encode(
             json.dumps(state_data).encode()
@@ -1577,18 +1577,18 @@ class TestKeycloakCallbackRecaptcha:
         mock_assessment_result.score = 0.9
 
         with (
-            patch("server.routes.auth.token_manager") as mock_token_manager,
-            patch("server.routes.auth.recaptcha_service") as mock_recaptcha_service,
-            patch("server.routes.auth.RECAPTCHA_SITE_KEY", "test-site-key"),
-            patch("server.routes.auth.a_session_maker") as mock_session_maker,
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch(
-                "storage.user_authorization_store.UserAuthorizationStore"
+                'storage.user_authorization_store.UserAuthorizationStore'
             ) as mock_user_auth_store,
-            patch("server.routes.auth.set_response_cookie"),
-            patch("server.routes.auth.get_analytics_service"),
-            patch("storage.org_store.OrgStore.get_org_by_id", new_callable=AsyncMock),
-            patch("server.routes.email.verify_email", new_callable=AsyncMock),
-            patch("server.routes.auth.UserStore") as mock_user_store,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+            patch('server.routes.auth.UserStore') as mock_user_store,
         ):
             mock_session = MagicMock()
             mock_session_maker.return_value.__enter__.return_value = mock_session
@@ -1596,18 +1596,18 @@ class TestKeycloakCallbackRecaptcha:
             mock_session.query.return_value = mock_query
             mock_query.filter.return_value = mock_query
             mock_user_settings = MagicMock()
-            mock_user_settings.accepted_tos = "2025-01-01"
+            mock_user_settings.accepted_tos = '2025-01-01'
             mock_query.first.return_value = mock_user_settings
 
             mock_token_manager.get_keycloak_tokens = AsyncMock(
-                return_value=("test_access_token", "test_refresh_token")
+                return_value=('test_access_token', 'test_refresh_token')
             )
             mock_token_manager.get_user_info = AsyncMock(
                 return_value=create_keycloak_user_info(
-                    sub="test_user_id",
-                    preferred_username="test_user",
-                    email="user@example.com",
-                    identity_provider="github",
+                    sub='test_user_id',
+                    preferred_username='test_user',
+                    email='user@example.com',
+                    identity_provider='github',
                     email_verified=True,
                 )
             )
@@ -1619,9 +1619,9 @@ class TestKeycloakCallbackRecaptcha:
 
             # Setup UserStore mocks
             mock_user = MagicMock()
-            mock_user.id = "test_user_id"
-            mock_user.current_org_id = "test_org_id"
-            mock_user.accepted_tos = "2025-01-01"
+            mock_user.id = 'test_user_id'
+            mock_user.current_org_id = 'test_org_id'
+            mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
             mock_user_store.backfill_contact_name = AsyncMock()
@@ -1637,7 +1637,7 @@ class TestKeycloakCallbackRecaptcha:
 
             # Act
             result = await keycloak_callback(
-                code="test_code",
+                code='test_code',
                 state=encoded_state,
                 request=mock_request,
                 background_tasks=mock_background_tasks,
@@ -1656,8 +1656,8 @@ class TestKeycloakCallbackRecaptcha:
         """Test that login is blocked and redirected when reCAPTCHA score is low."""
         # Arrange
         state_data = {
-            "redirect_url": "https://example.com",
-            "recaptcha_token": "test-token",
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
         }
         encoded_state = base64.urlsafe_b64encode(
             json.dumps(state_data).encode()
@@ -1668,22 +1668,22 @@ class TestKeycloakCallbackRecaptcha:
         mock_assessment_result.score = 0.2
 
         with (
-            patch("server.routes.auth.token_manager") as mock_token_manager,
-            patch("server.routes.auth.recaptcha_service") as mock_recaptcha_service,
-            patch("server.routes.auth.RECAPTCHA_SITE_KEY", "test-site-key"),
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
             patch(
-                "storage.user_authorization_store.UserAuthorizationStore"
+                'storage.user_authorization_store.UserAuthorizationStore'
             ) as mock_user_auth_store,
-            patch("server.routes.auth.UserStore") as mock_user_store,
+            patch('server.routes.auth.UserStore') as mock_user_store,
         ):
             mock_token_manager.get_keycloak_tokens = AsyncMock(
-                return_value=("test_access_token", "test_refresh_token")
+                return_value=('test_access_token', 'test_refresh_token')
             )
             mock_token_manager.get_user_info = AsyncMock(
                 return_value=create_keycloak_user_info(
-                    sub="test_user_id",
-                    preferred_username="test_user",
-                    email="user@example.com",
+                    sub='test_user_id',
+                    preferred_username='test_user',
+                    email='user@example.com',
                 )
             )
             mock_token_manager.check_duplicate_base_email = AsyncMock(
@@ -1692,8 +1692,8 @@ class TestKeycloakCallbackRecaptcha:
 
             # Setup UserStore mocks
             mock_user = MagicMock()
-            mock_user.id = "test_user_id"
-            mock_user.current_org_id = "test_org_id"
+            mock_user.id = 'test_user_id'
+            mock_user.current_org_id = 'test_org_id'
             mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
             mock_user_store.backfill_contact_name = AsyncMock()
@@ -1709,7 +1709,7 @@ class TestKeycloakCallbackRecaptcha:
 
             # Act
             result = await keycloak_callback(
-                code="test_code",
+                code='test_code',
                 state=encoded_state,
                 request=mock_request,
                 background_tasks=mock_background_tasks,
@@ -1719,7 +1719,7 @@ class TestKeycloakCallbackRecaptcha:
             # Assert
             assert isinstance(result, RedirectResponse)
             assert result.status_code == 302
-            assert "recaptcha_blocked=true" in result.headers["location"]
+            assert 'recaptcha_blocked=true' in result.headers['location']
 
     @pytest.mark.asyncio
     async def test_login_extracts_ip_from_x_forwarded_for(
@@ -1728,32 +1728,32 @@ class TestKeycloakCallbackRecaptcha:
         """Test that IP is extracted from X-Forwarded-For header when present."""
         # Arrange
         state_data = {
-            "redirect_url": "https://example.com",
-            "recaptcha_token": "test-token",
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
         }
         encoded_state = base64.urlsafe_b64encode(
             json.dumps(state_data).encode()
         ).decode()
 
-        mock_request.headers = {"X-Forwarded-For": "192.168.1.1, 10.0.0.1"}
+        mock_request.headers = {'X-Forwarded-For': '192.168.1.1, 10.0.0.1'}
         mock_request.client = None
 
         mock_assessment_result = MagicMock()
         mock_assessment_result.allowed = True
 
         with (
-            patch("server.routes.auth.token_manager") as mock_token_manager,
-            patch("server.routes.auth.recaptcha_service") as mock_recaptcha_service,
-            patch("server.routes.auth.RECAPTCHA_SITE_KEY", "test-site-key"),
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
             patch(
-                "storage.user_authorization_store.UserAuthorizationStore"
+                'storage.user_authorization_store.UserAuthorizationStore'
             ) as mock_user_auth_store,
-            patch("server.routes.auth.a_session_maker") as mock_session_maker,
-            patch("server.routes.auth.set_response_cookie"),
-            patch("server.routes.auth.get_analytics_service"),
-            patch("storage.org_store.OrgStore.get_org_by_id", new_callable=AsyncMock),
-            patch("server.routes.email.verify_email", new_callable=AsyncMock),
-            patch("server.routes.auth.UserStore") as mock_user_store,
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+            patch('server.routes.auth.UserStore') as mock_user_store,
         ):
             mock_session = MagicMock()
             mock_session_maker.return_value.__enter__.return_value = mock_session
@@ -1761,18 +1761,18 @@ class TestKeycloakCallbackRecaptcha:
             mock_session.query.return_value = mock_query
             mock_query.filter.return_value = mock_query
             mock_user_settings = MagicMock()
-            mock_user_settings.accepted_tos = "2025-01-01"
+            mock_user_settings.accepted_tos = '2025-01-01'
             mock_query.first.return_value = mock_user_settings
 
             mock_token_manager.get_keycloak_tokens = AsyncMock(
-                return_value=("test_access_token", "test_refresh_token")
+                return_value=('test_access_token', 'test_refresh_token')
             )
             mock_token_manager.get_user_info = AsyncMock(
                 return_value=create_keycloak_user_info(
-                    sub="test_user_id",
-                    preferred_username="test_user",
-                    email="user@example.com",
-                    identity_provider="github",
+                    sub='test_user_id',
+                    preferred_username='test_user',
+                    email='user@example.com',
+                    identity_provider='github',
                     email_verified=True,
                 )
             )
@@ -1784,9 +1784,9 @@ class TestKeycloakCallbackRecaptcha:
 
             # Setup UserStore mocks
             mock_user = MagicMock()
-            mock_user.id = "test_user_id"
-            mock_user.current_org_id = "test_org_id"
-            mock_user.accepted_tos = "2025-01-01"
+            mock_user.id = 'test_user_id'
+            mock_user.current_org_id = 'test_org_id'
+            mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
             mock_user_store.backfill_contact_name = AsyncMock()
@@ -1802,7 +1802,7 @@ class TestKeycloakCallbackRecaptcha:
 
             # Act
             await keycloak_callback(
-                code="test_code",
+                code='test_code',
                 state=encoded_state,
                 request=mock_request,
                 background_tasks=mock_background_tasks,
@@ -1811,7 +1811,7 @@ class TestKeycloakCallbackRecaptcha:
 
             # Assert
             call_args = mock_recaptcha_service.create_assessment.call_args
-            assert call_args[1]["user_ip"] == "192.168.1.1"
+            assert call_args[1]['user_ip'] == '192.168.1.1'
 
     @pytest.mark.asyncio
     async def test_login_uses_client_host_when_x_forwarded_for_missing(
@@ -1820,8 +1820,8 @@ class TestKeycloakCallbackRecaptcha:
         """Test that client.host is used when X-Forwarded-For is missing."""
         # Arrange
         state_data = {
-            "redirect_url": "https://example.com",
-            "recaptcha_token": "test-token",
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
         }
         encoded_state = base64.urlsafe_b64encode(
             json.dumps(state_data).encode()
@@ -1829,24 +1829,24 @@ class TestKeycloakCallbackRecaptcha:
 
         mock_request.headers = {}
         mock_request.client = MagicMock()
-        mock_request.client.host = "192.168.1.2"
+        mock_request.client.host = '192.168.1.2'
 
         mock_assessment_result = MagicMock()
         mock_assessment_result.allowed = True
 
         with (
-            patch("server.routes.auth.token_manager") as mock_token_manager,
-            patch("server.routes.auth.recaptcha_service") as mock_recaptcha_service,
-            patch("server.routes.auth.RECAPTCHA_SITE_KEY", "test-site-key"),
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
             patch(
-                "storage.user_authorization_store.UserAuthorizationStore"
+                'storage.user_authorization_store.UserAuthorizationStore'
             ) as mock_user_auth_store,
-            patch("server.routes.auth.a_session_maker") as mock_session_maker,
-            patch("server.routes.auth.set_response_cookie"),
-            patch("server.routes.auth.get_analytics_service"),
-            patch("storage.org_store.OrgStore.get_org_by_id", new_callable=AsyncMock),
-            patch("server.routes.email.verify_email", new_callable=AsyncMock),
-            patch("server.routes.auth.UserStore") as mock_user_store,
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+            patch('server.routes.auth.UserStore') as mock_user_store,
         ):
             mock_session = MagicMock()
             mock_session_maker.return_value.__enter__.return_value = mock_session
@@ -1854,18 +1854,18 @@ class TestKeycloakCallbackRecaptcha:
             mock_session.query.return_value = mock_query
             mock_query.filter.return_value = mock_query
             mock_user_settings = MagicMock()
-            mock_user_settings.accepted_tos = "2025-01-01"
+            mock_user_settings.accepted_tos = '2025-01-01'
             mock_query.first.return_value = mock_user_settings
 
             mock_token_manager.get_keycloak_tokens = AsyncMock(
-                return_value=("test_access_token", "test_refresh_token")
+                return_value=('test_access_token', 'test_refresh_token')
             )
             mock_token_manager.get_user_info = AsyncMock(
                 return_value=create_keycloak_user_info(
-                    sub="test_user_id",
-                    preferred_username="test_user",
-                    email="user@example.com",
-                    identity_provider="github",
+                    sub='test_user_id',
+                    preferred_username='test_user',
+                    email='user@example.com',
+                    identity_provider='github',
                     email_verified=True,
                 )
             )
@@ -1877,9 +1877,9 @@ class TestKeycloakCallbackRecaptcha:
 
             # Setup UserStore mocks
             mock_user = MagicMock()
-            mock_user.id = "test_user_id"
-            mock_user.current_org_id = "test_org_id"
-            mock_user.accepted_tos = "2025-01-01"
+            mock_user.id = 'test_user_id'
+            mock_user.current_org_id = 'test_org_id'
+            mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
             mock_user_store.backfill_contact_name = AsyncMock()
@@ -1895,7 +1895,7 @@ class TestKeycloakCallbackRecaptcha:
 
             # Act
             await keycloak_callback(
-                code="test_code",
+                code='test_code',
                 state=encoded_state,
                 request=mock_request,
                 background_tasks=mock_background_tasks,
@@ -1904,7 +1904,7 @@ class TestKeycloakCallbackRecaptcha:
 
             # Assert
             call_args = mock_recaptcha_service.create_assessment.call_args
-            assert call_args[1]["user_ip"] == "192.168.1.2"
+            assert call_args[1]['user_ip'] == '192.168.1.2'
 
     @pytest.mark.asyncio
     async def test_login_uses_unknown_ip_when_client_is_none(
@@ -1913,8 +1913,8 @@ class TestKeycloakCallbackRecaptcha:
         """Test that 'unknown' IP is used when client is None."""
         # Arrange
         state_data = {
-            "redirect_url": "https://example.com",
-            "recaptcha_token": "test-token",
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
         }
         encoded_state = base64.urlsafe_b64encode(
             json.dumps(state_data).encode()
@@ -1927,18 +1927,18 @@ class TestKeycloakCallbackRecaptcha:
         mock_assessment_result.allowed = True
 
         with (
-            patch("server.routes.auth.token_manager") as mock_token_manager,
-            patch("server.routes.auth.recaptcha_service") as mock_recaptcha_service,
-            patch("server.routes.auth.RECAPTCHA_SITE_KEY", "test-site-key"),
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
             patch(
-                "storage.user_authorization_store.UserAuthorizationStore"
+                'storage.user_authorization_store.UserAuthorizationStore'
             ) as mock_user_auth_store,
-            patch("server.routes.auth.a_session_maker") as mock_session_maker,
-            patch("server.routes.auth.set_response_cookie"),
-            patch("server.routes.auth.get_analytics_service"),
-            patch("storage.org_store.OrgStore.get_org_by_id", new_callable=AsyncMock),
-            patch("server.routes.email.verify_email", new_callable=AsyncMock),
-            patch("server.routes.auth.UserStore") as mock_user_store,
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+            patch('server.routes.auth.UserStore') as mock_user_store,
         ):
             mock_session = MagicMock()
             mock_session_maker.return_value.__enter__.return_value = mock_session
@@ -1946,18 +1946,18 @@ class TestKeycloakCallbackRecaptcha:
             mock_session.query.return_value = mock_query
             mock_query.filter.return_value = mock_query
             mock_user_settings = MagicMock()
-            mock_user_settings.accepted_tos = "2025-01-01"
+            mock_user_settings.accepted_tos = '2025-01-01'
             mock_query.first.return_value = mock_user_settings
 
             mock_token_manager.get_keycloak_tokens = AsyncMock(
-                return_value=("test_access_token", "test_refresh_token")
+                return_value=('test_access_token', 'test_refresh_token')
             )
             mock_token_manager.get_user_info = AsyncMock(
                 return_value=create_keycloak_user_info(
-                    sub="test_user_id",
-                    preferred_username="test_user",
-                    email="user@example.com",
-                    identity_provider="github",
+                    sub='test_user_id',
+                    preferred_username='test_user',
+                    email='user@example.com',
+                    identity_provider='github',
                     email_verified=True,
                 )
             )
@@ -1969,9 +1969,9 @@ class TestKeycloakCallbackRecaptcha:
 
             # Setup UserStore mocks
             mock_user = MagicMock()
-            mock_user.id = "test_user_id"
-            mock_user.current_org_id = "test_org_id"
-            mock_user.accepted_tos = "2025-01-01"
+            mock_user.id = 'test_user_id'
+            mock_user.current_org_id = 'test_org_id'
+            mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
             mock_user_store.backfill_contact_name = AsyncMock()
@@ -1987,7 +1987,7 @@ class TestKeycloakCallbackRecaptcha:
 
             # Act
             await keycloak_callback(
-                code="test_code",
+                code='test_code',
                 state=encoded_state,
                 request=mock_request,
                 background_tasks=mock_background_tasks,
@@ -1996,7 +1996,7 @@ class TestKeycloakCallbackRecaptcha:
 
             # Assert
             call_args = mock_recaptcha_service.create_assessment.call_args
-            assert call_args[1]["user_ip"] == "unknown"
+            assert call_args[1]['user_ip'] == 'unknown'
 
     @pytest.mark.asyncio
     async def test_login_includes_email_in_assessment(
@@ -2005,8 +2005,8 @@ class TestKeycloakCallbackRecaptcha:
         """Test that email is included in assessment when available."""
         # Arrange
         state_data = {
-            "redirect_url": "https://example.com",
-            "recaptcha_token": "test-token",
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
         }
         encoded_state = base64.urlsafe_b64encode(
             json.dumps(state_data).encode()
@@ -2016,18 +2016,18 @@ class TestKeycloakCallbackRecaptcha:
         mock_assessment_result.allowed = True
 
         with (
-            patch("server.routes.auth.token_manager") as mock_token_manager,
-            patch("server.routes.auth.recaptcha_service") as mock_recaptcha_service,
-            patch("server.routes.auth.RECAPTCHA_SITE_KEY", "test-site-key"),
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
             patch(
-                "storage.user_authorization_store.UserAuthorizationStore"
+                'storage.user_authorization_store.UserAuthorizationStore'
             ) as mock_user_auth_store,
-            patch("server.routes.auth.a_session_maker") as mock_session_maker,
-            patch("server.routes.auth.set_response_cookie"),
-            patch("server.routes.auth.get_analytics_service"),
-            patch("storage.org_store.OrgStore.get_org_by_id", new_callable=AsyncMock),
-            patch("server.routes.email.verify_email", new_callable=AsyncMock),
-            patch("server.routes.auth.UserStore") as mock_user_store,
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+            patch('server.routes.auth.UserStore') as mock_user_store,
         ):
             mock_session = MagicMock()
             mock_session_maker.return_value.__enter__.return_value = mock_session
@@ -2035,18 +2035,18 @@ class TestKeycloakCallbackRecaptcha:
             mock_session.query.return_value = mock_query
             mock_query.filter.return_value = mock_query
             mock_user_settings = MagicMock()
-            mock_user_settings.accepted_tos = "2025-01-01"
+            mock_user_settings.accepted_tos = '2025-01-01'
             mock_query.first.return_value = mock_user_settings
 
             mock_token_manager.get_keycloak_tokens = AsyncMock(
-                return_value=("test_access_token", "test_refresh_token")
+                return_value=('test_access_token', 'test_refresh_token')
             )
             mock_token_manager.get_user_info = AsyncMock(
                 return_value=create_keycloak_user_info(
-                    sub="test_user_id",
-                    preferred_username="test_user",
-                    email="user@example.com",
-                    identity_provider="github",
+                    sub='test_user_id',
+                    preferred_username='test_user',
+                    email='user@example.com',
+                    identity_provider='github',
                     email_verified=True,
                 )
             )
@@ -2058,9 +2058,9 @@ class TestKeycloakCallbackRecaptcha:
 
             # Setup UserStore mocks
             mock_user = MagicMock()
-            mock_user.id = "test_user_id"
-            mock_user.current_org_id = "test_org_id"
-            mock_user.accepted_tos = "2025-01-01"
+            mock_user.id = 'test_user_id'
+            mock_user.current_org_id = 'test_org_id'
+            mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
             mock_user_store.backfill_contact_name = AsyncMock()
@@ -2076,7 +2076,7 @@ class TestKeycloakCallbackRecaptcha:
 
             # Act
             await keycloak_callback(
-                code="test_code",
+                code='test_code',
                 state=encoded_state,
                 request=mock_request,
                 background_tasks=mock_background_tasks,
@@ -2085,7 +2085,7 @@ class TestKeycloakCallbackRecaptcha:
 
             # Assert
             call_args = mock_recaptcha_service.create_assessment.call_args
-            assert call_args[1]["email"] == "user@example.com"
+            assert call_args[1]['email'] == 'user@example.com'
 
     @pytest.mark.asyncio
     async def test_login_skips_recaptcha_when_site_key_not_configured(
@@ -2094,26 +2094,26 @@ class TestKeycloakCallbackRecaptcha:
         """Test that reCAPTCHA is skipped when RECAPTCHA_SITE_KEY is not configured."""
         # Arrange
         state_data = {
-            "redirect_url": "https://example.com",
-            "recaptcha_token": "test-token",
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
         }
         encoded_state = base64.urlsafe_b64encode(
             json.dumps(state_data).encode()
         ).decode()
 
         with (
-            patch("server.routes.auth.token_manager") as mock_token_manager,
-            patch("server.routes.auth.recaptcha_service") as mock_recaptcha_service,
-            patch("server.routes.auth.RECAPTCHA_SITE_KEY", ""),
-            patch("server.routes.auth.a_session_maker") as mock_session_maker,
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', ''),
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch(
-                "storage.user_authorization_store.UserAuthorizationStore"
+                'storage.user_authorization_store.UserAuthorizationStore'
             ) as mock_user_auth_store,
-            patch("server.routes.auth.set_response_cookie"),
-            patch("server.routes.auth.get_analytics_service"),
-            patch("storage.org_store.OrgStore.get_org_by_id", new_callable=AsyncMock),
-            patch("server.routes.email.verify_email", new_callable=AsyncMock),
-            patch("server.routes.auth.UserStore") as mock_user_store,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+            patch('server.routes.auth.UserStore') as mock_user_store,
         ):
             mock_session = MagicMock()
             mock_session_maker.return_value.__enter__.return_value = mock_session
@@ -2121,18 +2121,18 @@ class TestKeycloakCallbackRecaptcha:
             mock_session.query.return_value = mock_query
             mock_query.filter.return_value = mock_query
             mock_user_settings = MagicMock()
-            mock_user_settings.accepted_tos = "2025-01-01"
+            mock_user_settings.accepted_tos = '2025-01-01'
             mock_query.first.return_value = mock_user_settings
 
             mock_token_manager.get_keycloak_tokens = AsyncMock(
-                return_value=("test_access_token", "test_refresh_token")
+                return_value=('test_access_token', 'test_refresh_token')
             )
             mock_token_manager.get_user_info = AsyncMock(
                 return_value=create_keycloak_user_info(
-                    sub="test_user_id",
-                    preferred_username="test_user",
-                    email="user@example.com",
-                    identity_provider="github",
+                    sub='test_user_id',
+                    preferred_username='test_user',
+                    email='user@example.com',
+                    identity_provider='github',
                     email_verified=True,
                 )
             )
@@ -2144,9 +2144,9 @@ class TestKeycloakCallbackRecaptcha:
 
             # Setup UserStore mocks
             mock_user = MagicMock()
-            mock_user.id = "test_user_id"
-            mock_user.current_org_id = "test_org_id"
-            mock_user.accepted_tos = "2025-01-01"
+            mock_user.id = 'test_user_id'
+            mock_user.current_org_id = 'test_org_id'
+            mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
             mock_user_store.backfill_contact_name = AsyncMock()
@@ -2157,7 +2157,7 @@ class TestKeycloakCallbackRecaptcha:
 
             # Act
             await keycloak_callback(
-                code="test_code",
+                code='test_code',
                 state=encoded_state,
                 request=mock_request,
                 background_tasks=mock_background_tasks,
@@ -2173,21 +2173,21 @@ class TestKeycloakCallbackRecaptcha:
     ):
         """Test that reCAPTCHA is skipped when token is missing from state."""
         # Arrange
-        state = "https://example.com"  # Old format without token
+        state = 'https://example.com'  # Old format without token
 
         with (
-            patch("server.routes.auth.token_manager") as mock_token_manager,
-            patch("server.routes.auth.recaptcha_service") as mock_recaptcha_service,
-            patch("server.routes.auth.RECAPTCHA_SITE_KEY", "test-site-key"),
-            patch("server.routes.auth.a_session_maker") as mock_session_maker,
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch(
-                "storage.user_authorization_store.UserAuthorizationStore"
+                'storage.user_authorization_store.UserAuthorizationStore'
             ) as mock_user_auth_store,
-            patch("server.routes.auth.set_response_cookie"),
-            patch("server.routes.auth.get_analytics_service"),
-            patch("storage.org_store.OrgStore.get_org_by_id", new_callable=AsyncMock),
-            patch("server.routes.email.verify_email", new_callable=AsyncMock),
-            patch("server.routes.auth.UserStore") as mock_user_store,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+            patch('server.routes.auth.UserStore') as mock_user_store,
         ):
             mock_session = MagicMock()
             mock_session_maker.return_value.__enter__.return_value = mock_session
@@ -2195,18 +2195,18 @@ class TestKeycloakCallbackRecaptcha:
             mock_session.query.return_value = mock_query
             mock_query.filter.return_value = mock_query
             mock_user_settings = MagicMock()
-            mock_user_settings.accepted_tos = "2025-01-01"
+            mock_user_settings.accepted_tos = '2025-01-01'
             mock_query.first.return_value = mock_user_settings
 
             mock_token_manager.get_keycloak_tokens = AsyncMock(
-                return_value=("test_access_token", "test_refresh_token")
+                return_value=('test_access_token', 'test_refresh_token')
             )
             mock_token_manager.get_user_info = AsyncMock(
                 return_value=create_keycloak_user_info(
-                    sub="test_user_id",
-                    preferred_username="test_user",
-                    email="user@example.com",
-                    identity_provider="github",
+                    sub='test_user_id',
+                    preferred_username='test_user',
+                    email='user@example.com',
+                    identity_provider='github',
                     email_verified=True,
                 )
             )
@@ -2218,9 +2218,9 @@ class TestKeycloakCallbackRecaptcha:
 
             # Setup UserStore mocks
             mock_user = MagicMock()
-            mock_user.id = "test_user_id"
-            mock_user.current_org_id = "test_org_id"
-            mock_user.accepted_tos = "2025-01-01"
+            mock_user.id = 'test_user_id'
+            mock_user.current_org_id = 'test_org_id'
+            mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
             mock_user_store.backfill_contact_name = AsyncMock()
@@ -2231,7 +2231,7 @@ class TestKeycloakCallbackRecaptcha:
 
             # Act
             await keycloak_callback(
-                code="test_code",
+                code='test_code',
                 state=state,
                 request=mock_request,
                 background_tasks=mock_background_tasks,
@@ -2248,26 +2248,26 @@ class TestKeycloakCallbackRecaptcha:
         """Test that login proceeds (fail open) when reCAPTCHA service throws exception."""
         # Arrange
         state_data = {
-            "redirect_url": "https://example.com",
-            "recaptcha_token": "test-token",
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
         }
         encoded_state = base64.urlsafe_b64encode(
             json.dumps(state_data).encode()
         ).decode()
 
         with (
-            patch("server.routes.auth.token_manager") as mock_token_manager,
-            patch("server.routes.auth.recaptcha_service") as mock_recaptcha_service,
-            patch("server.routes.auth.RECAPTCHA_SITE_KEY", "test-site-key"),
-            patch("server.routes.auth.a_session_maker") as mock_session_maker,
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch(
-                "storage.user_authorization_store.UserAuthorizationStore"
+                'storage.user_authorization_store.UserAuthorizationStore'
             ) as mock_user_auth_store,
-            patch("server.routes.auth.set_response_cookie"),
-            patch("server.routes.auth.get_analytics_service"),
-            patch("storage.org_store.OrgStore.get_org_by_id", new_callable=AsyncMock),
-            patch("server.routes.auth.logger") as mock_logger,
-            patch("server.routes.auth.UserStore") as mock_user_store,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.get_analytics_service'),
+            patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
+            patch('server.routes.auth.logger') as mock_logger,
+            patch('server.routes.auth.UserStore') as mock_user_store,
         ):
             mock_session = MagicMock()
             mock_session_maker.return_value.__enter__.return_value = mock_session
@@ -2275,18 +2275,18 @@ class TestKeycloakCallbackRecaptcha:
             mock_session.query.return_value = mock_query
             mock_query.filter.return_value = mock_query
             mock_user_settings = MagicMock()
-            mock_user_settings.accepted_tos = "2025-01-01"
+            mock_user_settings.accepted_tos = '2025-01-01'
             mock_query.first.return_value = mock_user_settings
 
             mock_token_manager.get_keycloak_tokens = AsyncMock(
-                return_value=("test_access_token", "test_refresh_token")
+                return_value=('test_access_token', 'test_refresh_token')
             )
             mock_token_manager.get_user_info = AsyncMock(
                 return_value=create_keycloak_user_info(
-                    sub="test_user_id",
-                    preferred_username="test_user",
-                    email="user@example.com",
-                    identity_provider="github",
+                    sub='test_user_id',
+                    preferred_username='test_user',
+                    email='user@example.com',
+                    identity_provider='github',
                     email_verified=True,
                 )
             )
@@ -2298,9 +2298,9 @@ class TestKeycloakCallbackRecaptcha:
 
             # Setup UserStore mocks
             mock_user = MagicMock()
-            mock_user.id = "test_user_id"
-            mock_user.current_org_id = "test_org_id"
-            mock_user.accepted_tos = "2025-01-01"
+            mock_user.id = 'test_user_id'
+            mock_user.current_org_id = 'test_org_id'
+            mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
             mock_user_store.backfill_contact_name = AsyncMock()
@@ -2310,12 +2310,12 @@ class TestKeycloakCallbackRecaptcha:
             mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
             mock_recaptcha_service.create_assessment.side_effect = Exception(
-                "Service error"
+                'Service error'
             )
 
             # Act
             result = await keycloak_callback(
-                code="test_code",
+                code='test_code',
                 state=encoded_state,
                 request=mock_request,
                 background_tasks=mock_background_tasks,
@@ -2328,7 +2328,7 @@ class TestKeycloakCallbackRecaptcha:
             recaptcha_error_calls = [
                 call
                 for call in mock_logger.exception.call_args_list
-                if "reCAPTCHA verification error" in str(call)
+                if 'reCAPTCHA verification error' in str(call)
             ]
             assert len(recaptcha_error_calls) > 0
 
@@ -2339,8 +2339,8 @@ class TestKeycloakCallbackRecaptcha:
         """Test that warning is logged when reCAPTCHA blocks user."""
         # Arrange
         state_data = {
-            "redirect_url": "https://example.com",
-            "recaptcha_token": "test-token",
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
         }
         encoded_state = base64.urlsafe_b64encode(
             json.dumps(state_data).encode()
@@ -2351,24 +2351,24 @@ class TestKeycloakCallbackRecaptcha:
         mock_assessment_result.score = 0.2
 
         with (
-            patch("server.routes.auth.token_manager") as mock_token_manager,
-            patch("server.routes.auth.recaptcha_service") as mock_recaptcha_service,
-            patch("server.routes.auth.RECAPTCHA_SITE_KEY", "test-site-key"),
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
             patch(
-                "storage.user_authorization_store.UserAuthorizationStore"
+                'storage.user_authorization_store.UserAuthorizationStore'
             ) as mock_user_auth_store,
-            patch("server.routes.auth.logger") as mock_logger,
-            patch("server.routes.email.verify_email", new_callable=AsyncMock),
-            patch("server.routes.auth.UserStore") as mock_user_store,
+            patch('server.routes.auth.logger') as mock_logger,
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+            patch('server.routes.auth.UserStore') as mock_user_store,
         ):
             mock_token_manager.get_keycloak_tokens = AsyncMock(
-                return_value=("test_access_token", "test_refresh_token")
+                return_value=('test_access_token', 'test_refresh_token')
             )
             mock_token_manager.get_user_info = AsyncMock(
                 return_value=create_keycloak_user_info(
-                    sub="test_user_id",
-                    preferred_username="test_user",
-                    email="user@example.com",
+                    sub='test_user_id',
+                    preferred_username='test_user',
+                    email='user@example.com',
                 )
             )
             mock_token_manager.check_duplicate_base_email = AsyncMock(
@@ -2377,8 +2377,8 @@ class TestKeycloakCallbackRecaptcha:
 
             # Setup UserStore mocks
             mock_user = MagicMock()
-            mock_user.id = "test_user_id"
-            mock_user.current_org_id = "test_org_id"
+            mock_user.id = 'test_user_id'
+            mock_user.current_org_id = 'test_org_id'
             mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
             mock_user_store.backfill_contact_name = AsyncMock()
@@ -2394,7 +2394,7 @@ class TestKeycloakCallbackRecaptcha:
 
             # Act
             await keycloak_callback(
-                code="test_code",
+                code='test_code',
                 state=encoded_state,
                 request=mock_request,
                 background_tasks=mock_background_tasks,
@@ -2404,9 +2404,9 @@ class TestKeycloakCallbackRecaptcha:
             # Assert
             mock_logger.warning.assert_called_once()
             call_kwargs = mock_logger.warning.call_args
-            assert call_kwargs[0][0] == "recaptcha_blocked_at_callback"
-            assert call_kwargs[1]["extra"]["score"] == 0.2
-            assert call_kwargs[1]["extra"]["user_id"] == "test_user_id"
+            assert call_kwargs[0][0] == 'recaptcha_blocked_at_callback'
+            assert call_kwargs[1]['extra']['score'] == 0.2
+            assert call_kwargs[1]['extra']['user_id'] == 'test_user_id'
 
 
 @pytest.mark.asyncio
@@ -2415,24 +2415,24 @@ async def test_keycloak_callback_calls_backfill_user_email_for_existing_user(
 ):
     """When an existing user logs in, backfill_user_email should be called."""
     user_info = create_keycloak_user_info(
-        sub="test_user_id",
-        preferred_username="test_user",
-        identity_provider="github",
-        email="test@example.com",
+        sub='test_user_id',
+        preferred_username='test_user',
+        identity_provider='github',
+        email='test@example.com',
         email_verified=True,
     )
 
     with (
-        patch("server.routes.auth.token_manager") as mock_token_manager,
-        patch("server.routes.auth.set_response_cookie"),
-        patch("server.routes.auth.UserStore") as mock_user_store,
-        patch("server.routes.auth.get_analytics_service"),
-        patch("storage.org_store.OrgStore.get_org_by_id", new_callable=AsyncMock),
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.set_response_cookie'),
+        patch('server.routes.auth.UserStore') as mock_user_store,
+        patch('server.routes.auth.get_analytics_service'),
+        patch('storage.org_store.OrgStore.get_org_by_id', new_callable=AsyncMock),
     ):
         mock_user = MagicMock()
-        mock_user.id = "test_user_id"
-        mock_user.current_org_id = "test_org_id"
-        mock_user.accepted_tos = "2025-01-01"
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
+        mock_user.accepted_tos = '2025-01-01'
 
         mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
@@ -2441,7 +2441,7 @@ async def test_keycloak_callback_calls_backfill_user_email_for_existing_user(
         mock_user_store.record_login = AsyncMock()
 
         mock_token_manager.get_keycloak_tokens = AsyncMock(
-            return_value=("test_access_token", "test_refresh_token")
+            return_value=('test_access_token', 'test_refresh_token')
         )
         mock_token_manager.get_user_info = AsyncMock(return_value=user_info)
         mock_token_manager.store_idp_tokens = AsyncMock()
@@ -2449,8 +2449,8 @@ async def test_keycloak_callback_calls_backfill_user_email_for_existing_user(
         mock_token_manager.check_duplicate_base_email = AsyncMock(return_value=False)
 
         result = await keycloak_callback(
-            code="test_code",
-            state="test_state",
+            code='test_code',
+            state='test_state',
             request=mock_request,
             background_tasks=mock_background_tasks,
             user_authorizer=create_mock_user_authorizer(),
@@ -2461,7 +2461,7 @@ async def test_keycloak_callback_calls_backfill_user_email_for_existing_user(
 
         # backfill_user_email should have been called with the user_id and user_info dict
         mock_user_store.backfill_user_email.assert_called_once_with(
-            "test_user_id", user_info.model_dump(exclude_none=True)
+            'test_user_id', user_info.model_dump(exclude_none=True)
         )
 
 
@@ -2469,7 +2469,7 @@ async def test_keycloak_callback_calls_backfill_user_email_for_existing_user(
 async def test_accept_tos_stores_timezone_naive_datetime(mock_request):
     """Test that accept_tos stores a timezone-naive datetime for database compatibility."""
     # Arrange
-    test_user_id = "12345678-1234-5678-1234-567812345678"
+    test_user_id = '12345678-1234-5678-1234-567812345678'
 
     mock_user = MagicMock()
     mock_user.id = test_user_id
@@ -2487,12 +2487,12 @@ async def test_accept_tos_stores_timezone_naive_datetime(mock_request):
 
     mock_user_auth = MagicMock(spec=SaasUserAuth)
     mock_user_auth.get_access_token = AsyncMock(
-        return_value=SecretStr("test_access_token")
+        return_value=SecretStr('test_access_token')
     )
-    mock_user_auth.refresh_token = SecretStr("test_refresh_token")
+    mock_user_auth.refresh_token = SecretStr('test_refresh_token')
     mock_user_auth.get_user_id = AsyncMock(return_value=test_user_id)
 
-    mock_request.json = AsyncMock(return_value={"redirect_url": "http://example.com"})
+    mock_request.json = AsyncMock(return_value={'redirect_url': 'http://example.com'})
 
     # Mock user for onboarding check (user already completed onboarding)
     mock_user_for_onboarding = MagicMock()
@@ -2500,13 +2500,13 @@ async def test_accept_tos_stores_timezone_naive_datetime(mock_request):
 
     with (
         patch(
-            "server.routes.auth.get_user_auth", AsyncMock(return_value=mock_user_auth)
+            'server.routes.auth.get_user_auth', AsyncMock(return_value=mock_user_auth)
         ),
-        patch("server.routes.auth.a_session_maker", return_value=mock_session_context),
-        patch("server.routes.auth.set_response_cookie"),
+        patch('server.routes.auth.a_session_maker', return_value=mock_session_context),
+        patch('server.routes.auth.set_response_cookie'),
         patch(
-            "server.routes.auth._get_post_auth_redirect",
-            AsyncMock(return_value="http://example.com"),
+            'server.routes.auth._get_post_auth_redirect',
+            AsyncMock(return_value='http://example.com'),
         ),
     ):
         # Act
@@ -2524,8 +2524,8 @@ async def test_accept_tos_stores_timezone_naive_datetime(mock_request):
 async def test_accept_tos_preserves_offline_flow_redirect(mock_request):
     """Test that accept_tos does not override redirect_url when it's the offline token flow."""
     # Arrange
-    test_user_id = "12345678-1234-5678-1234-567812345678"
-    offline_redirect_url = "https://auth.example.com/realms/test/protocol/openid-connect/auth?redirect_uri=https://example.com/oauth/keycloak/offline/callback"
+    test_user_id = '12345678-1234-5678-1234-567812345678'
+    offline_redirect_url = 'https://auth.example.com/realms/test/protocol/openid-connect/auth?redirect_uri=https://example.com/oauth/keycloak/offline/callback'
 
     mock_user = MagicMock()
     mock_user.id = test_user_id
@@ -2543,25 +2543,25 @@ async def test_accept_tos_preserves_offline_flow_redirect(mock_request):
 
     mock_user_auth = MagicMock(spec=SaasUserAuth)
     mock_user_auth.get_access_token = AsyncMock(
-        return_value=SecretStr("test_access_token")
+        return_value=SecretStr('test_access_token')
     )
-    mock_user_auth.refresh_token = SecretStr("test_refresh_token")
+    mock_user_auth.refresh_token = SecretStr('test_refresh_token')
     mock_user_auth.get_user_id = AsyncMock(return_value=test_user_id)
 
-    mock_request.json = AsyncMock(return_value={"redirect_url": offline_redirect_url})
+    mock_request.json = AsyncMock(return_value={'redirect_url': offline_redirect_url})
 
     mock_get_post_auth_redirect = AsyncMock(
-        return_value="http://example.com/onboarding"
+        return_value='http://example.com/onboarding'
     )
 
     with (
         patch(
-            "server.routes.auth.get_user_auth", AsyncMock(return_value=mock_user_auth)
+            'server.routes.auth.get_user_auth', AsyncMock(return_value=mock_user_auth)
         ),
-        patch("server.routes.auth.a_session_maker", return_value=mock_session_context),
-        patch("server.routes.auth.set_response_cookie"),
+        patch('server.routes.auth.a_session_maker', return_value=mock_session_context),
+        patch('server.routes.auth.set_response_cookie'),
         patch(
-            "server.routes.auth._get_post_auth_redirect",
+            'server.routes.auth._get_post_auth_redirect',
             mock_get_post_auth_redirect,
         ),
     ):
@@ -2579,7 +2579,7 @@ async def test_accept_tos_preserves_offline_flow_redirect(mock_request):
         import json
 
         response_body = json.loads(result.body.decode())
-        assert response_body["redirect_url"] == offline_redirect_url
+        assert response_body['redirect_url'] == offline_redirect_url
 
 
 # ---------------------------------------------------------------------------
@@ -2599,22 +2599,22 @@ async def test_get_user_orgs_with_data_returns_orgs():
 
     mock_org_1 = MagicMock()
     mock_org_1.id = org_id_1
-    mock_org_1.name = "Org 1"
+    mock_org_1.name = 'Org 1'
 
     mock_org_2 = MagicMock()
     mock_org_2.id = org_id_2
-    mock_org_2.name = "Org 2"
+    mock_org_2.name = 'Org 2'
 
     with patch(
-        "storage.org_store.OrgStore.get_orgs_by_ids",
+        'storage.org_store.OrgStore.get_orgs_by_ids',
         new_callable=AsyncMock,
         return_value=[mock_org_1, mock_org_2],
     ):
-        result = await _get_user_orgs_with_data("user-123", [org_id_1, org_id_2])
+        result = await _get_user_orgs_with_data('user-123', [org_id_1, org_id_2])
 
     assert len(result) == 2
-    assert result[0].name == "Org 1"
-    assert result[1].name == "Org 2"
+    assert result[0].name == 'Org 1'
+    assert result[1].name == 'Org 2'
 
 
 @pytest.mark.asyncio
@@ -2629,18 +2629,18 @@ async def test_get_user_orgs_with_data_returns_only_found_orgs():
 
     mock_org_1 = MagicMock()
     mock_org_1.id = org_id_1
-    mock_org_1.name = "Org 1"
+    mock_org_1.name = 'Org 1'
 
     # get_orgs_by_ids only returns orgs that exist (org_id_2 not found)
     with patch(
-        "storage.org_store.OrgStore.get_orgs_by_ids",
+        'storage.org_store.OrgStore.get_orgs_by_ids',
         new_callable=AsyncMock,
         return_value=[mock_org_1],
     ):
-        result = await _get_user_orgs_with_data("user-123", [org_id_1, org_id_2])
+        result = await _get_user_orgs_with_data('user-123', [org_id_1, org_id_2])
 
     assert len(result) == 1
-    assert result[0].name == "Org 1"
+    assert result[0].name == 'Org 1'
 
 
 @pytest.mark.asyncio
@@ -2654,11 +2654,11 @@ async def test_get_user_orgs_with_data_handles_exception_gracefully():
     org_id_2 = uuid4()
 
     with patch(
-        "storage.org_store.OrgStore.get_orgs_by_ids",
+        'storage.org_store.OrgStore.get_orgs_by_ids',
         new_callable=AsyncMock,
-        side_effect=RuntimeError("Database error"),
+        side_effect=RuntimeError('Database error'),
     ):
-        result = await _get_user_orgs_with_data("user-123", [org_id_1, org_id_2])
+        result = await _get_user_orgs_with_data('user-123', [org_id_1, org_id_2])
 
     # Should return empty list on exception
     assert result == []
@@ -2669,7 +2669,7 @@ async def test_get_user_orgs_with_data_returns_empty_list_for_empty_input():
     """_get_user_orgs_with_data returns empty list when no org_member_ids provided."""
     from server.routes.auth import _get_user_orgs_with_data
 
-    result = await _get_user_orgs_with_data("user-123", [])
+    result = await _get_user_orgs_with_data('user-123', [])
     assert result == []
 
 
@@ -2694,30 +2694,30 @@ async def test_track_login_analytics_background_calls_identify_and_track():
 
     mock_org = MagicMock()
     mock_org.id = org_member_id
-    mock_org.name = "Test Org"
+    mock_org.name = 'Test Org'
 
     with (
-        patch("server.routes.auth.get_analytics_service", return_value=mock_analytics),
+        patch('server.routes.auth.get_analytics_service', return_value=mock_analytics),
         patch(
-            "storage.org_store.OrgStore.get_org_by_id",
+            'storage.org_store.OrgStore.get_org_by_id',
             new_callable=AsyncMock,
             return_value=mock_org,
         ),
         patch(
-            "storage.org_store.OrgStore.get_orgs_by_ids",
+            'storage.org_store.OrgStore.get_orgs_by_ids',
             new_callable=AsyncMock,
             return_value=[mock_org],
         ),
         patch(
-            "storage.org_member_store.OrgMemberStore.get_org_members_count",
+            'storage.org_member_store.OrgMemberStore.get_org_members_count',
             new_callable=AsyncMock,
             return_value=5,
         ),
     ):
         await _track_login_analytics_background(
-            user_id="user-123",
-            email="user@example.com",
-            idp="github",
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
             current_org_id=current_org_id,
             org_member_ids=[org_member_id],
             consented=True,
@@ -2728,16 +2728,16 @@ async def test_track_login_analytics_background_calls_identify_and_track():
 
     # Verify identify_user call
     identify_kwargs = mock_analytics.identify_user.call_args.kwargs
-    assert identify_kwargs["ctx"].user_id == "user-123"
-    assert identify_kwargs["ctx"].consented is True
-    assert identify_kwargs["email"] == "user@example.com"
-    assert identify_kwargs["idp"] == "github"
+    assert identify_kwargs['ctx'].user_id == 'user-123'
+    assert identify_kwargs['ctx'].consented is True
+    assert identify_kwargs['email'] == 'user@example.com'
+    assert identify_kwargs['idp'] == 'github'
 
     # Verify track_user_logged_in call
     track_kwargs = mock_analytics.track_user_logged_in.call_args.kwargs
-    assert track_kwargs["ctx"].user_id == "user-123"
-    assert track_kwargs["ctx"].consented is True
-    assert track_kwargs["idp"] == "github"
+    assert track_kwargs['ctx'].user_id == 'user-123'
+    assert track_kwargs['ctx'].consented is True
+    assert track_kwargs['idp'] == 'github'
 
 
 @pytest.mark.asyncio
@@ -2745,12 +2745,12 @@ async def test_track_login_analytics_background_skips_when_no_analytics_service(
     """_track_login_analytics_background returns early when analytics service is None."""
     from server.routes.auth import _track_login_analytics_background
 
-    with patch("server.routes.auth.get_analytics_service", return_value=None):
+    with patch('server.routes.auth.get_analytics_service', return_value=None):
         # Should not raise
         await _track_login_analytics_background(
-            user_id="user-123",
-            email="user@example.com",
-            idp="github",
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
             current_org_id=None,
             org_member_ids=[],
             consented=True,
@@ -2766,19 +2766,19 @@ async def test_track_login_analytics_background_handles_org_id_none():
     mock_analytics.identify_user = MagicMock()
     mock_analytics.track_user_logged_in = MagicMock()
 
-    with patch("server.routes.auth.get_analytics_service", return_value=mock_analytics):
+    with patch('server.routes.auth.get_analytics_service', return_value=mock_analytics):
         await _track_login_analytics_background(
-            user_id="user-123",
-            email="user@example.com",
-            idp="github",
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
             current_org_id=None,
             org_member_ids=[],
             consented=True,
         )
 
     identify_kwargs = mock_analytics.identify_user.call_args.kwargs
-    assert identify_kwargs["ctx"].org_id is None
-    assert identify_kwargs["org_name"] is None
+    assert identify_kwargs['ctx'].org_id is None
+    assert identify_kwargs['org_name'] is None
 
 
 @pytest.mark.asyncio
@@ -2787,14 +2787,14 @@ async def test_track_login_analytics_background_handles_exception_gracefully():
     from server.routes.auth import _track_login_analytics_background
 
     mock_analytics = MagicMock()
-    mock_analytics.identify_user.side_effect = RuntimeError("PostHog error")
+    mock_analytics.identify_user.side_effect = RuntimeError('PostHog error')
 
-    with patch("server.routes.auth.get_analytics_service", return_value=mock_analytics):
+    with patch('server.routes.auth.get_analytics_service', return_value=mock_analytics):
         # Should not raise
         await _track_login_analytics_background(
-            user_id="user-123",
-            email="user@example.com",
-            idp="github",
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
             current_org_id=None,
             org_member_ids=[],
             consented=True,
@@ -2816,41 +2816,41 @@ async def test_track_login_analytics_background_builds_orgs_data_with_member_cou
 
     mock_org = MagicMock()
     mock_org.id = org_id
-    mock_org.name = "Test Org"
+    mock_org.name = 'Test Org'
 
     with (
-        patch("server.routes.auth.get_analytics_service", return_value=mock_analytics),
+        patch('server.routes.auth.get_analytics_service', return_value=mock_analytics),
         patch(
-            "storage.org_store.OrgStore.get_org_by_id",
+            'storage.org_store.OrgStore.get_org_by_id',
             new_callable=AsyncMock,
             return_value=mock_org,
         ),
         patch(
-            "storage.org_store.OrgStore.get_orgs_by_ids",
+            'storage.org_store.OrgStore.get_orgs_by_ids',
             new_callable=AsyncMock,
             return_value=[mock_org],
         ),
         patch(
-            "storage.org_member_store.OrgMemberStore.get_org_members_count",
+            'storage.org_member_store.OrgMemberStore.get_org_members_count',
             new_callable=AsyncMock,
             return_value=10,
         ),
     ):
         await _track_login_analytics_background(
-            user_id="user-123",
-            email="user@example.com",
-            idp="github",
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
             current_org_id=None,
             org_member_ids=[org_id],
             consented=True,
         )
 
     identify_kwargs = mock_analytics.identify_user.call_args.kwargs
-    orgs = identify_kwargs["orgs"]
+    orgs = identify_kwargs['orgs']
     assert len(orgs) == 1
-    assert orgs[0]["id"] == str(org_id)
-    assert orgs[0]["name"] == "Test Org"
-    assert orgs[0]["member_count"] == 10
+    assert orgs[0]['id'] == str(org_id)
+    assert orgs[0]['name'] == 'Test Org'
+    assert orgs[0]['member_count'] == 10
 
 
 @pytest.mark.asyncio
@@ -2868,36 +2868,36 @@ async def test_track_login_analytics_background_handles_member_count_error():
 
     mock_org = MagicMock()
     mock_org.id = org_id
-    mock_org.name = "Test Org"
+    mock_org.name = 'Test Org'
 
     with (
-        patch("server.routes.auth.get_analytics_service", return_value=mock_analytics),
+        patch('server.routes.auth.get_analytics_service', return_value=mock_analytics),
         patch(
-            "storage.org_store.OrgStore.get_org_by_id",
+            'storage.org_store.OrgStore.get_org_by_id',
             new_callable=AsyncMock,
             return_value=mock_org,
         ),
         patch(
-            "storage.org_store.OrgStore.get_orgs_by_ids",
+            'storage.org_store.OrgStore.get_orgs_by_ids',
             new_callable=AsyncMock,
             return_value=[mock_org],
         ),
         patch(
-            "storage.org_member_store.OrgMemberStore.get_org_members_count",
+            'storage.org_member_store.OrgMemberStore.get_org_members_count',
             new_callable=AsyncMock,
-            side_effect=RuntimeError("DB error"),
+            side_effect=RuntimeError('DB error'),
         ),
     ):
         await _track_login_analytics_background(
-            user_id="user-123",
-            email="user@example.com",
-            idp="github",
+            user_id='user-123',
+            email='user@example.com',
+            idp='github',
             current_org_id=None,
             org_member_ids=[org_id],
             consented=True,
         )
 
     identify_kwargs = mock_analytics.identify_user.call_args.kwargs
-    orgs = identify_kwargs["orgs"]
+    orgs = identify_kwargs['orgs']
     assert len(orgs) == 1
-    assert orgs[0]["member_count"] is None
+    assert orgs[0]['member_count'] is None
