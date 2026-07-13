@@ -10,14 +10,18 @@
  * banner from the secret store (the one signal that works on Docker/cloud)
  * WITHOUT ever claiming a verified host login.
  *
- * Flow (Settings → Agent, the same way a user configures a built-in provider):
- *   1. Switch the agent type to ACP and select the Claude Code preset.
- *   2. With no secret saved, the "configured" banner is absent.
- *   3. Save a Claude credential (CLAUDE_CODE_OAUTH_TOKEN). The value is never
- *      read or validated by the banner — the store only needs the name present —
- *      so a placeholder is sufficient and no real/PAYG credential is required.
- *   4. The neutral "configured" banner appears, and the green "signed in"
- *      banner does NOT (the honesty guard — a stored credential is not a login).
+ * Flow (Settings → Agent profiles — the #1571 profile library — the same way a
+ * user configures a built-in provider):
+ *   1. Seed a Claude credential (CLAUDE_CODE_OAUTH_TOKEN) directly in the
+ *      backend secret store via the secrets API. The value is never read or
+ *      validated by the banner — the store only needs the name present — so a
+ *      placeholder is sufficient and no real/PAYG credential is required.
+ *   2. Open the "default" agent profile and switch it to ACP → Claude Code so
+ *      the credentials section + auth banner mount.
+ *   3. With the host-login probe inconclusive, the stored credential surfaces
+ *      the neutral "configured" banner.
+ *   4. The green "signed in" banner does NOT appear (the honesty guard — a
+ *      stored credential is not a verified login).
  *
  * Determinism note: the assertion requires the host-login probe to be
  * inconclusive (`unknown`). That is always true on the containerized
@@ -75,15 +79,16 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("mock-LLM ACP credentials-configured banner (#1244)", () => {
   test.beforeAll(async ({ request }) => {
-    // Start from a clean store so the no-secret baseline holds even if a prior
-    // run's best-effort afterAll cleanup didn't complete (crash / network blip).
-    await request
-      .delete(`${BACKEND_URL}/api/settings/secrets/${OAUTH_TOKEN_SECRET}`, {
-        headers: { "X-Session-API-Key": SESSION_API_KEY },
-      })
-      .catch(() => {
-        // best-effort — the secret may simply not exist yet
-      });
+    // Seed a Claude credential so the banner resolver sees a stored secret when
+    // the credentials section mounts. PUT /api/settings/secrets is the
+    // upsert-by-name endpoint the app itself uses (secrets-service.ts). The
+    // value is never authenticated by the banner, so a placeholder suffices.
+    // No catch — a seed failure should surface here, not as a mystery at the
+    // banner assertion.
+    await request.put(`${BACKEND_URL}/api/settings/secrets`, {
+      headers: { "X-Session-API-Key": SESSION_API_KEY },
+      data: { name: OAUTH_TOKEN_SECRET, value: PLACEHOLDER_TOKEN },
+    });
   });
 
   test.beforeEach(async ({ page }) => {
@@ -170,20 +175,7 @@ test.describe("mock-LLM ACP credentials-configured banner (#1244)", () => {
         "state only applies when the probe is inconclusive (Docker/cloud/CI)",
     );
 
-    // ── Baseline: no secret yet → banner absent ──────────────────────────
-    await expect(configuredBanner).toHaveCount(0);
-
-    // ── Save a placeholder Claude credential ─────────────────────────────
-    await tokenField.click();
-    await tokenField.fill(PLACEHOLDER_TOKEN);
-
-    const saveBtn = page.getByTestId("agent-save-button");
-    await expect(saveBtn).toBeEnabled({ timeout: 5_000 });
-    await saveBtn.click();
-    // Save completes: isDirty flips back to false and the button disables.
-    await expect(saveBtn).toBeDisabled({ timeout: 10_000 });
-
-    // ── The neutral "configured" banner appears … ────────────────────────
+    // ── The seeded credential surfaces the neutral "configured" banner … ─
     await expect(configuredBanner).toBeVisible({ timeout: 10_000 });
     await expect(configuredBanner).toContainText(/configured/i);
 
