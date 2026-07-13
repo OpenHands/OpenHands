@@ -14,8 +14,8 @@ completion path.
 - `run_llm_profile_smoke.py`: reproducible harness.
 - `main-llm-smoke.json`: sanitized result for current main
   `3949e1cc17d9443f1f4ef7d34d428baf065cd919`.
-- `pr-llm-smoke.json`: sanitized result for PR head
-  `3dbb838ebcb6d46d7adc9a96468bdf24f8506f3f`.
+- `pr-llm-smoke.json`: sanitized result for merged PR product head
+  `a441ca5a486aa1b3a2be6273ba752d776ea56d16`.
 
 ## Flow
 
@@ -34,7 +34,7 @@ completion path.
 | Checkout | Result | Key evidence |
 | --- | --- | --- |
 | Current main `3949e1cc17d9443f1f4ef7d34d428baf065cd919` | PASS for this narrower LLM smoke | Missing-auth and wrong-key requests returned 401. Post-restart LiteLLM request used auth fingerprint `c56a1c9c692c03bd`, matching the stored sentinel fingerprint. Completion returned `local-smoke-completion-ok`. API responses were masked and raw secret checks were false. Storage remained opaque/non-JSON, so this run is not evidence that main has the PR's field-level leaf storage behavior. |
-| PR head `3dbb838ebcb6d46d7adc9a96468bdf24f8506f3f` | PASS | Missing-auth and wrong-key requests returned 401. Post-restart LiteLLM request used auth fingerprint `f9cc38aa8b3ff3cc`, matching the stored sentinel fingerprint. Completion returned `local-smoke-completion-ok`. API responses were masked, raw secret checks were false, and `llm_profiles` was parseable JSON with an encrypted leaf marker plus visible non-secret profile markers. |
+| Merged PR product head `a441ca5a486aa1b3a2be6273ba752d776ea56d16` | PASS | Missing-auth and wrong-key requests returned 401. Post-restart LiteLLM request used auth fingerprint `03d6f8f025c17cbf`, matching the stored sentinel fingerprint. Completion returned `local-smoke-completion-ok`. API responses were masked, raw secret checks were false, and `llm_profiles` was parseable JSON with an encrypted leaf marker plus visible non-secret profile markers. |
 
 Current main passed this local LLM post-restart invocation path, so this package
 does not claim a red baseline for that narrower item. The previously captured
