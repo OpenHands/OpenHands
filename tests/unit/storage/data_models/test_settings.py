@@ -214,6 +214,7 @@ def test_settings_update_replaces_existing_mcp_servers():
                         'fresh': {
                             'transport': 'http',
                             'url': 'https://example.com/fresh',
+                            'tools': ['search'],
                         }
                     }
                 }
@@ -225,6 +226,161 @@ def test_settings_update_replaces_existing_mcp_servers():
     assert mcp is not None
     assert set(mcp) == {'fresh'}
     assert mcp['fresh'].url == 'https://example.com/fresh'
+
+
+def _settings_with_mcp_auth(
+    url: str = 'https://integration.example.com/mcp',
+) -> Settings:
+    return Settings(
+        agent_settings=OpenHandsAgentSettings(
+            mcp_config={
+                'integration-hub': {
+                    'url': url,
+                    'headers': {'Authorization': 'Bearer real-key'},
+                }
+            }
+        )
+    )
+
+
+def test_settings_update_preserves_redacted_mcp_auth_for_same_endpoint():
+    settings = _settings_with_mcp_auth()
+
+    settings.update(
+        {
+            'agent_settings_diff': {
+                'mcp_config': {
+                    'integration-hub': {
+                        'url': 'https://integration.example.com/mcp',
+                        'auth': {'strategy': 'bearer', 'value': '**********'},
+                    }
+                }
+            }
+        }
+    )
+
+    server = settings.agent_settings.mcp_config['integration-hub']
+    assert server.auth is not None
+    assert server.auth.to_http_headers() == {
+        'Authorization': 'Bearer real-key'
+    }
+
+
+@pytest.mark.parametrize(
+    'credential_update',
+    ({}, {'auth': {'strategy': 'bearer', 'value': '**********'}}),
+)
+def test_settings_update_drops_mcp_auth_for_changed_endpoint(
+    credential_update: dict[str, object],
+):
+    settings = _settings_with_mcp_auth('https://old.example.com/mcp')
+
+    settings.update(
+        {
+            'agent_settings_diff': {
+                'mcp_config': {
+                    'integration-hub': {
+                        'url': 'https://new.example.com/mcp',
+                        **credential_update,
+                    }
+                }
+            }
+        }
+    )
+
+    server = settings.agent_settings.mcp_config['integration-hub']
+    assert not server.headers
+    assert server.auth is None or server.auth.to_http_headers() == {}
+
+
+def test_settings_update_preserves_omitted_mcp_auth_for_same_endpoint():
+    settings = _settings_with_mcp_auth()
+
+    settings.update(
+        {
+            'agent_settings_diff': {
+                'mcp_config': {
+                    'integration-hub': {
+                        'url': 'https://integration.example.com/mcp',
+                    }
+                }
+            }
+        }
+    )
+
+    server = settings.agent_settings.mcp_config['integration-hub']
+    assert server.auth is not None
+    assert server.auth.to_http_headers() == {
+        'Authorization': 'Bearer real-key'
+    }
+
+
+def test_settings_update_clears_explicit_mcp_auth():
+    settings = _settings_with_mcp_auth()
+
+    settings.update(
+        {
+            'agent_settings_diff': {
+                'mcp_config': {
+                    'integration-hub': {
+                        'url': 'https://integration.example.com/mcp',
+                        'auth': None,
+                    }
+                }
+            }
+        }
+    )
+
+    server = settings.agent_settings.mcp_config['integration-hub']
+    assert server.auth is None
+
+
+def test_settings_update_preserves_redacted_mcp_env_for_same_command():
+    settings = Settings(
+        agent_settings=OpenHandsAgentSettings(
+            mcp_config={
+                'local': {
+                    'command': 'mcp-server',
+                    'args': ['--stdio'],
+                    'env': {'API_KEY': 'real-key'},
+                }
+            }
+        )
+    )
+
+    settings.update(
+        {
+            'agent_settings_diff': {
+                'mcp_config': {
+                    'local': {
+                        'command': 'mcp-server',
+                        'args': ['--stdio'],
+                        'env': {'API_KEY': '**********'},
+                    }
+                }
+            }
+        }
+    )
+
+    server = settings.agent_settings.mcp_config['local']
+    assert server.env is not None
+    assert server.env['API_KEY'].get_secret_value() == 'real-key'
+
+    settings.update(
+        {
+            'agent_settings_diff': {
+                'mcp_config': {
+                    'local': {
+                        'command': 'mcp-server',
+                        'args': ['--stdio'],
+                        'env': {},
+                    }
+                }
+            }
+        }
+    )
+
+    assert not settings.agent_settings.mcp_config['local'].env
 
 
 def test_settings_update_can_clear_mcp_config():

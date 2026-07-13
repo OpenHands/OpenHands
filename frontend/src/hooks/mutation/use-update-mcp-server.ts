@@ -51,7 +51,10 @@ export function useUpdateMcpServer() {
       const index = parseInt(indexStr, 10);
 
       if (serverType === "sse") {
+        const current = newConfig.sse_servers[index];
         const sseServer: MCPSSEServer = {
+          ...(typeof current === "object" &&
+            current.name && { name: current.name }),
           url: server.url!,
           ...(server.api_key && { api_key: server.api_key }),
         };
@@ -61,11 +64,14 @@ export function useUpdateMcpServer() {
           name: server.name!,
           command: server.command!,
           ...(server.args && { args: server.args }),
-          ...(server.env && { env: server.env }),
+          env: server.env ?? {},
         };
         newConfig.stdio_servers[index] = stdioServer;
       } else if (serverType === "shttp") {
+        const current = newConfig.shttp_servers[index];
         const shttpServer: MCPSHTTPServer = {
+          ...(typeof current === "object" &&
+            current.name && { name: current.name }),
           url: server.url!,
           ...(server.api_key && { api_key: server.api_key }),
           ...(server.timeout !== undefined && { timeout: server.timeout }),
@@ -73,8 +79,22 @@ export function useUpdateMcpServer() {
         newConfig.shttp_servers[index] = shttpServer;
       }
 
+      const serialized = toSdkMcpConfig(newConfig);
+      if (
+        (serverType === "sse" || serverType === "shttp") &&
+        !server.api_key &&
+        serialized
+      ) {
+        const updated =
+          serverType === "sse"
+            ? newConfig.sse_servers[index]
+            : newConfig.shttp_servers[index];
+        if (typeof updated === "object" && updated.name) {
+          serialized[updated.name].auth = null;
+        }
+      }
       const payload = {
-        agent_settings_diff: { mcp_config: toSdkMcpConfig(newConfig) },
+        agent_settings_diff: { mcp_config: serialized },
       };
 
       await SettingsService.saveSettings(payload);

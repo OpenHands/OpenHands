@@ -88,19 +88,33 @@ function apiKeyFromServerConfig(
   if (headerApiKey) return headerApiKey;
 
   const { auth } = serverConfig;
+  if (auth && typeof auth === "object" && !Array.isArray(auth)) {
+    const credential = auth as Record<string, unknown>;
+    if (
+      (credential.strategy === "api_key" || credential.strategy === "bearer") &&
+      typeof credential.value === "string"
+    ) {
+      return credential.value;
+    }
+    if (credential.strategy === "header") {
+      const authHeaders = credential.headers;
+      if (authHeaders && typeof authHeaders === "object") {
+        return apiKeyFromAuthorizationHeader(
+          (authHeaders as Record<string, unknown>).Authorization ??
+            (authHeaders as Record<string, unknown>).authorization,
+        );
+      }
+    }
+  }
   return typeof auth === "string" && auth !== "oauth" ? auth : undefined;
 }
 
-/**
- * Serialize an API key as an ``Authorization`` bearer header. The SDK only
- * redacts/encrypts ``headers`` (and ``env``), not ``auth``, so a key written
- * to ``auth`` would persist in plaintext — write the header form instead.
- */
-function getAuthorizationHeaders(apiKey: string | undefined) {
+function getAuthCredential(apiKey: string | undefined) {
   if (!apiKey) return {};
   return {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
+    auth: {
+      strategy: "bearer",
+      value: apiKey,
     },
   };
 }
@@ -233,7 +247,7 @@ export function toSdkMcpConfig(
       server.url = entry;
     } else {
       server.url = entry.url;
-      Object.assign(server, getAuthorizationHeaders(entry.api_key));
+      Object.assign(server, getAuthCredential(entry.api_key));
     }
     server.transport = "sse";
 
@@ -251,7 +265,7 @@ export function toSdkMcpConfig(
       server.url = entry;
     } else {
       server.url = entry.url;
-      Object.assign(server, getAuthorizationHeaders(entry.api_key));
+      Object.assign(server, getAuthCredential(entry.api_key));
       if (entry.timeout != null) server.timeout = entry.timeout;
     }
 

@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Mapping
+from copy import deepcopy
 from enum import Enum
 from typing import Annotated, Any, Sequence
 
@@ -34,6 +36,7 @@ from openhands.app_server.integrations.provider import ProviderToken
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.utils.jsonpatch_compat import deep_merge
+from openhands.sdk.mcp.config import MCPServer, dump_mcp_config
 from openhands.sdk.settings import (
     ACPAgentSettings,
     AgentSettingsConfig,
@@ -43,6 +46,7 @@ from openhands.sdk.settings import (
     default_agent_settings,
     validate_agent_settings,
 )
+from openhands.sdk.utils.pydantic_secrets import REDACTED_SECRET_VALUE
 
 logger = logging.getLogger(__name__)
 
@@ -273,6 +277,106 @@ def _coerce_dict_secrets(d: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+_MISSING_SECRET = object()
+
+
+def _is_redacted_mcp_secret(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    return value == REDACTED_SECRET_VALUE or bool(
+        re.fullmatch(
+            rf'Bearer\s+{re.escape(REDACTED_SECRET_VALUE)}',
+            value,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _restore_redacted_secret(value: Any, existing: Any) -> Any:
+    if _is_redacted_mcp_secret(value):
+        if isinstance(existing, str) and not _is_redacted_mcp_secret(existing):
+            return existing
+        return _MISSING_SECRET
+    if isinstance(value, dict):
+        existing_dict = existing if isinstance(existing, Mapping) else {}
+        restored = {}
+        for key, item in value.items():
+            restored_item = _restore_redacted_secret(item, existing_dict.get(key))
+            if restored_item is not _MISSING_SECRET:
+                restored[key] = restored_item
+        return restored
+    return value
+
+
+def _mcp_server_map(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    servers = value.get('mcpServers', value)
+    return servers if isinstance(servers, dict) else None
+
+
+def _mcp_endpoint_identity(server: Mapping[str, Any]) -> tuple[Any, ...] | None:
+    url = server.get('url')
+    if isinstance(url, str) and url:
+        return ('url', url)
+    command = server.get('command')
+    if not isinstance(command, str) or not command:
+        return None
+    args = server.get('args')
+    return (
+        'stdio',
+        command,
+        tuple(args) if isinstance(args, list) else (),
+        server.get('cwd'),
+    )
+
+
+def _preserve_redacted_mcp_secrets(
+    value: Any,
+    existing: Mapping[str, MCPServer] | None,
+) -> Any:
+    incoming_value = deepcopy(value)
+    incoming_servers = _mcp_server_map(incoming_value)
+    if incoming_servers is None:
+        return incoming_value
+
+    existing = existing or {}
+    existing_dump = dump_mcp_config(
+        existing,
+        context={'expose_secrets': 'plaintext'},
+    )
+    for name, incoming_server in incoming_servers.items():
+        if not isinstance(name, str) or not isinstance(incoming_server, dict):
+            continue
+        existing_server = existing_dump.get(name)
+        same_endpoint = (
+            existing_server is not None
+            and _mcp_endpoint_identity(incoming_server)
+            == _mcp_endpoint_identity(existing_server)
+        )
+        submitted_credentials = {'headers', 'auth'}.intersection(incoming_server)
+        for field in ('headers', 'env', 'auth'):
+            existing_value = (
+                existing_server.get(field) if same_endpoint and existing_server else None
+            )
+            if field not in incoming_server:
+                if existing_value is not None and (
+                    field == 'env' or not submitted_credentials
+                ):
+                    incoming_server[field] = existing_value
+                continue
+            restored = _restore_redacted_secret(
+                incoming_server[field],
+                existing_value,
+            )
+            if restored is _MISSING_SECRET:
+                incoming_server.pop(field)
+            else:
+                incoming_server[field] = restored
+
+    return incoming_value
+
+
 def _load_persisted_agent_settings(
     data: Any,
 ) -> OpenHandsAgentSettings | ACPAgentSettings:
@@ -499,7 +603,14 @@ class Settings(BaseModel):
             # ``mcp_config`` replaces wholesale rather than deep-merging, so
             # hold it back from the variant-aware merge and apply it after.
             replace_mcp_config = 'mcp_config' in agent_update
-            mcp_config = coerced.pop('mcp_config', None) if replace_mcp_config else None
+            mcp_config = (
+                _preserve_redacted_mcp_secrets(
+                    coerced.pop('mcp_config', None),
+                    self.agent_settings.mcp_config,
+                )
+                if replace_mcp_config
+                else None
+            )
 
             # The SDK owns the discriminated-union merge: replace on
             # ``agent_kind`` change, deep-merge within a variant. Cross-kind

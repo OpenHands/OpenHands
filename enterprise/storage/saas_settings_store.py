@@ -39,7 +39,7 @@ from openhands.app_server.utils.llm import is_openhands_model
 from openhands.sdk.llm.utils.openhands_provider import (
     canonicalize_openhands_llm_payload,
 )
-from openhands.sdk.mcp.config import MCPServer, coerce_mcp_config
+from openhands.sdk.mcp.config import MCPServer, coerce_mcp_config, dump_mcp_config
 from openhands.sdk.profiles import resolve_agent_profile
 
 # Agent-settings keys private to each org member: never written to
@@ -144,7 +144,17 @@ class SaasSettingsStore(SettingsStore):
 
     @staticmethod
     def _get_persisted_agent_settings(item: Settings) -> dict[str, Any]:
-        return item.agent_settings.model_dump(mode='json')
+        persisted = item.agent_settings.model_dump(
+            mode='json',
+            exclude={'llm': {'api_key'}},
+        )
+        mcp_config = item.agent_settings.mcp_config
+        if mcp_config is not None:
+            persisted['mcp_config'] = dump_mcp_config(
+                mcp_config,
+                context={'expose_secrets': 'plaintext'},
+            )
+        return persisted
 
     def _resolve_active_agent_profile(
         self,

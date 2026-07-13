@@ -108,6 +108,33 @@ def test_member_settings_persist_full_effective_agent_settings():
     assert settings.conversation_settings.security_analyzer == 'llm'
 
 
+def test_persisted_agent_settings_expose_only_mcp_secrets():
+    settings = Settings(
+        agent_settings={
+            'llm': {'model': 'test-model', 'api_key': 'llm-key'},
+            'mcp_config': {
+                'remote': {
+                    'url': 'https://mcp.example.com',
+                    'headers': {'Authorization': 'Bearer mcp-key'},
+                },
+                'local': {
+                    'command': 'mcp-server',
+                    'env': {'API_KEY': 'mcp-env-key'},
+                },
+            },
+        }
+    )
+
+    persisted = SaasSettingsStore._get_persisted_agent_settings(settings)
+
+    assert 'api_key' not in persisted['llm']
+    assert persisted['mcp_config']['remote']['auth'] == {
+        'strategy': 'bearer',
+        'value': 'mcp-key',
+    }
+    assert persisted['mcp_config']['local']['env'] == {'API_KEY': 'mcp-env-key'}
+
+
 @pytest.fixture
 def settings_store(async_session_maker):
     store = SaasSettingsStore('5594c7b6-f959-4b81-92e9-b09c206f5081')
@@ -925,7 +952,11 @@ async def test_store_and_load_mcp_config_via_agent_settings(
 
     admin_mcp_config = {
         'mcpServers': {
-            'admin': {'url': 'https://admin-private-server.com', 'transport': 'sse'}
+            'admin': {
+                'url': 'https://admin-private-server.com',
+                'transport': 'sse',
+                'headers': {'Authorization': 'Bearer admin-secret'},
+            }
         },
     }
 
@@ -961,6 +992,9 @@ async def test_store_and_load_mcp_config_via_agent_settings(
         loaded.agent_settings.mcp_config['admin'].url
         == 'https://admin-private-server.com'
     )
+    auth = loaded.agent_settings.mcp_config['admin'].auth
+    assert auth is not None
+    assert auth.to_http_headers() == {'Authorization': 'Bearer admin-secret'}
 
 
 @pytest.mark.asyncio

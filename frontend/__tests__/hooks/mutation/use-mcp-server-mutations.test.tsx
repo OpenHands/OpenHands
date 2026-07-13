@@ -282,6 +282,8 @@ describe("MCP Server Mutation Hooks", () => {
       const savedConfig = savedPayload.agent_settings_diff.mcp_config;
       const serverUrls = Object.values(savedConfig).map((s) => s.url);
       expect(serverUrls).toContain("https://new-url.com");
+      expect(savedConfig).toHaveProperty("myserver");
+      expect(savedConfig.myserver).toHaveProperty("auth", null);
     });
   });
 

@@ -112,6 +112,23 @@ describe("parseMcpConfig", () => {
     });
   });
 
+  it("should parse api_key from SDK bearer credentials", () => {
+    const input = {
+      "auth-server": {
+        url: "https://example.com",
+        auth: { strategy: "bearer", value: "**********" },
+      },
+    };
+
+    const result = parseMcpConfig(input);
+
+    expect(result.shttp_servers[0]).toEqual({
+      name: "auth-server",
+      url: "https://example.com",
+      api_key: "**********",
+    });
+  });
+
   it("should not include api_key when auth is 'oauth'", () => {
     const input = {
       mcpServers: {
@@ -219,9 +236,7 @@ describe("toSdkMcpConfig", () => {
     expect(result?.["sse_2"].url).toBe("https://example3.com");
   });
 
-  it("should serialize api_key as an Authorization bearer header", () => {
-    // The SDK only redacts/encrypts ``headers`` (and ``env``), not ``auth`` —
-    // writing the key to ``auth`` would persist it in plaintext.
+  it("should serialize api_key as an SDK bearer credential", () => {
     const config: MCPConfig = {
       sse_servers: [
         { name: "secure", url: "https://example.com", api_key: "my-secret" },
@@ -237,11 +252,11 @@ describe("toSdkMcpConfig", () => {
     expect(result?.["secure"]).toEqual({
       url: "https://example.com",
       transport: "sse",
-      headers: { Authorization: "Bearer my-secret" },
+      auth: { strategy: "bearer", value: "my-secret" },
     });
     expect(result?.["shttp"]).toEqual({
       url: "https://shttp.example",
-      headers: { Authorization: "Bearer shttp-secret" },
+      auth: { strategy: "bearer", value: "shttp-secret" },
     });
   });
 
@@ -279,7 +294,7 @@ describe("toSdkMcpConfig", () => {
       sse: {
         url: "https://example.com",
         transport: "sse",
-        headers: { Authorization: "Bearer legacy-secret" },
+        auth: { strategy: "bearer", value: "legacy-secret" },
       },
     });
   });
