@@ -245,7 +245,7 @@ export function createProxyHandlers({
     res.on("finish", finish);
     res.on("error", finish);
 
-    proxy.web(req, res, { target }).catch((err) => {
+    const handleProxyError = (err) => {
       metrics.totalErrors += 1;
       if (!isBenignSocketError(err)) {
         console.error(
@@ -255,7 +255,13 @@ export function createProxyHandlers({
       }
       writeProxyError(res, err instanceof Error ? err.message : String(err));
       finish();
-    });
+    };
+
+    try {
+      proxy.web(req, res, { target }).catch(handleProxyError);
+    } catch (err) {
+      handleProxyError(err);
+    }
   }
 
   function proxyWebSocket(req, socket, head, target) {

@@ -86,6 +86,26 @@ describe("static-server.mjs", () => {
     });
   }
 
+  async function getText(url: string) {
+    return new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const req = request(url, { method: "GET" }, (res) => {
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => {
+          body += chunk;
+        });
+        res.on("end", () => {
+          resolve({
+            status: res.statusCode ?? 0,
+            body,
+          });
+        });
+      });
+      req.on("error", reject);
+      req.end();
+    });
+  }
+
   describe("parseArgs", () => {
     it("defaults sessionApiKey to null", () => {
       const config = parseArgs([]);
@@ -265,6 +285,38 @@ describe("static-server.mjs", () => {
       expect(response.status).toBe(200);
       expect(body.version).toBe("1.28.0");
       expect(body.runtime_services).toEqual(JSON.parse(runtimeServicesInfo));
+    });
+
+    it("returns 502 when proxied /server_info target URL is invalid", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const runtimeServicesInfo = JSON.stringify({
+        mode: "docker",
+        services: {},
+      });
+      const server = await startStaticServer({
+        port: 0,
+        host: "127.0.0.1",
+        dir: buildDir,
+        routes: { "/server_info": "not-a-url" },
+        runtimeServicesInfo,
+      });
+      servers.push(server);
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("No port");
+      const origin = `http://127.0.0.1:${address.port}`;
+
+      const response = await getText(`${origin}/server_info`);
+
+      expect(response.status).toBe(502);
+      expect(response.body).toContain("Bad Gateway");
+      expect(response.body).toContain("Invalid backend URL");
+      expect(server.listening).toBe(true);
     });
   });
 
@@ -589,5 +641,29 @@ describe("static-server.mjs", () => {
 
     expect(response.status).not.toBe(200);
     await expect(response.text()).resolves.not.toContain("secret");
+  });
+
+  it("returns 502 when backend target URL is invalid", async () => {
+    const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+    tempDirs.push(buildDir);
+    writeFileSync(path.join(buildDir, "index.html"), "<main>app</main>");
+
+    const server = await startStaticServer({
+      port: 0,
+      host: "127.0.0.1",
+      dir: buildDir,
+      routes: { "/api/invalid": "not-a-url" },
+    });
+    servers.push(server);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("No port");
+    const origin = `http://127.0.0.1:${address.port}`;
+
+    const response = await getText(`${origin}/api/invalid/test`);
+
+    expect(response.status).toBe(502);
+    expect(response.body).toContain("Bad Gateway");
+    expect(response.body).toContain("Invalid URL");
+    expect(server.listening).toBe(true);
   });
 });

@@ -126,6 +126,26 @@ async function getJson(url: string) {
   });
 }
 
+async function getText(url: string) {
+  return new Promise<{ status: number; body: string }>((resolve, reject) => {
+    const req = request(url, { method: "GET" }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        body += chunk;
+      });
+      res.on("end", () => {
+        resolve({
+          status: res.statusCode ?? 0,
+          body,
+        });
+      });
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
 async function stopChild(child?: ChildProcess) {
   if (!child || child.exitCode !== null) {
     return;
@@ -363,6 +383,44 @@ describe("ingress proxy functionality", () => {
     }
   });
 
+  it("returns 502 when backend target URL is invalid", async () => {
+    const badIngressPort = await getFreePort();
+    const badIngress = spawn(
+      process.execPath,
+      [
+        ingressScript,
+        "--port",
+        badIngressPort.toString(),
+        "--default",
+        "not-a-url",
+      ],
+      {
+        cwd: repoRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    let stderr = "";
+    badIngress.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    await waitForPort(badIngressPort, badIngress);
+
+    try {
+      const response = await getText(`${originForPort(badIngressPort)}/test`);
+      await delay(100);
+
+      expect(response.status).toBe(502);
+      expect(response.body).toContain("Bad Gateway");
+      expect(response.body).toContain("Invalid URL");
+      expect(badIngress.exitCode).toBeNull();
+      expect(stderr).toContain("Invalid URL");
+    } finally {
+      await stopChild(badIngress);
+    }
+  });
+
   it("adds runtime_services to proxied /server_info", async () => {
     const serverInfoBackend = createServer((_req, res) => {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -411,6 +469,52 @@ describe("ingress proxy functionality", () => {
     } finally {
       await stopChild(runtimeIngress);
       await closeServer(serverInfoBackend);
+    }
+  });
+
+  it("returns 502 when intercepted /server_info target URL is invalid", async () => {
+    const runtimeIngressPort = await getFreePort();
+    const runtimeServicesInfo = JSON.stringify({
+      mode: "dev:automation",
+      services: {},
+    });
+    const runtimeIngress = spawn(
+      process.execPath,
+      [
+        ingressScript,
+        "--port",
+        runtimeIngressPort.toString(),
+        "--runtime-services-info",
+        runtimeServicesInfo,
+        "--route",
+        "/server_info=not-a-url",
+      ],
+      {
+        cwd: repoRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    let stderr = "";
+    runtimeIngress.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    await waitForPort(runtimeIngressPort, runtimeIngress);
+
+    try {
+      const response = await getText(
+        `${originForPort(runtimeIngressPort)}/server_info`,
+      );
+      await delay(100);
+
+      expect(response.status).toBe(502);
+      expect(response.body).toContain("Bad Gateway");
+      expect(response.body).toContain("Invalid backend URL");
+      expect(runtimeIngress.exitCode).toBeNull();
+      expect(stderr).toContain("Invalid backend URL");
+    } finally {
+      await stopChild(runtimeIngress);
     }
   });
 });
