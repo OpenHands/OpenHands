@@ -8,10 +8,12 @@ import httpx
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import RedirectResponse
 from server.logger import logger
+from server.utils.rate_limit_utils import check_rate_limit_by_user_id
 
 from openhands.app_server.utils.http_session import httpx_verify_option
 
 GITHUB_PROXY_ENDPOINTS = bool(os.environ.get('GITHUB_PROXY_ENDPOINTS'))
+GITHUB_PROXY_BASE_URL = os.environ.get('GITHUB_PROXY_BASE_URL') or f'https://{os.environ.get("AUTH_WEB_HOST", "")}'
 
 
 def add_github_proxy_routes(app: FastAPI):
@@ -41,7 +43,8 @@ def add_github_proxy_routes(app: FastAPI):
         return get_fernet()
 
     @app.get('/github-proxy/{subdomain}/login/oauth/authorize')
-    def github_proxy_start(request: Request):
+    async def github_proxy_start(request: Request):
+        await check_rate_limit_by_user_id(request, 'github_proxy_start', None)
         parsed_url = urlparse(str(request.url))
         query_params = parse_qs(parsed_url.query)
         state_payload = json.dumps(
@@ -54,7 +57,7 @@ def add_github_proxy_routes(app: FastAPI):
         state = b64encode(_fernet().encrypt(compressed_payload)).decode()
         query_params['state'] = [state]
         query_params['redirect_uri'] = [
-            f'https://{request.url.netloc}/github-proxy/callback'
+            f'{GITHUB_PROXY_BASE_URL}/github-proxy/callback'
         ]
         query_string = urlencode(query_params, doseq=True)
         return RedirectResponse(
@@ -62,7 +65,8 @@ def add_github_proxy_routes(app: FastAPI):
         )
 
     @app.get('/github-proxy/callback')
-    def github_proxy_callback(request: Request):
+    async def github_proxy_callback(request: Request):
+        await check_rate_limit_by_user_id(request, 'github_proxy_callback', None)
         # Decode state
         parsed_url = urlparse(str(request.url))
         query_params = parse_qs(parsed_url.query)
@@ -86,7 +90,7 @@ def add_github_proxy_routes(app: FastAPI):
         body: bytes | str = body_bytes
         if query_params.get('redirect_uri'):
             query_params['redirect_uri'] = [
-                f'https://{request.url.netloc}/github-proxy/callback'
+                f'{GITHUB_PROXY_BASE_URL}/github-proxy/callback'
             ]
             body = urlencode(query_params, doseq=True)
         url = 'https://github.com/login/oauth/access_token'
