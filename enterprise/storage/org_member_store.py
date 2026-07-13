@@ -24,7 +24,7 @@ from openhands.sdk.mcp.config import coerce_mcp_config, dump_mcp_config
 _MISSING = object()
 
 
-def _serialize_mcp_config(value: object) -> dict[str, Any] | None:
+def serialize_mcp_config(value: object) -> dict[str, Any] | None:
     if value is None:
         return None
     return dump_mcp_config(
@@ -62,7 +62,7 @@ class OrgMemberStore:
                 status=status,
                 agent_settings_diff=agent_settings_diff,
                 mcp_config=(
-                    _serialize_mcp_config(mcp_config)
+                    serialize_mcp_config(mcp_config)
                     if mcp_config is not _MISSING
                     else None
                 ),
@@ -178,7 +178,7 @@ class OrgMemberStore:
         return {
             'llm_api_key': settings.agent_settings.llm.api_key,
             'agent_settings_diff': {},
-            'mcp_config': _serialize_mcp_config(settings.agent_settings.mcp_config),
+            'mcp_config': serialize_mcp_config(settings.agent_settings.mcp_config),
             'conversation_settings_diff': {},
         }
 
@@ -195,7 +195,7 @@ class OrgMemberStore:
         return {
             'llm_api_key': user_settings.llm_api_key,
             'agent_settings_diff': agent_settings_diff,
-            'mcp_config': _serialize_mcp_config(mcp_config),
+            'mcp_config': serialize_mcp_config(mcp_config),
             'conversation_settings_diff': dict(user_settings.conversation_settings),
         }
 
@@ -312,7 +312,7 @@ class OrgMemberStore:
                 )
 
             if mcp_config is not _MISSING:
-                org_member.mcp_config = _serialize_mcp_config(mcp_config)
+                org_member.mcp_config = serialize_mcp_config(mcp_config)
 
             if conversation_settings_diff is not None:
                 org_member.conversation_settings_diff = deep_merge(

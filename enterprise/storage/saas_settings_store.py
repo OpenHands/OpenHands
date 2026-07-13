@@ -21,7 +21,7 @@ from storage.database import a_session_maker
 from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
 from storage.org import Org
 from storage.org_member import OrgMember
-from storage.org_member_store import OrgMemberStore
+from storage.org_member_store import OrgMemberStore, serialize_mcp_config
 from storage.org_store import OrgStore
 from storage.user import User
 from storage.user_settings import UserSettings
@@ -39,7 +39,7 @@ from openhands.app_server.utils.llm import is_openhands_model
 from openhands.sdk.llm.utils.openhands_provider import (
     canonicalize_openhands_llm_payload,
 )
-from openhands.sdk.mcp.config import MCPServer, coerce_mcp_config, dump_mcp_config
+from openhands.sdk.mcp.config import MCPServer, coerce_mcp_config
 from openhands.sdk.profiles import resolve_agent_profile
 
 # Agent-settings keys private to each org member: never written to
@@ -131,13 +131,7 @@ class SaasSettingsStore(SettingsStore):
 
     @staticmethod
     def _get_persisted_mcp_config(item: Settings) -> dict[str, Any] | None:
-        mcp_config = item.agent_settings.mcp_config
-        if mcp_config is None:
-            return None
-        return dump_mcp_config(
-            mcp_config,
-            context={'expose_secrets': 'plaintext'},
-        )
+        return serialize_mcp_config(item.agent_settings.mcp_config)
 
     def _resolve_active_agent_profile(
         self,
@@ -448,6 +442,7 @@ class SaasSettingsStore(SettingsStore):
                 kwargs['active_agent_profile_revision'] = resolved_revision
 
         settings = Settings(**kwargs)
+        settings._mcp_config_updated = False
         if resolution_requested:
             # Launch view (even when resolution fell back): never persistable.
             settings._resolved_view = True
@@ -673,7 +668,8 @@ class SaasSettingsStore(SettingsStore):
             for private_key in MEMBER_PRIVATE_AGENT_KEYS:
                 member_agent_settings_diff.pop(private_key, None)
             org_member.agent_settings_diff = member_agent_settings_diff
-            org_member.mcp_config = self._get_persisted_mcp_config(item)
+            if item._mcp_config_updated:
+                org_member.mcp_config = self._get_persisted_mcp_config(item)
 
             if uses_managed_llm_key and current_member_llm_api_key is not None:
                 # Managed/proxy key — store on this member but mark as org-managed

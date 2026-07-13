@@ -509,6 +509,7 @@ class Settings(BaseModel):
     # not dump/reconstruct — ``store()`` also guards on
     # ``active_agent_profile_id`` for reconstructed copies.
     _resolved_view: bool = PrivateAttr(default=False)
+    _mcp_config_updated: bool = PrivateAttr(default=False)
 
     # Marketplace registrations for plugin resolution
     # Users can register multiple marketplaces with different auto-load behaviors
@@ -541,12 +542,20 @@ class Settings(BaseModel):
     # user out of settings entirely if legacy stored data contained a duplicate.
 
     def __init__(self, **data: Any):
+        raw_agent_settings = data.get('agent_settings')
+        mcp_config_updated = (
+            'mcp_config' in raw_agent_settings
+            if isinstance(raw_agent_settings, Mapping)
+            else 'mcp_config'
+            in getattr(raw_agent_settings, 'model_fields_set', frozenset())
+        )
         # Import Secrets here to avoid circular imports
         from openhands.app_server.secrets.secrets_models import Secrets
 
         if 'secrets_store' not in data or data['secrets_store'] is None:
             data['secrets_store'] = Secrets()
         super().__init__(**data)
+        self._mcp_config_updated = mcp_config_updated
 
     @property
     def llm_api_key_is_set(self) -> bool:
@@ -626,6 +635,8 @@ class Settings(BaseModel):
             # Use object.__setattr__ to avoid validate_assignment
             # side-effects on other fields.
             object.__setattr__(self, 'agent_settings', new_settings)
+            if replace_mcp_config:
+                self._mcp_config_updated = True
 
         conv_update = payload.get('conversation_settings_diff')
         if isinstance(conv_update, dict):

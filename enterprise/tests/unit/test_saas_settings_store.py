@@ -1367,6 +1367,55 @@ async def test_llm_profiles_are_encrypted_at_rest(
 
 
 @pytest.mark.asyncio
+async def test_partial_settings_store_preserves_existing_mcp_config(
+    session_maker, async_session_maker, org_with_multiple_members_fixture
+):
+    from sqlalchemy import select
+    from storage.org_member import OrgMember
+
+    admin_user_id = str(org_with_multiple_members_fixture['admin_user_id'])
+    org_id = org_with_multiple_members_fixture['org_id']
+    store = SaasSettingsStore(admin_user_id)
+
+    initial_settings = _make_settings(
+        model='test-model',
+        base_url='http://test-url.com',
+        api_key='test-key',
+        mcp_config={
+            'integration-hub': {
+                'url': 'https://mcp.example.com',
+                'headers': {'Authorization': 'Bearer secret'},
+            }
+        },
+    )
+    partial_settings = _make_settings(
+        model='updated-model',
+        base_url='http://test-url.com',
+        api_key='updated-key',
+    )
+
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await store.store(initial_settings)
+        await store.store(partial_settings)
+
+    with session_maker() as session:
+        member = session.execute(
+            select(OrgMember)
+            .where(OrgMember.org_id == org_id)
+            .where(
+                OrgMember.user_id == org_with_multiple_members_fixture['admin_user_id']
+            )
+        ).scalar_one()
+
+    assert member.mcp_config == {
+        'integration-hub': {
+            'url': 'https://mcp.example.com',
+            'auth': {'strategy': 'bearer', 'value': 'secret'},
+        }
+    }
+
+
+@pytest.mark.asyncio
 async def test_store_replaces_mcp_config_on_delete(
     session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
