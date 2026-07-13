@@ -1,4 +1,6 @@
+import asyncio
 import glob
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +42,34 @@ class FilesystemEventService(EventServiceBase):
         files = glob.glob(str(search_path))
         paths = [Path(file) for file in files]
         return paths
+
+    async def _scan_event_timestamps(
+        self, paths: list[Path]
+    ) -> list[tuple[Path, str]] | None:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._read_event_timestamps, paths)
+
+    def _read_event_timestamps(self, paths: list[Path]) -> list[tuple[Path, str]]:
+        """Read only the timestamp of each stored event.
+
+        A plain ``json.loads`` of the stored payload is an order of magnitude
+        cheaper than validating the full ``Event`` discriminated union, which
+        bounds unfiltered ``search_events`` validation to the requested page's
+        ordered prefix instead of every stored event. Reads happen in a single
+        executor call because the per-file work is too small to amortize one
+        task per file.
+        """
+        scanned = []
+        for path in paths:
+            try:
+                timestamp = json.loads(path.read_text())['timestamp']
+            except Exception:
+                if path.exists():
+                    _logger.exception('Error reading event', stack_info=True)
+                continue
+            if isinstance(timestamp, str):
+                scanned.append((path, timestamp))
+        return scanned
 
 
 class FilesystemEventServiceInjector(EventServiceInjector):

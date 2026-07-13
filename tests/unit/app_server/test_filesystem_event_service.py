@@ -467,3 +467,204 @@ class TestFilesystemEventServiceIntegration:
 
         result = await service.search_events(conversation_id)
         assert len(result.items) == 3
+
+
+class TestFilesystemEventServiceTimestampScan:
+    """Regression tests for the unfiltered search_events timestamp-scan fast path.
+
+    Unfiltered searches sort and paginate on cheaply-scanned timestamps and must
+    fully load (validate) only the ordered prefix needed for the requested page,
+    while returning exactly what a full-load search would return.
+    """
+
+    def _create_token_event_at(self, timestamp: str) -> TokenEvent:
+        return TokenEvent(
+            source='agent',
+            prompt_token_ids=[1, 2],
+            response_token_ids=[3, 4],
+            timestamp=timestamp,
+        )
+
+    def _count_full_loads(self, service: FilesystemEventService) -> list[int]:
+        """Wrap service._load_event with a counter; returns the counter holder."""
+        calls = [0]
+        original_load = service._load_event
+
+        def counting_load(path: Path):
+            calls[0] += 1
+            return original_load(path)
+
+        service._load_event = counting_load  # type: ignore[method-assign]
+        return calls
+
+    @pytest.mark.asyncio
+    async def test_unfiltered_page_uses_bounded_lookahead(
+        self, service: FilesystemEventService
+    ):
+        """A page of an unfiltered search must not load the whole conversation."""
+        conversation_id = uuid4()
+        total_events = 10
+        page_limit = 3
+
+        for i in range(total_events):
+            await service.save_event(
+                conversation_id,
+                self._create_token_event_at(f'2026-01-01T00:00:{i:02d}'),
+            )
+
+        calls = self._count_full_loads(service)
+        result = await service.search_events(conversation_id, limit=page_limit)
+
+        assert len(result.items) == page_limit
+        assert calls[0] == page_limit + 1
+
+    @pytest.mark.asyncio
+    async def test_unfiltered_pages_use_bounded_ordered_hydration(
+        self, service: FilesystemEventService
+    ):
+        """Each page validates only its offset, items, and one-item lookahead."""
+        conversation_id = uuid4()
+        total_events = 10
+        page_limit = 3
+
+        for i in range(total_events):
+            await service.save_event(
+                conversation_id,
+                self._create_token_event_at(f'2026-01-01T00:00:{i:02d}'),
+            )
+
+        page_id = None
+        collected_ids = []
+        page_calls = []
+        calls = self._count_full_loads(service)
+        previous_calls = 0
+        while True:
+            result = await service.search_events(
+                conversation_id, page_id=page_id, limit=page_limit
+            )
+            page_calls.append(calls[0] - previous_calls)
+            previous_calls = calls[0]
+            collected_ids.extend(item.id for item in result.items)
+            if result.next_page_id is None:
+                break
+            page_id = result.next_page_id
+
+        assert len(collected_ids) == total_events
+        assert page_calls == [4, 8, 10, 10]
+
+    @pytest.mark.asyncio
+    async def test_unfiltered_search_matches_filtered_slow_path(
+        self, service: FilesystemEventService
+    ):
+        """Fast path must return the same events, order and paging as full load."""
+        conversation_id = uuid4()
+        for i in range(7):
+            await service.save_event(
+                conversation_id,
+                self._create_token_event_at(f'2026-01-01T00:00:{i:02d}'),
+            )
+        for _ in range(2):
+            await service.save_event(
+                conversation_id,
+                self._create_token_event_at('2026-01-01T00:00:03'),
+            )
+
+        for sort_order in (EventSortOrder.TIMESTAMP, EventSortOrder.TIMESTAMP_DESC):
+            for page_id in (None, '3'):
+                fast = await service.search_events(
+                    conversation_id, sort_order=sort_order, page_id=page_id, limit=3
+                )
+                # kind__eq matches every stored event but disables the fast path
+                slow = await service.search_events(
+                    conversation_id,
+                    kind__eq='TokenEvent',
+                    sort_order=sort_order,
+                    page_id=page_id,
+                    limit=3,
+                )
+                assert [e.id for e in fast.items] == [e.id for e in slow.items]
+                assert [e.timestamp for e in fast.items] == [
+                    e.timestamp for e in slow.items
+                ]
+                assert fast.next_page_id == slow.next_page_id
+
+    @pytest.mark.asyncio
+    async def test_unfiltered_search_skips_unreadable_files(
+        self, service: FilesystemEventService
+    ):
+        """Corrupt event files are skipped, as in the full-load path."""
+        conversation_id = uuid4()
+        events = [
+            self._create_token_event_at(f'2026-01-01T00:00:{i:02d}') for i in range(3)
+        ]
+        for event in events:
+            await service.save_event(conversation_id, event)
+
+        conversation_path = await service.get_conversation_path(conversation_id)
+        (conversation_path / 'corrupt.json').write_text('not valid json{')
+
+        result = await service.search_events(conversation_id)
+
+        assert len(result.items) == 3
+        assert {item.id for item in result.items} == {event.id for event in events}
+
+    @pytest.mark.asyncio
+    async def test_timestamp_scan_skips_invalid_timestamped_event_payload(
+        self, service: FilesystemEventService
+    ):
+        """Timestamp scans must not let invalid Event JSON consume page offsets."""
+        conversation_id = uuid4()
+        for i in range(5):
+            await service.save_event(
+                conversation_id,
+                self._create_token_event_at(f'2026-01-01T00:00:{i:02d}'),
+            )
+
+        conversation_path = await service.get_conversation_path(conversation_id)
+        (conversation_path / 'invalid-timestamp.json').write_text(
+            '{"timestamp": "2026-01-01T00:00:01.500000", "kind": "InvalidEvent"}'
+        )
+
+        for sort_order in (EventSortOrder.TIMESTAMP, EventSortOrder.TIMESTAMP_DESC):
+            for page_id in (None, '2'):
+                fast = await service.search_events(
+                    conversation_id, sort_order=sort_order, page_id=page_id, limit=2
+                )
+                slow = await service.search_events(
+                    conversation_id,
+                    kind__eq='TokenEvent',
+                    sort_order=sort_order,
+                    page_id=page_id,
+                    limit=2,
+                )
+                assert [event.id for event in fast.items] == [
+                    event.id for event in slow.items
+                ]
+                assert [event.timestamp for event in fast.items] == [
+                    event.timestamp for event in slow.items
+                ]
+                assert fast.next_page_id == slow.next_page_id
+
+        fast_zero = await service.search_events(conversation_id, limit=0)
+        slow_zero = await service.search_events(
+            conversation_id, kind__eq='TokenEvent', limit=0
+        )
+        assert fast_zero.items == slow_zero.items == []
+        assert fast_zero.next_page_id == slow_zero.next_page_id
+
+        invalid_only_conversation_id = uuid4()
+        invalid_only_path = await service.get_conversation_path(
+            invalid_only_conversation_id
+        )
+        invalid_only_path.mkdir(parents=True)
+        (invalid_only_path / 'invalid-timestamp.json').write_text(
+            '{"timestamp": "2026-01-01T00:00:00", "kind": "InvalidEvent"}'
+        )
+        fast_invalid_only = await service.search_events(
+            invalid_only_conversation_id, limit=0
+        )
+        slow_invalid_only = await service.search_events(
+            invalid_only_conversation_id, kind__eq='TokenEvent', limit=0
+        )
+        assert fast_invalid_only.items == slow_invalid_only.items == []
+        assert fast_invalid_only.next_page_id == slow_invalid_only.next_page_id

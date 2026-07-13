@@ -63,6 +63,22 @@ class EventServiceBase(EventService, ABC):
 
         return await asyncio.gather(*(load_event(path) for path in paths))
 
+    async def _scan_event_timestamps(
+        self, paths: list[Path]
+    ) -> list[tuple[Path, str]] | None:
+        """Return a (path, timestamp) pair per readable event, or None.
+
+        Backends where reading the raw stored payload is much cheaper than a
+        full ``Event`` validation (e.g. the local filesystem) can override
+        this so that unfiltered ``search_events`` pages only fully load the
+        ordered prefix needed to reach the requested page and its lookahead,
+        instead of the entire conversation history.
+        Unreadable events must be omitted, matching ``_load_event`` failure
+        semantics. Returning None (the default) means no cheap scan is
+        available and ``search_events`` falls back to loading every event.
+        """
+        return None
+
     async def get_conversation_path(self, conversation_id: UUID) -> Path:
         """Get a path for a conversation. Ensure user_id is included if possible."""
         path = self.prefix
@@ -105,6 +121,45 @@ class EventServiceBase(EventService, ABC):
         loop = asyncio.get_running_loop()
         prefix = await self.get_conversation_path(conversation_id)
         paths = await loop.run_in_executor(None, self._search_paths, prefix)
+
+        # Fast path for unfiltered queries (the common "open a conversation"
+        # page pattern): sort and paginate on cheaply-scanned timestamps and
+        # fully load only the ordered prefix needed for the requested page,
+        # instead of loading and validating every event in the conversation.
+        if kind__eq is None and timestamp__gte is None and timestamp__lt is None:
+            scanned = await self._scan_event_timestamps(paths)
+            if scanned is not None:
+                scanned.sort(
+                    key=lambda path_and_timestamp: path_and_timestamp[1],
+                    reverse=(sort_order == EventSortOrder.TIMESTAMP_DESC),
+                )
+                start_offset = int(page_id) if page_id else 0
+                valid_events_seen = 0
+                items: list[Event] = []
+                has_next_page = False
+                batch_size = max(1, min(_event_load_concurrency(), limit + 1))
+                for index in range(0, len(scanned), batch_size):
+                    paths_to_load = [
+                        path for path, _ in scanned[index : index + batch_size]
+                    ]
+                    for event in await self._load_events_from_paths(paths_to_load):
+                        if not event:
+                            continue
+                        if valid_events_seen < start_offset:
+                            valid_events_seen += 1
+                            continue
+                        if len(items) < limit:
+                            items.append(event)
+                            valid_events_seen += 1
+                            continue
+                        has_next_page = True
+                        break
+                    if has_next_page:
+                        break
+                return EventPage(
+                    items=items,
+                    next_page_id=str(start_offset + limit) if has_next_page else None,
+                )
 
         events = await self._load_events_from_paths(paths)
         # Convert datetime filters to ISO strings so they can be compared
