@@ -569,17 +569,7 @@ class UserStore:
             # For new sign-ups after migration, user_settings won't exist
             # Fall back to getting data from org_members
             if user_settings:
-                if org_member.llm_api_key and org_member.llm_api_key.get_secret_value():
-                    user_settings.llm_api_key = encrypt_legacy_value(
-                        org_member.llm_api_key.get_secret_value()
-                    )
-                if (
-                    org_member.llm_api_key_for_byor
-                    and org_member.llm_api_key_for_byor.get_secret_value()
-                ):
-                    user_settings.llm_api_key_for_byor = encrypt_legacy_value(
-                        org_member.llm_api_key_for_byor.get_secret_value()
-                    )
+                UserStore._sync_user_settings_from_org_member(user_settings, org_member)
                 logger.info(
                     'user_store:downgrade_user:updated_user_settings_from_org_member',
                     extra={'user_id': user_id},
@@ -1225,6 +1215,23 @@ class UserStore:
         return kwargs
 
     @staticmethod
+    def _sync_user_settings_from_org_member(
+        user_settings: UserSettings, org_member: OrgMember
+    ) -> None:
+        user_settings.mcp_config = org_member.effective_mcp_config
+        if org_member.llm_api_key and org_member.llm_api_key.get_secret_value():
+            user_settings.llm_api_key = encrypt_legacy_value(
+                org_member.llm_api_key.get_secret_value()
+            )
+        if (
+            org_member.llm_api_key_for_byor
+            and org_member.llm_api_key_for_byor.get_secret_value()
+        ):
+            user_settings.llm_api_key_for_byor = encrypt_legacy_value(
+                org_member.llm_api_key_for_byor.get_secret_value()
+            )
+
+    @staticmethod
     def _create_user_settings_from_entities(
         user_id: str, org_member: OrgMember, user: User, org: Org
     ) -> UserSettings:
@@ -1246,10 +1253,8 @@ class UserStore:
         from storage.org_store import OrgStore
 
         member_agent_settings_diff = dict(org_member.agent_settings_diff)
-        legacy_mcp_config = member_agent_settings_diff.pop('mcp_config', None)
-        member_mcp_config = org_member.mcp_config
-        if member_mcp_config is None:
-            member_mcp_config = legacy_mcp_config
+        member_agent_settings_diff.pop('mcp_config', None)
+        member_mcp_config = org_member.effective_mcp_config
         org_agent_settings = OrgStore.get_agent_settings_from_org(org)
         org_agent_settings_dump = org_agent_settings.model_dump(mode='json')
         org_agent_settings_dump.pop('mcp_config', None)

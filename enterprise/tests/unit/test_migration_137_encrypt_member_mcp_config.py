@@ -29,6 +29,96 @@ def _json_object(value):
     return json.loads(value) if isinstance(value, str) else value
 
 
+def test_bearer_token_skips_malformed_authorization_values():
+    assert (
+        migration_137._mcp_bearer_token(
+            {
+                'headers': {
+                    'AUTHORIZATION': None,
+                    'Authorization': 'Bearer real-key',
+                }
+            }
+        )
+        == 'real-key'
+    )
+
+
+def test_recovery_preserves_non_bearer_auth_shape():
+    recovered = migration_137._recover_redacted_mcp_config(
+        {
+            'server': {
+                'url': 'https://mcp.example.com',
+                'auth': {'strategy': 'bearer', 'value': '**********'},
+            }
+        },
+        {
+            'server': {
+                'url': 'https://mcp.example.com',
+                'auth': {
+                    'strategy': 'api_key',
+                    'value': 'real-key',
+                    'header_name': 'X-API-Key',
+                },
+            }
+        },
+    )
+
+    assert recovered['server']['auth'] == {
+        'strategy': 'api_key',
+        'value': 'real-key',
+        'header_name': 'X-API-Key',
+    }
+
+
+def test_recovery_preserves_typed_bearer_from_scalar_redaction():
+    recovered = migration_137._recover_redacted_mcp_config(
+        {
+            'server': {
+                'url': 'https://mcp.example.com',
+                'auth': '**********',
+            }
+        },
+        {
+            'server': {
+                'url': 'https://mcp.example.com',
+                'auth': {'strategy': 'bearer', 'value': 'real-key'},
+            }
+        },
+    )
+
+    assert recovered['server']['auth'] == {
+        'strategy': 'bearer',
+        'value': 'real-key',
+    }
+
+
+def test_recovery_preserves_typed_basic_from_scalar_redaction():
+    recovered = migration_137._recover_redacted_mcp_config(
+        {
+            'server': {
+                'url': 'https://mcp.example.com',
+                'auth': '**********',
+            }
+        },
+        {
+            'server': {
+                'url': 'https://mcp.example.com',
+                'auth': {
+                    'strategy': 'basic',
+                    'username': 'user',
+                    'password': 'real-key',
+                },
+            }
+        },
+    )
+
+    assert recovered['server']['auth'] == {
+        'strategy': 'basic',
+        'username': 'user',
+        'password': 'real-key',
+    }
+
+
 def test_upgrade_encrypts_and_moves_legacy_mcp_config(monkeypatch):
     engine = sa.create_engine('sqlite://')
     metadata = sa.MetaData()

@@ -293,6 +293,16 @@ def _is_redacted_mcp_secret(value: object) -> bool:
     )
 
 
+def _has_redacted_mcp_secret(value: object) -> bool:
+    if _is_redacted_mcp_secret(value):
+        return True
+    if isinstance(value, Mapping):
+        return any(_has_redacted_mcp_secret(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_has_redacted_mcp_secret(item) for item in value)
+    return False
+
+
 def _restore_redacted_secret(value: Any, existing: Any) -> Any:
     if _is_redacted_mcp_secret(value):
         if isinstance(existing, str) and not _is_redacted_mcp_secret(existing):
@@ -309,30 +319,64 @@ def _restore_redacted_secret(value: Any, existing: Any) -> Any:
     return value
 
 
-def _existing_mcp_headers(
-    incoming: Any,
-    existing_server: Mapping[str, Any],
-) -> Any:
-    existing_headers = existing_server.get('headers')
-    if not isinstance(incoming, Mapping):
-        return existing_headers
+def _is_authorization_header(key: object) -> bool:
+    return isinstance(key, str) and key.lower() == 'authorization'
 
-    auth = existing_server.get('auth')
-    if not isinstance(auth, Mapping) or auth.get('strategy') != 'bearer':
-        return existing_headers
-    auth_value = auth.get('value')
-    if not isinstance(auth_value, str) or _is_redacted_mcp_secret(auth_value):
-        return existing_headers
 
-    restored = dict(existing_headers) if isinstance(existing_headers, Mapping) else {}
-    for key, value in incoming.items():
+def _header_value(headers: object, key: object) -> object:
+    if not isinstance(headers, Mapping):
+        return None
+    for existing_key, value in headers.items():
         if (
             isinstance(key, str)
-            and key.lower() == 'authorization'
-            and _is_redacted_mcp_secret(value)
+            and isinstance(existing_key, str)
+            and existing_key.lower() == key.lower()
         ):
-            restored[key] = f'Bearer {auth_value}'
-    return restored or existing_headers
+            return value
+    return None
+
+
+def _restore_submitted_mcp_headers(
+    incoming: object,
+    existing_server: Mapping[str, Any],
+) -> object:
+    if not isinstance(incoming, Mapping):
+        return incoming
+    existing_headers = existing_server.get('headers')
+    restored = (
+        dict(existing_headers)
+        if _has_redacted_mcp_secret(incoming) and isinstance(existing_headers, Mapping)
+        else {}
+    )
+    for key, value in incoming.items():
+        existing_value = _header_value(existing_headers, key)
+        for existing_key in tuple(restored):
+            if (
+                isinstance(existing_key, str)
+                and isinstance(key, str)
+                and existing_key.lower() == key.lower()
+            ):
+                restored.pop(existing_key)
+        if (
+            _is_authorization_header(key)
+            and _is_redacted_mcp_secret(value)
+            and existing_value is None
+        ):
+            continue
+        restored_value = _restore_redacted_secret(value, existing_value)
+        if restored_value is not _MISSING_SECRET:
+            restored[key] = restored_value
+    return restored
+
+
+def _restore_submitted_mcp_auth(value: object, existing: object) -> object:
+    if _has_redacted_mcp_secret(value) and existing is not None:
+        if isinstance(value, Mapping) and isinstance(existing, Mapping):
+            if value.get('strategy') != existing.get('strategy'):
+                return deepcopy(existing)
+        elif not isinstance(value, str) or not isinstance(existing, str):
+            return deepcopy(existing)
+    return _restore_redacted_secret(value, existing)
 
 
 def _restore_submitted_mcp_secrets(
@@ -343,13 +387,19 @@ def _restore_submitted_mcp_secrets(
     for field in submitted_fields:
         existing_value = existing_server.get(field)
         if field == 'headers':
-            existing_value = _existing_mcp_headers(
-                incoming_server[field], existing_server
+            restored = _restore_submitted_mcp_headers(
+                incoming_server[field],
+                existing_server,
             )
-        restored = _restore_redacted_secret(
-            incoming_server[field],
-            existing_value,
-        )
+        elif field == 'auth':
+            restored = _restore_submitted_mcp_auth(
+                incoming_server[field], existing_value
+            )
+        else:
+            restored = _restore_redacted_secret(
+                incoming_server[field],
+                existing_value,
+            )
         if restored is _MISSING_SECRET:
             incoming_server.pop(field)
         else:
@@ -361,15 +411,30 @@ def _carry_omitted_mcp_secrets(
     existing_server: Mapping[str, Any],
     submitted_fields: tuple[str, ...],
 ) -> None:
-    submitted_remote_credentials = {'headers', 'auth'}.intersection(submitted_fields)
-    for field in _MCP_SECRET_FIELDS:
-        if field in submitted_fields:
-            continue
-        existing_value = existing_server.get(field)
-        if existing_value is not None and (
-            field == 'env' or not submitted_remote_credentials
-        ):
-            incoming_server[field] = existing_value
+    if 'env' not in submitted_fields and existing_server.get('env') is not None:
+        incoming_server['env'] = existing_server['env']
+
+    if 'headers' not in submitted_fields:
+        existing_headers = existing_server.get('headers')
+        if isinstance(existing_headers, Mapping):
+            headers = dict(existing_headers)
+            if 'auth' in submitted_fields:
+                headers = {
+                    key: value
+                    for key, value in headers.items()
+                    if not _is_authorization_header(key)
+                }
+            if headers:
+                incoming_server['headers'] = headers
+
+    if 'auth' not in submitted_fields and existing_server.get('auth') is not None:
+        submitted_headers = incoming_server.get('headers')
+        has_plain_authorization = isinstance(submitted_headers, Mapping) and any(
+            _is_authorization_header(key) and not _is_redacted_mcp_secret(value)
+            for key, value in submitted_headers.items()
+        )
+        if not has_plain_authorization:
+            incoming_server['auth'] = existing_server['auth']
 
 
 def _mcp_server_map(value: Any) -> dict[str, Any] | None:
@@ -387,12 +452,48 @@ def _mcp_endpoint_identity(server: Mapping[str, Any]) -> tuple[Any, ...] | None:
     if not isinstance(command, str) or not command:
         return None
     args = server.get('args')
+    # Bind environment secrets to the full process invocation.
     return (
         'stdio',
         command,
         tuple(args) if isinstance(args, list) else (),
         server.get('cwd'),
     )
+
+
+def _matching_existing_mcp_server(
+    name: str,
+    incoming_server: Mapping[str, Any],
+    incoming_servers: Mapping[str, Any],
+    existing_servers: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    incoming_endpoint = _mcp_endpoint_identity(incoming_server)
+    if incoming_endpoint is None:
+        return {}
+
+    named_server = existing_servers.get(name)
+    if isinstance(named_server, Mapping):
+        return (
+            named_server
+            if incoming_endpoint == _mcp_endpoint_identity(named_server)
+            else {}
+        )
+
+    candidates = [
+        server
+        for existing_name, server in existing_servers.items()
+        if existing_name not in incoming_servers
+        and isinstance(server, Mapping)
+        and incoming_endpoint == _mcp_endpoint_identity(server)
+    ]
+    competing_updates = sum(
+        1
+        for incoming_name, server in incoming_servers.items()
+        if incoming_name not in existing_servers
+        and isinstance(server, Mapping)
+        and incoming_endpoint == _mcp_endpoint_identity(server)
+    )
+    return candidates[0] if len(candidates) == competing_updates == 1 else {}
 
 
 def _preserve_redacted_mcp_secrets(
@@ -412,14 +513,12 @@ def _preserve_redacted_mcp_secrets(
     for name, incoming_server in incoming_servers.items():
         if not isinstance(name, str) or not isinstance(incoming_server, dict):
             continue
-        existing_server = existing_dump.get(name)
-        incoming_endpoint = _mcp_endpoint_identity(incoming_server)
-        if (
-            existing_server is None
-            or incoming_endpoint is None
-            or incoming_endpoint != _mcp_endpoint_identity(existing_server)
-        ):
-            existing_server = {}
+        existing_server = _matching_existing_mcp_server(
+            name,
+            incoming_server,
+            incoming_servers,
+            existing_dump,
+        )
 
         submitted_fields = tuple(
             field for field in _MCP_SECRET_FIELDS if field in incoming_server

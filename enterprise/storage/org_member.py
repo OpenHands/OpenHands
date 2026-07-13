@@ -85,3 +85,10 @@ class OrgMember(Base):
     def llm_api_key_for_byor(self, value: str | SecretStr | None):
         raw = value.get_secret_value() if isinstance(value, SecretStr) else value
         self._llm_api_key_for_byor = encrypt_value(raw) if raw else None
+
+    @property
+    def effective_mcp_config(self) -> dict[str, Any] | None:
+        if self.mcp_config is not None:
+            return self.mcp_config
+        value = (self.agent_settings_diff or {}).get('mcp_config')
+        return value if isinstance(value, dict) else None

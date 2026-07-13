@@ -126,6 +126,69 @@ describe("parseMcpConfig", () => {
       name: "auth-server",
       url: "https://example.com",
       api_key: "**********",
+      auth: { strategy: "bearer", value: "**********" },
+    });
+  });
+
+  it.each([
+    {
+      strategy: "api_key" as const,
+      value: "**********",
+      header_name: "X-API-Key",
+    },
+    {
+      strategy: "basic" as const,
+      username: "user",
+      password: "**********",
+    },
+    {
+      strategy: "header" as const,
+      headers: { "X-API-Key": "**********" },
+    },
+    {
+      strategy: "oauth2" as const,
+      state: { tokens: { access_token: "**********" } },
+    },
+  ])("round-trips typed $strategy auth", (auth) => {
+    const parsed = parseMcpConfig({
+      server: { url: "https://example.com", auth },
+    });
+
+    expect(toSdkMcpConfig(parsed)?.server.auth).toEqual(auth);
+  });
+
+  it("round-trips custom headers alongside bearer auth", () => {
+    const persisted = {
+      server: {
+        url: "https://example.com",
+        headers: { "X-Tenant": "**********" },
+        auth: { strategy: "bearer", value: "**********" },
+      },
+    };
+
+    expect(toSdkMcpConfig(parseMcpConfig(persisted))?.server).toEqual(
+      persisted.server,
+    );
+  });
+
+  it("preserves api_key header metadata when updating its value", () => {
+    const parsed = parseMcpConfig({
+      server: {
+        url: "https://example.com",
+        auth: {
+          strategy: "api_key",
+          value: "**********",
+          header_name: "X-API-Key",
+        },
+      },
+    });
+    const server = parsed.shttp_servers[0];
+    if (typeof server === "object") server.api_key = "replacement";
+
+    expect(toSdkMcpConfig(parsed)?.server.auth).toEqual({
+      strategy: "api_key",
+      value: "replacement",
+      header_name: "X-API-Key",
     });
   });
 
@@ -279,7 +342,12 @@ describe("toSdkMcpConfig", () => {
     const parsed = parseMcpConfig(persisted);
 
     expect(parsed.shttp_servers).toEqual([
-      { name: "shttp", url: "https://shttp.example", api_key: "shttp-secret" },
+      {
+        name: "shttp",
+        url: "https://shttp.example",
+        api_key: "shttp-secret",
+        headers: { Authorization: "Bearer shttp-secret" },
+      },
     ]);
   });
 

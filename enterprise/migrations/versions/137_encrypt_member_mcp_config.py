@@ -75,6 +75,7 @@ def _mcp_endpoint_identity(server: dict[str, Any]) -> tuple[Any, ...] | None:
     if not isinstance(command, str) or not command:
         return None
     args = server.get('args')
+    # Bind environment secrets to the full process invocation.
     return (
         'stdio',
         command,
@@ -107,11 +108,31 @@ def _mcp_bearer_token(server: dict[str, Any]) -> str | None:
         if not isinstance(key, str) or key.lower() != 'authorization':
             continue
         if not isinstance(value, str):
-            return None
+            continue
         match = re.fullmatch(r'Bearer\s+(.+)', value, flags=re.IGNORECASE)
         if match and not _is_redacted_secret(match.group(1)):
             return match.group(1)
     return None
+
+
+def _has_redacted_secret(value: object) -> bool:
+    if _is_redacted_secret(value):
+        return True
+    if isinstance(value, dict):
+        return any(_has_redacted_secret(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_has_redacted_secret(item) for item in value)
+    return False
+
+
+def _restore_redacted_auth(value: Any, backup: Any) -> Any:
+    if _has_redacted_secret(value) and backup is not None:
+        if isinstance(value, dict) and isinstance(backup, dict):
+            if value.get('strategy') != backup.get('strategy'):
+                return deepcopy(backup)
+        elif not isinstance(value, str) or not isinstance(backup, str):
+            return deepcopy(backup)
+    return _restore_redacted_value(value, backup)
 
 
 def _mcp_credential_backup(
@@ -124,13 +145,14 @@ def _mcp_credential_backup(
         return projected
 
     current_auth = current.get('auth')
-    if (
-        isinstance(current_auth, dict)
-        and str(current_auth.get('strategy', '')).lower() == 'bearer'
-    ):
-        projected['auth'] = {'strategy': 'bearer', 'value': bearer_token}
-    elif _is_redacted_secret(current_auth):
-        projected['auth'] = bearer_token
+    if projected.get('auth') is None:
+        if (
+            isinstance(current_auth, dict)
+            and str(current_auth.get('strategy', '')).lower() == 'bearer'
+        ):
+            projected['auth'] = {'strategy': 'bearer', 'value': bearer_token}
+        elif _is_redacted_secret(current_auth):
+            projected['auth'] = bearer_token
 
     current_headers = current.get('headers')
     if isinstance(current_headers, dict):
@@ -170,7 +192,12 @@ def _recover_redacted_mcp_config(
         credential_backup = _mcp_credential_backup(current_server, backup_server)
         for field in ('headers', 'env', 'auth'):
             if field in current_server:
-                current_server[field] = _restore_redacted_value(
+                restore = (
+                    _restore_redacted_auth
+                    if field == 'auth'
+                    else _restore_redacted_value
+                )
+                current_server[field] = restore(
                     current_server[field], credential_backup.get(field)
                 )
     return recovered

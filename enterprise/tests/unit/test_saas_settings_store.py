@@ -1416,6 +1416,57 @@ async def test_partial_settings_store_preserves_existing_mcp_config(
 
 
 @pytest.mark.asyncio
+async def test_partial_store_migrates_legacy_member_mcp_config(
+    session_maker, async_session_maker, org_with_multiple_members_fixture
+):
+    from sqlalchemy import select
+    from storage.org_member import OrgMember
+
+    fixture = org_with_multiple_members_fixture
+    org_id = fixture['org_id']
+    admin_user_id = fixture['admin_user_id']
+    legacy_config = {
+        'integration-hub': {
+            'url': 'https://mcp.example.com',
+            'auth': {'strategy': 'bearer', 'value': 'legacy-secret'},
+        }
+    }
+    async with async_session_maker() as session:
+        member = (
+            await session.execute(
+                select(OrgMember)
+                .where(OrgMember.org_id == org_id)
+                .where(OrgMember.user_id == admin_user_id)
+            )
+        ).scalar_one()
+        member.mcp_config = None
+        member.agent_settings_diff = {
+            **member.agent_settings_diff,
+            'mcp_config': legacy_config,
+        }
+        await session.commit()
+
+    settings = _make_settings(
+        model='updated-model',
+        base_url='http://test-url.com',
+        api_key='updated-key',
+    )
+    store = SaasSettingsStore(str(admin_user_id))
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await store.store(settings)
+
+    with session_maker() as session:
+        member = session.execute(
+            select(OrgMember)
+            .where(OrgMember.org_id == org_id)
+            .where(OrgMember.user_id == admin_user_id)
+        ).scalar_one()
+
+    assert member.mcp_config == legacy_config
+    assert 'mcp_config' not in member.agent_settings_diff
+
+
+@pytest.mark.asyncio
 async def test_store_replaces_mcp_config_on_delete(
     session_maker, async_session_maker, org_with_multiple_members_fixture
 ):

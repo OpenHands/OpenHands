@@ -26,10 +26,32 @@ export type ProviderToken = {
   host: string | null;
 };
 
+export type MCPJsonValue =
+  | boolean
+  | number
+  | string
+  | null
+  | MCPJsonValue[]
+  | { [key: string]: MCPJsonValue };
+
+export type MCPAuthCredential =
+  | { strategy: "none" }
+  | { strategy: "api_key"; value?: string | null; header_name?: string | null }
+  | { strategy: "bearer"; value?: string | null }
+  | { strategy: "basic"; username: string; password?: string | null }
+  | { strategy: "header"; headers?: Record<string, string> | null }
+  | {
+      strategy: "oauth2";
+      authentication?: Record<string, MCPJsonValue> | null;
+      state?: Record<string, MCPJsonValue> | null;
+    };
+
 export type MCPSSEServer = {
   name?: string;
   url: string;
   api_key?: string;
+  auth?: MCPAuthCredential;
+  headers?: Record<string, string>;
 };
 
 export type MCPStdioServer = {
@@ -43,6 +65,8 @@ export type MCPSHTTPServer = {
   name?: string;
   url: string;
   api_key?: string;
+  auth?: MCPAuthCredential;
+  headers?: Record<string, string>;
   timeout?: number;
 };
 

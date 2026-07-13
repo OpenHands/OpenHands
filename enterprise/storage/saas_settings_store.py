@@ -287,10 +287,8 @@ class SaasSettingsStore(SettingsStore):
             return None
         org_agent_settings = OrgStore.get_agent_settings_from_org(org)
         member_agent_settings_diff = dict(org_member.agent_settings_diff)
-        legacy_mcp_config = member_agent_settings_diff.pop('mcp_config', None)
-        member_mcp_config = org_member.mcp_config
-        if member_mcp_config is None:
-            member_mcp_config = legacy_mcp_config
+        member_agent_settings_diff.pop('mcp_config', None)
+        member_mcp_config = org_member.effective_mcp_config
 
         kwargs = {
             **{
@@ -659,12 +657,15 @@ class SaasSettingsStore(SettingsStore):
                 ),
             )
 
+            member_mcp_config = org_member.effective_mcp_config
             member_agent_settings_diff = dict(org_member.agent_settings_diff)
             for private_key in MEMBER_PRIVATE_AGENT_KEYS:
                 member_agent_settings_diff.pop(private_key, None)
             org_member.agent_settings_diff = member_agent_settings_diff
             if item._mcp_config_updated:
                 org_member.mcp_config = self._get_persisted_mcp_config(item)
+            elif org_member.mcp_config is None and member_mcp_config is not None:
+                org_member.mcp_config = serialize_mcp_config(member_mcp_config)
 
             if uses_managed_llm_key and current_member_llm_api_key is not None:
                 # Managed/proxy key — store on this member but mark as org-managed

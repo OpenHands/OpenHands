@@ -127,8 +127,10 @@ class UserSettings(Base):
         if self.mcp_config is not None:
             agent_settings['mcp_config'] = self.mcp_config
 
-        return Settings(
+        settings = Settings(
             agent_settings=agent_settings,
             conversation_settings=self.conversation_settings or {},
             registered_marketplaces=marketplaces,
         )
+        settings._mcp_config_updated = False
+        return settings

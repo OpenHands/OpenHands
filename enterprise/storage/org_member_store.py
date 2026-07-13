@@ -18,10 +18,7 @@ from storage.user import User
 from storage.user_settings import UserSettings
 
 from openhands.app_server.settings.settings_models import Settings
-from openhands.app_server.utils.jsonpatch_compat import (
-    deep_merge,
-    deep_merge_with_wholesale_keys,
-)
+from openhands.app_server.utils.jsonpatch_compat import deep_merge
 from openhands.sdk.mcp.config import coerce_mcp_config, dump_mcp_config
 
 _MISSING = object()
@@ -309,7 +306,7 @@ class OrgMemberStore:
                 org_member.llm_api_key = raw_key
 
             if agent_settings_diff is not None:
-                org_member.agent_settings_diff = deep_merge_with_wholesale_keys(
+                org_member.agent_settings_diff = deep_merge(
                     org_member.agent_settings_diff,
                     agent_settings_diff,
                 )

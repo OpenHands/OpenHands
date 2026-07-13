@@ -25,15 +25,45 @@ interface MCPServerConfig {
 
 function withExplicitMcpAuthClear(
   serialized: NonNullable<ReturnType<typeof toSdkMcpConfig>>,
-  server: string | MCPSSEServer | MCPSHTTPServer,
+  server: MCPSSEServer | MCPSHTTPServer,
 ) {
-  if (typeof server !== "object" || !server.name || !serialized[server.name]) {
+  if (!server.name || !serialized[server.name]) {
     return serialized;
   }
+  const headers = Object.fromEntries(
+    Object.entries(server.headers ?? {}).filter(
+      ([key]) => key.toLowerCase() !== "authorization",
+    ),
+  );
   return {
     ...serialized,
-    [server.name]: { ...serialized[server.name], auth: null },
+    [server.name]: {
+      ...serialized[server.name],
+      auth: null,
+      ...(server.headers && { headers }),
+    },
   };
+}
+
+function updatedRemoteServer(
+  current: string | MCPSSEServer | MCPSHTTPServer,
+  server: MCPServerConfig,
+): MCPSSEServer | MCPSHTTPServer {
+  const updated: MCPSHTTPServer = {
+    ...(typeof current === "object" ? current : {}),
+    url: server.url!,
+  };
+  if (server.type === "shttp" && server.timeout !== undefined) {
+    updated.timeout = server.timeout;
+  } else {
+    delete updated.timeout;
+  }
+  if (server.api_key) {
+    updated.api_key = server.api_key;
+  } else {
+    delete updated.api_key;
+  }
+  return updated;
 }
 
 export function useUpdateMcpServer() {
@@ -62,16 +92,14 @@ export function useUpdateMcpServer() {
       };
       const [serverType, indexStr] = serverId.split("-");
       const index = parseInt(indexStr, 10);
+      let previousRemote: MCPSSEServer | MCPSHTTPServer | undefined;
+      let updatedRemote: MCPSSEServer | MCPSHTTPServer | undefined;
 
       if (serverType === "sse") {
         const current = newConfig.sse_servers[index];
-        const sseServer: MCPSSEServer = {
-          ...(typeof current === "object" &&
-            current.name && { name: current.name }),
-          url: server.url!,
-          ...(server.api_key && { api_key: server.api_key }),
-        };
-        newConfig.sse_servers[index] = sseServer;
+        previousRemote = typeof current === "object" ? current : undefined;
+        updatedRemote = updatedRemoteServer(current, server);
+        newConfig.sse_servers[index] = updatedRemote;
       } else if (serverType === "stdio") {
         const stdioServer: MCPStdioServer = {
           name: server.name!,
@@ -82,25 +110,16 @@ export function useUpdateMcpServer() {
         newConfig.stdio_servers[index] = stdioServer;
       } else if (serverType === "shttp") {
         const current = newConfig.shttp_servers[index];
-        const shttpServer: MCPSHTTPServer = {
-          ...(typeof current === "object" &&
-            current.name && { name: current.name }),
-          url: server.url!,
-          ...(server.api_key && { api_key: server.api_key }),
-          ...(server.timeout !== undefined && { timeout: server.timeout }),
-        };
-        newConfig.shttp_servers[index] = shttpServer;
+        previousRemote = typeof current === "object" ? current : undefined;
+        updatedRemote = updatedRemoteServer(current, server);
+        newConfig.shttp_servers[index] = updatedRemote;
       }
 
       let serialized = toSdkMcpConfig(newConfig);
       const remoteApiKeyRemoved =
-        (serverType === "sse" || serverType === "shttp") && !server.api_key;
-      if (remoteApiKeyRemoved && serialized) {
-        const updated =
-          serverType === "sse"
-            ? newConfig.sse_servers[index]
-            : newConfig.shttp_servers[index];
-        serialized = withExplicitMcpAuthClear(serialized, updated);
+        previousRemote?.api_key !== undefined && !server.api_key;
+      if (remoteApiKeyRemoved && serialized && updatedRemote) {
+        serialized = withExplicitMcpAuthClear(serialized, updatedRemote);
       }
       const payload = {
         agent_settings_diff: { mcp_config: serialized },

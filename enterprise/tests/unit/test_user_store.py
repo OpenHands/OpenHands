@@ -1126,6 +1126,7 @@ def test_create_user_settings_from_entities():
             'auth': {'strategy': 'bearer', 'value': 'mcp-secret'},
         }
     }
+    org_member.effective_mcp_config = org_member.mcp_config
     org_member.conversation_settings_diff = {
         'max_iterations': 50,
     }
@@ -1184,6 +1185,7 @@ def test_create_user_settings_from_entities_with_org_fallback():
     org_member.llm_api_key = None
     org_member.agent_settings_diff = {}
     org_member.mcp_config = None
+    org_member.effective_mcp_config = None
     org_member.conversation_settings_diff = {}
 
     user = MagicMock()
@@ -1236,6 +1238,45 @@ def test_create_user_settings_from_entities_with_org_fallback():
     assert result.conversation_settings['max_iterations'] == 100
     assert result.language == 'es'
     assert result.search_api_key == 'search-key'
+
+
+def test_user_settings_to_settings_is_not_a_live_mcp_update():
+    from storage.user_settings import UserSettings
+
+    user_settings = UserSettings(
+        keycloak_user_id='test-user',
+        agent_settings={},
+        mcp_config={'server': {'url': 'https://mcp.example.com'}},
+    )
+
+    settings = user_settings.to_settings()
+
+    assert settings.agent_settings.mcp_config is not None
+    assert settings._mcp_config_updated is False
+
+
+def test_sync_user_settings_from_org_member_updates_mcp_config():
+    from storage.user_settings import UserSettings
+
+    current_mcp_config = {
+        'current': {
+            'url': 'https://mcp.example.com',
+            'auth': {'strategy': 'bearer', 'value': 'current-secret'},
+        }
+    }
+    user_settings = UserSettings(
+        keycloak_user_id='test-user',
+        mcp_config={'stale': {'url': 'https://stale.example.com'}},
+    )
+    org_member = MagicMock(
+        effective_mcp_config=current_mcp_config,
+        llm_api_key=None,
+        llm_api_key_for_byor=None,
+    )
+
+    UserStore._sync_user_settings_from_org_member(user_settings, org_member)
+
+    assert user_settings.mcp_config == current_mcp_config
 
 
 # --- Tests for Redis lock functions (mocked) ---
