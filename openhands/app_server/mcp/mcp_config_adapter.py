@@ -111,7 +111,7 @@ def _preserve_auth(incoming: dict[str, Any], existing: dict[str, Any]) -> None:
     existing_headers = existing.get('headers')
     if isinstance(incoming_headers, dict) and isinstance(existing_headers, dict):
         _preserve_redacted_leaves(incoming_headers, existing_headers)
-    elif 'auth' not in incoming and 'headers' not in incoming and existing_headers:
+    elif 'headers' not in incoming and existing_headers:
         incoming['headers'] = deepcopy(existing_headers)
 
 
@@ -198,7 +198,7 @@ def dump_mcp_config_for_log(mcp_servers: Mapping[str, Any]) -> dict[str, Any]:
         try:
             return dump_native_mcp_config(
                 cast(Any, mcp_servers),
-                context={'expose_secrets': True},
+                context={'expose_secrets': False},
             )
         except Exception:
             pass

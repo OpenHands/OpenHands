@@ -7,7 +7,10 @@ import pytest
 from pydantic import SecretStr, ValidationError
 
 import openhands.app_server.settings.settings_models as settings_module
-from openhands.app_server.mcp.mcp_config_adapter import mcp_config_server_map
+from openhands.app_server.mcp.mcp_config_adapter import (
+    dump_mcp_config_for_log,
+    mcp_config_server_map,
+)
 from openhands.app_server.settings.llm_profiles import ProfileNotFoundError
 from openhands.app_server.settings.settings_models import (
     MarketplaceRegistration,
@@ -236,6 +239,7 @@ def test_settings_update_preserves_redacted_mcp_secret_leaves():
                     'url': 'https://native.example.com/mcp',
                     'transport': 'streamable-http',
                     'auth': {'strategy': 'bearer', 'value': 'old-native-secret'},
+                    'headers': {'X-Custom-Token': 'old-header-secret'},
                 },
                 'stdio': {
                     'command': 'python',
@@ -271,17 +275,20 @@ def test_settings_update_preserves_redacted_mcp_secret_leaves():
     redacted_get_mcp = settings.model_dump()['agent_settings']['mcp_config']
     posted_mcp = deepcopy(redacted_get_mcp)
     posted_mcp['native-bearer']['auth']['value'] = 'rotated-native-secret'
+    posted_mcp['native-bearer'].pop('headers', None)
 
     settings.update({'agent_settings_diff': {'mcp_config': posted_mcp}})
 
     servers = mcp_config_server_map(settings.agent_settings.mcp_config)
     legacy_auth = servers['legacy-http'].auth
     native_auth = servers['native-bearer'].auth
+    native_headers = servers['native-bearer'].headers
     stdio_env = servers['stdio'].env
     oauth_auth = servers['oauth'].auth
 
     assert legacy_auth.value.get_secret_value() == 'legacy-secret'
     assert native_auth.value.get_secret_value() == 'rotated-native-secret'
+    assert native_headers['X-Custom-Token'].get_secret_value() == 'old-header-secret'
     assert stdio_env['API_KEY'].get_secret_value() == 'old-env-secret'
     assert stdio_env['UNCHANGED'].get_secret_value() == 'old-unchanged-secret'
     assert (
@@ -296,6 +303,10 @@ def test_settings_update_preserves_redacted_mcp_secret_leaves():
         oauth_auth.state.client_info.client_secret.get_secret_value()
         == 'old-client-info-secret'
     )
+    logged_mcp = str(dump_mcp_config_for_log(servers))
+    assert 'old-header-secret' not in logged_mcp
+    assert 'rotated-native-secret' not in logged_mcp
+    assert 'old-env-secret' not in logged_mcp
 
 
 def test_settings_update_can_clear_mcp_config():

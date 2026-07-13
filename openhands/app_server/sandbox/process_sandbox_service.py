@@ -186,12 +186,11 @@ class ProcessSandboxService(SandboxService):
             process = psutil.Process(process_info.pid)
             if process.is_running():
                 status = process.status()
-                if status == psutil.STATUS_RUNNING:
-                    return SandboxStatus.RUNNING
-                elif status == psutil.STATUS_STOPPED:
+                if status == psutil.STATUS_STOPPED:
                     return SandboxStatus.PAUSED
-                else:
-                    return SandboxStatus.STARTING
+                if status == psutil.STATUS_ZOMBIE:
+                    return SandboxStatus.MISSING
+                return SandboxStatus.RUNNING
             else:
                 return SandboxStatus.MISSING
         except (psutil.NoSuchProcess, psutil.AccessDenied):
