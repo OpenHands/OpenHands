@@ -62,6 +62,7 @@ def get_engine(database_name=DB_NAME):
             pool_size=POOL_SIZE,
             max_overflow=MAX_OVERFLOW,
             pool_pre_ping=True,
+            pool_use_lifo=True,
         )
     else:
         scheme = f'postgresql+{DB_DRIVER}' if DB_DRIVER else 'postgresql'
@@ -73,6 +74,7 @@ def get_engine(database_name=DB_NAME):
             pool_size=POOL_SIZE,
             max_overflow=MAX_OVERFLOW,
             pool_pre_ping=True,
+            pool_use_lifo=True,
             connect_args=(
                 build_pg8000_connect_args(DB_SSL_MODE) if DB_DRIVER == 'pg8000' else {}
             ),

@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 from typing import Annotated, Any
 
@@ -721,6 +722,120 @@ class OrgMemberFinancialPage(BaseModel):
     next_page_id: str | None = None
 
 
+class OrgBudgetThresholdResponse(BaseModel):
+    id: int
+    percentage: int
+    email_enabled: bool
+    slack_enabled: bool
+
+
+class OrgBudgetThresholdUpdate(BaseModel):
+    percentage: int = Field(gt=0, le=100)
+    email_enabled: bool = True
+    slack_enabled: bool = False
+
+
+SLACK_CHANNEL_MAX_LENGTH = 80
+SLACK_CHANNEL_PATTERN = re.compile(r'^#[a-z0-9][a-z0-9_-]*$')
+
+MAX_BUDGET_THRESHOLDS = 10000
+
+
+class OrgBudgetUserResponse(BaseModel):
+    user_id: str
+    user_email: str | None = None
+    user_name: str | None = None
+    current_spend: float = 0.0
+    monthly_limit: float | None = None
+    effective_monthly_limit: float | None = None
+    is_disabled: bool = False
+    is_override: bool = False
+
+
+class OrgBudgetSettingsResponse(BaseModel):
+    enabled: bool
+    monthly_limit: float | None = None
+    litellm_last_sync_at: datetime | None = None
+    litellm_last_sync_status: str | None = None
+    litellm_last_sync_error: str | None = None
+
+    reset_day: int
+    slack_channel: str | None = None
+    slack_team_id: str | None = None
+    default_user_monthly_limit: float | None = None
+    cycle_start_at: datetime
+    cycle_end_at: datetime
+    current_spend: float = 0.0
+    current_spend_percentage: float = 0.0
+    thresholds: list[OrgBudgetThresholdResponse] = Field(default_factory=list)
+    users: list[OrgBudgetUserResponse] = Field(default_factory=list)
+    users_total: int = 0
+    users_page: int = 1
+    users_per_page: int = 50
+
+
+class OrgBudgetSettingsUpdate(BaseModel):
+    enabled: bool | None = None
+    monthly_limit: float | None = Field(default=None, gt=0)
+    reset_day: int | None = None
+    default_user_monthly_limit: float | None = Field(default=None, gt=0)
+    slack_channel: str | None = None
+    slack_team_id: str | None = None
+    thresholds: list[OrgBudgetThresholdUpdate] | None = None
+
+    @field_validator('reset_day')
+    @classmethod
+    def _validate_reset_day(cls, value: int | None) -> int | None:
+        if value is None:
+            return value
+        if value not in (1, 15):
+            raise ValueError('reset_day must be 1 or 15')
+        return value
+
+    @field_validator('slack_channel')
+    @classmethod
+    def _validate_slack_channel(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        if len(value) > SLACK_CHANNEL_MAX_LENGTH:
+            raise ValueError(
+                f'slack_channel must be {SLACK_CHANNEL_MAX_LENGTH} characters or fewer'
+            )
+        if not SLACK_CHANNEL_PATTERN.fullmatch(value):
+            raise ValueError(
+                'slack_channel must start with # and contain only lowercase letters, numbers, hyphens, or underscores'
+            )
+        return value
+
+    @model_validator(mode='after')
+    def _validate_thresholds(self) -> 'OrgBudgetSettingsUpdate':
+        if not self.thresholds:
+            return self
+        if len(self.thresholds) > MAX_BUDGET_THRESHOLDS:
+            raise ValueError(
+                f'thresholds cannot exceed {MAX_BUDGET_THRESHOLDS} entries'
+            )
+        seen = set()
+        for threshold in self.thresholds:
+            if threshold.percentage in seen:
+                raise ValueError('threshold percentages must be unique')
+            seen.add(threshold.percentage)
+        return self
+
+
+class OrgBudgetUserOverrideUpdate(BaseModel):
+    monthly_limit: float | None = Field(default=None, gt=0)
+    is_disabled: bool = False
+
+    @model_validator(mode='after')
+    def _validate_override(self) -> 'OrgBudgetUserOverrideUpdate':
+        if self.is_disabled and self.monthly_limit is not None:
+            raise ValueError('monthly_limit must be unset when override is disabled')
+        if not self.is_disabled and self.monthly_limit is None:
+            raise ValueError('monthly_limit is required when override is enabled')
+        return self
+
+
 class OrgConversationResponse(BaseModel):
     """Response model for a single conversation in an organization."""
 
@@ -740,7 +855,10 @@ class OrgConversationResponse(BaseModel):
     )
     selected_repository: str | None = None
     selected_branch: str | None = None
+    git_provider: str | None = None
     trigger: str | None = None
+    pr_number: list[int] = Field(default_factory=list)
+    pr_merged: bool | None = None
     tags: dict[str, str] = Field(default_factory=dict)
     # Cost and token metrics
     accumulated_cost: float = 0.0
@@ -804,6 +922,49 @@ class TeamUsageData(BaseModel):
     percentage: float = 0.0
 
 
+class OrgUserUsageRow(BaseModel):
+    """Usage summary for a single user."""
+
+    user_id: str
+    user_email: str | None = None
+    user_name: str | None = None
+    conversation_count: int = 0
+    first_conversation_at: datetime | None = None
+    last_conversation_at: datetime | None = None
+    first_login_at: datetime | None = None
+    last_login_at: datetime | None = None
+    spend_mtd: float = 0.0
+    spend_ytd: float = 0.0
+    spend_lifetime: float = 0.0
+    budget_monthly_limit: float | None = None
+    budget_is_disabled: bool = False
+    prs_merged: int | None = None
+
+
+class OrgUserUsageStats(BaseModel):
+    """Detailed usage stats by user for the admin dashboard."""
+
+    items: list[OrgUserUsageRow] = Field(default_factory=list)
+    has_more: bool = False
+
+
+class ModelUsageData(BaseModel):
+    """Usage data for a single model."""
+
+    model_name: str
+    conversation_count: int = 0
+    total_tokens: int = 0
+    total_cost: float = 0.0
+
+
+class AgentUsageData(BaseModel):
+    """Usage data for a single agent."""
+
+    agent_name: str
+    conversation_count: int = 0
+    total_cost: float = 0.0
+
+
 class OrgUsageStats(BaseModel):
     """Detailed usage statistics for organization dashboard."""
 
@@ -818,3 +979,9 @@ class OrgUsageStats(BaseModel):
 
     # Team breakdown (by user)
     team_usage: list[TeamUsageData] = Field(default_factory=list)
+
+    # Model breakdown
+    model_usage: list[ModelUsageData] = Field(default_factory=list)
+
+    # Agent breakdown
+    agent_usage: list[AgentUsageData] = Field(default_factory=list)

@@ -26,6 +26,8 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     ACP_SERVER_TAG_KEY,
+    AGENT_PROFILE_ID_TAG_KEY,
+    AGENT_PROFILE_REVISION_TAG_KEY,
     ARCHIVE_WORKSPACE_PATH_TAG_KEY,
     AgentType,
     AppConversation,
@@ -213,6 +215,25 @@ def append_system_context(existing: str | None, block: str) -> str:
     if block in existing:
         return existing
     return f'{existing.rstrip()}\n\n{block}'
+
+
+def effective_disabled_skills(user: UserInfo) -> list[str]:
+    """Union of the member-level and launched-profile-level skill deny-lists.
+
+    A skill disabled at EITHER level stays off. The member's deny-list rides
+    ``user.disabled_skills``; the launched Agent Profile's rides the resolved
+    ``agent_settings.agent_context.disabled_skills`` (the SDK resolver stamps the
+    profile's ``disabled_skills`` there — #4017). On a non-profile launch the
+    resolved context's deny-list is empty, so this is just the member's list.
+    Order-preserving de-dup. Because it is a deny-list, a name absent from the
+    discovered catalog is a harmless no-op, so no reconciliation is needed
+    between the two sources.
+    """
+    member = list(user.disabled_skills or [])
+    agent_settings = getattr(user, 'agent_settings', None)
+    agent_context = getattr(agent_settings, 'agent_context', None)
+    profile = list(getattr(agent_context, 'disabled_skills', None) or [])
+    return list(dict.fromkeys([*member, *profile]))
 
 
 @dataclass
@@ -431,6 +452,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     selected_branch=request.selected_branch,
                     plugins=request.plugins,
                     api_secrets=request.secrets,
+                    agent_profile_id=request.agent_profile_id,
                 )
             )
 
@@ -494,6 +516,25 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             # archive captures the right directory without re-deriving the path
             # from settings (e.g. grouping) that may change before delete.
             tags[ARCHIVE_WORKSPACE_PATH_TAG_KEY] = working_dir
+            # Stamp Agent Profile provenance. The launched profile resolved into
+            # the launched ``agent_settings`` (a resolve-requested load carries
+            # its id + revision onto UserInfo); ride the tags dict so it
+            # round-trips and surfaces as the ``launched_agent_profile``
+            # computed field. Resolves with the same override the launch itself
+            # used, so provenance reflects what actually ran even when the
+            # request carried a one-off ``agent_profile_id``.
+            profile_user = await self.user_context.get_user_info(
+                resolve_agent_profile=True,
+                override_agent_profile_id=request.agent_profile_id,
+            )
+            launched_profile_id = getattr(profile_user, 'active_agent_profile_id', None)
+            if isinstance(launched_profile_id, str) and launched_profile_id:
+                tags[AGENT_PROFILE_ID_TAG_KEY] = launched_profile_id
+                launched_revision = getattr(
+                    profile_user, 'active_agent_profile_revision', None
+                )
+                if isinstance(launched_revision, int):
+                    tags[AGENT_PROFILE_REVISION_TAG_KEY] = str(launched_revision)
             if request_agent.agent_kind == 'acp':
                 llm_model = request_agent.acp_model
                 agent_kind = 'acp'
@@ -501,12 +542,23 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 # can resolve a brand label ("Claude Code", "Codex", …) via
                 # the SDK registry without keeping a per-conversation column.
                 # Surfaced to the UI as the projected ``acp_server`` field.
-                acp_user = await self.user_context.get_user_info()
-                if isinstance(acp_user.agent_settings, ACPAgentSettings):
-                    tags[ACP_SERVER_TAG_KEY] = acp_user.agent_settings.acp_server
+                # Reuses ``profile_user`` (resolved above with the same
+                # override) rather than re-fetching — a second fetch would
+                # both double the settings-resolution cost and risk a
+                # different profile resolving if it changed in between.
+                if isinstance(profile_user.agent_settings, ACPAgentSettings):
+                    tags[ACP_SERVER_TAG_KEY] = profile_user.agent_settings.acp_server
             else:
                 llm_model = request_agent.llm.model
                 agent_kind = 'openhands'
+
+            conversation_tags: dict[str, str] = dict(tags)
+            if request.selected_repository:
+                conversation_tags['repo_name'] = request.selected_repository
+            if request.git_provider:
+                conversation_tags['git_provider'] = request.git_provider.value
+            if request.selected_branch:
+                conversation_tags['selected_branch'] = request.selected_branch
 
             app_conversation_info = AppConversationInfo(
                 id=info.id,
@@ -515,7 +567,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 created_by_user_id=user_id,
                 llm_model=llm_model,
                 agent_kind=agent_kind,
-                tags=tags,
                 # Git parameters
                 selected_repository=request.selected_repository,
                 selected_branch=request.selected_branch,
@@ -523,6 +574,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 trigger=request.trigger,
                 pr_number=request.pr_number,
                 parent_conversation_id=request.parent_conversation_id,
+                tags=conversation_tags,
             )
             await self.app_conversation_info_service.save_app_conversation_info(
                 app_conversation_info
@@ -1237,10 +1289,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         Args:
             mcp_servers: Dictionary to add servers to
             user: User information containing custom MCP config
-        """
-        if isinstance(user.agent_settings, ACPAgentSettings):
-            return
 
+        Handles both OpenHands and ACP agent settings: a resolved ACP profile's
+        ref-filtered ``mcp_config`` rides on ``ACPAgentSettings.mcp_config`` and
+        must reach ``create_agent`` (the ACP-only early-return that previously
+        dropped it is gone — SDK#3705 remainder, #15044 §7).
+        """
         user_mcp = user.agent_settings.mcp_config
         if not user_mcp:
             return
@@ -1291,11 +1345,69 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         return llm, mcp_servers
 
     @staticmethod
+    def _build_observability_context(
+        conversation_id: UUID,
+        *,
+        agent_kind: str,
+        selected_repository: str | None = None,
+        selected_branch: str | None = None,
+        git_provider: ProviderType | None = None,
+    ) -> tuple[dict[str, Any], list[str]]:
+        """Build trace metadata and tag filters for a conversation.
+
+        Metadata uses explicit field names such as ``repo_name`` and
+        ``selected_branch``. Tags intentionally keep the concise
+        ``repo:`` / ``branch:`` prefixes used by LiteLLM metadata filters.
+        """
+        metadata: dict[str, Any] = {
+            'app': 'openhands',
+            'conversation_id': str(conversation_id),
+            'agent_kind': agent_kind,
+        }
+        tags = ['app:openhands', f'agent_kind:{agent_kind}']
+
+        if selected_repository:
+            metadata['repo_name'] = selected_repository
+            tags.append(f'repo:{selected_repository}')
+        if selected_branch:
+            metadata['selected_branch'] = selected_branch
+            tags.append(f'branch:{selected_branch}')
+        if git_provider:
+            provider = git_provider.value
+            metadata['git_provider'] = provider
+            tags.append(f'git_provider:{provider}')
+
+        return metadata, tags
+
+    @staticmethod
+    def _extend_observability_metadata(
+        target: dict[str, Any], metadata: Mapping[str, Any]
+    ) -> None:
+        for key, value in metadata.items():
+            if value is None:
+                continue
+            if isinstance(value, str) and value == '':
+                continue
+            if key in target:
+                if target[key] != value:
+                    _logger.warning(
+                        'Conflicting observability metadata for %s (existing=%r, incoming=%r); keeping existing value',
+                        key,
+                        target[key],
+                        value,
+                    )
+                continue
+            target[key] = value
+
+    @staticmethod
     def _apply_server_agent_overrides(
         agent: Agent,
         agent_type: AgentType,
         conversation_id: UUID,
         user_id: str | None,
+        repo_name: str | None = None,
+        git_provider: ProviderType | None = None,
+        selected_branch: str | None = None,
     ) -> Agent:
         """Apply server-only fields that have no place in ``AgentSettings``.
 
@@ -1318,6 +1430,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 llm_type=agent.llm.usage_id or 'agent',
                 conversation_id=conversation_id,
                 user_id=user_id,
+                repo_name=repo_name,
+                git_provider=git_provider.value if git_provider else None,
+                selected_branch=selected_branch,
             )
             overrides['llm'] = agent.llm.model_copy(
                 update={'litellm_extra_body': {'metadata': llm_metadata}}
@@ -1335,6 +1450,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     llm_type='condenser',
                     conversation_id=conversation_id,
                     user_id=user_id,
+                    repo_name=repo_name,
+                    git_provider=git_provider.value if git_provider else None,
+                    selected_branch=selected_branch,
                 )
                 condenser_updates['litellm_extra_body'] = {
                     'metadata': condenser_metadata
@@ -1525,6 +1643,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         selected_branch: str | None = None,
         plugins: list[PluginSpec] | None = None,
         api_secrets: dict[str, SecretStr] | None = None,
+        agent_profile_id: str | None = None,
     ) -> StartConversationRequest:
         """Build a complete StartConversationRequest for a user.
 
@@ -1548,13 +1667,23 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             trigger: Optional conversation trigger.
             remote_workspace: Optional remote workspace instance
             selected_repository: Optional repository name
+            selected_branch: Optional selected branch name
             plugins: Optional list of plugins to load
             api_secrets: Optional secrets passed directly via the API.
                 These are merged with existing secrets (from database
                 and git providers), with API-provided secrets taking
                 precedence.
+            agent_profile_id: One-off Agent Profile override for this
+                conversation only (cloud-only; does not change the member's
+                active pointer). ``None`` uses the ambient active profile.
         """
-        user = await self.user_context.get_user_info()
+        # Conversation start builds the agent, so it consumes the RESOLVED
+        # (effective launch) view; plain settings reads/round-trips elsewhere
+        # stay on the persisted view.
+        user = await self.user_context.get_user_info(
+            resolve_agent_profile=True,
+            override_agent_profile_id=agent_profile_id,
+        )
 
         # Compose instance + org + user marketplaces once for both arms below.
         # Enabled by default; inert (None) only when ENABLE_MARKETPLACE_PLUGIN_LOADING
@@ -1576,6 +1705,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 remote_workspace=remote_workspace,
                 plugins=plugins,
                 api_secrets=api_secrets,
+                agent_profile_id=agent_profile_id,
             )
             if remote_workspace:
                 acp_request = await self._load_skills_onto_request(
@@ -1584,7 +1714,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     remote_workspace,
                     selected_repository,
                     get_project_dir(working_dir, selected_repository),
-                    user.disabled_skills,
+                    effective_disabled_skills(user),
                     registered_marketplaces,
                 )
             return acp_request
@@ -1701,7 +1831,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
 
         agent = self._apply_server_agent_overrides(
-            agent, agent_type, conversation_id, user.id
+            agent,
+            agent_type,
+            conversation_id,
+            user.id,
+            repo_name=selected_repository,
+            git_provider=git_provider,
+            selected_branch=selected_branch,
         )
 
         # --- hooks (require remote workspace; must precede request build) -----
@@ -1739,6 +1875,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 for p in plugins
             ]
 
+        observability_metadata, observability_tags = self._build_observability_context(
+            conversation_id,
+            agent_kind='openhands',
+            selected_repository=selected_repository,
+            selected_branch=selected_branch,
+            git_provider=git_provider,
+        )
+
         # --- populate ConversationSettings and build request ----------------
         conv_settings = user.conversation_settings.model_copy(
             update={
@@ -1763,16 +1907,21 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # injects it directly into the JSON body as a forward-compatible
         # fallback.
         laminar_user_id = await self.user_context.get_user_email() or user.id
-        observability_metadata = await self._build_observability_metadata(
+        resolved_observability_metadata = await self._build_observability_metadata(
             remote_workspace,
             project_dir,
             selected_repository,
             selected_branch,
             git_provider,
         )
+        self._extend_observability_metadata(
+            observability_metadata, resolved_observability_metadata
+        )
         create_kwargs: dict[str, Any] = {'agent': agent, 'user_id': laminar_user_id}
         if observability_metadata:
             create_kwargs['observability_metadata'] = observability_metadata
+        if observability_tags:
+            create_kwargs['observability_tags'] = observability_tags
         request = conv_settings.create_request(
             StartConversationRequest, **create_kwargs
         )
@@ -1785,7 +1934,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 remote_workspace,
                 selected_repository,
                 project_dir,
-                user.disabled_skills,
+                effective_disabled_skills(user),
                 registered_marketplaces,
             )
 
@@ -1863,6 +2012,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         remote_workspace: AsyncRemoteWorkspace | None = None,
         plugins: list[PluginSpec] | None = None,
         api_secrets: dict[str, SecretStr] | None = None,
+        agent_profile_id: str | None = None,
     ) -> StartConversationRequest:
         """Build a StartConversationRequest for ACP agent conversations.
 
@@ -1885,13 +2035,19 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             trigger: Optional conversation trigger.
             git_provider: Optional git provider type
             selected_repository: Optional repository name
-            selected_branch: Optional branch name
+            selected_branch: Optional selected branch name
             remote_workspace: Optional remote workspace instance, used to
                 resolve the HEAD commit for the Laminar trace metadata.
             plugins: Optional list of plugins to load
             api_secrets: Optional secrets passed directly via the API.
+            agent_profile_id: One-off Agent Profile override for this
+                conversation only (cloud-only; does not change the member's
+                active pointer). ``None`` uses the ambient active profile.
         """
-        user = await self.user_context.get_user_info()
+        user = await self.user_context.get_user_info(
+            resolve_agent_profile=True,
+            override_agent_profile_id=agent_profile_id,
+        )
 
         project_dir = get_project_dir(working_dir, selected_repository)
         workspace = LocalWorkspace(working_dir=project_dir)
@@ -1971,6 +2127,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 update={'api_key': None, 'base_url': None}
             ),
         }
+        # Forward the resolved profile's / user's custom MCP servers to the ACP
+        # subprocess (#15044 §7). Only custom servers — the system OpenHands MCP
+        # server (Tavily proxy) is runtime-internal and unreachable by an external
+        # ACP CLI, so it is intentionally not injected here.
+        acp_mcp_servers: dict[str, MCPServer] = {}
+        self._merge_custom_mcp_config(acp_mcp_servers, user)
+        if acp_mcp_servers:
+            settings_update['mcp_config'] = acp_mcp_servers
         if system_message_suffix:
             settings_update['agent_context'] = AgentContext(
                 system_message_suffix=system_message_suffix
@@ -1984,6 +2148,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 PluginSource(source=p.source, ref=p.ref, repo_path=p.repo_path)
                 for p in plugins
             ]
+
+        observability_metadata, observability_tags = self._build_observability_context(
+            conversation_id,
+            agent_kind='acp',
+            selected_repository=selected_repository,
+            selected_branch=selected_branch,
+            git_provider=git_provider,
+        )
 
         # Mirror the regular path: populate ConversationSettings and delegate
         # to create_request() so that max_iterations, confirmation_mode, and
@@ -2003,12 +2175,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # prefer email over the internal id so Laminar traces are immediately
         # attributable, falling back to ``user.id`` when no email is available.
         laminar_user_id = await self.user_context.get_user_email() or user.id
-        observability_metadata = await self._build_observability_metadata(
+        resolved_observability_metadata = await self._build_observability_metadata(
             remote_workspace,
             project_dir,
             selected_repository,
             selected_branch,
             git_provider,
+        )
+        self._extend_observability_metadata(
+            observability_metadata, resolved_observability_metadata
         )
         create_kwargs: dict[str, Any] = {
             'agent': acp_agent,
@@ -2017,6 +2192,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         }
         if observability_metadata:
             create_kwargs['observability_metadata'] = observability_metadata
+        if observability_tags:
+            create_kwargs['observability_tags'] = observability_tags
         return conv_settings.create_request(StartConversationRequest, **create_kwargs)
 
     async def _process_pending_messages(

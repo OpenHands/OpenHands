@@ -134,6 +134,8 @@ Backend:
 
 Frontend:
 - Located in the `frontend` directory
+- UI refactors: Budgets UI is split into `budgets.tsx` + `budgets-tabs.tsx`, `budgets-components.tsx`, `budgets-constants.ts`. Usage monitoring dashboard is split into `usage-dashboard.tsx` with `usage-dashboard-tabs.tsx`, `usage-dashboard-widgets.tsx`, and `usage-dashboard-utils.ts`. Shared inline SVGs live in `frontend/src/components/shared/icons/inline-icons.tsx`.
+
 - Prerequisites: A recent version of NodeJS / NPM
 - Setup: Run `npm install` in the frontend directory
 - Testing:

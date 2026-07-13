@@ -5776,14 +5776,14 @@ numpy = {version = ">=2", markers = "python_version >= \"3.9\""}
 
 [[package]]
 name = "openhands-agent-server"
-version = "1.33.0"
+version = "1.36.0"
 description = "OpenHands Agent Server - REST/WebSocket interface for OpenHands AI Agent"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_agent_server-1.33.0-py3-none-any.whl", hash = "sha256:ecbbff7cbbacdb202a3f34d540d10d41038b55f017308b82581a72f11b732f2c"},
-    {file = "openhands_agent_server-1.33.0.tar.gz", hash = "sha256:f375b086920ab06e24e86b940cab7b1bb8746aa293dfe2ae78a850a7dee205af"},
+    {file = "openhands_agent_server-1.36.0-py3-none-any.whl", hash = "sha256:d38a4f1d0e7340be5bf28454696061603bbf9320b790fce5df7a68e6231596eb"},
+    {file = "openhands_agent_server-1.36.0.tar.gz", hash = "sha256:e76204f629e0a1a48b85545ae0b7ee6cfce7f8e482a4c5d420a10e9f6d4b4009"},
 ]
 
 [package.dependencies]
@@ -5801,7 +5801,7 @@ wsproto = ">=1.2.0"
 
 [[package]]
 name = "openhands-ai"
-version = "1.9.2"
+version = "1.11.0"
 description = "OpenHands: Code Less, Make More"
 optional = false
 python-versions = "^3.12,<3.14"
@@ -5847,9 +5847,9 @@ mcp = ">=1.25"
 memory-profiler = "0.61.0"
 numpy = "2.4.4"
 openai = "2.33.0"
-openhands-agent-server = "1.33.0"
-openhands-sdk = "1.33.0"
-openhands-tools = "1.33.0"
+openhands-agent-server = "1.36.0"
+openhands-sdk = "1.36.0"
+openhands-tools = "1.36.0"
 opentelemetry-api = "1.39.1"
 opentelemetry-exporter-otlp-proto-grpc = "1.39.1"
 orjson = "3.11.8"
@@ -5902,14 +5902,14 @@ url = ".."
 
 [[package]]
 name = "openhands-sdk"
-version = "1.33.0"
+version = "1.36.0"
 description = "OpenHands SDK - Core functionality for building AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_sdk-1.33.0-py3-none-any.whl", hash = "sha256:0890569884023e396e9a28bbc921e181de6b545b6b7901a6972353f537ab2ae9"},
-    {file = "openhands_sdk-1.33.0.tar.gz", hash = "sha256:02f5ba23c507202eb6cccb68b96a5cc9f53887799d2ff5b89d34aa0b8b039e67"},
+    {file = "openhands_sdk-1.36.0-py3-none-any.whl", hash = "sha256:3a219a7df52cc60fa64957d39cff5fa7d07739162c9dedb720eab5a424259b27"},
+    {file = "openhands_sdk-1.36.0.tar.gz", hash = "sha256:e157bcf423e77e66dbd269fd65571c1a8f6519130f096ede89ec3cf68fc662f9"},
 ]
 
 [package.dependencies]
@@ -5933,18 +5933,19 @@ websockets = ">=12"
 
 [package.extras]
 boto3 = ["boto3 (>=1.35.0)"]
+toolshield = ["toolshield (>=0.1.3,<0.2)"]
 vertex = ["google-cloud-aiplatform (>=1.38)"]
 
 [[package]]
 name = "openhands-tools"
-version = "1.33.0"
+version = "1.36.0"
 description = "OpenHands Tools - Runtime tools for AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_tools-1.33.0-py3-none-any.whl", hash = "sha256:d54102aad22fbd2a63e87decdd45a1c97dbe6c904f3752041fa87b4e73e4afe2"},
-    {file = "openhands_tools-1.33.0.tar.gz", hash = "sha256:82078befcc44878af885a701e5d3ac4be6cf93ad7022a1901053e1bdf89a18c7"},
+    {file = "openhands_tools-1.36.0-py3-none-any.whl", hash = "sha256:852b83b5837b20d51785c0112a01567d6ddc3e651ee511b1df1d675ed89832de"},
+    {file = "openhands_tools-1.36.0.tar.gz", hash = "sha256:b454f62e6ee988112df61f42d12b84e54a5fc303df23452a92bccc2aeb7e3bd7"},
 ]
 
 [package.dependencies]

@@ -7,7 +7,10 @@ import {
 } from "#/constants/settings-nav";
 import { OrganizationUserRole } from "#/types/org";
 import { isBillingHidden } from "#/utils/org/billing-visibility";
-import { isSettingsPageHidden } from "#/utils/settings-utils";
+import {
+  ADMIN_ONLY_SETTINGS_PATHS,
+  isSettingsPageHidden,
+} from "#/utils/settings-utils";
 import { useMe } from "./query/use-me";
 import { usePermission } from "./organizations/use-permissions";
 import { useOrgTypeAndAccess } from "./use-org-type-and-access";
@@ -90,9 +93,9 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
     );
   }
 
-  // Hide admin dashboard for non-admins/owners or personal orgs
+  // Hide admin-only settings pages for non-admins/owners or personal orgs
   if (!isAdminOrOwner || !organizationId || isPersonalOrg) {
-    items = items.filter((item) => item.to !== "/settings/usage-monitoring");
+    items = items.filter((item) => !ADMIN_ONLY_SETTINGS_PATHS.has(item.to));
   }
 
   const PERSONAL_LLM_PATHS = new Set([

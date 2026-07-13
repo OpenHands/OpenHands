@@ -9,12 +9,15 @@ import pytest
 from fastapi import HTTPException
 from pydantic import SecretStr
 from server.auth.saas_user_auth import SaasUserAuth
+from server.constants import BYOR_KEY_ALIAS_PATTERN
 from server.routes.api_keys import (
     ByorPermittedResponse,
     CurrentApiKeyResponse,
     LlmApiKeyResponse,
+    _create_byor_key_alias,
     check_byor_permitted,
     delete_byor_key_from_litellm,
+    generate_byor_key,
     get_current_api_key,
     get_llm_api_key_for_byor,
 )
@@ -400,8 +403,33 @@ class TestDeleteByorKeyFromLitellm:
         user_id = 'user-123'
         org_id = uuid.uuid4()
         byor_key = 'sk-byor-key-to-delete'
-        expected_alias = f'BYOR Key - user {user_id}, org {org_id}'
+        expected_alias = BYOR_KEY_ALIAS_PATTERN.format(
+            user_id=user_id, org_id=str(org_id)
+        )
         mock_delete_key.return_value = None
+
+        # Act
+        result = await delete_byor_key_from_litellm(user_id, org_id, byor_key)
+
+        # Assert
+        assert result is True
+        mock_delete_key.assert_called_once_with(byor_key, key_alias=expected_alias)
+
+    @pytest.mark.asyncio
+    @patch('server.routes.api_keys.BYOR_KEY_ALIAS_PATTERN', 'env/{org_id}/u={user_id}')
+    @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
+    async def test_delete_uses_env_override_alias(self, mock_delete_key):
+        """An overridden BYOR_KEY_ALIAS_PATTERN flows through to delete_key.
+
+        Patches the imported constant in the api_keys module since the env
+        var is read once at import time (see constants.py).
+        """
+        # Arrange
+        user_id = 'user-123'
+        org_id = uuid.uuid4()
+        byor_key = 'sk-byor-key-to-delete'
+        mock_delete_key.return_value = None
+        expected_alias = f'env/{org_id}/u={user_id}'
 
         # Act
         result = await delete_byor_key_from_litellm(user_id, org_id, byor_key)
@@ -425,6 +453,111 @@ class TestDeleteByorKeyFromLitellm:
 
         # Assert
         assert result is False
+
+
+class TestCreateByorKeyAlias:
+    """Test the _create_byor_key_alias helper."""
+
+    def test_uses_default_pattern(self):
+        """Default pattern formats user_id and org_id with the literal defaults."""
+        # Arrange
+        user_id = 'user-123'
+        org_id_str = str(uuid.uuid4())
+        expected = BYOR_KEY_ALIAS_PATTERN.format(user_id=user_id, org_id=org_id_str)
+
+        # Act
+        result = _create_byor_key_alias(user_id, org_id_str)
+
+        # Assert
+        assert result == expected
+        # The default should keep the production literal that LiteLLM
+        # currently has provisioned keys tagged with.
+        assert 'BYOR Key' in result
+        assert user_id in result
+        assert org_id_str in result
+
+    def test_respects_env_override_pattern(self):
+        """An overridden BYOR_KEY_ALIAS_PATTERN flows through the helper.
+
+        Patches the imported constant in the api_keys module since it's
+        read once at import time (mirrors the env-var read in constants.py).
+        """
+        custom_pattern = 'env/{org_id}/u={user_id}'
+        with patch('server.routes.api_keys.BYOR_KEY_ALIAS_PATTERN', custom_pattern):
+            result = _create_byor_key_alias('user-9', 'org-7')
+
+        assert result == 'env/org-7/u=user-9'
+
+    def test_missing_placeholder_raises_keyerror(self):
+        """A pattern with an unexpected placeholder fails loudly (str.format KeyError)."""
+        bad_pattern = '{environment}/{something_else}'
+        with patch('server.routes.api_keys.BYOR_KEY_ALIAS_PATTERN', bad_pattern):
+            with pytest.raises(KeyError):
+                _create_byor_key_alias('user-9', 'org-7')
+
+
+class TestGenerateByorKey:
+    """Test the generate_byor_key function."""
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LiteLlmManager.generate_key')
+    async def test_passes_default_alias_and_team_id_to_litellm(self, mock_generate_key):
+        """generate_byor_key builds the alias from the helper and passes org_id as str."""
+        # Arrange
+        user_id = 'user-123'
+        org_id = uuid.uuid4()
+        org_id_str = str(org_id)
+        new_key = 'sk-new-generated-key'
+        mock_generate_key.return_value = new_key
+        expected_alias = BYOR_KEY_ALIAS_PATTERN.format(
+            user_id=user_id, org_id=org_id_str
+        )
+
+        # Act
+        result = await generate_byor_key(user_id, org_id)
+
+        # Assert
+        assert result == new_key
+        mock_generate_key.assert_called_once_with(
+            user_id,
+            org_id_str,
+            expected_alias,
+            {'type': 'byor'},
+        )
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LiteLlmManager.generate_key')
+    async def test_uses_env_override_alias(self, mock_generate_key):
+        """An overridden pattern flows through to LiteLLM.generate_key."""
+        # Arrange
+        user_id = 'user-123'
+        org_id = uuid.uuid4()
+        mock_generate_key.return_value = 'sk-key'
+        custom_pattern = 'custom/{org_id}/{user_id}'
+
+        with patch('server.routes.api_keys.BYOR_KEY_ALIAS_PATTERN', custom_pattern):
+            await generate_byor_key(user_id, org_id)
+
+        # Assert
+        mock_generate_key.assert_called_once_with(
+            user_id,
+            str(org_id),
+            custom_pattern.format(user_id=user_id, org_id=str(org_id)),
+            {'type': 'byor'},
+        )
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LiteLlmManager.generate_key')
+    async def test_returns_none_on_exception(self, mock_generate_key):
+        """Exceptions during generation surface as None (caller handles 500)."""
+        # Arrange
+        mock_generate_key.side_effect = Exception('LiteLLM API error')
+
+        # Act
+        result = await generate_byor_key('user-123', uuid.uuid4())
+
+        # Assert
+        assert result is None
 
 
 class TestCheckByorPermitted:

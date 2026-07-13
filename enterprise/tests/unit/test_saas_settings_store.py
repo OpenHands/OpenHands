@@ -632,6 +632,71 @@ async def test_store_updates_org_defaults_and_all_members_for_shared_keys(
 
 
 @pytest.mark.asyncio
+async def test_store_rejects_resolved_profile_settings_view(
+    session_maker, async_session_maker, org_with_multiple_members_fixture
+):
+    """``store()`` refuses a resolved Agent-Profile launch view outright.
+
+    A resolved view (``load(resolve_agent_profile=True)`` / an override) is
+    the profile's dump — ref-filtered ``mcp_config``, the referenced LLM
+    profile's key — not user-authored settings. Persisting it would corrupt
+    the member/org rows, so ``store()`` raises before writing anything.
+    """
+    from sqlalchemy import select
+    from storage.org import Org
+    from storage.org_member import OrgMember
+
+    fixture = org_with_multiple_members_fixture
+    org_id = fixture['org_id']
+    admin_user_id = str(fixture['admin_user_id'])
+
+    store = SaasSettingsStore(admin_user_id)
+    resolved_settings = _make_settings(
+        model='anthropic/claude-sonnet-4',
+        base_url='https://api.anthropic.com/v1',
+        api_key='profile-resolved-secret-key',
+    )
+    # Marks agent_settings as profile-resolved, exactly as load() would when
+    # the caller requested resolution and the member has an active profile.
+    resolved_settings.active_agent_profile_id = 'profile-1'
+    resolved_settings.active_agent_profile_revision = 3
+    resolved_settings.enable_sound_notifications = True
+
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        with pytest.raises(ValueError, match='resolved Agent-Profile'):
+            await store.store(resolved_settings)
+
+        # The private marker alone (a resolved load that fell back carries no
+        # active_agent_profile_id) must also be refused.
+        marked_settings = _make_settings(model='gpt-4o')
+        marked_settings._resolved_view = True
+        with pytest.raises(ValueError, match='resolved Agent-Profile'):
+            await store.store(marked_settings)
+
+    with session_maker() as session:
+        org = session.execute(select(Org).where(Org.id == org_id)).scalars().first()
+        assert org is not None
+        # Nothing was written before the guard fired.
+        assert (org.agent_settings or {}).get('llm', {}).get('model') != (
+            'anthropic/claude-sonnet-4'
+        )
+
+        members = {
+            str(member.user_id): member
+            for member in session.execute(
+                select(OrgMember).where(OrgMember.org_id == org_id)
+            )
+            .scalars()
+            .all()
+        }
+        member1 = members[str(fixture['member1_user_id'])]
+        member2 = members[str(fixture['member2_user_id'])]
+        # Other members keep their own pre-existing LLM, untouched.
+        assert member1.agent_settings_diff['llm']['model'] == 'old-model-v2'
+        assert member2.agent_settings_diff['llm']['model'] == 'old-model-v3'
+
+
+@pytest.mark.asyncio
 async def test_store_keeps_openhands_managed_keys_member_specific(
     session_maker, async_session_maker, org_with_multiple_members_fixture
 ):

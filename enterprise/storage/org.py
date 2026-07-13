@@ -73,6 +73,13 @@ class Org(Base):
     llm_profiles: Mapped[dict[str, Any] | None] = mapped_column(
         EncryptedJSON, nullable=True
     )
+    # Encrypted column for agent profiles. Mirrors llm_profiles: the column is
+    # the at-rest encryption boundary, so secret-bearing skills[].mcp_tools ride
+    # in cleartext inside the encrypted blob. Envelope is
+    # ``{profiles: {<id>: AgentProfile}, active: <id> | null}`` (see AgentProfiles).
+    agent_profiles: Mapped[dict[str, Any] | None] = mapped_column(
+        EncryptedJSON, nullable=True
+    )
     # Marks the bootstrapped default org on OHE installs; a partial unique
     # index allows at most one default org per install.
     is_default: Mapped[bool] = mapped_column(nullable=False, default=False)

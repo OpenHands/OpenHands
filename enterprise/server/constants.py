@@ -18,6 +18,12 @@ IS_FEATURE_ENV = (
 )  # Does not include the staging deployment
 IS_LOCAL_ENV = bool(HOST == 'localhost')
 
+# Pattern for byor keys. Making this an environment variable allows different patterns so multiple environments can use
+# the same litellm instance in development
+BYOR_KEY_ALIAS_PATTERN = os.getenv(
+    'BYOR_KEY_ALIAS_PATTERN', 'BYOR Key - user {user_id}, org {org_id}'
+)
+
 
 # Explicit OH_DEPLOYMENT_MODE wins; _is_all_hands_managed_domain() is the host fallback.
 def _is_all_hands_managed_domain(host: str) -> bool:
