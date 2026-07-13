@@ -31,11 +31,9 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "@playwright/test";
 import {
-  routeSessionApiKey,
-  dismissAnalyticsModal,
-  waitForTestId,
   selectDropdownOption,
   resetToOpenHandsAgentViaUI,
+  openAgentProfileEditor,
   BACKEND_URL,
   SESSION_API_KEY,
 } from "../utils/mock-llm-helpers";
@@ -118,10 +116,10 @@ test.describe("mock-LLM ACP credentials-configured banner (#1244)", () => {
   test("Claude credential in the store surfaces a 'configured' banner, never 'signed in'", async ({
     page,
   }) => {
-    await routeSessionApiKey(page);
-    await page.goto("/settings/agent", { waitUntil: "domcontentloaded" });
-    await dismissAnalyticsModal(page);
-    await waitForTestId(page, "agent-settings-screen");
+    // #1571 turned Settings → Agent into a profile library: the form is reached
+    // via /settings/agents (plural) by opening a profile editor, not the old
+    // standalone /settings/agent route.
+    await openAgentProfileEditor(page, "default");
 
     const configuredBanner = page.getByTestId("settings-acp-auth-configured");
     const signedInBanner = page.getByTestId("settings-acp-auth-detected");
