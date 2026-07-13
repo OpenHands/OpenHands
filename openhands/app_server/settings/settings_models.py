@@ -308,6 +308,32 @@ def _restore_redacted_secret(value: Any, existing: Any) -> Any:
     return value
 
 
+def _existing_mcp_headers(
+    incoming: Any,
+    existing_server: Mapping[str, Any],
+) -> Any:
+    existing_headers = existing_server.get('headers')
+    if not isinstance(incoming, Mapping):
+        return existing_headers
+
+    auth = existing_server.get('auth')
+    if not isinstance(auth, Mapping) or auth.get('strategy') != 'bearer':
+        return existing_headers
+    auth_value = auth.get('value')
+    if not isinstance(auth_value, str) or _is_redacted_mcp_secret(auth_value):
+        return existing_headers
+
+    restored = dict(existing_headers) if isinstance(existing_headers, Mapping) else {}
+    for key, value in incoming.items():
+        if (
+            isinstance(key, str)
+            and key.lower() == 'authorization'
+            and _is_redacted_mcp_secret(value)
+        ):
+            restored[key] = f'Bearer {auth_value}'
+    return restored or existing_headers
+
+
 def _mcp_server_map(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict):
         return None
@@ -359,6 +385,15 @@ def _preserve_redacted_mcp_secrets(
                 if same_endpoint and existing_server
                 else None
             )
+            if (
+                field == 'headers'
+                and same_endpoint
+                and existing_server
+                and field in incoming_server
+            ):
+                existing_value = _existing_mcp_headers(
+                    incoming_server[field], existing_server
+                )
             if field not in incoming_server:
                 if existing_value is not None and (
                     field == 'env' or not submitted_credentials

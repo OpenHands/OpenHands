@@ -264,9 +264,34 @@ def test_settings_update_preserves_redacted_mcp_auth_for_same_endpoint():
     assert server.auth.to_http_headers() == {'Authorization': 'Bearer real-key'}
 
 
+def test_settings_update_preserves_redacted_mcp_header_for_same_endpoint():
+    settings = _settings_with_mcp_auth()
+
+    settings.update(
+        {
+            'agent_settings_diff': {
+                'mcp_config': {
+                    'integration-hub': {
+                        'url': 'https://integration.example.com/mcp',
+                        'headers': {'Authorization': 'Bearer **********'},
+                    }
+                }
+            }
+        }
+    )
+
+    server = settings.agent_settings.mcp_config['integration-hub']
+    assert server.auth is not None
+    assert server.auth.to_http_headers() == {'Authorization': 'Bearer real-key'}
+
+
 @pytest.mark.parametrize(
     'credential_update',
-    ({}, {'auth': {'strategy': 'bearer', 'value': '**********'}}),
+    (
+        {},
+        {'auth': {'strategy': 'bearer', 'value': '**********'}},
+        {'headers': {'Authorization': 'Bearer **********'}},
+    ),
 )
 def test_settings_update_drops_mcp_auth_for_changed_endpoint(
     credential_update: dict[str, object],
