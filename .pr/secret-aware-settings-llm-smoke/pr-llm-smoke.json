@@ -1,0 +1,113 @@
+{
+  "api_get_after_restart": {
+    "get_body_after_restart_base_url_sha16": "d272eb5b47016fd9",
+    "get_body_after_restart_contains_mask": true,
+    "get_body_after_restart_contains_raw_secret": false,
+    "get_body_after_restart_model": "openai/gpt-4o-mini",
+    "get_body_after_restart_sha16": "c44750028996ce39",
+    "get_status_after_restart": 200
+  },
+  "api_save": {
+    "get_body_before_restart_contains_mask": true,
+    "get_body_before_restart_contains_raw_secret": false,
+    "get_body_before_restart_sha16": "c44750028996ce39",
+    "get_status_before_restart": 200,
+    "save_body_sha16": "38f0cf6a1c17bf39",
+    "save_status": 200
+  },
+  "app_after_restart": {
+    "health": 200,
+    "log_sha16": "8ea1f8d5c72a92c4"
+  },
+  "app_api_key_sha16": "f59fc7019adece3c",
+  "app_before_restart": {
+    "health": 200,
+    "log_sha16": "95926df5cba9de3d"
+  },
+  "app_port": 13211,
+  "branch_label": "pr",
+  "completed_at": "2026-07-13T11:34:29+00:00",
+  "db_name": "oh_15110_pr_llm_smoke",
+  "head_sha": "3dbb838ebcb6d46d7adc9a96468bdf24f8506f3f",
+  "identity": {
+    "org_id": "189240a1-08d3-43c8-9ed3-b7c6cbca860c",
+    "user_id": "035dfa24-628b-4f15-8fe1-abfe2595d69c"
+  },
+  "load_and_llm_invocation_after_restart": {
+    "completion_content": "local-smoke-completion-ok",
+    "completion_content_sha16": "9cccdee32deca077",
+    "completion_success": true,
+    "loaded_profile_api_key_matches_sentinel": true,
+    "loaded_profile_api_key_sha16": "f9cc38aa8b3ff3cc",
+    "loaded_profile_base_url_sha16": "d272eb5b47016fd9",
+    "loaded_profile_model": "openai/gpt-4o-mini",
+    "loaded_profile_present": true,
+    "resolved_profile_base_url_sha16": "d272eb5b47016fd9"
+  },
+  "migration": {
+    "log_sha16": "3fd060b6b1465ab2",
+    "mentions_secret_storage_rewrite": true,
+    "ran_to_head": true
+  },
+  "mock_endpoint_requests": [
+    {
+      "auth_matches_expected": false,
+      "auth_present": false,
+      "auth_scheme": null,
+      "auth_sha16": null,
+      "body_message_count": 1,
+      "body_model": "openai/gpt-4o-mini",
+      "body_sha16": "38c7c6ed07f3c7ad",
+      "method": "POST",
+      "path": "/v1/chat/completions"
+    },
+    {
+      "auth_matches_expected": false,
+      "auth_present": true,
+      "auth_scheme": "Bearer",
+      "auth_sha16": "7249ade910939308",
+      "body_message_count": 1,
+      "body_model": "openai/gpt-4o-mini",
+      "body_sha16": "38c7c6ed07f3c7ad",
+      "method": "POST",
+      "path": "/v1/chat/completions"
+    },
+    {
+      "auth_matches_expected": true,
+      "auth_present": true,
+      "auth_scheme": "Bearer",
+      "auth_sha16": "f9cc38aa8b3ff3cc",
+      "body_message_count": 1,
+      "body_model": "gpt-4o-mini",
+      "body_sha16": "f3a3962c7c41b611",
+      "method": "POST",
+      "path": "/v1/chat/completions"
+    }
+  ],
+  "mock_endpoint_self_test": {
+    "missing_auth_status": 401,
+    "wrong_auth_status": 401
+  },
+  "mock_port": 13221,
+  "model": "openai/gpt-4o-mini",
+  "overall_success": true,
+  "profile_name": "local-openai-compatible-smoke",
+  "sentinel_key_sha16": "f9cc38aa8b3ff3cc",
+  "started_at": "2026-07-13T11:33:46+00:00",
+  "storage_after_restart": {
+    "llm_profiles_contains_encrypted_leaf_marker": true,
+    "llm_profiles_contains_mask": false,
+    "llm_profiles_contains_raw_secret": false,
+    "llm_profiles_json_parseable": true,
+    "llm_profiles_json_type": "dict",
+    "llm_profiles_sql_text_length": 1623,
+    "llm_profiles_sql_text_sha16": "09f4a3eb49d5c16a",
+    "llm_profiles_visible_markers": [
+      "local-openai-compatible-smoke",
+      "openai/gpt-4o-mini",
+      "127.0.0.1",
+      "/v1"
+    ]
+  },
+  "wrong_key_sha16": "7249ade910939308"
+}
