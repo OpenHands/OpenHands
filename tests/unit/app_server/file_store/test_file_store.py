@@ -271,7 +271,10 @@ class TestLocalFileStore(TestCase, _StorageTest):
                 f'Failed to remove temporary directory {self.temp_dir}: {e}'
             )
 
-    @unittest.skipIf(_ON_WINDOWS, 'Concurrent writes not supported on Windows due to exclusive file locking')
+    @unittest.skipIf(
+        _ON_WINDOWS,
+        'Concurrent writes not supported on Windows due to exclusive file locking',
+    )
     def test_concurrent_writes_no_corruption(self):
         """Test that concurrent writes don't corrupt file content.
 
