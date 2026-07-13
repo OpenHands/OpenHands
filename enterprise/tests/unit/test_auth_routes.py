@@ -576,6 +576,8 @@ async def test_keycloak_callback_email_not_verified_but_social_login(
         mock_user_store.update_user_email.assert_called_once_with(
             user_id='test_user_id', email_verified=True
         )
+        # Verify the cookie was set
+        mock_set_cookie.assert_called_once()
 
 
 @pytest.mark.asyncio

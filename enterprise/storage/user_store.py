@@ -743,11 +743,16 @@ class UserStore:
     @staticmethod
     async def get_user_by_id(user_id: str) -> Optional[User]:
         """Get user by Keycloak user ID."""
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            return None
+
         async with a_session_maker() as session:
             result = await session.execute(
                 select(User)
                 .options(selectinload(User.org_members))
-                .filter(User.id == uuid.UUID(user_id))
+                .filter(User.id == user_uuid)
             )
             user = result.scalars().first()
             if user:
