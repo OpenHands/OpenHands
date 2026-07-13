@@ -10,13 +10,18 @@ from unittest.mock import AsyncMock, Mock, patch
 from uuid import uuid4
 
 import pytest
-from pydantic import SecretStr
-
 from openhands.agent_server.models import (
     SendMessageRequest,
     StartConversationRequest,
     TextContent,
 )
+from openhands.sdk import Agent, AgentContext, Event
+from openhands.sdk.llm import LLM
+from openhands.sdk.secret import LookupSecret, StaticSecret
+from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
+from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
+from pydantic import SecretStr
+
 from openhands.app_server.app_conversation.app_conversation_models import (
     AgentType,
     AppConversationInfo,
@@ -49,11 +54,6 @@ from openhands.app_server.settings.settings_models import (
 )
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.redis_lock import RedisLockUnavailable
-from openhands.sdk import Agent, AgentContext, Event
-from openhands.sdk.llm import LLM
-from openhands.sdk.secret import LookupSecret, StaticSecret
-from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
-from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 
 def _async_iter(items):
@@ -3081,6 +3081,7 @@ class TestPluginHandling:
     def test_construct_initial_message_with_plugin_params_no_params(self):
         """Test _construct_initial_message_with_plugin_params with plugins but no parameters."""
         from openhands.agent_server.models import SendMessageRequest, TextContent
+
         from openhands.app_server.app_conversation.app_conversation_models import (
             PluginSpec,
         )
@@ -3104,6 +3105,7 @@ class TestPluginHandling:
     def test_construct_initial_message_with_plugin_params_creates_new_message(self):
         """Test _construct_initial_message_with_plugin_params creates message when no initial message."""
         from openhands.agent_server.models import TextContent
+
         from openhands.app_server.app_conversation.app_conversation_models import (
             PluginSpec,
         )
@@ -3130,6 +3132,7 @@ class TestPluginHandling:
     def test_construct_initial_message_with_plugin_params_appends_to_message(self):
         """Test _construct_initial_message_with_plugin_params appends to existing message."""
         from openhands.agent_server.models import SendMessageRequest, TextContent
+
         from openhands.app_server.app_conversation.app_conversation_models import (
             PluginSpec,
         )
@@ -3162,6 +3165,7 @@ class TestPluginHandling:
     def test_construct_initial_message_with_plugin_params_preserves_role(self):
         """Test _construct_initial_message_with_plugin_params preserves message role."""
         from openhands.agent_server.models import SendMessageRequest, TextContent
+
         from openhands.app_server.app_conversation.app_conversation_models import (
             PluginSpec,
         )
@@ -3182,6 +3186,7 @@ class TestPluginHandling:
     def test_construct_initial_message_with_plugin_params_empty_content(self):
         """Test _construct_initial_message_with_plugin_params handles empty content list."""
         from openhands.agent_server.models import SendMessageRequest, TextContent
+
         from openhands.app_server.app_conversation.app_conversation_models import (
             PluginSpec,
         )
@@ -3201,6 +3206,7 @@ class TestPluginHandling:
     def test_construct_initial_message_with_multiple_plugins(self):
         """Test _construct_initial_message_with_plugin_params handles multiple plugins."""
         from openhands.agent_server.models import TextContent
+
         from openhands.app_server.app_conversation.app_conversation_models import (
             PluginSpec,
         )
@@ -4338,3 +4344,188 @@ class TestBuildAcpStartConversationRequestSecrets:
             'conversation_id': str(request.conversation_id),
             'agent_kind': 'acp',
         }
+
+
+# ---------------------------------------------------------------------------
+# Tests for _process_pending_messages (TOCTOU race fix)
+# ---------------------------------------------------------------------------
+
+
+def _make_pending_message_service_mock() -> Mock:
+    """Return a Mock with the PendingMessageService interface pre-wired."""
+    svc = Mock()
+    svc.update_conversation_id = AsyncMock(return_value=0)
+    svc.get_pending_messages = AsyncMock(return_value=[])
+    svc.delete_messages_by_ids = AsyncMock(return_value=0)
+    svc.delete_messages_for_conversation = AsyncMock(return_value=0)
+    return svc
+
+
+def _make_pending_message(msg_id: str, conversation_id: str) -> Mock:
+    """Build a minimal PendingMessage-like object."""
+    msg = Mock()
+    msg.id = msg_id
+    msg.role = 'user'
+    msg.content = [Mock()]
+    msg.content[0].model_dump = Mock(return_value={'type': 'text', 'text': 'hello'})
+    return msg
+
+
+def _build_process_pending_service(
+    pending_message_service: Mock,
+    httpx_client: Mock,
+) -> LiveStatusAppConversationService:
+    """Construct the minimal LiveStatusAppConversationService needed for _process_pending_messages."""
+    return LiveStatusAppConversationService(
+        init_git_in_empty_workspace=False,
+        user_context=Mock(spec=UserContext),
+        app_conversation_info_service=Mock(),
+        app_conversation_start_task_service=Mock(),
+        event_callback_service=Mock(),
+        event_service=Mock(),
+        sandbox_service=Mock(),
+        sandbox_spec_service=Mock(),
+        jwt_service=Mock(),
+        pending_message_service=pending_message_service,
+        sandbox_startup_timeout=30,
+        sandbox_startup_poll_frequency=1,
+        max_num_conversations_per_sandbox=20,
+        httpx_client=httpx_client,
+        web_url='https://test.example.com',
+        openhands_provider_base_url='https://provider.example.com',
+        access_token_hard_timeout=None,
+        app_mode='test',
+    )
+
+
+class TestProcessPendingMessages:
+    """Regression tests for the TOCTOU race fix in _process_pending_messages.
+
+    Before the fix the function called delete_messages_for_conversation() which
+    performed a fresh SELECT * and deleted every row for the conversation — including
+    rows inserted concurrently during delivery and rows whose delivery failed.
+
+    After the fix only successfully-delivered message IDs are deleted via
+    delete_messages_by_ids(), so:
+    - Concurrently-arrived messages survive.
+    - Failed deliveries survive and are retried on the next READY event.
+    """
+
+    @pytest.mark.asyncio
+    async def test_successful_delivery_deletes_only_delivered_id(self):
+        """A message that is delivered successfully must be removed via delete_messages_by_ids."""
+        task_id = uuid4()
+        conversation_id = uuid4()
+        msg_id = 'msg-aaa'
+
+        pending_svc = _make_pending_message_service_mock()
+        pending_svc.get_pending_messages = AsyncMock(
+            return_value=[_make_pending_message(msg_id, str(conversation_id))]
+        )
+
+        http_response = Mock()
+        http_response.raise_for_status = Mock()  # does not raise → success
+        httpx_client = Mock()
+        httpx_client.post = AsyncMock(return_value=http_response)
+
+        service = _build_process_pending_service(pending_svc, httpx_client)
+        await service._process_pending_messages(
+            task_id=task_id,
+            conversation_id=conversation_id,
+            agent_server_url='http://agent',
+            session_api_key='key',
+        )
+
+        # Only the delivered ID must be deleted
+        pending_svc.delete_messages_by_ids.assert_awaited_once_with([msg_id])
+        # The old bulk-delete must NOT be called
+        pending_svc.delete_messages_for_conversation.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_failed_delivery_leaves_message_queued(self):
+        """A message whose HTTP delivery raises must NOT appear in delete_messages_by_ids."""
+        task_id = uuid4()
+        conversation_id = uuid4()
+        msg_id = 'msg-bbb'
+
+        pending_svc = _make_pending_message_service_mock()
+        pending_svc.get_pending_messages = AsyncMock(
+            return_value=[_make_pending_message(msg_id, str(conversation_id))]
+        )
+
+        httpx_client = Mock()
+        httpx_client.post = AsyncMock(side_effect=Exception('connection refused'))
+
+        service = _build_process_pending_service(pending_svc, httpx_client)
+        await service._process_pending_messages(
+            task_id=task_id,
+            conversation_id=conversation_id,
+            agent_server_url='http://agent',
+            session_api_key='key',
+        )
+
+        # Failed message ID must NOT be deleted
+        pending_svc.delete_messages_by_ids.assert_awaited_once_with([])
+        pending_svc.delete_messages_for_conversation.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_concurrent_message_is_preserved(self):
+        """Only the snapshotted message IDs are deleted; a concurrent insert survives.
+
+        This directly tests the TOCTOU fix: msg-A was in the snapshot, msg-B
+        arrived during delivery.  Only msg-A should appear in delete_messages_by_ids.
+        """
+        task_id = uuid4()
+        conversation_id = uuid4()
+        msg_a_id = 'msg-snapshot'
+        msg_b_id = 'msg-concurrent'  # arrived after the snapshot
+
+        pending_svc = _make_pending_message_service_mock()
+        # Snapshot contains only msg-A
+        pending_svc.get_pending_messages = AsyncMock(
+            return_value=[_make_pending_message(msg_a_id, str(conversation_id))]
+        )
+
+        http_response = Mock()
+        http_response.raise_for_status = Mock()
+        httpx_client = Mock()
+        httpx_client.post = AsyncMock(return_value=http_response)
+
+        service = _build_process_pending_service(pending_svc, httpx_client)
+        await service._process_pending_messages(
+            task_id=task_id,
+            conversation_id=conversation_id,
+            agent_server_url='http://agent',
+            session_api_key='key',
+        )
+
+        # delete_messages_by_ids must be called with ONLY msg-A; msg-B must not appear
+        pending_svc.delete_messages_by_ids.assert_awaited_once_with([msg_a_id])
+        called_ids = pending_svc.delete_messages_by_ids.call_args[0][0]
+        assert msg_b_id not in called_ids, (
+            'Concurrently-inserted msg-B must not be deleted'
+        )
+
+    @pytest.mark.asyncio
+    async def test_empty_queue_returns_early_without_http_or_delete(self):
+        """When get_pending_messages returns [], no HTTP request or delete must occur."""
+        task_id = uuid4()
+        conversation_id = uuid4()
+
+        pending_svc = _make_pending_message_service_mock()
+        pending_svc.get_pending_messages = AsyncMock(return_value=[])
+
+        httpx_client = Mock()
+        httpx_client.post = AsyncMock()
+
+        service = _build_process_pending_service(pending_svc, httpx_client)
+        await service._process_pending_messages(
+            task_id=task_id,
+            conversation_id=conversation_id,
+            agent_server_url='http://agent',
+            session_api_key='key',
+        )
+
+        httpx_client.post.assert_not_called()
+        pending_svc.delete_messages_by_ids.assert_not_called()
+        pending_svc.delete_messages_for_conversation.assert_not_called()

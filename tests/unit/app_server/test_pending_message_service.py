@@ -9,10 +9,10 @@ from typing import AsyncGenerator
 from uuid import uuid4
 
 import pytest
+from openhands.agent_server.models import TextContent
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from openhands.agent_server.models import TextContent
 from openhands.app_server.pending_messages.pending_message_models import (
     PendingMessageResponse,
 )
@@ -307,3 +307,66 @@ class TestSQLPendingMessageService:
         assert len(messages2) == 1
         assert messages1[0].content[0].text == 'Conv1 msg'
         assert messages2[0].content[0].text == 'Conv2 msg'
+
+    # ------------------------------------------------------------------
+    # delete_messages_by_ids
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_delete_messages_by_ids_deletes_only_specified(
+        self,
+        service: SQLPendingMessageService,
+        sample_content: list[TextContent],
+    ):
+        """delete_messages_by_ids must remove only the requested rows.
+
+        Any rows in the same conversation that were NOT in the ID list (simulating
+        messages that arrived concurrently during delivery) must survive.
+        """
+        conversation_id = f'task-{uuid4().hex}'
+
+        # Add three messages and record their IDs
+        r1 = await service.add_message(conversation_id, sample_content)
+        r2 = await service.add_message(conversation_id, sample_content)
+        r3 = await service.add_message(conversation_id, sample_content)
+
+        # Delete only the first two (simulating successful delivery of r1 + r2)
+        deleted = await service.delete_messages_by_ids([r1.id, r2.id])
+
+        assert deleted == 2
+        remaining = await service.get_pending_messages(conversation_id)
+        assert len(remaining) == 1
+        assert remaining[0].id == r3.id
+
+    @pytest.mark.asyncio
+    async def test_delete_messages_by_ids_empty_list_is_noop(
+        self,
+        service: SQLPendingMessageService,
+        sample_content: list[TextContent],
+    ):
+        """Passing an empty list must return 0 without touching the database."""
+        conversation_id = f'task-{uuid4().hex}'
+        await service.add_message(conversation_id, sample_content)
+
+        deleted = await service.delete_messages_by_ids([])
+
+        assert deleted == 0
+        assert await service.count_pending_messages(conversation_id) == 1
+
+    @pytest.mark.asyncio
+    async def test_delete_messages_by_ids_unknown_ids_are_ignored(
+        self,
+        service: SQLPendingMessageService,
+        sample_content: list[TextContent],
+    ):
+        """Requesting deletion of non-existent IDs must not raise and must return 0."""
+        conversation_id = f'task-{uuid4().hex}'
+        await service.add_message(conversation_id, sample_content)
+
+        deleted = await service.delete_messages_by_ids(
+            ['non-existent-id-1', 'non-existent-id-2']
+        )
+
+        assert deleted == 0
+        # The real message must be untouched
+        assert await service.count_pending_messages(conversation_id) == 1

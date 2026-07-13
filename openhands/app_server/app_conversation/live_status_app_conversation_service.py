@@ -2205,8 +2205,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     ) -> None:
         """Process pending messages queued before conversation was ready.
 
-        Messages are delivered concurrently to the agent server. After processing,
-        all messages are deleted from the database regardless of success or failure.
+        Messages are delivered sequentially to the agent server to preserve
+        order.  Only messages that are successfully delivered are removed from
+        the database, so:
+
+        * Messages that fail delivery remain queued and will be retried on
+          the next READY event (e.g. conversation resume).
+        * Messages that arrive concurrently during delivery (after the initial
+          snapshot is taken) are not deleted — they will be delivered on the
+          next READY event too, avoiding the TOCTOU race.
 
         Args:
             task_id: The start task ID (may have been used as conversation_id initially)
@@ -2247,7 +2254,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             f'conversation {conversation_id_str}'
         )
 
-        # Process messages sequentially to preserve order
+        # Process messages sequentially to preserve order.
+        # Track only IDs that were successfully delivered so we can delete
+        # exclusively those rows.  This avoids two bugs:
+        #
+        # 1. TOCTOU race: any message that arrives concurrently (after the
+        #    snapshot below) is never added to successful_ids and therefore
+        #    survives the delete, ready for the next READY event.
+        # 2. Silent loss on failure: if the HTTP call throws (network blip,
+        #    agent-server 500, timeout), the message is NOT added to
+        #    successful_ids and stays in the DB for the next retry.
+        successful_ids: list[str] = []
         for msg in pending_messages:
             try:
                 # Serialize content objects to JSON-compatible dicts
@@ -2264,19 +2281,19 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     timeout=30.0,
                 )
                 response.raise_for_status()
+                successful_ids.append(msg.id)
                 _logger.debug(f'Delivered pending message {msg.id}')
             except Exception as e:
                 _logger.warning(f'Failed to deliver pending message {msg.id}: {e}')
 
-        # Delete all pending messages after processing (regardless of success/failure)
-        deleted_count = (
-            await self.pending_message_service.delete_messages_for_conversation(
-                conversation_id_str
-            )
+        # Delete only the messages that were successfully delivered.
+        deleted_count = await self.pending_message_service.delete_messages_by_ids(
+            successful_ids
         )
         _logger.info(
             f'Finished processing pending messages for conversation {conversation_id_str}. '
-            f'Deleted {deleted_count} messages.'
+            f'Delivered {len(successful_ids)}/{len(pending_messages)}, '
+            f'deleted {deleted_count} messages.'
         )
 
     async def update_agent_server_conversation_title(

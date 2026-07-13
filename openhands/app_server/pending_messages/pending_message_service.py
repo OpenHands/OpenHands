@@ -8,6 +8,7 @@ from typing import Any, AsyncGenerator
 from fastapi import Request
 from pydantic import TypeAdapter
 from sqlalchemy import JSON, String, func, select
+from sqlalchemy import delete as sql_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -61,6 +62,17 @@ class PendingMessageService(ABC):
     @abstractmethod
     async def delete_messages_for_conversation(self, conversation_id: str) -> int:
         """Delete all pending messages for a conversation, returning count deleted."""
+
+    @abstractmethod
+    async def delete_messages_by_ids(self, message_ids: list[str]) -> int:
+        """Delete only the messages with the specified IDs.
+
+        Used after delivery to remove only the messages that were successfully
+        sent, leaving any messages that arrived concurrently during delivery
+        intact so they can be delivered on the next READY event.
+
+        Returns the number of rows deleted.
+        """
 
     @abstractmethod
     async def update_conversation_id(
@@ -152,6 +164,25 @@ class SQLPendingMessageService(PendingMessageService):
         """Delete all pending messages for a conversation, returning count deleted."""
         stmt = select(StoredPendingMessage).where(
             StoredPendingMessage.conversation_id == conversation_id
+        )
+        result = await self.db_session.execute(stmt)
+        stored_messages = result.scalars().all()
+
+        count = len(stored_messages)
+        for msg in stored_messages:
+            await self.db_session.delete(msg)
+
+        if count > 0:
+            await self.db_session.commit()
+
+        return count
+
+    async def delete_messages_by_ids(self, message_ids: list[str]) -> int:
+        """Delete only the messages with the specified IDs."""
+        if not message_ids:
+            return 0
+        stmt = select(StoredPendingMessage).where(
+            StoredPendingMessage.id.in_(message_ids)
         )
         result = await self.db_session.execute(stmt)
         stored_messages = result.scalars().all()
