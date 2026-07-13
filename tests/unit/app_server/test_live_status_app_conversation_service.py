@@ -106,6 +106,8 @@ def _build_test_user_agent_settings(user: SimpleNamespace) -> OpenHandsAgentSett
 class _TestUserInfo(SimpleNamespace):
     def __init__(self, **kwargs):
         kwargs.setdefault('disabled_skills', [])
+        kwargs.setdefault('active_agent_profile_id', None)
+        kwargs.setdefault('active_agent_profile_revision', None)
         super().__init__(**kwargs)
 
     @property
@@ -173,6 +175,7 @@ def _resolved_profile_user(
     system_message_suffix='PROFILE_SUFFIX',
     disabled_skills=None,
     available_skills=None,
+    enable_switch_llm_tool=True,
 ):
     profile = OpenHandsAgentProfile(
         name='reviewer',
@@ -181,6 +184,7 @@ def _resolved_profile_user(
         tools=tools,
         system_message_suffix=system_message_suffix,
         disabled_skills=disabled_skills or [],
+        enable_switch_llm_tool=enable_switch_llm_tool,
     )
     settings = resolve_agent_profile(
         profile,
@@ -1328,6 +1332,35 @@ class TestLiveStatusAppConversationService:
 
         assert result.agent.tools == expected_tools
         assert mock_defaults.called is uses_cloud_defaults
+
+    @pytest.mark.asyncio
+    async def test_resolved_profile_can_disable_switch_llm_tool(self):
+        user = _resolved_profile_user(
+            tools=[],
+            enable_switch_llm_tool=False,
+        )
+        user.llm_profiles = LLMProfiles(
+            profiles={
+                'first': LLM(model='openai/gpt-4o', usage_id='first'),
+                'second': LLM(model='openai/gpt-4.1', usage_id='second'),
+            }
+        )
+        self.mock_user_context.get_user_info = AsyncMock(return_value=user)
+        self.service._setup_conversation_secrets = AsyncMock(return_value=({}, None))
+        self.service._configure_llm_and_mcp = AsyncMock(
+            return_value=(user.agent_settings.llm, {})
+        )
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+        )
+
+        assert 'SwitchLLMTool' not in result.agent.include_default_tools
 
     @pytest.mark.asyncio
     async def test_resolved_profile_context_is_launch_base(self):

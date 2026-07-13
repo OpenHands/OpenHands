@@ -132,7 +132,6 @@ from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ACPAgentSettings
 from openhands.sdk.subagent import get_registered_agent_definitions
 from openhands.sdk.tool import Tool
-from openhands.sdk.tool.builtins import SwitchLLMTool
 from openhands.sdk.utils.redact import (
     redact_api_key_literals,
     redact_text_secrets,
@@ -292,8 +291,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
     @staticmethod
     def _launch_snapshot_from_user(user: UserInfo) -> _ConversationLaunchSnapshot:
-        profile_id = getattr(user, 'active_agent_profile_id', None)
-        profile_revision = getattr(user, 'active_agent_profile_revision', None)
+        profile_id = user.active_agent_profile_id
+        profile_revision = user.active_agent_profile_revision
         return _ConversationLaunchSnapshot(
             user=user,
             agent_profile_id=profile_id
@@ -1855,29 +1854,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             }
         )
         agent = configured_agent_settings.create_agent()
-
-        # SaaS profiles live on the user/org record, not the sandbox
-        # filesystem, so we attach the agent's built-in switch_llm tool
-        # ourselves rather than relying on create_agent()'s gating. Enabled
-        # whenever there are at least two valid saved profiles (a switch needs
-        # a target).
-        valid_profile_names = [
-            name
-            for name in user.llm_profiles.profiles
-            if PROFILE_NAME_REGEX.match(name)
-        ]
-        if (
-            len(valid_profile_names) >= 2
-            and SwitchLLMTool.__name__ not in agent.include_default_tools
-        ):
-            agent = agent.model_copy(
-                update={
-                    'include_default_tools': [
-                        *agent.include_default_tools,
-                        SwitchLLMTool.__name__,
-                    ]
-                }
-            )
 
         agent = self._apply_server_agent_overrides(
             agent,
