@@ -19,6 +19,22 @@ from openhands.app_server.utils.jsonpatch_compat import (
     deep_merge,
     deep_merge_with_wholesale_keys,
 )
+from openhands.sdk.mcp.config import coerce_mcp_config, dump_mcp_config
+
+_MISSING = object()
+
+
+def _serialize_mcp_config(value: object) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    return dump_mcp_config(
+        coerce_mcp_config(value),
+        context={'expose_secrets': 'plaintext'},
+    )
+
+
+def _pop_mcp_config(settings: dict[str, Any]) -> object:
+    return settings.pop('mcp_config', _MISSING)
 
 
 class OrgMemberStore:
@@ -35,6 +51,8 @@ class OrgMemberStore:
         conversation_settings_diff: Optional[dict[str, Any]] = None,
     ) -> OrgMember:
         """Add a user to an organization with a specific role."""
+        agent_settings_diff = dict(agent_settings_diff or {})
+        mcp_config = _pop_mcp_config(agent_settings_diff)
         async with a_session_maker() as session:
             org_member = OrgMember(
                 org_id=org_id,
@@ -42,7 +60,12 @@ class OrgMemberStore:
                 role_id=role_id,
                 llm_api_key=llm_api_key,
                 status=status,
-                agent_settings_diff=dict(agent_settings_diff or {}),
+                agent_settings_diff=agent_settings_diff,
+                mcp_config=(
+                    _serialize_mcp_config(mcp_config)
+                    if mcp_config is not _MISSING
+                    else None
+                ),
                 conversation_settings_diff=dict(conversation_settings_diff or {}),
             )
             session.add(org_member)
@@ -155,15 +178,24 @@ class OrgMemberStore:
         return {
             'llm_api_key': settings.agent_settings.llm.api_key,
             'agent_settings_diff': {},
+            'mcp_config': _serialize_mcp_config(settings.agent_settings.mcp_config),
             'conversation_settings_diff': {},
         }
 
     @staticmethod
     def get_kwargs_from_user_settings(user_settings: UserSettings) -> dict[str, Any]:
         """Return kwargs for OrgMember construction (keys match column names)."""
+        agent_settings_diff = dict(user_settings.agent_settings or {})
+        nested_mcp_config = _pop_mcp_config(agent_settings_diff)
+        mcp_config = (
+            nested_mcp_config
+            if nested_mcp_config is not _MISSING
+            else user_settings.mcp_config
+        )
         return {
             'llm_api_key': user_settings.llm_api_key,
-            'agent_settings_diff': dict(user_settings.agent_settings),
+            'agent_settings_diff': agent_settings_diff,
+            'mcp_config': _serialize_mcp_config(mcp_config),
             'conversation_settings_diff': dict(user_settings.conversation_settings),
         }
 
@@ -264,6 +296,10 @@ class OrgMemberStore:
         raw_key = values.pop('llm_api_key', None)
         agent_settings_diff = values.pop('agent_settings_diff', None)
         conversation_settings_diff = values.pop('conversation_settings_diff', None)
+        mcp_config = _MISSING
+        if agent_settings_diff is not None:
+            agent_settings_diff = dict(agent_settings_diff)
+            mcp_config = _pop_mcp_config(agent_settings_diff)
 
         for org_member in org_members:
             if raw_key is not None:
@@ -274,6 +310,9 @@ class OrgMemberStore:
                     org_member.agent_settings_diff,
                     agent_settings_diff,
                 )
+
+            if mcp_config is not _MISSING:
+                org_member.mcp_config = _serialize_mcp_config(mcp_config)
 
             if conversation_settings_diff is not None:
                 org_member.conversation_settings_diff = deep_merge(

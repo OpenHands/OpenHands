@@ -349,15 +349,15 @@ def _preserve_redacted_mcp_secrets(
         if not isinstance(name, str) or not isinstance(incoming_server, dict):
             continue
         existing_server = existing_dump.get(name)
-        same_endpoint = (
-            existing_server is not None
-            and _mcp_endpoint_identity(incoming_server)
-            == _mcp_endpoint_identity(existing_server)
-        )
+        same_endpoint = existing_server is not None and _mcp_endpoint_identity(
+            incoming_server
+        ) == _mcp_endpoint_identity(existing_server)
         submitted_credentials = {'headers', 'auth'}.intersection(incoming_server)
         for field in ('headers', 'env', 'auth'):
             existing_value = (
-                existing_server.get(field) if same_endpoint and existing_server else None
+                existing_server.get(field)
+                if same_endpoint and existing_server
+                else None
             )
             if field not in incoming_server:
                 if existing_value is not None and (

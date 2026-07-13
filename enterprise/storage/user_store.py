@@ -1246,9 +1246,15 @@ class UserStore:
         from storage.org_store import OrgStore
 
         member_agent_settings_diff = dict(org_member.agent_settings_diff)
+        legacy_mcp_config = member_agent_settings_diff.pop('mcp_config', None)
+        member_mcp_config = org_member.mcp_config
+        if member_mcp_config is None:
+            member_mcp_config = legacy_mcp_config
         org_agent_settings = OrgStore.get_agent_settings_from_org(org)
+        org_agent_settings_dump = org_agent_settings.model_dump(mode='json')
+        org_agent_settings_dump.pop('mcp_config', None)
         agent_settings = {
-            **org_agent_settings.model_dump(mode='json'),
+            **org_agent_settings_dump,
             **member_agent_settings_diff,
         }
 
@@ -1291,6 +1297,7 @@ class UserStore:
             v1_enabled=org.v1_enabled,
             sandbox_grouping_strategy=org.sandbox_grouping_strategy,
             agent_settings=agent_settings,
+            mcp_config=member_mcp_config,
             conversation_settings=conversation_settings,
             already_migrated=False,
         )

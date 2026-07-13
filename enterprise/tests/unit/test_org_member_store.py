@@ -28,6 +28,9 @@ def test_get_kwargs_from_user_settings_uses_agent_settings_as_source_of_truth():
                 'enabled': False,
                 'max_size': 128,
             },
+            'mcp_config': {
+                'private': {'url': 'https://mcp.example.com'},
+            },
         },
         conversation_settings={
             'confirmation_mode': True,
@@ -47,6 +50,8 @@ def test_get_kwargs_from_user_settings_uses_agent_settings_as_source_of_truth():
     assert kwargs['agent_settings_diff']['llm']['base_url'] == 'https://api.example.com'
     assert kwargs['agent_settings_diff']['condenser']['enabled'] is False
     assert kwargs['agent_settings_diff']['condenser']['max_size'] == 128
+    assert 'mcp_config' not in kwargs['agent_settings_diff']
+    assert kwargs['mcp_config'] == {'private': {'url': 'https://mcp.example.com'}}
     assert kwargs['conversation_settings_diff']['confirmation_mode'] is True
     assert kwargs['conversation_settings_diff']['security_analyzer'] == 'llm'
     assert kwargs['conversation_settings_diff']['max_iterations'] == 42
@@ -1161,14 +1166,7 @@ async def test_update_all_members_settings_async_with_empty_settings(
 async def test_update_all_members_settings_async_replaces_mcp_config(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization members with existing mcp_config in agent_settings_diff
-    WHEN: update_all_members_settings_async is called with fewer MCP servers
-    THEN: mcp_config should be replaced (not merged), so deleted servers stay deleted
-
-    This tests the fix for APP-1862: MCP server settings cannot be updated
-    or deleted because deep_merge was resurrecting deleted servers.
-    """
+    """Replace MCP servers instead of resurrecting deleted entries."""
     from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange - Create org with member that has 3 MCP servers
@@ -1190,14 +1188,11 @@ async def test_update_all_members_settings_async_replaces_mcp_config(
             user_id=user.id,
             role_id=role.id,
             llm_api_key='test-key',
-            agent_settings_diff={
-                'mcp_config': {
-                    'mcpServers': {
-                        'server1': {'url': 'https://server1.com', 'transport': 'sse'},
-                        'server2': {'url': 'https://server2.com', 'transport': 'sse'},
-                        'server3': {'url': 'https://server3.com', 'transport': 'sse'},
-                    },
-                },
+            agent_settings_diff={},
+            mcp_config={
+                'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+                'server2': {'url': 'https://server2.com', 'transport': 'sse'},
+                'server3': {'url': 'https://server3.com', 'transport': 'sse'},
             },
             status='active',
         )
@@ -1233,9 +1228,8 @@ async def test_update_all_members_settings_async_replaces_mcp_config(
         )
         member = result.scalars().first()
 
-        mcp_servers = member.agent_settings_diff.get('mcp_config', {}).get(
-            'mcpServers', {}
-        )
+        mcp_servers = member.mcp_config or {}
+        assert 'mcp_config' not in member.agent_settings_diff
         assert len(mcp_servers) == 2, f'Expected 2 servers, got {len(mcp_servers)}'
         assert 'server1' in mcp_servers
         assert 'server2' in mcp_servers
@@ -1248,13 +1242,7 @@ async def test_update_all_members_settings_async_replaces_mcp_config(
 async def test_update_all_members_settings_async_mcp_config_not_in_payload(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization members with existing mcp_config
-    WHEN: update_all_members_settings_async is called WITHOUT mcp_config in payload
-    THEN: mcp_config should remain unchanged (not be cleared)
-
-    This ensures we only replace mcp_config when it's explicitly in the update.
-    """
+    """Preserve MCP servers when an update omits the field."""
     from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange - Create org with member that has MCP servers
@@ -1276,12 +1264,10 @@ async def test_update_all_members_settings_async_mcp_config_not_in_payload(
             user_id=user.id,
             role_id=role.id,
             llm_api_key='test-key',
+            mcp_config={
+                'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+            },
             agent_settings_diff={
-                'mcp_config': {
-                    'mcpServers': {
-                        'server1': {'url': 'https://server1.com', 'transport': 'sse'},
-                    },
-                },
                 'llm': {'model': 'old-model'},
             },
             status='active',
@@ -1315,22 +1301,16 @@ async def test_update_all_members_settings_async_mcp_config_not_in_payload(
 
         # LLM should be updated
         assert member.agent_settings_diff['llm']['model'] == 'new-model'
-        # mcp_config should be unchanged
-        mcp_config = member.agent_settings_diff.get('mcp_config', {})
-        assert 'server1' in mcp_config.get('mcpServers', {})
+        assert member.mcp_config is not None
+        assert 'server1' in member.mcp_config
+        assert 'mcp_config' not in member.agent_settings_diff
 
 
 @pytest.mark.asyncio
 async def test_update_all_members_settings_async_empty_mcp_config(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization members with existing mcp_config
-    WHEN: update_all_members_settings_async is called with empty mcp_config
-    THEN: mcp_config should be cleared (all servers deleted)
-
-    This tests the case where user deletes ALL servers.
-    """
+    """Clear MCP servers when the update contains an empty config."""
     from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange - Create org with member that has MCP servers
@@ -1352,13 +1332,10 @@ async def test_update_all_members_settings_async_empty_mcp_config(
             user_id=user.id,
             role_id=role.id,
             llm_api_key='test-key',
-            agent_settings_diff={
-                'mcp_config': {
-                    'mcpServers': {
-                        'server1': {'url': 'https://server1.com', 'transport': 'sse'},
-                        'server2': {'url': 'https://server2.com', 'transport': 'sse'},
-                    },
-                },
+            agent_settings_diff={},
+            mcp_config={
+                'server1': {'url': 'https://server1.com', 'transport': 'sse'},
+                'server2': {'url': 'https://server2.com', 'transport': 'sse'},
             },
             status='active',
         )
@@ -1390,8 +1367,8 @@ async def test_update_all_members_settings_async_empty_mcp_config(
         )
         member = result.scalars().first()
 
-        mcp_config = member.agent_settings_diff.get('mcp_config', {})
-        mcp_servers = mcp_config.get('mcpServers', {})
+        mcp_servers = member.mcp_config or {}
+        assert 'mcp_config' not in member.agent_settings_diff
         assert len(mcp_servers) == 0, f'Expected 0 servers, got {len(mcp_servers)}'
 
 
@@ -1399,13 +1376,7 @@ async def test_update_all_members_settings_async_empty_mcp_config(
 async def test_update_all_members_settings_async_add_first_mcp_server(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization members with NO existing mcp_config
-    WHEN: update_all_members_settings_async is called with mcp_config
-    THEN: mcp_config should be added correctly
-
-    This tests adding the first server when none exist.
-    """
+    """Add the first MCP server to encrypted member storage."""
     from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange - Create org with member that has NO mcp_config
@@ -1463,8 +1434,8 @@ async def test_update_all_members_settings_async_add_first_mcp_server(
         )
         member = result.scalars().first()
 
-        mcp_config = member.agent_settings_diff.get('mcp_config', {})
-        mcp_servers = mcp_config.get('mcpServers', {})
+        mcp_servers = member.mcp_config or {}
+        assert 'mcp_config' not in member.agent_settings_diff
         assert len(mcp_servers) == 1
         assert 'first-server' in mcp_servers
 
@@ -1473,13 +1444,7 @@ async def test_update_all_members_settings_async_add_first_mcp_server(
 async def test_update_all_members_settings_async_update_server_url(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization members with existing mcp_config
-    WHEN: update_all_members_settings_async is called with updated server URL
-    THEN: The server URL should be updated (not duplicated)
-
-    This tests updating an existing server's properties.
-    """
+    """Replace an existing MCP server endpoint without duplication."""
     from server.routes.org_models import OrgMemberSettingsUpdate
 
     # Arrange
@@ -1501,14 +1466,11 @@ async def test_update_all_members_settings_async_update_server_url(
             user_id=user.id,
             role_id=role.id,
             llm_api_key='test-key',
-            agent_settings_diff={
-                'mcp_config': {
-                    'mcpServers': {
-                        'myserver': {
-                            'url': 'https://old-url.com',
-                            'transport': 'sse',
-                        },
-                    },
+            agent_settings_diff={},
+            mcp_config={
+                'myserver': {
+                    'url': 'https://old-url.com',
+                    'transport': 'sse',
                 },
             },
             status='active',
@@ -1546,7 +1508,7 @@ async def test_update_all_members_settings_async_update_server_url(
         )
         member = result.scalars().first()
 
-        mcp_config = member.agent_settings_diff.get('mcp_config', {})
-        mcp_servers = mcp_config.get('mcpServers', {})
+        mcp_servers = member.mcp_config or {}
+        assert 'mcp_config' not in member.agent_settings_diff
         assert len(mcp_servers) == 1
         assert mcp_servers['myserver']['url'] == 'https://new-url.com'

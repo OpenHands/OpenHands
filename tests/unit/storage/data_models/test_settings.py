@@ -261,9 +261,7 @@ def test_settings_update_preserves_redacted_mcp_auth_for_same_endpoint():
 
     server = settings.agent_settings.mcp_config['integration-hub']
     assert server.auth is not None
-    assert server.auth.to_http_headers() == {
-        'Authorization': 'Bearer real-key'
-    }
+    assert server.auth.to_http_headers() == {'Authorization': 'Bearer real-key'}
 
 
 @pytest.mark.parametrize(
@@ -310,9 +308,7 @@ def test_settings_update_preserves_omitted_mcp_auth_for_same_endpoint():
 
     server = settings.agent_settings.mcp_config['integration-hub']
     assert server.auth is not None
-    assert server.auth.to_http_headers() == {
-        'Authorization': 'Bearer real-key'
-    }
+    assert server.auth.to_http_headers() == {'Authorization': 'Bearer real-key'}
 
 
 def test_settings_update_clears_explicit_mcp_auth():

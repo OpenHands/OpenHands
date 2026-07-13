@@ -92,15 +92,10 @@ class OrgLLMProfileMutator:
 
 
 def member_mcp_config(member: OrgMember) -> dict[str, MCPServer]:
-    """The acting member's globally-configured MCP servers as a server map.
-
-    ``mcp_config`` is member-private (it lives only on the member's
-    ``agent_settings_diff``; the org dump strips it — see
-    ``MEMBER_PRIVATE_AGENT_KEYS``), so the member-effective set is exactly the
-    member diff's ``mcp_config``. Used to resolve / filter ``mcp_server_refs``.
-    Returns ``{}`` when the member configured no MCP servers.
-    """
-    raw = (member.agent_settings_diff or {}).get('mcp_config')
+    """Return the acting member's configured MCP servers."""
+    raw = member.mcp_config
+    if raw is None:
+        raw = (member.agent_settings_diff or {}).get('mcp_config')
     if not raw:
         return {}
     try:

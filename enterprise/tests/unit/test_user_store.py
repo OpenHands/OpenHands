@@ -1120,6 +1120,12 @@ def test_create_user_settings_from_entities():
             'base_url': 'https://api.example.com',
         },
     }
+    org_member.mcp_config = {
+        'private': {
+            'url': 'https://mcp.example.com',
+            'auth': {'strategy': 'bearer', 'value': 'mcp-secret'},
+        }
+    }
     org_member.conversation_settings_diff = {
         'max_iterations': 50,
     }
@@ -1161,6 +1167,8 @@ def test_create_user_settings_from_entities():
     assert result.agent_settings['llm']['model'] == 'claude-3-5-sonnet'
     assert result.agent_settings['llm']['base_url'] == 'https://api.example.com'
     assert result.agent_settings['agent'] == 'CodeActAgent'
+    assert 'mcp_config' not in result.agent_settings
+    assert result.mcp_config == org_member.mcp_config
     assert result.conversation_settings['security_analyzer'] == 'llm'
     assert result.conversation_settings['max_iterations'] == 50
     assert result.language == 'en'
@@ -1175,6 +1183,7 @@ def test_create_user_settings_from_entities_with_org_fallback():
     org_member = MagicMock()
     org_member.llm_api_key = None
     org_member.agent_settings_diff = {}
+    org_member.mcp_config = None
     org_member.conversation_settings_diff = {}
 
     user = MagicMock()
