@@ -1,5 +1,6 @@
 import importlib
 import warnings
+from copy import deepcopy
 from unittest.mock import patch
 
 import pytest
@@ -219,6 +220,82 @@ def test_settings_update_replaces_existing_mcp_servers():
     servers = mcp_config_server_map(settings.agent_settings.mcp_config)
     assert set(servers) == {'fresh'}
     assert servers['fresh'].url == 'https://example.com/fresh'
+
+
+def test_settings_update_preserves_redacted_mcp_secret_leaves():
+    settings = Settings(
+        agent_settings={
+            'llm': {'model': 'sdk-model'},
+            'mcp_config': {
+                'legacy-http': {
+                    'url': 'https://legacy.example.com/mcp',
+                    'transport': 'sse',
+                    'headers': {'Authorization': 'Bearer legacy-secret'},
+                },
+                'native-bearer': {
+                    'url': 'https://native.example.com/mcp',
+                    'transport': 'streamable-http',
+                    'auth': {'strategy': 'bearer', 'value': 'old-native-secret'},
+                },
+                'stdio': {
+                    'command': 'python',
+                    'args': ['server.py'],
+                    'env': {
+                        'API_KEY': 'old-env-secret',
+                        'UNCHANGED': 'old-unchanged-secret',
+                    },
+                },
+                'oauth': {
+                    'url': 'https://oauth.example.com/mcp',
+                    'transport': 'streamable-http',
+                    'auth': {
+                        'strategy': 'oauth2',
+                        'authentication': {
+                            'type': 'oauth',
+                            'client_id': 'client-id',
+                            'client_secret': 'old-client-secret',
+                        },
+                        'state': {
+                            'tokens': {
+                                'access_token': 'old-access-token',
+                                'refresh_token': 'old-refresh-token',
+                            },
+                            'client_info': {'client_secret': 'old-client-info-secret'},
+                        },
+                    },
+                },
+            },
+        }
+    )
+
+    redacted_get_mcp = settings.model_dump()['agent_settings']['mcp_config']
+    posted_mcp = deepcopy(redacted_get_mcp)
+    posted_mcp['native-bearer']['auth']['value'] = 'rotated-native-secret'
+
+    settings.update({'agent_settings_diff': {'mcp_config': posted_mcp}})
+
+    servers = mcp_config_server_map(settings.agent_settings.mcp_config)
+    legacy_auth = servers['legacy-http'].auth
+    native_auth = servers['native-bearer'].auth
+    stdio_env = servers['stdio'].env
+    oauth_auth = servers['oauth'].auth
+
+    assert legacy_auth.value.get_secret_value() == 'legacy-secret'
+    assert native_auth.value.get_secret_value() == 'rotated-native-secret'
+    assert stdio_env['API_KEY'].get_secret_value() == 'old-env-secret'
+    assert stdio_env['UNCHANGED'].get_secret_value() == 'old-unchanged-secret'
+    assert (
+        oauth_auth.authentication.client_secret.get_secret_value()
+        == 'old-client-secret'
+    )
+    assert oauth_auth.state.tokens.access_token.get_secret_value() == 'old-access-token'
+    assert (
+        oauth_auth.state.tokens.refresh_token.get_secret_value() == 'old-refresh-token'
+    )
+    assert (
+        oauth_auth.state.client_info.client_secret.get_secret_value()
+        == 'old-client-info-secret'
+    )
 
 
 def test_settings_update_can_clear_mcp_config():

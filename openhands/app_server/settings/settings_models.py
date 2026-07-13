@@ -33,6 +33,7 @@ from openhands.app_server.integrations.provider import ProviderToken
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.mcp.mcp_config_adapter import (
     normalize_mcp_config_payload,
+    preserve_existing_mcp_secrets,
     replace_mcp_config_in_agent_settings_dump,
 )
 from openhands.app_server.settings.llm_profiles import LLMProfiles
@@ -507,6 +508,9 @@ class Settings(BaseModel):
             # config preservation tracked in OpenHands/OpenHands#14370.
             new_settings = apply_agent_settings_diff(self.agent_settings, coerced)
             if replace_mcp_config:
+                mcp_config = preserve_existing_mcp_secrets(
+                    mcp_config, self.agent_settings.mcp_config
+                )
                 dumped = new_settings.model_dump(
                     mode='json', context={'expose_secrets': True}
                 )

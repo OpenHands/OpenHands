@@ -9,10 +9,13 @@ decision out of app-server business logic.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 from typing import Any, cast
 
 from fastmcp.mcp_config import MCPConfig as FastMCPConfig
 from pydantic import BaseModel
+
+from openhands.sdk.utils.pydantic_secrets import REDACTED_SECRET_VALUE
 
 NativeMCPServer: Any
 
@@ -57,6 +60,93 @@ def _dump_server(server: Any) -> Any:
     if isinstance(server, BaseModel):
         return server.model_dump(mode='json', exclude_none=True, exclude_defaults=True)
     return server
+
+
+def _dump_server_with_secrets(server: Any) -> dict[str, Any]:
+    if isinstance(server, BaseModel):
+        dumped = server.model_dump(
+            mode='json',
+            context={'expose_secrets': True},
+            exclude_none=True,
+            exclude_defaults=True,
+        )
+    else:
+        dumped = deepcopy(server)
+    return dumped if isinstance(dumped, dict) else {}
+
+
+def _is_redacted_secret(value: Any) -> bool:
+    return isinstance(value, str) and value in {
+        REDACTED_SECRET_VALUE,
+        f'Bearer {REDACTED_SECRET_VALUE}',
+    }
+
+
+def _preserve_redacted_leaves(incoming: Any, existing: Any) -> None:
+    if not isinstance(incoming, dict) or not isinstance(existing, dict):
+        return
+    for key, value in list(incoming.items()):
+        existing_value = existing.get(key)
+        if _is_redacted_secret(value) and existing_value is not None:
+            incoming[key] = deepcopy(existing_value)
+        elif isinstance(value, dict):
+            _preserve_redacted_leaves(value, existing_value)
+
+
+def _preserve_auth(incoming: dict[str, Any], existing: dict[str, Any]) -> None:
+    incoming_auth = incoming.get('auth')
+    existing_auth = existing.get('auth')
+
+    if isinstance(incoming_auth, dict) and isinstance(existing_auth, dict):
+        same_strategy = incoming_auth.get('strategy') == existing_auth.get('strategy')
+        if same_strategy:
+            for key, value in existing_auth.items():
+                if key not in incoming_auth:
+                    incoming_auth[key] = deepcopy(value)
+            _preserve_redacted_leaves(incoming_auth, existing_auth)
+    elif 'auth' not in incoming and 'headers' not in incoming and existing_auth:
+        incoming['auth'] = deepcopy(existing_auth)
+
+    incoming_headers = incoming.get('headers')
+    existing_headers = existing.get('headers')
+    if isinstance(incoming_headers, dict) and isinstance(existing_headers, dict):
+        _preserve_redacted_leaves(incoming_headers, existing_headers)
+    elif 'auth' not in incoming and 'headers' not in incoming and existing_headers:
+        incoming['headers'] = deepcopy(existing_headers)
+
+
+def preserve_existing_mcp_secrets(value: Any, existing_value: Any) -> Any:
+    """Preserve unchanged MCP secret leaves across redacted settings updates.
+
+    ``mcp_config`` is replaced wholesale when the UI saves settings. The GET
+    response cannot expose secret values, so follow-up saves can contain
+    ``**********`` placeholders or omit auth details for servers the user did
+    not change. For retained server names, carry forward the previous secret
+    leaves before validating the replacement payload.
+    """
+    if value is None or not existing_value:
+        return value
+
+    incoming_servers = {
+        name: _dump_server_with_secrets(server)
+        for name, server in mcp_config_server_map(value).items()
+    }
+    existing_servers = {
+        name: _dump_server_with_secrets(server)
+        for name, server in mcp_config_server_map(existing_value).items()
+    }
+
+    for name, incoming in incoming_servers.items():
+        existing = existing_servers.get(name)
+        if not existing:
+            continue
+        _preserve_auth(incoming, existing)
+        incoming_env = incoming.get('env')
+        existing_env = existing.get('env')
+        if isinstance(incoming_env, dict) and isinstance(existing_env, dict):
+            _preserve_redacted_leaves(incoming_env, existing_env)
+
+    return incoming_servers
 
 
 def normalize_mcp_config_payload(value: Any) -> Any:
