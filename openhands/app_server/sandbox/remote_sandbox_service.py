@@ -127,17 +127,28 @@ class RemoteSandboxService(SandboxService):
         self, method: str, path: str, **kwargs: Any
     ) -> httpx.Response:
         """Send a request to the remote runtime API."""
-        try:
-            url = self.api_url + path
-            return await self.httpx_client.request(
-                method, url, headers={'X-API-Key': self.api_key}, **kwargs
-            )
-        except httpx.TimeoutException:
-            _logger.error(f'No response received within timeout for URL: {url}')
-            raise
-        except httpx.HTTPError as e:
-            _logger.error(f'HTTP error for URL {url}: {e}')
-            raise
+        url = self.api_url + path
+        # A stalled runtime-api request (e.g. dead pooled DB connection on its
+        # side) times out once, while a retry on a fresh connection succeeds —
+        # so retry idempotent reads once instead of failing conversation start.
+        attempts = 2 if method in ('GET', 'HEAD') else 1
+        last_exc: httpx.TimeoutException | None = None
+        for attempt in range(attempts):
+            try:
+                return await self.httpx_client.request(
+                    method, url, headers={'X-API-Key': self.api_key}, **kwargs
+                )
+            except httpx.TimeoutException as e:
+                last_exc = e
+                if attempt + 1 < attempts:
+                    _logger.warning(f'Timeout for URL {url}; retrying')
+                    continue
+                _logger.error(f'No response received within timeout for URL: {url}')
+                raise
+            except httpx.HTTPError as e:
+                _logger.error(f'HTTP error for URL {url}: {e}')
+                raise
+        raise last_exc  # type: ignore[misc]  # unreachable; keeps mypy happy
 
     def _to_sandbox_info(
         self, stored: StoredRemoteSandbox, runtime: dict[str, Any] | None = None
