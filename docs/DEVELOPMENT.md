@@ -146,9 +146,8 @@ The HTML report is written to `reports/mutation.html`. Mutation scores are
 report-only initially; establish a stable baseline before adding a failing
 threshold.
 
-Stryker does not cover the small Python surface in this repository. Most Python
-files support CI or mock-LLM tests; `tools/canvas_ui_tool.py` is shipped runtime
-code and would need a Python test harness and Python-specific mutation tool.
+Stryker does not cover the small Python surface in this repository; mutating it
+would need a Python test harness and Python-specific mutation tool.
 
 ## CSS isolation and host-app customization
 
