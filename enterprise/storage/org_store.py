@@ -444,9 +444,21 @@ class OrgStore:
                     or effective_managed_key is not None
                 )
                 if effective_managed_key is not None:
+                    # Stamp the (possibly freshly minted) key onto the acting
+                    # member's row. We deliberately do NOT iterate every
+                    # OrgMember here — that's O(N) LiteLLM calls per org-defaults
+                    # save, which doesn't scale past a few thousand members
+                    # and would also overwrite BYOR members' stored keys.
+                    # Other members self-heal lazily in
+                    # SaasSettingsStore._ensure_api_key when they next save
+                    # their own settings.
+                    acting_member = await OrgStore._get_member_for_user(
+                        session, org_id, user_id
+                    )
+                    if acting_member is not None:
+                        acting_member.llm_api_key = SecretStr(effective_managed_key)
                     if member_updates is None:
                         member_updates = OrgMemberSettingsUpdate()
-                    member_updates.llm_api_key = SecretStr(effective_managed_key)
 
                 if member_updates is not None:
                     if should_reset_custom_key_flag:
@@ -825,13 +837,9 @@ class OrgStore:
         if not uses_managed_llm_key:
             return None
 
-        result = await session.execute(
-            select(OrgMember).where(
-                OrgMember.org_id == updated_org.id,
-                OrgMember.user_id == UUID(user_id),
-            )
+        acting_member = await OrgStore._get_member_for_user(
+            session, updated_org.id, user_id
         )
-        acting_member = result.scalars().first()
         if acting_member is None:
             logger.error(
                 'Acting member row not found during managed LLM key '
@@ -866,6 +874,21 @@ class OrgStore:
             key_alias,
             {'type': 'openhands'} if openhands_type else None,
         )
+
+    @staticmethod
+    async def _get_member_for_user(
+        session,
+        org_id: UUID,
+        user_id: str,
+    ) -> OrgMember | None:
+        """Look up a single OrgMember row by (org_id, user_id)."""
+        result = await session.execute(
+            select(OrgMember).where(
+                OrgMember.org_id == org_id,
+                OrgMember.user_id == UUID(user_id),
+            )
+        )
+        return result.scalars().first()
 
     @staticmethod
     async def update_org_defaults_async(

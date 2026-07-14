@@ -1450,15 +1450,19 @@ async def test_update_org_defaults_async_with_llm_api_key():
 
 
 @pytest.mark.asyncio
-async def test_update_org_defaults_async_propagates_managed_key_reset():
+async def test_update_org_defaults_async_stamps_acting_user_key_and_resets_flag():
     """GIVEN: A unified OrgUpdate save that resolves to a managed org key
     WHEN: update_org_defaults_async is called
-    THEN: the propagated member update carries that key and resets the custom-key flag
+    THEN: the acting user's row gets that key, the bulk member update no
+          longer overwrites every member with the acting user's key, and
+          ``has_custom_llm_api_key`` is reset on every member. Other
+          members self-heal lazily — we do NOT iterate the whole org here.
     """
     from server.routes.org_models import OrgUpdate
 
     org_id = uuid.uuid4()
     user_id = str(uuid.uuid4())
+    acting_member = _make_member(org_id, uuid.UUID(user_id), 'stale-acting')
     mock_org = Org(
         id=org_id,
         name='Test Organization',
@@ -1468,10 +1472,15 @@ async def test_update_org_defaults_async_propagates_managed_key_reset():
         agent_settings_diff={'llm': {'model': 'openhands/claude-3'}}
     )
 
+    org_result = MagicMock()
+    org_result.scalars.return_value.first.return_value = mock_org
+    member_result = MagicMock()
+    member_result.scalars.return_value.first.return_value = acting_member
+
     mock_session = AsyncMock()
-    mock_result = MagicMock()
-    mock_result.scalars.return_value.first.return_value = mock_org
-    mock_session.execute.return_value = mock_result
+    # First execute() returns the org row; the second one (member lookup)
+    # returns the acting member.
+    mock_session.execute.side_effect = [org_result, member_result]
     mock_session.commit = AsyncMock()
     mock_session.refresh = AsyncMock()
 
@@ -1495,9 +1504,13 @@ async def test_update_org_defaults_async_propagates_managed_key_reset():
     assert result is not None
     agent_settings = OrgStore.get_agent_settings_from_org(result)
     assert agent_settings.llm.model == 'openhands/claude-3'
+    # Acting user's row gets the (possibly freshly minted) key.
+    assert acting_member.llm_api_key.get_secret_value() == 'managed-key'
     mock_member_update.assert_called_once()
     member_settings = mock_member_update.call_args[0][2]
-    assert member_settings.llm_api_key.get_secret_value() == 'managed-key'
+    # The bulk member update no longer overwrites every member with the
+    # acting user's key — that's the bug fix.
+    assert member_settings.llm_api_key is None
     assert member_settings.has_custom_llm_api_key is False
 
 
@@ -1598,3 +1611,16 @@ async def test_count_team_orgs_excludes_personal_workspaces(async_session_maker)
 
     with patch('storage.org_store.a_session_maker', async_session_maker):
         assert await OrgStore.count_team_orgs() == 1
+
+
+def _make_member(
+    org_id: uuid.UUID,
+    user_id: uuid.UUID,
+    llm_api_key: str,
+) -> OrgMember:
+    return OrgMember(
+        org_id=org_id,
+        user_id=user_id,
+        role_id=1,
+        llm_api_key=llm_api_key,
+    )
