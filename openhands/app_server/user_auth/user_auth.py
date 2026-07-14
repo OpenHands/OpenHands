@@ -137,7 +137,9 @@ class UserAuth(ABC):
         user: UserGitInfo = await client.get_user()
         return user
 
-    async def ensure_managed_llm_key(self, settings: Settings) -> Settings:
+    async def ensure_managed_llm_key(
+        self, settings: Settings | None
+    ) -> Settings | None:
         """No-op default: only SaaS ``UserAuth`` implementations know how to
         verify and regenerate the managed LLM proxy key. Overrides must
         detect BYOR (``has_custom_llm_api_key``) and unmanaged
