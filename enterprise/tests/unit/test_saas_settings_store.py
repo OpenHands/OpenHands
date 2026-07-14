@@ -108,6 +108,36 @@ def test_member_settings_persist_full_effective_agent_settings():
     assert settings.conversation_settings.security_analyzer == 'llm'
 
 
+def test_persisted_mcp_config_exposes_only_mcp_secrets():
+    settings = Settings(
+        agent_settings={
+            'llm': {'model': 'test-model', 'api_key': 'llm-key'},
+            'mcp_config': {
+                'remote': {
+                    'url': 'https://mcp.example.com',
+                    'headers': {'Authorization': 'Bearer mcp-key'},
+                },
+                'local': {
+                    'command': 'mcp-server',
+                    'env': {'API_KEY': 'mcp-env-key'},
+                },
+            },
+        }
+    )
+
+    persisted = SaasSettingsStore._get_persisted_agent_settings(settings)
+    persisted_mcp = SaasSettingsStore._get_persisted_mcp_config(settings)
+
+    assert 'api_key' not in persisted['llm']
+    assert 'mcp_config' not in persisted
+    assert persisted_mcp is not None
+    assert persisted_mcp['remote']['auth'] == {
+        'strategy': 'bearer',
+        'value': 'mcp-key',
+    }
+    assert persisted_mcp['local']['env'] == {'API_KEY': 'mcp-env-key'}
+
+
 @pytest.fixture
 def settings_store(async_session_maker):
     store = SaasSettingsStore('5594c7b6-f959-4b81-92e9-b09c206f5081')
@@ -831,10 +861,10 @@ async def test_store_keeps_mcp_config_private_to_acting_member(
         }
 
     assert 'mcp_config' not in org.agent_settings
-    assert (
-        members[admin_user_id].agent_settings_diff.get('mcp_config')
-        == persisted_mcp_config
-    )
+    assert members[admin_user_id].mcp_config == persisted_mcp_config
+    assert 'mcp_config' not in members[admin_user_id].agent_settings_diff
+    assert members[member1_user_id].mcp_config is None
+    assert members[member2_user_id].mcp_config is None
     assert 'mcp_config' not in members[member1_user_id].agent_settings_diff
     assert 'mcp_config' not in members[member2_user_id].agent_settings_diff
 
@@ -918,14 +948,17 @@ async def test_store_calls_ensure_api_key_when_base_url_is_litellm_proxy(
 async def test_store_and_load_mcp_config_via_agent_settings(
     async_session_maker, org_with_multiple_members_fixture
 ):
-    """mcp_config is persisted inside agent_settings / agent_settings_diff and
-    round-trips correctly through store → load."""
+    """MCP config round-trips through encrypted member storage."""
     fixture = org_with_multiple_members_fixture
     admin_user_id = str(fixture['admin_user_id'])
 
     admin_mcp_config = {
         'mcpServers': {
-            'admin': {'url': 'https://admin-private-server.com', 'transport': 'sse'}
+            'admin': {
+                'url': 'https://admin-private-server.com',
+                'transport': 'sse',
+                'headers': {'Authorization': 'Bearer admin-secret'},
+            }
         },
     }
 
@@ -961,6 +994,65 @@ async def test_store_and_load_mcp_config_via_agent_settings(
         loaded.agent_settings.mcp_config['admin'].url
         == 'https://admin-private-server.com'
     )
+    auth = loaded.agent_settings.mcp_config['admin'].auth
+    assert auth is not None
+    assert auth.to_http_headers() == {'Authorization': 'Bearer admin-secret'}
+
+
+@pytest.mark.asyncio
+async def test_mcp_config_is_encrypted_at_rest(
+    async_session_maker, org_with_multiple_members_fixture
+):
+    """Keep MCP credentials out of raw database values."""
+    import json
+
+    from sqlalchemy import select, text
+    from storage.org_member import OrgMember
+
+    admin_user_id = org_with_multiple_members_fixture['admin_user_id']
+    settings = DataSettings(
+        agent_settings={
+            'llm': {
+                'model': 'test-model',
+                'base_url': 'http://non-litellm-url.com',
+                'api_key': 'test-api-key',
+            },
+            'mcp_config': {
+                'private': {
+                    'url': 'https://mcp.example.com',
+                    'headers': {'Authorization': 'Bearer database-secret'},
+                }
+            },
+        }
+    )
+    store = SaasSettingsStore(str(admin_user_id))
+
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await store.store(settings)
+
+    async with async_session_maker() as session:
+        rows = (
+            await session.execute(text('SELECT user_id, mcp_config FROM org_member'))
+        ).all()
+        raw = next(
+            value
+            for user_id, value in rows
+            if str(user_id).replace('-', '') == admin_user_id.hex
+        )
+        member = (
+            await session.execute(
+                select(OrgMember).where(OrgMember.user_id == admin_user_id)
+            )
+        ).scalar_one()
+
+    assert 'database-secret' not in raw
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(raw)
+    assert member.mcp_config is not None
+    assert member.mcp_config['private']['auth'] == {
+        'strategy': 'bearer',
+        'value': 'database-secret',
+    }
 
 
 @pytest.mark.asyncio
@@ -1275,6 +1367,106 @@ async def test_llm_profiles_are_encrypted_at_rest(
 
 
 @pytest.mark.asyncio
+async def test_partial_settings_store_preserves_existing_mcp_config(
+    session_maker, async_session_maker, org_with_multiple_members_fixture
+):
+    from sqlalchemy import select
+    from storage.org_member import OrgMember
+
+    admin_user_id = str(org_with_multiple_members_fixture['admin_user_id'])
+    org_id = org_with_multiple_members_fixture['org_id']
+    store = SaasSettingsStore(admin_user_id)
+
+    initial_settings = _make_settings(
+        model='test-model',
+        base_url='http://test-url.com',
+        api_key='test-key',
+        mcp_config={
+            'integration-hub': {
+                'url': 'https://mcp.example.com',
+                'headers': {'Authorization': 'Bearer secret'},
+            }
+        },
+    )
+    partial_settings = _make_settings(
+        model='updated-model',
+        base_url='http://test-url.com',
+        api_key='updated-key',
+    )
+
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await store.store(initial_settings)
+        await store.store(partial_settings)
+
+    with session_maker() as session:
+        member = session.execute(
+            select(OrgMember)
+            .where(OrgMember.org_id == org_id)
+            .where(
+                OrgMember.user_id == org_with_multiple_members_fixture['admin_user_id']
+            )
+        ).scalar_one()
+
+    assert member.mcp_config == {
+        'integration-hub': {
+            'url': 'https://mcp.example.com',
+            'auth': {'strategy': 'bearer', 'value': 'secret'},
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_partial_store_migrates_legacy_member_mcp_config(
+    session_maker, async_session_maker, org_with_multiple_members_fixture
+):
+    from sqlalchemy import select
+    from storage.org_member import OrgMember
+
+    fixture = org_with_multiple_members_fixture
+    org_id = fixture['org_id']
+    admin_user_id = fixture['admin_user_id']
+    legacy_config = {
+        'integration-hub': {
+            'url': 'https://mcp.example.com',
+            'auth': {'strategy': 'bearer', 'value': 'legacy-secret'},
+        }
+    }
+    async with async_session_maker() as session:
+        member = (
+            await session.execute(
+                select(OrgMember)
+                .where(OrgMember.org_id == org_id)
+                .where(OrgMember.user_id == admin_user_id)
+            )
+        ).scalar_one()
+        member.mcp_config = None
+        member.agent_settings_diff = {
+            **member.agent_settings_diff,
+            'mcp_config': legacy_config,
+        }
+        await session.commit()
+
+    settings = _make_settings(
+        model='updated-model',
+        base_url='http://test-url.com',
+        api_key='updated-key',
+    )
+    store = SaasSettingsStore(str(admin_user_id))
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await store.store(settings)
+
+    with session_maker() as session:
+        member = session.execute(
+            select(OrgMember)
+            .where(OrgMember.org_id == org_id)
+            .where(OrgMember.user_id == admin_user_id)
+        ).scalar_one()
+
+    assert member.mcp_config == legacy_config
+    assert 'mcp_config' not in member.agent_settings_diff
+
+
+@pytest.mark.asyncio
 async def test_store_replaces_mcp_config_on_delete(
     session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
@@ -1355,8 +1547,10 @@ async def test_store_replaces_mcp_config_on_delete(
     # The persisted ``mcp_config`` is the SDK 1.31.x flat server map (no
     # ``mcpServers`` wrapper), so reach directly into it instead of going
     # through the legacy wrapper key.
-    admin_servers = members[admin_user_id].agent_settings_diff.get('mcp_config', {})
+    admin_servers = members[admin_user_id].mcp_config or {}
     assert set(admin_servers.keys()) == {'server1', 'server2'}
+    assert 'mcp_config' not in members[admin_user_id].agent_settings_diff
+    assert members[member1_user_id].mcp_config is None
     assert 'mcp_config' not in members[member1_user_id].agent_settings_diff
 
 

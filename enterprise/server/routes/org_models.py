@@ -32,6 +32,8 @@ from openhands.sdk.settings import (
 
 logger = logging.getLogger(__name__)
 
+MEMBER_PRIVATE_AGENT_KEYS: frozenset[str] = frozenset({'mcp_config'})
+
 
 class OrgCreationError(Exception):
     """Base exception for organization creation errors."""
@@ -298,6 +300,9 @@ class OrgUpdate(BaseModel):
 
     def _normalize_agent_settings_diff(self) -> None:
         """Normalize nested LLM settings inside ``agent_settings_diff``."""
+        if self.agent_settings_diff is not None:
+            for key in MEMBER_PRIVATE_AGENT_KEYS:
+                self.agent_settings_diff.pop(key, None)
         llm_diff = self._get_agent_llm_diff()
         if llm_diff is None:
             return

@@ -155,7 +155,8 @@ def test_load_agent_profiles_defaults_empty_and_degrades():
 def test_member_mcp_config_degrades_on_non_validation_error():
     """coerce_mcp_config failures beyond ValidationError degrade to {}, not raise."""
     member = MagicMock(spec=OrgMember)
-    member.agent_settings_diff = {'mcp_config': {'mcpServers': {}}}
+    member.mcp_config = {'mcpServers': {}}
+    member.agent_settings_diff = {}
     with patch(
         'storage.agent_profile_resolution.coerce_mcp_config',
         side_effect=TypeError('contract drift'),
@@ -836,8 +837,8 @@ class TestPersistedVsResolvedSettingsView:
                     'model': 'gpt-4o',
                     'base_url': 'https://api.openai.com/v1',
                 },
-                'mcp_config': {'mcpServers': dict(MEMBER_MCP_SERVERS)},
             }
+            member.mcp_config = dict(MEMBER_MCP_SERVERS)
             await session.commit()
         return profile
 
@@ -888,7 +889,7 @@ class TestPersistedVsResolvedSettingsView:
             await store.store(settings)
 
         member = await _read_member(async_session_maker, org_id, USER_ID)
-        stored_mcp = member.agent_settings_diff.get('mcp_config') or {}
+        stored_mcp = member.mcp_config or {}
         assert set(stored_mcp) == {'a', 'b', 'c'}
 
     @pytest.mark.asyncio
