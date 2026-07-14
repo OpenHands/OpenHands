@@ -182,6 +182,13 @@ export function MarketplaceModal({
           </label>
           <input
             type="text"
+            // A source like "github:owner/repo" is case-sensitive and must not be
+            // mangled by mobile keyboard autocapitalization/autocorrect (which
+            // turns "github:" into "Github:" and breaks source parsing).
+            autoCapitalize="none"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
             value={source}
             onChange={(e) => {
               const nextSource = e.target.value;
@@ -271,6 +278,11 @@ export function MarketplaceModal({
           </label>
           <input
             type="text"
+            // Branch/tag/commit refs are case-sensitive; keep autocorrect off.
+            autoCapitalize="none"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
             value={ref}
             onChange={(e) => setRef(e.target.value)}
             placeholder="e.g., main, develop, v1.0.0"
@@ -288,6 +300,11 @@ export function MarketplaceModal({
           </label>
           <input
             type="text"
+            // Repository subdirectory paths are case-sensitive; keep autocorrect off.
+            autoCapitalize="none"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
             value={repoPath}
             onChange={(e) => {
               setRepoPath(e.target.value);

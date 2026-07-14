@@ -40,6 +40,25 @@ describe("MarketplaceModal", () => {
     ).toBeInTheDocument();
   });
 
+  it("disables autocapitalize/autocorrect on case-sensitive source, ref and repo path inputs", () => {
+    render(<MarketplaceModal {...baseProps} />);
+
+    // A "github:owner/repo" source, a ref, and a repo subpath are all
+    // case-sensitive; mobile keyboard autocapitalization must not mangle them
+    // (e.g. turning "github:" into "Github:", which breaks parsing).
+    const caseSensitiveInputs = [
+      screen.getByPlaceholderText("github:owner/repo"),
+      screen.getByPlaceholderText("e.g., main, develop, v1.0.0"),
+      screen.getByPlaceholderText("e.g., marketplaces/internal"),
+    ];
+
+    caseSensitiveInputs.forEach((input) => {
+      expect(input).toHaveAttribute("autocapitalize", "none");
+      expect(input).toHaveAttribute("autocorrect", "off");
+      expect(input).toHaveAttribute("spellcheck", "false");
+    });
+  });
+
   it("shows name required error when name is empty", async () => {
     render(<MarketplaceModal {...baseProps} />);
     const user = userEvent.setup();
