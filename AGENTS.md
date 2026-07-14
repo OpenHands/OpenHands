@@ -159,22 +159,6 @@ Frontend:
   - For SaaS organization management screens, prefer deriving the selected organization from `useOrganizations()` plus the selected org ID store instead of adding a dedicated single-org fetch when only list-level fields (for example `name`) are needed.
 
 
-VSCode Extension:
-- Located in the `openhands/app_server/integrations/vscode` directory
-- Setup: Run `npm install` in the extension directory
-- Linting:
-  - Run linting with fixes: `npm run lint:fix`
-  - Check only: `npm run lint`
-  - Type checking: `npm run typecheck`
-- Building:
-  - Compile TypeScript: `npm run compile`
-  - Package extension: `npm run package-vsix`
-- Testing:
-  - Run tests: `npm run test`
-- Development Best Practices:
-  - Use `vscode.window.createOutputChannel()` for debug logging instead of `showErrorMessage()` popups
-  - Pre-commit process runs both frontend and backend checks when committing extension changes
-
 ## Enterprise Directory
 
 The `enterprise/` directory contains additional functionality that extends the open-source OpenHands codebase. This includes:
@@ -329,13 +313,16 @@ vi.mock("#/hooks/use-agent-state", () => ({
 }));
 ```
 
-### Microagents
+### Skills and Microagents
 
 Microagents are specialized prompts that enhance OpenHands with domain-specific knowledge and task-specific workflows. They are Markdown files that can include frontmatter for configuration.
 
-#### Types:
-- **Public Microagents**: Located in `microagents/`, available to all users
-- **Repository Microagents**: Located in `.openhands/microagents/`, specific to this repository
+#### Sources:
+- **Global skills**: Bundled with OpenHands
+- **User skills**: Located in `~/.openhands/skills/`
+- **Organization skills**: Loaded from an organization's `.openhands` repository
+- **Repository skills**: Loaded from `.agents/skills/`, `.openhands/microagents/`, and legacy `.openhands/skills/`
+- **This repository's guidance**: Located in `.openhands/microagents/`
 
 #### Loading Behavior:
 - **Without frontmatter**: Always loaded into LLM context
@@ -355,11 +342,11 @@ Your specialized knowledge and instructions here...
 ### Frontend
 
 #### Action Handling:
-- Actions are defined in `frontend/src/types/action-type.ts`
-- The `HANDLED_ACTIONS` array in `frontend/src/state/chat-slice.ts` determines which actions are displayed as collapsible UI elements
+- Action identifiers used by the client are defined in `frontend/src/types/action-type.tsx`
+- Event visibility and content are handled under `frontend/src/components/features/chat/event-content-helpers/`
 - To add a new action type to the UI:
-  1. Add the action type to the `HANDLED_ACTIONS` array
-  2. Implement the action handling in `addAssistantAction` function in chat-slice.ts
+  1. Add the client action identifier when needed
+  2. Update `get-action-content.ts` and `should-render-event.ts` for its content and visibility
   3. Add a translation key in the format `ACTION_MESSAGE$ACTION_NAME` to the i18n files
 - Actions with `thought` property are displayed in the UI based on their action type:
   - Regular actions (like "run", "edit") display the thought as a separate message
@@ -412,65 +399,18 @@ There are two main patterns for saving settings in the OpenHands frontend:
 
 ### Adding New LLM Models
 
-To add a new LLM model to OpenHands, you need to update multiple files across both frontend and backend:
+The verified-model catalog is owned by `openhands-sdk` in `openhands.sdk.llm.utils.verified_models`. The app imports that catalog in `openhands/app_server/utils/llm.py`; SaaS can override the managed OpenHands model list from its database. The frontend does not maintain verified-model arrays and receives the structured catalog from `/api/options/models` through `frontend/src/api/option-service/option-service.api.ts`.
 
 #### Model Configuration Procedure:
 
-1. **Frontend Model Arrays** (`frontend/src/utils/verified-models.ts`):
-   - Add the model to `VERIFIED_MODELS` array (main list of all verified models)
-   - Add to provider-specific arrays based on the model's provider:
-     - `VERIFIED_OPENAI_MODELS` for OpenAI models
-     - `VERIFIED_ANTHROPIC_MODELS` for Anthropic models
-     - `VERIFIED_MISTRAL_MODELS` for Mistral models
-     - `VERIFIED_OPENHANDS_MODELS` for models available through OpenHands provider
-
-2. **Backend CLI Integration** (`openhands/cli/utils.py`):
-   - Add the model to the appropriate `VERIFIED_*_MODELS` arrays
-   - This ensures the model appears in CLI model selection
-
-3. **Backend Model List** (`openhands/utils/llm.py`):
-   - **CRITICAL**: Add the model to the `openhands_models` list (lines 57-66) if using OpenHands provider
-   - This is required for the model to appear in the frontend model selector
-   - Format: `'openhands/model-name'` (e.g., `'openhands/o3'`)
-
-4. **Backend LLM Configuration** (`openhands/llm/llm.py`):
-   - Add to feature-specific arrays based on model capabilities:
-     - `FUNCTION_CALLING_SUPPORTED_MODELS` if the model supports function calling
-     - `REASONING_EFFORT_SUPPORTED_MODELS` if the model supports reasoning effort parameters
-     - `CACHE_PROMPT_SUPPORTED_MODELS` if the model supports prompt caching
-     - `MODELS_WITHOUT_STOP_WORDS` if the model doesn't support stop words
-
-5. **Validation**:
+1. Update the verified-model and provider data in the `openhands-sdk` source package, including its tests.
+2. If app-specific model discovery changes, update `openhands/app_server/utils/llm.py` and its tests.
+3. Confirm `/api/options/models` returns the expected `models`, `verified_models`, `verified_providers`, and `default_model` fields.
+4. Validate the frontend model selector against that response rather than adding a frontend-only list.
+5. Run the relevant checks:
    - Run backend linting: `pre-commit run --config ./dev_config/python/.pre-commit-config.yaml`
    - Run frontend linting: `cd frontend && npm run lint:fix`
    - Run frontend build: `cd frontend && npm run build`
-
-#### Model Verification Arrays:
-
-- **VERIFIED_MODELS**: Main array of all verified models shown in the UI
-- **VERIFIED_OPENAI_MODELS**: OpenAI models (LiteLLM doesn't return provider prefix)
-- **VERIFIED_ANTHROPIC_MODELS**: Anthropic models (LiteLLM doesn't return provider prefix)
-- **VERIFIED_MISTRAL_MODELS**: Mistral models (LiteLLM doesn't return provider prefix)
-- **VERIFIED_OPENHANDS_MODELS**: Models available through OpenHands managed provider
-
-#### Model Feature Support Arrays:
-
-- **FUNCTION_CALLING_SUPPORTED_MODELS**: Models that support structured function calling
-- **REASONING_EFFORT_SUPPORTED_MODELS**: Models that support reasoning effort parameters (like o1, o3)
-- **CACHE_PROMPT_SUPPORTED_MODELS**: Models that support prompt caching for efficiency
-- **MODELS_WITHOUT_STOP_WORDS**: Models that don't support stop word parameters
-
-#### Frontend Model Integration:
-
-- Models are automatically available in the model selector UI once added to verified arrays
-- The `extractModelAndProvider` utility automatically detects provider from model arrays
-- Provider-specific models are grouped and prioritized in the UI selection
-
-#### CLI Model Integration:
-
-- Models appear in CLI provider selection based on the verified arrays
-- The `organize_models_and_providers` function groups models by provider
-- Default model selection prioritizes verified models for each provider
 
 ### Environment Variable Enable Toggles
 
