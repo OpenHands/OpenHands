@@ -259,6 +259,39 @@ class TestInitTavilyProxy:
                 'Tavily MCP proxy initialized successfully'
             )
 
+    def test_init_tavily_proxy_redacts_api_key_from_errors(self):
+        """Test init_tavily_proxy does not log the Tavily API key on failure."""
+        with (
+            patch(
+                'openhands.app_server.mcp.mcp_router.get_global_config'
+            ) as mock_config,
+            patch('openhands.app_server.mcp.mcp_router.logger') as mock_logger,
+            patch('openhands.app_server.mcp.mcp_router.Client') as mock_client,
+            patch(
+                'openhands.app_server.mcp.mcp_router.StreamableHttpTransport'
+            ) as mock_transport,
+            patch(
+                'openhands.app_server.mcp.mcp_router.create_proxy'
+            ) as mock_create_proxy,
+            patch('openhands.app_server.mcp.mcp_router.mcp_server') as mock_mcp_server,
+        ):
+            mock_config.return_value.tavily_api_key = 'test-tavily-key'
+            mock_transport_instance = MagicMock()
+            mock_transport.return_value = mock_transport_instance
+            mock_client_instance = MagicMock()
+            mock_client.return_value = mock_client_instance
+            mock_create_proxy.side_effect = RuntimeError(
+                'connect failed: https://mcp.tavily.com/mcp/?tavilyApiKey=test-tavily-key&x=1'
+            )
+
+            init_tavily_proxy()
+
+            mock_mcp_server.mount.assert_not_called()
+            mock_logger.error.assert_called_once()
+            logged_message = mock_logger.error.call_args.args[0]
+            assert 'test-tavily-key' not in logged_message
+            assert 'tavilyApiKey=<redacted>' in logged_message
+
     def test_init_tavily_proxy_handles_exception(self):
         """Test init_tavily_proxy handles exceptions gracefully."""
         with (

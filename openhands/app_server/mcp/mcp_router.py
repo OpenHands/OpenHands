@@ -46,6 +46,11 @@ HOST = f'https://{os.getenv("WEB_HOST", "app.all-hands.dev").strip()}'
 CONVERSATION_URL = HOST + '/conversations/{}'
 
 
+def _redact_tavily_api_key(value: str) -> str:
+    """Redact the Tavily MCP API key from loggable strings."""
+    return re.sub(r'(tavilyApiKey=)[^&\s]+', r'\1<redacted>', value)
+
+
 def init_tavily_proxy() -> None:
     """Initialize the Tavily MCP proxy if API key is configured.
 
@@ -72,7 +77,9 @@ def init_tavily_proxy() -> None:
         mcp_server.mount(namespace='tavily', server=proxy_server)
         logger.info('Tavily MCP proxy initialized successfully')
     except Exception as e:
-        logger.error(f'Failed to initialize Tavily MCP proxy: {e}')
+        logger.error(
+            f'Failed to initialize Tavily MCP proxy: {_redact_tavily_api_key(str(e))}'
+        )
 
 
 async def get_conversation_link(
