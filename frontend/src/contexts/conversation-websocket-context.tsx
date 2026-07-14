@@ -49,7 +49,7 @@ import type {
 import EventService from "#/api/event-service/event-service.api";
 import PendingMessageService from "#/api/pending-message-service/pending-message-service.api";
 import { useConversationStore } from "#/stores/conversation-store";
-import { isBudgetOrCreditError, trackError } from "#/utils/error-handler";
+import { classifyBudgetOrCreditError, trackError } from "#/utils/error-handler";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore from "#/stores/metrics-store";
 import { I18nKey } from "#/i18n/declaration";
@@ -76,6 +76,18 @@ interface ConversationWebSocketContextType {
 const ConversationWebSocketContext = createContext<
   ConversationWebSocketContextType | undefined
 >(undefined);
+
+const getBudgetErrorMessageKey = (errorMessage: string) => {
+  const errorType = classifyBudgetOrCreditError(errorMessage);
+  if (errorType === "credit") {
+    return I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS;
+  }
+  if (errorType === "budget") {
+    return I18nKey.STATUS$ERROR_BUDGET_LIMIT_REACHED;
+  }
+  return null;
+};
+
 
 export function ConversationWebSocketProvider({
   children,
@@ -398,8 +410,9 @@ export function ConversationWebSocketProvider({
                 errorCode: errorEvent.code,
               },
             });
-            if (isBudgetOrCreditError(errorEvent.detail)) {
-              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+            const budgetErrorKey = getBudgetErrorMessageKey(errorEvent.detail);
+            if (budgetErrorKey) {
+              setErrorMessage(budgetErrorKey);
             } else {
               setErrorMessage(errorEvent.detail);
             }
@@ -419,8 +432,9 @@ export function ConversationWebSocketProvider({
               },
             });
             // Use friendly i18n message for budget/credit errors instead of raw error
-            if (isBudgetOrCreditError(event.error)) {
-              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+            const budgetErrorKey = getBudgetErrorMessageKey(event.error);
+            if (budgetErrorKey) {
+              setErrorMessage(budgetErrorKey);
             } else {
               setErrorMessage(event.error);
             }
@@ -592,8 +606,9 @@ export function ConversationWebSocketProvider({
                 errorCode: errorEvent.code,
               },
             });
-            if (isBudgetOrCreditError(errorEvent.detail)) {
-              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+            const budgetErrorKey = getBudgetErrorMessageKey(errorEvent.detail);
+            if (budgetErrorKey) {
+              setErrorMessage(budgetErrorKey);
             } else {
               setErrorMessage(errorEvent.detail);
             }
@@ -613,8 +628,9 @@ export function ConversationWebSocketProvider({
               },
             });
             // Use friendly i18n message for budget/credit errors instead of raw error
-            if (isBudgetOrCreditError(event.error)) {
-              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+            const budgetErrorKey = getBudgetErrorMessageKey(event.error);
+            if (budgetErrorKey) {
+              setErrorMessage(budgetErrorKey);
             } else {
               setErrorMessage(event.error);
             }
