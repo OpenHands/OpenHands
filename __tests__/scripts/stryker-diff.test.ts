@@ -113,6 +113,7 @@ describe("Stryker diff runner", () => {
     const changedFiles = [
       "src/keep.ts",
       "src/keep.tsx",
+      "src/a.test.ts.helper.ts",
       "src\\windows\\keep.ts",
       "src/keep.js",
       "src/looks-like.ts.backup",
@@ -125,6 +126,7 @@ describe("Stryker diff runner", () => {
       "src/fixtures/a.ts",
       "src/mocks/a.ts",
       "src/__tests__/a.ts",
+      "src/test/a.ts",
       "src/x/__snapshots__/a.ts",
       "src/generated/a.ts",
       "src/a.gen.ts",
@@ -138,7 +140,7 @@ describe("Stryker diff runner", () => {
     );
 
     expect(result.calls[1]?.args.at(-1)).toBe(
-      "src/keep.ts,src/keep.tsx,src\\windows\\keep.ts",
+      "src/keep.ts,src/keep.tsx,src/a.test.ts.helper.ts,src\\windows\\keep.ts",
     );
   });
 
