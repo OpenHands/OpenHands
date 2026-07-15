@@ -34,7 +34,6 @@ from server.middleware import (  # noqa: E402
     SetAuthCookieMiddleware,
 )
 from server.rate_limit import setup_rate_limit_handler  # noqa: E402
-from server.routes.agent_canvas import add_agent_canvas_proxy_routes  # noqa: E402
 from server.routes.agent_profiles import router as agent_profiles_router  # noqa: E402
 from server.routes.analytics_events import analytics_events_router  # noqa: E402
 from server.routes.api_keys import api_router as api_keys_router  # noqa: E402
@@ -218,7 +217,6 @@ base_app.add_middleware(
 )
 base_app.add_middleware(CacheControlMiddleware)
 base_app.middleware('http')(SetAuthCookieMiddleware())
-add_agent_canvas_proxy_routes(base_app)
 
 
 base_app.mount('/', SPAStaticFiles(directory=directory, html=True), name='dist')

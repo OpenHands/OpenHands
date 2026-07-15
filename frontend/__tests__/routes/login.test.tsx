@@ -404,6 +404,18 @@ describe("LoginPage", () => {
       });
     });
 
+    it("should hard reload authenticated users to Canvas redirect destination", async () => {
+      vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
+
+      render(<RouterStub initialEntries={["/login?redirect=/canvas"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(window.location.assign).toHaveBeenCalledWith("/canvas");
+      });
+    });
+
     it("should hard reload authenticated users to same-origin absolute Canvas returnTo destination", async () => {
       vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
 

@@ -18,7 +18,8 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const returnTo = searchParams.get("returnTo") || "/";
+  const returnTo =
+    searchParams.get("returnTo") || searchParams.get("redirect") || "/";
   const locationState = location.state as LocationState | null;
 
   const config = useConfig();

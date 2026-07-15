@@ -753,7 +753,8 @@ def _extract_login_inner_return_to(relative_url: str) -> str | None:
     parsed = urlparse(relative_url)
     if parsed.path != '/login':
         return None
-    inner = parse_qs(parsed.query).get('returnTo')
+    query = parse_qs(parsed.query)
+    inner = query.get('returnTo') or query.get('redirect')
     if not inner:
         return None
     value = inner[0]

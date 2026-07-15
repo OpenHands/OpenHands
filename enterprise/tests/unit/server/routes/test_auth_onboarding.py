@@ -458,6 +458,14 @@ class TestBuildPostLoginRedirect:
 
         assert result == 'https://example.com/canvas?login_method=github'
 
+    def test_unwraps_automation_style_redirect_param_to_canvas(self):
+        result = _build_post_login_redirect(
+            'https://example.com/login?redirect=%2Fcanvas',
+            'https://example.com',
+        )
+
+        assert result == 'https://example.com/canvas'
+
     def test_preserves_non_login_redirect(self):
         result = _build_post_login_redirect(
             'https://example.com/settings',
