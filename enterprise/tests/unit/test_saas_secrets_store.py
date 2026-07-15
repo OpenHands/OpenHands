@@ -9,7 +9,8 @@ from pydantic import SecretStr
 from storage.saas_secrets_store import SaasSecretsStore
 from storage.stored_custom_secrets import StoredCustomSecrets
 
-from openhands.app_server.integrations.provider import CustomSecret
+from openhands.app_server.integrations.provider import CustomSecret, ProviderToken
+from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.utils.encryption_key import EncryptionKey
@@ -106,6 +107,50 @@ class TestSaasSecretsStore:
 
         assert updated is False
         assert await secrets_store.get_custom_secret_value('CODEX_AUTH_JSON') == current
+
+    @pytest.mark.asyncio
+    @patch(
+        'storage.saas_secrets_store.UserStore.get_user_by_id',
+        new_callable=AsyncMock,
+    )
+    async def test_stale_provider_update_preserves_rotated_custom_secret(
+        self, mock_get_user, secrets_store, mock_user
+    ):
+        mock_get_user.return_value = mock_user
+        original = '{"tokens":{"refresh_token":"r0"}}'
+        rotated = '{"tokens":{"refresh_token":"r1"}}'
+        await secrets_store.store(
+            Secrets(
+                custom_secrets=MappingProxyType(
+                    {
+                        'CODEX_AUTH_JSON': CustomSecret.from_value(
+                            {'secret': original, 'description': 'Codex login'}
+                        )
+                    }
+                )
+            )
+        )
+        stale_store = SaasSecretsStore('user-id', secrets_store._jwt_svc)
+        stale = await stale_store.load()
+        assert stale is not None
+
+        assert await secrets_store.compare_and_swap_custom_secret(
+            'CODEX_AUTH_JSON', hashlib.sha256(original.encode()).hexdigest(), rotated
+        )
+        provider_update = stale.model_copy(
+            update={
+                'provider_tokens': MappingProxyType(
+                    {
+                        ProviderType.GITHUB: ProviderToken(
+                            token=SecretStr('github-token')
+                        )
+                    }
+                )
+            }
+        )
+        await stale_store.store(provider_update)
+
+        assert await stale_store.get_custom_secret_value('CODEX_AUTH_JSON') == rotated
 
     @pytest.mark.asyncio
     @patch(

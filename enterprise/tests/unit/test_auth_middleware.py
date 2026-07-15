@@ -161,17 +161,26 @@ async def test_middleware_no_auth_at_all(middleware, mock_request):
 
 
 @pytest.mark.asyncio
-async def test_middleware_defers_codex_refresh_auth(
-    middleware, mock_request, mock_response
+@pytest.mark.parametrize(
+    ('method', 'suffix'),
+    (
+        ('GET', 'codex-auth'),
+        ('HEAD', 'codex-auth'),
+        ('PUT', 'codex-auth'),
+        ('DELETE', 'codex-auth'),
+        ('POST', 'codex-auth/refresh'),
+    ),
+)
+async def test_middleware_defers_codex_auth(
+    middleware, mock_request, mock_response, method, suffix
 ):
     mock_request.cookies = {}
     mock_request.headers = {'Authorization': 'Basic scoped-credentials'}
-    mock_request.method = 'POST'
+    mock_request.method = method
     mock_request.url = MagicMock()
     mock_request.url.hostname = 'localhost'
     mock_request.url.path = (
-        '/api/internal/conversations/'
-        '11111111-1111-1111-1111-111111111111/codex-auth/refresh'
+        f'/api/internal/conversations/11111111-1111-1111-1111-111111111111/{suffix}'
     )
     mock_call_next = AsyncMock(return_value=mock_response)
 

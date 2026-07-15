@@ -51,6 +51,8 @@ class _CodexAuthScope:
     org_id: UUID
     sandbox_id: str
     conversation_id: UUID
+    token_digest: str
+    expires_at: int
 
     @property
     def refresh_lock_key(self) -> str:
@@ -58,17 +60,23 @@ class _CodexAuthScope:
         scope_digest = hashlib.sha256(scope.encode()).hexdigest()
         return f'codex-auth-refresh:{scope_digest}'
 
+    @property
+    def revocation_key(self) -> str:
+        return f'codex-auth-revoked:{self.token_digest}'
+
 
 async def _authorize(
     conversation_id: UUID,
     session_api_key: str | None,
     codex_auth_token: str | None,
     jwt_service: JwtService,
+    *,
+    allow_revoked: bool = False,
 ) -> _CodexAuthScope:
     if not codex_auth_token:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
-            detail='X-Codex-Auth-Token header is required',
+            detail='X-OH-Codex header is required',
         )
     sandbox = await validate_session_key(session_api_key)
     try:
@@ -77,6 +85,7 @@ async def _authorize(
         user_id = str(claims['user_id'])
         sandbox_id = str(claims['sandbox_id'])
         scoped_conversation_id = UUID(str(claims['conversation_id']))
+        expires_at = int(claims['exp'])
     except (KeyError, TypeError, ValueError, jwt.InvalidTokenError) as exc:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, detail='Invalid Codex auth token'
@@ -91,12 +100,45 @@ async def _authorize(
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, detail='Codex auth token scope mismatch'
         )
-    return _CodexAuthScope(
+    scope = _CodexAuthScope(
         user_id=user_id,
         org_id=org_id,
         sandbox_id=sandbox_id,
         conversation_id=conversation_id,
+        token_digest=hashlib.sha256(codex_auth_token.encode()).hexdigest(),
+        expires_at=expires_at,
     )
+    if not allow_revoked:
+        redis: Any = get_redis_client_async()
+        try:
+            revoked = await redis.get(scope.revocation_key)
+        except redis_exceptions.RedisError as exc:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail='Codex credential authorization is unavailable',
+            ) from exc
+        if revoked is not None:
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED,
+                detail='Codex auth token has been revoked',
+            )
+    return scope
+
+
+async def _revoke(scope: _CodexAuthScope) -> None:
+    redis: Any = get_redis_client_async()
+    try:
+        await redis.set(
+            scope.revocation_key,
+            '1',
+            ex=max(1, scope.expires_at - int(time.time())),
+            nx=False,
+        )
+    except redis_exceptions.RedisError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='Codex credential authorization is unavailable',
+        ) from exc
 
 
 @asynccontextmanager
@@ -299,13 +341,11 @@ def _refresh_error(response: httpx.Response) -> dict[str, Any]:
 @router.get('/{conversation_id}/codex-auth', include_in_schema=False)
 async def get_codex_auth(
     conversation_id: UUID,
-    x_session_api_key: str | None = Header(None),
-    x_codex_auth_token: str | None = Header(None),
+    x_oh_sandbox: str | None = Header(None),
+    x_oh_codex: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    scope = await _authorize(
-        conversation_id, x_session_api_key, x_codex_auth_token, jwt_service
-    )
+    scope = await _authorize(conversation_id, x_oh_sandbox, x_oh_codex, jwt_service)
     store = await _get_store(scope)
     value = await store.get_custom_secret_value(_SECRET_NAME)
     if value is None:
@@ -327,13 +367,11 @@ async def get_codex_auth(
 @router.head('/{conversation_id}/codex-auth', include_in_schema=False)
 async def touch_codex_auth(
     conversation_id: UUID,
-    x_session_api_key: str | None = Header(None),
-    x_codex_auth_token: str | None = Header(None),
+    x_oh_sandbox: str | None = Header(None),
+    x_oh_codex: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    scope = await _authorize(
-        conversation_id, x_session_api_key, x_codex_auth_token, jwt_service
-    )
+    scope = await _authorize(conversation_id, x_oh_sandbox, x_oh_codex, jwt_service)
     store = await _get_store(scope)
     value = await store.get_custom_secret_value(_SECRET_NAME)
     if value is None:
@@ -351,13 +389,11 @@ async def touch_codex_auth(
 async def update_codex_auth(
     conversation_id: UUID,
     request: Request,
-    x_session_api_key: str | None = Header(None),
-    x_codex_auth_token: str | None = Header(None),
+    x_oh_sandbox: str | None = Header(None),
+    x_oh_codex: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    scope = await _authorize(
-        conversation_id, x_session_api_key, x_codex_auth_token, jwt_service
-    )
+    scope = await _authorize(conversation_id, x_oh_sandbox, x_oh_codex, jwt_service)
     expected_digest, value = await _parse_update(request)
     async with _credential_lock(scope):
         store = await _get_store(scope)
@@ -460,11 +496,16 @@ async def refresh_codex_auth(
 @router.delete('/{conversation_id}/codex-auth', include_in_schema=False)
 async def release_codex_auth(
     conversation_id: UUID,
-    x_session_api_key: str | None = Header(None),
-    x_codex_auth_token: str | None = Header(None),
+    x_oh_sandbox: str | None = Header(None),
+    x_oh_codex: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    await _authorize(
-        conversation_id, x_session_api_key, x_codex_auth_token, jwt_service
+    scope = await _authorize(
+        conversation_id,
+        x_oh_sandbox,
+        x_oh_codex,
+        jwt_service,
+        allow_revoked=True,
     )
+    await _revoke(scope)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

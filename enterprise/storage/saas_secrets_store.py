@@ -5,7 +5,7 @@ import hmac
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from storage.database import a_session_maker
 from storage.stored_custom_secrets import StoredCustomSecrets
 from storage.user_store import UserStore
@@ -26,6 +26,9 @@ class SaasSecretsStore(SecretsStore):
     # (user_id, org_id), so the effective org must flow through here for
     # the right rows to be read/written.
     effective_org_id: UUID | None = None
+    _loaded_custom_secrets: dict[UUID | None, dict[str, tuple[str, str | None]]] = (
+        field(default_factory=dict, init=False, repr=False)
+    )
 
     async def get_custom_secret_value(self, secret_name: str) -> str | None:
         user = await UserStore.get_user_by_id(self.user_id)
@@ -90,6 +93,7 @@ class SaasSecretsStore(SecretsStore):
             settings = result.scalars().all()
 
             if not settings:
+                self._loaded_custom_secrets[org_id] = {}
                 return Secrets()
 
             kwargs = {}
@@ -100,6 +104,10 @@ class SaasSecretsStore(SecretsStore):
                 }
 
             self._decrypt_kwargs(kwargs)
+            self._loaded_custom_secrets[org_id] = {
+                name: (value['secret'], value.get('description'))
+                for name, value in kwargs.items()
+            }
 
             return Secrets(custom_secrets=kwargs)  # type: ignore[arg-type]
 
@@ -108,47 +116,70 @@ class SaasSecretsStore(SecretsStore):
         if user is None:
             raise ValueError(f'User not found: {self.user_id}')
         org_id = self.effective_org_id or user.current_org_id
+        desired = {
+            name: (secret.secret.get_secret_value(), secret.description)
+            for name, secret in item.custom_secrets.items()
+        }
 
         async with a_session_maker() as session:
-            # Incoming secrets are always the most updated ones
-            # Delete existing records for this user AND organization only
-            # org_id is always set: it's either the effective org from
-            # the request or the user's non-nullable current_org_id.
-            delete_query = delete(StoredCustomSecrets).filter(
-                StoredCustomSecrets.keycloak_user_id == self.user_id,
-                StoredCustomSecrets.org_id == org_id,
-            )
-            await session.execute(delete_query)
-
-            # Prepare the new secrets data
-            kwargs = item.model_dump(context={'expose_secrets': True})
-            del kwargs[
-                'provider_tokens'
-            ]  # Assuming provider_tokens is not part of custom_secrets
-            self._encrypt_kwargs(kwargs)
-
-            secrets_json = kwargs.get('custom_secrets', {})
-
-            # Extract the secrets into tuples for insertion or updating
-            secret_tuples = []
-            for secret_name, secret_info in secrets_json.items():
-                secret_value = secret_info.get('secret')
-                description = secret_info.get('description')
-
-                secret_tuples.append((secret_name, secret_value, description))
-
-            # Add the new secrets
-            for secret_name, secret_value, description in secret_tuples:
-                new_secret = StoredCustomSecrets(
-                    keycloak_user_id=self.user_id,
-                    org_id=org_id,
-                    secret_name=secret_name,
-                    secret_value=secret_value,
-                    description=description,
+            result = await session.execute(
+                select(StoredCustomSecrets)
+                .filter(
+                    StoredCustomSecrets.keycloak_user_id == self.user_id,
+                    StoredCustomSecrets.org_id == org_id,
                 )
-                session.add(new_secret)
+                .with_for_update()
+            )
+            stored_by_name = {row.secret_name: row for row in result.scalars().all()}
+            current = {
+                name: (
+                    self._jwt_svc.decrypt_value(row.secret_value),
+                    self._jwt_svc.decrypt_value(row.description)
+                    if row.description is not None
+                    else None,
+                )
+                for name, row in stored_by_name.items()
+            }
+            baseline = self._loaded_custom_secrets.get(org_id, current)
+            changed_names = {
+                name
+                for name in baseline.keys() | desired.keys()
+                if baseline.get(name) != desired.get(name)
+            }
+
+            for name in changed_names:
+                stored = stored_by_name.get(name)
+                updated = desired.get(name)
+                if updated is None:
+                    if stored is not None:
+                        await session.delete(stored)
+                    current.pop(name, None)
+                    continue
+
+                value, description = updated
+                encrypted_value = self._jwt_svc.encrypt_value(value)
+                encrypted_description = (
+                    self._jwt_svc.encrypt_value(description)
+                    if description is not None
+                    else None
+                )
+                if stored is None:
+                    session.add(
+                        StoredCustomSecrets(
+                            keycloak_user_id=self.user_id,
+                            org_id=org_id,
+                            secret_name=name,
+                            secret_value=encrypted_value,
+                            description=encrypted_description,
+                        )
+                    )
+                else:
+                    stored.secret_value = encrypted_value
+                    stored.description = encrypted_description
+                current[name] = updated
 
             await session.commit()
+            self._loaded_custom_secrets[org_id] = current
 
     def _decrypt_kwargs(self, kwargs: dict):
         for key, value in kwargs.items():

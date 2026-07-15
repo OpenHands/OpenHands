@@ -4154,9 +4154,11 @@ class TestBuildAcpStartConversationRequestSecrets:
             f'{request.conversation_id}/codex-auth'
         )
         assert scoped.headers == {
-            'X-Session-API-Key': 'session-key',
-            'X-Codex-Auth-Token': 'scoped-token',
+            'X-OH-Sandbox': 'session-key',
+            'X-OH-Codex': 'scoped-token',
         }
+        restored = LookupSecret.model_validate_json(scoped.model_dump_json())
+        assert restored.headers == scoped.headers
         assert scoped.description == 'Codex login'
         service.jwt_service.create_jws_token.assert_called_once_with(
             payload={

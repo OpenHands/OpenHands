@@ -73,6 +73,13 @@ def jwt_service():
     )
 
 
+@pytest.fixture(autouse=True)
+def fake_redis(monkeypatch):
+    redis = _FakeRedis()
+    monkeypatch.setattr(codex_auth, 'get_redis_client_async', lambda: redis)
+    return redis
+
+
 @pytest.fixture
 def app(jwt_service):
     app = FastAPI()
@@ -108,8 +115,8 @@ def _token(jwt_service: JwtService, conversation_id: UUID, sandbox_id: str) -> s
 
 def _headers(jwt_service, conversation_id, sandbox_id):
     return {
-        'X-Session-API-Key': f'session-{sandbox_id}',
-        'X-Codex-Auth-Token': _token(jwt_service, conversation_id, sandbox_id),
+        'X-OH-Sandbox': f'session-{sandbox_id}',
+        'X-OH-Codex': _token(jwt_service, conversation_id, sandbox_id),
     }
 
 
@@ -173,6 +180,20 @@ def test_rotation_is_returned_to_next_conversation(app, jwt_service):
             headers=first_headers,
         )
         assert response.status_code == 204
+        assert (
+            client.get(
+                f'/api/internal/conversations/{first_id}/codex-auth',
+                headers=first_headers,
+            ).status_code
+            == 401
+        )
+        assert (
+            client.delete(
+                f'/api/internal/conversations/{first_id}/codex-auth',
+                headers=first_headers,
+            ).status_code
+            == 204
+        )
 
         response = client.get(
             f'/api/internal/conversations/{second_id}/codex-auth',

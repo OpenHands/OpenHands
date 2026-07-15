@@ -36,6 +36,16 @@ class ResolverUserContext(UserContext):
     async def get_user_email(self) -> str | None:
         return await self.saas_user_auth.get_user_email()
 
+    async def get_effective_org_id(self) -> UUID | None:
+        if self.resolver_org_id is not None:
+            return self.resolver_org_id
+        get_effective_org_id = getattr(
+            self.saas_user_auth, 'get_effective_org_id', None
+        )
+        if callable(get_effective_org_id):
+            return await get_effective_org_id()
+        return None
+
     async def get_user_info(
         self,
         *,

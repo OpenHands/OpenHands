@@ -196,10 +196,15 @@ class SetAuthCookieMiddleware:
 
         parts = path.split('/')
         if (
-            request.method == 'POST'
-            and len(parts) == 7
+            len(parts) in (6, 7)
             and parts[1:4] == ['api', 'internal', 'conversations']
-            and parts[5:] == ['codex-auth', 'refresh']
+            and (
+                (
+                    parts[5:] == ['codex-auth']
+                    and request.method in {'GET', 'HEAD', 'PUT', 'DELETE'}
+                )
+                or (parts[5:] == ['codex-auth', 'refresh'] and request.method == 'POST')
+            )
         ):
             return False
 

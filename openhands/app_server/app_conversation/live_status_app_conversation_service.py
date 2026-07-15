@@ -2040,8 +2040,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 f'{conversation_id}/codex-auth'
             ),
             headers={
-                'X-Session-API-Key': sandbox.session_api_key,
-                'X-Codex-Auth-Token': token,
+                'X-OH-Sandbox': sandbox.session_api_key,
+                'X-OH-Codex': token,
             },
             description=source.description,
         )
