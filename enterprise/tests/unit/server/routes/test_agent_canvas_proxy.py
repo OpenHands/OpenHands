@@ -9,28 +9,31 @@ from server.routes.agent_canvas import add_agent_canvas_proxy_routes
 
 
 async def _authenticated(_request):
-    return SecretStr('access-token')
+    return SecretStr("access-token")
 
 
 async def _unauthenticated(_request):
-    raise NoCredentialsError('missing credentials')
+    raise NoCredentialsError("missing credentials")
 
 
 def test_canvas_redirects_unauthenticated_users_to_login(monkeypatch):
-    monkeypatch.setenv('AGENT_CANVAS_INTERNAL_URL', 'http://agent-canvas:8000')
+    monkeypatch.setenv("AGENT_CANVAS_INTERNAL_URL", "http://agent-canvas:8000")
     app = FastAPI()
     add_agent_canvas_proxy_routes(app)
     client = TestClient(app)
 
-    with patch('server.routes.agent_canvas.get_access_token', _unauthenticated):
-        response = client.get('/canvas/settings?tab=llm', follow_redirects=False)
+    with patch("server.routes.agent_canvas.get_access_token", _unauthenticated):
+        response = client.get("/canvas/settings?tab=llm", follow_redirects=False)
 
     assert response.status_code == 302
-    assert response.headers['location'] == '/login?returnTo=%2Fcanvas%2Fsettings%3Ftab%3Dllm'
+    assert (
+        response.headers["location"]
+        == "/login?returnTo=%2Fcanvas%2Fsettings%3Ftab%3Dllm"
+    )
 
 
 def test_canvas_proxies_authenticated_requests(monkeypatch):
-    monkeypatch.setenv('AGENT_CANVAS_INTERNAL_URL', 'http://agent-canvas:8000')
+    monkeypatch.setenv("AGENT_CANVAS_INTERNAL_URL", "http://agent-canvas:8000")
     calls = []
 
     class FakeAsyncClient:
@@ -44,11 +47,11 @@ def test_canvas_proxies_authenticated_requests(monkeypatch):
             return None
 
         async def request(self, method, url, headers=None):
-            calls.append({'method': method, 'url': url, 'headers': headers})
+            calls.append({"method": method, "url": url, "headers": headers})
             return httpx.Response(
                 200,
-                content=b'<html>canvas</html>',
-                headers={'content-type': 'text/html', 'content-length': '19'},
+                content=b"<html>canvas</html>",
+                headers={"content-type": "text/html", "content-length": "19"},
             )
 
     app = FastAPI()
@@ -56,17 +59,17 @@ def test_canvas_proxies_authenticated_requests(monkeypatch):
     client = TestClient(app)
 
     with (
-        patch('server.routes.agent_canvas.get_access_token', _authenticated),
-        patch('server.routes.agent_canvas.httpx.AsyncClient', FakeAsyncClient),
+        patch("server.routes.agent_canvas.get_access_token", _authenticated),
+        patch("server.routes.agent_canvas.httpx.AsyncClient", FakeAsyncClient),
     ):
-        response = client.get('/canvas/assets/app.js?v=1')
+        response = client.get("/canvas/assets/app.js?v=1")
 
     assert response.status_code == 200
-    assert response.text == '<html>canvas</html>'
+    assert response.text == "<html>canvas</html>"
     assert calls == [
         {
-            'method': 'GET',
-            'url': 'http://agent-canvas:8000/canvas/assets/app.js?v=1',
-            'headers': {'accept': '*/*'},
+            "method": "GET",
+            "url": "http://agent-canvas:8000/canvas/assets/app.js?v=1",
+            "headers": {"accept": "*/*"},
         }
     ]
