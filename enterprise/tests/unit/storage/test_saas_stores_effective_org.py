@@ -196,9 +196,7 @@ async def test_secrets_store_load_filters_by_resolved_org_id(
 
 @pytest.mark.asyncio
 async def test_secrets_store_store_uses_effective_org_id_when_set():
-    """``store()`` must delete/insert under the effective org, not the
-    user's current org. We capture the org id by intercepting the
-    ``StoredCustomSecrets`` row that would be inserted."""
+    """Store custom secrets under the effective organization."""
 
     captured_org_ids: list[UUID] = []
     user = FakeUser(current_org_id=CURRENT_ORG_ID)
@@ -210,11 +208,10 @@ async def test_secrets_store_store_uses_effective_org_id_when_set():
         async def __aexit__(self, *exc):
             return False
 
-        async def execute(self, _query):
+        async def execute(self, query):
+            if query.is_insert:
+                captured_org_ids.append(query.compile().params['org_id'])
             return MagicMock()
-
-        def add(self, row):
-            captured_org_ids.append(row.org_id)
 
         async def commit(self):
             return None
@@ -253,8 +250,7 @@ async def test_secrets_store_store_uses_effective_org_id_when_set():
 
 @pytest.mark.asyncio
 async def test_secrets_store_store_falls_back_to_current_org_when_unset():
-    """The legacy/webhook code path (no effective org supplied) must
-    keep writing under user.current_org_id."""
+    """Fall back to the user's current organization."""
     captured_org_ids: list[UUID] = []
     user = FakeUser(current_org_id=CURRENT_ORG_ID)
 
@@ -265,11 +261,10 @@ async def test_secrets_store_store_falls_back_to_current_org_when_unset():
         async def __aexit__(self, *exc):
             return False
 
-        async def execute(self, _query):
+        async def execute(self, query):
+            if query.is_insert:
+                captured_org_ids.append(query.compile().params['org_id'])
             return MagicMock()
-
-        def add(self, row):
-            captured_org_ids.append(row.org_id)
 
         async def commit(self):
             return None
