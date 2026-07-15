@@ -1,3 +1,4 @@
+import hashlib
 from types import MappingProxyType
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -46,6 +47,66 @@ def secrets_store(async_session_maker, jwt_svc):
 
 
 class TestSaasSecretsStore:
+    @pytest.mark.asyncio
+    @patch(
+        'storage.saas_secrets_store.UserStore.get_user_by_id',
+        new_callable=AsyncMock,
+    )
+    async def test_compare_and_swap_custom_secret(
+        self, mock_get_user, secrets_store, mock_user
+    ):
+        mock_get_user.return_value = mock_user
+        original = '{"tokens":{"refresh_token":"r0"}}'
+        rotated = '{"tokens":{"refresh_token":"r1"}}'
+        await secrets_store.store(
+            Secrets(
+                custom_secrets=MappingProxyType(
+                    {
+                        'CODEX_AUTH_JSON': CustomSecret.from_value(
+                            {'secret': original, 'description': 'Codex login'}
+                        )
+                    }
+                )
+            )
+        )
+
+        updated = await secrets_store.compare_and_swap_custom_secret(
+            'CODEX_AUTH_JSON', hashlib.sha256(original.encode()).hexdigest(), rotated
+        )
+
+        assert updated is True
+        assert await secrets_store.get_custom_secret_value('CODEX_AUTH_JSON') == rotated
+
+    @pytest.mark.asyncio
+    @patch(
+        'storage.saas_secrets_store.UserStore.get_user_by_id',
+        new_callable=AsyncMock,
+    )
+    async def test_compare_and_swap_conflict_preserves_current_value(
+        self, mock_get_user, secrets_store, mock_user
+    ):
+        mock_get_user.return_value = mock_user
+        current = '{"tokens":{"refresh_token":"current"}}'
+        stale = '{"tokens":{"refresh_token":"stale"}}'
+        await secrets_store.store(
+            Secrets(
+                custom_secrets=MappingProxyType(
+                    {
+                        'CODEX_AUTH_JSON': CustomSecret.from_value(
+                            {'secret': current, 'description': ''}
+                        )
+                    }
+                )
+            )
+        )
+
+        updated = await secrets_store.compare_and_swap_custom_secret(
+            'CODEX_AUTH_JSON', hashlib.sha256(stale.encode()).hexdigest(), stale
+        )
+
+        assert updated is False
+        assert await secrets_store.get_custom_secret_value('CODEX_AUTH_JSON') == current
+
     @pytest.mark.asyncio
     @patch(
         'storage.saas_secrets_store.UserStore.get_user_by_id',

@@ -94,6 +94,7 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
     SandboxSpecService,
     is_custom_sandbox_spec,
 )
+from openhands.app_server.secrets.codex_auth import is_chatgpt_codex_auth
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.settings.llm_profiles import resolve_profile_llm
@@ -1998,6 +1999,53 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             _logger.warning(f'Failed to load skills: {e}', exc_info=True)
             return request
 
+    async def _scope_codex_subscription_auth(
+        self,
+        secrets: dict[str, Any],
+        settings: ACPAgentSettings,
+        user: UserInfo,
+        sandbox: SandboxInfo,
+        conversation_id: UUID,
+    ) -> None:
+        """Scope stored Codex subscription auth to one conversation."""
+        source = secrets.get('CODEX_AUTH_JSON')
+        if (
+            (self.app_mode or '').lower() != 'saas'
+            or settings.acp_server != 'codex'
+            or not isinstance(source, StaticSecret)
+        ):
+            return
+        value = source.get_value()
+        if not value or not is_chatgpt_codex_auth(value):
+            return
+        if not self.web_url or not user.id or not sandbox.session_api_key:
+            raise ValueError('Cannot scope Codex credentials to this conversation')
+        org_id = await self.user_context.get_effective_org_id()
+        if org_id is None:
+            raise ValueError('Cannot determine the Codex credential organization')
+        token = self.jwt_service.create_jws_token(
+            payload={
+                'purpose': 'codex-auth',
+                'user_id': user.id,
+                'org_id': str(org_id),
+                'sandbox_id': sandbox.id,
+                'conversation_id': str(conversation_id),
+                'secret_name': 'CODEX_AUTH_JSON',
+            },
+            expires_in=self.access_token_hard_timeout,
+        )
+        secrets['CODEX_AUTH_JSON'] = LookupSecret(
+            url=(
+                f'{self.web_url.rstrip("/")}/api/internal/conversations/'
+                f'{conversation_id}/codex-auth'
+            ),
+            headers={
+                'X-Session-API-Key': sandbox.session_api_key,
+                'X-Codex-Auth-Token': token,
+            },
+            description=source.description,
+        )
+
     async def _build_acp_start_conversation_request(
         self,
         sandbox: SandboxInfo,
@@ -2018,13 +2066,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         User secrets (Secrets panel + git provider tokens) flow through
         ``request.secrets`` — the canonical cipher-protected wire channel.
-        In SaaS mode each secret is a ``LookupSecret`` pointing at
-        ``/api/v1/webhooks/custom-secret`` with a per-secret scoped JWT, so
-        values are never materialised in this process.  In OSS mode (no
-        ``web_url``) they remain ``StaticSecret``.  Secrets are passed
-        directly as ``secrets=`` to ``create_request()``; no ``AgentContext``
-        relay is needed (software-agent-sdk #3464;
-        OpenHands/agent-canvas#1039).
+        Stored ChatGPT Codex auth uses a conversation-scoped ``LookupSecret``.
+        Secrets are passed directly as ``secrets=`` to ``create_request()``.
 
         Args:
             sandbox: Sandbox information
@@ -2048,18 +2091,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             resolve_agent_profile=True,
             override_agent_profile_id=agent_profile_id,
         )
+        acp_settings = user.agent_settings
+        assert isinstance(acp_settings, ACPAgentSettings)
 
         project_dir = get_project_dir(working_dir, selected_repository)
         workspace = LocalWorkspace(working_dir=project_dir)
 
         # --- secrets --------------------------------------------------------
-        # ACP secrets must be StaticSecrets — LookupSecrets with JWT headers
-        # (e.g. X-Access-Token) are redacted by the SDK serializer because
-        # "TOKEN" matches SECRET_KEY_PATTERNS, leaving headers: {} and
-        # causing provider auth to silently fail at subprocess launch.
-        # Use raw custom secrets, static git provider tokens, and static
-        # integration-scoped secrets for ACP conversations.
         secrets: dict = await self.user_context.get_secrets()
+        if not api_secrets or 'CODEX_AUTH_JSON' not in api_secrets:
+            await self._scope_codex_subscription_auth(
+                secrets, acp_settings, user, sandbox, conversation_id
+            )
         provider_tokens = cast(
             PROVIDER_TOKEN_TYPE | None,
             await self.user_context.get_provider_tokens(),
@@ -2113,9 +2156,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
 
         # --- build the ACP agent ------------------------------------------
-        acp_settings = user.agent_settings  # already verified to be ACPAgentSettings
-        assert isinstance(acp_settings, ACPAgentSettings)
-
         # Isolate the CLI data dir onto the durable /workspace tree so the SDK
         # self-resumes the provider session (session/load from base_state.json)
         # across pause/resume — matching the regular-agent lifecycle (#1274).

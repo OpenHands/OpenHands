@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, AsyncGenerator
+from uuid import UUID
 
 from fastapi import Request
 from pydantic import PrivateAttr, SecretStr
@@ -177,6 +178,12 @@ class AuthUserContext(UserContext):
     async def get_default_sandbox_spec_id(self) -> str | None:
         user_info = await self.get_user_info()
         return user_info.default_sandbox_spec_id
+
+    async def get_effective_org_id(self) -> UUID | None:
+        resolver = getattr(self.user_auth, 'get_effective_org_id', None)
+        if resolver is None:
+            return None
+        return await resolver()
 
 
 USER_ID_ATTR = 'user_id'

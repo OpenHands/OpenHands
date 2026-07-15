@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -24,6 +26,52 @@ class SaasSecretsStore(SecretsStore):
     # (user_id, org_id), so the effective org must flow through here for
     # the right rows to be read/written.
     effective_org_id: UUID | None = None
+
+    async def get_custom_secret_value(self, secret_name: str) -> str | None:
+        user = await UserStore.get_user_by_id(self.user_id)
+        if user is None:
+            raise ValueError(f'User not found: {self.user_id}')
+        org_id = self.effective_org_id or user.current_org_id
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(StoredCustomSecrets).filter(
+                    StoredCustomSecrets.keycloak_user_id == self.user_id,
+                    StoredCustomSecrets.org_id == org_id,
+                    StoredCustomSecrets.secret_name == secret_name,
+                )
+            )
+            stored = result.scalars().one_or_none()
+            if stored is None:
+                return None
+            return self._jwt_svc.decrypt_value(stored.secret_value)
+
+    async def compare_and_swap_custom_secret(
+        self, secret_name: str, expected_digest: str, value: str
+    ) -> bool:
+        user = await UserStore.get_user_by_id(self.user_id)
+        if user is None:
+            raise ValueError(f'User not found: {self.user_id}')
+        org_id = self.effective_org_id or user.current_org_id
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(StoredCustomSecrets)
+                .filter(
+                    StoredCustomSecrets.keycloak_user_id == self.user_id,
+                    StoredCustomSecrets.org_id == org_id,
+                    StoredCustomSecrets.secret_name == secret_name,
+                )
+                .with_for_update()
+            )
+            stored = result.scalars().one_or_none()
+            if stored is None:
+                raise KeyError(secret_name)
+            current_value = self._jwt_svc.decrypt_value(stored.secret_value)
+            current_digest = hashlib.sha256(current_value.encode()).hexdigest()
+            if not hmac.compare_digest(current_digest, expected_digest):
+                return False
+            stored.secret_value = self._jwt_svc.encrypt_value(value)
+            await session.commit()
+            return True
 
     async def load(self) -> Secrets | None:
         if not self.user_id:

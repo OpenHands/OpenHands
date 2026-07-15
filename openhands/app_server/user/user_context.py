@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from uuid import UUID
 
 from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
@@ -122,6 +123,10 @@ class UserContext(ABC):
             The effective maximum number of concurrent sandboxes allowed.
         """
         return default
+
+    async def get_effective_org_id(self) -> UUID | None:
+        """Return the request's effective organization."""
+        return None
 
 
 class UserContextInjector(DiscriminatedUnionMixin, Injector[UserContext], ABC):
