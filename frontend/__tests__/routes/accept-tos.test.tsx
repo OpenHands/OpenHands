@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { it, describe, expect, vi, beforeEach, afterEach } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -58,7 +58,11 @@ const createWrapper = () => {
 describe("AcceptTOS", () => {
   beforeEach(() => {
     useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
-    vi.stubGlobal("location", { href: "" });
+    vi.stubGlobal("location", {
+      href: "",
+      origin: "https://pr-254.staging.all-hands.dev",
+      assign: vi.fn(),
+    });
   });
 
   afterEach(() => {
@@ -121,6 +125,30 @@ describe("AcceptTOS", () => {
       redirect_url: "/dashboard",
     });
   });
+
+  it.each(["/canvas", "/automations"])(
+    "should hard reload %s redirect URLs after accepting TOS",
+    async (redirectUrl) => {
+      vi.mocked(openHands.post).mockResolvedValue({
+        data: { redirect_url: redirectUrl },
+      });
+
+      const user = userEvent.setup();
+      render(<AcceptTOS />, { wrapper: createWrapper() });
+
+      const checkbox = screen.getByRole("checkbox");
+      await user.click(checkbox);
+
+      const continueButton = screen.getByRole("button", {
+        name: "TOS$CONTINUE",
+      });
+      await user.click(continueButton);
+
+      await waitFor(() => {
+        expect(window.location.assign).toHaveBeenCalledWith(redirectUrl);
+      });
+    },
+  );
 
   it("should handle external redirect URLs", async () => {
     // Mock the API response with an external URL

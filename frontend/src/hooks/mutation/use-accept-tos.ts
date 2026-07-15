@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { usePostHog } from "posthog-js/react";
 import { useNavigate } from "react-router";
 import { openHands } from "#/api/open-hands-axios";
+import { navigateToReturnUrl } from "#/utils/canvas-return-url";
 import { handleCaptureConsent } from "#/utils/handle-capture-consent";
 
 interface AcceptTosVariables {
@@ -38,8 +39,7 @@ export const useAcceptTos = () => {
         // For external URLs, redirect using window.location
         window.location.href = finalRedirectUrl;
       } else {
-        // For internal routes, use navigate
-        navigate(finalRedirectUrl);
+        navigateToReturnUrl(finalRedirectUrl, navigate);
       }
     },
     onError: () => {

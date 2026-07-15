@@ -416,6 +416,18 @@ describe("LoginPage", () => {
       });
     });
 
+    it("should hard reload authenticated users to Automations redirect destination", async () => {
+      vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
+
+      render(<RouterStub initialEntries={["/login?redirect=/automations"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(window.location.assign).toHaveBeenCalledWith("/automations");
+      });
+    });
+
     it("should hard reload authenticated users to same-origin absolute Canvas returnTo destination", async () => {
       vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
 

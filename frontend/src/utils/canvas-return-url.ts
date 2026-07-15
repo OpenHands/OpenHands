@@ -1,4 +1,10 @@
 export const AGENT_CANVAS_PATH_PREFIX = "/canvas";
+export const AUTOMATIONS_PATH_PREFIX = "/automations";
+
+const EXTERNAL_APP_PATH_PREFIXES = [
+  AGENT_CANVAS_PATH_PREFIX,
+  AUTOMATIONS_PATH_PREFIX,
+] as const;
 
 function getSameOriginPath(value: string): string | null {
   try {
@@ -17,6 +23,23 @@ function getSameOriginPath(value: string): string | null {
   } catch {
     return null;
   }
+}
+
+function isExternalAppPath(path: string): boolean {
+  return EXTERNAL_APP_PATH_PREFIXES.some(
+    (prefix) =>
+      path === prefix ||
+      path.startsWith(`${prefix}/`) ||
+      path.startsWith(`${prefix}?`) ||
+      path.startsWith(`${prefix}#`),
+  );
+}
+
+export function getExternalAppReturnPath(value: string): string | null {
+  const path = getSameOriginPath(value);
+  if (!path) return null;
+
+  return isExternalAppPath(path) ? path : null;
 }
 
 export function getAgentCanvasReturnPath(value: string): string | null {
@@ -43,9 +66,9 @@ export function navigateToReturnUrl(
   path: string,
   navigate: (path: string, options: { replace: true }) => void,
 ): void {
-  const canvasPath = getAgentCanvasReturnPath(path);
-  if (canvasPath) {
-    window.location.assign(canvasPath);
+  const externalAppPath = getExternalAppReturnPath(path);
+  if (externalAppPath) {
+    window.location.assign(externalAppPath);
     return;
   }
 

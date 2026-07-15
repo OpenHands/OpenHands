@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { openHands } from "#/api/open-hands-axios";
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
+import { navigateToReturnUrl } from "#/utils/canvas-return-url";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 type SubmitOnboardingArgs = {
@@ -45,8 +46,7 @@ export const useSubmitOnboarding = () => {
         // For external URLs, redirect using window.location
         window.location.href = finalRedirectUrl;
       } else {
-        // For internal routes, use navigate
-        navigate(finalRedirectUrl);
+        navigateToReturnUrl(finalRedirectUrl, navigate);
       }
     },
     onError: (error) => {
