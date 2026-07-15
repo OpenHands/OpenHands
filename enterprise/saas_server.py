@@ -5,12 +5,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Ensure SAAS configuration is used
-if not os.getenv('OPENHANDS_CONFIG_CLS'):
-    os.environ['OPENHANDS_CONFIG_CLS'] = 'server.config.SaaSServerConfig'
+if not os.getenv("OPENHANDS_CONFIG_CLS"):
+    os.environ["OPENHANDS_CONFIG_CLS"] = "server.config.SaaSServerConfig"
 
 # SaaS registers enterprise routes below, then mounts the frontend last. Avoid
 # the base app's import-time SPA mount from shadowing those routes.
-os.environ['SERVE_FRONTEND'] = 'false'
+os.environ["SERVE_FRONTEND"] = "false"
 
 from fastapi import Request, status  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
@@ -80,12 +80,12 @@ from openhands.app_server.middleware import (  # noqa: E402
 )
 from openhands.app_server.static import SPAStaticFiles  # noqa: E402
 
-directory = os.getenv('FRONTEND_DIRECTORY', './frontend/build')
+directory = os.getenv("FRONTEND_DIRECTORY", "./frontend/build")
 
 
-@base_app.get('/saas')
+@base_app.get("/saas")
 def is_saas():
-    return {'saas': True}
+    return {"saas": True}
 
 
 base_app.include_router(readiness_router)  # Add routes for readiness checks
@@ -108,7 +108,7 @@ if GITHUB_APP_CLIENT_ID:
     from server.routes.integration.github import github_integration_router  # noqa: E402
 
     # Bludgeon mypy into not deleting my import
-    logger.debug(f'Loaded {GithubV1CallbackProcessor.__name__}')
+    logger.debug(f"Loaded {GithubV1CallbackProcessor.__name__}")
 
     base_app.include_router(
         github_integration_router
@@ -123,7 +123,7 @@ if GITLAB_APP_CLIENT_ID:
     from server.routes.integration.gitlab import gitlab_integration_router  # noqa: E402
 
     # Bludgeon mypy into not deleting my import
-    logger.debug(f'Loaded {GitlabV1CallbackProcessor.__name__}')
+    logger.debug(f"Loaded {GitlabV1CallbackProcessor.__name__}")
 
     base_app.include_router(gitlab_integration_router)
 
@@ -136,7 +136,7 @@ if BITBUCKET_APP_CLIENT_ID:
         bitbucket_integration_router,
     )
 
-    logger.debug(f'Loaded {BitbucketV1CallbackProcessor.__name__}')
+    logger.debug(f"Loaded {BitbucketV1CallbackProcessor.__name__}")
 
     base_app.include_router(bitbucket_integration_router)
 
@@ -149,7 +149,7 @@ if AZURE_DEVOPS_CLIENT_ID:
         azure_devops_integration_router,
     )
 
-    logger.debug(f'Loaded {AzureDevOpsV1CallbackProcessor.__name__}')
+    logger.debug(f"Loaded {AzureDevOpsV1CallbackProcessor.__name__}")
 
     base_app.include_router(azure_devops_integration_router)
 
@@ -165,9 +165,9 @@ if USER_PROVISIONING_ENABLED:
     # ``userProvisioning.enabled``) is truthy. Off by default in
     # staging and production; enabled per-environment via Helm.
     base_app.include_router(user_provisioning_router)
-    logger.info('user_provisioning_router:enabled')
+    logger.info("user_provisioning_router:enabled")
 base_app.include_router(
-    org_profiles_router, prefix='/api/organizations'
+    org_profiles_router, prefix="/api/organizations"
 )  # Add routes for org LLM profiles
 base_app.include_router(
     agent_profiles_router
@@ -203,7 +203,7 @@ if BITBUCKET_DATA_CENTER_HOST:
         bitbucket_dc_integration_router,
     )
 
-    logger.debug(f'Loaded {BitbucketDCV1CallbackProcessor.__name__}')
+    logger.debug(f"Loaded {BitbucketDCV1CallbackProcessor.__name__}")
 
     base_app.include_router(bitbucket_dc_integration_router)
 base_app.include_router(email_router)  # Add routes for email management
@@ -217,11 +217,11 @@ base_app.add_middleware(
     allow_origins=PERMITTED_CORS_ORIGINS,
 )
 base_app.add_middleware(CacheControlMiddleware)
-base_app.middleware('http')(SetAuthCookieMiddleware())
+base_app.middleware("http")(SetAuthCookieMiddleware())
 add_agent_canvas_proxy_routes(base_app)
 
 
-base_app.mount('/', SPAStaticFiles(directory=directory, html=True), name='dist')
+base_app.mount("/", SPAStaticFiles(directory=directory, html=True), name="dist")
 
 
 setup_rate_limit_handler(base_app)
@@ -231,14 +231,14 @@ setup_rate_limit_handler(base_app)
 async def no_credentials_exception_handler(request: Request, exc: NoCredentialsError):
     logger.info(exc.__class__.__name__)
     return JSONResponse(
-        {'error': NoCredentialsError.__name__}, status.HTTP_401_UNAUTHORIZED
+        {"error": NoCredentialsError.__name__}, status.HTTP_401_UNAUTHORIZED
     )
 
 
 @base_app.exception_handler(ExpiredError)
 async def expired_exception_handler(request: Request, exc: ExpiredError):
     logger.info(exc.__class__.__name__)
-    return JSONResponse({'error': ExpiredError.__name__}, status.HTTP_401_UNAUTHORIZED)
+    return JSONResponse({"error": ExpiredError.__name__}, status.HTTP_401_UNAUTHORIZED)
 
 
 # Note: socketio is no longer used for communication. The base FastAPI app is used directly.
