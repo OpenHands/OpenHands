@@ -13,6 +13,7 @@ from openhands.app_server.utils.http_session import httpx_verify_option
 AGENT_CANVAS_INTERNAL_URL_ENV = "AGENT_CANVAS_INTERNAL_URL"
 AGENT_CANVAS_PATH_PREFIX = "/canvas"
 AGENT_CANVAS_PROXY_TIMEOUT_SECONDS = 30.0
+AGENT_CANVAS_PUBLIC_PATH_PREFIXES = ("/assets/",)
 HOP_BY_HOP_RESPONSE_HEADERS = {
     "connection",
     "content-encoding",
@@ -42,6 +43,10 @@ def _return_to_path(request: Request) -> str:
 def _login_redirect(request: Request) -> RedirectResponse:
     return_to = quote(_return_to_path(request), safe="")
     return RedirectResponse(f"/login?returnTo={return_to}", status_code=302)
+
+
+def _requires_auth(path: str) -> bool:
+    return not path.startswith(AGENT_CANVAS_PUBLIC_PATH_PREFIXES)
 
 
 async def _is_authenticated(request: Request) -> bool:
@@ -104,6 +109,7 @@ def add_agent_canvas_proxy_routes(app: FastAPI) -> None:
 
     @app.api_route(f"{AGENT_CANVAS_PATH_PREFIX}/{{path:path}}", methods=["GET", "HEAD"])
     async def agent_canvas_path(request: Request, path: str):
-        if not await _is_authenticated(request):
+        canvas_path = f"/{path}"
+        if _requires_auth(canvas_path) and not await _is_authenticated(request):
             return _login_redirect(request)
-        return await _proxy_agent_canvas(request, f"/{path}")
+        return await _proxy_agent_canvas(request, canvas_path)
