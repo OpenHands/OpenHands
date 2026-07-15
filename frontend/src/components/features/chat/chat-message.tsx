@@ -16,101 +16,109 @@ interface ChatMessageProps {
   isFromPlanningAgent?: boolean;
 }
 
-export function ChatMessage({
-  type,
-  message,
-  children,
-  actions,
-  isFromPlanningAgent = false,
-}: React.PropsWithChildren<ChatMessageProps>) {
-  const [isHovering, setIsHovering] = React.useState(false);
-  const [isCopy, setIsCopy] = React.useState(false);
+export const ChatMessage = React.memo(
+  ({
+    type,
+    message,
+    children,
+    actions,
+    isFromPlanningAgent = false,
+  }: React.PropsWithChildren<ChatMessageProps>) => {
+    const [isHovering, setIsHovering] = React.useState(false);
+    const [isCopy, setIsCopy] = React.useState(false);
 
-  const handleCopyToClipboard = async () => {
-    await navigator.clipboard.writeText(message);
-    setIsCopy(true);
-  };
-
-  React.useEffect(() => {
-    let timeout: NodeJS.Timeout;
-
-    if (isCopy) {
-      timeout = setTimeout(() => {
-        setIsCopy(false);
-      }, 2000);
-    }
-
-    return () => {
-      clearTimeout(timeout);
+    const handleCopyToClipboard = async () => {
+      await navigator.clipboard.writeText(message);
+      setIsCopy(true);
     };
-  }, [isCopy]);
 
-  return (
-    <article
-      data-testid={`${type}-message`}
-      onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
-      className={cn(
-        "rounded-xl relative w-fit max-w-full last:mb-4",
-        "flex flex-col gap-2",
-        type === "user" && "p-4 bg-tertiary self-end",
-        type === "agent" && "mt-6 w-full max-w-full bg-transparent",
-        isFromPlanningAgent &&
-          type === "agent" &&
-          "border border-[#597ff4] bg-tertiary p-4 mt-2",
-      )}
-    >
-      <div
+    React.useEffect(() => {
+      let timeout: NodeJS.Timeout;
+
+      if (isCopy) {
+        timeout = setTimeout(() => {
+          setIsCopy(false);
+        }, 2000);
+      }
+
+      return () => {
+        clearTimeout(timeout);
+      };
+    }, [isCopy]);
+
+    return (
+      <article
+        data-testid={`${type}-message`}
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
         className={cn(
-          "absolute -top-2.5 -right-2.5",
-          !isHovering ? "hidden" : "flex",
-          "items-center gap-1",
+          "rounded-xl relative w-fit max-w-full last:mb-4",
+          "flex flex-col gap-2",
+          type === "user" && "p-4 bg-tertiary self-end",
+          type === "agent" && "mt-6 w-full max-w-full bg-transparent",
+          isFromPlanningAgent &&
+            type === "agent" &&
+            "border border-[#597ff4] bg-tertiary p-4 mt-2",
         )}
       >
-        {actions?.map((action, index) =>
-          action.tooltip ? (
-            <StyledTooltip key={index} content={action.tooltip} placement="top">
+        <div
+          className={cn(
+            "absolute -top-2.5 -right-2.5",
+            !isHovering ? "hidden" : "flex",
+            "items-center gap-1",
+          )}
+        >
+          {actions?.map((action, index) =>
+            action.tooltip ? (
+              <StyledTooltip
+                key={index}
+                content={action.tooltip}
+                placement="top"
+              >
+                <button
+                  type="button"
+                  onClick={action.onClick}
+                  className="button-base p-1 cursor-pointer"
+                  aria-label={action.tooltip}
+                >
+                  {action.icon}
+                </button>
+              </StyledTooltip>
+            ) : (
               <button
+                key={index}
                 type="button"
                 onClick={action.onClick}
                 className="button-base p-1 cursor-pointer"
-                aria-label={action.tooltip}
+                aria-label={`Action ${index + 1}`}
               >
                 {action.icon}
               </button>
-            </StyledTooltip>
-          ) : (
-            <button
-              key={index}
-              type="button"
-              onClick={action.onClick}
-              className="button-base p-1 cursor-pointer"
-              aria-label={`Action ${index + 1}`}
-            >
-              {action.icon}
-            </button>
-          ),
-        )}
+            ),
+          )}
 
-        <CopyToClipboardButton
-          isHidden={!isHovering}
-          isDisabled={isCopy}
-          onClick={handleCopyToClipboard}
-          mode={isCopy ? "copied" : "copy"}
-        />
-      </div>
+          <CopyToClipboardButton
+            isHidden={!isHovering}
+            isDisabled={isCopy}
+            onClick={handleCopyToClipboard}
+            mode={isCopy ? "copied" : "copy"}
+          />
+        </div>
 
-      <div
-        className="text-sm"
-        style={{
-          whiteSpace: "normal",
-          wordBreak: "break-word",
-        }}
-      >
-        <MarkdownRenderer includeStandard>{message}</MarkdownRenderer>
-      </div>
+        <div
+          className="text-sm"
+          style={{
+            whiteSpace: "normal",
+            wordBreak: "break-word",
+          }}
+        >
+          <MarkdownRenderer includeStandard>{message}</MarkdownRenderer>
+        </div>
 
-      {children}
-    </article>
-  );
-}
+        {children}
+      </article>
+    );
+  },
+);
+
+ChatMessage.displayName = "ChatMessage";

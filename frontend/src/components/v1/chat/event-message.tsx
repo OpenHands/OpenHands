@@ -120,206 +120,253 @@ const renderUserMessageWithSkillReady = (
 };
 
 /* eslint-disable react/jsx-props-no-spreading */
-export function EventMessage({
-  event,
-  messages,
-  isLastMessage,
-  isInLast10Actions,
-  planPreviewEventIds,
-}: EventMessageProps) {
-  const { t } = useTranslation();
-  const { data: config } = useConfig();
-  const { planContent } = useConversationStore();
-  const { curAgentState } = useAgentState();
+/**
+ * Custom memo comparator for EventMessage.
+ *
+ * During streaming, every token merges into the last event in the store, which
+ * produces a fresh `messages`/`allEvents` array reference on every token even
+ * though only the last entry changed. With a default shallow compare, that
+ * fresh array ref would force EVERY event card in the conversation to re-render
+ * (and re-parse its markdown) on every single token — the per-token render cost
+ * grows with conversation length, which is the root cause of the high GPU/CPU
+ * usage and UI freeze reported in #12681.
+ *
+ * We therefore compare only what can actually change a card's output:
+ *  - `event` (by reference): the streaming delta is replaced with a new object
+ *    on every token, so the live bubble correctly re-renders; unchanged events
+ *    keep the same object reference across the store's array copy, so they skip.
+ *  - `isLastMessage` / `isInLast10Actions` (booleans): drive shine/streaming
+ *    indicators and must update as the list grows.
+ *  - `planPreviewEventIds` (by reference): only reassigned when the set of
+ *    plan-preview anchors changes.
+ *
+ * `messages` is intentionally NOT compared by reference: it only grows (new
+ * events append) or has its last entry merged (streaming). Comparing its length
+ * is sufficient and stable — length changes only when a genuinely new event
+ * arrives, not on a streaming-token merge, so observation cards (which look up
+ * their action via `messages.find`) still re-render exactly when needed.
+ */
+const areEventMessagePropsEqual = (
+  prev: Readonly<EventMessageProps>,
+  next: Readonly<EventMessageProps>,
+): boolean =>
+  prev.event === next.event &&
+  prev.isLastMessage === next.isLastMessage &&
+  prev.isInLast10Actions === next.isInLast10Actions &&
+  prev.planPreviewEventIds === next.planPreviewEventIds &&
+  prev.messages.length === next.messages.length;
 
-  // Disable Build button while agent is running (streaming)
-  const isAgentRunning =
-    curAgentState === AgentState.RUNNING ||
-    curAgentState === AgentState.LOADING;
-
-  // Read isFromPlanningAgent directly from the event object
-  const isFromPlanningAgent = event.isFromPlanningAgent || false;
-
-  // Common props for components that need them
-  const commonProps = {
+export const EventMessage = React.memo(
+  ({
+    event,
+    messages,
     isLastMessage,
     isInLast10Actions,
-    config,
-    isFromPlanningAgent,
-  };
+    planPreviewEventIds,
+  }: EventMessageProps) => {
+    const { t } = useTranslation();
+    const { data: config } = useConfig();
+    const { planContent } = useConversationStore();
+    const { curAgentState } = useAgentState();
 
-  // Agent error events
-  if (isAgentErrorEvent(event)) {
-    return <ErrorEventMessage event={event} {...commonProps} />;
-  }
+    // Disable Build button while agent is running (streaming)
+    const isAgentRunning =
+      curAgentState === AgentState.RUNNING ||
+      curAgentState === AgentState.LOADING;
 
-  // Hook execution events
-  if (isHookExecutionEvent(event)) {
-    return <HookExecutionEventMessage event={event} />;
-  }
+    // Read isFromPlanningAgent directly from the event object
+    const isFromPlanningAgent = event.isFromPlanningAgent || false;
 
-  // ACP sub-agent tool call events (Claude Code, Codex, Gemini CLI, …)
-  // render through the same generic wrapper used for observation events so
-  // the card shape, success indicator and markdown rendering all match.
-  if (isACPToolCallEvent(event)) {
-    return (
-      <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
-    );
-  }
+    // Common props for components that need them
+    const commonProps = {
+      isLastMessage,
+      isInLast10Actions,
+      config,
+      isFromPlanningAgent,
+    };
 
-  // Streaming token deltas - the live, growing assistant bubble. Consecutive
-  // deltas are merged upstream (handleEventForUI / event store) into this single
-  // event, and the turn's final MessageEvent is reconciled into it rather than
-  // appended, so this same bubble becomes the finalized message.
-  if (isStreamingDeltaEvent(event)) {
-    const reasoning = event.reasoning_content ?? "";
-    const message = event.content ?? "";
-    return (
-      <>
-        {reasoning && (
-          // Render the streamed reasoning as a collapsible "Thinking" section
-          // (collapsed by default) so it's distinct from the answer and doesn't
-          // dominate the bubble.
-          <GenericEventMessage
-            title={t(I18nKey.EVENT$THINKING)}
-            details={reasoning}
-            initiallyExpanded={false}
-          />
-        )}
-        {message && (
-          <ChatMessage
-            type="agent"
-            message={message}
-            isFromPlanningAgent={isFromPlanningAgent}
-          />
-        )}
-      </>
-    );
-  }
-
-  // Finish actions
-  if (isActionEvent(event) && event.action.kind === "FinishAction") {
-    return (
-      <FinishEventMessage
-        event={event as ActionEvent<FinishAction>}
-        {...commonProps}
-      />
-    );
-  }
-
-  // ThinkAction - render the thought as a normal chat message (not a collapsible block)
-  // The thought content IS the action, so we use event.action.thought directly
-  // instead of event.thought (which contains the raw tool call text).
-  if (isActionEvent(event) && event.action.kind === "ThinkAction") {
-    const thinkAction = event as ActionEvent<ThinkAction>;
-    return (
-      <ChatMessage
-        type="agent"
-        message={thinkAction.action.thought}
-        isFromPlanningAgent={isFromPlanningAgent}
-      />
-    );
-  }
-
-  // Action events - render thought + action (will be replaced by thought + observation)
-  if (isActionEvent(event)) {
-    return (
-      <>
-        <ThoughtEventMessage
-          event={event}
-          isFromPlanningAgent={isFromPlanningAgent}
-        />
-        <GenericEventMessageWrapper
-          event={event}
-          isLastMessage={isLastMessage}
-        />
-      </>
-    );
-  }
-
-  // Observation events - find the corresponding action and render thought + observation
-  if (isObservationEvent(event)) {
-    // Handle PlanningFileEditorObservation specially
-    if (isPlanningFileEditorObservationEvent(event)) {
-      // Only show PlanPreview if this event is marked as the one to display
-      // (last PlanningFileEditorObservation in its phase)
-      if (
-        planPreviewEventIds &&
-        shouldShowPlanPreview(event.id, planPreviewEventIds)
-      ) {
-        // Show shine effect only if this is the last message AND agent is running
-        const isStreaming =
-          isLastMessage && curAgentState === AgentState.RUNNING;
-        return (
-          <PlanPreview
-            planContent={planContent}
-            isStreaming={isStreaming}
-            isBuildDisabled={isAgentRunning}
-          />
-        );
-      }
-      // Not the designated preview event for this phase - render nothing
-      // This prevents duplicate previews within the same phase
-      return null;
+    // Agent error events
+    if (isAgentErrorEvent(event)) {
+      return <ErrorEventMessage event={event} {...commonProps} />;
     }
 
-    // Find the action that this observation is responding to
-    const correspondingAction = messages.find(
-      (msg) => isActionEvent(msg) && msg.id === event.action_id,
-    );
+    // Hook execution events
+    if (isHookExecutionEvent(event)) {
+      return <HookExecutionEventMessage event={event} />;
+    }
 
-    // Skip ThoughtEventMessage for ThinkAction (thought IS the action)
-    const shouldShowThought =
-      correspondingAction &&
-      isActionEvent(correspondingAction) &&
-      correspondingAction.action.kind !== "ThinkAction";
-
-    return (
-      <>
-        {shouldShowThought && (
-          <ThoughtEventMessage
-            event={correspondingAction}
-            isFromPlanningAgent={isFromPlanningAgent}
-          />
-        )}
+    // ACP sub-agent tool call events (Claude Code, Codex, Gemini CLI, …)
+    // render through the same generic wrapper used for observation events so
+    // the card shape, success indicator and markdown rendering all match.
+    if (isACPToolCallEvent(event)) {
+      return (
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
-          correspondingAction={
-            correspondingAction && isActionEvent(correspondingAction)
-              ? correspondingAction
-              : undefined
-          }
         />
-      </>
-    );
-  }
-
-  // Message events (user and assistant messages)
-  if (!isActionEvent(event) && !isObservationEvent(event)) {
-    const messageEvent = event as MessageEvent;
-
-    // Check if this is a user message that should display a Skill Ready event
-    if (isUserMessageEvent(event) && shouldShowSkillReadyEvent(messageEvent)) {
-      return renderUserMessageWithSkillReady(
-        messageEvent,
-        commonProps,
-        isLastMessage,
       );
     }
 
-    // Render normal message event (user or assistant)
-    return (
-      <UserAssistantEventMessage
-        event={messageEvent}
-        {...commonProps}
-        isLastMessage={isLastMessage}
-      />
-    );
-  }
+    // Streaming token deltas - the live, growing assistant bubble. Consecutive
+    // deltas are merged upstream (handleEventForUI / event store) into this single
+    // event, and the turn's final MessageEvent is reconciled into it rather than
+    // appended, so this same bubble becomes the finalized message.
+    if (isStreamingDeltaEvent(event)) {
+      const reasoning = event.reasoning_content ?? "";
+      const message = event.content ?? "";
+      return (
+        <>
+          {reasoning && (
+            // Render the streamed reasoning as a collapsible "Thinking" section
+            // (collapsed by default) so it's distinct from the answer and doesn't
+            // dominate the bubble.
+            <GenericEventMessage
+              title={t(I18nKey.EVENT$THINKING)}
+              details={reasoning}
+              initiallyExpanded={false}
+            />
+          )}
+          {message && (
+            <ChatMessage
+              type="agent"
+              message={message}
+              isFromPlanningAgent={isFromPlanningAgent}
+            />
+          )}
+        </>
+      );
+    }
 
-  // Generic fallback for all other events
-  return (
-    <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
-  );
-}
+    // Finish actions
+    if (isActionEvent(event) && event.action.kind === "FinishAction") {
+      return (
+        <FinishEventMessage
+          event={event as ActionEvent<FinishAction>}
+          {...commonProps}
+        />
+      );
+    }
+
+    // ThinkAction - render the thought as a normal chat message (not a collapsible block)
+    // The thought content IS the action, so we use event.action.thought directly
+    // instead of event.thought (which contains the raw tool call text).
+    if (isActionEvent(event) && event.action.kind === "ThinkAction") {
+      const thinkAction = event as ActionEvent<ThinkAction>;
+      return (
+        <ChatMessage
+          type="agent"
+          message={thinkAction.action.thought}
+          isFromPlanningAgent={isFromPlanningAgent}
+        />
+      );
+    }
+
+    // Action events - render thought + action (will be replaced by thought + observation)
+    if (isActionEvent(event)) {
+      return (
+        <>
+          <ThoughtEventMessage
+            event={event}
+            isFromPlanningAgent={isFromPlanningAgent}
+          />
+          <GenericEventMessageWrapper
+            event={event}
+            isLastMessage={isLastMessage}
+          />
+        </>
+      );
+    }
+
+    // Observation events - find the corresponding action and render thought + observation
+    if (isObservationEvent(event)) {
+      // Handle PlanningFileEditorObservation specially
+      if (isPlanningFileEditorObservationEvent(event)) {
+        // Only show PlanPreview if this event is marked as the one to display
+        // (last PlanningFileEditorObservation in its phase)
+        if (
+          planPreviewEventIds &&
+          shouldShowPlanPreview(event.id, planPreviewEventIds)
+        ) {
+          // Show shine effect only if this is the last message AND agent is running
+          const isStreaming =
+            isLastMessage && curAgentState === AgentState.RUNNING;
+          return (
+            <PlanPreview
+              planContent={planContent}
+              isStreaming={isStreaming}
+              isBuildDisabled={isAgentRunning}
+            />
+          );
+        }
+        // Not the designated preview event for this phase - render nothing
+        // This prevents duplicate previews within the same phase
+        return null;
+      }
+
+      // Find the action that this observation is responding to
+      const correspondingAction = messages.find(
+        (msg) => isActionEvent(msg) && msg.id === event.action_id,
+      );
+
+      // Skip ThoughtEventMessage for ThinkAction (thought IS the action)
+      const shouldShowThought =
+        correspondingAction &&
+        isActionEvent(correspondingAction) &&
+        correspondingAction.action.kind !== "ThinkAction";
+
+      return (
+        <>
+          {shouldShowThought && (
+            <ThoughtEventMessage
+              event={correspondingAction}
+              isFromPlanningAgent={isFromPlanningAgent}
+            />
+          )}
+          <GenericEventMessageWrapper
+            event={event}
+            isLastMessage={isLastMessage}
+            correspondingAction={
+              correspondingAction && isActionEvent(correspondingAction)
+                ? correspondingAction
+                : undefined
+            }
+          />
+        </>
+      );
+    }
+
+    // Message events (user and assistant messages)
+    if (!isActionEvent(event) && !isObservationEvent(event)) {
+      const messageEvent = event as MessageEvent;
+
+      // Check if this is a user message that should display a Skill Ready event
+      if (
+        isUserMessageEvent(event) &&
+        shouldShowSkillReadyEvent(messageEvent)
+      ) {
+        return renderUserMessageWithSkillReady(
+          messageEvent,
+          commonProps,
+          isLastMessage,
+        );
+      }
+
+      // Render normal message event (user or assistant)
+      return (
+        <UserAssistantEventMessage
+          event={messageEvent}
+          {...commonProps}
+          isLastMessage={isLastMessage}
+        />
+      );
+    }
+
+    // Generic fallback for all other events
+    return (
+      <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
+    );
+  },
+  areEventMessagePropsEqual,
+);
+
+EventMessage.displayName = "EventMessage";

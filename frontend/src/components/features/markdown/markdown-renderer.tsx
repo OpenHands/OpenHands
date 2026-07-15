@@ -1,3 +1,4 @@
+import React, { useMemo } from "react";
 import Markdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -31,6 +32,37 @@ interface MarkdownRendererProps {
   includeHeadings?: boolean;
 }
 
+// The default component set is fully static, so hoist it to module scope so it
+// keeps a stable reference across renders. react-markdown diffing keys off the
+// `components` identity; a fresh object each render forces every subtree to
+// re-render and re-tokenize, which during streaming means the whole accumulated
+// string is re-parsed on every token.
+const DEFAULT_COMPONENTS: Partial<Components> = {
+  code,
+  ul,
+  ol,
+  table,
+  th,
+  td,
+};
+
+const STANDARD_COMPONENTS: Partial<Components> = {
+  a: anchor,
+  p: paragraph,
+};
+
+const HEADING_COMPONENTS: Partial<Components> = {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+};
+
+// remark plugins are static too; a stable array avoids re-processing config.
+const REMARK_PLUGINS = [remarkGfm, remarkBreaks];
+
 /**
  * A reusable Markdown renderer component that provides consistent
  * markdown rendering across the application.
@@ -44,46 +76,39 @@ interface MarkdownRendererProps {
  * - includeHeadings: adds h1-h6 heading components
  * - components prop: allows custom overrides or additional components
  */
-export function MarkdownRenderer({
-  children,
-  content,
-  components: customComponents,
-  includeStandard = false,
-  includeHeadings = false,
-}: MarkdownRendererProps) {
-  // Build the components object with defaults and optional additions
-  const components: Components = {
-    code,
-    ul,
-    ol,
-    table,
-    th,
-    td,
-    ...(includeStandard && {
-      a: anchor,
-      p: paragraph,
-    }),
-    ...(includeHeadings && {
-      h1,
-      h2,
-      h3,
-      h4,
-      h5,
-      h6,
-    }),
-    ...customComponents, // Custom components override defaults
-  };
+export const MarkdownRenderer = React.memo(
+  ({
+    children,
+    content,
+    components: customComponents,
+    includeStandard = false,
+    includeHeadings = false,
+  }: MarkdownRendererProps) => {
+    // Build the components object with defaults and optional additions. The
+    // result is memoized on the flags/customComponents so the identity stays
+    // stable unless something that actually changes the mapping changes.
+    const components: Components = useMemo(() => {
+      if (!includeStandard && !includeHeadings && !customComponents) {
+        return DEFAULT_COMPONENTS;
+      }
+      return {
+        ...DEFAULT_COMPONENTS,
+        ...(includeStandard && STANDARD_COMPONENTS),
+        ...(includeHeadings && HEADING_COMPONENTS),
+        ...customComponents, // Custom components override defaults
+      };
+    }, [includeStandard, includeHeadings, customComponents]);
 
-  const markdownContent = content ?? children ?? "";
+    const markdownContent = content ?? children ?? "";
 
-  return (
-    <div data-testid="markdown-renderer">
-      <Markdown
-        components={components}
-        remarkPlugins={[remarkGfm, remarkBreaks]}
-      >
-        {markdownContent}
-      </Markdown>
-    </div>
-  );
-}
+    return (
+      <div data-testid="markdown-renderer">
+        <Markdown components={components} remarkPlugins={REMARK_PLUGINS}>
+          {markdownContent}
+        </Markdown>
+      </div>
+    );
+  },
+);
+
+MarkdownRenderer.displayName = "MarkdownRenderer";

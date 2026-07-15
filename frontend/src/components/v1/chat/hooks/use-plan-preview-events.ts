@@ -85,23 +85,33 @@ export interface PlanPreviewEventInfo {
  * @returns Set of event IDs that should render PlanPreview
  */
 export function usePlanPreviewEvents(allEvents: OpenHandsEvent[]): Set<string> {
-  return useMemo(() => {
-    const planPreviewEventIds = new Set<string>();
-
-    // Group events by phases (user message boundaries)
+  // The set of plan-preview anchor ids only changes when a Plan.md
+  // PlanningFileEditorObservation arrives — NOT on every streaming-delta merge
+  // that re-creates the `allEvents` array reference. Deriving the memo from
+  // `allEvents` directly would rebuild a fresh Set on every token and (via the
+  // EventMessage memo comparator) re-render every card. Instead we key the memo
+  // on the stable string of collected ids so the returned Set keeps its
+  // identity across streaming tokens.
+  const planPreviewKey = useMemo(() => {
     const phases = groupEventsByPhase(allEvents);
-
-    // For each phase, find the last PlanningFileEditorObservation
+    const ids: string[] = [];
     phases.forEach((phase) => {
       const lastPlanningObservationId =
         findLastPlanningObservationInPhase(phase);
       if (lastPlanningObservationId) {
-        planPreviewEventIds.add(lastPlanningObservationId);
+        ids.push(lastPlanningObservationId);
       }
     });
-
-    return planPreviewEventIds;
+    return ids.join("\n");
   }, [allEvents]);
+
+  return useMemo(() => {
+    const planPreviewEventIds = new Set<string>();
+    if (planPreviewKey) {
+      planPreviewKey.split("\n").forEach((id) => planPreviewEventIds.add(id));
+    }
+    return planPreviewEventIds;
+  }, [planPreviewKey]);
 }
 
 /**
