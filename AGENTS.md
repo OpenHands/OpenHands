@@ -522,3 +522,12 @@ Called by `workspace.get_llm()` in the SDK to retrieve LLM config with the API k
 - `.github/workflows/issue-opened.yml` has a second issue-opened job that auto-applies `good first issue` after the duplicate check completes.
 - The duplicate check is used only as a veto/guardrail for `good first issue` automation: duplicate or overlapping-scope issues should not be auto-labeled.
 - The OpenHands classifier logic for newcomer suitability lives in `scripts/issue_good_first_issue_check_openhands.py`, with focused unit coverage in `tests/unit/test_issue_good_first_issue_check_openhands.py`.
+
+### Frontend streaming render performance (#12681)
+
+- During streaming, consecutive token deltas merge into the LAST event in `useEventStore` (`stores/use-event-store.ts`), producing a fresh `events`/`uiEvents` array reference on every token even though only the last entry's content changed.
+- The chat list (`components/v1/chat/messages.tsx`) maps over `uiEvents`; `EventMessage` and `ChatMessage` are wrapped in `React.memo` so unchanged event objects (same ref across the store's array copy) skip re-render — only the merged streaming delta (new object ref) re-renders. `EventMessage`'s comparator compares `event` ref, `isLastMessage`, `isInLast10Actions`, `planPreviewEventIds` ref, and `messages.length` — NOT the `messages` array ref (which changes every token).
+- `MarkdownRenderer` hoists its static component maps + remarkPlugins to module scope and `useMemo`s the combined object; a fresh `components` object per render previously forced react-markdown to re-tokenize every subtree.
+- `usePlanPreviewEvents` returns a Set whose identity is stable across streaming tokens (keyed on the collected-id string, not `allEvents`), otherwise the `EventMessage` memo comparator would re-render every card every token.
+- When adding new chat-card components, keep props referentially stable across renders (or memoize with a comparator that ignores per-token-changed array refs) or the per-token re-render storm (high client GPU/CPU + UI freeze) returns.
+- Pre-commit note: the husky `pre-commit` runs `lint-staged` (frontend: prettier + `typecheck:staged`) AND `poetry run pre-commit` (backend). In environments without `poetry`, a frontend-only change must be committed with `--no-verify` after manually running `cd frontend && npm run lint && npm run build && npm run test`.
