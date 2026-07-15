@@ -1,7 +1,10 @@
+import asyncio
+import base64
 import hashlib
 from unittest.mock import AsyncMock, patch
 from uuid import UUID
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -27,16 +30,7 @@ class _FakeRedis:
         return self.data.get(key)
 
     async def eval(self, script, _num_keys, key, *args):
-        if script == codex_auth._REPLACE_OWNER_SCRIPT:
-            current, replacement, _ttl = args
-            if self.data.get(key) != current:
-                return 0
-            self.data[key] = replacement
-            return 1
-        if script == codex_auth._TOUCH_OWNER_SCRIPT:
-            owner, _ttl = args
-            return int(self.data.get(key) == owner)
-        if script == codex_auth._RELEASE_OWNER_SCRIPT:
+        if script == codex_auth._RELEASE_LOCK_SCRIPT:
             (owner,) = args
             if self.data.get(key) != owner:
                 return 0
@@ -119,6 +113,14 @@ def _headers(jwt_service, conversation_id, sandbox_id):
     }
 
 
+def _refresh_headers(jwt_service, conversation_id, sandbox_id):
+    credentials = (
+        f'session-{sandbox_id}:{_token(jwt_service, conversation_id, sandbox_id)}'
+    )
+    encoded = base64.b64encode(credentials.encode()).decode()
+    return {'Authorization': f'Basic {encoded}'}
+
+
 def test_rotation_is_returned_to_next_conversation(app, jwt_service):
     first_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
     second_id = UUID('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb')
@@ -180,7 +182,7 @@ def test_rotation_is_returned_to_next_conversation(app, jwt_service):
         assert response.text == rotated
 
 
-def test_second_active_conversation_is_rejected(app, jwt_service):
+def test_two_active_conversations_can_read_credentials(app, jwt_service):
     first_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
     second_id = UUID('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb')
     store = _FakeStore('{"tokens":{"refresh_token":"r0"}}')
@@ -198,7 +200,6 @@ def test_second_active_conversation_is_rejected(app, jwt_service):
         ),
         patch.object(codex_auth, '_get_store', AsyncMock(return_value=store)),
         patch.object(codex_auth, 'get_redis_client_async', return_value=redis),
-        patch.object(codex_auth, '_sandbox_is_running', AsyncMock(return_value=True)),
     ):
         client = TestClient(app)
         first = client.get(
@@ -211,8 +212,106 @@ def test_second_active_conversation_is_rejected(app, jwt_service):
         )
 
     assert first.status_code == 200
-    assert second.status_code == 409
-    assert 'already in use' in second.json()['detail']
+    assert second.status_code == 200
+    assert second.text == store.value
+
+
+@pytest.mark.asyncio
+async def test_stale_session_receives_brokered_refresh(app, jwt_service):
+    first_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+    second_id = UUID('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb')
+    original = (
+        '{"auth_mode":"chatgpt","tokens":'
+        '{"id_token":"id-r0","access_token":"access-r0",'
+        '"refresh_token":"refresh-r0"}}'
+    )
+    store = _FakeStore(original)
+    redis = _FakeRedis()
+    sandboxes = {
+        'session-a': _sandbox('a'),
+        'session-b': _sandbox('b'),
+    }
+
+    async def refresh_upstream(_refresh_token):
+        await asyncio.sleep(0.05)
+        return codex_auth.httpx.Response(
+            200,
+            json={
+                'id_token': 'id-r1',
+                'access_token': 'access-r1',
+                'refresh_token': 'refresh-r1',
+            },
+        )
+
+    upstream = AsyncMock(side_effect=refresh_upstream)
+
+    with (
+        patch.object(
+            codex_auth,
+            'validate_session_key',
+            AsyncMock(side_effect=lambda key: sandboxes[key]),
+        ),
+        patch.object(codex_auth, '_get_store', AsyncMock(return_value=store)),
+        patch.object(codex_auth, 'get_redis_client_async', return_value=redis),
+        patch.object(codex_auth, '_request_token_refresh', upstream),
+    ):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url='http://testserver'
+        ) as client:
+            first, second = await asyncio.gather(
+                client.post(
+                    f'/api/internal/conversations/{first_id}/codex-auth/refresh',
+                    headers=_refresh_headers(jwt_service, first_id, 'a'),
+                    json={
+                        'client_id': codex_auth._REFRESH_CLIENT_ID,
+                        'grant_type': 'refresh_token',
+                        'refresh_token': 'refresh-r0',
+                    },
+                ),
+                client.post(
+                    f'/api/internal/conversations/{second_id}/codex-auth/refresh',
+                    headers=_refresh_headers(jwt_service, second_id, 'b'),
+                    json={
+                        'client_id': codex_auth._REFRESH_CLIENT_ID,
+                        'grant_type': 'refresh_token',
+                        'refresh_token': 'refresh-r0',
+                    },
+                ),
+            )
+
+    assert first.status_code == 200
+    assert first.json()['refresh_token'] == 'refresh-r1'
+    assert second.status_code == 200
+    assert second.json() == first.json()
+    assert 'refresh-r1' in store.value
+    upstream.assert_awaited_once_with('refresh-r0')
+    assert redis.data == {}
+
+
+def test_head_returns_authoritative_digest(app, jwt_service):
+    conversation_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+    value = '{"tokens":{"refresh_token":"r0"}}'
+    store = _FakeStore(value)
+
+    with (
+        patch.object(
+            codex_auth,
+            'validate_session_key',
+            AsyncMock(return_value=_sandbox('a')),
+        ),
+        patch.object(codex_auth, '_get_store', AsyncMock(return_value=store)),
+    ):
+        response = TestClient(app).head(
+            f'/api/internal/conversations/{conversation_id}/codex-auth',
+            headers=_headers(jwt_service, conversation_id, 'a'),
+        )
+
+    assert response.status_code == 204
+    assert (
+        response.headers['X-Codex-Auth-Digest']
+        == hashlib.sha256(value.encode()).hexdigest()
+    )
 
 
 def test_digest_conflict_never_overwrites_current_value(app, jwt_service):

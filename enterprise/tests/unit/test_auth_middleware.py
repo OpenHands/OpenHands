@@ -160,6 +160,61 @@ async def test_middleware_no_auth_at_all(middleware, mock_request):
     assert result.status_code == status.HTTP_401_UNAUTHORIZED
 
 
+@pytest.mark.asyncio
+async def test_middleware_defers_codex_refresh_auth(
+    middleware, mock_request, mock_response
+):
+    mock_request.cookies = {}
+    mock_request.headers = {'Authorization': 'Basic scoped-credentials'}
+    mock_request.method = 'POST'
+    mock_request.url = MagicMock()
+    mock_request.url.hostname = 'localhost'
+    mock_request.url.path = (
+        '/api/internal/conversations/'
+        '11111111-1111-1111-1111-111111111111/codex-auth/refresh'
+    )
+    mock_call_next = AsyncMock(return_value=mock_response)
+
+    result = await middleware(mock_request, mock_call_next)
+
+    assert result == mock_response
+    mock_call_next.assert_awaited_once_with(mock_request)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('method', 'path'),
+    (
+        (
+            'GET',
+            '/api/internal/conversations/'
+            '11111111-1111-1111-1111-111111111111/codex-auth/refresh',
+        ),
+        (
+            'POST',
+            '/api/internal/conversations/'
+            '11111111-1111-1111-1111-111111111111/codex-auth',
+        ),
+    ),
+)
+async def test_middleware_does_not_defer_other_internal_auth(
+    middleware, mock_request, method, path
+):
+    mock_request.cookies = {}
+    mock_request.headers = {'Authorization': 'Basic scoped-credentials'}
+    mock_request.method = method
+    mock_request.url = MagicMock()
+    mock_request.url.hostname = 'localhost'
+    mock_request.url.path = path
+    mock_call_next = AsyncMock(return_value=MagicMock(spec=Response))
+
+    result = await middleware(mock_request, mock_call_next)
+
+    assert isinstance(result, JSONResponse)
+    assert result.status_code == status.HTTP_401_UNAUTHORIZED
+    mock_call_next.assert_not_called()
+
+
 def decode_body(body: bytes | memoryview):
     if isinstance(body, memoryview):
         return body.tobytes().decode()

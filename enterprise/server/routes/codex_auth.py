@@ -1,45 +1,43 @@
+import asyncio
+import base64
 import hashlib
+import hmac
 import json
+import os
 import re
+import secrets
+import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+import httpx
 import jwt
 from fastapi import APIRouter, Header, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from storage.redis import get_redis_client_async, redis_exceptions
 from storage.saas_secrets_store import SaasSecretsStore
 
-from openhands.app_server.config import depends_jwt_service, get_sandbox_service
+from openhands.app_server.config import depends_jwt_service
 from openhands.app_server.constants import MAX_API_SECRET_VALUE_LENGTH
-from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.app_server.sandbox.session_auth import validate_session_key
 from openhands.app_server.secrets.codex_auth import is_chatgpt_codex_auth
-from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
-from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
 
 router = APIRouter(prefix='/api/internal/conversations')
 jwt_service_dependency = depends_jwt_service()
 
 _SECRET_NAME = 'CODEX_AUTH_JSON'
-_LEASE_TTL_SECONDS = 14 * 86400
+_REFRESH_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
+_REFRESH_LOCK_TTL_SECONDS = 120
+_REFRESH_LOCK_WAIT_SECONDS = 30
+_REFRESH_TOKEN_URL = 'https://auth.openai.com/oauth/token'
 _DIGEST_PATTERN = re.compile(r'^[0-9a-f]{64}$')
 _MAX_REQUEST_BYTES = MAX_API_SECRET_VALUE_LENGTH + 4096
-_REPLACE_OWNER_SCRIPT = """
-if redis.call('get', KEYS[1]) == ARGV[1] then
-    redis.call('set', KEYS[1], ARGV[2], 'EX', ARGV[3])
-    return 1
-end
-return 0
-"""
-_TOUCH_OWNER_SCRIPT = """
-if redis.call('get', KEYS[1]) == ARGV[1] then
-    return redis.call('expire', KEYS[1], ARGV[2])
-end
-return 0
-"""
-_RELEASE_OWNER_SCRIPT = """
+_RELEASE_LOCK_SCRIPT = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
     return redis.call('del', KEYS[1])
 end
@@ -55,20 +53,10 @@ class _CodexAuthScope:
     conversation_id: UUID
 
     @property
-    def owner(self) -> str:
-        return json.dumps(
-            {
-                'conversation_id': str(self.conversation_id),
-                'sandbox_id': self.sandbox_id,
-            },
-            separators=(',', ':'),
-            sort_keys=True,
-        )
-
-    @property
-    def lease_key(self) -> str:
-        user_digest = hashlib.sha256(self.user_id.encode()).hexdigest()
-        return f'codex-auth-owner:{user_digest}'
+    def refresh_lock_key(self) -> str:
+        scope = f'{self.user_id}\0{self.org_id}'
+        scope_digest = hashlib.sha256(scope.encode()).hexdigest()
+        return f'codex-auth-refresh:{scope_digest}'
 
 
 async def _authorize(
@@ -111,101 +99,39 @@ async def _authorize(
     )
 
 
-async def _sandbox_is_running(sandbox_id: str) -> bool:
-    state = InjectorState()
-    setattr(state, USER_CONTEXT_ATTR, ADMIN)
-    async with get_sandbox_service(state) as sandbox_service:
-        sandbox = await sandbox_service.get_sandbox(sandbox_id)
-    return sandbox is not None and sandbox.status == SandboxStatus.RUNNING
-
-
-async def _replace_owner(redis, key: str, current: str, owner: str) -> bool:
-    result = await redis.eval(
-        _REPLACE_OWNER_SCRIPT,
-        1,
-        key,
-        current,
-        owner,
-        str(_LEASE_TTL_SECONDS),
-    )
-    return bool(result)
-
-
-async def _acquire_lease(scope: _CodexAuthScope) -> None:
+@asynccontextmanager
+async def _credential_lock(scope: _CodexAuthScope) -> AsyncIterator[None]:
     redis: Any = get_redis_client_async()
+    owner = secrets.token_urlsafe(24)
+    deadline = time.monotonic() + _REFRESH_LOCK_WAIT_SECONDS
     try:
-        for _ in range(3):
+        while True:
             acquired = await redis.set(
-                scope.lease_key,
-                scope.owner,
-                ex=_LEASE_TTL_SECONDS,
+                scope.refresh_lock_key,
+                owner,
+                ex=_REFRESH_LOCK_TTL_SECONDS,
                 nx=True,
             )
             if acquired:
-                return
-            raw_owner = await redis.get(scope.lease_key)
-            if raw_owner is None:
-                continue
-            current = raw_owner.decode() if isinstance(raw_owner, bytes) else raw_owner
-            existing = json.loads(current)
-            existing_conversation_id = UUID(existing['conversation_id'])
-            existing_sandbox_id = str(existing['sandbox_id'])
-            if existing_conversation_id != scope.conversation_id and (
-                await _sandbox_is_running(existing_sandbox_id)
-            ):
+                break
+            if time.monotonic() >= deadline:
                 raise HTTPException(
-                    status.HTTP_409_CONFLICT,
-                    detail=(
-                        'ChatGPT subscription credentials are already in use by '
-                        'another Codex conversation. Stop it and try again.'
-                    ),
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail='Codex credential refresh is busy',
                 )
-            if await _replace_owner(redis, scope.lease_key, current, scope.owner):
-                return
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail='Codex credential ownership changed; try again.',
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail='Codex credential ownership is unavailable',
-        ) from exc
-
-
-async def _require_lease(scope: _CodexAuthScope) -> None:
-    redis: Any = get_redis_client_async()
-    try:
-        touched = await redis.eval(
-            _TOUCH_OWNER_SCRIPT,
-            1,
-            scope.lease_key,
-            scope.owner,
-            str(_LEASE_TTL_SECONDS),
-        )
+            await asyncio.sleep(0.1)
     except redis_exceptions.RedisError as exc:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail='Codex credential ownership is unavailable',
+            detail='Codex credential refresh is unavailable',
         ) from exc
-    if not touched:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail='Codex credential ownership expired or moved to another session.',
-        )
-
-
-async def _release_lease(scope: _CodexAuthScope) -> None:
-    redis: Any = get_redis_client_async()
     try:
-        await redis.eval(_RELEASE_OWNER_SCRIPT, 1, scope.lease_key, scope.owner)
-    except redis_exceptions.RedisError as exc:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail='Codex credential ownership is unavailable',
-        ) from exc
+        yield
+    finally:
+        try:
+            await redis.eval(_RELEASE_LOCK_SCRIPT, 1, scope.refresh_lock_key, owner)
+        except redis_exceptions.RedisError:
+            pass
 
 
 async def _get_store(scope: _CodexAuthScope) -> SaasSecretsStore:
@@ -249,6 +175,127 @@ async def _parse_update(request: Request) -> tuple[str, str]:
     return expected_digest, value
 
 
+def _decode_refresh_authorization(value: str | None) -> tuple[str, str]:
+    try:
+        scheme, encoded = value.split(' ', 1) if value else ('', '')
+        decoded = base64.b64decode(encoded, validate=True).decode()
+        session_api_key, separator, codex_auth_token = decoded.partition(':')
+    except (UnicodeError, ValueError):
+        scheme = ''
+        session_api_key = ''
+        separator = ''
+        codex_auth_token = ''
+    if (
+        scheme.lower() != 'basic'
+        or not separator
+        or not session_api_key
+        or not codex_auth_token
+    ):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail='Invalid Codex refresh authorization',
+        )
+    return session_api_key, codex_auth_token
+
+
+async def _parse_refresh_request(request: Request) -> str:
+    body = await request.body()
+    if len(body) > 4096:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail='Codex credential refresh is too large',
+        )
+    try:
+        payload = json.loads(body)
+        client_id = payload['client_id']
+        grant_type = payload['grant_type']
+        refresh_token = payload['refresh_token']
+    except (KeyError, TypeError, UnicodeError, ValueError):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail='Invalid Codex credential refresh',
+        ) from None
+    if (
+        client_id != _REFRESH_CLIENT_ID
+        or grant_type != 'refresh_token'
+        or not isinstance(refresh_token, str)
+        or not refresh_token
+    ):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail='Invalid Codex credential refresh',
+        )
+    return refresh_token
+
+
+def _token_payload(value: str) -> dict[str, str]:
+    try:
+        tokens = json.loads(value)['tokens']
+    except (KeyError, TypeError, ValueError):
+        tokens = None
+    if not isinstance(tokens, dict):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail='Stored Codex authentication needs to be refreshed',
+        )
+    payload = {
+        key: token
+        for key in ('id_token', 'access_token', 'refresh_token')
+        if isinstance((token := tokens.get(key)), str) and token
+    }
+    if 'refresh_token' not in payload:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail='Stored Codex authentication needs to be refreshed',
+        )
+    return payload
+
+
+def _merge_refresh(value: str, refresh: dict[str, Any]) -> str:
+    if not isinstance(refresh.get('access_token'), str) or not refresh['access_token']:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            detail='Codex credential refresh returned an invalid response',
+        )
+    document = json.loads(value)
+    tokens = document['tokens']
+    for key in ('id_token', 'access_token', 'refresh_token'):
+        token = refresh.get(key)
+        if isinstance(token, str) and token:
+            tokens[key] = token
+    document['last_refresh'] = datetime.now(UTC).isoformat().replace('+00:00', 'Z')
+    updated = json.dumps(document, separators=(',', ':'))
+    if not is_chatgpt_codex_auth(updated):
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            detail='Codex credential refresh returned invalid authentication',
+        )
+    return updated
+
+
+async def _request_token_refresh(refresh_token: str) -> httpx.Response:
+    url = os.getenv('OPENHANDS_CODEX_REFRESH_TOKEN_URL', _REFRESH_TOKEN_URL)
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        return await client.post(
+            url,
+            json={
+                'client_id': _REFRESH_CLIENT_ID,
+                'grant_type': 'refresh_token',
+                'refresh_token': refresh_token,
+            },
+        )
+
+
+def _refresh_error(response: httpx.Response) -> dict[str, Any]:
+    try:
+        payload = response.json()
+        error = payload.get('error')
+        code = error.get('code') if isinstance(error, dict) else None
+    except (AttributeError, TypeError, ValueError):
+        code = None
+    return {'error': {'code': code or 'credential_refresh_failed'}}
+
+
 @router.get('/{conversation_id}/codex-auth', include_in_schema=False)
 async def get_codex_auth(
     conversation_id: UUID,
@@ -270,7 +317,6 @@ async def get_codex_auth(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail='Stored Codex authentication needs to be refreshed',
         )
-    await _acquire_lease(scope)
     return Response(
         content=value,
         media_type='application/json',
@@ -288,8 +334,17 @@ async def touch_codex_auth(
     scope = await _authorize(
         conversation_id, x_session_api_key, x_codex_auth_token, jwt_service
     )
-    await _require_lease(scope)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    store = await _get_store(scope)
+    value = await store.get_custom_secret_value(_SECRET_NAME)
+    if value is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail='Codex credentials were not found'
+        )
+    digest = hashlib.sha256(value.encode()).hexdigest()
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT,
+        headers={'X-Codex-Auth-Digest': digest, 'Cache-Control': 'no-store'},
+    )
 
 
 @router.put('/{conversation_id}/codex-auth', include_in_schema=False)
@@ -304,22 +359,102 @@ async def update_codex_auth(
         conversation_id, x_session_api_key, x_codex_auth_token, jwt_service
     )
     expected_digest, value = await _parse_update(request)
-    await _require_lease(scope)
-    store = await _get_store(scope)
-    try:
-        updated = await store.compare_and_swap_custom_secret(
-            _SECRET_NAME, expected_digest, value
-        )
-    except KeyError as exc:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, detail='Codex credentials were not found'
-        ) from exc
+    async with _credential_lock(scope):
+        store = await _get_store(scope)
+        try:
+            updated = await store.compare_and_swap_custom_secret(
+                _SECRET_NAME, expected_digest, value
+            )
+        except KeyError as exc:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, detail='Codex credentials were not found'
+            ) from exc
     if not updated:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail='Codex credentials changed in another session.',
         )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post('/{conversation_id}/codex-auth/refresh', include_in_schema=False)
+async def refresh_codex_auth(
+    conversation_id: UUID,
+    request: Request,
+    authorization: str | None = Header(None),
+    jwt_service: JwtService = jwt_service_dependency,
+):
+    session_api_key, codex_auth_token = _decode_refresh_authorization(authorization)
+    scope = await _authorize(
+        conversation_id, session_api_key, codex_auth_token, jwt_service
+    )
+    submitted_refresh_token = await _parse_refresh_request(request)
+    async with _credential_lock(scope):
+        store = await _get_store(scope)
+        current = await store.get_custom_secret_value(_SECRET_NAME)
+        if current is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, detail='Codex credentials were not found'
+            )
+        current_tokens = _token_payload(current)
+        current_refresh_token = current_tokens['refresh_token']
+        if not hmac.compare_digest(
+            submitted_refresh_token.encode(errors='surrogatepass'),
+            current_refresh_token.encode(errors='surrogatepass'),
+        ):
+            return JSONResponse(
+                current_tokens,
+                headers={'Cache-Control': 'no-store'},
+            )
+        try:
+            response = await _request_token_refresh(current_refresh_token)
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                detail='Codex credential refresh is unavailable',
+            ) from exc
+        if not response.is_success:
+            response_status = (
+                response.status_code
+                if 400 <= response.status_code < 500
+                else status.HTTP_502_BAD_GATEWAY
+            )
+            return JSONResponse(
+                _refresh_error(response),
+                status_code=response_status,
+                headers={'Cache-Control': 'no-store'},
+            )
+        try:
+            refresh = response.json()
+        except ValueError as exc:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                detail='Codex credential refresh returned an invalid response',
+            ) from exc
+        if not isinstance(refresh, dict):
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                detail='Codex credential refresh returned an invalid response',
+            )
+        updated_value = _merge_refresh(current, refresh)
+        current_digest = hashlib.sha256(current.encode()).hexdigest()
+        try:
+            updated = await store.compare_and_swap_custom_secret(
+                _SECRET_NAME, current_digest, updated_value
+            )
+        except KeyError as exc:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, detail='Codex credentials were not found'
+            ) from exc
+        if not updated:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail='Codex credentials changed during refresh',
+            )
+        return JSONResponse(
+            _token_payload(updated_value),
+            headers={'Cache-Control': 'no-store'},
+        )
 
 
 @router.delete('/{conversation_id}/codex-auth', include_in_schema=False)
@@ -329,8 +464,7 @@ async def release_codex_auth(
     x_codex_auth_token: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    scope = await _authorize(
+    await _authorize(
         conversation_id, x_session_api_key, x_codex_auth_token, jwt_service
     )
-    await _release_lease(scope)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
