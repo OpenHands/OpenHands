@@ -36,7 +36,6 @@ _REFRESH_LOCK_TTL_SECONDS = 120
 _REFRESH_LOCK_WAIT_SECONDS = 30
 _REFRESH_TOKEN_URL = 'https://auth.openai.com/oauth/token'
 _DIGEST_PATTERN = re.compile(r'^[0-9a-f]{64}$')
-_MAX_REQUEST_BYTES = MAX_API_SECRET_VALUE_LENGTH + 4096
 _RELEASE_LOCK_SCRIPT = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
     return redis.call('del', KEYS[1])
@@ -193,27 +192,8 @@ async def _get_store(scope: _CodexAuthScope) -> CodexAuthStore:
     return await CodexAuthStore.get_instance(scope.user_id, scope.org_id)
 
 
-async def _read_limited_body(request: Request, limit: int, detail: str) -> bytes:
-    content_length = request.headers.get('content-length')
-    try:
-        declared_length = int(content_length) if content_length is not None else None
-    except ValueError:
-        declared_length = None
-    if declared_length is not None and declared_length > limit:
-        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, detail=detail)
-
-    body = bytearray()
-    async for chunk in request.stream():
-        if len(body) + len(chunk) > limit:
-            raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, detail=detail)
-        body.extend(chunk)
-    return bytes(body)
-
-
 async def _parse_update(request: Request) -> tuple[str, str]:
-    body = await _read_limited_body(
-        request, _MAX_REQUEST_BYTES, 'Codex credential update is too large'
-    )
+    body = await request.body()
     try:
         payload = json.loads(body)
         expected_digest = payload['expected_digest']
@@ -266,9 +246,7 @@ def _decode_refresh_authorization(value: str | None) -> tuple[str, str]:
 
 
 async def _parse_refresh_request(request: Request) -> str:
-    body = await _read_limited_body(
-        request, 4096, 'Codex credential refresh is too large'
-    )
+    body = await request.body()
     try:
         payload = json.loads(body)
         client_id = payload['client_id']

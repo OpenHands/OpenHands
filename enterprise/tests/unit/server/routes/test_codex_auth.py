@@ -6,7 +6,7 @@ from uuid import UUID
 
 import httpx
 import pytest
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from server.routes import codex_auth
@@ -232,39 +232,6 @@ def test_revocation_rejects_equivalent_padded_jwt(app, jwt_service, broker):
 
     assert response.status_code == 204
     assert padded_response.status_code == 401
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ('parser', 'limit'),
-    [
-        (codex_auth._parse_update, codex_auth._MAX_REQUEST_BYTES),
-        (codex_auth._parse_refresh_request, 4096),
-    ],
-)
-async def test_oversized_chunked_body_stops_streaming(parser, limit):
-    messages = [
-        {'type': 'http.request', 'body': b'x' * limit, 'more_body': True},
-        {'type': 'http.request', 'body': b'x', 'more_body': True},
-        {'type': 'http.request', 'body': b'unread', 'more_body': False},
-    ]
-    received = 0
-
-    async def receive():
-        nonlocal received
-        message = messages[received]
-        received += 1
-        return message
-
-    request = Request(
-        {'type': 'http', 'method': 'POST', 'path': '/', 'headers': []}, receive
-    )
-
-    with pytest.raises(HTTPException) as exc_info:
-        await parser(request)
-
-    assert exc_info.value.status_code == 413
-    assert received == 2
 
 
 @pytest.mark.asyncio
