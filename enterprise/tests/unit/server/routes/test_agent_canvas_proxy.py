@@ -79,7 +79,7 @@ def test_canvas_proxies_authenticated_requests(monkeypatch):
     ]
 
 
-def test_canvas_proxies_static_assets_without_authentication(monkeypatch):
+def test_canvas_proxies_public_static_resources_without_authentication(monkeypatch):
     monkeypatch.setenv("AGENT_CANVAS_INTERNAL_URL", "http://agent-canvas:8000")
     calls = []
 
@@ -97,8 +97,8 @@ def test_canvas_proxies_static_assets_without_authentication(monkeypatch):
             calls.append({"method": method, "url": url, "headers": headers})
             return httpx.Response(
                 200,
-                content=b"console.log('canvas')",
-                headers={"content-type": "application/javascript"},
+                content=b"public canvas resource",
+                headers={"content-type": "text/plain"},
             )
 
     app = FastAPI()
@@ -109,14 +109,32 @@ def test_canvas_proxies_static_assets_without_authentication(monkeypatch):
         patch("server.routes.agent_canvas.get_access_token", _unexpected_auth),
         patch("server.routes.agent_canvas.httpx.AsyncClient", FakeAsyncClient),
     ):
-        response = client.get("/canvas/assets/app.js?v=1")
+        responses = [
+            client.get("/canvas/assets/app.js?v=1"),
+            client.get("/canvas/locales/en/openhands.json"),
+            client.get("/canvas/favicon.svg"),
+        ]
 
-    assert response.status_code == 200
-    assert response.text == "console.log('canvas')"
+    assert [response.status_code for response in responses] == [200, 200, 200]
+    assert [response.text for response in responses] == [
+        "public canvas resource",
+        "public canvas resource",
+        "public canvas resource",
+    ]
     assert calls == [
         {
             "method": "GET",
             "url": "http://agent-canvas:8000/canvas/assets/app.js?v=1",
             "headers": {"accept": "*/*"},
-        }
+        },
+        {
+            "method": "GET",
+            "url": "http://agent-canvas:8000/canvas/locales/en/openhands.json",
+            "headers": {"accept": "*/*"},
+        },
+        {
+            "method": "GET",
+            "url": "http://agent-canvas:8000/canvas/favicon.svg",
+            "headers": {"accept": "*/*"},
+        },
     ]

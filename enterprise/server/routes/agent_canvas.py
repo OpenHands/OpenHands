@@ -13,7 +13,8 @@ from openhands.app_server.utils.http_session import httpx_verify_option
 AGENT_CANVAS_INTERNAL_URL_ENV = "AGENT_CANVAS_INTERNAL_URL"
 AGENT_CANVAS_PATH_PREFIX = "/canvas"
 AGENT_CANVAS_PROXY_TIMEOUT_SECONDS = 30.0
-AGENT_CANVAS_PUBLIC_PATH_PREFIXES = ("/assets/",)
+AGENT_CANVAS_PUBLIC_PATH_PREFIXES = ("/assets/", "/locales/")
+AGENT_CANVAS_PUBLIC_PATHS = frozenset(("/favicon.svg",))
 HOP_BY_HOP_RESPONSE_HEADERS = {
     "connection",
     "content-encoding",
@@ -46,7 +47,9 @@ def _login_redirect(request: Request) -> RedirectResponse:
 
 
 def _requires_auth(path: str) -> bool:
-    return not path.startswith(AGENT_CANVAS_PUBLIC_PATH_PREFIXES)
+    return path not in AGENT_CANVAS_PUBLIC_PATHS and not path.startswith(
+        AGENT_CANVAS_PUBLIC_PATH_PREFIXES
+    )
 
 
 async def _is_authenticated(request: Request) -> bool:
