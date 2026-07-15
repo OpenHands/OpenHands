@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useIsAuthed } from "./query/use-is-authed";
 import { LoginMethod, setLoginMethod } from "#/utils/local-storage";
+import { navigateToReturnUrl } from "#/utils/canvas-return-url";
 import { useConfig } from "./query/use-config";
 
 /**
@@ -55,7 +56,7 @@ export const useAuthCallback = () => {
         ? `${destination}?${remainingParams}`
         : destination;
 
-      navigate(finalUrl, { replace: true });
+      navigateToReturnUrl(finalUrl, navigate);
     }
   }, [
     isAuthed,

@@ -132,7 +132,7 @@ const createWrapper = () => {
 describe("LoginPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal("location", { href: "" });
+    vi.stubGlobal("location", { href: "", assign: vi.fn() });
 
     // @ts-expect-error - partial mock for testing
     vi.spyOn(OptionService, "getConfig").mockResolvedValue({
@@ -217,7 +217,7 @@ describe("LoginPage", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
-        enable_onboarding: false,
+          enable_onboarding: false,
         },
       });
 
@@ -257,7 +257,7 @@ describe("LoginPage", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
-        enable_onboarding: false,
+          enable_onboarding: false,
         },
       });
 
@@ -383,6 +383,23 @@ describe("LoginPage", () => {
       );
     });
 
+    it("should hard reload authenticated users to Canvas returnTo destination", async () => {
+      vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
+
+      render(
+        <RouterStub
+          initialEntries={["/login?returnTo=/canvas/conversations"]}
+        />,
+        { wrapper: createWrapper() },
+      );
+
+      await waitFor(() => {
+        expect(window.location.assign).toHaveBeenCalledWith(
+          "/canvas/conversations",
+        );
+      });
+    });
+
     it("should preserve login_method param when redirecting authenticated users", async () => {
       // Arrange
       vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
@@ -421,7 +438,7 @@ describe("LoginPage", () => {
           hide_users_page: false,
           hide_billing_page: false,
           hide_integrations_page: false,
-        enable_onboarding: false,
+          enable_onboarding: false,
         },
       });
 
