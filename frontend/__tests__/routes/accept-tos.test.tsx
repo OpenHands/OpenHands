@@ -126,9 +126,13 @@ describe("AcceptTOS", () => {
     });
   });
 
-  it.each(["/canvas", "/automations"])(
+  it.each([
+    ["/canvas", "/canvas"],
+    ["/automations", "/automations"],
+    ["https://pr-254.staging.all-hands.dev/canvas", "/canvas"],
+  ])(
     "should hard reload %s redirect URLs after accepting TOS",
-    async (redirectUrl) => {
+    async (redirectUrl, expectedUrl) => {
       vi.mocked(openHands.post).mockResolvedValue({
         data: { redirect_url: redirectUrl },
       });
@@ -145,7 +149,7 @@ describe("AcceptTOS", () => {
       await user.click(continueButton);
 
       await waitFor(() => {
-        expect(window.location.assign).toHaveBeenCalledWith(redirectUrl);
+        expect(window.location.assign).toHaveBeenCalledWith(expectedUrl);
       });
     },
   );

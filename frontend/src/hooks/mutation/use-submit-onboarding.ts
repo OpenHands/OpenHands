@@ -2,7 +2,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { openHands } from "#/api/open-hands-axios";
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
-import { navigateToReturnUrl } from "#/utils/canvas-return-url";
+import {
+  isCrossOriginUrl,
+  navigateToReturnUrl,
+} from "#/utils/canvas-return-url";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 type SubmitOnboardingArgs = {
@@ -38,16 +41,13 @@ export const useSubmitOnboarding = () => {
       queryClient.invalidateQueries({ queryKey: ["onboarding-status"] });
 
       const finalRedirectUrl = data.redirect_url || returnTo || "/";
-      // Check if the redirect URL is an external URL (starts with http or https)
-      if (
-        finalRedirectUrl.startsWith("http://") ||
-        finalRedirectUrl.startsWith("https://")
-      ) {
-        // For external URLs, redirect using window.location
+
+      if (isCrossOriginUrl(finalRedirectUrl)) {
         window.location.href = finalRedirectUrl;
-      } else {
-        navigateToReturnUrl(finalRedirectUrl, navigate);
+        return;
       }
+
+      navigateToReturnUrl(finalRedirectUrl, navigate);
     },
     onError: (error) => {
       displayErrorToast(error.message);

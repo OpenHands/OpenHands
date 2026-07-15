@@ -58,6 +58,15 @@ export function getAgentCanvasReturnPath(value: string): string | null {
   return null;
 }
 
+export function isCrossOriginUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.origin !== window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 export function isAgentCanvasReturnUrl(path: string): boolean {
   return getAgentCanvasReturnPath(path) !== null;
 }
