@@ -132,7 +132,11 @@ const createWrapper = () => {
 describe("LoginPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal("location", { href: "", assign: vi.fn() });
+    vi.stubGlobal("location", {
+      href: "",
+      origin: "https://pr-254.staging.all-hands.dev",
+      assign: vi.fn(),
+    });
 
     // @ts-expect-error - partial mock for testing
     vi.spyOn(OptionService, "getConfig").mockResolvedValue({
@@ -389,6 +393,25 @@ describe("LoginPage", () => {
       render(
         <RouterStub
           initialEntries={["/login?returnTo=/canvas/conversations"]}
+        />,
+        { wrapper: createWrapper() },
+      );
+
+      await waitFor(() => {
+        expect(window.location.assign).toHaveBeenCalledWith(
+          "/canvas/conversations",
+        );
+      });
+    });
+
+    it("should hard reload authenticated users to same-origin absolute Canvas returnTo destination", async () => {
+      vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
+
+      render(
+        <RouterStub
+          initialEntries={[
+            `/login?returnTo=${encodeURIComponent("https://pr-254.staging.all-hands.dev/canvas/conversations")}`,
+          ]}
         />,
         { wrapper: createWrapper() },
       );
