@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -13,6 +14,8 @@ from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.utils.logger import openhands_logger as logger
 
+_CODEX_AUTH_SECRET_NAME = 'CODEX_AUTH_JSON'
+
 
 @dataclass
 class SaasSecretsStore(SecretsStore):
@@ -24,6 +27,9 @@ class SaasSecretsStore(SecretsStore):
     # (user_id, org_id), so the effective org must flow through here for
     # the right rows to be read/written.
     effective_org_id: UUID | None = None
+    _loaded_codex_auth_digests: dict[UUID | None, str] = field(
+        default_factory=dict, init=False, repr=False
+    )
 
     async def load(self) -> Secrets | None:
         if not self.user_id:
@@ -42,6 +48,7 @@ class SaasSecretsStore(SecretsStore):
             settings = result.scalars().all()
 
             if not settings:
+                self._loaded_codex_auth_digests.pop(org_id, None)
                 return Secrets()
 
             kwargs = {}
@@ -52,6 +59,13 @@ class SaasSecretsStore(SecretsStore):
                 }
 
             self._decrypt_kwargs(kwargs)
+            codex_auth = kwargs.get(_CODEX_AUTH_SECRET_NAME, {}).get('secret')
+            if isinstance(codex_auth, str):
+                self._loaded_codex_auth_digests[org_id] = hashlib.sha256(
+                    codex_auth.encode()
+                ).hexdigest()
+            else:
+                self._loaded_codex_auth_digests.pop(org_id, None)
 
             return Secrets(custom_secrets=kwargs)  # type: ignore[arg-type]
 
@@ -60,8 +74,36 @@ class SaasSecretsStore(SecretsStore):
         if user is None:
             raise ValueError(f'User not found: {self.user_id}')
         org_id = self.effective_org_id or user.current_org_id
+        kwargs = item.model_dump(context={'expose_secrets': True})
+        del kwargs['provider_tokens']
+        secrets_json = kwargs.get('custom_secrets', {})
+        codex_auth_info = secrets_json.get(_CODEX_AUTH_SECRET_NAME)
+        codex_auth = (
+            codex_auth_info.get('secret') if isinstance(codex_auth_info, dict) else None
+        )
+        loaded_codex_digest = self._loaded_codex_auth_digests.get(org_id)
+        codex_auth_digest = (
+            hashlib.sha256(codex_auth.encode()).hexdigest()
+            if isinstance(codex_auth, str)
+            else None
+        )
+        preserve_codex_auth = (
+            loaded_codex_digest == codex_auth_digest and codex_auth_digest is not None
+        )
 
         async with a_session_maker() as session:
+            if preserve_codex_auth:
+                await session.execute(
+                    select(StoredCustomSecrets.id)
+                    .filter(
+                        StoredCustomSecrets.keycloak_user_id == self.user_id,
+                        StoredCustomSecrets.org_id == org_id,
+                        StoredCustomSecrets.secret_name == _CODEX_AUTH_SECRET_NAME,
+                    )
+                    .with_for_update()
+                )
+                secrets_json.pop(_CODEX_AUTH_SECRET_NAME, None)
+
             # Incoming secrets are always the most updated ones
             # Delete existing records for this user AND organization only
             # org_id is always set: it's either the effective org from
@@ -70,16 +112,13 @@ class SaasSecretsStore(SecretsStore):
                 StoredCustomSecrets.keycloak_user_id == self.user_id,
                 StoredCustomSecrets.org_id == org_id,
             )
+            if preserve_codex_auth:
+                delete_query = delete_query.filter(
+                    StoredCustomSecrets.secret_name != _CODEX_AUTH_SECRET_NAME
+                )
             await session.execute(delete_query)
 
-            # Prepare the new secrets data
-            kwargs = item.model_dump(context={'expose_secrets': True})
-            del kwargs[
-                'provider_tokens'
-            ]  # Assuming provider_tokens is not part of custom_secrets
             self._encrypt_kwargs(kwargs)
-
-            secrets_json = kwargs.get('custom_secrets', {})
 
             # Extract the secrets into tuples for insertion or updating
             secret_tuples = []
@@ -101,6 +140,13 @@ class SaasSecretsStore(SecretsStore):
                 session.add(new_secret)
 
             await session.commit()
+            if not preserve_codex_auth:
+                if isinstance(codex_auth, str):
+                    self._loaded_codex_auth_digests[org_id] = hashlib.sha256(
+                        codex_auth.encode()
+                    ).hexdigest()
+                else:
+                    self._loaded_codex_auth_digests.pop(org_id, None)
 
     def _decrypt_kwargs(self, kwargs: dict):
         for key, value in kwargs.items():

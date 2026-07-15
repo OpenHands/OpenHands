@@ -1,3 +1,4 @@
+import hashlib
 from types import MappingProxyType
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -5,6 +6,7 @@ from uuid import UUID
 
 import pytest
 from pydantic import SecretStr
+from storage.codex_auth_store import CodexAuthStore
 from storage.saas_secrets_store import SaasSecretsStore
 from storage.stored_custom_secrets import StoredCustomSecrets
 
@@ -35,8 +37,10 @@ def mock_user():
 @pytest.fixture
 def secrets_store(async_session_maker, jwt_svc):
     # Inject the test session maker into the store module
+    import storage.codex_auth_store as codex_store_module
     import storage.saas_secrets_store as store_module
 
+    codex_store_module.a_session_maker = async_session_maker
     store_module.a_session_maker = async_session_maker
 
     store = SaasSecretsStore('user-id', jwt_svc)
@@ -46,6 +50,96 @@ def secrets_store(async_session_maker, jwt_svc):
 
 
 class TestSaasSecretsStore:
+    @pytest.mark.asyncio
+    @patch(
+        'storage.saas_secrets_store.UserStore.get_user_by_id',
+        new_callable=AsyncMock,
+    )
+    async def test_stale_save_preserves_rotated_codex_auth(
+        self, mock_get_user, secrets_store, mock_user
+    ):
+        mock_get_user.return_value = mock_user
+        original = '{"tokens":{"refresh_token":"r0"}}'
+        rotated = '{"tokens":{"refresh_token":"r1"}}'
+        initial = Secrets(
+            custom_secrets=MappingProxyType(
+                {
+                    'CODEX_AUTH_JSON': CustomSecret.from_value(
+                        {'secret': original, 'description': 'Codex login'}
+                    ),
+                    'OTHER': CustomSecret.from_value(
+                        {'secret': 'old', 'description': ''}
+                    ),
+                }
+            )
+        )
+        await secrets_store.store(initial)
+        stale_store = SaasSecretsStore('user-id', secrets_store._jwt_svc)
+        stale = await stale_store.load()
+        assert stale is not None
+
+        codex_store = CodexAuthStore(
+            'user-id', mock_user.current_org_id, secrets_store._jwt_svc
+        )
+        assert await codex_store.compare_and_swap(
+            hashlib.sha256(original.encode()).hexdigest(), rotated
+        )
+        updated = dict(stale.custom_secrets)
+        updated['OTHER'] = CustomSecret.from_value({'secret': 'new', 'description': ''})
+        stale_update = stale.model_copy(
+            update={'custom_secrets': MappingProxyType(updated)}
+        )
+        await stale_store.store(stale_update)
+        await stale_store.store(stale_update)
+
+        assert await codex_store.get_value() == rotated
+        loaded = await secrets_store.load()
+        assert loaded is not None
+        assert loaded.custom_secrets['OTHER'].secret.get_secret_value() == 'new'
+
+    @pytest.mark.asyncio
+    @patch(
+        'storage.saas_secrets_store.UserStore.get_user_by_id',
+        new_callable=AsyncMock,
+    )
+    async def test_changed_codex_auth_wins_after_concurrent_rotation(
+        self, mock_get_user, secrets_store, mock_user
+    ):
+        mock_get_user.return_value = mock_user
+        original = '{"tokens":{"refresh_token":"r0"}}'
+        rotated = '{"tokens":{"refresh_token":"r1"}}'
+        changed = '{"tokens":{"refresh_token":"r2"}}'
+        await secrets_store.store(
+            Secrets(
+                custom_secrets=MappingProxyType(
+                    {
+                        'CODEX_AUTH_JSON': CustomSecret.from_value(
+                            {'secret': original, 'description': ''}
+                        )
+                    }
+                )
+            )
+        )
+        editing_store = SaasSecretsStore('user-id', secrets_store._jwt_svc)
+        editing = await editing_store.load()
+        assert editing is not None
+
+        codex_store = CodexAuthStore(
+            'user-id', mock_user.current_org_id, secrets_store._jwt_svc
+        )
+        assert await codex_store.compare_and_swap(
+            hashlib.sha256(original.encode()).hexdigest(), rotated
+        )
+        updated = dict(editing.custom_secrets)
+        updated['CODEX_AUTH_JSON'] = CustomSecret.from_value(
+            {'secret': changed, 'description': ''}
+        )
+        await editing_store.store(
+            editing.model_copy(update={'custom_secrets': MappingProxyType(updated)})
+        )
+
+        assert await codex_store.get_value() == changed
+
     @pytest.mark.asyncio
     @patch(
         'storage.saas_secrets_store.UserStore.get_user_by_id',

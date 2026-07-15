@@ -71,6 +71,25 @@ def test_resolver_org_id_scopes_saas_auth_when_supported():
     assert auth.effective_org_id_override == org_id
 
 
+@pytest.mark.asyncio
+async def test_effective_org_id_prefers_resolver_org(mock_saas_user_auth):
+    org_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+    ctx = ResolverUserContext(mock_saas_user_auth, resolver_org_id=org_id)
+
+    assert await ctx.get_effective_org_id() == org_id
+    mock_saas_user_auth.get_effective_org_id.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_effective_org_id_delegates_to_auth(mock_saas_user_auth):
+    org_id = UUID('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb')
+    mock_saas_user_auth.get_effective_org_id.return_value = org_id
+    ctx = ResolverUserContext(mock_saas_user_auth)
+
+    assert await ctx.get_effective_org_id() == org_id
+    mock_saas_user_auth.get_effective_org_id.assert_awaited_once_with()
+
+
 def create_custom_secret(value: str, description: str = 'Test secret') -> CustomSecret:
     """Helper to create CustomSecret instances."""
     return CustomSecret(secret=SecretStr(value), description=description)

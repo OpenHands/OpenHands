@@ -194,6 +194,20 @@ class SetAuthCookieMiddleware:
         if path.startswith('/api/service/'):
             return False
 
+        parts = path.split('/')
+        if (
+            len(parts) in (6, 7)
+            and parts[1:4] == ['api', 'internal', 'conversations']
+            and (
+                (
+                    parts[5:] == ['codex-auth']
+                    and request.method in {'GET', 'HEAD', 'PUT', 'DELETE'}
+                )
+                or (parts[5:] == ['codex-auth', 'refresh'] and request.method == 'POST')
+            )
+        ):
+            return False
+
         is_mcp = path.startswith('/mcp')
         is_api_route = path.startswith('/api')
         return is_api_route or is_mcp
