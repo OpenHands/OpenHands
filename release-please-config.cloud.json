@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "last-release-sha": "2a3f06a75d4b166bef77a0240143efdcc092cfc2",
+  "draft-pull-request": true,
+  "extra-label": "release-line: cloud",
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "changelog-type": "github",
+      "skip-changelog": true,
+      "component": "cloud",
+      "include-component-in-tag": true,
+      "include-v-in-tag": false,
+      "include-v-in-release-name": false,
+      "tag-separator": "-"
+    }
+  }
+}

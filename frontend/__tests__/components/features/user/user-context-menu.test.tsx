@@ -196,6 +196,9 @@ describe("UserContextMenu", () => {
     // In SaaS, personal LLM/Condenser/Verification routes are hidden in favor
     // of /settings/org-defaults/* (visible only when an org is selected, which
     // this test does not seed). Org-only and billing routes are also filtered.
+    // The Usage & Monitoring and Budgets links are hidden because the test
+    // renders as a non-admin "member" user; useSettingsNavItems() suppresses
+    // them for members and personal orgs (see use-settings-nav-items.ts).
     const personalLlmPaths = new Set([
       "/settings",
       "/settings/condenser",
@@ -206,9 +209,10 @@ describe("UserContextMenu", () => {
         item.to !== "/settings/org-members" &&
         item.to !== "/settings/org" &&
         item.to !== "/settings/billing" &&
+        item.to !== "/settings/usage-monitoring" &&
+        item.to !== "/settings/budgets" &&
         !item.to.startsWith("/settings/org-defaults") &&
-        !personalLlmPaths.has(item.to) &&
-        true,
+        !personalLlmPaths.has(item.to),
     );
 
     await waitFor(() => {

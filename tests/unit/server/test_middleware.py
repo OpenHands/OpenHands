@@ -4,8 +4,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.middleware.cors import CORSMiddleware
+from starlette.requests import Request
 
-from openhands.app_server.middleware import LocalhostCORSMiddleware
+from openhands.app_server.middleware import (
+    InMemoryRateLimiter,
+    LocalhostCORSMiddleware,
+    RateLimitMiddleware,
+)
 
 
 @pytest.fixture
@@ -150,3 +155,47 @@ def test_localhost_cors_middleware_cors_parameters():
             assert kwargs['allow_credentials'] is True
             assert kwargs['allow_methods'] == ['*']
             assert kwargs['allow_headers'] == ['*']
+
+
+def test_in_memory_rate_limiter_init():
+    """Test that InMemoryRateLimiter correctly initializes all attributes."""
+    rate_limiter = InMemoryRateLimiter(requests=5, seconds=10, sleep_seconds=2)
+
+    assert rate_limiter.requests == 5
+    assert rate_limiter.seconds == 10
+    assert rate_limiter.sleep_seconds == 2
+    assert isinstance(rate_limiter.history, dict)
+
+
+def test_rate_limit_middleware_exempts_sandbox_resume():
+    """Resume requests should not compete with bursty reopen polling."""
+    app = FastAPI()
+
+    @app.post('/api/v1/sandboxes/{sandbox_id}/resume')
+    def resume_sandbox(sandbox_id: str):
+        return {'sandbox_id': sandbox_id}
+
+    @app.get('/api/v1/app-conversations')
+    def batch_get_app_conversations(ids: str):
+        return {'ids': ids}
+
+    app.add_middleware(
+        RateLimitMiddleware,
+        rate_limiter=InMemoryRateLimiter(requests=0, seconds=60, sleep_seconds=0),
+    )
+    client = TestClient(app)
+
+    rate_limited_response = client.get('/api/v1/app-conversations?ids=conv-123')
+    resume_response = client.post('/api/v1/sandboxes/sandbox-123/resume')
+
+    assert rate_limited_response.status_code == 429
+    assert resume_response.status_code == 200
+    assert resume_response.json() == {'sandbox_id': 'sandbox-123'}
+
+
+async def test_in_memory_rate_limiter_client_none():
+    """Test that InMemoryRateLimiter handles a request with client=None."""
+    request = Request({'type': 'http', 'client': None})
+    rate_limiter = InMemoryRateLimiter()
+    result = await rate_limiter(request)
+    assert result is True

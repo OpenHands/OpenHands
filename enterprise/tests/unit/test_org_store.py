@@ -14,7 +14,11 @@ from storage.role import Role
 from storage.user import User
 
 from openhands.app_server.settings.settings_models import Settings
-from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
+from openhands.sdk.settings import (
+    ACPAgentSettings,
+    ConversationSettings,
+    OpenHandsAgentSettings,
+)
 
 
 @pytest.fixture
@@ -70,6 +74,28 @@ async def test_get_org_by_id_not_found(async_session_maker):
         non_existent_id = uuid.uuid4()
         retrieved_org = await OrgStore.get_org_by_id(non_existent_id)
         assert retrieved_org is None
+
+
+@pytest.mark.asyncio
+async def test_enable_byor_export_persists_flag(async_session_maker):
+    async with async_session_maker() as session:
+        org = Org(name=f'test-org-{uuid.uuid4()}')
+        session.add(org)
+        await session.commit()
+        await session.refresh(org)
+        org_id = org.id
+        assert org.byor_export_enabled is False
+
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        updated_org = await OrgStore.enable_byor_export(org_id)
+
+    assert updated_org is not None
+    assert updated_org.byor_export_enabled is True
+
+    async with async_session_maker() as session:
+        persisted_org = await session.get(Org, org_id)
+        assert persisted_org is not None
+        assert persisted_org.byor_export_enabled is True
 
 
 @pytest.mark.asyncio
@@ -131,7 +157,7 @@ async def test_update_org(async_session_maker, mock_litellm_api):
         assert updated_org is not None
         assert updated_org.name == 'updated-org'
         agent_settings = OrgStore.get_agent_settings_from_org(updated_org)
-        assert agent_settings.llm.model == 'litellm_proxy/claude-3'
+        assert agent_settings.llm.model == 'openhands/claude-3'
 
 
 def test_get_org_settings_from_org_use_persisted_loaders():
@@ -157,6 +183,41 @@ def test_get_org_settings_from_org_use_persisted_loaders():
 
     agent_loader.assert_called_once_with({'legacy': True})
     conversation_loader.assert_called_once_with({'legacy': True})
+
+
+def test_get_agent_settings_from_org_preserves_acp_variant():
+    """Regression: ACP org settings (``agent_kind: 'acp'``, null
+    ``agent_context``) must load as ``ACPAgentSettings`` rather than being
+    coerced into ``OpenHandsAgentSettings`` — that coercion 500'd on the
+    non-nullable ``agent_context``.
+    """
+    org = MagicMock(spec=Org)
+    org.agent_settings = {
+        'agent_kind': 'acp',
+        'acp_server': 'claude-code',
+        'llm': {'model': 'litellm_proxy/anthropic/claude-sonnet-4'},
+    }
+
+    settings = OrgStore.get_agent_settings_from_org(org)
+
+    assert isinstance(settings, ACPAgentSettings)
+    assert settings.agent_kind == 'acp'
+    assert settings.agent_context is None
+
+
+def test_merge_and_validate_settings_switches_variant_without_mongrel():
+    """Switching ``agent_kind`` replaces the variant instead of deep-merging
+    incompatible fields across the discriminated-union boundary (which would
+    produce an invalid ``llm``-plus-``acp_server`` mongrel).
+    """
+    merged = OrgStore._merge_and_validate_settings(
+        {'agent_kind': 'openhands', 'llm': {'model': 'gpt'}},
+        {'agent_kind': 'acp', 'acp_server': 'claude-code'},
+        OpenHandsAgentSettings,
+    )
+
+    assert isinstance(merged, ACPAgentSettings)
+    assert merged.acp_server == 'claude-code'
 
 
 @pytest.mark.asyncio
@@ -602,7 +663,13 @@ async def test_delete_org_cascade_success(async_session_maker, mock_litellm_api)
         session.add(expected_org)
         await session.commit()
 
-    with patch('storage.org_store.a_session_maker', async_session_maker):
+    with (
+        patch('storage.org_store.a_session_maker', async_session_maker),
+        patch(
+            'storage.org_store.OrgStore._delete_litellm_user_best_effort',
+            new=AsyncMock(),
+        ) as mock_delete_litellm_user,
+    ):
         # Act
         result = await OrgStore.delete_org_cascade(org_id)
 
@@ -612,6 +679,38 @@ async def test_delete_org_cascade_success(async_session_maker, mock_litellm_api)
     assert result.name == 'Test Organization'
     assert result.contact_name == 'John Doe'
     assert result.contact_email == 'john@example.com'
+    mock_delete_litellm_user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_litellm_user_best_effort_calls_litellm():
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+
+    with patch(
+        'storage.org_store.LiteLlmManager.delete_user', new=AsyncMock()
+    ) as mock_delete_user:
+        await OrgStore._delete_litellm_user_best_effort(user_id, org_id)
+
+    mock_delete_user.assert_called_once_with(user_id)
+
+
+@pytest.mark.asyncio
+async def test_delete_litellm_user_best_effort_swallows_litellm_failure():
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+
+    with (
+        patch(
+            'storage.org_store.LiteLlmManager.delete_user',
+            new=AsyncMock(side_effect=Exception('LiteLLM API unavailable')),
+        ) as mock_delete_user,
+        patch('storage.org_store.logger.warning') as mock_warning,
+    ):
+        await OrgStore._delete_litellm_user_best_effort(user_id, org_id)
+
+    mock_delete_user.assert_called_once_with(user_id)
+    mock_warning.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -1028,7 +1127,13 @@ async def test_delete_org_cascade_sole_org_requester_is_deleted(
         await session.commit()
 
     # Act
-    with patch('storage.org_store.a_session_maker', async_session_maker):
+    with (
+        patch('storage.org_store.a_session_maker', async_session_maker),
+        patch(
+            'storage.org_store.OrgStore._delete_litellm_user_best_effort',
+            new=AsyncMock(),
+        ) as mock_delete_litellm_user,
+    ):
         result = await OrgStore.delete_org_cascade(
             org_id, requester_user_id=str(user_id)
         )
@@ -1036,6 +1141,7 @@ async def test_delete_org_cascade_sole_org_requester_is_deleted(
     # Assert: the deleted org is returned, and the user/org/member rows are gone.
     assert result is not None
     assert result.id == org_id
+    mock_delete_litellm_user.assert_called_once_with(str(user_id), org_id)
 
     async with async_session_maker() as session:
         assert await session.get(Org, org_id) is None
@@ -1388,7 +1494,7 @@ async def test_update_org_defaults_async_propagates_managed_key_reset():
 
     assert result is not None
     agent_settings = OrgStore.get_agent_settings_from_org(result)
-    assert agent_settings.llm.model == 'litellm_proxy/claude-3'
+    assert agent_settings.llm.model == 'openhands/claude-3'
     mock_member_update.assert_called_once()
     member_settings = mock_member_update.call_args[0][2]
     assert member_settings.llm_api_key.get_secret_value() == 'managed-key'
@@ -1444,6 +1550,92 @@ async def test_update_org_defaults_async_non_key_changes_keep_custom_key_flags()
 
 
 @pytest.mark.asyncio
+async def test_update_org_defaults_async_does_not_broadcast_mcp_config(
+    async_session_maker,
+):
+    async with async_session_maker() as session:
+        org = Org(
+            name='test-org',
+            agent_settings=OpenHandsAgentSettings(
+                llm={'model': 'old-model'}
+            ).model_dump(mode='json'),
+        )
+        role = Role(name='member', rank=2)
+        session.add_all([org, role])
+        await session.flush()
+
+        users = [
+            User(
+                id=uuid.uuid4(),
+                current_org_id=org.id,
+                email=f'user{i}@example.com',
+            )
+            for i in range(2)
+        ]
+        session.add_all(users)
+        await session.flush()
+        session.add_all(
+            [
+                OrgMember(
+                    org_id=org.id,
+                    user_id=user.id,
+                    role_id=role.id,
+                    llm_api_key='test-key',
+                    mcp_config={f'private-{i}': {'url': f'https://mcp{i}.example.com'}},
+                    status='active',
+                )
+                for i, user in enumerate(users)
+            ]
+        )
+        org_id = org.id
+        user_ids = [user.id for user in users]
+        await session.commit()
+        acting_user_id = str(user_ids[0])
+
+    update_data = OrgUpdate(
+        agent_settings_diff={
+            'llm': {'model': 'new-model'},
+            'mcp_config': {
+                'admin': {
+                    'url': 'https://admin.example.com',
+                    'auth': {'strategy': 'bearer', 'value': 'admin-secret'},
+                }
+            },
+        }
+    )
+    assert update_data.agent_settings_diff == {'llm': {'model': 'new-model'}}
+
+    with (
+        patch('storage.org_store.a_session_maker', async_session_maker),
+        patch(
+            'storage.org_store.OrgStore._maybe_get_managed_llm_key_for_user',
+            AsyncMock(return_value=None),
+        ),
+    ):
+        updated_org = await OrgStore.update_org_defaults_async(
+            org_id,
+            update_data,
+            acting_user_id,
+        )
+
+    assert updated_org is not None
+    assert not updated_org.agent_settings.get('mcp_config')
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(OrgMember).where(OrgMember.org_id == org_id)
+        )
+        members = {member.user_id: member for member in result.scalars().all()}
+
+    for i, user_id in enumerate(user_ids):
+        member = members[user_id]
+        assert member.mcp_config == {
+            f'private-{i}': {'url': f'https://mcp{i}.example.com'}
+        }
+        assert 'mcp_config' not in member.agent_settings_diff
+        assert member.agent_settings_diff['llm']['model'] == 'new-model'
+
+
+@pytest.mark.asyncio
 async def test_update_org_defaults_async_org_not_found():
     """GIVEN: Non-existent organization ID
     WHEN: update_org_defaults_async is called
@@ -1475,3 +1667,20 @@ async def test_update_org_defaults_async_org_not_found():
 
     # Assert
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_count_team_orgs_excludes_personal_workspaces(async_session_maker):
+    user_id = uuid.uuid4()
+    async with async_session_maker() as session:
+        # Personal workspace: org id matches the user id
+        personal_org = Org(id=user_id, name=f'user_{user_id}_org')
+        session.add(personal_org)
+        await session.commit()
+        session.add(User(id=user_id, current_org_id=user_id))
+        team_org = Org(name='team-org')
+        session.add(team_org)
+        await session.commit()
+
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        assert await OrgStore.count_team_orgs() == 1

@@ -1193,6 +1193,49 @@ describe("clientLoader redirect behavior", () => {
     expect(result?.headers.get("Location")).toBe("/settings/mcp");
   });
 
+  it("should redirect non-admins away from /settings/budgets", async () => {
+    const config = {
+      app_mode: "saas",
+      feature_flags: {
+        enable_billing: false,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
+        hide_users_page: false,
+        hide_billing_page: false,
+        hide_integrations_page: false,
+        enable_onboarding: false,
+      },
+    };
+    mockQueryClient.setQueryData(["web-client-config"], config);
+    mockQueryClient.setQueryData(["organizations"], {
+      items: [MOCK_TEAM_ORG_ACME],
+      currentOrgId: MOCK_TEAM_ORG_ACME.id,
+    });
+    useSelectedOrganizationStore.setState({ organizationId: "2" });
+
+    vi.spyOn(organizationService, "getMe").mockResolvedValue({
+      org_id: "2",
+      user_id: "99",
+      email: "member@test.com",
+      role: "member",
+      llm_api_key: "**********",
+      max_iterations: 20,
+      llm_model: "gpt-4",
+      llm_base_url: "https://api.openai.com",
+      status: "active",
+    });
+
+    const result = await clientLoader(
+      createMockRequest("/settings/budgets") as any,
+    );
+
+    expect(result).toBeDefined();
+    expect(result?.status).toBe(302);
+    expect(result?.headers.get("Location")).toBe("/settings");
+  });
+
   it("should not redirect when accessing a non-hidden page", async () => {
     const config = {
       app_mode: "saas",

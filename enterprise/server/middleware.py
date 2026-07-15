@@ -15,6 +15,7 @@ from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.saas_user_auth import SaasUserAuth, token_manager
 from server.routes.auth import set_response_cookie
 from server.utils.url_utils import get_cookie_domain, get_cookie_samesite
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from openhands.app_server.user_auth.user_auth import AuthType, UserAuth, get_user_auth
 from openhands.app_server.utils.logger import openhands_logger as logger
@@ -78,10 +79,19 @@ class SetAuthCookieMiddleware:
             )
         except AuthError as e:
             logger.warning('auth_error', exc_info=True)
-            try:
-                await self._logout(request)
-            except Exception as logout_error:
-                logger.debug(str(logout_error))
+            # Only attempt a Keycloak logout when this looked like a cookie
+            # session going bad. Bearer-token auth failures (e.g., a
+            # ``BearerTokenError`` from a transient Keycloak refresh
+            # failure) must NOT revoke the user's offline session — that
+            # would brick every subsequent API-key call until the user
+            # logs back in through the browser. The API key's lifecycle is
+            # managed via key mint/delete, not via per-request refresh
+            # outcomes. See ``_logout`` for the defense-in-depth check.
+            if keycloak_auth_cookie:
+                try:
+                    await self._logout(request)
+                except Exception as logout_error:
+                    logger.debug(str(logout_error))
 
             # Send a response that deletes the auth cookie if needed
             response = JSONResponse(
@@ -107,12 +117,14 @@ class SetAuthCookieMiddleware:
         auth_header = request.headers.get('Authorization')
         mcp_auth_header = request.headers.get('X-Session-API-Key')
         api_auth_header = request.headers.get('X-Access-Token')
+        api_key_cookie = request.cookies.get('api_key')
         accepted_tos: bool | None = False
         if (
             keycloak_auth_cookie is None
             and (auth_header is None or not auth_header.startswith('Bearer '))
             and mcp_auth_header is None
             and api_auth_header is None
+            and api_key_cookie is None
         ):
             raise NoCredentialsError
 
@@ -187,10 +199,25 @@ class SetAuthCookieMiddleware:
         return is_api_route or is_mcp
 
     async def _logout(self, request: Request):
-        # Log out of keycloak - this prevents issues where you did not log in with the idp you believe you used
+        # Log out of keycloak - this prevents issues where you did not log in with the idp you believe you used.
+        #
+        # IMPORTANT: only terminate the Keycloak session when the request
+        # carried a *cookie* (browser session). For bearer-token (API
+        # key) requests, ``user_auth.refresh_token`` is the user's stored
+        # *offline_token* loaded from ``OfflineTokenStore``. Calling
+        # ``token_manager.logout`` with that value asks Keycloak to
+        # revoke the offline session, which permanently breaks every API
+        # key minted for the user until they re-authenticate through the
+        # browser (``/keycloak/callback`` rewrites the offline_token).
+        # A single transient Keycloak hiccup that surfaces as
+        # ``BearerTokenError`` must not be allowed to cause this damage.
         try:
             user_auth = cast(SaasUserAuth, await get_user_auth(request))
-            if user_auth and user_auth.refresh_token:
+            if (
+                user_auth
+                and user_auth.refresh_token
+                and user_auth.auth_type == AuthType.COOKIE
+            ):
                 await token_manager.logout(user_auth.refresh_token.get_secret_value())
         except Exception:
             logger.debug('Error logging out')
@@ -203,6 +230,26 @@ _CREDENTIALLESS_PATH_PREFIXES = (
     '/oauth/device/authorize',
     '/oauth/device/token',
 )
+
+
+class _OriginStrippingApp:
+    """Hide Origin from inner middleware after outer CORS classifies the request."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope['type'] != 'http':
+            await self.app(scope, receive, send)
+            return
+
+        inner_scope = dict(scope)
+        inner_scope['headers'] = tuple(
+            (name, value)
+            for name, value in scope['headers']
+            if name.lower() != b'origin'
+        )
+        await self.app(inner_scope, receive, send)
 
 
 class ApiKeyAwareCORSMiddleware:
@@ -220,9 +267,9 @@ class ApiKeyAwareCORSMiddleware:
     credentials enabled.
     """
 
-    def __init__(self, app, allow_origins):
+    def __init__(self, app: ASGIApp, allow_origins: list[str]) -> None:
         self._permissive = CORSMiddleware(
-            app,
+            _OriginStrippingApp(app),
             allow_origins=['*'],
             allow_credentials=False,
             allow_methods=['*'],
@@ -236,14 +283,14 @@ class ApiKeyAwareCORSMiddleware:
             allow_headers=['*'],
         )
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope['type'] == 'http' and self._is_credentialless(scope):
             await self._permissive(scope, receive, send)
         else:
             await self._strict(scope, receive, send)
 
     @staticmethod
-    def _is_credentialless(scope) -> bool:
+    def _is_credentialless(scope: Scope) -> bool:
         path = scope.get('path', '')
         if any(path.startswith(prefix) for prefix in _CREDENTIALLESS_PATH_PREFIXES):
             return True

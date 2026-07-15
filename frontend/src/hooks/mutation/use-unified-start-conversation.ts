@@ -1,6 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Provider } from "#/types/settings";
 import { useErrorMessageStore } from "#/stores/error-message-store";
+import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
+import {
+  getRateLimitRetryDelayMs,
+  isRateLimitError,
+} from "#/utils/rate-limit-retry";
 import {
   resumeV1ConversationSandbox,
   updateConversationSandboxStatusInCache,
@@ -25,25 +30,53 @@ export const useUnifiedResumeConversationSandbox = () => {
   );
 
   return useMutation({
-    mutationKey: ["start-conversation"],
+    // Mutation keys don't affect data cache - they only track mutation state.
+    // This key is intentionally descriptive to distinguish from any legacy mutations.
+    mutationKey: ["unified-resume-conversation-sandbox"],
     mutationFn: async (variables: {
       conversationId: string;
       providers?: Provider[];
     }) => resumeV1ConversationSandbox(variables.conversationId),
-    onMutate: async () => {
+    retry: (failureCount, error) => isRateLimitError(error) && failureCount < 3,
+    retryDelay: (_failureCount, error) => getRateLimitRetryDelayMs(error),
+    onMutate: async (variables) => {
       await queryClient.cancelQueries({ queryKey: ["user", "conversations"] });
       const previousConversations = queryClient.getQueryData([
         "user",
         "conversations",
       ]);
+      const previousConversation =
+        queryClient.getQueryData<V1AppConversation | null>([
+          "user",
+          "conversation",
+          variables.conversationId,
+        ]);
 
-      return { previousConversations };
+      queryClient.setQueryData<V1AppConversation | null>(
+        ["user", "conversation", variables.conversationId],
+        (oldData) =>
+          oldData
+            ? {
+                ...oldData,
+                sandbox_status: "STARTING",
+                execution_status: null,
+              }
+            : oldData,
+      );
+
+      return { previousConversations, previousConversation };
     },
     onError: (_, __, context) => {
       if (context?.previousConversations) {
         queryClient.setQueryData(
           ["user", "conversations"],
           context.previousConversations,
+        );
+      }
+      if (context?.previousConversation) {
+        queryClient.setQueryData(
+          ["user", "conversation", context.previousConversation.id],
+          context.previousConversation,
         );
       }
     },

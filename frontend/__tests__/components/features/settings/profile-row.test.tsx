@@ -58,4 +58,13 @@ describe("ProfileRow", () => {
     await user.click(screen.getByTestId("profile-menu-trigger"));
     expect(screen.getByTestId("profile-edit")).toBeInTheDocument();
   });
+
+  it("hides the actions menu trigger when management is disabled", () => {
+    renderRow({ canManage: false });
+
+    expect(screen.getByText("openai_gpt-4o")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("profile-menu-trigger"),
+    ).not.toBeInTheDocument();
+  });
 });

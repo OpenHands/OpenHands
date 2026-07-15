@@ -75,6 +75,18 @@ def get_byor_key_alias(keycloak_user_id: str, org_id: str) -> str:
     return f'BYOR Key - user {keycloak_user_id}, org {org_id}'
 
 
+def get_org_team_alias(org_id: str, org_name: str | None, user_id: str | None) -> str:
+    """Human-readable LiteLLM team_alias for an org's team.
+
+    Personal orgs (org_id == user_id) get "Personal Workspace"; team orgs use
+    their display name. Falls back to the id when no name is available, never
+    the bare user uid (which made teams indistinguishable in the dashboard).
+    """
+    if str(org_id) == str(user_id):
+        return 'Personal Workspace'
+    return org_name or f'Organization {org_id}'
+
+
 class LiteLlmManager:
     """Manage LiteLLM interactions."""
 
@@ -112,6 +124,7 @@ class LiteLlmManager:
         keycloak_user_id: str,
         oss_settings: Settings,
         create_user: bool,
+        add_user_to_team: bool = True,
     ) -> Settings | None:
         logger.info(
             'SettingsStore:update_settings_with_litellm_default:start',
@@ -180,62 +193,95 @@ class LiteLlmManager:
                         extra={'org_id': org_id, 'user_id': keycloak_user_id},
                     )
 
+                team_alias = await LiteLlmManager._team_alias_for_org(
+                    org_id, keycloak_user_id
+                )
                 await LiteLlmManager._create_team(
-                    client, keycloak_user_id, org_id, team_budget
+                    client, team_alias, org_id, team_budget
                 )
 
-                if create_user:
-                    user_created = await LiteLlmManager._create_user(
-                        client, keycloak_user_info.get('email'), keycloak_user_id
+                if add_user_to_team:
+                    if create_user:
+                        # create_user is True only when no OpenHands User row exists,
+                        # so a pre-existing LiteLLM record under this id is a stale
+                        # orphan (e.g. from an account reset). Reset it so _create_user
+                        # rebuilds a clean record rather than re-attaching it. Best-
+                        # effort: a failed reset must not block onboarding — _create_user
+                        # below still tolerates a surviving record (409).
+                        if await LiteLlmManager._user_exists(client, keycloak_user_id):
+                            logger.info(
+                                'LiteLlmManager:create_entries:reset_stale_litellm_user',
+                                extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                            )
+                            try:
+                                await LiteLlmManager._delete_user(
+                                    client, keycloak_user_id
+                                )
+                            except Exception as exc:
+                                logger.warning(
+                                    'LiteLlmManager:create_entries:reset_stale_litellm_user_failed',
+                                    extra={
+                                        'org_id': org_id,
+                                        'user_id': keycloak_user_id,
+                                        'error': str(exc),
+                                    },
+                                )
+
+                        user_created = await LiteLlmManager._create_user(
+                            client, keycloak_user_info.get('email'), keycloak_user_id
+                        )
+                        if not user_created:
+                            logger.error(
+                                'create_entries_failed_user_creation',
+                                extra={
+                                    'org_id': org_id,
+                                    'user_id': keycloak_user_id,
+                                },
+                            )
+                            return None
+
+                    # Verify user exists before proceeding with key generation
+                    user_exists = await LiteLlmManager._user_exists(
+                        client, keycloak_user_id
                     )
-                    if not user_created:
+                    if not user_exists:
                         logger.error(
-                            'create_entries_failed_user_creation',
+                            'create_entries_user_not_found_before_key_generation',
                             extra={
                                 'org_id': org_id,
                                 'user_id': keycloak_user_id,
+                                'create_user_flag': create_user,
                             },
                         )
                         return None
 
-                # Verify user exists before proceeding with key generation
-                user_exists = await LiteLlmManager._user_exists(
-                    client, keycloak_user_id
-                )
-                if not user_exists:
-                    logger.error(
-                        'create_entries_user_not_found_before_key_generation',
-                        extra={
-                            'org_id': org_id,
-                            'user_id': keycloak_user_id,
-                            'create_user_flag': create_user,
-                        },
+                    await LiteLlmManager._add_user_to_team(
+                        client, keycloak_user_id, org_id, team_budget
                     )
-                    return None
 
-                await LiteLlmManager._add_user_to_team(
-                    client, keycloak_user_id, org_id, team_budget
-                )
+                    # We delete the key if it already exists. In environments where multiple
+                    # installations are using the same keycloak and litellm instance, this
+                    # will mean other installations will have their key invalidated.
+                    key_alias = get_openhands_cloud_key_alias(keycloak_user_id, org_id)
+                    try:
+                        await LiteLlmManager._delete_key_by_alias(client, key_alias)
+                    except httpx.HTTPStatusError as ex:
+                        if ex.response and ex.response.status_code == 404:
+                            logger.debug(
+                                f'Key "{key_alias}" did not exist - continuing'
+                            )
+                        else:
+                            raise
 
-                # We delete the key if it already exists. In environments where multiple
-                # installations are using the same keycloak and litellm instance, this
-                # will mean other installations will have their key invalidated.
-                key_alias = get_openhands_cloud_key_alias(keycloak_user_id, org_id)
-                try:
-                    await LiteLlmManager._delete_key_by_alias(client, key_alias)
-                except httpx.HTTPStatusError as ex:
-                    if ex.response and ex.response.status_code == 404:
-                        logger.debug(f'Key "{key_alias}" did not exist - continuing')
-                    else:
-                        raise
-
-                key = await LiteLlmManager._generate_key(
-                    client,
-                    keycloak_user_id,
-                    org_id,
-                    key_alias,
-                    None,
-                )
+                    key = await LiteLlmManager._generate_key(
+                        client,
+                        keycloak_user_id,
+                        org_id,
+                        key_alias,
+                        None,
+                    )
+                else:
+                    key = ''
 
         oss_settings.update(
             {
@@ -349,9 +395,10 @@ class LiteLlmManager:
                     'LiteLlmManager:migrate_lite_llm_entries:create_team',
                     extra={'org_id': org_id, 'user_id': keycloak_user_id},
                 )
-                await LiteLlmManager._create_team(
-                    client, keycloak_user_id, org_id, credits
+                team_alias = await LiteLlmManager._team_alias_for_org(
+                    org_id, keycloak_user_id
                 )
+                await LiteLlmManager._create_team(client, team_alias, org_id, credits)
 
                 logger.debug(
                     'LiteLlmManager:migrate_lite_llm_entries:update_user',
@@ -392,7 +439,7 @@ class LiteLlmManager:
                 llm_base_url = llm_cfg.get('base_url')
                 if llm_base_url == LITE_LLM_API_URL:
                     db_key = llm_cfg.get('api_key')
-                    if hasattr(db_key, 'get_secret_value'):
+                    if db_key is not None and hasattr(db_key, 'get_secret_value'):
                         db_key = db_key.get_secret_value()
 
                 if db_key:
@@ -606,6 +653,29 @@ class LiteLlmManager:
                 )
 
     @staticmethod
+    async def _team_alias_for_org(org_id: str, keycloak_user_id: str) -> str:
+        """Resolve the dashboard-friendly team_alias for an org (its display
+        name, or 'Personal Workspace' for the user's personal org). The org
+        name is looked up lazily; lookup failures fall back to a stable label."""
+        if str(org_id) == str(keycloak_user_id):
+            return get_org_team_alias(org_id, None, keycloak_user_id)
+        # Lazy import: org_store imports this module at load time.
+        from uuid import UUID
+
+        from storage.org_store import OrgStore
+
+        org_name = None
+        try:
+            org = await OrgStore.get_org_by_id(UUID(org_id))
+            org_name = org.name if org else None
+        except Exception:
+            logger.warning(
+                'Failed to resolve org name for LiteLLM team_alias',
+                extra={'org_id': org_id},
+            )
+        return get_org_team_alias(org_id, org_name, keycloak_user_id)
+
+    @staticmethod
     async def _create_team(
         client: httpx.AsyncClient,
         team_alias: str,
@@ -684,6 +754,7 @@ class LiteLlmManager:
         team_id: str,
         team_alias: str | None,
         max_budget: float | None,
+        clear_budget: bool = False,
     ):
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
@@ -696,7 +767,7 @@ class LiteLlmManager:
             },
         }
 
-        if max_budget is not None:
+        if max_budget is not None or clear_budget:
             json_data['max_budget'] = max_budget
 
         if team_alias is not None:
@@ -1010,6 +1081,13 @@ class LiteLlmManager:
         )
 
         if not response.is_success:
+            if response.status_code == 404:
+                # User doesn't exist - delete is idempotent (mirrors _delete_team).
+                logger.info(
+                    'LiteLlmManager:_delete_user:already_deleted_or_missing',
+                    extra={'user_id': keycloak_user_id},
+                )
+                return
             logger.error(
                 'error_deleting_litellm_user',
                 extra={
@@ -1156,6 +1234,7 @@ class LiteLlmManager:
         keycloak_user_id: str,
         team_id: str,
         max_budget: float | None,
+        clear_budget: bool = False,
     ):
         """Update a user's budget in a team.
 
@@ -1175,7 +1254,7 @@ class LiteLlmManager:
             'user_id': keycloak_user_id,
         }
 
-        if max_budget is not None:
+        if max_budget is not None or clear_budget:
             json_data['max_budget_in_team'] = max_budget
 
         response = await client.post(

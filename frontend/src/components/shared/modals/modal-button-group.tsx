@@ -15,6 +15,9 @@ interface ModalButtonGroupProps {
   primaryTestId?: string;
   secondaryTestId?: string;
   fullWidth?: boolean;
+  // For single-action modals where the primary button already closes; avoids a
+  // redundant second "Close" button next to it.
+  hideSecondaryButton?: boolean;
 }
 
 export function ModalButtonGroup({
@@ -27,6 +30,7 @@ export function ModalButtonGroup({
   primaryTestId,
   secondaryTestId,
   fullWidth = false,
+  hideSecondaryButton = false,
 }: ModalButtonGroupProps) {
   const { t } = useTranslation();
   const closeText = secondaryText ?? t(I18nKey.BUTTON$CLOSE);
@@ -55,16 +59,18 @@ export function ModalButtonGroup({
           primaryText
         )}
       </BrandButton>
-      <BrandButton
-        type="button"
-        variant="secondary"
-        onClick={onSecondaryClick}
-        className={cn(fullWidth ? "w-full" : "grow")}
-        testId={secondaryTestId}
-        isDisabled={isLoading}
-      >
-        {closeText}
-      </BrandButton>
+      {!hideSecondaryButton && (
+        <BrandButton
+          type="button"
+          variant="secondary"
+          onClick={onSecondaryClick}
+          className={cn(fullWidth ? "w-full" : "grow")}
+          testId={secondaryTestId}
+          isDisabled={isLoading}
+        >
+          {closeText}
+        </BrandButton>
+      )}
     </div>
   );
 }

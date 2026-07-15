@@ -59,6 +59,7 @@ from server.utils.rate_limit_utils import (
 from server.utils.url_utils import get_cookie_domain, get_cookie_samesite, get_web_url
 from sqlalchemy import select
 from storage.database import a_session_maker
+from storage.default_org_service import DefaultOrgBootstrapService
 from storage.user import User
 from storage.user_store import UserStore
 
@@ -70,7 +71,7 @@ from openhands.app_server.integrations.provider import (
 )
 from openhands.app_server.integrations.service_types import ProviderType, TokenResponse
 from openhands.app_server.user_auth import get_access_token
-from openhands.app_server.user_auth.user_auth import get_user_auth
+from openhands.app_server.user_auth.user_auth import AuthType, get_user_auth
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 with warnings.catch_warnings():
@@ -330,8 +331,10 @@ async def keycloak_callback(
     user_id = user_info.sub
     user_info_dict = user_info.model_dump(exclude_none=True)
     user = await UserStore.get_user_by_id(user_id)
+    is_new_user: bool = False
     if not user:
         user = await UserStore.create_user(user_id, user_info_dict)
+        is_new_user = True
     else:
         # Existing user — gradually backfill contact_name if it still has a username-style value
         await UserStore.backfill_contact_name(user_id, user_info_dict)
@@ -440,6 +443,8 @@ async def keycloak_callback(
         response = RedirectResponse(verification_redirect_url, status_code=302)
         return response
 
+    await UserStore.record_login(user_id)
+
     # default to github IDP for now.
     # TODO: remove default once Keycloak is updated universally with the new attribute.
     idp: str = user_info.identity_provider or ProviderType.GITHUB.value
@@ -462,9 +467,7 @@ async def keycloak_callback(
         else True
     )
 
-    logger.debug(
-        f'keycloakAccessToken: {keycloak_access_token}, keycloakUserId: {user_id}'
-    )
+    logger.debug('keycloak_user_authenticated', extra={'user_id': user_id})
 
     # Server-side identity — defer to background to avoid blocking auth response
     consented = user.user_consents_to_analytics is True
@@ -578,6 +581,32 @@ async def keycloak_callback(
                 redirect_url = f'{redirect_url}&invitation_error=true'
             else:
                 redirect_url = f'{redirect_url}?invitation_error=true'
+
+    # Accept pending invitations addressed to the user's email. Runs before
+    # the default-org bootstrap so an invitation's role (e.g. admin) wins
+    # over the bootstrap's auto-add member role for the same org.
+    try:
+        accepted_invitations = (
+            await OrgInvitationService.accept_pending_invitations_for_user(user)
+        )
+        if accepted_invitations:
+            user = await UserStore.get_user_by_id(user_id) or user
+    except Exception as e:
+        logger.exception(
+            'Unexpected error accepting pending invitations at login',
+            extra={'user_id': user_id, 'error': str(e)},
+        )
+
+    try:
+        user = await DefaultOrgBootstrapService.apply_for_user(
+            user,
+            is_new_user=is_new_user,
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error applying default organization bootstrap',
+            extra={'user_id': user_id, 'error': str(e)},
+        )
 
     # If the user hasn't accepted the TOS, redirect to the TOS page
     if not has_accepted_tos:
@@ -864,7 +893,12 @@ async def accept_tos(request: Request):
 
     if not access_token or not refresh_token or not user_id:
         logger.warning(
-            f'accept_tos: One or more is None: access_token {access_token}, refresh_token {refresh_token}, user_id {user_id}'
+            'accept_tos: missing authentication state',
+            extra={
+                'has_access_token': bool(access_token),
+                'has_refresh_token': bool(refresh_token),
+                'user_id': user_id,
+            },
         )
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -1035,6 +1069,16 @@ async def complete_onboarding(
         analytics = get_analytics_service()
         if analytics:
             ctx = await resolve_analytics_context(user_id)
+            # Stamp email on the person profile so person_display_name
+            # is set when the onboarding event is viewed in PostHog.
+            # identify_user was a no-op at login (consent was False),
+            # and accept_tos never re-triggered it, so this is the
+            # first opportunity after consent is granted.
+            if user.email:
+                analytics.set_person_properties(
+                    ctx=ctx,
+                    properties={'email': user.email},
+                )
             analytics.track_onboarding_completed(
                 ctx=ctx,
                 selections=selections,
@@ -1075,10 +1119,25 @@ async def logout(request: Request):
         samesite=get_cookie_samesite(),
     )
 
-    # Try to properly logout from Keycloak, but don't fail if it doesn't work
+    # Try to properly logout from Keycloak, but don't fail if it doesn't work.
+    #
+    # IMPORTANT: only terminate the Keycloak session when the resolved
+    # auth is the *cookie* (browser session). ``get_user_auth`` resolves
+    # bearer tokens before cookies, so a request that carries both an
+    # ``Authorization: Bearer <api-key>`` header *and* a
+    # ``keycloak_auth`` cookie would otherwise have its API-key-bound
+    # *offline_token* terminated when the user clicked "logout" in the
+    # browser. The browser intent is to drop the cookie session, not to
+    # revoke a long-lived API key. The cookie itself is always deleted
+    # above; we just must not nuke an offline session that belongs to a
+    # different auth surface.
     try:
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
-        if user_auth and user_auth.refresh_token:
+        if (
+            user_auth
+            and user_auth.refresh_token
+            and user_auth.auth_type == AuthType.COOKIE
+        ):
             refresh_token = user_auth.refresh_token.get_secret_value()
             await token_manager.logout(refresh_token)
     except Exception as e:

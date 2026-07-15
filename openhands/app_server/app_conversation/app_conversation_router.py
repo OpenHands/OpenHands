@@ -13,7 +13,7 @@ from typing import Annotated, Any, AsyncGenerator, Literal
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +23,7 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
     AppConversationInfoService,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
+    ARCHIVE_WORKSPACE_PATH_TAG_KEY,
     AppConversation,
     AppConversationInfo,
     AppConversationPage,
@@ -38,10 +39,14 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     HookEventResponse,
     HookMatcherResponse,
     SkillResponse,
+    SwitchAcpModelRequest,
     SwitchProfileRequest,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
+    ConversationExportAlreadyRunning,
+    ConversationExportLockUnavailable,
+    ConversationExportTooLarge,
 )
 from openhands.app_server.app_conversation.app_conversation_service_base import (
     AppConversationServiceBase,
@@ -586,6 +591,32 @@ async def send_message_to_conversation(
     )
 
 
+async def _persist_conversation_model(
+    app_conversation_info_service: AppConversationInfoService,
+    conversation_id: UUID,
+    model: str,
+) -> None:
+    """Persist ``llm_model`` on the conversation record so the UI chip/header
+    reflects a model switch on the next fetch.
+
+    Best-effort: a save failure is logged but never undoes the switch the
+    agent-server already accepted.
+    """
+    try:
+        info = await app_conversation_info_service.get_app_conversation_info(
+            conversation_id,
+        )
+        if info is not None and info.llm_model != model:
+            info.llm_model = model
+            await app_conversation_info_service.save_app_conversation_info(info)
+    except Exception:
+        logger.exception(
+            'Failed to persist new llm_model on conversation %s after model '
+            'switch — chip may be stale until the next refresh.',
+            conversation_id,
+        )
+
+
 @router.post(
     '/{conversation_id}/switch_profile',
     responses={
@@ -731,23 +762,106 @@ async def switch_conversation_profile(
             detail='Failed to reach agent server.',
         )
 
-    # Persist the new model on the conversation record so the chat header
-    # (and other callers that read ``conversation.llm_model``) reflect the
-    # swap on the next fetch. Best-effort: a save failure is logged but
-    # does not undo the switch the agent-server already accepted.
+    # Persist the new model so the chat header reflects the swap on next fetch.
+    await _persist_conversation_model(
+        app_conversation_info_service, conversation_id, profile_llm.model
+    )
+
+    return Success()
+
+
+@router.post(
+    '/{conversation_id}/switch_acp_model',
+    responses={
+        400: {
+            'description': 'Agent is not ACP, or provider does not support model switching'
+        },
+        404: {'description': 'Conversation or sandbox not found'},
+        409: {'description': 'Sandbox is paused; resume it before switching models'},
+        502: {'description': 'Agent server returned an error'},
+        504: {'description': 'ACP server did not respond to the model switch in time'},
+    },
+)
+async def switch_conversation_acp_model(
+    conversation_id: UUID,
+    request: SwitchAcpModelRequest,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    app_conversation_info_service: AppConversationInfoService = (
+        app_conversation_info_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> Success:
+    """Switch the model of a running ACP conversation in place.
+
+    Proxies to the agent-server's ``switch_acp_model`` endpoint, which issues
+    a protocol-level ``session/set_model`` call to the ACP subprocess so the
+    new model applies to subsequent turns without losing context. Persists the
+    new model on the conversation record so the UI chip stays current.
+    """
+    ctx = await _get_agent_server_context(
+        conversation_id,
+        app_conversation_service,
+        sandbox_service,
+        sandbox_spec_service,
+    )
+    if isinstance(ctx, JSONResponse):
+        raise HTTPException(
+            status_code=ctx.status_code,
+            detail=f'Conversation {conversation_id} is not reachable',
+        )
+    if ctx is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail='Sandbox is paused; resume it before switching models.',
+        )
+
+    headers = {'X-Session-API-Key': ctx.session_api_key} if ctx.session_api_key else {}
+
     try:
-        info = await app_conversation_info_service.get_app_conversation_info(
-            conversation_id,
+        switch_response = await httpx_client.post(
+            f'{ctx.agent_server_url}/api/conversations/{conversation_id}/switch_acp_model',
+            json={'model': request.model},
+            headers=headers,
+            timeout=30.0,
         )
-        if info is not None and info.llm_model != profile_llm.model:
-            info.llm_model = profile_llm.model
-            await app_conversation_info_service.save_app_conversation_info(info)
-    except Exception:
-        logger.exception(
-            'Failed to persist new llm_model on conversation %s after profile '
-            'switch — header may be stale until the next refresh.',
+        switch_response.raise_for_status()
+        logger.info(
+            'Switched ACP conversation %s to model %r',
             conversation_id,
+            request.model,
         )
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            'Agent server returned error during switch_acp_model: '
+            f'{e.response.status_code} - {e.response.text}'
+        )
+        # Surface agent-server's 400/504 directly (not-ACP, timeout). The
+        # pre-session 409 band-aid is gone as of SDK #3764: a pre-run switch now
+        # persists and returns 200, so the agent-server no longer 409s here.
+        if e.response.status_code in (400, 504):
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=f'Agent server error: {e.response.status_code}',
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f'Agent server error: {e.response.status_code}',
+        )
+    except httpx.RequestError as e:
+        logger.error(f'Failed to reach agent server during switch_acp_model: {e}')
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Failed to reach agent server.',
+        )
+
+    # Persist so the conversation's model chip reflects the switch on next load.
+    await _persist_conversation_model(
+        app_conversation_info_service, conversation_id, request.model
+    )
 
     return Success()
 
@@ -758,17 +872,52 @@ async def _finalize_sandbox_delete(
     sandbox_id: str,
     db_session: AsyncSession,
     httpx_client: httpx.AsyncClient,
+    conversation_id: UUID | None = None,
+    workspace_path: str | None = None,
 ) -> None:
-    """Delete sandbox if no other conversations reference it, then close connections."""
+    """Archive the conversation's workspace, then delete the sandbox if unreferenced.
+
+    Runs detached (background task) AFTER the delete response was already returned.
+    The workspace is captured FIRST — a conversation-scoped step, while the runtime
+    is still up — and only if that succeeds (or archiving is not REQUIRED) is the
+    sandbox torn down, and only when no other conversation still references it
+    (under grouping a sibling conversation keeps it alive). When archiving is
+    REQUIRED and fails, the sandbox + running runtime are kept so the runtime-api
+    idle reap captures the workspace later (the durability backstop). delete_sandbox
+    is sandbox-scoped (stop + delete) and knows nothing about conversations.
+    """
     try:
-        conversation_count = (
-            await app_conversation_info_service.count_conversations_by_sandbox_id(
-                sandbox_id
-            )
+        archived = await sandbox_service.archive_conversation_workspace(
+            sandbox_id,
+            conversation_id=conversation_id.hex if conversation_id else None,
+            workspace_path=workspace_path,
         )
-        if conversation_count == 0:
-            await sandbox_service.delete_sandbox(sandbox_id)
+        if not archived:
+            # REQUIRED archive failed: keep the sandbox + running runtime for the
+            # runtime-api idle reap to capture (the durability backstop).
+            logger.warning(
+                'Workspace archive required but failed for %s; leaving the '
+                'sandbox + runtime for the idle reap',
+                sandbox_id,
+            )
+        else:
+            conversation_count = (
+                await app_conversation_info_service.count_conversations_by_sandbox_id(
+                    sandbox_id
+                )
+            )
+            if conversation_count == 0:
+                await sandbox_service.delete_sandbox(sandbox_id)
         await db_session.commit()
+    except Exception:
+        # Any failure in the finalizer (a transient stop/lookup error, the count
+        # query, the commit itself): do NOT commit a half-done delete, so no
+        # orphaned row is left; the row + running runtime stay for the runtime-api
+        # idle reap to capture + reap.
+        logger.exception(
+            'Deferred sandbox cleanup failed for %s; kept for retry', sandbox_id
+        )
+        await db_session.rollback()
     finally:
         await asyncio.gather(
             db_session.aclose(),
@@ -852,6 +1001,8 @@ async def delete_app_conversation(
 
     # Delete the sandbox in the background if no other conversations reference it
     if sandbox_id:
+        # Path pinned at creation; the finalizer archives exactly this directory.
+        workspace_path = app_conversation_info.tags.get(ARCHIVE_WORKSPACE_PATH_TAG_KEY)
         asyncio.create_task(
             _finalize_sandbox_delete(
                 sandbox_service,
@@ -859,6 +1010,8 @@ async def delete_app_conversation(
                 sandbox_id,
                 db_session,
                 httpx_client,
+                conversation_id=conversation_uuid,
+                workspace_path=workspace_path,
             )
         )
 
@@ -1453,8 +1606,9 @@ async def export_conversation(
         A zip file containing the conversation trajectory
     """
     try:
-        # Get the zip file content
-        zip_content = await app_conversation_service.export_conversation(
+        # Prepare the zip stream before sending headers so lock and validation
+        # errors can still be returned as HTTP status codes.
+        zip_stream = await app_conversation_service.open_conversation_export(
             conversation_id
         )
 
@@ -1481,9 +1635,8 @@ async def export_conversation(
         except Exception:
             logger.exception('analytics:trajectory_downloaded:failed')
 
-        # Return as a downloadable zip file
-        return Response(
-            content=zip_content,
+        return StreamingResponse(
+            zip_stream,
             media_type='application/zip',
             headers={
                 'Content-Disposition': f'attachment; filename="conversation_{conversation_id}.zip"'
@@ -1491,6 +1644,12 @@ async def export_conversation(
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ConversationExportAlreadyRunning as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ConversationExportLockUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except ConversationExportTooLarge as e:
+        raise HTTPException(status_code=413, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f'Failed to download trajectory: {str(e)}'

@@ -28,6 +28,8 @@ from fastapi import Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from server.routes.auth import keycloak_offline_callback, logout
 
+from openhands.app_server.user_auth.user_auth import AuthType
+
 
 @pytest.fixture
 def mock_request():
@@ -152,6 +154,11 @@ class TestOfflineTokenSurvivesLogout:
             logout_request.headers = {}
 
             mock_user_auth = MagicMock()
+            # The user is logging out via the browser, so the resolved
+            # auth is the cookie session — express that explicitly so the
+            # logout route's bearer-vs-cookie guard exercises the
+            # cookie-auth branch.
+            mock_user_auth.auth_type = AuthType.COOKIE
             mock_user_auth.refresh_token = MagicMock()
             mock_user_auth.refresh_token.get_secret_value.return_value = (
                 online_refresh_token

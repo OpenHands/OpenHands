@@ -396,6 +396,31 @@ async def test_edit_profile_round_trip_preserves_api_key(test_client, settings_s
 
 
 @pytest.mark.asyncio
+async def test_save_profile_rejects_client_declared_is_subscription(
+    test_client, settings_store
+):
+    """A client can't put a profile into subscription mode via this endpoint.
+
+    ``is_subscription`` is a read-only SDK computed field: it's serialized
+    into GET responses so GET-edit-POST round trips don't 422, but a client
+    setting it to ``True`` directly must not survive validation, since it
+    only becomes true via ``LLM.subscription_login()`` — a path this
+    endpoint doesn't use. This is a temporary compensating control pending
+    OpenHands/software-agent-sdk#3942; see ``StrictLLM._restore_is_subscription``.
+    """
+    await _seed(settings_store, _base_settings())
+
+    resp = test_client.post(
+        '/api/v1/settings/profiles/p',
+        json={'llm': {'model': 'openai/gpt-4o', 'is_subscription': True}},
+    )
+    assert resp.status_code == 201
+
+    stored = await settings_store.load()
+    assert stored.llm_profiles.get('p').is_subscription is False
+
+
+@pytest.mark.asyncio
 async def test_edit_profile_with_new_api_key_replaces_old(test_client, settings_store):
     """Counter-test to the round-trip guard: when the user actually types
     a new api_key in the edit form, the server must replace the stored
@@ -416,6 +441,116 @@ async def test_edit_profile_with_new_api_key_replaces_old(test_client, settings_
 
     stored = await settings_store.load()
     assert stored.llm_profiles.get('p').api_key.get_secret_value() == 'NEW-KEY'
+
+
+@pytest.mark.asyncio
+async def test_snapshot_save_with_preserve_flag_keeps_existing_profile_key(
+    test_client, settings_store
+):
+    """The UI's no-key edit-save: settings are saved first (active key kept),
+    then the profile is snapshotted. ``preserve_existing_api_key`` must stop
+    the snapshot from replacing the profile's stored key with the active one,
+    while the rest of the snapshot (model etc.) still lands.
+    """
+    settings = _base_settings()  # active llm: openai/gpt-4o + sk-current
+    settings.llm_profiles.save(
+        'p', LLM(model='anthropic/claude-opus-4', api_key=SecretStr('sk-profile'))
+    )
+    await _seed(settings_store, settings)
+
+    resp = test_client.post(
+        '/api/v1/settings/profiles/p',
+        json={'include_secrets': True, 'preserve_existing_api_key': True},
+    )
+    assert resp.status_code == 201
+
+    stored = await settings_store.load()
+    saved = stored.llm_profiles.get('p')
+    assert saved.model == 'openai/gpt-4o'  # snapshot of active settings
+    assert saved.api_key.get_secret_value() == 'sk-profile'  # key preserved
+
+
+@pytest.mark.asyncio
+async def test_snapshot_save_with_preserve_flag_keeps_profile_keyless(
+    test_client, settings_store
+):
+    """A keyless profile must stay keyless on a no-key edit-save — it must
+    not silently inherit the active settings' key."""
+    settings = _base_settings()
+    settings.llm_profiles.save('p', LLM(model='anthropic/claude-opus-4'))
+    await _seed(settings_store, settings)
+
+    resp = test_client.post(
+        '/api/v1/settings/profiles/p',
+        json={'preserve_existing_api_key': True},
+    )
+    assert resp.status_code == 201
+
+    stored = await settings_store.load()
+    assert stored.llm_profiles.get('p').api_key is None
+
+
+@pytest.mark.asyncio
+async def test_snapshot_save_preserve_flag_noop_for_new_profile(
+    test_client, settings_store
+):
+    """With no existing profile there is nothing to preserve — the snapshot
+    keeps its key (current create behaviour, unchanged)."""
+    await _seed(settings_store, _base_settings())
+
+    resp = test_client.post(
+        '/api/v1/settings/profiles/fresh',
+        json={'preserve_existing_api_key': True},
+    )
+    assert resp.status_code == 201
+
+    stored = await settings_store.load()
+    assert stored.llm_profiles.get('fresh').api_key.get_secret_value() == 'sk-current'
+
+
+@pytest.mark.asyncio
+async def test_preserve_flag_wins_over_explicit_llm_key(test_client, settings_store):
+    """The flag declares 'no new key from the user'; a key smuggled in the
+    body alongside it is ignored in favour of the stored one."""
+    await _seed(settings_store, _base_settings())
+    test_client.post(
+        '/api/v1/settings/profiles/p',
+        json={'llm': {'model': 'openai/gpt-4o', 'api_key': 'OLD-KEY'}},
+    )
+
+    resp = test_client.post(
+        '/api/v1/settings/profiles/p',
+        json={
+            'preserve_existing_api_key': True,
+            'llm': {'model': 'openai/gpt-4o', 'api_key': 'NEW-KEY'},
+        },
+    )
+    assert resp.status_code == 201
+
+    stored = await settings_store.load()
+    assert stored.llm_profiles.get('p').api_key.get_secret_value() == 'OLD-KEY'
+
+
+@pytest.mark.asyncio
+async def test_preserve_flag_then_include_secrets_false_still_clears_key(
+    test_client, settings_store
+):
+    """``include_secrets: false`` is the explicit 'store no secret' switch and
+    must win over key preservation."""
+    settings = _base_settings()
+    settings.llm_profiles.save(
+        'p', LLM(model='openai/gpt-4o', api_key=SecretStr('sk-profile'))
+    )
+    await _seed(settings_store, settings)
+
+    resp = test_client.post(
+        '/api/v1/settings/profiles/p',
+        json={'include_secrets': False, 'preserve_existing_api_key': True},
+    )
+    assert resp.status_code == 201
+
+    stored = await settings_store.load()
+    assert stored.llm_profiles.get('p').api_key is None
 
 
 @pytest.mark.asyncio
@@ -864,6 +999,30 @@ async def test_main_settings_endpoint_ignores_llm_profiles_payload(
     assert resp.status_code == 200  # silently ignored, not crashed
     listing = test_client.get('/api/v1/settings/profiles').json()
     assert 'ATTACKER' not in {p['name'] for p in listing['profiles']}
+
+
+@pytest.mark.asyncio
+async def test_main_settings_endpoint_ignores_active_agent_profile_pointer(
+    test_client, settings_store
+):
+    """The generic settings POST must ignore the agent-profile launch pointer.
+
+    ``active_agent_profile_id`` / ``active_agent_profile_revision`` are launch
+    provenance, not persisted settings — ``store()`` refuses instances that
+    carry them. A client echoing a non-null value back on a settings PUT must
+    be silently dropped (200), not written through to a 500 in ``store()``.
+    """
+    await _seed(settings_store, _base_settings())
+
+    resp = test_client.post(
+        '/api/v1/settings',
+        json={
+            'active_agent_profile_id': 'deadbeef-0000-0000-0000-000000000000',
+            'active_agent_profile_revision': 7,
+        },
+    )
+
+    assert resp.status_code == 200  # silently ignored, not a 500 from store()
 
 
 @pytest.mark.asyncio

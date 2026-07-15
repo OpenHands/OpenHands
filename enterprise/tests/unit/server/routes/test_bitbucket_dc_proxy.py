@@ -93,6 +93,30 @@ def test_user_details_non_200(client):
     assert response.json() == {'error': 'bitbucket_error: 404'}
 
 
+def test_user_details_empty_search_results(client):
+    whoami_resp = MagicMock()
+    whoami_resp.status_code = 200
+    whoami_resp.text = 'testuser'
+
+    user_resp = MagicMock()
+    user_resp.status_code = 200
+    user_resp.json.return_value = {'values': []}
+
+    with patch('server.routes.bitbucket_dc_proxy.httpx.AsyncClient') as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=[whoami_resp, user_resp])
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        response = client.get(
+            '/bitbucket-dc-proxy/oauth2/userinfo',
+            headers={'Authorization': 'Bearer some_token'},
+        )
+
+    assert response.status_code == 404
+    assert response.json() == {'error': 'user_not_found: testuser'}
+
+
 def test_happy_path_full_user_data(client):
     whoami_resp = MagicMock()
     whoami_resp.status_code = 200
@@ -101,10 +125,14 @@ def test_happy_path_full_user_data(client):
     user_resp = MagicMock()
     user_resp.status_code = 200
     user_resp.json.return_value = {
-        'id': 42,
-        'name': 'jsmith',
-        'displayName': 'John Smith',
-        'emailAddress': 'john@example.com',
+        'values': [
+            {
+                'id': 42,
+                'name': 'jsmith',
+                'displayName': 'John Smith',
+                'emailAddress': 'john@example.com',
+            }
+        ]
     }
 
     with patch('server.routes.bitbucket_dc_proxy.httpx.AsyncClient') as mock_client_cls:
@@ -132,8 +160,9 @@ def test_happy_path_full_user_data(client):
                 timeout=10,
             ),
             call(
-                'https://bitbucket.test/rest/api/latest/users/jsmith',
+                'https://bitbucket.test/rest/api/latest/users',
                 headers={'Authorization': 'Bearer some_token'},
+                params={'filter': 'jsmith'},
                 timeout=10,
             ),
         ]
@@ -148,9 +177,13 @@ def test_happy_path_missing_id_falls_back_to_username(client):
     user_resp = MagicMock()
     user_resp.status_code = 200
     user_resp.json.return_value = {
-        'name': 'jsmith',
-        'displayName': 'John Smith',
-        'emailAddress': 'john@example.com',
+        'values': [
+            {
+                'name': 'jsmith',
+                'displayName': 'John Smith',
+                'emailAddress': 'john@example.com',
+            }
+        ]
     }
 
     with patch('server.routes.bitbucket_dc_proxy.httpx.AsyncClient') as mock_client_cls:
@@ -174,8 +207,69 @@ def test_happy_path_missing_id_falls_back_to_username(client):
                 timeout=10,
             ),
             call(
-                'https://bitbucket.test/rest/api/latest/users/jsmith',
+                'https://bitbucket.test/rest/api/latest/users',
                 headers={'Authorization': 'Bearer some_token'},
+                params={'filter': 'jsmith'},
+                timeout=10,
+            ),
+        ]
+    )
+
+
+def test_happy_path_login_name_can_differ_from_slug(client):
+    whoami_resp = MagicMock()
+    whoami_resp.status_code = 200
+    whoami_resp.text = 'Jane.Doe@example.com'
+
+    user_resp = MagicMock()
+    user_resp.status_code = 200
+    user_resp.json.return_value = {
+        'values': [
+            {
+                'id': 1,
+                'name': 'other@example.com',
+                'displayName': 'Other User',
+                'emailAddress': 'other@example.com',
+                'slug': 'other',
+            },
+            {
+                'id': 2,
+                'name': 'Jane.Doe@example.com',
+                'displayName': 'Doe, Jane',
+                'emailAddress': 'Jane.Doe@example.com',
+                'slug': 'jane.doe_example.com',
+            },
+        ]
+    }
+
+    with patch('server.routes.bitbucket_dc_proxy.httpx.AsyncClient') as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=[whoami_resp, user_resp])
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        response = client.get(
+            '/bitbucket-dc-proxy/oauth2/userinfo',
+            headers={'Authorization': 'Bearer some_token'},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data['sub'] == '2'
+    assert data['preferred_username'] == 'Jane.Doe@example.com'
+    assert data['name'] == 'Doe, Jane'
+    assert data['email'] == 'Jane.Doe@example.com'
+    mock_client.get.assert_has_calls(
+        [
+            call(
+                'https://bitbucket.test/plugins/servlet/applinks/whoami',
+                headers={'Authorization': 'Bearer some_token'},
+                timeout=10,
+            ),
+            call(
+                'https://bitbucket.test/rest/api/latest/users',
+                headers={'Authorization': 'Bearer some_token'},
+                params={'filter': 'Jane.Doe@example.com'},
                 timeout=10,
             ),
         ]

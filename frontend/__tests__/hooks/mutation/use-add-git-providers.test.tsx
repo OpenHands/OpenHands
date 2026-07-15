@@ -6,14 +6,6 @@ import { SecretsService } from "#/api/secrets-service";
 import { useAddGitProviders } from "#/hooks/mutation/use-add-git-providers";
 import { Provider, ProviderToken } from "#/types/settings";
 
-const mockTrackGitProviderConnected = vi.fn();
-
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
-    trackGitProviderConnected: mockTrackGitProviderConnected,
-  }),
-}));
-
 vi.mock("#/context/use-selected-organization", () => ({
   useSelectedOrganizationId: () => ({ organizationId: "org-1" }),
 }));
@@ -36,7 +28,6 @@ describe("useAddGitProviders", () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
-    mockTrackGitProviderConnected.mockReset();
     queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },

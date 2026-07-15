@@ -8,7 +8,8 @@ import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation"
 import { useConversationNameContextMenu } from "#/hooks/use-conversation-name-context-menu";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
-import { agentDisplayLabel } from "#/utils/agent-display-label";
+import { resolveAgentChip } from "#/utils/agent-display-label";
+import { AgentChipIcon } from "#/components/shared/agent-chip-icon";
 import { EllipsisButton } from "../conversation-panel/ellipsis-button";
 import { ConversationNameContextMenu } from "./conversation-name-context-menu";
 import { SystemMessageModal } from "../conversation-panel/system-message-modal";
@@ -17,7 +18,6 @@ import { HooksModal } from "../conversation-panel/hooks-modal";
 import { ConfirmDeleteModal } from "../conversation-panel/confirm-delete-modal";
 import { ConfirmStopModal } from "../conversation-panel/confirm-stop-modal";
 import { MetricsModal } from "./metrics-modal/metrics-modal";
-import CircuitIcon from "#/icons/u-circuit.svg?react";
 
 export function ConversationName() {
   const { t } = useTranslation();
@@ -135,10 +135,10 @@ export function ConversationName() {
     return null;
   }
 
-  const agentLabel = agentDisplayLabel(
+  const agentChip = resolveAgentChip(
     conversation.agent_kind,
     conversation.llm_model,
-    conversation.tags,
+    conversation.acp_server,
     config?.acp_providers,
   );
 
@@ -170,15 +170,15 @@ export function ConversationName() {
           </div>
         )}
 
-        {titleMode !== "edit" && agentLabel && (
+        {titleMode !== "edit" && agentChip && (
           <span
-            className="text-xs text-[#A3A3A3] flex items-center gap-1 whitespace-nowrap"
-            title={conversation.llm_model ?? agentLabel}
+            className="text-xs text-[#A3A3A3] max-w-[150px] flex items-center gap-1 overflow-hidden"
+            title={agentChip.tooltip}
             data-testid="conversation-name-llm-model"
           >
-            <CircuitIcon width={12} height={12} className="shrink-0" />
-            <Typography.Text className="text-xs text-[#A3A3A3]">
-              {agentLabel}
+            <AgentChipIcon kind={agentChip.kind} />
+            <Typography.Text className="text-xs text-[#A3A3A3] truncate">
+              {agentChip.text}
             </Typography.Text>
           </span>
         )}

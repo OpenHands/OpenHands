@@ -28,6 +28,11 @@ const renderInviteOrganizationMemberModal = (config?: {
 describe("InviteOrganizationMemberModal", () => {
   beforeEach(() => {
     useSelectedOrganizationStore.setState({ organizationId: "1" });
+    vi.spyOn(organizationService, "getPendingInvitations").mockResolvedValue({
+      items: [],
+      email_delivery_configured: false,
+      auto_add_enabled: false,
+    });
   });
 
   afterEach(() => {
@@ -73,9 +78,38 @@ describe("InviteOrganizationMemberModal", () => {
     expect(inviteMembersBatchSpy).toHaveBeenCalledExactlyOnceWith({
       orgId: "1",
       emails: ["someone@acme.org"],
+      role: "member",
     });
 
     expect(onCloseMock).toHaveBeenCalledOnce();
+  });
+
+  it("should invite with the admin role when selected in the role dropdown", async () => {
+    const inviteMembersBatchSpy = vi.spyOn(
+      organizationService,
+      "inviteMembers",
+    );
+    const onCloseMock = vi.fn();
+
+    renderInviteOrganizationMemberModal({ onClose: onCloseMock });
+
+    const modal = screen.getByTestId("invite-modal");
+    const badgeInput = within(modal).getByTestId("emails-badge-input");
+    await userEvent.type(badgeInput, "someone@acme.org ");
+
+    const roleDropdown = within(modal).getByTestId("invite-role-dropdown");
+    await userEvent.click(within(roleDropdown).getByTestId("dropdown-trigger"));
+    const listbox = await screen.findByRole("listbox");
+    await userEvent.click(within(listbox).getByText("ORG$ROLE_ADMIN"));
+
+    const submitButton = within(modal).getByRole("button", { name: /add/i });
+    await userEvent.click(submitButton);
+
+    expect(inviteMembersBatchSpy).toHaveBeenCalledExactlyOnceWith({
+      orgId: "1",
+      emails: ["someone@acme.org"],
+      role: "admin",
+    });
   });
 
   it("should allow adding multiple emails using badge input and make a batch POST request", async () => {
@@ -116,6 +150,7 @@ describe("InviteOrganizationMemberModal", () => {
     expect(inviteMembersBatchSpy).toHaveBeenCalledExactlyOnceWith({
       orgId: "1",
       emails: ["user1@acme.org", "user2@acme.org", "user3@acme.org"],
+      role: "member",
     });
 
     expect(onCloseMock).toHaveBeenCalledOnce();
@@ -137,5 +172,117 @@ describe("InviteOrganizationMemberModal", () => {
       "ORG$NO_EMAILS_ADDED_HINT",
     );
     expect(inviteMembersSpy).not.toHaveBeenCalled();
+  });
+
+  it("should show invite links instead of closing when email delivery is not configured", async () => {
+    vi.spyOn(organizationService, "inviteMembers").mockResolvedValue({
+      successful: [
+        {
+          id: 1,
+          email: "someone@acme.org",
+          role: "member",
+          status: "pending",
+          created_at: "2026-01-01T00:00:00Z",
+          expires_at: "2026-01-08T00:00:00Z",
+          invite_url:
+            "https://app.example.com/api/organizations/members/invite/accept?token=inv-abc",
+        },
+      ],
+      failed: [],
+      email_delivery_configured: false,
+    });
+    const onCloseMock = vi.fn();
+
+    renderInviteOrganizationMemberModal({ onClose: onCloseMock });
+
+    const modal = screen.getByTestId("invite-modal");
+    const badgeInput = within(modal).getByTestId("emails-badge-input");
+    await userEvent.type(badgeInput, "someone@acme.org ");
+    const submitButton = within(modal).getByRole("button", { name: /add/i });
+    await userEvent.click(submitButton);
+
+    // The links are the only way the invitee can join, so the modal stays
+    // open showing them with copy buttons instead of closing.
+    const linksModal = await screen.findByTestId("invite-links-modal");
+    expect(onCloseMock).not.toHaveBeenCalled();
+    expect(
+      within(linksModal).getByTestId("copy-invite-link-button"),
+    ).toBeInTheDocument();
+    expect(
+      within(linksModal).getByText("someone@acme.org"),
+    ).toBeInTheDocument();
+  });
+
+  it("should show the auto-add hint when sign-in already adds users to the org", async () => {
+    vi.spyOn(organizationService, "getPendingInvitations").mockResolvedValue({
+      items: [],
+      email_delivery_configured: false,
+      auto_add_enabled: true,
+    });
+
+    renderInviteOrganizationMemberModal();
+
+    expect(
+      await screen.findByTestId("auto-add-enabled-hint"),
+    ).toBeInTheDocument();
+  });
+
+  it("should show failures without the share-links hint when email is configured but some invites fail", async () => {
+    vi.spyOn(organizationService, "inviteMembers").mockResolvedValue({
+      successful: [
+        {
+          id: 1,
+          email: "ok@acme.org",
+          role: "member",
+          status: "pending",
+          created_at: "2026-01-01T00:00:00Z",
+          expires_at: "2026-01-08T00:00:00Z",
+          invite_url: "https://app.example.com/accept?token=inv-ok",
+        },
+      ],
+      failed: [{ email: "bad@acme.org", error: "User is already a member" }],
+      email_delivery_configured: true,
+    });
+    const onCloseMock = vi.fn();
+
+    renderInviteOrganizationMemberModal({ onClose: onCloseMock });
+
+    const modal = screen.getByTestId("invite-modal");
+    const badgeInput = within(modal).getByTestId("emails-badge-input");
+    await userEvent.type(badgeInput, "ok@acme.org bad@acme.org ");
+    await userEvent.click(within(modal).getByRole("button", { name: /add/i }));
+
+    // Modal stays open so the inviter can see what failed...
+    const linksModal = await screen.findByTestId("invite-links-modal");
+    expect(onCloseMock).not.toHaveBeenCalled();
+    expect(within(linksModal).getByText("bad@acme.org")).toBeInTheDocument();
+    // ...but the "share these links" hint is wrong when emails were sent.
+    expect(
+      within(linksModal).queryByText("ORG$INVITATIONS_CREATED_SHARE_LINKS"),
+    ).not.toBeInTheDocument();
+  });
+  it("should invite a typed email even when it was never committed with space", async () => {
+    const inviteMembersBatchSpy = vi.spyOn(
+      organizationService,
+      "inviteMembers",
+    );
+    const onCloseMock = vi.fn();
+
+    renderInviteOrganizationMemberModal({ onClose: onCloseMock });
+
+    const modal = screen.getByTestId("invite-modal");
+    const badgeInput = within(modal).getByTestId("emails-badge-input");
+    // No trailing space — clicking the button blurs the input, which commits
+    // the pending text. Previously this errored with "press space".
+    await userEvent.type(badgeInput, "someone@acme.org");
+
+    const submitButton = within(modal).getByRole("button", { name: /add/i });
+    await userEvent.click(submitButton);
+
+    expect(inviteMembersBatchSpy).toHaveBeenCalledExactlyOnceWith({
+      orgId: "1",
+      emails: ["someone@acme.org"],
+      role: "member",
+    });
   });
 });

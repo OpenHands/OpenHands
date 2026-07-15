@@ -202,6 +202,12 @@ async def test_settings_api_endpoints(test_client):
     # V1 API sets api_key to None for security and uses llm_api_key_set flag instead
     assert vals['llm']['api_key'] is None
     assert response_data['llm_api_key_set'] is True
+    # Verify marketplace fields are present in response
+    assert 'inherited_marketplaces' in response_data
+    assert 'registered_marketplaces' in response_data
+    # Both should be lists (may be empty)
+    assert isinstance(response_data['inherited_marketplaces'], list)
+    assert isinstance(response_data['registered_marketplaces'], list)
 
     # Test updating with partial settings — legacy flat fields should preserve existing
     partial_settings = {
@@ -328,3 +334,21 @@ async def test_disabled_skills_persistence(test_client):
     assert response.status_code == 200
     data = response.json()
     assert data['disabled_skills'] == []
+
+
+def test_store_settings_rejects_duplicate_personal_marketplace_names(test_client):
+    """Saving personal marketplaces with duplicate names is rejected (400)."""
+    # Arrange / Act
+    response = test_client.post(
+        '/api/v1/settings',
+        json={
+            'registered_marketplaces': [
+                {'name': 'dup', 'source': 'github:o/a'},
+                {'name': 'dup', 'source': 'github:o/b'},
+            ]
+        },
+    )
+
+    # Assert
+    assert response.status_code == 400
+    assert 'dup' in response.json()['error']
