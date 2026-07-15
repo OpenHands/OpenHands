@@ -628,6 +628,8 @@ async def keycloak_callback(
                 'Redirecting returning user to onboarding',
                 extra={'user_id': user_id, 'deployment_mode': DEPLOYMENT_MODE},
             )
+        else:
+            redirect_url = _build_post_login_redirect(redirect_url, web_url)
         if invitation_token:
             if '?' in redirect_url:
                 redirect_url = f'{redirect_url}&invitation_success=true'
@@ -816,6 +818,22 @@ def _build_onboarding_redirect(original_url: str, web_url: str) -> str:
         return onboarding_url
 
     return f'{onboarding_url}?returnTo={quote(relative, safe="")}'
+
+
+def _build_post_login_redirect(original_url: str, web_url: str) -> str:
+    """Build the final post-login redirect URL."""
+    if not original_url:
+        return original_url
+
+    relative = original_url
+    if web_url and original_url.startswith(web_url):
+        relative = original_url[len(web_url) :] or '/'
+
+    inner_return_to = _extract_login_inner_return_to(relative)
+    if inner_return_to is None or inner_return_to.startswith('//'):
+        return original_url
+
+    return f'{web_url}{inner_return_to}'
 
 
 async def _should_redirect_to_onboarding(user_id: str, user: User) -> bool:

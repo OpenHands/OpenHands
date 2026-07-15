@@ -18,6 +18,7 @@ from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.auth import (
     OnboardingSubmission,
     _build_onboarding_redirect,
+    _build_post_login_redirect,
     _get_post_auth_redirect,
     _should_redirect_to_onboarding,
     complete_onboarding,
@@ -437,6 +438,43 @@ class TestBuildOnboardingRedirect:
             'https://example.com/onboarding?returnTo=%2Ffoo%3FreturnTo%3D%252Fbar'
         )
 
+
+class TestBuildPostLoginRedirect:
+    """Tests for the final OAuth callback redirect helper."""
+
+    def test_unwraps_same_origin_login_return_to_canvas(self):
+        result = _build_post_login_redirect(
+            'https://example.com/login?returnTo=%2Fcanvas',
+            'https://example.com',
+        )
+
+        assert result == 'https://example.com/canvas'
+
+    def test_unwraps_same_origin_login_return_to_canvas_with_query(self):
+        result = _build_post_login_redirect(
+            'https://example.com/login?returnTo=%2Fcanvas%3Flogin_method%3Dgithub',
+            'https://example.com',
+        )
+
+        assert result == 'https://example.com/canvas?login_method=github'
+
+    def test_preserves_non_login_redirect(self):
+        result = _build_post_login_redirect(
+            'https://example.com/settings',
+            'https://example.com',
+        )
+
+        assert result == 'https://example.com/settings'
+
+    def test_rejects_protocol_relative_inner_return_to(self):
+        result = _build_post_login_redirect(
+            'https://example.com/login?returnTo=%2F%2Fevil.example.com%2Fpwn',
+            'https://example.com',
+        )
+
+        assert result == (
+            'https://example.com/login?returnTo=%2F%2Fevil.example.com%2Fpwn'
+        )
 
 # --- Tests for /complete_onboarding endpoint ---
 
