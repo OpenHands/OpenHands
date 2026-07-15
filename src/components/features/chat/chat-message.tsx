@@ -30,7 +30,7 @@ interface ChatMessageProps {
   onStop?: () => void;
 }
 
-export function ChatMessage({
+export const ChatMessage = React.memo(function ChatMessage({
   type,
   message,
   children,
@@ -283,4 +283,6 @@ export function ChatMessage({
   }
 
   return messageBubble;
-}
+});
+
+ChatMessage.displayName = "ChatMessage";

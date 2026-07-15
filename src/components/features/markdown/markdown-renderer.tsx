@@ -1,3 +1,4 @@
+import React, { useMemo } from "react";
 import Markdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -14,6 +15,34 @@ import { table, th, td } from "./table";
 import { blockquote } from "./blockquote";
 import { hr } from "./horizontal-rule";
 import { remarkGithubAlerts } from "./remark-github-alerts";
+
+// Static component maps hoisted to module scope so they keep stable identity
+// across renders. The combined `components` object passed to <Markdown/> is
+// derived from these via useMemo; without hoisting, every render built a new
+// object/array, which defeated React.memo on consumers and re-parsed markdown
+// for every streaming token.
+const DEFAULT_COMPONENTS: Partial<Components> = {
+  code,
+  ul,
+  ol,
+  li,
+  hr,
+  table,
+  th,
+  td,
+  blockquote,
+};
+const STANDARD_COMPONENTS: Partial<Components> = { a: anchor, p: paragraph };
+const HEADING_COMPONENTS: Partial<Components> = {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+};
+
+const REMARK_PLUGINS = [remarkGithubAlerts, remarkGfm, remarkBreaks];
 
 // Build a sanitize schema that extends rehype-sanitize's defaults with a
 // few markdown-friendly additions. The defaults strip `<script>`, event
@@ -131,7 +160,7 @@ interface MarkdownRendererProps {
  * - includeHeadings: adds h1-h6 heading components
  * - components prop: allows custom overrides or additional components
  */
-export function MarkdownRenderer({
+export const MarkdownRenderer = React.memo(function MarkdownRenderer({
   children,
   content,
   components: customComponents,
@@ -139,31 +168,21 @@ export function MarkdownRenderer({
   includeHeadings = false,
   allowHtml = true,
 }: MarkdownRendererProps) {
-  // Build the components object with defaults and optional additions
-  const components: Components = {
-    code,
-    ul,
-    ol,
-    li,
-    hr,
-    table,
-    th,
-    td,
-    blockquote,
-    ...(includeStandard && {
-      a: anchor,
-      p: paragraph,
-    }),
-    ...(includeHeadings && {
-      h1,
-      h2,
-      h3,
-      h4,
-      h5,
-      h6,
-    }),
-    ...customComponents, // Custom components override defaults
-  };
+  // Build the components object with defaults and optional additions. Memoized
+  // on the flags/custom overrides so the object keeps identity across renders
+  // when the inputs are unchanged — otherwise React.memo consumers re-rendered
+  // and markdown re-parsed on every streaming token.
+  const components = useMemo<Components>(() => {
+    if (!includeStandard && !includeHeadings && !customComponents) {
+      return DEFAULT_COMPONENTS as Components;
+    }
+    return {
+      ...DEFAULT_COMPONENTS,
+      ...(includeStandard ? STANDARD_COMPONENTS : {}),
+      ...(includeHeadings ? HEADING_COMPONENTS : {}),
+      ...customComponents, // Custom components override defaults
+    } as Components;
+  }, [includeStandard, includeHeadings, customComponents]);
 
   const markdownContent = content ?? children ?? "";
 
@@ -171,19 +190,25 @@ export function MarkdownRenderer({
   // tree. `rehype-sanitize` then strips anything dangerous (scripts,
   // event handlers, `javascript:` URLs, etc.). The order matters: sanitize
   // must run *after* raw so it sees the parsed HTML nodes.
-  const rehypePlugins: PluggableList | undefined = allowHtml
-    ? [rehypeRaw, [rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]]
-    : undefined;
+  const rehypePlugins = useMemo<PluggableList | undefined>(
+    () =>
+      allowHtml
+        ? [rehypeRaw, [rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]]
+        : undefined,
+    [allowHtml],
+  );
 
   return (
     <div data-testid="markdown-renderer">
       <Markdown
         components={components}
-        remarkPlugins={[remarkGithubAlerts, remarkGfm, remarkBreaks]}
+        remarkPlugins={REMARK_PLUGINS}
         rehypePlugins={rehypePlugins}
       >
         {markdownContent}
       </Markdown>
     </div>
   );
-}
+});
+
+MarkdownRenderer.displayName = "MarkdownRenderer";

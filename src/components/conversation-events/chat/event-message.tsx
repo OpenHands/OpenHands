@@ -134,7 +134,22 @@ const renderUserMessageWithSkillReady = (
   }
 };
 
-export function EventMessage({
+const areEventMessagePropsEqual = (
+  prev: Readonly<EventMessageProps>,
+  next: Readonly<EventMessageProps>,
+): boolean =>
+  prev.event === next.event &&
+  prev.isLastMessage === next.isLastMessage &&
+  prev.isInLast10Actions === next.isInLast10Actions &&
+  prev.planPreviewEventIds === next.planPreviewEventIds &&
+  prev.suppressThought === next.suppressThought &&
+  // Compare length, not the array ref: the ref changes every streaming
+  // token, but length only changes when a genuinely new event arrives —
+  // which is exactly when observation cards (which do `messages.find(...)`
+  // below) must re-render.
+  prev.messages.length === next.messages.length;
+
+export const EventMessage = React.memo(function EventMessage({
   event,
   messages,
   isLastMessage,
@@ -344,4 +359,6 @@ export function EventMessage({
   return (
     <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
   );
-}
+}, areEventMessagePropsEqual);
+
+EventMessage.displayName = "EventMessage";

@@ -85,23 +85,33 @@ export interface PlanPreviewEventInfo {
  * @returns Set of event IDs that should render PlanPreview
  */
 export function usePlanPreviewEvents(allEvents: OpenHandsEvent[]): Set<string> {
-  return useMemo(() => {
-    const planPreviewEventIds = new Set<string>();
-
-    // Group events by phases (user message boundaries)
+  // Derive a stable string key from the collected plan-preview ids, keyed on
+  // the *content* of the result (which ids were selected) rather than the
+  // `allEvents` array reference. During streaming, every token produces a fresh
+  // `allEvents` ref even though only the last event's content changed, so this
+  // memo recomputes — but the returned string is value-equal across tokens as
+  // long as no new Plan.md observation arrived.
+  const planPreviewKey = useMemo(() => {
     const phases = groupEventsByPhase(allEvents);
-
-    // For each phase, find the last PlanningFileEditorObservation
+    const ids: string[] = [];
     phases.forEach((phase) => {
       const lastPlanningObservationId =
         findLastPlanningObservationInPhase(phase);
-      if (lastPlanningObservationId) {
-        planPreviewEventIds.add(lastPlanningObservationId);
-      }
+      if (lastPlanningObservationId) ids.push(lastPlanningObservationId);
     });
-
-    return planPreviewEventIds;
+    return ids.join("\n");
   }, [allEvents]);
+
+  // Strings compare by value in useMemo deps, so when no new Plan.md
+  // observation arrived `planPreviewKey` is value-equal and the Set keeps its
+  // identity across streaming tokens.
+  return useMemo(() => {
+    const planPreviewEventIds = new Set<string>();
+    if (planPreviewKey) {
+      planPreviewKey.split("\n").forEach((id) => planPreviewEventIds.add(id));
+    }
+    return planPreviewEventIds;
+  }, [planPreviewKey]);
 }
 
 /**
