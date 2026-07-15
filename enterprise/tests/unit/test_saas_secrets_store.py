@@ -1,4 +1,5 @@
 import hashlib
+from contextlib import asynccontextmanager
 from types import MappingProxyType
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -151,6 +152,62 @@ class TestSaasSecretsStore:
         await stale_store.store(provider_update)
 
         assert await stale_store.get_custom_secret_value('CODEX_AUTH_JSON') == rotated
+
+    @pytest.mark.asyncio
+    @patch(
+        'storage.saas_secrets_store.UserStore.get_user_by_id',
+        new_callable=AsyncMock,
+    )
+    async def test_store_upserts_when_concurrent_insert_wins(
+        self, mock_get_user, secrets_store, mock_user
+    ):
+        mock_get_user.return_value = mock_user
+        first = Secrets(
+            custom_secrets=MappingProxyType(
+                {
+                    'shared': CustomSecret.from_value(
+                        {'secret': 'first', 'description': 'first'}
+                    )
+                }
+            )
+        )
+        second = Secrets(
+            custom_secrets=MappingProxyType(
+                {
+                    'shared': CustomSecret.from_value(
+                        {'secret': 'second', 'description': 'second'}
+                    )
+                }
+            )
+        )
+        await secrets_store.store(first)
+        real_session_maker = secrets_store.a_session_maker
+
+        @asynccontextmanager
+        async def stale_session_maker():
+            async with real_session_maker() as session:
+                execute = session.execute
+                empty_result = MagicMock()
+                empty_result.scalars.return_value.all.return_value = []
+                first_execute = True
+
+                async def execute_after_stale_read(statement, *args, **kwargs):
+                    nonlocal first_execute
+                    if first_execute:
+                        first_execute = False
+                        return empty_result
+                    return await execute(statement, *args, **kwargs)
+
+                with patch.object(
+                    session, 'execute', side_effect=execute_after_stale_read
+                ):
+                    yield session
+
+        stale_store = SaasSecretsStore('user-id', secrets_store._jwt_svc)
+        with patch('storage.saas_secrets_store.a_session_maker', stale_session_maker):
+            await stale_store.store(second)
+
+        assert await secrets_store.get_custom_secret_value('shared') == 'second'
 
     @pytest.mark.asyncio
     @patch(

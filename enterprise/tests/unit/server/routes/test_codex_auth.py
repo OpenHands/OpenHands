@@ -6,7 +6,7 @@ from uuid import UUID
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from server.routes import codex_auth
@@ -235,6 +235,70 @@ def test_two_active_conversations_can_read_credentials(app, jwt_service):
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.text == store.value
+
+
+def test_revocation_rejects_equivalent_padded_jwt(app, jwt_service):
+    conversation_id = UUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+    store = _FakeStore('{"tokens":{"refresh_token":"r0"}}')
+
+    with (
+        patch.object(
+            codex_auth,
+            'validate_session_key',
+            AsyncMock(return_value=_sandbox('a')),
+        ),
+        patch.object(codex_auth, '_get_store', AsyncMock(return_value=store)),
+    ):
+        client = TestClient(app)
+        headers = _headers(jwt_service, conversation_id, 'a')
+        response = client.delete(
+            f'/api/internal/conversations/{conversation_id}/codex-auth',
+            headers=headers,
+        )
+        padded_headers = {
+            **headers,
+            'X-OH-Codex': f'{headers["X-OH-Codex"]}=',
+        }
+        padded_response = client.get(
+            f'/api/internal/conversations/{conversation_id}/codex-auth',
+            headers=padded_headers,
+        )
+
+    assert response.status_code == 204
+    assert padded_response.status_code == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('parser', 'limit'),
+    [
+        (codex_auth._parse_update, codex_auth._MAX_REQUEST_BYTES),
+        (codex_auth._parse_refresh_request, 4096),
+    ],
+)
+async def test_oversized_chunked_body_stops_streaming(parser, limit):
+    messages = [
+        {'type': 'http.request', 'body': b'x' * limit, 'more_body': True},
+        {'type': 'http.request', 'body': b'x', 'more_body': True},
+        {'type': 'http.request', 'body': b'unread', 'more_body': False},
+    ]
+    received = 0
+
+    async def receive():
+        nonlocal received
+        message = messages[received]
+        received += 1
+        return message
+
+    request = Request(
+        {'type': 'http', 'method': 'POST', 'path': '/', 'headers': []}, receive
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await parser(request)
+
+    assert exc_info.value.status_code == 413
+    assert received == 2
 
 
 @pytest.mark.asyncio

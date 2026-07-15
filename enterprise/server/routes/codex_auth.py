@@ -65,6 +65,13 @@ class _CodexAuthScope:
         return f'codex-auth-revoked:{self.token_digest}'
 
 
+def _token_digest(token: str) -> str:
+    encoded_signature = token.rsplit('.', 1)[-1]
+    padding = '=' * (-len(encoded_signature) % 4)
+    signature = base64.urlsafe_b64decode(f'{encoded_signature}{padding}')
+    return hashlib.sha256(signature).hexdigest()
+
+
 async def _authorize(
     conversation_id: UUID,
     session_api_key: str | None,
@@ -86,7 +93,13 @@ async def _authorize(
         sandbox_id = str(claims['sandbox_id'])
         scoped_conversation_id = UUID(str(claims['conversation_id']))
         expires_at = int(claims['exp'])
-    except (KeyError, TypeError, ValueError, jwt.InvalidTokenError) as exc:
+        token_digest = _token_digest(codex_auth_token)
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+        jwt.InvalidTokenError,
+    ) as exc:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, detail='Invalid Codex auth token'
         ) from exc
@@ -105,7 +118,7 @@ async def _authorize(
         org_id=org_id,
         sandbox_id=sandbox_id,
         conversation_id=conversation_id,
-        token_digest=hashlib.sha256(codex_auth_token.encode()).hexdigest(),
+        token_digest=token_digest,
         expires_at=expires_at,
     )
     if not allow_revoked:
@@ -182,13 +195,27 @@ async def _get_store(scope: _CodexAuthScope) -> SaasSecretsStore:
     )
 
 
+async def _read_limited_body(request: Request, limit: int, detail: str) -> bytes:
+    content_length = request.headers.get('content-length')
+    try:
+        declared_length = int(content_length) if content_length is not None else None
+    except ValueError:
+        declared_length = None
+    if declared_length is not None and declared_length > limit:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=detail)
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > limit:
+            raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=detail)
+        body.extend(chunk)
+    return bytes(body)
+
+
 async def _parse_update(request: Request) -> tuple[str, str]:
-    body = await request.body()
-    if len(body) > _MAX_REQUEST_BYTES:
-        raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail='Codex credential update is too large',
-        )
+    body = await _read_limited_body(
+        request, _MAX_REQUEST_BYTES, 'Codex credential update is too large'
+    )
     try:
         payload = json.loads(body)
         expected_digest = payload['expected_digest']
@@ -241,12 +268,9 @@ def _decode_refresh_authorization(value: str | None) -> tuple[str, str]:
 
 
 async def _parse_refresh_request(request: Request) -> str:
-    body = await request.body()
-    if len(body) > 4096:
-        raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail='Codex credential refresh is too large',
-        )
+    body = await _read_limited_body(
+        request, 4096, 'Codex credential refresh is too large'
+    )
     try:
         payload = json.loads(body)
         client_id = payload['client_id']

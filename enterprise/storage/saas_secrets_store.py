@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from storage.database import a_session_maker
 from storage.stored_custom_secrets import StoredCustomSecrets
 from storage.user_store import UserStore
@@ -164,15 +165,25 @@ class SaasSecretsStore(SecretsStore):
                     else None
                 )
                 if stored is None:
-                    session.add(
-                        StoredCustomSecrets(
-                            keycloak_user_id=self.user_id,
-                            org_id=org_id,
-                            secret_name=name,
-                            secret_value=encrypted_value,
-                            description=encrypted_description,
-                        )
+                    statement = insert(StoredCustomSecrets).values(
+                        keycloak_user_id=self.user_id,
+                        org_id=org_id,
+                        secret_name=name,
+                        secret_value=encrypted_value,
+                        description=encrypted_description,
                     )
+                    statement = statement.on_conflict_do_update(
+                        index_elements=[
+                            StoredCustomSecrets.keycloak_user_id,
+                            StoredCustomSecrets.org_id,
+                            StoredCustomSecrets.secret_name,
+                        ],
+                        set_={
+                            'secret_value': statement.excluded.secret_value,
+                            'description': statement.excluded.description,
+                        },
+                    )
+                    await session.execute(statement)
                 else:
                     stored.secret_value = encrypted_value
                     stored.description = encrypted_description
