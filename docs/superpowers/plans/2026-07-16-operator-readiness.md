@@ -2,15 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-**Goal:** Add a tested, secret-safe operator CLI and CI gate that prepares, validates, and starts this OpenHands fork without changing upstream application behavior.
+**Goal:** Add a tested, secret-safe operator CLI and CI gate that prepares, validates, and starts this OpenHands fork without changing backend/frontend APIs.
 
-**Architecture:** Implement a Python standard-library CLI under `scripts/` with pure readiness/provider helpers and thin system probes. Validate it through a dependency-free `unittest` suite and a path-filtered GitHub Actions workflow. Document the supported local, Codespaces, WSL, and VPS workflows.
+**Architecture:** Implement a Python standard-library CLI under `scripts/` with pure readiness/provider helpers and thin system probes. Correct the existing one-line Makefile frontend-host wiring defect. Validate both through a dependency-free `unittest` suite and a path-filtered GitHub Actions workflow. Document the supported local, Codespaces, WSL, and VPS workflows.
 
-**Tech Stack:** Python 3.12 standard library, `unittest`, GitHub Actions, existing OpenHands `make` targets.
+**Tech Stack:** Python 3.12 standard library, `unittest`, GNU Make, GitHub Actions, existing OpenHands `make` targets.
 
 ## Global Constraints
 
-- Do not modify upstream backend or frontend behavior.
+- Do not modify upstream backend or frontend APIs.
+- Limit existing-source changes to the `FRONTEND_HOST` Makefile wiring fix.
 - Do not add dependencies or regenerate lockfiles.
 - Do not print, persist, or commit provider secrets.
 - Docker is the default runtime; local runtime must be selected explicitly.
@@ -78,20 +79,22 @@ python scripts/openhands_operator.py --help
 
 Expected: all commands exit `0`.
 
-### Task 3: Add the permanent readiness CI gate
+### Task 3: Add the permanent readiness CI gate and host wiring fix
 
 **Files:**
+- Modify: `Makefile`
 - Create: `.github/workflows/fork-operator-readiness.yml`
 
 **Interfaces:**
-- Consumes: operator script and unit tests.
-- Produces: a required-quality signal for pushes and pull requests touching the operator layer.
+- Consumes: operator script, unit tests, and existing Make targets.
+- Produces: a required-quality signal for pushes and pull requests touching the operator layer, plus independent frontend/backend host selection.
 
-- [x] **Step 1: Trigger only on operator script, tests, workflow, and fork operations documentation**
-- [x] **Step 2: Use GitHub-authored checkout and Python setup actions**
-- [x] **Step 3: Run `py_compile`, unit tests, and CLI help**
-- [x] **Step 4: Commit the workflow**
-- [x] **Step 5: Inspect the pull-request workflow run and logs**
+- [x] **Step 1: Correct `start-frontend` to bind Vite with `FRONTEND_HOST`**
+- [x] **Step 2: Trigger only on Makefile, operator script, tests, workflow, and fork operations documentation**
+- [x] **Step 3: Use GitHub-authored checkout and Python setup actions**
+- [x] **Step 4: Run `py_compile`, unit tests, CLI help, and exact Makefile host-wiring validation**
+- [x] **Step 5: Commit the workflow and Makefile fix**
+- [x] **Step 6: Inspect the pull-request workflow run and logs**
 
 ### Task 4: Document operation and security boundaries
 
@@ -114,8 +117,8 @@ Expected: all commands exit `0`.
 **Files:**
 - Review all files from Tasks 1-4.
 
-- [x] **Step 1: Compare the branch against `main` and confirm no upstream core files changed**
-- [x] **Step 2: Re-run the complete operator verification commands**
+- [x] **Step 1: Compare the branch against `main` and confirm only the intended Makefile operational line changed in existing source**
+- [x] **Step 2: Re-run the complete operator and Make dry-run verification commands**
 - [x] **Step 3: Check the design success criteria one by one**
 - [x] **Step 4: Open a draft pull request with exact validation evidence and remaining manual runtime steps**
 - [x] **Step 5: Review CI results; fix failures and re-run until green or report the precise blocker**
