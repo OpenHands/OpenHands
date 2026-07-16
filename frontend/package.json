@@ -12,7 +12,7 @@
     "@monaco-editor/react": "4.7.0",
     "@react-router/node": "7.17.0",
     "@react-router/serve": "7.17.0",
-    "@tailwindcss/vite": "4.1.18",
+    "@tailwindcss/vite": "4.3.2",
     "@tanstack/react-query": "5.90.20",
     "@uidotdev/usehooks": "2.4.1",
     "@xterm/addon-fit": "0.11.0",
@@ -44,7 +44,7 @@
     "socket.io-client": "4.8.3",
     "tailwind-merge": "3.4.0",
     "tailwind-scrollbar": "4.0.2",
-    "vite": "7.3.2",
+    "vite": "8.1.4",
     "zustand": "5.0.13"
   },
   "scripts": {
@@ -82,7 +82,7 @@
   "devDependencies": {
     "@mswjs/socket.io-binding": "0.2.0",
     "@playwright/test": "1.60.0",
-    "@react-router/dev": "7.17.0",
+    "@react-router/dev": "8.2.0",
     "@tailwindcss/typography": "0.5.19",
     "@tanstack/eslint-plugin-query": "5.100.10",
     "@testing-library/dom": "10.4.1",
