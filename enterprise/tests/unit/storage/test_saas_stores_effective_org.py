@@ -211,7 +211,9 @@ async def test_secrets_store_store_uses_effective_org_id_when_set():
             return False
 
         async def execute(self, _query):
-            return MagicMock()
+            result = MagicMock()
+            result.scalar_one_or_none.return_value = None
+            return result
 
         def add(self, row):
             captured_org_ids.append(row.org_id)
@@ -266,7 +268,9 @@ async def test_secrets_store_store_falls_back_to_current_org_when_unset():
             return False
 
         async def execute(self, _query):
-            return MagicMock()
+            result = MagicMock()
+            result.scalar_one_or_none.return_value = None
+            return result
 
         def add(self, row):
             captured_org_ids.append(row.org_id)
