@@ -1,0 +1,48 @@
+name: Fork operator readiness
+
+on:
+  pull_request:
+    paths:
+      - "scripts/openhands_operator.py"
+      - "tests/unit/test_openhands_operator.py"
+      - ".github/workflows/fork-operator-readiness.yml"
+      - "docs/fork/OPERATIONS.md"
+      - "docs/superpowers/specs/2026-07-16-operator-readiness-design.md"
+      - "docs/superpowers/plans/2026-07-16-operator-readiness.md"
+  push:
+    branches:
+      - main
+      - "feat/**"
+    paths:
+      - "scripts/openhands_operator.py"
+      - "tests/unit/test_openhands_operator.py"
+      - ".github/workflows/fork-operator-readiness.yml"
+      - "docs/fork/OPERATIONS.md"
+      - "docs/superpowers/specs/2026-07-16-operator-readiness-design.md"
+      - "docs/superpowers/plans/2026-07-16-operator-readiness.md"
+
+permissions:
+  contents: read
+
+jobs:
+  operator-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile operator CLI
+        run: python -m py_compile scripts/openhands_operator.py
+
+      - name: Run operator unit tests
+        run: python -m unittest tests.unit.test_openhands_operator -v
+
+      - name: Verify CLI help
+        run: python scripts/openhands_operator.py --help
