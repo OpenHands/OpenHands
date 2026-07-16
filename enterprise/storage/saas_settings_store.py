@@ -9,7 +9,10 @@ from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 from server.constants import LITE_LLM_API_URL
 from server.logger import logger
-from server.routes.org_models import OrgMemberSettingsUpdate
+from server.routes.org_models import (
+    MEMBER_PRIVATE_AGENT_KEYS,
+    OrgMemberSettingsUpdate,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from storage.agent_profile_resolution import (
@@ -21,7 +24,7 @@ from storage.database import a_session_maker
 from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
 from storage.org import Org
 from storage.org_member import OrgMember
-from storage.org_member_store import OrgMemberStore
+from storage.org_member_store import OrgMemberStore, serialize_mcp_config
 from storage.org_store import OrgStore
 from storage.user import User
 from storage.user_settings import UserSettings
@@ -31,7 +34,6 @@ from openhands.app_server.settings.llm_profiles import LLMProfiles, resolve_prof
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.utils.jsonpatch_compat import (
-    WHOLESALE_REPLACEMENT_KEYS,
     deep_merge,
     deep_merge_with_wholesale_keys,
 )
@@ -41,35 +43,6 @@ from openhands.sdk.llm.utils.openhands_provider import (
 )
 from openhands.sdk.mcp.config import MCPServer, coerce_mcp_config
 from openhands.sdk.profiles import resolve_agent_profile
-
-# Agent-settings keys private to each org member: never written to
-# org-level defaults nor broadcast across the org. Covers ``mcp_config``
-# (per-user MCP server set, a dict-of-items collection). ACP provider
-# creds are not here — they ride the per-user Secrets panel
-# (``request.secrets`` -> ``state.secret_registry``), not agent_settings.
-MEMBER_PRIVATE_AGENT_KEYS: frozenset[str] = WHOLESALE_REPLACEMENT_KEYS
-
-
-def _split_member_private_keys(
-    agent_settings_diff: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Split an agent_settings dump into (shared, private) halves.
-
-    The shared half is safe to write to ``org.agent_settings`` and to
-    broadcast through ``update_all_members_settings_async``. The private
-    half must be applied only to the acting member's row.
-    """
-    private = {
-        key: agent_settings_diff[key]
-        for key in MEMBER_PRIVATE_AGENT_KEYS
-        if key in agent_settings_diff
-    }
-    shared = {
-        key: value
-        for key, value in agent_settings_diff.items()
-        if key not in MEMBER_PRIVATE_AGENT_KEYS
-    }
-    return shared, private
 
 
 @dataclass
@@ -144,7 +117,16 @@ class SaasSettingsStore(SettingsStore):
 
     @staticmethod
     def _get_persisted_agent_settings(item: Settings) -> dict[str, Any]:
-        return item.agent_settings.model_dump(mode='json')
+        persisted = item.agent_settings.model_dump(
+            mode='json',
+            exclude={'llm': {'api_key'}},
+        )
+        persisted.pop('mcp_config', None)
+        return persisted
+
+    @staticmethod
+    def _get_persisted_mcp_config(item: Settings) -> dict[str, Any] | None:
+        return serialize_mcp_config(item.agent_settings.mcp_config)
 
     def _resolve_active_agent_profile(
         self,
@@ -305,6 +287,8 @@ class SaasSettingsStore(SettingsStore):
             return None
         org_agent_settings = OrgStore.get_agent_settings_from_org(org)
         member_agent_settings_diff = dict(org_member.agent_settings_diff)
+        member_agent_settings_diff.pop('mcp_config', None)
+        member_mcp_config = org_member.effective_mcp_config
 
         kwargs = {
             **{
@@ -334,6 +318,8 @@ class SaasSettingsStore(SettingsStore):
             org_agent_settings_dump,
             member_agent_settings_diff,
         )
+        if member_mcp_config is not None:
+            merged_agent_settings['mcp_config'] = member_mcp_config
         effective_llm_api_key = self._get_effective_llm_api_key(org, org_member)
         if effective_llm_api_key is not None:
             merged_agent_settings.setdefault('llm', {})['api_key'] = (
@@ -449,6 +435,7 @@ class SaasSettingsStore(SettingsStore):
                 kwargs['active_agent_profile_revision'] = resolved_revision
 
         settings = Settings(**kwargs)
+        settings._mcp_config_updated = False
         if resolution_requested:
             # Launch view (even when resolution fell back): never persistable.
             settings._resolved_view = True
@@ -584,15 +571,11 @@ class SaasSettingsStore(SettingsStore):
                 )
 
             effective_agent_settings_diff = self._get_persisted_agent_settings(item)
-
-            # Keep mcp_config scoped to the acting member only.
-            # ``shared_agent_settings_diff`` is the slice safe for org-wide
-            # state; ``private_agent_settings_diff`` is applied below to the
-            # acting member's row only so other members don't inherit one
-            # user's MCP servers.
-            shared_agent_settings_diff, private_agent_settings_diff = (
-                _split_member_private_keys(effective_agent_settings_diff)
-            )
+            shared_agent_settings_diff = {
+                key: value
+                for key, value in effective_agent_settings_diff.items()
+                if key not in MEMBER_PRIVATE_AGENT_KEYS
+            }
 
             # Strip any pre-existing private keys from the org dump before
             # merging, so legacy values written by older code paths are
@@ -674,14 +657,15 @@ class SaasSettingsStore(SettingsStore):
                 ),
             )
 
-            # Member-private keys (mcp_config) live only on the acting
-            # member's row. Use the wholesale-replacement semantics so
-            # deletes stick (APP-1862).
-            if private_agent_settings_diff:
-                org_member.agent_settings_diff = deep_merge_with_wholesale_keys(
-                    dict(org_member.agent_settings_diff),
-                    private_agent_settings_diff,
-                )
+            member_mcp_config = org_member.effective_mcp_config
+            member_agent_settings_diff = dict(org_member.agent_settings_diff)
+            for private_key in MEMBER_PRIVATE_AGENT_KEYS:
+                member_agent_settings_diff.pop(private_key, None)
+            org_member.agent_settings_diff = member_agent_settings_diff
+            if item._mcp_config_updated:
+                org_member.mcp_config = self._get_persisted_mcp_config(item)
+            elif org_member.mcp_config is None and member_mcp_config is not None:
+                org_member.mcp_config = serialize_mcp_config(member_mcp_config)
 
             if uses_managed_llm_key and current_member_llm_api_key is not None:
                 # Managed/proxy key — store on this member but mark as org-managed

@@ -9,7 +9,7 @@ from pydantic import SecretStr
 from sqlalchemy import JSON, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from storage.base import Base
-from storage.encrypt_utils import decrypt_value, encrypt_value
+from storage.encrypt_utils import EncryptedJSON, decrypt_value, encrypt_value
 
 if TYPE_CHECKING:
     from storage.org import Org
@@ -30,6 +30,9 @@ class OrgMember(Base):
     has_custom_llm_api_key: Mapped[bool] = mapped_column(nullable=False, default=False)
     agent_settings_diff: Mapped[dict[str, Any]] = mapped_column(
         JSON, nullable=False, default=dict
+    )
+    mcp_config: Mapped[dict[str, Any] | None] = mapped_column(
+        EncryptedJSON, nullable=True
     )
     # Per-member pointer to the active AgentProfile id — the sole launch
     # authority for Agent Profiles (mirrors the per-member _llm_api_key
@@ -82,3 +85,10 @@ class OrgMember(Base):
     def llm_api_key_for_byor(self, value: str | SecretStr | None):
         raw = value.get_secret_value() if isinstance(value, SecretStr) else value
         self._llm_api_key_for_byor = encrypt_value(raw) if raw else None
+
+    @property
+    def effective_mcp_config(self) -> dict[str, Any] | None:
+        if self.mcp_config is not None:
+            return self.mcp_config
+        value = (self.agent_settings_diff or {}).get('mcp_config')
+        return value if isinstance(value, dict) else None

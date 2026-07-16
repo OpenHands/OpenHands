@@ -1,5 +1,6 @@
 import {
   MCPConfig,
+  MCPAuthCredential,
   MCPSSEServer,
   MCPSHTTPServer,
   MCPStdioServer,
@@ -12,7 +13,39 @@ const EMPTY_MCP_CONFIG: MCPConfig = {
   shttp_servers: [],
 };
 
-type SdkMcpServerConfig = Record<string, SettingsValue>;
+type SdkMcpServerConfig = Record<string, SettingsValue | MCPAuthCredential>;
+
+const MCP_AUTH_STRATEGIES = new Set([
+  "none",
+  "api_key",
+  "bearer",
+  "basic",
+  "header",
+  "oauth2",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringRecord(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) return undefined;
+  const entries = Object.entries(value).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string",
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function authCredential(value: unknown): MCPAuthCredential | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.strategy !== "string" ||
+    !MCP_AUTH_STRATEGIES.has(value.strategy)
+  ) {
+    return undefined;
+  }
+  return value as MCPAuthCredential;
+}
 
 /**
  * Normalize the SDK wire payload to a flat server map.
@@ -88,20 +121,77 @@ function apiKeyFromServerConfig(
   if (headerApiKey) return headerApiKey;
 
   const { auth } = serverConfig;
+  if (auth && typeof auth === "object" && !Array.isArray(auth)) {
+    const credential = auth as Record<string, unknown>;
+    if (
+      (credential.strategy === "api_key" || credential.strategy === "bearer") &&
+      typeof credential.value === "string"
+    ) {
+      return credential.value;
+    }
+    if (credential.strategy === "header") {
+      const authHeaders = credential.headers;
+      if (authHeaders && typeof authHeaders === "object") {
+        return apiKeyFromAuthorizationHeader(
+          (authHeaders as Record<string, unknown>).Authorization ??
+            (authHeaders as Record<string, unknown>).authorization,
+        );
+      }
+    }
+  }
   return typeof auth === "string" && auth !== "oauth" ? auth : undefined;
 }
 
-/**
- * Serialize an API key as an ``Authorization`` bearer header. The SDK only
- * redacts/encrypts ``headers`` (and ``env``), not ``auth``, so a key written
- * to ``auth`` would persist in plaintext — write the header form instead.
- */
-function getAuthorizationHeaders(apiKey: string | undefined) {
-  if (!apiKey) return {};
+function authorizationHeader(
+  headers: Record<string, string> | undefined,
+): [string, string] | undefined {
+  return Object.entries(headers ?? {}).find(
+    ([key]) => key.toLowerCase() === "authorization",
+  );
+}
+
+function withApiKey(
+  auth: MCPAuthCredential | undefined,
+  apiKey: string,
+): MCPAuthCredential {
+  if (auth?.strategy === "api_key" || auth?.strategy === "bearer") {
+    return { ...auth, value: apiKey };
+  }
+  if (auth?.strategy === "header") {
+    const current = authorizationHeader(auth.headers ?? undefined);
+    if (current) {
+      const [key, value] = current;
+      const headerValue = /^Bearer\s+/i.test(value)
+        ? `Bearer ${apiKey}`
+        : apiKey;
+      return {
+        ...auth,
+        headers: { ...auth.headers, [key]: headerValue },
+      };
+    }
+  }
+  return { strategy: "bearer", value: apiKey };
+}
+
+function getRemoteSecretFields(server: MCPSSEServer | MCPSHTTPServer) {
+  let { auth, headers } = server;
+  if (server.api_key) {
+    const currentHeader = authorizationHeader(headers);
+    if (!auth && currentHeader) {
+      const [key, value] = currentHeader;
+      headers = {
+        ...headers,
+        [key]: /^Bearer\s+/i.test(value)
+          ? `Bearer ${server.api_key}`
+          : server.api_key,
+      };
+    } else {
+      auth = withApiKey(auth, server.api_key);
+    }
+  }
   return {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
+    ...(auth && { auth }),
+    ...(headers && { headers }),
   };
 }
 
@@ -169,6 +259,8 @@ export function parseMcpConfig(value: unknown): MCPConfig {
     if (url) {
       const transport = serverConfig.transport as string | undefined;
       const apiKey = apiKeyFromServerConfig(serverConfig);
+      const auth = authCredential(serverConfig.auth);
+      const headers = stringRecord(serverConfig.headers);
 
       if (transport === "sse") {
         const server: MCPSSEServer = {
@@ -176,6 +268,8 @@ export function parseMcpConfig(value: unknown): MCPConfig {
           url,
         };
         if (apiKey) server.api_key = apiKey;
+        if (auth) server.auth = auth;
+        if (headers) server.headers = headers;
         sseServers.push(server);
       } else {
         const server: MCPSHTTPServer = {
@@ -183,6 +277,8 @@ export function parseMcpConfig(value: unknown): MCPConfig {
           url,
         };
         if (apiKey) server.api_key = apiKey;
+        if (auth) server.auth = auth;
+        if (headers) server.headers = headers;
         if (serverConfig.timeout != null) {
           server.timeout = serverConfig.timeout as number;
         }
@@ -233,7 +329,7 @@ export function toSdkMcpConfig(
       server.url = entry;
     } else {
       server.url = entry.url;
-      Object.assign(server, getAuthorizationHeaders(entry.api_key));
+      Object.assign(server, getRemoteSecretFields(entry));
     }
     server.transport = "sse";
 
@@ -251,7 +347,7 @@ export function toSdkMcpConfig(
       server.url = entry;
     } else {
       server.url = entry.url;
-      Object.assign(server, getAuthorizationHeaders(entry.api_key));
+      Object.assign(server, getRemoteSecretFields(entry));
       if (entry.timeout != null) server.timeout = entry.timeout;
     }
 

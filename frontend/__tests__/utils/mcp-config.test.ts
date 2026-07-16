@@ -112,6 +112,86 @@ describe("parseMcpConfig", () => {
     });
   });
 
+  it("should parse api_key from SDK bearer credentials", () => {
+    const input = {
+      "auth-server": {
+        url: "https://example.com",
+        auth: { strategy: "bearer", value: "**********" },
+      },
+    };
+
+    const result = parseMcpConfig(input);
+
+    expect(result.shttp_servers[0]).toEqual({
+      name: "auth-server",
+      url: "https://example.com",
+      api_key: "**********",
+      auth: { strategy: "bearer", value: "**********" },
+    });
+  });
+
+  it.each([
+    {
+      strategy: "api_key" as const,
+      value: "**********",
+      header_name: "X-API-Key",
+    },
+    {
+      strategy: "basic" as const,
+      username: "user",
+      password: "**********",
+    },
+    {
+      strategy: "header" as const,
+      headers: { "X-API-Key": "**********" },
+    },
+    {
+      strategy: "oauth2" as const,
+      state: { tokens: { access_token: "**********" } },
+    },
+  ])("round-trips typed $strategy auth", (auth) => {
+    const parsed = parseMcpConfig({
+      server: { url: "https://example.com", auth },
+    });
+
+    expect(toSdkMcpConfig(parsed)?.server.auth).toEqual(auth);
+  });
+
+  it("round-trips custom headers alongside bearer auth", () => {
+    const persisted = {
+      server: {
+        url: "https://example.com",
+        headers: { "X-Tenant": "**********" },
+        auth: { strategy: "bearer", value: "**********" },
+      },
+    };
+
+    expect(toSdkMcpConfig(parseMcpConfig(persisted))?.server).toEqual(
+      persisted.server,
+    );
+  });
+
+  it("preserves api_key header metadata when updating its value", () => {
+    const parsed = parseMcpConfig({
+      server: {
+        url: "https://example.com",
+        auth: {
+          strategy: "api_key",
+          value: "**********",
+          header_name: "X-API-Key",
+        },
+      },
+    });
+    const server = parsed.shttp_servers[0];
+    if (typeof server === "object") server.api_key = "replacement";
+
+    expect(toSdkMcpConfig(parsed)?.server.auth).toEqual({
+      strategy: "api_key",
+      value: "replacement",
+      header_name: "X-API-Key",
+    });
+  });
+
   it("should not include api_key when auth is 'oauth'", () => {
     const input = {
       mcpServers: {
@@ -129,7 +209,9 @@ describe("parseMcpConfig", () => {
       name: "oauth-server",
       url: "https://example.com",
     });
-    expect((result.sse_servers[0] as { api_key?: string }).api_key).toBeUndefined();
+    expect(
+      (result.sse_servers[0] as { api_key?: string }).api_key,
+    ).toBeUndefined();
   });
 
   it("should parse timeout for shttp servers", () => {
@@ -219,16 +301,18 @@ describe("toSdkMcpConfig", () => {
     expect(result?.["sse_2"].url).toBe("https://example3.com");
   });
 
-  it("should serialize api_key as an Authorization bearer header", () => {
-    // The SDK only redacts/encrypts ``headers`` (and ``env``), not ``auth`` —
-    // writing the key to ``auth`` would persist it in plaintext.
+  it("should serialize api_key as an SDK bearer credential", () => {
     const config: MCPConfig = {
       sse_servers: [
         { name: "secure", url: "https://example.com", api_key: "my-secret" },
       ],
       stdio_servers: [],
       shttp_servers: [
-        { name: "shttp", url: "https://shttp.example", api_key: "shttp-secret" },
+        {
+          name: "shttp",
+          url: "https://shttp.example",
+          api_key: "shttp-secret",
+        },
       ],
     };
 
@@ -237,11 +321,11 @@ describe("toSdkMcpConfig", () => {
     expect(result?.["secure"]).toEqual({
       url: "https://example.com",
       transport: "sse",
-      headers: { Authorization: "Bearer my-secret" },
+      auth: { strategy: "bearer", value: "my-secret" },
     });
     expect(result?.["shttp"]).toEqual({
       url: "https://shttp.example",
-      headers: { Authorization: "Bearer shttp-secret" },
+      auth: { strategy: "bearer", value: "shttp-secret" },
     });
   });
 
@@ -258,7 +342,12 @@ describe("toSdkMcpConfig", () => {
     const parsed = parseMcpConfig(persisted);
 
     expect(parsed.shttp_servers).toEqual([
-      { name: "shttp", url: "https://shttp.example", api_key: "shttp-secret" },
+      {
+        name: "shttp",
+        url: "https://shttp.example",
+        api_key: "shttp-secret",
+        headers: { Authorization: "Bearer shttp-secret" },
+      },
     ]);
   });
 
@@ -279,7 +368,7 @@ describe("toSdkMcpConfig", () => {
       sse: {
         url: "https://example.com",
         transport: "sse",
-        headers: { Authorization: "Bearer legacy-secret" },
+        auth: { strategy: "bearer", value: "legacy-secret" },
       },
     });
   });
