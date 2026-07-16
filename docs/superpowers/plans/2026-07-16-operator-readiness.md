@@ -1,6 +1,6 @@
 # OpenHands Fork Operator Readiness Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add a tested, secret-safe operator CLI and CI gate that prepares, validates, and starts this OpenHands fork without changing upstream application behavior.
 
@@ -28,12 +28,12 @@
 - Consumes: future module loaded from `scripts/openhands_operator.py`.
 - Produces: executable behavior contracts for `parse_version`, `validate_provider`, `build_child_environment`, `bootstrap_workspace`, `render_report`, and `main`.
 
-- [ ] **Step 1: Write tests for version parsing and provider validation**
-- [ ] **Step 2: Write tests proving secret values never appear in human or JSON output**
-- [ ] **Step 3: Write tests for OpenCode Go to `LLM_*` child-environment mapping**
-- [ ] **Step 4: Write tests for workspace/config bootstrap and sanitized dry-run output**
-- [ ] **Step 5: Add a temporary CI workflow and verify the tests fail because the implementation file is absent**
-- [ ] **Step 6: Commit the red test state**
+- [x] **Step 1: Write tests for version parsing and provider validation**
+- [x] **Step 2: Write tests proving secret values never appear in human or JSON output**
+- [x] **Step 3: Write tests for OpenCode Go to `LLM_*` child-environment mapping**
+- [x] **Step 4: Write tests for workspace/config bootstrap and sanitized dry-run output**
+- [x] **Step 5: Add a temporary CI workflow and verify the tests fail because the implementation file is absent**
+- [x] **Step 6: Commit the red test state**
 
 Run:
 
@@ -59,14 +59,14 @@ Expected before implementation: failure while importing `scripts/openhands_opera
   - `render_report(report: ReadinessReport, as_json: bool) -> str`
   - `main(argv: Sequence[str] | None = None) -> int`
 
-- [ ] **Step 1: Implement dataclasses and deterministic report rendering**
-- [ ] **Step 2: Implement semantic version parsing and command probes**
-- [ ] **Step 3: Implement runtime, workspace, port, and provider readiness checks**
-- [ ] **Step 4: Implement secret-safe OpenCode Go child-environment mapping**
-- [ ] **Step 5: Implement `doctor`, `bootstrap`, and `start` subcommands**
-- [ ] **Step 6: Run the unit tests and fix only implementation defects**
-- [ ] **Step 7: Run syntax compilation and CLI help checks**
-- [ ] **Step 8: Commit the green implementation**
+- [x] **Step 1: Implement dataclasses and deterministic report rendering**
+- [x] **Step 2: Implement semantic version parsing and command probes**
+- [x] **Step 3: Implement runtime, workspace, port, and provider readiness checks**
+- [x] **Step 4: Implement secret-safe OpenCode Go child-environment mapping**
+- [x] **Step 5: Implement `doctor`, `bootstrap`, and `start` subcommands**
+- [x] **Step 6: Run the unit tests and fix only implementation defects**
+- [x] **Step 7: Run syntax compilation and CLI help checks**
+- [x] **Step 8: Commit the green implementation**
 
 Run:
 
@@ -87,11 +87,11 @@ Expected: all commands exit `0`.
 - Consumes: operator script and unit tests.
 - Produces: a required-quality signal for pushes and pull requests touching the operator layer.
 
-- [ ] **Step 1: Trigger only on operator script, tests, workflow, and fork operations documentation**
-- [ ] **Step 2: Use GitHub-authored checkout and Python setup actions**
-- [ ] **Step 3: Run `py_compile`, unit tests, and CLI help**
-- [ ] **Step 4: Commit the workflow**
-- [ ] **Step 5: Inspect the pull-request workflow run and logs**
+- [x] **Step 1: Trigger only on operator script, tests, workflow, and fork operations documentation**
+- [x] **Step 2: Use GitHub-authored checkout and Python setup actions**
+- [x] **Step 3: Run `py_compile`, unit tests, and CLI help**
+- [x] **Step 4: Commit the workflow**
+- [x] **Step 5: Inspect the pull-request workflow run and logs**
 
 ### Task 4: Document operation and security boundaries
 
@@ -102,20 +102,20 @@ Expected: all commands exit `0`.
 - Consumes: CLI behavior from Task 2.
 - Produces: copy-paste startup instructions for WSL/Codespaces/VPS operators.
 
-- [ ] **Step 1: Document `doctor`, `bootstrap`, and one-command `start --bootstrap --build`**
-- [ ] **Step 2: Document generic and OpenCode Go provider variables without real values**
-- [ ] **Step 3: Document JSON/strict modes for CI and troubleshooting**
-- [ ] **Step 4: Document remote-access, Docker, filesystem, and credential risks**
-- [ ] **Step 5: Explicitly separate ChatGPT browser login from API authentication**
-- [ ] **Step 6: Commit documentation**
+- [x] **Step 1: Document `doctor`, `bootstrap`, and one-command `start --bootstrap --build`**
+- [x] **Step 2: Document generic and OpenCode Go provider variables without real values**
+- [x] **Step 3: Document JSON/strict modes for CI and troubleshooting**
+- [x] **Step 4: Document remote-access, Docker, filesystem, and credential risks**
+- [x] **Step 5: Explicitly separate ChatGPT browser login from API authentication**
+- [x] **Step 6: Commit documentation**
 
 ### Task 5: Final review and pull request
 
 **Files:**
 - Review all files from Tasks 1-4.
 
-- [ ] **Step 1: Compare the branch against `main` and confirm no upstream core files changed**
-- [ ] **Step 2: Re-run the complete operator verification commands**
-- [ ] **Step 3: Check the design success criteria one by one**
-- [ ] **Step 4: Open a draft pull request with exact validation evidence and remaining manual runtime steps**
-- [ ] **Step 5: Review CI results; fix failures and re-run until green or report the precise blocker**
+- [x] **Step 1: Compare the branch against `main` and confirm no upstream core files changed**
+- [x] **Step 2: Re-run the complete operator verification commands**
+- [x] **Step 3: Check the design success criteria one by one**
+- [x] **Step 4: Open a draft pull request with exact validation evidence and remaining manual runtime steps**
+- [x] **Step 5: Review CI results; fix failures and re-run until green or report the precise blocker**
