@@ -1,4 +1,8 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { copyToClipboard } from "#/utils/clipboard";
 import { CopyToClipboardButton } from "./copy-to-clipboard-button";
 
 export function CopyableContentWrapper({
@@ -8,12 +12,16 @@ export function CopyableContentWrapper({
   text: string;
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation("openhands");
   const [isHovering, setIsHovering] = React.useState(false);
   const [isCopied, setIsCopied] = React.useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(text);
-    setIsCopied(true);
+    if (await copyToClipboard(text)) {
+      setIsCopied(true);
+    } else {
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
+    }
   };
 
   React.useEffect(() => {

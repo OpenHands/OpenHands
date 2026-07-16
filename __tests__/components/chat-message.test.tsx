@@ -1,10 +1,22 @@
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import util from "util";
 import { ChatMessage } from "#/components/features/chat/chat-message";
 
+const toastMocks = vi.hoisted(() => ({
+  displayErrorToast: vi.fn(),
+}));
+
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displayErrorToast: toastMocks.displayErrorToast,
+}));
+
 describe("ChatMessage", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    toastMocks.displayErrorToast.mockClear();
+  });
   it("does not update the parent while measuring user-message truncation", async () => {
     // Regression test for the React warning:
     //   "Cannot update a component (`ChatMessage`) while rendering a different
@@ -135,6 +147,27 @@ describe("ChatMessage", () => {
 
     await waitFor(() =>
       expect(navigator.clipboard.readText()).resolves.toBe("Hello, World!"),
+    );
+  });
+
+  it("shows an error toast and stays in copy mode when the clipboard rejects", async () => {
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(
+      new Error("denied"),
+    );
+
+    const user = userEvent.setup();
+    render(<ChatMessage type="user" message="Hello, World!" />);
+
+    await user.click(screen.getByTestId("copy-to-clipboard"));
+
+    await waitFor(() =>
+      expect(toastMocks.displayErrorToast).toHaveBeenCalledWith(
+        "CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED",
+      ),
+    );
+    expect(screen.getByTestId("copy-to-clipboard")).toHaveAttribute(
+      "aria-label",
+      "BUTTON$COPY",
     );
   });
 
