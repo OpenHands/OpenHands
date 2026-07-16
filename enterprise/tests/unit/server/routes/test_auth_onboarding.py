@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.auth import (
     OnboardingSubmission,
+    _build_cross_app_redirect_url,
     _build_onboarding_redirect,
     _get_post_auth_redirect,
     _should_redirect_to_onboarding,
@@ -201,6 +202,27 @@ class TestGetPostAuthRedirect:
         assert result == 'https://example.com/dashboard'
 
     @pytest.mark.asyncio
+    async def test_unwraps_automation_login_redirect_when_onboarding_completed(
+        self, mock_user
+    ):
+        """Automation redirects should bypass the main app login SPA."""
+        mock_user.onboarding_completed = True
+        user_id = str(mock_user.id)
+
+        with patch(
+            'server.routes.auth.UserStore.get_user_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_user,
+        ):
+            result = await _get_post_auth_redirect(
+                user_id,
+                'https://example.com/login?redirect=%2Fautomations&login_method=github',
+                'https://example.com',
+            )
+
+        assert result == 'https://example.com/automations?login_method=github'
+
+    @pytest.mark.asyncio
     async def test_returns_default_url_when_user_not_found(self):
         """Test that default URL is returned when user is not found."""
         with patch(
@@ -300,6 +322,53 @@ class TestGetPostAuthRedirect:
         )
 
 
+class TestBuildCrossAppRedirectUrl:
+    def test_unwraps_legacy_login_redirect_to_automations(self):
+        result = _build_cross_app_redirect_url(
+            'https://example.com/login?redirect=%2Fautomations&login_method=github',
+            'https://example.com',
+        )
+
+        assert result == 'https://example.com/automations?login_method=github'
+
+    def test_unwraps_login_return_to_automation_deep_link(self):
+        result = _build_cross_app_redirect_url(
+            'https://example.com/login'
+            '?returnTo=%2Fautomations%2Fabc%3Ftab%3Druns'
+            '&login_method=gitlab',
+            'https://example.com',
+        )
+
+        assert result == (
+            'https://example.com/automations/abc?tab=runs&login_method=gitlab'
+        )
+
+    def test_direct_automation_path_becomes_same_origin_absolute_url(self):
+        result = _build_cross_app_redirect_url('/automations', 'https://example.com')
+
+        assert result == 'https://example.com/automations'
+
+    def test_non_automation_login_redirect_is_unchanged(self):
+        result = _build_cross_app_redirect_url(
+            'https://example.com/login?redirect=%2Fsettings&login_method=github',
+            'https://example.com',
+        )
+
+        assert result == (
+            'https://example.com/login?redirect=%2Fsettings&login_method=github'
+        )
+
+    def test_rejects_protocol_relative_inner_redirect(self):
+        result = _build_cross_app_redirect_url(
+            'https://example.com/login?redirect=%2F%2Fevil.example.com%2Fautomations',
+            'https://example.com',
+        )
+
+        assert result == (
+            'https://example.com/login?redirect=%2F%2Fevil.example.com%2Fautomations'
+        )
+
+
 # --- Tests for _build_onboarding_redirect ---
 
 
@@ -376,6 +445,13 @@ class TestBuildOnboardingRedirect:
             'https://other.example.com/login?returnTo=%2Ffoo', 'https://example.com'
         )
         assert result == 'https://example.com/onboarding?returnTo=%2Ffoo'
+
+    def test_unwraps_legacy_login_redirect_to_inner_destination(self):
+        result = _build_onboarding_redirect(
+            'https://example.com/login?redirect=%2Fautomations&login_method=github',
+            'https://example.com',
+        )
+        assert result == 'https://example.com/onboarding?returnTo=%2Fautomations'
 
     def test_unwraps_login_returnTo_to_inner_destination(self):
         """Regression: login-wrapped destinations are unwrapped.
