@@ -3,6 +3,7 @@ name: Fork operator readiness
 on:
   pull_request:
     paths:
+      - "Makefile"
       - "scripts/openhands_operator.py"
       - "tests/unit/test_openhands_operator.py"
       - ".github/workflows/fork-operator-readiness.yml"
@@ -14,6 +15,7 @@ on:
       - main
       - "feat/**"
     paths:
+      - "Makefile"
       - "scripts/openhands_operator.py"
       - "tests/unit/test_openhands_operator.py"
       - ".github/workflows/fork-operator-readiness.yml"
@@ -46,3 +48,9 @@ jobs:
 
       - name: Verify CLI help
         run: python scripts/openhands_operator.py --help
+
+      - name: Verify frontend host wiring
+        run: >-
+          grep -F --
+          'VITE_BACKEND_HOST=$(BACKEND_HOST_PORT) VITE_FRONTEND_PORT=$(FRONTEND_PORT) npm run $$SCRIPT -- --port $(FRONTEND_PORT) --host $(FRONTEND_HOST)'
+          Makefile
