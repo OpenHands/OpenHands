@@ -44,19 +44,16 @@ class CodexAuthStore:
                     StoredCustomSecrets.org_id == self.org_id,
                     StoredCustomSecrets.secret_name == _SECRET_NAME,
                 )
-                .order_by(StoredCustomSecrets.id.desc())
                 .with_for_update()
             )
-            stored_rows = result.scalars().all()
-            if not stored_rows:
+            stored = result.scalar_one_or_none()
+            if stored is None:
                 raise KeyError(_SECRET_NAME)
-            current = self._jwt_svc.decrypt_value(stored_rows[0].secret_value)
+            current = self._jwt_svc.decrypt_value(stored.secret_value)
             current_digest = hashlib.sha256(current.encode()).hexdigest()
             if not hmac.compare_digest(current_digest, expected_digest):
                 return False
-            encrypted = self._jwt_svc.encrypt_value(value)
-            for stored in stored_rows:
-                stored.secret_value = encrypted
+            stored.secret_value = self._jwt_svc.encrypt_value(value)
             await session.commit()
             return True
 
