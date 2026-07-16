@@ -30,6 +30,7 @@ dependencies = [
   "binaryornot==0.6.0",
   "boto3",
   "browsergym-core==0.13.3",
+  "cryptography==48.0.1",
   "deprecated==1.3.1",
   "deprecation==2.1.0",
   "dirhash==0.5.0",
@@ -52,7 +53,7 @@ dependencies = [
   "jupyter-kernel-gateway==3.0.1",
   "kubernetes>=33.1",
   "libtmux>=0.46.2",
-  "litellm==1.84.1",
+  "litellm==1.84.10",
   "lmnr>=0.7.20",
   "mcp>=1.25",
   "memory-profiler==0.61.0",
@@ -159,9 +160,10 @@ include = [
 [tool.poetry.dependencies]
 python = "^3.12,<3.14"
 authlib = ">=1.6.12,!=1.7.0"                      # CVE-2026-44681 (fixed in 1.6.12 and 1.7.1; 1.7.0 is vulnerable)
+cryptography = "48.0.1"                           # CVE GHSA-537c-gmf6-5ccf
 orjson = "3.11.8"                                 # Pinned to fix CVE-2025-67221
-litellm = "1.84.1"                                # Exact pin to the verified 1.84.1 release; bump explicitly when upgrading (rather than a floor) to ensure only the tested version is used
-openai = "2.33.0"                                 # Pin because litellm 1.84.1 requires 2.33.0 and is incompatible with >=1.100.0 (BerriAI/litellm#13711)
+litellm = "1.84.10"                               # Exact pin to the verified 1.84.10 release; bump explicitly when upgrading (rather than a floor) to ensure only the tested version is used
+openai = "2.33.0"                                 # Pin because litellm 1.84.10 requires 2.33.0 and is incompatible with >=1.100.0 (BerriAI/litellm#13711)
 aiohttp = "3.14.1"                                # CVE-2026-54278 (fixed in 3.14.1); keep aiohttp on a fixed-or-newer release
 google-genai = "*"                                # To use litellm with Gemini Pro API
 google-api-python-client = "^2.164.0"             # For Google Sheets API
