@@ -12,7 +12,6 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODULE_PATH = REPO_ROOT / 'scripts' / 'openhands_operator.py'
 SPEC = importlib.util.spec_from_file_location('openhands_operator', MODULE_PATH)
@@ -27,9 +26,7 @@ SPEC.loader.exec_module(operator)
 class VersionParsingTests(unittest.TestCase):
     def test_parse_version_accepts_common_tool_output(self) -> None:
         self.assertEqual(operator.parse_version('v22.12.0'), (22, 12, 0))
-        self.assertEqual(
-            operator.parse_version('Poetry (version 2.3.4)'), (2, 3, 4)
-        )
+        self.assertEqual(operator.parse_version('Poetry (version 2.3.4)'), (2, 3, 4))
 
     def test_parse_version_returns_none_without_semantic_version(self) -> None:
         self.assertIsNone(operator.parse_version('version unknown'))
@@ -43,7 +40,9 @@ class VersionParsingTests(unittest.TestCase):
 
 
 class ProviderValidationTests(unittest.TestCase):
-    def test_partial_generic_configuration_is_an_error_without_secret_leak(self) -> None:
+    def test_partial_generic_configuration_is_an_error_without_secret_leak(
+        self,
+    ) -> None:
         secret = 'generic-secret-value'
         results = operator.validate_provider(
             {'LLM_API_KEY': secret}, mode='generic', require_provider=False
@@ -57,12 +56,8 @@ class ProviderValidationTests(unittest.TestCase):
         self.assertNotIn(secret, rendered)
 
     def test_missing_provider_is_warning_unless_required(self) -> None:
-        optional = operator.validate_provider(
-            {}, mode='auto', require_provider=False
-        )
-        required = operator.validate_provider(
-            {}, mode='auto', require_provider=True
-        )
+        optional = operator.validate_provider({}, mode='auto', require_provider=False)
+        required = operator.validate_provider({}, mode='auto', require_provider=True)
 
         self.assertEqual(optional[0].status, 'warning')
         self.assertEqual(required[0].status, 'error')
@@ -106,9 +101,7 @@ class ProviderValidationTests(unittest.TestCase):
 
         child = operator.build_child_environment(source, provider_mode='opencode-go')
 
-        self.assertEqual(
-            child['LLM_MODEL'], 'openai/organization/example-model'
-        )
+        self.assertEqual(child['LLM_MODEL'], 'openai/organization/example-model')
 
     def test_invalid_provider_base_url_is_rejected_without_echoing_value(self) -> None:
         invalid_url = 'provider.example/v1?token=do-not-print'
@@ -150,7 +143,9 @@ class ProviderValidationTests(unittest.TestCase):
 
 
 class BootstrapTests(unittest.TestCase):
-    def test_bootstrap_creates_workspace_and_local_config_without_overwrite(self) -> None:
+    def test_bootstrap_creates_workspace_and_local_config_without_overwrite(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = Path(temp_dir)
             workspace = repo_root / 'workspace'
@@ -177,7 +172,9 @@ class BootstrapTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
-    def test_doctor_returns_error_for_partial_provider_without_printing_secret(self) -> None:
+    def test_doctor_returns_error_for_partial_provider_without_printing_secret(
+        self,
+    ) -> None:
         secret = 'doctor-secret-value'
         output = StringIO()
         with (

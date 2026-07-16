@@ -458,9 +458,7 @@ def build_child_environment(
     if not (model and base_url and api_key):
         return child
 
-    child['LLM_MODEL'] = (
-        model if model.startswith('openai/') else f'openai/{model}'
-    )
+    child['LLM_MODEL'] = model if model.startswith('openai/') else f'openai/{model}'
     child['LLM_BASE_URL'] = base_url
     child['LLM_API_KEY'] = api_key
     return child
@@ -498,15 +496,11 @@ def bootstrap_workspace(
     return actions
 
 
-def _apply_strict_mode(
-    results: list[CheckResult], strict: bool
-) -> list[CheckResult]:
+def _apply_strict_mode(results: list[CheckResult], strict: bool) -> list[CheckResult]:
     if not strict:
         return results
     return [
-        _result(item.name, 'error', item.message)
-        if item.status == 'warning'
-        else item
+        _result(item.name, 'error', item.message) if item.status == 'warning' else item
         for item in results
     ]
 
@@ -604,8 +598,7 @@ def render_report(report: ReadinessReport, as_json: bool) -> str:
         )
 
     lines = [
-        'OpenHands operator readiness: '
-        + ('READY' if report.ready else 'BLOCKED')
+        'OpenHands operator readiness: ' + ('READY' if report.ready else 'BLOCKED')
     ]
     labels = {'pass': 'PASS', 'warning': 'WARN', 'error': 'ERROR'}
     lines.extend(
@@ -650,15 +643,15 @@ def _safe_launch_description(
     provider_mode: str,
 ) -> str:
     visible = [
-        f"RUNTIME={child_env.get('RUNTIME', '')}",
-        f"WORKSPACE_BASE={child_env.get('WORKSPACE_BASE', '')}",
+        f'RUNTIME={child_env.get("RUNTIME", "")}',
+        f'WORKSPACE_BASE={child_env.get("WORKSPACE_BASE", "")}',
     ]
     if 'INSTALL_DOCKER' in child_env:
-        visible.append(f"INSTALL_DOCKER={child_env['INSTALL_DOCKER']}")
+        visible.append(f'INSTALL_DOCKER={child_env["INSTALL_DOCKER"]}')
     if resolve_provider_mode(child_env, provider_mode) in {'generic', 'opencode-go'}:
         visible.extend(
             [
-                f"LLM_MODEL={child_env.get('LLM_MODEL', '<unset>')}",
+                f'LLM_MODEL={child_env.get("LLM_MODEL", "<unset>")}',
                 'LLM_BASE_URL=<set>'
                 if child_env.get('LLM_BASE_URL')
                 else 'LLM_BASE_URL=<unset>',
