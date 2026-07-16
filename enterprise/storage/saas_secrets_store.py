@@ -87,22 +87,46 @@ class SaasSecretsStore(SecretsStore):
             if isinstance(codex_auth, str)
             else None
         )
-        preserve_codex_auth = (
-            loaded_codex_digest == codex_auth_digest and codex_auth_digest is not None
-        )
-
         async with a_session_maker() as session:
-            if preserve_codex_auth:
-                await session.execute(
-                    select(StoredCustomSecrets.id)
-                    .filter(
-                        StoredCustomSecrets.keycloak_user_id == self.user_id,
-                        StoredCustomSecrets.org_id == org_id,
-                        StoredCustomSecrets.secret_name == _CODEX_AUTH_SECRET_NAME,
-                    )
-                    .with_for_update()
+            result = await session.execute(
+                select(StoredCustomSecrets)
+                .filter(
+                    StoredCustomSecrets.keycloak_user_id == self.user_id,
+                    StoredCustomSecrets.org_id == org_id,
+                    StoredCustomSecrets.secret_name == _CODEX_AUTH_SECRET_NAME,
                 )
+                .order_by(StoredCustomSecrets.id.desc())
+                .limit(1)
+                .with_for_update()
+            )
+            stored_codex_auth = result.scalar_one_or_none()
+            stored_codex_digest = None
+            if stored_codex_auth is not None:
+                stored_value = self._jwt_svc.decrypt_value(
+                    stored_codex_auth.secret_value
+                )
+                stored_codex_digest = hashlib.sha256(stored_value.encode()).hexdigest()
+
+            if loaded_codex_digest is None:
+                preserve_codex_auth = stored_codex_auth is not None and (
+                    codex_auth_digest is None
+                    or codex_auth_digest == stored_codex_digest
+                )
+            else:
+                preserve_codex_auth = (
+                    loaded_codex_digest == codex_auth_digest
+                    and codex_auth_digest is not None
+                )
+
+            if preserve_codex_auth:
                 secrets_json.pop(_CODEX_AUTH_SECRET_NAME, None)
+                if isinstance(codex_auth_info, dict):
+                    description = codex_auth_info.get('description')
+                    stored_codex_auth.description = (
+                        self._jwt_svc.encrypt_value(description)
+                        if description is not None
+                        else None
+                    )
 
             # Incoming secrets are always the most updated ones
             # Delete existing records for this user AND organization only

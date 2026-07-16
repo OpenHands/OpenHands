@@ -55,6 +55,71 @@ class TestSaasSecretsStore:
         'storage.saas_secrets_store.UserStore.get_user_by_id',
         new_callable=AsyncMock,
     )
+    async def test_fresh_store_preserves_existing_codex_auth(
+        self, mock_get_user, secrets_store, mock_user
+    ):
+        mock_get_user.return_value = mock_user
+        original = '{"tokens":{"refresh_token":"r0"}}'
+        await secrets_store.store(
+            Secrets(
+                custom_secrets={
+                    'CODEX_AUTH_JSON': CustomSecret.from_value(
+                        {'secret': original, 'description': 'Codex login'}
+                    )
+                }
+            )
+        )
+
+        fresh_store = SaasSecretsStore('user-id', secrets_store._jwt_svc)
+        await fresh_store.store(Secrets())
+
+        loaded = await fresh_store.load()
+        assert loaded is not None
+        assert (
+            loaded.custom_secrets['CODEX_AUTH_JSON'].secret.get_secret_value()
+            == original
+        )
+
+    @pytest.mark.asyncio
+    @patch(
+        'storage.saas_secrets_store.UserStore.get_user_by_id',
+        new_callable=AsyncMock,
+    )
+    async def test_codex_auth_description_update_is_preserved(
+        self, mock_get_user, secrets_store, mock_user
+    ):
+        mock_get_user.return_value = mock_user
+        original = '{"tokens":{"refresh_token":"r0"}}'
+        await secrets_store.store(
+            Secrets(
+                custom_secrets={
+                    'CODEX_AUTH_JSON': CustomSecret.from_value(
+                        {'secret': original, 'description': 'Old description'}
+                    )
+                }
+            )
+        )
+        editing_store = SaasSecretsStore('user-id', secrets_store._jwt_svc)
+        editing = await editing_store.load()
+        assert editing is not None
+        updated = dict(editing.custom_secrets)
+        updated['CODEX_AUTH_JSON'] = CustomSecret.from_value(
+            {'secret': original, 'description': 'New description'}
+        )
+
+        await editing_store.store(
+            editing.model_copy(update={'custom_secrets': updated})
+        )
+
+        loaded = await editing_store.load()
+        assert loaded is not None
+        assert loaded.custom_secrets['CODEX_AUTH_JSON'].description == 'New description'
+
+    @pytest.mark.asyncio
+    @patch(
+        'storage.saas_secrets_store.UserStore.get_user_by_id',
+        new_callable=AsyncMock,
+    )
     async def test_stale_save_preserves_rotated_codex_auth(
         self, mock_get_user, secrets_store, mock_user
     ):
