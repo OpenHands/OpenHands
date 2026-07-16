@@ -120,7 +120,7 @@ class SaasSecretsStore(SecretsStore):
 
             if preserve_codex_auth:
                 secrets_json.pop(_CODEX_AUTH_SECRET_NAME, None)
-                if isinstance(codex_auth_info, dict):
+                if stored_codex_auth is not None and isinstance(codex_auth_info, dict):
                     description = codex_auth_info.get('description')
                     stored_codex_auth.description = (
                         self._jwt_svc.encrypt_value(description)

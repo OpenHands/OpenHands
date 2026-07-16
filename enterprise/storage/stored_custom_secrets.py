@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Identity, Index, String
+from sqlalchemy import ForeignKey, Identity, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from storage.base import Base
 
@@ -11,15 +11,6 @@ if TYPE_CHECKING:
 
 class StoredCustomSecrets(Base):
     __tablename__ = 'custom_secrets'
-    __table_args__ = (
-        Index(
-            'uq_custom_secrets_user_org_secret_name',
-            'keycloak_user_id',
-            'org_id',
-            'secret_name',
-            unique=True,
-        ),
-    )
 
     id: Mapped[int] = mapped_column(Identity(), primary_key=True)
     keycloak_user_id: Mapped[str | None] = mapped_column(

@@ -167,6 +167,55 @@ class TestSaasSecretsStore:
         'storage.saas_secrets_store.UserStore.get_user_by_id',
         new_callable=AsyncMock,
     )
+    async def test_stale_save_preserves_concurrent_codex_auth_deletion(
+        self, mock_get_user, secrets_store, mock_user
+    ):
+        mock_get_user.return_value = mock_user
+        initial = Secrets(
+            custom_secrets=MappingProxyType(
+                {
+                    'CODEX_AUTH_JSON': CustomSecret.from_value(
+                        {
+                            'secret': '{"tokens":{"refresh_token":"r0"}}',
+                            'description': 'Codex login',
+                        }
+                    ),
+                    'OTHER': CustomSecret.from_value(
+                        {'secret': 'old', 'description': ''}
+                    ),
+                }
+            )
+        )
+        await secrets_store.store(initial)
+        stale_store = SaasSecretsStore('user-id', secrets_store._jwt_svc)
+        stale = await stale_store.load()
+        assert stale is not None
+
+        deleting_store = SaasSecretsStore('user-id', secrets_store._jwt_svc)
+        deleting = await deleting_store.load()
+        assert deleting is not None
+        deleted = dict(deleting.custom_secrets)
+        deleted.pop('CODEX_AUTH_JSON')
+        await deleting_store.store(
+            deleting.model_copy(update={'custom_secrets': MappingProxyType(deleted)})
+        )
+
+        updated = dict(stale.custom_secrets)
+        updated['OTHER'] = CustomSecret.from_value({'secret': 'new', 'description': ''})
+        await stale_store.store(
+            stale.model_copy(update={'custom_secrets': MappingProxyType(updated)})
+        )
+
+        loaded = await stale_store.load()
+        assert loaded is not None
+        assert 'CODEX_AUTH_JSON' not in loaded.custom_secrets
+        assert loaded.custom_secrets['OTHER'].secret.get_secret_value() == 'new'
+
+    @pytest.mark.asyncio
+    @patch(
+        'storage.saas_secrets_store.UserStore.get_user_by_id',
+        new_callable=AsyncMock,
+    )
     async def test_changed_codex_auth_wins_after_concurrent_rotation(
         self, mock_get_user, secrets_store, mock_user
     ):

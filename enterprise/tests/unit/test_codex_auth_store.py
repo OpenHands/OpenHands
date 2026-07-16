@@ -4,6 +4,7 @@ from uuid import UUID
 
 import pytest
 from pydantic import SecretStr
+from sqlalchemy import select
 from storage.codex_auth_store import CodexAuthStore
 from storage.stored_custom_secrets import StoredCustomSecrets
 
@@ -56,6 +57,34 @@ async def test_compare_and_swap(async_session_maker, jwt_svc, store):
         hashlib.sha256(original.encode()).hexdigest(), rotated
     )
     assert await store.get_value() == rotated
+
+
+@pytest.mark.asyncio
+async def test_compare_and_swap_converges_duplicate_rows(
+    async_session_maker, jwt_svc, store
+):
+    stale = '{"tokens":{"refresh_token":"stale"}}'
+    current = '{"tokens":{"refresh_token":"current"}}'
+    rotated = '{"tokens":{"refresh_token":"rotated"}}'
+    await _insert(async_session_maker, jwt_svc, stale)
+    await _insert(async_session_maker, jwt_svc, current)
+
+    assert await store.get_value() == current
+    assert await store.compare_and_swap(
+        hashlib.sha256(current.encode()).hexdigest(), rotated
+    )
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(StoredCustomSecrets).filter(
+                StoredCustomSecrets.keycloak_user_id == 'user-id',
+                StoredCustomSecrets.org_id == _ORG_ID,
+                StoredCustomSecrets.secret_name == 'CODEX_AUTH_JSON',
+            )
+        )
+        values = {
+            jwt_svc.decrypt_value(row.secret_value) for row in result.scalars().all()
+        }
+    assert values == {rotated}
 
 
 @pytest.mark.asyncio
