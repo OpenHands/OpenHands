@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Operator readiness and launch helper for the OpenHands fork.
+"""Prepare, validate, and start this OpenHands fork safely.
 
-The module deliberately uses only the Python standard library so it can diagnose
-an unprepared checkout before the project dependencies are installed.
+This module uses only the Python standard library so it can diagnose a fresh
+checkout before OpenHands dependencies are installed.
 """
 
 from __future__ import annotations
@@ -19,25 +19,25 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
-
+from urllib.parse import urlparse
 
 MIN_PYTHON = (3, 12, 0)
 MAX_PYTHON = (3, 14, 0)
 MIN_NODE = (22, 12, 0)
 MIN_POETRY = (1, 8, 0)
-VALID_STATUSES = {'pass', 'warning', 'error'}
-
+VALID_STATUSES = frozenset({'pass', 'warning', 'error'})
 GENERIC_PROVIDER_KEYS = ('LLM_MODEL', 'LLM_API_KEY')
 OPENCODE_GO_KEYS = (
     'OPENCODE_GO_MODEL',
     'OPENCODE_GO_BASE_URL',
     'OPENCODE_GO_API_KEY',
 )
+_VERSION_PATTERN = re.compile(r'(?<!\d)(\d+)\.(\d+)(?:\.(\d+))?')
 
 
 @dataclass(frozen=True)
 class CheckResult:
-    """One readiness probe result."""
+    """One readiness check result."""
 
     name: str
     status: str
@@ -57,28 +57,32 @@ class CheckResult:
 
 @dataclass(frozen=True)
 class ReadinessReport:
-    """Collection of readiness probe results."""
+    """A collection of readiness check results."""
 
     results: list[CheckResult]
 
+    def _count(self, status: str) -> int:
+        return sum(result.status == status for result in self.results)
+
     @property
     def passes(self) -> int:
-        return sum(result.status == 'pass' for result in self.results)
+        return self._count('pass')
 
     @property
     def warnings(self) -> int:
-        return sum(result.status == 'warning' for result in self.results)
+        return self._count('warning')
 
     @property
     def errors(self) -> int:
-        return sum(result.status == 'error' for result in self.results)
+        return self._count('error')
 
     @property
     def ready(self) -> bool:
         return self.errors == 0
 
 
-_VERSION_PATTERN = re.compile(r'(?<!\d)(\d+)\.(\d+)(?:\.(\d+))?')
+def _result(name: str, status: str, message: str) -> CheckResult:
+    return CheckResult(name=name, status=status, message=message)
 
 
 def parse_version(value: str) -> tuple[int, int, int] | None:
@@ -89,6 +93,18 @@ def parse_version(value: str) -> tuple[int, int, int] | None:
         return None
     major, minor, patch = match.groups()
     return int(major), int(minor), int(patch or 0)
+
+
+def parse_port(value: str) -> int:
+    """Parse and validate a TCP port for argparse."""
+
+    try:
+        port = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError('port must be an integer') from exc
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError('port must be between 1 and 65535')
+    return port
 
 
 def _format_version(version: tuple[int, int, int]) -> str:
@@ -114,9 +130,17 @@ def _run_probe(command: Sequence[str]) -> tuple[int, str]:
         )
     except (OSError, subprocess.SubprocessError) as exc:
         return 1, str(exc)
+    return completed.returncode, (completed.stdout or completed.stderr).strip()
 
-    output = (completed.stdout or completed.stderr).strip()
-    return completed.returncode, output
+
+def _check_available_command(name: str, executable: str) -> CheckResult:
+    if shutil.which(executable) is None:
+        return _result(
+            name,
+            'error',
+            f'{name} is not installed or is not available on PATH.',
+        )
+    return _result(name, 'pass', f'{name} is available.')
 
 
 def _check_versioned_command(
@@ -127,151 +151,107 @@ def _check_versioned_command(
     minimum: tuple[int, int, int],
     maximum: tuple[int, int, int] | None = None,
 ) -> CheckResult:
-    if shutil.which(executable) is None:
-        return CheckResult(
-            name=name,
-            status='error',
-            message=f'{name} is not installed or is not available on PATH.',
-        )
+    available = _check_available_command(name, executable)
+    if available.status == 'error':
+        return available
 
     return_code, output = _run_probe((executable, *arguments))
     if return_code != 0:
-        return CheckResult(
-            name=name,
-            status='error',
-            message=f'{name} could not be executed successfully.',
-        )
+        return _result(name, 'error', f'{name} could not be executed successfully.')
 
     version = parse_version(output)
     if version is None:
-        return CheckResult(
-            name=name,
-            status='error',
-            message=f'Could not determine the installed {name} version.',
+        return _result(
+            name,
+            'error',
+            f'Could not determine the installed {name} version.',
         )
 
     if not _version_in_range(version, minimum, maximum):
         requirement = f'>={_format_version(minimum)}'
         if maximum is not None:
             requirement += f', <{_format_version(maximum)}'
-        return CheckResult(
-            name=name,
-            status='error',
-            message=(
-                f'{name} {_format_version(version)} is incompatible; '
-                f'required {requirement}.'
-            ),
+        return _result(
+            name,
+            'error',
+            f'{name} {_format_version(version)} is incompatible; required {requirement}.',
         )
 
-    return CheckResult(
-        name=name,
-        status='pass',
-        message=f'{name} {_format_version(version)} is compatible.',
-    )
-
-
-def _check_available_command(name: str, executable: str) -> CheckResult:
-    if shutil.which(executable) is None:
-        return CheckResult(
-            name=name,
-            status='error',
-            message=f'{name} is not installed or is not available on PATH.',
-        )
-    return CheckResult(
-        name=name,
-        status='pass',
-        message=f'{name} is available.',
+    return _result(
+        name,
+        'pass',
+        f'{name} {_format_version(version)} is compatible.',
     )
 
 
 def _check_python() -> CheckResult:
     version = sys.version_info[:3]
     if not _version_in_range(version, MIN_PYTHON, MAX_PYTHON):
-        return CheckResult(
-            name='Python',
-            status='error',
-            message=(
+        return _result(
+            'Python',
+            'error',
+            (
                 f'Python {_format_version(version)} is incompatible; required '
                 f'>={_format_version(MIN_PYTHON)}, <{_format_version(MAX_PYTHON)}.'
             ),
         )
-    return CheckResult(
-        name='Python',
-        status='pass',
-        message=f'Python {_format_version(version)} is compatible.',
+    return _result(
+        'Python',
+        'pass',
+        f'Python {_format_version(version)} is compatible.',
     )
 
 
 def _check_docker() -> list[CheckResult]:
-    if shutil.which('docker') is None:
+    cli = _check_available_command('Docker CLI', 'docker')
+    if cli.status == 'error':
         return [
-            CheckResult(
-                name='Docker CLI',
-                status='error',
-                message=(
-                    'Docker is required for the docker runtime but is not '
-                    'installed or available on PATH.'
-                ),
+            _result(
+                'Docker CLI',
+                'error',
+                'Docker is required for the docker runtime but is unavailable.',
             )
         ]
 
-    results = [
-        CheckResult(
-            name='Docker CLI',
-            status='pass',
-            message='Docker CLI is available.',
-        )
-    ]
     return_code, _ = _run_probe(('docker', 'info'))
-    if return_code == 0:
-        results.append(
-            CheckResult(
-                name='Docker daemon',
-                status='pass',
-                message='Docker daemon is reachable.',
-            )
+    daemon = (
+        _result('Docker daemon', 'pass', 'Docker daemon is reachable.')
+        if return_code == 0
+        else _result(
+            'Docker daemon',
+            'error',
+            (
+                'Docker is installed but the daemon is not reachable. Start '
+                'Docker Desktop/Engine or deliberately use --runtime local.'
+            ),
         )
-    else:
-        results.append(
-            CheckResult(
-                name='Docker daemon',
-                status='error',
-                message=(
-                    'Docker is installed but the daemon is not reachable. Start '
-                    'Docker Desktop/Engine or deliberately use --runtime local.'
-                ),
-            )
-        )
-    return results
+    )
+    return [cli, daemon]
 
 
 def _check_workspace(workspace: Path) -> CheckResult:
     if not workspace.exists():
-        return CheckResult(
-            name='Workspace',
-            status='warning',
-            message=(
+        return _result(
+            'Workspace',
+            'warning',
+            (
                 f'Workspace does not exist: {workspace}. Run bootstrap or use '
                 'start --bootstrap to create it.'
             ),
         )
     if not workspace.is_dir():
-        return CheckResult(
-            name='Workspace',
-            status='error',
-            message=f'Workspace path is not a directory: {workspace}.',
+        return _result(
+            'Workspace',
+            'error',
+            f'Workspace path is not a directory: {workspace}.',
         )
     if not os.access(workspace, os.W_OK | os.X_OK):
-        return CheckResult(
-            name='Workspace',
-            status='error',
-            message=f'Workspace is not writable: {workspace}.',
+        return _result(
+            'Workspace',
+            'error',
+            f'Workspace is not writable: {workspace}.',
         )
-    return CheckResult(
-        name='Workspace',
-        status='pass',
-        message=f'Workspace is ready: {workspace}.',
-    )
+    return _result('Workspace', 'pass', f'Workspace is ready: {workspace}.')
 
 
 def _is_loopback_host(host: str) -> bool:
@@ -284,36 +264,39 @@ def _is_loopback_host(host: str) -> bool:
 
 
 def _check_remote_access(
-    backend_host: str, frontend_host: str, allow_remote_access: bool
+    backend_host: str,
+    frontend_host: str,
+    allow_remote_access: bool,
 ) -> CheckResult:
-    remote_hosts = [
-        host
-        for host in (backend_host, frontend_host)
-        if not _is_loopback_host(host)
-    ]
+    remote_hosts = list(
+        dict.fromkeys(
+            host
+            for host in (backend_host, frontend_host)
+            if not _is_loopback_host(host)
+        )
+    )
     if not remote_hosts:
-        return CheckResult(
-            name='Remote access',
-            status='pass',
-            message='Backend and frontend are bound to loopback addresses.',
+        return _result(
+            'Remote access',
+            'pass',
+            'Backend and frontend are bound to loopback addresses.',
         )
 
-    hosts = ', '.join(dict.fromkeys(remote_hosts))
+    hosts = ', '.join(remote_hosts)
     if not allow_remote_access:
-        return CheckResult(
-            name='Remote access',
-            status='error',
-            message=(
+        return _result(
+            'Remote access',
+            'error',
+            (
                 f'Refusing non-loopback binding ({hosts}) without '
                 '--allow-remote-access. Use TLS, access control, and a hardened '
                 'reverse proxy before exposing OpenHands.'
             ),
         )
-
-    return CheckResult(
-        name='Remote access',
-        status='pass',
-        message=(
+    return _result(
+        'Remote access',
+        'pass',
+        (
             f'Non-loopback binding was explicitly acknowledged for {hosts}. '
             'Protect it with TLS, access control, and a hardened reverse proxy.'
         ),
@@ -321,24 +304,20 @@ def _check_remote_access(
 
 
 def _check_port(name: str, host: str, port: int) -> CheckResult:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    address_family = socket.AF_INET6 if ':' in host else socket.AF_INET
+    sock = socket.socket(address_family, socket.SOCK_STREAM)
     try:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind((host, port))
-    except OSError:
-        return CheckResult(
-            name=name,
-            status='error',
-            message=f'{name} port {host}:{port} is already in use or unavailable.',
+    except (OSError, OverflowError):
+        return _result(
+            name,
+            'error',
+            f'{name} port {host}:{port} is already in use or unavailable.',
         )
     finally:
         sock.close()
-
-    return CheckResult(
-        name=name,
-        status='pass',
-        message=f'{name} port {host}:{port} is available.',
-    )
+    return _result(name, 'pass', f'{name} port {host}:{port} is available.')
 
 
 def resolve_provider_mode(env: Mapping[str, str], mode: str) -> str:
@@ -354,29 +333,41 @@ def resolve_provider_mode(env: Mapping[str, str], mode: str) -> str:
     return 'none'
 
 
-def validate_provider(
-    env: Mapping[str, str], mode: str, require_provider: bool
-) -> list[CheckResult]:
-    """Validate provider configuration using presence checks only.
+def _base_url_error(value: str) -> str | None:
+    parsed = urlparse(value)
+    if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+        return 'must be an absolute http:// or https:// URL'
+    if parsed.username is not None or parsed.password is not None:
+        return 'must not contain embedded credentials'
+    return None
 
-    Secret values are never copied into result messages.
-    """
+
+def _missing_keys(env: Mapping[str, str], keys: Sequence[str]) -> list[str]:
+    return [key for key in keys if not env.get(key, '').strip()]
+
+
+def validate_provider(
+    env: Mapping[str, str],
+    mode: str,
+    require_provider: bool,
+) -> list[CheckResult]:
+    """Validate provider configuration using presence checks only."""
 
     resolved = resolve_provider_mode(env, mode)
     if resolved == 'none':
-        if mode == 'none':
+        if mode == 'none' and not require_provider:
             return [
-                CheckResult(
-                    name='LLM provider',
-                    status='pass',
-                    message='Provider validation was disabled explicitly.',
+                _result(
+                    'LLM provider',
+                    'pass',
+                    'Provider validation was disabled explicitly.',
                 )
             ]
         return [
-            CheckResult(
-                name='LLM provider',
-                status='error' if require_provider else 'warning',
-                message=(
+            _result(
+                'LLM provider',
+                'error' if require_provider else 'warning',
+                (
                     'No environment-based LLM provider is configured. You may '
                     'configure a model in the OpenHands Settings UI after startup.'
                 ),
@@ -384,72 +375,81 @@ def validate_provider(
         ]
 
     if resolved == 'generic':
-        missing = [key for key in GENERIC_PROVIDER_KEYS if not env.get(key, '').strip()]
+        missing = _missing_keys(env, GENERIC_PROVIDER_KEYS)
         if missing:
             return [
-                CheckResult(
-                    name='Generic LLM provider',
-                    status='error',
-                    message=(
-                        'Generic provider configuration is incomplete; missing: '
-                        + ', '.join(missing)
-                        + '.'
-                    ),
+                _result(
+                    'Generic LLM provider',
+                    'error',
+                    'Generic provider configuration is incomplete; missing: '
+                    + ', '.join(missing)
+                    + '.',
+                )
+            ]
+        base_url = env.get('LLM_BASE_URL', '').strip()
+        error = _base_url_error(base_url) if base_url else None
+        if error is not None:
+            return [
+                _result(
+                    'Generic LLM provider',
+                    'error',
+                    f'LLM_BASE_URL {error}.',
                 )
             ]
         return [
-            CheckResult(
-                name='Generic LLM provider',
-                status='pass',
-                message=(
-                    'Generic provider configuration is complete; model and API '
-                    'key are present.'
-                ),
+            _result(
+                'Generic LLM provider',
+                'pass',
+                'Generic provider model and API key are present.',
             )
         ]
 
     if resolved == 'opencode-go':
-        missing = [key for key in OPENCODE_GO_KEYS if not env.get(key, '').strip()]
+        missing = _missing_keys(env, OPENCODE_GO_KEYS)
         if missing:
             return [
-                CheckResult(
-                    name='OpenCode Go provider',
-                    status='error',
-                    message=(
-                        'OpenCode Go configuration is incomplete; missing: '
-                        + ', '.join(missing)
-                        + '.'
-                    ),
+                _result(
+                    'OpenCode Go provider',
+                    'error',
+                    'OpenCode Go configuration is incomplete; missing: '
+                    + ', '.join(missing)
+                    + '.',
+                )
+            ]
+        error = _base_url_error(env['OPENCODE_GO_BASE_URL'].strip())
+        if error is not None:
+            return [
+                _result(
+                    'OpenCode Go provider',
+                    'error',
+                    f'OPENCODE_GO_BASE_URL {error}.',
                 )
             ]
         return [
-            CheckResult(
-                name='OpenCode Go provider',
-                status='pass',
-                message=(
-                    'OpenCode Go configuration is complete; model, base URL, and '
-                    'API key are present.'
-                ),
+            _result(
+                'OpenCode Go provider',
+                'pass',
+                'OpenCode Go model, base URL, and API key are present.',
             )
         ]
 
     return [
-        CheckResult(
-            name='LLM provider',
-            status='error',
-            message=f'Unsupported provider mode: {resolved}.',
+        _result(
+            'LLM provider',
+            'error',
+            f'Unsupported provider mode: {resolved}.',
         )
     ]
 
 
 def build_child_environment(
-    env: Mapping[str, str], provider_mode: str
+    env: Mapping[str, str],
+    provider_mode: str,
 ) -> dict[str, str]:
-    """Build the launch environment and map OpenCode Go into OpenHands variables."""
+    """Map a complete OpenCode Go profile into OpenHands child variables."""
 
     child = dict(env)
-    resolved = resolve_provider_mode(env, provider_mode)
-    if resolved != 'opencode-go':
+    if resolve_provider_mode(env, provider_mode) != 'opencode-go':
         return child
 
     model = env.get('OPENCODE_GO_MODEL', '').strip()
@@ -458,16 +458,21 @@ def build_child_environment(
     if not (model and base_url and api_key):
         return child
 
-    child['LLM_MODEL'] = model if '/' in model else f'openai/{model}'
+    child['LLM_MODEL'] = (
+        model if model.startswith('openai/') else f'openai/{model}'
+    )
     child['LLM_BASE_URL'] = base_url
     child['LLM_API_KEY'] = api_key
     return child
 
 
 def bootstrap_workspace(
-    *, repo_root: Path, workspace: Path, create_config: bool
+    *,
+    repo_root: Path,
+    workspace: Path,
+    create_config: bool,
 ) -> list[str]:
-    """Create safe local operator state without overwriting existing config."""
+    """Create local operator state without overwriting existing config."""
 
     actions: list[str] = []
     if workspace.exists():
@@ -490,18 +495,19 @@ def bootstrap_workspace(
         else:
             shutil.copyfile(template, config)
             actions.append('Created config.toml from config.template.toml.')
-
     return actions
 
 
-def _apply_strict_mode(results: list[CheckResult], strict: bool) -> list[CheckResult]:
+def _apply_strict_mode(
+    results: list[CheckResult], strict: bool
+) -> list[CheckResult]:
     if not strict:
         return results
     return [
-        CheckResult(result.name, 'error', result.message)
-        if result.status == 'warning'
-        else result
-        for result in results
+        _result(item.name, 'error', item.message)
+        if item.status == 'warning'
+        else item
+        for item in results
     ]
 
 
@@ -522,7 +528,6 @@ def collect_readiness(
     allow_remote_access: bool,
 ) -> ReadinessReport:
     results: list[CheckResult] = []
-
     if not skip_system_checks:
         results.extend(
             [
@@ -542,27 +547,33 @@ def collect_readiness(
                 ),
                 _check_available_command('Git', 'git'),
                 _check_available_command('make', 'make'),
+                _check_available_command('netcat (nc)', 'nc'),
             ]
         )
         if runtime == 'docker':
             results.extend(_check_docker())
         else:
             results.append(
-                CheckResult(
-                    name='Runtime isolation',
-                    status='warning',
-                    message=(
+                _result(
+                    'Runtime isolation',
+                    'warning',
+                    (
                         'Local runtime is selected. Agents may access the host '
-                        'filesystem and should be used only in a trusted environment.'
+                        'filesystem; use only in a trusted environment.'
                     ),
                 )
             )
 
-    results.append(_check_workspace(workspace))
-    results.append(
-        _check_remote_access(backend_host, frontend_host, allow_remote_access)
+    results.extend(
+        [
+            _check_workspace(workspace),
+            _check_remote_access(
+                backend_host,
+                frontend_host,
+                allow_remote_access,
+            ),
+        ]
     )
-
     if not skip_port_checks:
         results.extend(
             [
@@ -570,13 +581,12 @@ def collect_readiness(
                 _check_port('Frontend', frontend_host, frontend_port),
             ]
         )
-
     results.extend(validate_provider(env, provider_mode, require_provider))
-    return ReadinessReport(results=_apply_strict_mode(results, strict))
+    return ReadinessReport(_apply_strict_mode(results, strict))
 
 
 def render_report(report: ReadinessReport, as_json: bool) -> str:
-    """Render a deterministic report containing no provider values."""
+    """Render a deterministic report that never includes provider values."""
 
     if as_json:
         return json.dumps(
@@ -593,20 +603,28 @@ def render_report(report: ReadinessReport, as_json: bool) -> str:
             sort_keys=True,
         )
 
-    heading = 'READY' if report.ready else 'BLOCKED'
-    lines = [f'OpenHands operator readiness: {heading}']
+    lines = [
+        'OpenHands operator readiness: '
+        + ('READY' if report.ready else 'BLOCKED')
+    ]
     labels = {'pass': 'PASS', 'warning': 'WARN', 'error': 'ERROR'}
-    for result in report.results:
-        lines.append(f'[{labels[result.status]}] {result.name}: {result.message}')
+    lines.extend(
+        f'[{labels[item.status]}] {item.name}: {item.message}'
+        for item in report.results
+    )
     lines.append(
         'Summary: '
-        f'{report.passes} passed, {report.warnings} warnings, {report.errors} errors.'
+        f'{report.passes} passed, {report.warnings} warnings, '
+        f'{report.errors} errors.'
     )
     return '\n'.join(lines)
 
 
 def execute_command(
-    command: Sequence[str], *, cwd: Path, env: Mapping[str, str]
+    command: Sequence[str],
+    *,
+    cwd: Path,
+    env: Mapping[str, str],
 ) -> int:
     """Execute a build or launch command and return its exit status."""
 
@@ -619,40 +637,42 @@ def execute_command(
 
 def _resolve_workspace(repo_root: Path, value: str) -> Path:
     workspace = Path(value).expanduser()
-    if not workspace.is_absolute():
-        workspace = repo_root / workspace
-    return workspace.resolve()
+    return (
+        workspace.resolve()
+        if workspace.is_absolute()
+        else (repo_root / workspace).resolve()
+    )
 
 
 def _safe_launch_description(
-    command: Sequence[str], child_env: Mapping[str, str], provider_mode: str
+    command: Sequence[str],
+    child_env: Mapping[str, str],
+    provider_mode: str,
 ) -> str:
-    parts = ['Launch command: ' + ' '.join(command)]
     visible = [
         f"RUNTIME={child_env.get('RUNTIME', '')}",
         f"WORKSPACE_BASE={child_env.get('WORKSPACE_BASE', '')}",
     ]
     if 'INSTALL_DOCKER' in child_env:
         visible.append(f"INSTALL_DOCKER={child_env['INSTALL_DOCKER']}")
-    resolved = resolve_provider_mode(child_env, provider_mode)
-    if resolved in {'generic', 'opencode-go'}:
+    if resolve_provider_mode(child_env, provider_mode) in {'generic', 'opencode-go'}:
         visible.extend(
             [
                 f"LLM_MODEL={child_env.get('LLM_MODEL', '<unset>')}",
-                (
-                    'LLM_BASE_URL=<set>'
-                    if child_env.get('LLM_BASE_URL')
-                    else 'LLM_BASE_URL=<unset>'
-                ),
-                (
-                    'LLM_API_KEY=<set>'
-                    if child_env.get('LLM_API_KEY')
-                    else 'LLM_API_KEY=<unset>'
-                ),
+                'LLM_BASE_URL=<set>'
+                if child_env.get('LLM_BASE_URL')
+                else 'LLM_BASE_URL=<unset>',
+                'LLM_API_KEY=<set>'
+                if child_env.get('LLM_API_KEY')
+                else 'LLM_API_KEY=<unset>',
             ]
         )
-    parts.append('Environment: ' + ' '.join(visible))
-    return '\n'.join(parts)
+    return '\n'.join(
+        [
+            'Launch command: ' + ' '.join(command),
+            'Environment: ' + ' '.join(visible),
+        ]
+    )
 
 
 def _add_common_options(parser: argparse.ArgumentParser) -> None:
@@ -679,8 +699,8 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         '--backend-port',
-        type=int,
-        default=int(os.environ.get('BACKEND_PORT', '3000')),
+        type=parse_port,
+        default=os.environ.get('BACKEND_PORT', '3000'),
     )
     parser.add_argument(
         '--frontend-host',
@@ -688,16 +708,13 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         '--frontend-port',
-        type=int,
-        default=int(os.environ.get('FRONTEND_PORT', '3001')),
+        type=parse_port,
+        default=os.environ.get('FRONTEND_PORT', '3001'),
     )
     parser.add_argument(
         '--allow-remote-access',
         action='store_true',
-        help=(
-            'Acknowledge non-loopback binding. Use only behind TLS and access '
-            'control.'
-        ),
+        help='Acknowledge non-loopback binding behind independent security.',
     )
     parser.add_argument(
         '--require-provider',
@@ -712,33 +729,28 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--skip-system-checks',
         action='store_true',
-        help='Skip executable and runtime probes (primarily for focused CI/tests).',
+        help='Skip executable/runtime probes (for focused CI or tests).',
     )
     parser.add_argument(
         '--skip-port-checks',
         action='store_true',
         help='Skip backend and frontend port availability checks.',
     )
-    parser.add_argument(
-        '--json',
-        action='store_true',
-        help='Print the readiness report as JSON.',
-    )
+    parser.add_argument('--json', action='store_true', help='Print JSON output.')
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description='Prepare, validate, and start the OpenHands fork safely.'
     )
-    subparsers = parser.add_subparsers(dest='command', required=True)
+    commands = parser.add_subparsers(dest='command', required=True)
 
-    doctor = subparsers.add_parser(
-        'doctor', help='Check host and configuration readiness.'
-    )
+    doctor = commands.add_parser('doctor', help='Check operational readiness.')
     _add_common_options(doctor)
 
-    bootstrap = subparsers.add_parser(
-        'bootstrap', help='Create the workspace and optional local config file.'
+    bootstrap = commands.add_parser(
+        'bootstrap',
+        help='Create the workspace and optional local config.',
     )
     bootstrap.add_argument(
         '--workspace',
@@ -747,12 +759,13 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap.add_argument(
         '--create-config',
         action='store_true',
-        help='Copy config.template.toml to ignored config.toml when absent.',
+        help='Copy config.template.toml when config.toml is absent.',
     )
     bootstrap.add_argument('--json', action='store_true')
 
-    start = subparsers.add_parser(
-        'start', help='Validate and launch OpenHands with existing make targets.'
+    start = commands.add_parser(
+        'start',
+        help='Validate and launch using existing make targets.',
     )
     _add_common_options(start)
     start.add_argument(
@@ -763,20 +776,43 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument(
         '--create-config',
         action='store_true',
-        help='With --bootstrap, create config.toml from the template when absent.',
+        help='With --bootstrap, copy the config template when absent.',
     )
-    start.add_argument(
-        '--build',
-        action='store_true',
-        help='Run make build before make run.',
-    )
+    start.add_argument('--build', action='store_true', help='Run make build first.')
     start.add_argument(
         '--dry-run',
         action='store_true',
-        help='Print sanitized build/launch details without executing commands.',
+        help='Print sanitized actions without changing files or launching.',
     )
-
     return parser
+
+
+def _run_bootstrap(
+    *,
+    repo_root: Path,
+    workspace: Path,
+    create_config: bool,
+    as_json: bool,
+) -> int:
+    try:
+        actions = bootstrap_workspace(
+            repo_root=repo_root,
+            workspace=workspace,
+            create_config=create_config,
+        )
+    except OSError as exc:
+        if as_json:
+            print(json.dumps({'ok': False, 'error': str(exc)}, indent=2))
+        else:
+            print(f'Bootstrap failed: {exc}', file=sys.stderr)
+        return 1
+
+    print(
+        json.dumps({'ok': True, 'actions': actions}, indent=2)
+        if as_json
+        else '\n'.join(actions)
+    )
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -786,37 +822,34 @@ def main(argv: Sequence[str] | None = None) -> int:
     workspace = _resolve_workspace(repo_root, args.workspace)
 
     if args.command == 'bootstrap':
-        try:
-            actions = bootstrap_workspace(
-                repo_root=repo_root,
-                workspace=workspace,
-                create_config=args.create_config,
-            )
-        except OSError as exc:
-            if args.json:
-                print(json.dumps({'ok': False, 'error': str(exc)}, indent=2))
-            else:
-                print(f'Bootstrap failed: {exc}', file=sys.stderr)
-            return 1
+        return _run_bootstrap(
+            repo_root=repo_root,
+            workspace=workspace,
+            create_config=args.create_config,
+            as_json=args.json,
+        )
 
-        if args.json:
-            print(json.dumps({'ok': True, 'actions': actions}, indent=2))
-        else:
-            print('\n'.join(actions))
-        return 0
+    if args.command == 'start' and args.create_config and not args.bootstrap:
+        parser.error('--create-config requires --bootstrap')
 
     if args.command == 'start' and args.bootstrap:
-        try:
-            actions = bootstrap_workspace(
+        if args.dry_run:
+            if not args.json:
+                print(f'Bootstrap preview: would ensure workspace {workspace}.')
+                if args.create_config:
+                    print(
+                        'Bootstrap preview: would copy config.template.toml only '
+                        'when config.toml is absent.'
+                    )
+        else:
+            bootstrap_exit = _run_bootstrap(
                 repo_root=repo_root,
                 workspace=workspace,
                 create_config=args.create_config,
+                as_json=False,
             )
-        except OSError as exc:
-            print(f'Bootstrap failed: {exc}', file=sys.stderr)
-            return 1
-        if not args.json:
-            print('\n'.join(actions))
+            if bootstrap_exit != 0:
+                return bootstrap_exit
 
     report = collect_readiness(
         env=os.environ,
@@ -834,11 +867,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         allow_remote_access=args.allow_remote_access,
     )
     print(render_report(report, as_json=args.json))
-    if not report.ready:
-        return 1
-
-    if args.command == 'doctor':
-        return 0
+    if not report.ready or args.command == 'doctor':
+        return 0 if report.ready else 1
 
     child_env = build_child_environment(os.environ, args.provider)
     child_env['RUNTIME'] = args.runtime
@@ -855,7 +885,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         f'FRONTEND_HOST={args.frontend_host}',
         f'FRONTEND_PORT={args.frontend_port}',
     )
-
     if args.dry_run:
         if args.build:
             print('Build command: ' + ' '.join(build_command))
@@ -866,7 +895,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         build_exit = execute_command(build_command, cwd=repo_root, env=child_env)
         if build_exit != 0:
             return build_exit
-
     return execute_command(launch_command, cwd=repo_root, env=child_env)
 
 
