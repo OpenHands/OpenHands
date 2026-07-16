@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "Makefile"
+      - "README.md"
+      - ".devcontainer/devcontainer.json"
+      - ".devcontainer/setup.sh"
       - "scripts/openhands_operator.py"
       - "tests/unit/test_openhands_operator.py"
       - ".github/workflows/fork-operator-readiness.yml"
@@ -16,6 +19,9 @@ on:
       - "feat/**"
     paths:
       - "Makefile"
+      - "README.md"
+      - ".devcontainer/devcontainer.json"
+      - ".devcontainer/setup.sh"
       - "scripts/openhands_operator.py"
       - "tests/unit/test_openhands_operator.py"
       - ".github/workflows/fork-operator-readiness.yml"
@@ -48,6 +54,31 @@ jobs:
 
       - name: Verify CLI help
         run: python scripts/openhands_operator.py --help
+
+      - name: Validate OpenHands Codespace configuration
+        run: |
+          bash -n .devcontainer/setup.sh
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          path = Path('.devcontainer/devcontainer.json')
+          text = re.sub(r'^\s*//.*$', '', path.read_text(encoding='utf-8'), flags=re.MULTILINE)
+          config = json.loads(text)
+
+          assert config['name'] == 'OpenHands'
+          assert config['features']['ghcr.io/devcontainers/features/node:1']['version'] == '22'
+          assert config['forwardPorts'] == [3000, 3001]
+          assert config['portsAttributes']['3001']['onAutoForward'] == 'openBrowser'
+          assert config['postCreateCommand'] == 'bash .devcontainer/setup.sh'
+          PY
+
+      - name: Verify Codespaces README quick start
+        run: |
+          grep -F '# OpenHands Codespace — Start Here' README.md
+          grep -F 'https://codespaces.new/Rok1375/OpenHands?quickstart=1' README.md
+          grep -F 'python scripts/openhands_operator.py start' README.md
 
       - name: Verify frontend host wiring
         run: >-
