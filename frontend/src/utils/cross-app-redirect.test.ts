@@ -13,4 +13,9 @@ describe("isCrossAppPath", () => {
     expect(isCrossAppPath("/automations-old")).toBe(false);
     expect(isCrossAppPath("/settings?returnTo=/automations")).toBe(false);
   });
+
+  it("does not treat off-origin targets as cross-app paths", () => {
+    expect(isCrossAppPath("//evil.com/automations")).toBe(false);
+    expect(isCrossAppPath("https://evil.com/automations")).toBe(false);
+  });
 });
