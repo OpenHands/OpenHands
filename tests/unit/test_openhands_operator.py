@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import json
 import os
@@ -32,6 +33,13 @@ class VersionParsingTests(unittest.TestCase):
 
     def test_parse_version_returns_none_without_semantic_version(self) -> None:
         self.assertIsNone(operator.parse_version('version unknown'))
+
+    def test_parse_port_rejects_values_outside_tcp_range(self) -> None:
+        self.assertEqual(operator.parse_port('3000'), 3000)
+        with self.assertRaises(argparse.ArgumentTypeError):
+            operator.parse_port('0')
+        with self.assertRaises(argparse.ArgumentTypeError):
+            operator.parse_port('70000')
 
 
 class ProviderValidationTests(unittest.TestCase):
@@ -88,6 +96,38 @@ class ProviderValidationTests(unittest.TestCase):
         child = operator.build_child_environment(source, provider_mode='opencode-go')
 
         self.assertEqual(child['LLM_MODEL'], 'openai/example-model')
+
+    def test_slash_containing_model_gets_openai_compatible_prefix(self) -> None:
+        source = {
+            'OPENCODE_GO_MODEL': 'organization/example-model',
+            'OPENCODE_GO_BASE_URL': 'https://provider.example/v1',
+            'OPENCODE_GO_API_KEY': 'secret',
+        }
+
+        child = operator.build_child_environment(source, provider_mode='opencode-go')
+
+        self.assertEqual(
+            child['LLM_MODEL'], 'openai/organization/example-model'
+        )
+
+    def test_invalid_provider_base_url_is_rejected_without_echoing_value(self) -> None:
+        invalid_url = 'provider.example/v1?token=do-not-print'
+        results = operator.validate_provider(
+            {
+                'OPENCODE_GO_MODEL': 'example-model',
+                'OPENCODE_GO_BASE_URL': invalid_url,
+                'OPENCODE_GO_API_KEY': 'secret',
+            },
+            mode='opencode-go',
+            require_provider=True,
+        )
+
+        rendered = operator.render_report(
+            operator.ReadinessReport(results=results), as_json=False
+        )
+        self.assertTrue(any(result.status == 'error' for result in results))
+        self.assertIn('OPENCODE_GO_BASE_URL', rendered)
+        self.assertNotIn(invalid_url, rendered)
 
     def test_json_report_contains_counts_and_no_secret(self) -> None:
         secret = 'json-secret-value'
@@ -197,6 +237,73 @@ class CliTests(unittest.TestCase):
             self.assertIn('LLM_API_KEY=<set>', output.getvalue())
             self.assertIn('INSTALL_DOCKER=0', output.getvalue())
             self.assertNotIn(secret, output.getvalue())
+
+    def test_start_dry_run_with_bootstrap_does_not_mutate_filesystem(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir) / 'workspace'
+            with (
+                patch.object(operator, '_resolve_workspace', return_value=workspace),
+                redirect_stdout(StringIO()),
+            ):
+                exit_code = operator.main(
+                    [
+                        'start',
+                        '--runtime',
+                        'local',
+                        '--provider',
+                        'none',
+                        '--bootstrap',
+                        '--create-config',
+                        '--skip-system-checks',
+                        '--skip-port-checks',
+                        '--dry-run',
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertFalse(workspace.exists())
+
+
+class SystemCheckTests(unittest.TestCase):
+    def test_readiness_includes_netcat_requirement(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with (
+                patch.object(
+                    operator,
+                    '_check_python',
+                    return_value=operator.CheckResult('Python', 'pass', 'ok'),
+                ),
+                patch.object(
+                    operator.shutil,
+                    'which',
+                    side_effect=lambda command: (
+                        None if command == 'nc' else f'/usr/bin/{command}'
+                    ),
+                ),
+                patch.object(operator, '_run_probe', return_value=(0, '22.12.0')),
+            ):
+                report = operator.collect_readiness(
+                    env={},
+                    runtime='local',
+                    workspace=Path(temp_dir),
+                    backend_host='127.0.0.1',
+                    backend_port=3000,
+                    frontend_host='127.0.0.1',
+                    frontend_port=3001,
+                    provider_mode='none',
+                    require_provider=False,
+                    strict=False,
+                    skip_system_checks=False,
+                    skip_port_checks=True,
+                    allow_remote_access=False,
+                )
+
+        self.assertTrue(
+            any(
+                result.name == 'netcat (nc)' and result.status == 'error'
+                for result in report.results
+            )
+        )
 
 
 class RemoteAccessSafetyTests(unittest.TestCase):
