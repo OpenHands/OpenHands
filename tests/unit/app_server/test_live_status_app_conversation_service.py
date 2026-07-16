@@ -1666,7 +1666,7 @@ class TestLiveStatusAppConversationService:
         return_value=[],
     )
     @pytest.mark.asyncio
-    async def test_build_request_appends_shallow_clone_context(self, _mock_tools):
+    async def test_build_request_appends_partial_clone_context(self, _mock_tools):
         self.mock_user.git_full_clone = False
         self.mock_user_context.get_user_info.return_value = self.mock_user
         real_llm = LLM(model='gpt-4', api_key=SecretStr('test-key'))
@@ -1686,14 +1686,14 @@ class TestLiveStatusAppConversationService:
         suffix = result.agent.agent_context.system_message_suffix
         assert 'Existing integration instructions.' in suffix
         assert '<GIT_WORKSPACE_CONTEXT>' in suffix
-        assert 'git fetch --unshallow' in suffix
+        assert 'partial clone' in suffix
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
         return_value=[],
     )
     @pytest.mark.asyncio
-    async def test_build_request_omits_shallow_clone_context_for_full_clone(
+    async def test_build_request_omits_partial_clone_context_for_full_clone(
         self, _mock_tools
     ):
         self.mock_user.git_full_clone = True

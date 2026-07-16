@@ -204,8 +204,8 @@ After you finalize the plan in PLAN.md:
 Your role ends when the plan is finalized. Implementation is handled by the code agent.
 </IMPORTANT_PLANNING_BOUNDARIES>"""
 
-GIT_SHALLOW_CLONE_CONTEXT = """<GIT_WORKSPACE_CONTEXT>
-The selected repository was cloned as a shallow clone. Git history may be incomplete. Before using operations that depend on full history, tags, merge bases, historical blame, or arbitrary commit checkout, run `git rev-parse --is-shallow-repository`. If full history is needed, run `git fetch --unshallow` or `git fetch --deepen=<n>`.
+GIT_PARTIAL_CLONE_CONTEXT = """<GIT_WORKSPACE_CONTEXT>
+The selected repository was cloned as a partial clone (`--filter=blob:none`). The complete commit history is present, so merges, rebases, tags, blame, and checking out older commits all work normally. File contents are downloaded on demand, so operations that touch many files or older revisions may pause briefly to fetch data and require network access to the remote.
 </GIT_WORKSPACE_CONTEXT>"""
 
 
@@ -313,7 +313,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
         return self._launch_snapshot_from_user(user)
 
-    def _maybe_append_shallow_clone_context(
+    def _maybe_append_partial_clone_context(
         self,
         user: UserInfo,
         selected_repository: str | None,
@@ -321,7 +321,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     ) -> str | None:
         if selected_repository and not bool(getattr(user, 'git_full_clone', False)):
             return append_system_context(
-                system_message_suffix, GIT_SHALLOW_CLONE_CONTEXT
+                system_message_suffix, GIT_PARTIAL_CLONE_CONTEXT
             )
         return system_message_suffix
 
@@ -1788,7 +1788,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     )
                 secrets[name] = StaticSecret(value=value)
 
-        system_message_suffix = self._maybe_append_shallow_clone_context(
+        system_message_suffix = self._maybe_append_partial_clone_context(
             user, selected_repository, system_message_suffix
         )
 
@@ -2128,7 +2128,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     )
                 secrets[name] = StaticSecret(value=value)
 
-        system_message_suffix = self._maybe_append_shallow_clone_context(
+        system_message_suffix = self._maybe_append_partial_clone_context(
             user, selected_repository, system_message_suffix
         )
 

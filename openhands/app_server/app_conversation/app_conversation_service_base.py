@@ -394,9 +394,16 @@ class AppConversationServiceBase(AppConversationService, ABC):
         full_clone = bool(getattr(user_info, 'git_full_clone', False))
         clone_flags = ''
         if not full_clone:
-            clone_flags = ' --depth 1'
+            # Partial ("blobless") clone: fetch the complete commit history so
+            # merges, rebases, and blame have a valid merge base, but defer
+            # downloading file contents until they are actually needed. This
+            # keeps startup fast for large repositories without the broken-merge
+            # problems of a shallow (--depth) clone.
+            clone_flags = ' --filter=blob:none'
             if request.selected_branch:
-                clone_flags += f' --branch {shlex.quote(request.selected_branch)}'
+                clone_flags += (
+                    f' --single-branch --branch {shlex.quote(request.selected_branch)}'
+                )
 
         # Clone the repo - this is the slow part!
         if azure_devops_bearer_token:
@@ -426,7 +433,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
         # Checkout the appropriate branch
         if request.selected_branch:
-            # Needed for full clones; harmless no-op after shallow clones with --branch.
+            # Needed for full clones; harmless no-op after single-branch clones.
             checkout_command = f'git checkout {shlex.quote(request.selected_branch)}'
         else:
             # Generate a random branch name to avoid conflicts
