@@ -271,7 +271,7 @@ start-frontend:
 	else \
 		SCRIPT=dev; \
 	fi; \
-	VITE_BACKEND_HOST=$(BACKEND_HOST_PORT) VITE_FRONTEND_PORT=$(FRONTEND_PORT) npm run $$SCRIPT -- --port $(FRONTEND_PORT) --host $(BACKEND_HOST)
+	VITE_BACKEND_HOST=$(BACKEND_HOST_PORT) VITE_FRONTEND_PORT=$(FRONTEND_PORT) npm run $$SCRIPT -- --port $(FRONTEND_PORT) --host $(FRONTEND_HOST)
 
 # Common setup for running the app (non-callable)
 _run_setup:
