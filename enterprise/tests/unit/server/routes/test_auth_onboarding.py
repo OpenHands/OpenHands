@@ -377,6 +377,13 @@ class TestBuildOnboardingRedirect:
         )
         assert result == 'https://example.com/onboarding?returnTo=%2Ffoo'
 
+    def test_unwraps_legacy_login_redirect_to_inner_destination(self):
+        result = _build_onboarding_redirect(
+            'https://example.com/login?redirect=%2Fautomations&login_method=github',
+            'https://example.com',
+        )
+        assert result == 'https://example.com/onboarding?returnTo=%2Fautomations'
+
     def test_unwraps_login_returnTo_to_inner_destination(self):
         """Regression: login-wrapped destinations are unwrapped.
 

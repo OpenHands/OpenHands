@@ -736,7 +736,8 @@ def _extract_login_inner_return_to(relative_url: str) -> str | None:
     The OAuth flow's ``state`` is set to the full URL of the page that
     triggered the login (see ``generateAuthUrl`` in the frontend).
     For an unauthenticated deep-link visit, that page is itself
-    ``/login?returnTo=<actual destination>``, so the OAuth callback's
+    ``/login?returnTo=<actual destination>`` (or legacy
+    ``/login?redirect=<actual destination>``), so the OAuth callback's
     ``redirect_url`` ends up *wrapping* the user's true destination
     inside a login URL. Sending the user back through ``/login`` after
     onboarding works in principle (``LoginPage`` re-redirects authed
@@ -751,7 +752,8 @@ def _extract_login_inner_return_to(relative_url: str) -> str | None:
     parsed = urlparse(relative_url)
     if parsed.path != '/login':
         return None
-    inner = parse_qs(parsed.query).get('returnTo')
+    query = parse_qs(parsed.query)
+    inner = query.get('returnTo') or query.get('redirect')
     if not inner:
         return None
     value = inner[0]
@@ -784,7 +786,8 @@ def _build_onboarding_redirect(original_url: str, web_url: str) -> str:
     and lets the frontend use ``navigate(returnTo)`` directly.
 
     When ``original_url`` is itself a ``/login?returnTo=...`` URL —
-    which is the common case for unauthenticated deep-link visits,
+    or a legacy ``/login?redirect=...`` URL — which is the common case for
+    unauthenticated deep-link visits,
     because the OAuth flow's ``state`` carries the full login page
     URL — the *inner* ``returnTo`` is extracted so the user lands at
     their real destination in a single navigation rather than

@@ -13,11 +13,20 @@ interface LocationState {
   showRequestSubmittedModal?: boolean;
 }
 
+export function getSafeReturnTo(searchParams: URLSearchParams): string {
+  const destination =
+    searchParams.get("returnTo") || searchParams.get("redirect") || "/";
+  if (!destination.startsWith("/") || destination.startsWith("//")) {
+    return "/";
+  }
+  return destination;
+}
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const returnTo = searchParams.get("returnTo") || "/";
+  const returnTo = getSafeReturnTo(searchParams);
   const locationState = location.state as LocationState | null;
 
   const config = useConfig();
