@@ -22,6 +22,8 @@ _SECOND_ID = UUID('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb')
 class _FakeRedis:
     def __init__(self):
         self.data: dict[str, str] = {}
+        self.locks: dict[str, asyncio.Lock] = {}
+        self.lock_calls: list[dict] = []
 
     async def set(self, key, value, *, ex, nx):
         if nx and key in self.data:
@@ -32,14 +34,25 @@ class _FakeRedis:
     async def get(self, key):
         return self.data.get(key)
 
-    async def eval(self, script, _num_keys, key, *args):
-        if script == codex_auth._RELEASE_LOCK_SCRIPT:
-            (owner,) = args
-            if self.data.get(key) != owner:
-                return 0
-            del self.data[key]
-            return 1
-        raise AssertionError('Unexpected Redis script')
+    def lock(self, name, **kwargs):
+        self.lock_calls.append({'name': name, **kwargs})
+        return _FakeLock(self, name)
+
+
+class _FakeLock:
+    def __init__(self, redis: _FakeRedis, name: str):
+        self.redis = redis
+        self.name = name
+
+    async def __aenter__(self):
+        lock = self.redis.locks.setdefault(self.name, asyncio.Lock())
+        await lock.acquire()
+        self.redis.data[self.name] = 'locked'
+        return self
+
+    async def __aexit__(self, *_args):
+        self.redis.data.pop(self.name, None)
+        self.redis.locks[self.name].release()
 
 
 class _FakeStore:
@@ -106,7 +119,7 @@ def broker(monkeypatch):
         'session-a': _sandbox('a'),
         'session-b': _sandbox('b'),
     }
-    validate_session_key = AsyncMock(side_effect=lambda key: sandboxes[key])
+    validate_session_key = AsyncMock(side_effect=lambda key, **_kwargs: sandboxes[key])
     get_store = AsyncMock(return_value=store)
     monkeypatch.setattr(codex_auth, 'validate_session_key', validate_session_key)
     monkeypatch.setattr(codex_auth, '_get_store', get_store)
@@ -335,6 +348,47 @@ def test_digest_conflict_never_overwrites_current_value(app, jwt_service, broker
 
     assert response.status_code == 409
     assert store.value == current
+
+
+def test_update_uses_database_cas_without_redis_lock(
+    app, jwt_service, broker, fake_redis
+):
+    store, _ = broker
+    original = store.value
+    response = TestClient(app).put(
+        f'/api/internal/conversations/{_FIRST_ID}/codex-auth',
+        headers=_headers(jwt_service, _FIRST_ID, 'a'),
+        json={
+            'expected_digest': hashlib.sha256(original.encode()).hexdigest(),
+            'value': '{"tokens":{"refresh_token":"updated"}}',
+        },
+    )
+
+    assert response.status_code == 204
+    assert fake_redis.lock_calls == []
+
+
+def test_teardown_routes_request_paused_grace(app, jwt_service, broker):
+    client = TestClient(app)
+    headers = _headers(jwt_service, _FIRST_ID, 'a')
+    client.head(f'/api/internal/conversations/{_FIRST_ID}/codex-auth', headers=headers)
+    client.put(
+        f'/api/internal/conversations/{_FIRST_ID}/codex-auth',
+        headers=headers,
+        json={
+            'expected_digest': hashlib.sha256(broker[0].value.encode()).hexdigest(),
+            'value': broker[0].value,
+        },
+    )
+    client.delete(
+        f'/api/internal/conversations/{_FIRST_ID}/codex-auth', headers=headers
+    )
+
+    calls = codex_auth.validate_session_key.await_args_list
+    assert all(
+        call.kwargs['paused_grace_seconds'] == codex_auth._PAUSED_TEARDOWN_GRACE_SECONDS
+        for call in calls
+    )
 
 
 def test_invalid_document_does_not_echo_credentials(app, jwt_service, broker):

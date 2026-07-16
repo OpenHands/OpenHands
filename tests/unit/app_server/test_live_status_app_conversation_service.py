@@ -4415,6 +4415,46 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
 
     @pytest.mark.asyncio
+    async def test_codex_subscription_auth_falls_back_without_broker_context(
+        self, service, tmp_path
+    ):
+        source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"r0"}}'))
+        user = self._make_acp_user(acp_server='codex')
+        service.app_mode = 'saas'
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'CODEX_AUTH_JSON': source},
+        )
+
+        assert request.secrets['CODEX_AUTH_JSON'] is source
+        service.jwt_service.create_jws_token.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_codex_subscription_auth_falls_back_when_org_lookup_fails(
+        self, service, tmp_path
+    ):
+        source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"r0"}}'))
+        user = self._make_acp_user(acp_server='codex')
+        service.app_mode = 'saas'
+        service.web_url = 'https://cloud.example.com'
+        service.user_context.get_effective_org_id = AsyncMock(
+            side_effect=RuntimeError('organization unavailable')
+        )
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'CODEX_AUTH_JSON': source},
+        )
+
+        assert request.secrets['CODEX_AUTH_JSON'] is source
+        service.jwt_service.create_jws_token.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_api_codex_auth_does_not_get_write_access(self, service, tmp_path):
         source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"stored"}}'))
         override = SecretStr('{"tokens":{"refresh_token":"request"}}')

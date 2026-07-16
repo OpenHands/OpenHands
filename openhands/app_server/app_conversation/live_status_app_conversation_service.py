@@ -94,7 +94,10 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
     SandboxSpecService,
     is_custom_sandbox_spec,
 )
-from openhands.app_server.secrets.codex_auth import is_chatgpt_codex_auth
+from openhands.app_server.secrets.codex_auth import (
+    codex_auth_path,
+    is_chatgpt_codex_auth,
+)
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.settings.llm_profiles import resolve_profile_llm
@@ -2283,10 +2286,26 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not value or not is_chatgpt_codex_auth(value):
             return
         if not self.web_url or not user.id or not sandbox.session_api_key:
-            raise ValueError('Cannot scope Codex credentials to this conversation')
-        org_id = await self.user_context.get_effective_org_id()
+            _logger.warning(
+                'Leaving Codex credentials unscoped because broker context is incomplete',
+                extra={'conversation_id': str(conversation_id)},
+            )
+            return
+        try:
+            org_id = await self.user_context.get_effective_org_id()
+        except Exception:
+            _logger.warning(
+                'Leaving Codex credentials unscoped because the organization lookup failed',
+                extra={'conversation_id': str(conversation_id)},
+                exc_info=True,
+            )
+            return
         if org_id is None:
-            raise ValueError('Cannot determine the Codex credential organization')
+            _logger.warning(
+                'Leaving Codex credentials unscoped because no organization is available',
+                extra={'conversation_id': str(conversation_id)},
+            )
+            return
         token = self.jwt_service.create_jws_token(
             payload={
                 'purpose': 'codex-auth',
@@ -2299,10 +2318,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             expires_in=self.access_token_hard_timeout,
         )
         secrets['CODEX_AUTH_JSON'] = LookupSecret(
-            url=(
-                f'{self.web_url.rstrip("/")}/api/internal/conversations/'
-                f'{conversation_id}/codex-auth'
-            ),
+            url=f'{self.web_url.rstrip("/")}{codex_auth_path(conversation_id)}',
             headers={
                 'X-OH-Sandbox': sandbox.session_api_key,
                 'X-OH-Codex': token,

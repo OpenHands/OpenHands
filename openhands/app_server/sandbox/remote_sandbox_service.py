@@ -197,6 +197,17 @@ class RemoteSandboxService(SandboxService):
             exposed_urls = None
 
         sandbox_spec_id = stored.sandbox_spec_id
+        status_changed_at = None
+        if runtime and isinstance(runtime.get('last_state_change'), str):
+            try:
+                status_changed_at = datetime.fromisoformat(
+                    runtime['last_state_change'].replace('Z', '+00:00')
+                )
+            except ValueError:
+                _logger.warning(
+                    'Runtime returned an invalid state-change timestamp',
+                    extra={'sandbox_id': stored.id},
+                )
         return SandboxInfo(
             id=stored.id,
             created_by_user_id=stored.created_by_user_id,
@@ -206,6 +217,7 @@ class RemoteSandboxService(SandboxService):
             exposed_urls=exposed_urls,
             created_at=stored.created_at,
             status_detail=runtime.get('status_detail') if runtime else None,
+            status_changed_at=status_changed_at,
         )
 
     def _get_sandbox_status_from_runtime(
@@ -559,19 +571,11 @@ class RemoteSandboxService(SandboxService):
             return False
 
     async def pause_sandbox(self, sandbox_id: str) -> bool:
-        """Pause a running sandbox.
-
-        Security: Clears the session_api_key_hash to invalidate any existing
-        session keys, preventing leaked keys from being used while paused.
-        """
+        """Pause a running sandbox."""
         try:
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
             if not stored_sandbox:
                 return False
-
-            # Security: Invalidate the session API key hash to prevent
-            # leaked keys from being used while the sandbox is paused.
-            stored_sandbox.session_api_key_hash = None
 
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(

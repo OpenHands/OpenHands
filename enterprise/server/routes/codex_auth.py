@@ -1,11 +1,9 @@
-import asyncio
 import base64
 import hashlib
 import hmac
 import json
 import os
 import re
-import secrets
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -24,24 +22,23 @@ from storage.redis import get_redis_client_async, redis_exceptions
 from openhands.app_server.config import depends_jwt_service
 from openhands.app_server.constants import MAX_API_SECRET_VALUE_LENGTH
 from openhands.app_server.sandbox.session_auth import validate_session_key
-from openhands.app_server.secrets.codex_auth import is_chatgpt_codex_auth
+from openhands.app_server.secrets.codex_auth import (
+    CODEX_AUTH_ROUTE,
+    CODEX_AUTH_ROUTE_PREFIX,
+    is_chatgpt_codex_auth,
+)
 from openhands.app_server.services.jwt_service import JwtService
 
-router = APIRouter(prefix='/api/internal/conversations')
+router = APIRouter(prefix=CODEX_AUTH_ROUTE_PREFIX)
 jwt_service_dependency = depends_jwt_service()
 
 _SECRET_NAME = 'CODEX_AUTH_JSON'
 _REFRESH_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
 _REFRESH_LOCK_TTL_SECONDS = 120
 _REFRESH_LOCK_WAIT_SECONDS = 30
+_PAUSED_TEARDOWN_GRACE_SECONDS = 30
 _REFRESH_TOKEN_URL = 'https://auth.openai.com/oauth/token'
 _DIGEST_PATTERN = re.compile(r'^[0-9a-f]{64}$')
-_RELEASE_LOCK_SCRIPT = """
-if redis.call('get', KEYS[1]) == ARGV[1] then
-    return redis.call('del', KEYS[1])
-end
-return 0
-"""
 
 
 @dataclass(frozen=True)
@@ -78,13 +75,19 @@ async def _authorize(
     jwt_service: JwtService,
     *,
     allow_revoked: bool = False,
+    allow_paused_teardown: bool = False,
 ) -> _CodexAuthScope:
     if not codex_auth_token:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             detail='X-OH-Codex header is required',
         )
-    sandbox = await validate_session_key(session_api_key)
+    sandbox = await validate_session_key(
+        session_api_key,
+        paused_grace_seconds=(
+            _PAUSED_TEARDOWN_GRACE_SECONDS if allow_paused_teardown else None
+        ),
+    )
     try:
         claims = jwt_service.verify_jws_token(codex_auth_token)
         org_id = UUID(str(claims['org_id']))
@@ -156,36 +159,25 @@ async def _revoke(scope: _CodexAuthScope) -> None:
 @asynccontextmanager
 async def _credential_lock(scope: _CodexAuthScope) -> AsyncIterator[None]:
     redis: Any = get_redis_client_async()
-    owner = secrets.token_urlsafe(24)
-    deadline = time.monotonic() + _REFRESH_LOCK_WAIT_SECONDS
     try:
-        while True:
-            acquired = await redis.set(
-                scope.refresh_lock_key,
-                owner,
-                ex=_REFRESH_LOCK_TTL_SECONDS,
-                nx=True,
-            )
-            if acquired:
-                break
-            if time.monotonic() >= deadline:
-                raise HTTPException(
-                    status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail='Codex credential refresh is busy',
-                )
-            await asyncio.sleep(0.1)
+        async with redis.lock(
+            scope.refresh_lock_key,
+            timeout=_REFRESH_LOCK_TTL_SECONDS,
+            blocking_timeout=_REFRESH_LOCK_WAIT_SECONDS,
+            sleep=0.1,
+            raise_on_release_error=False,
+        ):
+            yield
+    except redis_exceptions.LockError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='Codex credential refresh is busy',
+        ) from exc
     except redis_exceptions.RedisError as exc:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             detail='Codex credential refresh is unavailable',
         ) from exc
-    try:
-        yield
-    finally:
-        try:
-            await redis.eval(_RELEASE_LOCK_SCRIPT, 1, scope.refresh_lock_key, owner)
-        except redis_exceptions.RedisError:
-            pass
 
 
 async def _get_store(scope: _CodexAuthScope) -> CodexAuthStore:
@@ -338,7 +330,7 @@ def _refresh_error(response: httpx.Response) -> dict[str, Any]:
     return {'error': {'code': code or 'credential_refresh_failed'}}
 
 
-@router.get('/{conversation_id}/codex-auth', include_in_schema=False)
+@router.get(CODEX_AUTH_ROUTE, include_in_schema=False)
 async def get_codex_auth(
     conversation_id: UUID,
     x_oh_sandbox: str | None = Header(None),
@@ -364,14 +356,20 @@ async def get_codex_auth(
     )
 
 
-@router.head('/{conversation_id}/codex-auth', include_in_schema=False)
+@router.head(CODEX_AUTH_ROUTE, include_in_schema=False)
 async def touch_codex_auth(
     conversation_id: UUID,
     x_oh_sandbox: str | None = Header(None),
     x_oh_codex: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    scope = await _authorize(conversation_id, x_oh_sandbox, x_oh_codex, jwt_service)
+    scope = await _authorize(
+        conversation_id,
+        x_oh_sandbox,
+        x_oh_codex,
+        jwt_service,
+        allow_paused_teardown=True,
+    )
     store = await _get_store(scope)
     value = await store.get_value()
     if value is None:
@@ -385,7 +383,7 @@ async def touch_codex_auth(
     )
 
 
-@router.put('/{conversation_id}/codex-auth', include_in_schema=False)
+@router.put(CODEX_AUTH_ROUTE, include_in_schema=False)
 async def update_codex_auth(
     conversation_id: UUID,
     request: Request,
@@ -393,16 +391,21 @@ async def update_codex_auth(
     x_oh_codex: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    scope = await _authorize(conversation_id, x_oh_sandbox, x_oh_codex, jwt_service)
+    scope = await _authorize(
+        conversation_id,
+        x_oh_sandbox,
+        x_oh_codex,
+        jwt_service,
+        allow_paused_teardown=True,
+    )
     expected_digest, value = await _parse_update(request)
-    async with _credential_lock(scope):
-        store = await _get_store(scope)
-        try:
-            updated = await store.compare_and_swap(expected_digest, value)
-        except KeyError as exc:
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND, detail='Codex credentials were not found'
-            ) from exc
+    store = await _get_store(scope)
+    try:
+        updated = await store.compare_and_swap(expected_digest, value)
+    except KeyError as exc:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail='Codex credentials were not found'
+        ) from exc
     if not updated:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -411,7 +414,7 @@ async def update_codex_auth(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post('/{conversation_id}/codex-auth/refresh', include_in_schema=False)
+@router.post(f'{CODEX_AUTH_ROUTE}/refresh', include_in_schema=False)
 async def refresh_codex_auth(
     conversation_id: UUID,
     request: Request,
@@ -489,7 +492,7 @@ async def refresh_codex_auth(
         )
 
 
-@router.delete('/{conversation_id}/codex-auth', include_in_schema=False)
+@router.delete(CODEX_AUTH_ROUTE, include_in_schema=False)
 async def release_codex_auth(
     conversation_id: UUID,
     x_oh_sandbox: str | None = Header(None),
@@ -502,6 +505,7 @@ async def release_codex_auth(
         x_oh_codex,
         jwt_service,
         allow_revoked=True,
+        allow_paused_teardown=True,
     )
     await _revoke(scope)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

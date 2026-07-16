@@ -473,6 +473,22 @@ class TestSandboxInfoConversion:
         assert running.status_detail is None
 
     @pytest.mark.asyncio
+    async def test_to_sandbox_info_includes_state_change_time(
+        self, remote_sandbox_service
+    ):
+        stored_sandbox = create_stored_sandbox()
+        runtime_data = create_runtime_data(status='paused')
+        runtime_data['last_state_change'] = '2026-07-16T12:34:56+00:00'
+
+        sandbox_info = remote_sandbox_service._to_sandbox_info(
+            stored_sandbox, runtime_data
+        )
+
+        assert sandbox_info.status_changed_at == datetime(
+            2026, 7, 16, 12, 34, 56, tzinfo=timezone.utc
+        )
+
+    @pytest.mark.asyncio
     async def test_to_sandbox_info_loads_runtime_when_none_provided(
         self, remote_sandbox_service
     ):
@@ -689,7 +705,7 @@ class TestSandboxLifecycle:
     async def test_pause_sandbox_success(self, remote_sandbox_service):
         """Test successful sandbox pause."""
         # Setup
-        stored_sandbox = create_stored_sandbox()
+        stored_sandbox = create_stored_sandbox(session_api_key_hash='live-hash')
         runtime_data = create_runtime_data()
 
         remote_sandbox_service._get_stored_sandbox = AsyncMock(
@@ -706,6 +722,7 @@ class TestSandboxLifecycle:
 
         # Verify
         assert result is True
+        assert stored_sandbox.session_api_key_hash == 'live-hash'
         remote_sandbox_service.httpx_client.request.assert_called_once_with(
             'POST',
             'https://api.example.com/pause',

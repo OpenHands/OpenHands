@@ -1,27 +1,14 @@
-"""Shared session-key authentication for sandbox-scoped endpoints.
-
-Both the sandbox router and the user router need to validate
-``X-Session-API-Key`` headers.  This module centralises that logic so
-it lives in exactly one place.
-
-The ``InjectorState`` + ``ADMIN`` pattern used here is established in
-``webhook_router.py`` — the sandbox service requires an admin context to
-look up sandboxes across all users by session key, but the session key
-itself acts as the proof of access.
-
-Security Note:
-    Session API keys are only valid while the sandbox is RUNNING. This prevents
-    leaked keys from being used to access secrets after a sandbox has been
-    paused, stopped, or deleted. See validate_session_key() for enforcement.
-"""
+"""Validate sandbox session keys."""
 
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
 
+from openhands.agent_server.utils import utc_now
 from openhands.app_server.config import get_global_config, get_sandbox_service
 from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxStatus
@@ -34,20 +21,12 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
-async def validate_session_key(session_api_key: str | None) -> SandboxInfo:
-    """Validate an ``X-Session-API-Key`` and return the associated sandbox.
-
-    Security:
-        This function enforces that session API keys are only valid for RUNNING
-        sandboxes. This is a critical security measure to prevent leaked keys
-        from being used to access user secrets after a sandbox has been paused,
-        stopped, or deleted.
-
-    Raises:
-        HTTPException(401): if the key is missing or does not map to a sandbox.
-        HTTPException(401): if the sandbox is not in RUNNING state.
-        HTTPException(401): in SAAS mode if the sandbox has no owning user.
-    """
+async def validate_session_key(
+    session_api_key: str | None,
+    *,
+    paused_grace_seconds: float | None = None,
+) -> SandboxInfo:
+    """Validate a sandbox session key."""
     if not session_api_key:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
@@ -70,10 +49,19 @@ async def validate_session_key(session_api_key: str | None) -> SandboxInfo:
             status.HTTP_401_UNAUTHORIZED, detail='Invalid session API key'
         )
 
-    # Security: Reject session keys for non-running sandboxes.
-    # This prevents leaked keys from being used to access secrets after
-    # the sandbox has been paused, stopped, or deleted.
-    if sandbox_info.status != SandboxStatus.RUNNING:
+    # Teardown can outlive the RUNNING-to-PAUSED transition.
+    paused_age = (
+        utc_now() - sandbox_info.status_changed_at
+        if sandbox_info.status_changed_at is not None
+        else None
+    )
+    recently_paused = (
+        sandbox_info.status == SandboxStatus.PAUSED
+        and paused_grace_seconds is not None
+        and paused_age is not None
+        and timedelta(0) <= paused_age <= timedelta(seconds=paused_grace_seconds)
+    )
+    if sandbox_info.status != SandboxStatus.RUNNING and not recently_paused:
         _logger.warning(
             'Session key rejected for non-running sandbox',
             extra={
