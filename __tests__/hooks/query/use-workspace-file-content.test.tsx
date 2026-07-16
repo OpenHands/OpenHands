@@ -122,9 +122,15 @@ describe("useWorkspaceFileContent", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
+    // The text fetch authenticates with the X-Session-API-Key header so it
+    // still works over plain HTTP (where the Secure session cookie is
+    // dropped by the browser), and keeps credentials for the HTTPS path.
     expect(fetchMock).toHaveBeenCalledWith(
       `${BASE_URL}docs/readme.md`,
-      expect.objectContaining({ credentials: "include" }),
+      expect.objectContaining({
+        credentials: "include",
+        headers: { "X-Session-API-Key": "session-key" },
+      }),
     );
     expect(result.current.data).toEqual({
       path: "docs/readme.md",
@@ -133,6 +139,43 @@ describe("useWorkspaceFileContent", () => {
       staticUrl: `${BASE_URL}docs/readme.md`,
       mimeType: "text/markdown",
     });
+  });
+
+  it("falls back to the active backend's api key when the conversation has no session key", async () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        id: "conv-1",
+        conversation_url: "https://agent.example.com/api/conversations/conv-1",
+      },
+    });
+    getActiveBackendMock.mockReturnValue({
+      backend: {
+        id: "local-1",
+        kind: "local",
+        host: "http://localhost:8000",
+        apiKey: "backend-key",
+      },
+      orgId: null,
+    });
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () => Promise.resolve(arrayBufferFromString("# Hello")),
+    });
+
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("docs/readme.md"),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${BASE_URL}docs/readme.md`,
+      expect.objectContaining({
+        headers: { "X-Session-API-Key": "backend-key" },
+      }),
+    );
   });
 
   it("does not fetch image bytes — image staticUrl is rendered directly", async () => {
