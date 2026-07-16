@@ -1270,3 +1270,110 @@ class TestFixTimezone:
         aware_dt = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         result = service._fix_timezone(aware_dt)
         assert result == aware_dt
+
+
+class TestCreatedAtPreservation:
+    """Regression tests: created_at must be immutable across re-saves.
+
+    The ``on_conversation_update`` webhook rebuilds an ``AppConversationInfo``
+    from scratch on every lifecycle transition and does not carry ``created_at``
+    forward, so the model defaults it to ``utc_now()``. ``save_app_conversation_info``
+    is an upsert, so without a guard the merge would clobber the persisted
+    ``created_at`` with "now" on every webhook.
+    """
+
+    @pytest.mark.asyncio
+    async def test_created_at_preserved_when_omitted_on_resave(
+        self,
+        service: SQLAppConversationInfoService,
+    ):
+        """A re-save that defaults created_at must not overwrite the stored value."""
+        conversation_id = uuid4()
+        original_created_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+        await service.save_app_conversation_info(
+            AppConversationInfo(
+                id=conversation_id,
+                created_by_user_id=None,
+                sandbox_id='sandbox_123',
+                title='Original',
+                created_at=original_created_at,
+                updated_at=original_created_at,
+            )
+        )
+
+        # Simulate the webhook rebuild: a fresh model whose created_at/updated_at
+        # come from the default_factory (i.e. "now"), not the stored value.
+        rebuilt = AppConversationInfo(
+            id=conversation_id,
+            created_by_user_id=None,
+            sandbox_id='sandbox_123',
+            title='Updated via webhook',
+        )
+        assert rebuilt.created_at > original_created_at  # default_factory ran
+
+        await service.save_app_conversation_info(rebuilt)
+
+        stored = await service.get_app_conversation_info(conversation_id)
+        assert stored is not None
+        # created_at is preserved from the original insert...
+        assert stored.created_at == original_created_at
+        # ...while other fields (title) still update.
+        assert stored.title == 'Updated via webhook'
+
+    @pytest.mark.asyncio
+    async def test_created_at_stable_across_repeated_webhooks(
+        self,
+        service: SQLAppConversationInfoService,
+    ):
+        """Repeated lifecycle webhooks must not drift created_at forward."""
+        conversation_id = uuid4()
+        original_created_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+        await service.save_app_conversation_info(
+            AppConversationInfo(
+                id=conversation_id,
+                created_by_user_id=None,
+                sandbox_id='sandbox_123',
+                title='Original',
+                created_at=original_created_at,
+                updated_at=original_created_at,
+            )
+        )
+
+        for i in range(3):
+            await service.save_app_conversation_info(
+                AppConversationInfo(
+                    id=conversation_id,
+                    created_by_user_id=None,
+                    sandbox_id='sandbox_123',
+                    title=f'Webhook update {i}',
+                )
+            )
+            stored = await service.get_app_conversation_info(conversation_id)
+            assert stored is not None
+            assert stored.created_at == original_created_at
+
+    @pytest.mark.asyncio
+    async def test_created_at_used_on_first_insert(
+        self,
+        service: SQLAppConversationInfoService,
+    ):
+        """On the initial insert, the provided created_at is honored."""
+        conversation_id = uuid4()
+        created_at = datetime(2023, 6, 15, 8, 30, 0, tzinfo=timezone.utc)
+
+        await service.save_app_conversation_info(
+            AppConversationInfo(
+                id=conversation_id,
+                created_by_user_id=None,
+                sandbox_id='sandbox_123',
+                title='Fresh',
+                created_at=created_at,
+                updated_at=created_at,
+            )
+        )
+
+        stored = await service.get_app_conversation_info(conversation_id)
+        assert stored is not None
+        assert stored.created_at == created_at

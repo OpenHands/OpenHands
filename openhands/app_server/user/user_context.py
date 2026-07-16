@@ -38,8 +38,20 @@ class UserContext(ABC):
         """
 
     @abstractmethod
-    async def get_user_info(self) -> UserInfo:
-        """Get the user info."""
+    async def get_user_info(
+        self,
+        *,
+        resolve_agent_profile: bool = False,
+        override_agent_profile_id: str | None = None,
+    ) -> UserInfo:
+        """Get the user info.
+
+        Defaults to the PERSISTED settings view. ``resolve_agent_profile=True``
+        opts into the effective launch view (the active Agent Profile resolved
+        into ``agent_settings`` — cloud-only concept);
+        ``override_agent_profile_id`` is a one-off launch override and implies
+        resolution. Implementations without the concept ignore both.
+        """
 
     @abstractmethod
     async def get_authenticated_git_url(

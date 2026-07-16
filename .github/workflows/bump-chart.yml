@@ -1,17 +1,24 @@
 # Opens a PR in OpenHands/OpenHands-Cloud pointing the openhands chart's
-# image.tag at the enterprise-server image that was just tagged. tag-image.yml
-# retags the sha-built image with the tag name (type=ref,event=tag)
-# concurrently, so the image tag matches the git tag verbatim — no prefix
-# stripping needed.
+# image.tag at the enterprise-server image for this tag. Triggered by
+# "Tag Docker images" completing (rather than the tag push itself) so the
+# chart PR only opens once the image tag actually resolves.
 name: Bump chart image tag
 
 on:
-  push:
-    tags:
-      - 'cloud-[0-9]+.[0-9]+.[0-9]+'
+  workflow_run:
+    workflows: ["Tag Docker images"]
+    types: [completed]
 
 jobs:
   bump-chart:
+    # "Tag Docker images" only runs on tag pushes, and workflow_run's
+    # head_branch carries the tag name for tag-triggered runs. Match the
+    # cloud line here rather than with a trigger-level `branches:` glob —
+    # whether that filter applies to tag-named head_branch values is
+    # undocumented, and a non-match would silently skip the chart bump.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'cloud-')
     # secrets: inherit forwards the org secrets RELEASE_APP_ID /
     # RELEASE_APP_PRIVATE_KEY that the reusable workflow needs.
     secrets: inherit
@@ -19,4 +26,6 @@ jobs:
     with:
       component: openhands
       chart_file: charts/openhands/values.yaml
-      tag: ${{ github.ref_name }}
+      metadata_file: charts/openhands/Chart.yaml
+      metadata_path: .appVersion
+      tag: ${{ github.event.workflow_run.head_branch }}

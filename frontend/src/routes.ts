@@ -39,6 +39,7 @@ export default [
       route("org", "routes/manage-org.tsx"),
       route("usage-monitoring", "routes/usage-monitoring.tsx"),
       route("admin-dashboard", "routes/admin-dashboard.tsx"),
+      route("budgets", "routes/budgets.tsx"),
     ]),
     route("conversations/:conversationId", "routes/conversation.tsx"),
     route("oauth/device/verify", "routes/device-verify.tsx"),

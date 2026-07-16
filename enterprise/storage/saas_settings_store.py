@@ -9,26 +9,31 @@ from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 from server.constants import LITE_LLM_API_URL
 from server.logger import logger
-from server.routes.org_models import OrgMemberSettingsUpdate
+from server.routes.org_models import (
+    MEMBER_PRIVATE_AGENT_KEYS,
+    OrgMemberSettingsUpdate,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
+from storage.agent_profile_resolution import (
+    OrgLLMProfileLoader,
+    load_agent_profiles,
+    load_llm_profiles,
+)
 from storage.database import a_session_maker
 from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
 from storage.org import Org
 from storage.org_member import OrgMember
-from storage.org_member_store import OrgMemberStore
+from storage.org_member_store import OrgMemberStore, serialize_mcp_config
 from storage.org_store import OrgStore
 from storage.user import User
 from storage.user_settings import UserSettings
 from storage.user_store import UserStore
 
-from openhands.app_server.settings.llm_profiles import LLMProfiles
-from openhands.app_server.settings.settings_models import (
-    Settings,
-)
+from openhands.app_server.settings.llm_profiles import LLMProfiles, resolve_profile_llm
+from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.utils.jsonpatch_compat import (
-    WHOLESALE_REPLACEMENT_KEYS,
     deep_merge,
     deep_merge_with_wholesale_keys,
 )
@@ -36,35 +41,8 @@ from openhands.app_server.utils.llm import is_openhands_model
 from openhands.sdk.llm.utils.openhands_provider import (
     canonicalize_openhands_llm_payload,
 )
-
-# Agent-settings keys private to each org member: never written to
-# org-level defaults nor broadcast across the org. Covers ``mcp_config``
-# (per-user MCP server set, a dict-of-items collection). ACP provider
-# creds are not here — they ride the per-user Secrets panel
-# (``request.secrets`` -> ``state.secret_registry``), not agent_settings.
-MEMBER_PRIVATE_AGENT_KEYS: frozenset[str] = WHOLESALE_REPLACEMENT_KEYS
-
-
-def _split_member_private_keys(
-    agent_settings_diff: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Split an agent_settings dump into (shared, private) halves.
-
-    The shared half is safe to write to ``org.agent_settings`` and to
-    broadcast through ``update_all_members_settings_async``. The private
-    half must be applied only to the acting member's row.
-    """
-    private = {
-        key: agent_settings_diff[key]
-        for key in MEMBER_PRIVATE_AGENT_KEYS
-        if key in agent_settings_diff
-    }
-    shared = {
-        key: value
-        for key, value in agent_settings_diff.items()
-        if key not in MEMBER_PRIVATE_AGENT_KEYS
-    }
-    return shared, private
+from openhands.sdk.mcp.config import MCPServer, coerce_mcp_config
+from openhands.sdk.profiles import resolve_agent_profile
 
 
 @dataclass
@@ -139,9 +117,155 @@ class SaasSettingsStore(SettingsStore):
 
     @staticmethod
     def _get_persisted_agent_settings(item: Settings) -> dict[str, Any]:
-        return item.agent_settings.model_dump(mode='json')
+        persisted = item.agent_settings.model_dump(
+            mode='json',
+            exclude={'llm': {'api_key'}},
+        )
+        persisted.pop('mcp_config', None)
+        return persisted
 
-    async def load(self) -> Settings | None:
+    @staticmethod
+    def _get_persisted_mcp_config(item: Settings) -> dict[str, Any] | None:
+        return serialize_mcp_config(item.agent_settings.mcp_config)
+
+    def _resolve_active_agent_profile(
+        self,
+        org: Org,
+        org_member: OrgMember,
+        merged_agent_settings: dict[str, Any],
+        effective_llm_api_key: SecretStr | None,
+        override_agent_profile_id: str | None = None,
+    ) -> tuple[dict[str, Any], str, int] | None:
+        """Resolve an agent profile into an ``agent_settings`` dump.
+
+        Resolves ``override_agent_profile_id`` when given (a one-off,
+        non-persisted launch override — never written back to
+        ``org_member.active_agent_profile_id``), else the member's ambient
+        ``active_agent_profile_id``, else the org-wide default pointer
+        (``AgentProfiles.active``, if one has been set). Returns
+        ``(agent_settings_dump, profile_id, revision)``, or ``None`` to fall
+        back to the composed ``agent_settings``.
+        Delegates the ``llm_profile_ref`` + ``mcp_server_refs`` join entirely to
+        the SDK ``resolve_agent_profile``; only the cloud-specific glue (the
+        org-backed ``llm_store`` adapter, the member-effective ``mcp_config``,
+        and the managed-key / base-url overlay via ``resolve_profile_llm``)
+        lives here.
+
+        Fail-safe by design: a stale pointer (profile deleted) or any resolution
+        error returns ``None`` and logs, because bricking *every* settings load
+        on a dangling pointer is far worse than launching the composed default.
+        """
+        agent_profiles = load_agent_profiles(org)
+        active_id = (
+            override_agent_profile_id
+            or org_member.active_agent_profile_id
+            or agent_profiles.active
+        )
+        if not active_id:
+            return None
+
+        name = agent_profiles.name_for_id(active_id)
+        if name is None:
+            logger.warning(
+                'Active agent profile %s not found for user %s in org %s; '
+                'falling back to composed settings',
+                active_id,
+                self.user_id,
+                org.id,
+            )
+            return None
+        try:
+            profile = agent_profiles.load(name)
+        except FileNotFoundError:
+            return None
+
+        mcp_config: dict[str, MCPServer] = {}
+        mcp_raw = merged_agent_settings.get('mcp_config')
+        if mcp_raw:
+            try:
+                mcp_config = coerce_mcp_config(mcp_raw)
+            except Exception:
+                mcp_config = {}
+
+        llm_store = OrgLLMProfileLoader(load_llm_profiles(org))
+        try:
+            resolved = resolve_agent_profile(
+                profile,
+                llm_store=llm_store,
+                mcp_config=mcp_config,
+                available_skills=None,
+                cipher=None,
+            )
+
+            # Apply the cloud managed-key / base-url overlay to the resolved LLM
+            # (OpenHands kind only), so managed OpenHands keys and provider-default
+            # base URLs behave exactly as the non-profile path. Reuses the existing
+            # resolve_profile_llm helper rather than re-deriving key resolution.
+            if resolved.agent_kind == 'openhands':
+                resolved = resolved.model_copy(
+                    update={
+                        'llm': resolve_profile_llm(
+                            resolved.llm,
+                            managed_proxy_url=LITE_LLM_API_URL,
+                            fallback_api_key=effective_llm_api_key,
+                        )
+                    }
+                )
+
+            # expose_secrets so the resolved LLM key lands in agent_settings the
+            # same way the composed path sets
+            # merged_agent_settings['llm']['api_key'].
+            resolved_dump = resolved.model_dump(
+                mode='json', context={'expose_secrets': True}
+            )
+            # Canonicalize legacy managed OpenHands model names/base_urls on the
+            # resolved LLM, mirroring the composed path (merged_agent_settings
+            # ['llm'], line ~348) so a profile launch and a non-profile launch
+            # normalize an org's pre-canonical llm_profiles identically.
+            resolved_llm = resolved_dump.get('llm')
+            if isinstance(resolved_llm, dict):
+                resolved_dump['llm'] = canonicalize_openhands_llm_payload(resolved_llm)
+        except Exception as exc:
+            # Never-brick contract: catch broadly, not just the known resolver
+            # errors — SDK contract drift (e.g. a new required kwarg raising
+            # TypeError) must degrade to the composed settings, not 500 every
+            # settings load.
+            logger.warning(
+                'Failed to resolve active agent profile %r for user %s: %s; '
+                'falling back to composed settings',
+                name,
+                self.user_id,
+                exc,
+            )
+            return None
+        return resolved_dump, str(profile.id), profile.revision
+
+    async def load(
+        self,
+        *,
+        resolve_agent_profile: bool = False,
+        override_agent_profile_id: str | None = None,
+    ) -> Settings | None:
+        """Load settings; opt into the resolved Agent-Profile launch view.
+
+        The default returns the PERSISTED (composed org + member) settings —
+        the view every load() -> store() round-trip must operate on, so an
+        active Agent Profile's *resolved* dump (ref-filtered ``mcp_config``,
+        the referenced LLM profile's key) can never masquerade as
+        user-authored settings and get written back.
+
+        ``resolve_agent_profile=True`` is the conversation-start opt-in: the
+        active Agent Profile resolves and REPLACES ``agent_settings`` (the
+        sole launch authority, #15044 §3), and the result is marked
+        ``_resolved_view`` — ``store()`` refuses it. Falls back to the
+        composed settings when no pointer is set or the pointer is stale /
+        unresolvable, so a broken pointer can never brick the load.
+
+        ``override_agent_profile_id`` is a one-off launch override (e.g. a
+        per-conversation-start request): it implies resolution, changes which
+        profile resolves for *this call only*, and is never persisted to
+        ``org_member.active_agent_profile_id``.
+        """
         user = await UserStore.get_user_by_id(self.user_id)
         if not user:
             logger.error(f'User not found for ID {self.user_id}')
@@ -163,6 +287,8 @@ class SaasSettingsStore(SettingsStore):
             return None
         org_agent_settings = OrgStore.get_agent_settings_from_org(org)
         member_agent_settings_diff = dict(org_member.agent_settings_diff)
+        member_agent_settings_diff.pop('mcp_config', None)
+        member_mcp_config = org_member.effective_mcp_config
 
         kwargs = {
             **{
@@ -192,6 +318,8 @@ class SaasSettingsStore(SettingsStore):
             org_agent_settings_dump,
             member_agent_settings_diff,
         )
+        if member_mcp_config is not None:
+            merged_agent_settings['mcp_config'] = member_mcp_config
         effective_llm_api_key = self._get_effective_llm_api_key(org, org_member)
         if effective_llm_api_key is not None:
             merged_agent_settings.setdefault('llm', {})['api_key'] = (
@@ -283,7 +411,34 @@ class SaasSettingsStore(SettingsStore):
                 # Settings.llm_profiles falls back to its default_factory.
                 kwargs.pop('llm_profiles', None)
 
+        # Agent Profiles: only on a resolve-requested load (conversation
+        # start), resolve the active agent profile and let the result REPLACE
+        # the composed agent_settings — the active Agent Profile is the sole
+        # launch authority (#15044 §3). Plain loads keep the persisted
+        # composed settings so settings round-trips never see (and never
+        # write back) a profile's resolved dump.
+        resolution_requested = (
+            resolve_agent_profile or override_agent_profile_id is not None
+        )
+        if resolution_requested:
+            resolved = self._resolve_active_agent_profile(
+                org,
+                org_member,
+                merged_agent_settings,
+                effective_llm_api_key,
+                override_agent_profile_id,
+            )
+            if resolved is not None:
+                resolved_dump, resolved_id, resolved_revision = resolved
+                kwargs['agent_settings'] = resolved_dump
+                kwargs['active_agent_profile_id'] = resolved_id
+                kwargs['active_agent_profile_revision'] = resolved_revision
+
         settings = Settings(**kwargs)
+        settings._mcp_config_updated = False
+        if resolution_requested:
+            # Launch view (even when resolution fell back): never persistable.
+            settings._resolved_view = True
 
         # The seed above is in-memory only. Persist it onto the org row so the
         # legacy LLM becomes a real stored profile — otherwise the profiles
@@ -336,6 +491,18 @@ class SaasSettingsStore(SettingsStore):
             await session.commit()
 
     async def store(self, item: Settings):
+        if item is not None and (
+            item._resolved_view or item.active_agent_profile_id is not None
+        ):
+            # A resolved Agent-Profile launch view (from
+            # load(resolve_agent_profile=True) / an override) is the profile's
+            # dump, not user-authored settings: persisting it would bake the
+            # ref-filtered mcp_config and the referenced LLM profile's key into
+            # the member/org rows. Only plain load() results may round-trip.
+            raise ValueError(
+                'Refusing to persist a resolved Agent-Profile settings view; '
+                'store() only accepts persisted settings from a plain load()'
+            )
         async with a_session_maker() as session:
             if not item:
                 return None
@@ -404,15 +571,11 @@ class SaasSettingsStore(SettingsStore):
                 )
 
             effective_agent_settings_diff = self._get_persisted_agent_settings(item)
-
-            # Keep mcp_config scoped to the acting member only.
-            # ``shared_agent_settings_diff`` is the slice safe for org-wide
-            # state; ``private_agent_settings_diff`` is applied below to the
-            # acting member's row only so other members don't inherit one
-            # user's MCP servers.
-            shared_agent_settings_diff, private_agent_settings_diff = (
-                _split_member_private_keys(effective_agent_settings_diff)
-            )
+            shared_agent_settings_diff = {
+                key: value
+                for key, value in effective_agent_settings_diff.items()
+                if key not in MEMBER_PRIVATE_AGENT_KEYS
+            }
 
             # Strip any pre-existing private keys from the org dump before
             # merging, so legacy values written by older code paths are
@@ -494,14 +657,15 @@ class SaasSettingsStore(SettingsStore):
                 ),
             )
 
-            # Member-private keys (mcp_config) live only on the acting
-            # member's row. Use the wholesale-replacement semantics so
-            # deletes stick (APP-1862).
-            if private_agent_settings_diff:
-                org_member.agent_settings_diff = deep_merge_with_wholesale_keys(
-                    dict(org_member.agent_settings_diff),
-                    private_agent_settings_diff,
-                )
+            member_mcp_config = org_member.effective_mcp_config
+            member_agent_settings_diff = dict(org_member.agent_settings_diff)
+            for private_key in MEMBER_PRIVATE_AGENT_KEYS:
+                member_agent_settings_diff.pop(private_key, None)
+            org_member.agent_settings_diff = member_agent_settings_diff
+            if item._mcp_config_updated:
+                org_member.mcp_config = self._get_persisted_mcp_config(item)
+            elif org_member.mcp_config is None and member_mcp_config is not None:
+                org_member.mcp_config = serialize_mcp_config(member_mcp_config)
 
             if uses_managed_llm_key and current_member_llm_api_key is not None:
                 # Managed/proxy key — store on this member but mark as org-managed

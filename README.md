@@ -102,7 +102,7 @@ docker run -it --rm \
   -p 8000:8000 \
   -v "$HOME/.openhands:/home/openhands/.openhands" \
   -v "${PROJECTS_PATH}:/projects" \
-  ghcr.io/openhands/agent-canvas:1.0.0-rc.11
+  ghcr.io/openhands/agent-canvas:1
 ```
 
 **Windows (PowerShell / Windows Terminal):** See [README.windows.md](https://github.com/OpenHands/agent-canvas/blob/main/README.windows.md) for the equivalent commands.
