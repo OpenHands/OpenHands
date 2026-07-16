@@ -8,18 +8,26 @@ import { useInvitation } from "#/hooks/use-invitation";
 import { LoginContent } from "#/components/features/auth/login-content";
 import { EmailVerificationModal } from "#/components/features/waitlist/email-verification-modal";
 import { RequestSubmittedModal } from "#/components/features/onboarding/request-submitted-modal";
-import { navigateToReturnUrl } from "#/utils/canvas-return-url";
+import { navigateOrHardRedirect } from "#/utils/cross-app-redirect";
 
 interface LocationState {
   showRequestSubmittedModal?: boolean;
+}
+
+export function getSafeReturnTo(searchParams: URLSearchParams): string {
+  const destination =
+    searchParams.get("returnTo") || searchParams.get("redirect") || "/";
+  if (!destination.startsWith("/") || destination.startsWith("//")) {
+    return "/";
+  }
+  return destination;
 }
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const returnTo =
-    searchParams.get("returnTo") || searchParams.get("redirect") || "/";
+  const returnTo = getSafeReturnTo(searchParams);
   const locationState = location.state as LocationState | null;
 
   const config = useConfig();
@@ -67,7 +75,7 @@ export default function LoginPage() {
         const separator = returnTo.includes("?") ? "&" : "?";
         destination = `${returnTo}${separator}login_method=${encodeURIComponent(loginMethod)}`;
       }
-      navigateToReturnUrl(destination, navigate);
+      navigateOrHardRedirect(navigate, destination, { replace: true });
     }
   }, [isAuthed, isAuthLoading, navigate, returnTo, searchParams]);
 

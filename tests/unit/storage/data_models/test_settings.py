@@ -8,6 +8,7 @@ from pydantic import SecretStr, ValidationError
 import openhands.app_server.settings.settings_models as settings_module
 from openhands.app_server.settings.llm_profiles import ProfileNotFoundError
 from openhands.app_server.settings.settings_models import (
+    GETSettingsModel,
     MarketplaceRegistration,
     Settings,
 )
@@ -617,6 +618,169 @@ def test_settings_update_drops_redacted_mcp_env_when_args_change():
     )
 
     assert not settings.agent_settings.mcp_config['local'].env
+
+
+def _mcp_config_as_seen_by_frontend(settings: Settings) -> dict:
+    """The ``mcp_config`` the frontend receives from ``GET /settings``.
+
+    Mirrors ``settings_router.load_settings``: the response is built as
+    ``GETSettingsModel(**settings.model_dump(...))`` and then serialized. That
+    dump-then-revalidate strips every MCP secret to *absent* — redaction emits
+    ``"**********"``, ``validate_secret`` turns that marker back into ``None`` on
+    the way into ``GETSettingsModel``, and the ``None`` is dropped on the way
+    out. So an unchanged credential arrives at the client as e.g.
+    ``{'strategy': 'bearer'}`` with no ``value`` — not the ``"**********"``
+    sentinel — which is exactly what the client echoes back on the next save.
+    """
+    response = GETSettingsModel(
+        **settings.model_dump(exclude={'secrets_store'}),
+        llm_api_key_set=settings.llm_api_key_is_set,
+    )
+    return response.model_dump(mode='json')['agent_settings']['mcp_config']
+
+
+def test_get_settings_roundtrip_strips_mcp_auth_secret_to_absent():
+    """Document the root cause: the GET response omits the secret entirely."""
+    settings = Settings(
+        agent_settings=OpenHandsAgentSettings(
+            mcp_config={
+                'server': {
+                    'url': 'https://mcp.example.com',
+                    'transport': 'http',
+                    'auth': {'strategy': 'bearer', 'value': 'real-key'},
+                }
+            }
+        )
+    )
+
+    seen = _mcp_config_as_seen_by_frontend(settings)
+
+    # The secret is gone, not redacted to "**********".
+    assert seen['server']['auth'] == {'strategy': 'bearer'}
+
+
+def test_settings_update_preserves_mcp_auth_across_get_roundtrip_on_add():
+    """Adding a server must not wipe existing servers' keys (the reported bug).
+
+    Replays the real flow: read the values as the frontend receives them (secret
+    stripped), append a brand-new server with its own key, and save the whole
+    map back — exactly the payload the browser sends.
+    """
+    settings = Settings(
+        agent_settings=OpenHandsAgentSettings(
+            mcp_config={
+                'shttp': {
+                    'url': 'https://a.example.com',
+                    'transport': 'http',
+                    'auth': {'strategy': 'bearer', 'value': 'key-a'},
+                },
+                'shttp_1': {
+                    'url': 'https://b.example.com',
+                    'transport': 'http',
+                    'auth': {'strategy': 'bearer', 'value': 'key-b'},
+                },
+            }
+        )
+    )
+
+    submitted = _mcp_config_as_seen_by_frontend(settings)
+    submitted['shttp_2'] = {
+        'url': 'https://c.example.com',
+        'auth': {'strategy': 'bearer', 'value': 'key-c'},
+    }
+
+    settings.update({'agent_settings_diff': {'mcp_config': submitted}})
+
+    dumped = dump_mcp_config(
+        settings.agent_settings.mcp_config or {},
+        context={'expose_secrets': 'plaintext'},
+    )
+    assert dumped['shttp']['auth'] == {'strategy': 'bearer', 'value': 'key-a'}
+    assert dumped['shttp_1']['auth'] == {'strategy': 'bearer', 'value': 'key-b'}
+    assert dumped['shttp_2']['auth'] == {'strategy': 'bearer', 'value': 'key-c'}
+
+
+@pytest.mark.parametrize(
+    'auth,secret_path',
+    (
+        (
+            {'strategy': 'api_key', 'value': 'real-key', 'header_name': 'X-API-Key'},
+            ('value',),
+        ),
+        (
+            {'strategy': 'basic', 'username': 'user', 'password': 'real-key'},
+            ('password',),
+        ),
+        (
+            {'strategy': 'header', 'headers': {'X-API-Key': 'real-key'}},
+            ('headers', 'X-API-Key'),
+        ),
+        (
+            {'strategy': 'oauth2', 'state': {'tokens': {'access_token': 'real-key'}}},
+            ('state', 'tokens', 'access_token'),
+        ),
+    ),
+)
+def test_settings_update_preserves_typed_mcp_auth_across_get_roundtrip(
+    auth: dict, secret_path: tuple[str, ...]
+):
+    """Every typed strategy survives the stripped-secret round trip on an edit."""
+    settings = Settings(
+        agent_settings=OpenHandsAgentSettings(
+            mcp_config={
+                'server': {
+                    'url': 'https://mcp.example.com',
+                    'transport': 'http',
+                    'auth': auth,
+                }
+            }
+        )
+    )
+
+    submitted = _mcp_config_as_seen_by_frontend(settings)
+    # An unrelated edit (a new server) triggers a full-map save.
+    submitted['added'] = {
+        'url': 'https://added.example.com',
+        'auth': {'strategy': 'bearer', 'value': 'new-key'},
+    }
+
+    settings.update({'agent_settings_diff': {'mcp_config': submitted}})
+
+    dumped = dump_mcp_config(
+        settings.agent_settings.mcp_config or {},
+        context={'expose_secrets': 'plaintext'},
+    )
+    restored = dumped['server']['auth']
+    for key in secret_path:
+        restored = restored[key]
+    assert restored == 'real-key'
+
+
+def test_settings_update_preserves_stdio_env_across_get_roundtrip():
+    """A stdio server's env secrets survive when another server is added."""
+    settings = Settings(
+        agent_settings=OpenHandsAgentSettings(
+            mcp_config={
+                'local': {
+                    'command': 'mcp-server',
+                    'args': ['--stdio'],
+                    'env': {'API_KEY': 'real-key'},
+                }
+            }
+        )
+    )
+
+    submitted = _mcp_config_as_seen_by_frontend(settings)
+    submitted['added'] = {
+        'url': 'https://added.example.com',
+        'auth': {'strategy': 'bearer', 'value': 'new-key'},
+    }
+
+    settings.update({'agent_settings_diff': {'mcp_config': submitted}})
+
+    server = settings.agent_settings.mcp_config['local']
+    assert server.env is not None
+    assert server.env['API_KEY'].get_secret_value() == 'real-key'
 
 
 def test_settings_update_can_clear_mcp_config():

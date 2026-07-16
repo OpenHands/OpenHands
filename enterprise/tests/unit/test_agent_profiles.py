@@ -813,6 +813,8 @@ class TestPersistedVsResolvedSettingsView:
                 name='reviewer',
                 llm_profile_ref='Default',
                 mcp_server_refs=mcp_server_refs,
+                tools=[],
+                system_message_suffix='PROFILE_SUFFIX',
             ),
         )
         await _set_agent_profiles(async_session_maker, org_id, ap)
@@ -971,6 +973,11 @@ class TestPersistedVsResolvedSettingsView:
             assert set(settings.agent_settings.mcp_config) == {'a'}
             # The resolved LLM is the referenced 'Default' org LLM profile.
             assert settings.agent_settings.llm.model == 'gpt-4o'
+            assert settings.agent_settings.tools == []
+            assert (
+                settings.agent_settings.agent_context.system_message_suffix
+                == 'PROFILE_SUFFIX'
+            )
 
             with pytest.raises(ValueError, match='resolved Agent-Profile'):
                 await store.store(settings)

@@ -5,7 +5,7 @@ import warnings
 from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
 from typing import Annotated, Optional, cast
-from urllib.parse import parse_qs, quote, urlencode, urlparse
+from urllib.parse import parse_qs, parse_qsl, quote, urlencode, urlparse, urlunparse
 from uuid import UUID as parse_uuid
 
 from fastapi import (
@@ -628,13 +628,12 @@ async def keycloak_callback(
                 'Redirecting returning user to onboarding',
                 extra={'user_id': user_id, 'deployment_mode': DEPLOYMENT_MODE},
             )
-        else:
-            redirect_url = _build_post_login_redirect(redirect_url, web_url)
         if invitation_token:
             if '?' in redirect_url:
                 redirect_url = f'{redirect_url}&invitation_success=true'
             else:
                 redirect_url = f'{redirect_url}?invitation_success=true'
+        redirect_url = _build_cross_app_redirect_url(redirect_url, web_url)
         response = RedirectResponse(redirect_url, status_code=302)
 
     set_response_cookie(
@@ -738,7 +737,8 @@ def _extract_login_inner_return_to(relative_url: str) -> str | None:
     The OAuth flow's ``state`` is set to the full URL of the page that
     triggered the login (see ``generateAuthUrl`` in the frontend).
     For an unauthenticated deep-link visit, that page is itself
-    ``/login?returnTo=<actual destination>``, so the OAuth callback's
+    ``/login?returnTo=<actual destination>`` (or legacy
+    ``/login?redirect=<actual destination>``), so the OAuth callback's
     ``redirect_url`` ends up *wrapping* the user's true destination
     inside a login URL. Sending the user back through ``/login`` after
     onboarding works in principle (``LoginPage`` re-redirects authed
@@ -761,6 +761,66 @@ def _extract_login_inner_return_to(relative_url: str) -> str | None:
     if not value.startswith('/'):
         return None
     return value
+
+
+def _is_cross_app_relative_path(value: str) -> bool:
+    """Return whether ``value`` is a safe same-origin cross-app route."""
+    if not value.startswith('/') or value.startswith('//'):
+        return False
+    parsed = urlparse(value)
+    return parsed.path in ('/automations', '/canvas') or parsed.path.startswith(
+        ('/automations/', '/canvas/')
+    )
+
+
+def _merge_login_wrapper_query(inner_destination: str, outer_query: str) -> str:
+    """Move non-routing login-wrapper query params onto an unwrapped destination."""
+    extra_params = [
+        (key, value)
+        for key, value in parse_qsl(outer_query, keep_blank_values=True)
+        if key not in ('returnTo', 'redirect')
+    ]
+    if not extra_params:
+        return inner_destination
+
+    parsed_inner = urlparse(inner_destination)
+    query = parse_qsl(parsed_inner.query, keep_blank_values=True) + extra_params
+    return urlunparse(parsed_inner._replace(query=urlencode(query)))
+
+
+def _build_cross_app_redirect_url(redirect_url: str, web_url: str) -> str:
+    """Build a direct server-side redirect for same-origin microservice routes.
+
+    OAuth state often points back at the main app's ``/login`` page with the
+    real destination nested inside ``returnTo`` or the legacy ``redirect`` query
+    parameter. For paths owned by another frontend, such as ``/automations`` or
+    ``/canvas``, sending the browser through the main app SPA first is brittle:
+    any old or already-loaded bundle can client-navigate and show the main app
+    404 before ingress sees the route.
+
+    Returning a direct ``Location: <web_url>/<cross-app>...`` from the backend
+    makes the browser issue a real document request, so ingress routes it to the
+    owning service.
+    """
+    if not redirect_url:
+        return redirect_url
+
+    relative = redirect_url
+    if web_url and redirect_url.startswith(web_url):
+        relative = redirect_url[len(web_url) :] or '/'
+
+    parsed = urlparse(relative)
+    if parsed.path == '/login':
+        query = parse_qs(parsed.query)
+        inner = query.get('returnTo') or query.get('redirect')
+        if inner and _is_cross_app_relative_path(inner[0]):
+            destination = _merge_login_wrapper_query(inner[0], parsed.query)
+            return f'{web_url}{destination}'
+
+    if _is_cross_app_relative_path(relative):
+        return f'{web_url}{relative}'
+
+    return redirect_url
 
 
 def _build_onboarding_redirect(original_url: str, web_url: str) -> str:
@@ -787,7 +847,8 @@ def _build_onboarding_redirect(original_url: str, web_url: str) -> str:
     and lets the frontend use ``navigate(returnTo)`` directly.
 
     When ``original_url`` is itself a ``/login?returnTo=...`` URL —
-    which is the common case for unauthenticated deep-link visits,
+    or a legacy ``/login?redirect=...`` URL — which is the common case for
+    unauthenticated deep-link visits,
     because the OAuth flow's ``state`` carries the full login page
     URL — the *inner* ``returnTo`` is extracted so the user lands at
     their real destination in a single navigation rather than
@@ -819,22 +880,6 @@ def _build_onboarding_redirect(original_url: str, web_url: str) -> str:
         return onboarding_url
 
     return f'{onboarding_url}?returnTo={quote(relative, safe="")}'
-
-
-def _build_post_login_redirect(original_url: str, web_url: str) -> str:
-    """Build the final post-login redirect URL."""
-    if not original_url:
-        return original_url
-
-    relative = original_url
-    if web_url and original_url.startswith(web_url):
-        relative = original_url[len(web_url) :] or '/'
-
-    inner_return_to = _extract_login_inner_return_to(relative)
-    if inner_return_to is None or inner_return_to.startswith('//'):
-        return original_url
-
-    return f'{web_url}{inner_return_to}'
 
 
 async def _should_redirect_to_onboarding(user_id: str, user: User) -> bool:
@@ -900,7 +945,7 @@ async def _get_post_auth_redirect(
         # ``?returnTo=...`` so the frontend ``OnboardingForm`` can
         # restore it after the user finishes the form.
         return _build_onboarding_redirect(default_url, web_url)
-    return default_url
+    return _build_cross_app_redirect_url(default_url, web_url)
 
 
 @api_router.post('/accept_tos')

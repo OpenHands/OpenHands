@@ -2,11 +2,8 @@ import { useMutation } from "@tanstack/react-query";
 import { usePostHog } from "posthog-js/react";
 import { useNavigate } from "react-router";
 import { openHands } from "#/api/open-hands-axios";
-import {
-  isCrossOriginUrl,
-  navigateToReturnUrl,
-} from "#/utils/canvas-return-url";
 import { handleCaptureConsent } from "#/utils/handle-capture-consent";
+import { navigateOrHardRedirect } from "#/utils/cross-app-redirect";
 
 interface AcceptTosVariables {
   redirectUrl: string;
@@ -34,12 +31,16 @@ export const useAcceptTos = () => {
       // Get the redirect URL from the response
       const finalRedirectUrl = response.data.redirect_url || redirectUrl;
 
-      if (isCrossOriginUrl(finalRedirectUrl)) {
+      // Check if the redirect URL is an external URL (starts with http or https)
+      if (
+        finalRedirectUrl.startsWith("http://") ||
+        finalRedirectUrl.startsWith("https://")
+      ) {
+        // For external URLs, redirect using window.location
         window.location.href = finalRedirectUrl;
-        return;
+      } else {
+        navigateOrHardRedirect(navigate, finalRedirectUrl);
       }
-
-      navigateToReturnUrl(finalRedirectUrl, navigate);
     },
     onError: () => {
       window.location.href = "/";

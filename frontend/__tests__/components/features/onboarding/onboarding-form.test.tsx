@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRoutesStub } from "react-router";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "i18next";
@@ -479,10 +479,6 @@ describe("OnboardingForm - redirect when already onboarded", () => {
     vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("should navigate to / when the backend reports onboarding is already complete", async () => {
     // Arrange
     vi.spyOn(onboardingService, "getStatus").mockResolvedValue({
@@ -516,23 +512,6 @@ describe("OnboardingForm - redirect when already onboarded", () => {
     });
     expect(mockNavigate).not.toHaveBeenCalledWith("/", { replace: true });
   });
-
-  it.each(["/canvas", "/automations"])(
-    "should hard reload %s returnTo when onboarding is already complete",
-    async (returnTo) => {
-      vi.stubGlobal("location", { ...window.location, assign: vi.fn() });
-      vi.spyOn(onboardingService, "getStatus").mockResolvedValue({
-        should_complete_onboarding: false,
-      });
-
-      await renderOnboardingForm(`/?returnTo=${encodeURIComponent(returnTo)}`);
-
-      await vi.waitFor(() => {
-        expect(window.location.assign).toHaveBeenCalledWith(returnTo);
-      });
-      expect(mockNavigate).not.toHaveBeenCalledWith(returnTo, { replace: true });
-    },
-  );
 
   it("should reject absolute URL returnTo and redirect to / when onboarding is already complete", async () => {
     // Security: a hand-crafted ``?returnTo=https://evil.example`` must

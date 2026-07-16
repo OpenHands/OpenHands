@@ -218,7 +218,6 @@ base_app.add_middleware(
 base_app.add_middleware(CacheControlMiddleware)
 base_app.middleware('http')(SetAuthCookieMiddleware())
 
-
 base_app.mount('/', SPAStaticFiles(directory=directory, html=True), name='dist')
 
 
