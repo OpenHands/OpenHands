@@ -1,6 +1,8 @@
 # Operating the Rok1375 OpenHands Fork
 
-This fork includes a dependency-free operator CLI that checks the machine, prepares local state, validates provider configuration, and launches the existing OpenHands source stack without changing upstream backend or frontend behavior.
+This guide is for the checked-out monorepo source in this fork. Upstream OpenHands is transitioning Agent Canvas and the agent SDK into separate repositories, but this operator intentionally uses the build and run targets that exist in this fork.
+
+The fork includes a dependency-free operator CLI that checks the machine, prepares local state, validates provider configuration, and launches the existing OpenHands source stack without changing upstream backend or frontend behavior.
 
 ## Security model
 
@@ -15,7 +17,7 @@ OpenHands is an autonomous coding agent. Treat every workspace mount and credent
 
 ## Prerequisites
 
-The `doctor` command validates the exact source-development baseline used by this repository:
+The `doctor` command validates the source-development baseline used by this repository:
 
 - Python `>=3.12,<3.14`
 - Node.js `>=22.12.0`
@@ -23,9 +25,10 @@ The `doctor` command validates the exact source-development baseline used by thi
 - Poetry `>=1.8`
 - Git
 - GNU Make
+- netcat (`nc`), which the existing `make run` readiness loop requires
 - Docker CLI and a reachable Docker daemon when `--runtime docker` is selected
 - writable workspace
-- available backend and frontend ports
+- valid TCP ports and available backend/frontend bindings
 
 Run the full check from the repository root:
 
@@ -72,7 +75,7 @@ python scripts/openhands_operator.py start \
   --dry-run
 ```
 
-The operator reports only whether an API key or base URL is set. It never prints the value of an API key.
+Dry-run mode does not create the workspace, copy `config.toml`, run the build, or launch the application. The operator reports only whether an API key or base URL is set and never prints an API-key value.
 
 ## Provider configuration
 
@@ -106,6 +109,8 @@ python scripts/openhands_operator.py start \
   --bootstrap \
   --build
 ```
+
+When `LLM_BASE_URL` is set, it must be an absolute `http://` or `https://` URL and must not contain embedded username/password credentials.
 
 Confirm the current model identifier and endpoint in the provider's official documentation or account dashboard. Do not guess them or hard-code them into this repository.
 
@@ -141,7 +146,7 @@ LLM_BASE_URL=<OPENCODE_GO_BASE_URL>
 LLM_API_KEY=<OPENCODE_GO_API_KEY>
 ```
 
-A model value that already contains a provider prefix, such as `openai/example-model`, is preserved.
+A model value that already begins with `openai/` is preserved. Other values, including IDs that contain a slash, receive the `openai/` compatibility prefix.
 
 ## Local runtime
 
@@ -221,7 +226,7 @@ Before using this mode, provide all of the following:
 - log rotation and disk monitoring;
 - backups for persistent OpenHands state.
 
-Do not expose the development server directly to the public internet.
+The repository's `make run` path is a source-development server. Do not expose it directly to the public internet or describe it as a hardened production deployment.
 
 ## Bootstrap commands
 
@@ -269,9 +274,13 @@ python scripts/openhands_operator.py doctor --json --strict
 
 Start Docker Desktop or Docker Engine, confirm `docker info` succeeds, and rerun `doctor`. Choose local runtime only when its reduced isolation is acceptable.
 
-### A port is occupied
+### A prerequisite is missing
 
-Select unused ports:
+Install the exact command named in the report. In particular, `make run` waits for the backend with `nc`, so a host without netcat will be blocked before launch.
+
+### A port is invalid or occupied
+
+Ports must be between `1` and `65535`. Select unused ports when the defaults are occupied:
 
 ```bash
 python scripts/openhands_operator.py start \
