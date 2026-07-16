@@ -38,7 +38,8 @@ import { ArchivedBanner } from "./archived-banner";
 import { useModelStore } from "#/stores/model-store";
 
 export function ChatInterface() {
-  const { setMessageToSend } = useConversationStore();
+  const { setMessageToSend, conversationMode, planContent } =
+    useConversationStore();
   const { errorMessage, removeErrorMessage } = useErrorMessageStore();
   const { isTask, taskStatus, taskDetail } = useTaskPolling();
   const conversationWebSocket = useConversationWebSocket();
@@ -76,12 +77,14 @@ export function ChatInterface() {
   const isAgentRunning =
     curAgentState === AgentState.RUNNING ||
     curAgentState === AgentState.LOADING;
+  const canBuildPlan =
+    !isAgentRunning && conversationMode === "plan" && Boolean(planContent);
 
   // Global keyboard shortcut for Build button (Cmd+Enter / Ctrl+Enter)
   // This is placed here instead of PlanPreview to avoid duplicate listeners
   // when multiple PlanPreview components exist in the chat
   React.useEffect(() => {
-    if (isAgentRunning) {
+    if (!canBuildPlan) {
       return undefined;
     }
 
@@ -100,7 +103,7 @@ export function ChatInterface() {
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isAgentRunning, handleBuildPlanClick, scrollDomToBottom]);
+  }, [canBuildPlan, handleBuildPlanClick, scrollDomToBottom]);
 
   const params = useParams();
   const { mutateAsync: uploadFiles } = useUnifiedUploadFiles();

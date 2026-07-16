@@ -8,7 +8,7 @@ import {
   test,
   vi,
 } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -26,12 +26,22 @@ import { OpenHandsAction } from "#/types/core/actions";
 import { useEventStore } from "#/stores/use-event-store";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
+import { useConversationStore } from "#/stores/conversation-store";
+
+const { handleBuildPlanClickMock } = vi.hoisted(() => ({
+  handleBuildPlanClickMock: vi.fn(),
+}));
 
 vi.mock("#/context/ws-client-provider");
 vi.mock("#/hooks/query/use-config");
 vi.mock("#/hooks/mutation/use-get-trajectory");
 vi.mock("#/hooks/mutation/use-unified-upload-files");
 vi.mock("#/hooks/use-conversation-id");
+vi.mock("#/hooks/use-handle-build-plan-click", () => ({
+  useHandleBuildPlanClick: () => ({
+    handleBuildPlanClick: handleBuildPlanClickMock,
+  }),
+}));
 
 vi.mock("#/hooks/use-user-providers", () => ({
   useUserProviders: () => ({
@@ -93,6 +103,66 @@ beforeEach(() => {
   useParamsMock.mockReturnValue({ conversationId: "test-conversation-id" });
   vi.mocked(useConversationId).mockReturnValue({
     conversationId: "test-conversation-id",
+  });
+});
+
+describe("ChatInterface - Build shortcut", () => {
+  beforeEach(() => {
+    handleBuildPlanClickMock.mockReset();
+    (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: { app_mode: "local" },
+    });
+    (useGetTrajectory as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      mutate: vi.fn(),
+      mutateAsync: vi.fn(),
+      isLoading: false,
+    });
+    (
+      useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
+    ).mockReturnValue({
+      mutateAsync: vi
+        .fn()
+        .mockResolvedValue({ skipped_files: [], uploaded_files: [] }),
+      isLoading: false,
+    });
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.AWAITING_USER_INPUT,
+      isArchived: false,
+    });
+    useConversationStore.setState({
+      conversationMode: "code",
+      planContent: null,
+    });
+  });
+
+  it("does not build outside plan mode", () => {
+    useConversationStore.setState({ planContent: "# Plan" });
+    renderChatInterfaceWithRouter();
+
+    fireEvent.keyDown(document, { key: "Enter", ctrlKey: true });
+
+    expect(handleBuildPlanClickMock).not.toHaveBeenCalled();
+  });
+
+  it("does not build when no plan exists", () => {
+    useConversationStore.setState({ conversationMode: "plan" });
+    renderChatInterfaceWithRouter();
+
+    fireEvent.keyDown(document, { key: "Enter", ctrlKey: true });
+
+    expect(handleBuildPlanClickMock).not.toHaveBeenCalled();
+  });
+
+  it("builds in plan mode when a plan exists", () => {
+    useConversationStore.setState({
+      conversationMode: "plan",
+      planContent: "# Plan",
+    });
+    renderChatInterfaceWithRouter();
+
+    fireEvent.keyDown(document, { key: "Enter", ctrlKey: true });
+
+    expect(handleBuildPlanClickMock).toHaveBeenCalledOnce();
   });
 });
 
