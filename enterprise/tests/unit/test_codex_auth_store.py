@@ -44,6 +44,7 @@ async def _insert(
 
 
 @pytest.mark.asyncio
+# SQLite does not serialize SELECT FOR UPDATE.
 async def test_compare_and_swap(async_session_maker, jwt_svc, store):
     original = '{"tokens":{"refresh_token":"r0"}}'
     rotated = '{"tokens":{"refresh_token":"r1"}}'
