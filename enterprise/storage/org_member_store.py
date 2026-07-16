@@ -5,7 +5,10 @@ Store class for managing organization-member relationships.
 from typing import Any, Optional
 from uuid import UUID
 
-from server.routes.org_models import OrgMemberSettingsUpdate
+from server.routes.org_models import (
+    MEMBER_PRIVATE_AGENT_KEYS,
+    OrgMemberSettingsUpdate,
+)
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -15,10 +18,23 @@ from storage.user import User
 from storage.user_settings import UserSettings
 
 from openhands.app_server.settings.settings_models import Settings
-from openhands.app_server.utils.jsonpatch_compat import (
-    deep_merge,
-    deep_merge_with_wholesale_keys,
-)
+from openhands.app_server.utils.jsonpatch_compat import deep_merge
+from openhands.sdk.mcp.config import coerce_mcp_config, dump_mcp_config
+
+_MISSING = object()
+
+
+def serialize_mcp_config(value: object) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    return dump_mcp_config(
+        coerce_mcp_config(value),
+        context={'expose_secrets': 'plaintext'},
+    )
+
+
+def _pop_mcp_config(settings: dict[str, Any]) -> object:
+    return settings.pop('mcp_config', _MISSING)
 
 
 class OrgMemberStore:
@@ -35,6 +51,8 @@ class OrgMemberStore:
         conversation_settings_diff: Optional[dict[str, Any]] = None,
     ) -> OrgMember:
         """Add a user to an organization with a specific role."""
+        agent_settings_diff = dict(agent_settings_diff or {})
+        mcp_config = _pop_mcp_config(agent_settings_diff)
         async with a_session_maker() as session:
             org_member = OrgMember(
                 org_id=org_id,
@@ -42,7 +60,12 @@ class OrgMemberStore:
                 role_id=role_id,
                 llm_api_key=llm_api_key,
                 status=status,
-                agent_settings_diff=dict(agent_settings_diff or {}),
+                agent_settings_diff=agent_settings_diff,
+                mcp_config=(
+                    serialize_mcp_config(mcp_config)
+                    if mcp_config is not _MISSING
+                    else None
+                ),
                 conversation_settings_diff=dict(conversation_settings_diff or {}),
             )
             session.add(org_member)
@@ -155,15 +178,24 @@ class OrgMemberStore:
         return {
             'llm_api_key': settings.agent_settings.llm.api_key,
             'agent_settings_diff': {},
+            'mcp_config': serialize_mcp_config(settings.agent_settings.mcp_config),
             'conversation_settings_diff': {},
         }
 
     @staticmethod
     def get_kwargs_from_user_settings(user_settings: UserSettings) -> dict[str, Any]:
         """Return kwargs for OrgMember construction (keys match column names)."""
+        agent_settings_diff = dict(user_settings.agent_settings or {})
+        nested_mcp_config = _pop_mcp_config(agent_settings_diff)
+        mcp_config = (
+            nested_mcp_config
+            if nested_mcp_config is not _MISSING
+            else user_settings.mcp_config
+        )
         return {
             'llm_api_key': user_settings.llm_api_key,
-            'agent_settings_diff': dict(user_settings.agent_settings),
+            'agent_settings_diff': agent_settings_diff,
+            'mcp_config': serialize_mcp_config(mcp_config),
             'conversation_settings_diff': dict(user_settings.conversation_settings),
         }
 
@@ -264,13 +296,17 @@ class OrgMemberStore:
         raw_key = values.pop('llm_api_key', None)
         agent_settings_diff = values.pop('agent_settings_diff', None)
         conversation_settings_diff = values.pop('conversation_settings_diff', None)
+        if agent_settings_diff is not None:
+            agent_settings_diff = dict(agent_settings_diff)
+            for key in MEMBER_PRIVATE_AGENT_KEYS:
+                agent_settings_diff.pop(key, None)
 
         for org_member in org_members:
             if raw_key is not None:
                 org_member.llm_api_key = raw_key
 
             if agent_settings_diff is not None:
-                org_member.agent_settings_diff = deep_merge_with_wholesale_keys(
+                org_member.agent_settings_diff = deep_merge(
                     org_member.agent_settings_diff,
                     agent_settings_diff,
                 )
