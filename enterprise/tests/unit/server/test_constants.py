@@ -22,6 +22,10 @@ class TestDeploymentMode:
             ('feature-123.staging.all-hands.dev', 'cloud'),
             ('pr-456.staging.all-hands.dev', 'cloud'),
             ('app.openhands.ai', 'cloud'),
+            # openhands.dev is also an All-Hands managed domain
+            ('app.openhands.dev', 'cloud'),
+            ('staging.openhands.dev', 'cloud'),
+            ('pr-456.staging.openhands.dev', 'cloud'),
             # Customer domains should return 'self_hosted'
             ('openhands.acme.com', 'self_hosted'),
             ('internal.company.io', 'self_hosted'),
@@ -81,9 +85,13 @@ class TestDeploymentMode:
             ('staging.all-hands.dev', True),
             ('feature.staging.all-hands.dev', True),
             ('app.openhands.ai', True),
+            ('app.openhands.dev', True),
+            ('staging.openhands.dev', True),
+            ('pr-1.staging.openhands.dev', True),
             ('localhost', False),  # localhost is not a managed domain
             ('customer.example.com', False),
             ('all-hands.dev', False),
+            ('openhands.dev', False),  # apex is not a subdomain, so not managed
         ],
     )
     def test_is_all_hands_managed_domain(self, host: str, expected: bool):
@@ -108,6 +116,45 @@ class TestDeploymentMode:
 
             # Default WEB_HOST is 'app.all-hands.dev' which should be 'cloud'
             assert constants_module.DEPLOYMENT_MODE == 'cloud'
+
+
+class TestStagingAndFeatureEnvDetection:
+    """IS_STAGING_ENV / IS_FEATURE_ENV must recognize both the legacy
+    all-hands.dev and the new openhands.dev staging/feature hosts."""
+
+    @pytest.mark.parametrize(
+        'web_host,is_staging,is_feature',
+        [
+            # Bare staging hosts: a staging env, but NOT a feature env
+            ('staging.all-hands.dev', True, False),
+            ('staging.openhands.dev', True, False),
+            # Feature / preview hosts on both domains
+            ('feature-123.staging.all-hands.dev', True, True),
+            ('pr-279.staging.all-hands.dev', True, True),
+            ('pr-279.staging.openhands.dev', True, True),
+            ('feature-123.staging.openhands.dev', True, True),
+            # Platform-team sandbox
+            ('pr-279.ohe-staging.platform-team.all-hands.dev', True, True),
+            # Production / customer / local hosts are neither
+            ('app.all-hands.dev', False, False),
+            ('app.openhands.dev', False, False),
+            ('openhands.acme.com', False, False),
+            ('localhost', False, False),
+        ],
+    )
+    def test_staging_and_feature_env_detection(
+        self, web_host: str, is_staging: bool, is_feature: bool
+    ):
+        """WEB_HOST drives IS_STAGING_ENV / IS_FEATURE_ENV for both domains."""
+        with patch.dict('os.environ', {'WEB_HOST': web_host}):
+            import importlib
+
+            import server.constants as constants_module
+
+            importlib.reload(constants_module)
+
+            assert constants_module.IS_STAGING_ENV is is_staging
+            assert constants_module.IS_FEATURE_ENV is is_feature
 
 
 class TestDeploymentModeInConfig:

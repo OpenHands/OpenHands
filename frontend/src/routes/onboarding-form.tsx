@@ -25,6 +25,7 @@ import {
 } from "#/api/option-service/option.types";
 import { queryClient } from "#/query-client-config";
 import OptionService from "#/api/option-service/option-service.api";
+import { navigateOrHardRedirect } from "#/utils/cross-app-redirect";
 
 /**
  * Sanitize a raw ``returnTo`` value, returning a safe same-origin path.
@@ -153,7 +154,7 @@ function OnboardingForm() {
       // stale ``/onboarding`` link still respects their deep-link
       // destination. ``returnTo`` is already sanitized above so it is
       // always a safe same-origin path.
-      navigate(returnTo, { replace: true });
+      navigateOrHardRedirect(navigate, returnTo, { replace: true });
     }
   }, [
     onboardingStatus?.should_complete_onboarding,
