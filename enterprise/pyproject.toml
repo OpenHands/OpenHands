@@ -23,7 +23,7 @@ packages = [
 python = "^3.12,<3.14"
 openhands-ai = { path = "../", develop = true }
 authlib = "1.6.12"
-cryptography = "48.0.1"                           # Pin transitive crypto dep to keep poetry.lock/uv.lock/enterprise/poetry.lock aligned
+cryptography = "48.0.1"                                     # Pin transitive crypto dep to keep poetry.lock/uv.lock/enterprise/poetry.lock aligned
 gspread = "6.2.1"
 alembic = "1.18.4"
 cloud-sql-python-connector = "1.20.1"

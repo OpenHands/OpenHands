@@ -30,6 +30,7 @@ dependencies = [
   "binaryornot==0.6.0",
   "boto3",
   "browsergym-core==0.13.3",
+  "cryptography==48.0.1",
   "deprecated==1.3.1",
   "deprecation==2.1.0",
   "dirhash==0.5.0",
@@ -106,7 +107,6 @@ dependencies = [
   "uvicorn",
   "whatthepatch==1.0.7",
   "zope-interface==7.2",
-  "cryptography==48.0.1",
 ]
 
 urls.Homepage = "https://github.com/OpenHands/OpenHands"
