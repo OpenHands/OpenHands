@@ -39,7 +39,7 @@ export const formatTimeDelta = (date: Date | string) => {
   // Parse string dates as UTC if needed, or use Date object directly
   const dateObj = typeof date === "string" ? parseDateAsUTC(date) : date;
   const now = new Date();
-  const delta = now.getTime() - dateObj.getTime();
+  const delta = Math.max(0, now.getTime() - dateObj.getTime());
 
   const seconds = Math.floor(delta / 1000);
   const minutes = Math.floor(seconds / 60);
