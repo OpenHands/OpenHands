@@ -6,6 +6,7 @@ from openhands.app_server.utils.llm import (
     _derive_verified_models,
     get_provider_api_base,
     is_openhands_model,
+    resolve_llm_model,
 )
 
 
@@ -107,6 +108,54 @@ class TestAssignProvider:
         monkeypatch.setattr(llm_utils, 'get_llm_provider', _boom)
 
         assert _assign_provider('whatever') == 'whatever'
+
+
+class TestResolveLlmModel:
+    """Tests for model routing normalization before settings are persisted."""
+
+    def test_custom_openai_compatible_base_url_prefixes_bare_model(self):
+        assert (
+            resolve_llm_model('gemma-4-e4b-it-mlx', 'http://localhost:1234/v1')
+            == 'openai/gemma-4-e4b-it-mlx'
+        )
+
+    def test_custom_openai_compatible_base_url_replaces_unknown_namespace(self):
+        assert (
+            resolve_llm_model(
+                'lmstudio-community/gemma-4-e4b-it-mlx',
+                'http://localhost:1234/v1',
+            )
+            == 'openai/gemma-4-e4b-it-mlx'
+        )
+
+    def test_known_provider_prefix_is_preserved(self):
+        assert (
+            resolve_llm_model(
+                'lm_studio/gemma-4-e4b-it-mlx', 'http://localhost:1234/v1'
+            )
+            == 'lm_studio/gemma-4-e4b-it-mlx'
+        )
+        assert (
+            resolve_llm_model('ollama/llama3', 'http://localhost:11434')
+            == 'ollama/llama3'
+        )
+
+    def test_known_bare_model_with_base_url_is_preserved(self):
+        assert resolve_llm_model('gpt-4', 'https://api.openai.com/v1') == 'gpt-4'
+
+    def test_unknown_bare_model_with_nonlocal_base_url_is_preserved(self):
+        assert resolve_llm_model('test-model', 'https://test.com') == 'test-model'
+
+    def test_unknown_namespace_with_nonlocal_base_url_is_preserved(self):
+        assert (
+            resolve_llm_model('custom-org/test-model', 'https://test.com')
+            == 'custom-org/test-model'
+        )
+
+    def test_empty_base_url_leaves_model_unchanged(self):
+        assert resolve_llm_model('lmstudio-community/gemma', '') == (
+            'lmstudio-community/gemma'
+        )
 
 
 class TestDeriveVerifiedModels:

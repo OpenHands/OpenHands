@@ -861,6 +861,25 @@ class TestLiveStatusAppConversationService:
         assert llm.base_url == 'https://user-llm.example.com'
 
     @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_normalizes_openai_compatible_custom_model(
+        self,
+    ):
+        """LM Studio model namespaces are normalized before runtime startup."""
+        # Arrange
+        self.mock_user.llm_model = 'lmstudio-community/gemma-4-e4b-it-mlx'
+        self.mock_user.llm_base_url = 'http://localhost:1234/v1'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, None, self.conversation_id
+        )
+
+        # Assert
+        assert llm.model == 'openai/gemma-4-e4b-it-mlx'
+        assert llm.base_url == 'http://localhost:1234/v1'
+
+    @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_user_default_model(self):
         """Test _configure_llm_and_mcp using user's default model."""
         # Arrange

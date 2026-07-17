@@ -225,6 +225,27 @@ async def test_settings_api_endpoints(test_client):
 
 
 @pytest.mark.asyncio
+async def test_settings_api_normalizes_openai_compatible_custom_model(test_client):
+    settings = Settings(
+        agent_settings=OpenHandsAgentSettings(
+            llm=LLM(
+                model='lmstudio-community/gemma-4-e4b-it-mlx',
+                base_url='http://localhost:1234/v1',
+            )
+        )
+    )
+
+    response = test_client.post('/api/v1/settings', json=_dump_update(settings))
+    assert response.status_code == 200
+
+    response = test_client.get('/api/v1/settings')
+    assert response.status_code == 200
+    llm = response.json()['agent_settings']['llm']
+    assert llm['model'] == 'openai/gemma-4-e4b-it-mlx'
+    assert llm['base_url'] == 'http://localhost:1234/v1'
+
+
+@pytest.mark.asyncio
 async def test_store_settings_rejects_legacy_nested_payload_keys(test_client):
     response = test_client.post(
         '/api/v1/settings',

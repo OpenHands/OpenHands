@@ -251,6 +251,29 @@ async def test_save_profile_with_explicit_llm_persists(test_client, settings_sto
 
 
 @pytest.mark.asyncio
+async def test_save_profile_normalizes_openai_compatible_custom_model(
+    test_client, settings_store
+):
+    await _seed(settings_store, _base_settings())
+
+    response = test_client.post(
+        '/api/v1/settings/profiles/lmstudio',
+        json={
+            'llm': {
+                'model': 'lmstudio-community/gemma-4-e4b-it-mlx',
+                'base_url': 'http://localhost:1234/v1',
+            },
+        },
+    )
+
+    assert response.status_code == 201
+    stored = await settings_store.load()
+    saved_llm = stored.llm_profiles.get('lmstudio')
+    assert saved_llm.model == 'openai/gemma-4-e4b-it-mlx'
+    assert saved_llm.base_url == 'http://localhost:1234/v1'
+
+
+@pytest.mark.asyncio
 async def test_save_profile_snapshots_current_llm_when_no_body(
     test_client, settings_store
 ):

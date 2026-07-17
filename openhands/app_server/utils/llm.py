@@ -1,4 +1,6 @@
+import ipaddress
 import warnings
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
@@ -104,6 +106,77 @@ class ModelsResponse(BaseModel):
 def is_openhands_model(model: str | None) -> bool:
     """Return True when the model uses the public OpenHands provider prefix."""
     return bool(model and model.startswith('openhands/'))
+
+
+def _has_known_litellm_provider_prefix(model: str) -> bool:
+    provider, separator, _ = model.partition('/')
+    if not separator:
+        return False
+    try:
+        LlmProviders(provider)
+    except ValueError:
+        return False
+    return True
+
+
+def _can_litellm_resolve_model(model: str) -> bool:
+    try:
+        get_llm_provider(model)
+    except Exception:
+        return False
+    return True
+
+
+def _is_local_llm_base_url(base_url: str) -> bool:
+    hostname = urlparse(base_url).hostname
+    if not hostname:
+        return False
+
+    hostname = hostname.lower()
+    if hostname == 'localhost' or hostname.endswith(('.localhost', '.local')):
+        return True
+    if hostname == 'host.docker.internal':
+        return True
+
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_unspecified
+
+
+def resolve_llm_model(model: str | None, base_url: str | None) -> str | None:
+    """Resolve model routing for OpenAI-compatible custom endpoints.
+
+    LiteLLM needs a provider prefix to route requests. OpenAI-compatible local
+    servers such as LM Studio often expose model ids like
+    ``lmstudio-community/gemma-...`` where the left side is a model namespace,
+    not a LiteLLM provider. When a custom local ``base_url`` is set and the
+    model cannot otherwise be resolved, route through the OpenAI-compatible
+    provider and keep the actual model id on the right.
+    """
+    if not model:
+        return model
+
+    model = model.strip()
+    if not model:
+        return model
+
+    base_url = base_url.strip() if base_url else ''
+    if not base_url:
+        return model
+
+    if _has_known_litellm_provider_prefix(model):
+        return model
+
+    if not _is_local_llm_base_url(base_url):
+        return model
+
+    _, separator, model_name = model.partition('/')
+    if separator:
+        return f'openai/{model_name}'
+
+    return model if _can_litellm_resolve_model(model) else f'openai/{model}'
 
 
 # Canonical masked placeholder for LLM API keys. Matches pydantic's

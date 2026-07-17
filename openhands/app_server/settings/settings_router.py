@@ -48,6 +48,7 @@ from openhands.app_server.utils.llm import (
     get_provider_api_base,
     is_openhands_model,
     resolve_llm_base_url,
+    resolve_llm_model,
 )
 from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk.llm import LLM
@@ -109,6 +110,7 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
     if not isinstance(settings.agent_settings, OpenHandsAgentSettings):
         return
     llm = settings.agent_settings.llm
+    llm.model = resolve_llm_model(llm.model, llm.base_url)
     llm.base_url = resolve_llm_base_url(
         model=llm.model,
         base_url=llm.base_url,
@@ -583,6 +585,10 @@ async def save_profile(
             # Caller has no new key: keep the profile's stored key (even "no
             # key") instead of the snapshotted active-settings key.
             llm = llm.model_copy(update={'api_key': existing.api_key})
+
+        llm = llm.model_copy(
+            update={'model': resolve_llm_model(llm.model, llm.base_url)}
+        )
 
         try:
             settings.llm_profiles.save(

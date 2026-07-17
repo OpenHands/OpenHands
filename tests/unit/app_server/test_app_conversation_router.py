@@ -661,6 +661,56 @@ class TestSwitchConversationProfile:
         assert post_kwargs['json']['llm']['usage_id'].startswith('profile:gpt-5:')
         assert post_kwargs['json']['llm']['stream'] is True
 
+    async def test_switch_profile_normalizes_openai_compatible_custom_model(self):
+        """LM Studio model namespaces are normalized before hitting LiteLLM."""
+        conv_id = uuid4()
+        settings = Settings(
+            agent_settings=OpenHandsAgentSettings(
+                llm=LLM(model='openai/gpt-4o', api_key='managed-proxy-key')
+            ),
+            llm_profiles=LLMProfiles(
+                profiles={
+                    'lmstudio': LLM(
+                        model='lmstudio-community/gemma-4-e4b-it-mlx',
+                        base_url='http://localhost:1234/v1',
+                    )
+                }
+            ),
+        )
+        ctx = _make_agent_server_context(conv_id, llm_model='openai/old-model')
+        ok_response = MagicMock()
+        ok_response.status_code = 200
+        ok_response.raise_for_status = MagicMock()
+        client = _make_httpx_client(post_return=ok_response)
+        info_service = MagicMock()
+        info_service.get_app_conversation_info = AsyncMock(
+            return_value=ctx.conversation,
+        )
+        info_service.save_app_conversation_info = AsyncMock()
+
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            await switch_conversation_profile(
+                conversation_id=conv_id,
+                request=SwitchProfileRequest(profile_name='lmstudio'),
+                user_settings=settings,
+                app_conversation_service=MagicMock(),
+                app_conversation_info_service=info_service,
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=client,
+            )
+
+        post_kwargs = client.post.await_args.kwargs
+        llm_payload = post_kwargs['json']['llm']
+        assert llm_payload['model'] == 'openai/gemma-4-e4b-it-mlx'
+        assert llm_payload['base_url'] == 'http://localhost:1234/v1'
+        saved_info = info_service.save_app_conversation_info.await_args[0][0]
+        assert saved_info.llm_model == 'openai/gemma-4-e4b-it-mlx'
+
     async def test_falls_back_to_settings_api_key_when_profile_has_none(self):
         """SaaS: managed profiles persist no key, so the switch must source the
         effective ``agent_settings.llm.api_key`` — otherwise the agent server
