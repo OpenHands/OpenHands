@@ -1377,11 +1377,33 @@ class LiteLlmManager:
             user_id: The user ID for logging purposes
 
         Returns:
-            True if the key is verified as valid, False if verification fails or key is invalid.
-            Returns False on network errors/timeouts to ensure we don't return potentially invalid keys.
+            True if the key is verified as valid or verification is inconclusive.
+            False only when LiteLLM explicitly reports an auth failure.
         """
         if not (LITE_LLM_API_URL and key):
             return False
+
+        def _extract_error_message(response: httpx.Response) -> str:
+            try:
+                message = response.text or ''
+            except Exception:
+                message = ''
+            if message:
+                return message
+            try:
+                payload = response.json()
+            except Exception:
+                return ''
+            if isinstance(payload, dict):
+                for field in ('detail', 'error', 'message'):
+                    value = payload.get(field)
+                    if isinstance(value, str):
+                        return value
+            return ''
+
+        def _is_budget_exceeded(message: str) -> bool:
+            lower = message.lower()
+            return 'budget' in lower and 'exceeded' in lower
 
         try:
             async with httpx.AsyncClient(
@@ -1405,30 +1427,49 @@ class LiteLlmManager:
                     )
                     return True
 
-                # All other status codes (401, 403, 500, etc.) are treated as invalid
-                # This includes authentication errors and server errors
+                if response.status_code in (401, 403):
+                    logger.warning(
+                        'Key verification failed - invalid credentials',
+                        extra={
+                            'user_id': user_id,
+                            'status_code': response.status_code,
+                            'key_prefix': key[:10] + '...' if len(key) > 10 else key,
+                        },
+                    )
+                    return False
+
+                error_message = _extract_error_message(response)
+                if response.status_code == 400 and _is_budget_exceeded(error_message):
+                    logger.info(
+                        'Key verification blocked by budget exceeded - preserving key',
+                        extra={
+                            'user_id': user_id,
+                            'status_code': response.status_code,
+                            'key_prefix': key[:10] + '...' if len(key) > 10 else key,
+                        },
+                    )
+                    return True
+
                 logger.warning(
-                    'Key verification failed - treating as invalid',
+                    'Key verification inconclusive - preserving key',
                     extra={
                         'user_id': user_id,
                         'status_code': response.status_code,
                         'key_prefix': key[:10] + '...' if len(key) > 10 else key,
                     },
                 )
-                return False
+                return True
 
         except (httpx.TimeoutException, Exception) as e:
-            # Any exception (timeout, network error, etc.) means we can't verify
-            # Return False to trigger regeneration rather than returning potentially invalid key
             logger.warning(
-                'Key verification error - treating as invalid to ensure key validity',
+                'Key verification error - preserving key',
                 extra={
                     'user_id': user_id,
                     'error': str(e),
                     'error_type': type(e).__name__,
                 },
             )
-            return False
+            return True
 
     @staticmethod
     async def _get_key_info(
@@ -1469,7 +1510,7 @@ class LiteLlmManager:
     async def _get_all_keys_for_user(
         client: httpx.AsyncClient,
         keycloak_user_id: str,
-    ) -> list[dict]:
+    ) -> list[dict] | None:
         """Get all keys for a user from LiteLLM.
 
         Returns a list of key info dictionaries containing:
@@ -1481,30 +1522,60 @@ class LiteLlmManager:
         - team_id: the team the key belongs to
         - metadata: any metadata associated with the key
 
-        Returns an empty list if no keys found or on error.
+        Returns None when the LiteLLM request fails so callers can skip
+        invalidation on transient errors.
         """
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
-            return []
+            return None
 
         try:
             response = await client.get(
                 f'{LITE_LLM_API_URL}/user/info?user_id={keycloak_user_id}',
                 headers={'x-goog-api-key': LITE_LLM_API_KEY},
             )
-            response.raise_for_status()
-            user_json = response.json()
-            # The user/info endpoint returns keys in the 'keys' field
-            return user_json.get('keys', [])
         except Exception as e:
             logger.warning(
-                'LiteLlmManager:_get_all_keys_for_user:error',
+                'LiteLlmManager:_get_all_keys_for_user:request_error',
                 extra={
                     'user_id': keycloak_user_id,
                     'error': str(e),
                 },
             )
+            return None
+
+        if response.status_code == 404:
+            logger.info(
+                'LiteLlmManager:_get_all_keys_for_user:not_found',
+                extra={'user_id': keycloak_user_id},
+            )
             return []
+
+        if not response.is_success:
+            logger.warning(
+                'LiteLlmManager:_get_all_keys_for_user:request_failed',
+                extra={
+                    'user_id': keycloak_user_id,
+                    'status_code': response.status_code,
+                    'text': response.text,
+                },
+            )
+            return None
+
+        try:
+            user_json = response.json()
+        except Exception as e:
+            logger.warning(
+                'LiteLlmManager:_get_all_keys_for_user:parse_failed',
+                extra={
+                    'user_id': keycloak_user_id,
+                    'error': str(e),
+                },
+            )
+            return None
+
+        # The user/info endpoint returns keys in the 'keys' field
+        return user_json.get('keys', [])
 
     @staticmethod
     async def _verify_existing_key(
@@ -1525,6 +1596,15 @@ class LiteLlmManager:
         """
         found = False
         keys = await LiteLlmManager._get_all_keys_for_user(client, keycloak_user_id)
+        if keys is None:
+            logger.warning(
+                'LiteLlmManager:_verify_existing_key:skip_invalidation',
+                extra={
+                    'user_id': keycloak_user_id,
+                    'org_id': org_id,
+                },
+            )
+            return True
         for key_info in keys:
             metadata = key_info.get('metadata') or {}
             team_id = key_info.get('team_id')
