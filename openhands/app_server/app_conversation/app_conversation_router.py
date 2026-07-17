@@ -1309,6 +1309,7 @@ def _is_allowed_runtime_request(conversation_id: UUID, request: RuntimeRequest) 
         ('GET', '/api/bash/bash_events/search'),
         ('GET', '/api/file/download'),
         ('GET', '/api/git/changes'),
+        ('GET', '/api/git/commits'),
         ('GET', '/api/git/diff'),
     }
 
