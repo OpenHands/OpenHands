@@ -123,6 +123,7 @@ from openhands.app_server.utils.redis_lock import (
     try_acquire_redis_lock,
 )
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
+from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.llm.llm_profile_store import PROFILE_NAME_REGEX
@@ -338,6 +339,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        execution_status__eq: ConversationExecutionStatus | None = None,
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 20,
@@ -351,6 +353,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
             sandbox_id__eq=sandbox_id__eq,
+            execution_status__eq=execution_status__eq,
             sort_order=sort_order,
             page_id=page_id,
             limit=limit,
@@ -369,6 +372,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        execution_status__eq: ConversationExecutionStatus | None = None,
     ) -> int:
         return await self.app_conversation_info_service.count_app_conversation_info(
             title__contains=title__contains,
@@ -377,6 +381,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
             sandbox_id__eq=sandbox_id__eq,
+            execution_status__eq=execution_status__eq,
         )
 
     async def get_app_conversation(

@@ -9,6 +9,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationSortOrder,
 )
 from openhands.app_server.services.injector import Injector
+from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
@@ -25,6 +26,7 @@ class AppConversationInfoService(ABC):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        execution_status__eq: ConversationExecutionStatus | None = None,
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
@@ -41,6 +43,7 @@ class AppConversationInfoService(ABC):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        execution_status__eq: ConversationExecutionStatus | None = None,
     ) -> int:
         """Count sandboxed conversations."""
 

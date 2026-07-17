@@ -89,6 +89,7 @@ from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
+from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.sdk.skills import KeywordTrigger, TaskTrigger
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
@@ -246,6 +247,10 @@ async def search_app_conversations(
         str | None,
         Query(title='Filter by exact sandbox_id'),
     ] = None,
+    execution_status__eq: Annotated[
+        ConversationExecutionStatus | None,
+        Query(title='Filter by exact execution status (e.g. running, finished, error)'),
+    ] = None,
     page_id: Annotated[
         str | None,
         Query(title='Optional next_page_id from the previously returned page'),
@@ -276,6 +281,7 @@ async def search_app_conversations(
         updated_at__gte=updated_at__gte,
         updated_at__lt=updated_at__lt,
         sandbox_id__eq=sandbox_id__eq,
+        execution_status__eq=execution_status__eq,
         page_id=page_id,
         limit=limit,
         include_sub_conversations=include_sub_conversations,
@@ -308,6 +314,10 @@ async def count_app_conversations(
         str | None,
         Query(title='Filter by exact sandbox_id'),
     ] = None,
+    execution_status__eq: Annotated[
+        ConversationExecutionStatus | None,
+        Query(title='Filter by exact execution status (e.g. running, finished, error)'),
+    ] = None,
     app_conversation_service: AppConversationService = (
         app_conversation_service_dependency
     ),
@@ -320,6 +330,7 @@ async def count_app_conversations(
         updated_at__gte=updated_at__gte,
         updated_at__lt=updated_at__lt,
         sandbox_id__eq=sandbox_id__eq,
+        execution_status__eq=execution_status__eq,
     )
 
 

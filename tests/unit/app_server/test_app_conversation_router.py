@@ -32,6 +32,7 @@ from openhands.app_server.app_conversation.app_conversation_router import (
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.settings.settings_models import Settings
+from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import OpenHandsAgentSettings
 
@@ -315,6 +316,40 @@ class TestSearchAppConversations:
         assert call_kwargs.get('limit') == 50
         assert call_kwargs.get('include_sub_conversations') is True
 
+    async def test_search_with_execution_status_filter(self):
+        """Test that execution_status__eq filter is passed to the service."""
+        # Arrange
+        mock_service = _make_mock_service()
+
+        # Act
+        await search_app_conversations(
+            execution_status__eq=ConversationExecutionStatus.RUNNING,
+            app_conversation_service=mock_service,
+        )
+
+        # Assert
+        mock_service.search_app_conversations.assert_called_once()
+        call_kwargs = mock_service.search_app_conversations.call_args[1]
+        assert (
+            call_kwargs.get('execution_status__eq')
+            == ConversationExecutionStatus.RUNNING
+        )
+
+    async def test_search_without_execution_status_filter(self):
+        """Test that execution_status__eq defaults to None when not provided."""
+        # Arrange
+        mock_service = _make_mock_service()
+
+        # Act
+        await search_app_conversations(
+            app_conversation_service=mock_service,
+        )
+
+        # Assert
+        mock_service.search_app_conversations.assert_called_once()
+        call_kwargs = mock_service.search_app_conversations.call_args[1]
+        assert call_kwargs.get('execution_status__eq') is None
+
 
 @pytest.mark.asyncio
 class TestCountAppConversations:
@@ -388,6 +423,26 @@ class TestCountAppConversations:
         assert call_kwargs.get('sandbox_id__eq') == sandbox_id
         assert call_kwargs.get('title__contains') == 'test'
         assert result == 3
+
+    async def test_count_with_execution_status_filter(self):
+        """Test that execution_status__eq filter is passed to the service."""
+        # Arrange
+        mock_service = _make_mock_service(count_return=7)
+
+        # Act
+        result = await count_app_conversations(
+            execution_status__eq=ConversationExecutionStatus.RUNNING,
+            app_conversation_service=mock_service,
+        )
+
+        # Assert
+        mock_service.count_app_conversations.assert_called_once()
+        call_kwargs = mock_service.count_app_conversations.call_args[1]
+        assert (
+            call_kwargs.get('execution_status__eq')
+            == ConversationExecutionStatus.RUNNING
+        )
+        assert result == 7
 
 
 # ─── switch_conversation_profile ────────────────────────────────────────────

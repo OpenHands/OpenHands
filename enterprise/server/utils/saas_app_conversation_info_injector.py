@@ -25,6 +25,7 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
 from openhands.app_server.errors import AuthError
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import ADMIN
+from openhands.sdk.conversation import ConversationExecutionStatus
 
 
 class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
@@ -136,6 +137,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        execution_status__eq: ConversationExecutionStatus | None = None,
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
@@ -159,6 +161,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
             sandbox_id__eq=sandbox_id__eq,
+            execution_status__eq=execution_status__eq,
         )
 
         # Add sort order
@@ -217,6 +220,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        execution_status__eq: ConversationExecutionStatus | None = None,
     ) -> int:
         """Count conversations matching the given filters with SAAS metadata."""
         query = (
@@ -240,6 +244,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
             sandbox_id__eq=sandbox_id__eq,
+            execution_status__eq=execution_status__eq,
         )
 
         result = await self.db_session.execute(query)
@@ -255,6 +260,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        execution_status__eq: ConversationExecutionStatus | None = None,
     ):
         """Apply filters to query that includes SAAS metadata."""
         # Apply the same filters as the base class
@@ -282,6 +288,12 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
 
         if sandbox_id__eq is not None:
             conditions.append(StoredConversationMetadata.sandbox_id == sandbox_id__eq)
+
+        if execution_status__eq is not None:
+            conditions.append(
+                StoredConversationMetadata.execution_status
+                == execution_status__eq.value
+            )
 
         if conditions:
             query = query.where(*conditions)

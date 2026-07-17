@@ -14,6 +14,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.services.injector import Injector
+from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
@@ -42,6 +43,7 @@ class AppConversationService(ABC):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        execution_status__eq: ConversationExecutionStatus | None = None,
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
@@ -58,6 +60,7 @@ class AppConversationService(ABC):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        execution_status__eq: ConversationExecutionStatus | None = None,
     ) -> int:
         """Count sandboxed conversations."""
 

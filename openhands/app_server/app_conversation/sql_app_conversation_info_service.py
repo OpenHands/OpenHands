@@ -59,6 +59,7 @@ from openhands.app_server.utils.sql_utils import (
     create_json_type_decorator,
 )
 from openhands.sdk import ConversationStats
+from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.sdk.llm import MetricsSnapshot, TokenUsage
 
@@ -182,6 +183,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        execution_status__eq: ConversationExecutionStatus | None = None,
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
@@ -205,6 +207,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
             sandbox_id__eq=sandbox_id__eq,
+            execution_status__eq=execution_status__eq,
         )
 
         # Add sort order
@@ -260,6 +263,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        execution_status__eq: ConversationExecutionStatus | None = None,
     ) -> int:
         """Count sandboxed conversations matching the given filters."""
         query = select(func.count(StoredConversationMetadata.conversation_id)).where(
@@ -274,6 +278,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
             sandbox_id__eq=sandbox_id__eq,
+            execution_status__eq=execution_status__eq,
         )
 
         result = await self.db_session.execute(query)
@@ -289,6 +294,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        execution_status__eq: ConversationExecutionStatus | None = None,
     ) -> Select:
         # Apply the same filters as search_app_conversations
         conditions: list[ColumnElement[bool]] = []
@@ -315,6 +321,12 @@ class SQLAppConversationInfoService(AppConversationInfoService):
 
         if sandbox_id__eq is not None:
             conditions.append(StoredConversationMetadata.sandbox_id == sandbox_id__eq)
+
+        if execution_status__eq is not None:
+            conditions.append(
+                StoredConversationMetadata.execution_status
+                == execution_status__eq.value
+            )
 
         if conditions:
             query = query.where(*conditions)

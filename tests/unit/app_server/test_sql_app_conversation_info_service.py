@@ -24,6 +24,7 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
+from openhands.sdk.conversation import ConversationExecutionStatus
 from openhands.sdk.llm import MetricsSnapshot, TokenUsage
 
 # Note: org_id column exists but foreign key constraint is not enforced in tests
@@ -528,6 +529,70 @@ class TestSQLAppConversationInfoService:
         # Count with no matches
         count = await service.count_app_conversation_info(title__contains='nonexistent')
         assert count == 0
+
+    @pytest.mark.asyncio
+    async def test_search_conversation_info_execution_status_filter(
+        self,
+        service: SQLAppConversationInfoService,
+        multiple_conversation_infos: list[AppConversationInfo],
+    ):
+        """Test search filtered by execution_status__eq."""
+        for info in multiple_conversation_infos:
+            await service.save_app_conversation_info(info)
+
+        # Mark the first two conversations as RUNNING and the rest as FINISHED
+        for info in multiple_conversation_infos[:2]:
+            await service.update_execution_status(
+                info.id, ConversationExecutionStatus.RUNNING.value
+            )
+        for info in multiple_conversation_infos[2:]:
+            await service.update_execution_status(
+                info.id, ConversationExecutionStatus.FINISHED.value
+            )
+
+        running = await service.search_app_conversation_info(
+            execution_status__eq=ConversationExecutionStatus.RUNNING
+        )
+        assert len(running.items) == 2
+
+        finished = await service.search_app_conversation_info(
+            execution_status__eq=ConversationExecutionStatus.FINISHED
+        )
+        assert len(finished.items) == 3
+
+        # A status that no conversation has should return nothing
+        errored = await service.search_app_conversation_info(
+            execution_status__eq=ConversationExecutionStatus.ERROR
+        )
+        assert len(errored.items) == 0
+
+    @pytest.mark.asyncio
+    async def test_count_conversation_info_execution_status_filter(
+        self,
+        service: SQLAppConversationInfoService,
+        multiple_conversation_infos: list[AppConversationInfo],
+    ):
+        """Test count filtered by execution_status__eq."""
+        for info in multiple_conversation_infos:
+            await service.save_app_conversation_info(info)
+
+        for info in multiple_conversation_infos[:2]:
+            await service.update_execution_status(
+                info.id, ConversationExecutionStatus.RUNNING.value
+            )
+
+        assert (
+            await service.count_app_conversation_info(
+                execution_status__eq=ConversationExecutionStatus.RUNNING
+            )
+            == 2
+        )
+        assert (
+            await service.count_app_conversation_info(
+                execution_status__eq=ConversationExecutionStatus.ERROR
+            )
+            == 0
+        )
 
     @pytest.mark.asyncio
     async def test_update_conversation_info(
