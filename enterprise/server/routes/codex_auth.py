@@ -21,7 +21,10 @@ from storage.redis import get_redis_client_async, redis_exceptions
 
 from openhands.app_server.config import depends_jwt_service
 from openhands.app_server.constants import MAX_API_SECRET_VALUE_LENGTH
-from openhands.app_server.sandbox.session_auth import validate_session_key
+from openhands.app_server.sandbox.session_auth import (
+    validate_session_key,
+    validate_teardown_session_key,
+)
 from openhands.app_server.secrets.codex_auth import (
     CODEX_AUTH_ROUTE,
     CODEX_AUTH_ROUTE_PREFIX,
@@ -36,7 +39,6 @@ _SECRET_NAME = 'CODEX_AUTH_JSON'
 _REFRESH_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
 _REFRESH_LOCK_TTL_SECONDS = 120
 _REFRESH_LOCK_WAIT_SECONDS = 30
-_PAUSED_TEARDOWN_GRACE_SECONDS = 30
 _REFRESH_TOKEN_URL = 'https://auth.openai.com/oauth/token'
 _DIGEST_PATTERN = re.compile(r'^[0-9a-f]{64}$')
 
@@ -82,12 +84,12 @@ async def _authorize(
             status.HTTP_401_UNAUTHORIZED,
             detail='X-OH-Codex header is required',
         )
-    sandbox = await validate_session_key(
-        session_api_key,
-        paused_grace_seconds=(
-            _PAUSED_TEARDOWN_GRACE_SECONDS if allow_paused_teardown else None
-        ),
-    )
+    try:
+        sandbox = await validate_session_key(session_api_key)
+    except HTTPException as exc:
+        if not allow_paused_teardown or exc.status_code != status.HTTP_401_UNAUTHORIZED:
+            raise
+        sandbox = await validate_teardown_session_key(session_api_key)
     try:
         claims = jwt_service.verify_jws_token(codex_auth_token)
         org_id = UUID(str(claims['org_id']))
@@ -337,7 +339,13 @@ async def get_codex_auth(
     x_oh_codex: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    scope = await _authorize(conversation_id, x_oh_sandbox, x_oh_codex, jwt_service)
+    scope = await _authorize(
+        conversation_id,
+        x_oh_sandbox,
+        x_oh_codex,
+        jwt_service,
+        allow_paused_teardown=True,
+    )
     store = await _get_store(scope)
     value = await store.get_value()
     if value is None:

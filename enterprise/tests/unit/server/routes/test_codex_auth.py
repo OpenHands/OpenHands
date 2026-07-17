@@ -6,7 +6,7 @@ from uuid import UUID
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from server.routes import codex_auth
@@ -120,8 +120,16 @@ def broker(monkeypatch):
         'session-b': _sandbox('b'),
     }
     validate_session_key = AsyncMock(side_effect=lambda key, **_kwargs: sandboxes[key])
+    validate_teardown_session_key = AsyncMock(
+        side_effect=lambda key: sandboxes[key]
+    )
     get_store = AsyncMock(return_value=store)
     monkeypatch.setattr(codex_auth, 'validate_session_key', validate_session_key)
+    monkeypatch.setattr(
+        codex_auth,
+        'validate_teardown_session_key',
+        validate_teardown_session_key,
+    )
     monkeypatch.setattr(codex_auth, '_get_store', get_store)
     return store, get_store
 
@@ -368,27 +376,45 @@ def test_update_uses_database_cas_without_redis_lock(
     assert fake_redis.lock_calls == []
 
 
-def test_teardown_routes_request_paused_grace(app, jwt_service, broker):
+def test_teardown_routes_use_scoped_teardown_key(app, jwt_service, broker):
+    codex_auth.validate_session_key.side_effect = HTTPException(401)
     client = TestClient(app)
     headers = _headers(jwt_service, _FIRST_ID, 'a')
-    client.head(f'/api/internal/conversations/{_FIRST_ID}/codex-auth', headers=headers)
-    client.put(
-        f'/api/internal/conversations/{_FIRST_ID}/codex-auth',
-        headers=headers,
+    path = f'/api/internal/conversations/{_FIRST_ID}/codex-auth'
+    responses = [
+        client.get(path, headers=headers),
+        client.head(path, headers=headers),
+        client.put(
+            path,
+            headers=headers,
+            json={
+                'expected_digest': hashlib.sha256(
+                    broker[0].value.encode()
+                ).hexdigest(),
+                'value': broker[0].value,
+            },
+        ),
+        client.delete(path, headers=headers),
+    ]
+
+    assert [response.status_code for response in responses] == [200, 204, 204, 204]
+    assert codex_auth.validate_teardown_session_key.await_count == 4
+
+
+def test_refresh_does_not_accept_teardown_key(app, jwt_service, broker):
+    codex_auth.validate_session_key.side_effect = HTTPException(401)
+    response = TestClient(app).post(
+        f'/api/internal/conversations/{_FIRST_ID}/codex-auth/refresh',
+        headers=_refresh_headers(jwt_service, _FIRST_ID, 'a'),
         json={
-            'expected_digest': hashlib.sha256(broker[0].value.encode()).hexdigest(),
-            'value': broker[0].value,
+            'client_id': codex_auth._REFRESH_CLIENT_ID,
+            'grant_type': 'refresh_token',
+            'refresh_token': 'r0',
         },
     )
-    client.delete(
-        f'/api/internal/conversations/{_FIRST_ID}/codex-auth', headers=headers
-    )
 
-    calls = codex_auth.validate_session_key.await_args_list
-    assert all(
-        call.kwargs['paused_grace_seconds'] == codex_auth._PAUSED_TEARDOWN_GRACE_SECONDS
-        for call in calls
-    )
+    assert response.status_code == 401
+    codex_auth.validate_teardown_session_key.assert_not_awaited()
 
 
 def test_invalid_document_does_not_echo_credentials(app, jwt_service, broker):

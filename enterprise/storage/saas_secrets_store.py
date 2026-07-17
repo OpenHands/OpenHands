@@ -81,46 +81,41 @@ class SaasSecretsStore(SecretsStore):
         codex_auth = (
             codex_auth_info.get('secret') if isinstance(codex_auth_info, dict) else None
         )
+        loaded_codex_known = org_id in self._loaded_codex_auth_digests
         loaded_codex_digest = self._loaded_codex_auth_digests.get(org_id)
         codex_auth_digest = (
             hashlib.sha256(codex_auth.encode()).hexdigest()
             if isinstance(codex_auth, str)
             else None
         )
+        preserve_codex_auth = not loaded_codex_known and codex_auth_info is None
+        stored_codex_auth = None
         async with a_session_maker() as session:
-            result = await session.execute(
-                select(StoredCustomSecrets)
-                .filter(
-                    StoredCustomSecrets.keycloak_user_id == self.user_id,
-                    StoredCustomSecrets.org_id == org_id,
-                    StoredCustomSecrets.secret_name == _CODEX_AUTH_SECRET_NAME,
+            if not preserve_codex_auth:
+                result = await session.execute(
+                    select(StoredCustomSecrets)
+                    .filter(
+                        StoredCustomSecrets.keycloak_user_id == self.user_id,
+                        StoredCustomSecrets.org_id == org_id,
+                        StoredCustomSecrets.secret_name == _CODEX_AUTH_SECRET_NAME,
+                    )
+                    .order_by(StoredCustomSecrets.id.desc())
+                    .limit(1)
+                    .with_for_update()
                 )
-                .order_by(StoredCustomSecrets.id.desc())
-                .limit(1)
-                .with_for_update()
-            )
-            stored_codex_auth = result.scalar_one_or_none()
-            stored_codex_digest = None
-            if stored_codex_auth is not None:
-                stored_value = self._jwt_svc.decrypt_value(
-                    stored_codex_auth.secret_value
-                )
-                stored_codex_digest = hashlib.sha256(stored_value.encode()).hexdigest()
-
-            if loaded_codex_digest is None:
-                preserve_codex_auth = stored_codex_auth is not None and (
-                    codex_auth_digest is None
-                    or codex_auth_digest == stored_codex_digest
-                )
-            else:
-                preserve_codex_auth = (
-                    loaded_codex_digest == codex_auth_digest
-                    and codex_auth_digest is not None
-                )
+                stored_codex_auth = result.scalar_one_or_none()
+                if not loaded_codex_known:
+                    preserve_codex_auth = stored_codex_auth is not None
+                elif loaded_codex_digest == codex_auth_digest:
+                    preserve_codex_auth = stored_codex_auth is not None
 
             if preserve_codex_auth:
                 secrets_json.pop(_CODEX_AUTH_SECRET_NAME, None)
-                if stored_codex_auth is not None and isinstance(codex_auth_info, dict):
+                if (
+                    loaded_codex_known
+                    and stored_codex_auth is not None
+                    and isinstance(codex_auth_info, dict)
+                ):
                     description = codex_auth_info.get('description')
                     stored_codex_auth.description = (
                         self._jwt_svc.encrypt_value(description)
@@ -166,9 +161,8 @@ class SaasSecretsStore(SecretsStore):
             await session.commit()
             if not preserve_codex_auth:
                 if isinstance(codex_auth, str):
-                    self._loaded_codex_auth_digests[org_id] = hashlib.sha256(
-                        codex_auth.encode()
-                    ).hexdigest()
+                    assert codex_auth_digest is not None
+                    self._loaded_codex_auth_digests[org_id] = codex_auth_digest
                 else:
                     self._loaded_codex_auth_digests.pop(org_id, None)
 

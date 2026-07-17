@@ -25,6 +25,7 @@ _logger = logging.getLogger(__name__)
 SESSION_API_KEY_VARIABLE = 'OH_SESSION_API_KEYS_0'
 WEBHOOK_CALLBACK_VARIABLE = 'OH_WEBHOOKS_0_BASE_URL'
 ALLOW_CORS_ORIGINS_VARIABLE = 'OH_ALLOW_CORS_ORIGINS_0'
+SESSION_API_KEY_TEARDOWN_GRACE_SECONDS = 30
 
 # Known start-failure classes we translate into short, user-safe messages. Raw
 # runtime status_detail (k8s pod/scheduling text) can leak internal registry
@@ -143,6 +144,12 @@ class SandboxService(ABC):
 
         Return None if no sandbox matches the key.
         """
+
+    async def get_sandbox_record_by_teardown_session_api_key(
+        self, session_api_key: str
+    ) -> SandboxRecord | None:
+        """Get a sandbox authorized only for teardown."""
+        return None
 
     async def batch_get_sandboxes(
         self, sandbox_ids: list[str]

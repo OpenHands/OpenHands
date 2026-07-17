@@ -9,7 +9,6 @@ Tests:
 """
 
 import contextlib
-from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -21,6 +20,7 @@ from openhands.app_server.integrations.provider import ProviderHandler, Provider
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.sandbox.sandbox_models import (
     SandboxInfo,
+    SandboxRecord,
     SandboxStatus,
     SecretNamesResponse,
 )
@@ -31,6 +31,7 @@ from openhands.app_server.sandbox.sandbox_router import (
 from openhands.app_server.sandbox.session_auth import (
     validate_session_key,
     validate_session_key_ownership,
+    validate_teardown_session_key,
 )
 from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.user_models import UserInfo
@@ -169,61 +170,22 @@ class TestValidateSessionKey:
         assert exc_info.value.status_code == 401
         assert 'not running' in exc_info.value.detail
 
-    async def test_accepts_recently_paused_sandbox_with_grace(self):
-        sandbox = SandboxInfo(
+    async def test_accepts_teardown_session_key(self):
+        sandbox = SandboxRecord(
             id=SANDBOX_ID,
             created_by_user_id=USER_ID,
-            sandbox_spec_id='test-spec',
-            status=SandboxStatus.PAUSED,
-            session_api_key='session-key',
-            status_changed_at=datetime.now(UTC) - timedelta(seconds=5),
         )
-        ctx, mock_svc = _patch_sandbox_service(sandbox)
+        ctx, mock_svc = _patch_sandbox_service(None)
+        mock_svc.get_sandbox_record_by_teardown_session_api_key = AsyncMock(
+            return_value=sandbox
+        )
         with ctx as mock_get:
             mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
             mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
 
-            result = await validate_session_key('valid-key', paused_grace_seconds=30)
+            result = await validate_teardown_session_key('teardown-key')
 
-        assert result.id == SANDBOX_ID
-
-    async def test_rejects_recently_paused_sandbox_without_grace(self):
-        sandbox = SandboxInfo(
-            id=SANDBOX_ID,
-            created_by_user_id=USER_ID,
-            sandbox_spec_id='test-spec',
-            status=SandboxStatus.PAUSED,
-            session_api_key='session-key',
-            status_changed_at=datetime.now(UTC) - timedelta(seconds=5),
-        )
-        ctx, mock_svc = _patch_sandbox_service(sandbox)
-        with ctx as mock_get:
-            mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
-            mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
-
-            with pytest.raises(HTTPException) as exc_info:
-                await validate_session_key('valid-key')
-
-        assert exc_info.value.status_code == 401
-
-    async def test_rejects_expired_paused_sandbox_grace(self):
-        sandbox = SandboxInfo(
-            id=SANDBOX_ID,
-            created_by_user_id=USER_ID,
-            sandbox_spec_id='test-spec',
-            status=SandboxStatus.PAUSED,
-            session_api_key='session-key',
-            status_changed_at=datetime.now(UTC) - timedelta(seconds=31),
-        )
-        ctx, mock_svc = _patch_sandbox_service(sandbox)
-        with ctx as mock_get:
-            mock_get.return_value.__aenter__ = AsyncMock(return_value=mock_svc)
-            mock_get.return_value.__aexit__ = AsyncMock(return_value=False)
-
-            with pytest.raises(HTTPException) as exc_info:
-                await validate_session_key('valid-key', paused_grace_seconds=30)
-
-        assert exc_info.value.status_code == 401
+        assert result == sandbox
 
     async def test_rejects_missing_sandbox(self):
         """Session key for MISSING sandbox raises 401 - security mitigation."""

@@ -167,7 +167,53 @@ class TestSaasSecretsStore:
         'storage.saas_secrets_store.UserStore.get_user_by_id',
         new_callable=AsyncMock,
     )
-    async def test_stale_save_preserves_concurrent_codex_auth_deletion(
+    async def test_store_without_load_preserves_rotated_codex_auth(
+        self, mock_get_user, secrets_store, mock_user
+    ):
+        mock_get_user.return_value = mock_user
+        original = '{"tokens":{"refresh_token":"r0"}}'
+        rotated = '{"tokens":{"refresh_token":"r1"}}'
+        await secrets_store.store(
+            Secrets(
+                custom_secrets={
+                    'CODEX_AUTH_JSON': CustomSecret.from_value(
+                        {'secret': original, 'description': ''}
+                    )
+                }
+            )
+        )
+        codex_store = CodexAuthStore(
+            'user-id', mock_user.current_org_id, secrets_store._jwt_svc
+        )
+        assert await codex_store.compare_and_swap(
+            hashlib.sha256(original.encode()).hexdigest(), rotated
+        )
+
+        fresh_store = SaasSecretsStore('user-id', secrets_store._jwt_svc)
+        await fresh_store.store(
+            Secrets(
+                custom_secrets={
+                    'CODEX_AUTH_JSON': CustomSecret.from_value(
+                        {'secret': original, 'description': ''}
+                    ),
+                    'OTHER': CustomSecret.from_value(
+                        {'secret': 'new', 'description': ''}
+                    ),
+                }
+            )
+        )
+
+        assert await codex_store.get_value() == rotated
+        loaded = await fresh_store.load()
+        assert loaded is not None
+        assert loaded.custom_secrets['OTHER'].secret.get_secret_value() == 'new'
+
+    @pytest.mark.asyncio
+    @patch(
+        'storage.saas_secrets_store.UserStore.get_user_by_id',
+        new_callable=AsyncMock,
+    )
+    async def test_stale_save_restores_submitted_codex_auth(
         self, mock_get_user, secrets_store, mock_user
     ):
         mock_get_user.return_value = mock_user
@@ -208,7 +254,10 @@ class TestSaasSecretsStore:
 
         loaded = await stale_store.load()
         assert loaded is not None
-        assert 'CODEX_AUTH_JSON' not in loaded.custom_secrets
+        assert (
+            loaded.custom_secrets['CODEX_AUTH_JSON'].secret.get_secret_value()
+            == '{"tokens":{"refresh_token":"r0"}}'
+        )
         assert loaded.custom_secrets['OTHER'].secret.get_secret_value() == 'new'
 
     @pytest.mark.asyncio
