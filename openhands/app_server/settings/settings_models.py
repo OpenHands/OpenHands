@@ -369,7 +369,54 @@ def _restore_submitted_mcp_headers(
     return restored
 
 
+def _merge_redacted_mcp_auth(
+    value: Mapping[str, Any],
+    existing: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Merge a submitted ``auth`` credential onto the stored one.
+
+    The ``GET /settings`` round-trip strips secret sub-fields: the redaction
+    marker validates back to ``None`` (``validate_secret``) and is then dropped
+    from the response, so an unchanged credential reaches ``store`` as e.g.
+    ``{'strategy': 'bearer'}`` with no ``value`` at all — not as the
+    ``"**********"`` sentinel the plain restore logic looks for. Keep every
+    field the client actually sent (restoring any surviving redaction marker),
+    then carry over the stored sub-fields the client omitted. Only the secrets
+    are ever stripped, so an omitted key is always a stored secret to recover.
+
+    Recurses so nested secret carriers (``header`` strategy ``headers``,
+    ``oauth2`` ``authentication``/``state``) are restored the same way. Gated by
+    an equal ``strategy`` in the caller so a genuine credential-type switch is
+    honored as submitted rather than merged.
+    """
+    merged: dict[str, Any] = {}
+    for key, item in value.items():
+        existing_item = existing.get(key)
+        if isinstance(item, Mapping):
+            merged[key] = _merge_redacted_mcp_auth(
+                item, existing_item if isinstance(existing_item, Mapping) else {}
+            )
+            continue
+        restored = _restore_redacted_secret(item, existing_item)
+        if restored is not _MISSING_SECRET:
+            merged[key] = restored
+    for key, item in existing.items():
+        if key not in value:
+            merged[key] = deepcopy(item)
+    return merged
+
+
 def _restore_submitted_mcp_auth(value: object, existing: object) -> object:
+    # Same credential type: keep what the client sent, restore any surviving
+    # redaction marker, and recover stored secret sub-fields the GET round-trip
+    # stripped to absent (bearer ``value``, api_key ``value``, basic
+    # ``password``, header ``headers``, oauth2 ``state``/``client_secret``).
+    if (
+        isinstance(value, Mapping)
+        and isinstance(existing, Mapping)
+        and value.get('strategy') == existing.get('strategy')
+    ):
+        return _merge_redacted_mcp_auth(value, existing)
     if _has_redacted_mcp_secret(value) and existing is not None:
         if isinstance(value, Mapping) and isinstance(existing, Mapping):
             if value.get('strategy') != existing.get('strategy'):

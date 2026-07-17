@@ -103,7 +103,7 @@ class TestDbSessionInjectorConfiguration:
             service.password.get_secret_value() == 'postgres'
         )  # Default from env var processing
         assert service.echo is False
-        assert service.pool_size == 25
+        assert service.pool_size == 5
         assert service.max_overflow == 10
         assert service.pool_use_lifo is True
         assert service.gcp_db_instance is None
@@ -137,6 +137,14 @@ class TestDbSessionInjectorConfiguration:
             assert service.gcp_project == 'env_project'
             assert service.gcp_region == 'env_region'
             assert service.ssl_mode == 'require'
+
+    def test_pool_size_env_vars_override_defaults(self, temp_persistence_dir):
+        """DB_POOL_SIZE / DB_MAX_OVERFLOW override the model defaults."""
+        with patch.dict(os.environ, {'DB_POOL_SIZE': '30', 'DB_MAX_OVERFLOW': '7'}):
+            service = DbSessionInjector(persistence_dir=temp_persistence_dir)
+
+            assert service.pool_size == 30
+            assert service.max_overflow == 7
 
     def test_explicit_values_override_env_vars(self, temp_persistence_dir):
         """Test that explicitly provided values override environment variables."""
@@ -213,7 +221,7 @@ class TestDbSessionInjectorConnections:
 
             # Verify other parameters
             assert call_args[1]['connect_args'] == {}
-            assert call_args[1]['pool_size'] == 25
+            assert call_args[1]['pool_size'] == 5
             assert call_args[1]['max_overflow'] == 10
             assert call_args[1]['pool_pre_ping']
             assert call_args[1]['pool_use_lifo'] is True
@@ -247,7 +255,7 @@ class TestDbSessionInjectorConnections:
 
             # Verify other parameters
             assert call_args[1]['connect_args'] == {}
-            assert call_args[1]['pool_size'] == 25
+            assert call_args[1]['pool_size'] == 5
             assert call_args[1]['max_overflow'] == 10
             assert call_args[1]['pool_pre_ping']
             assert call_args[1]['pool_use_lifo'] is True
