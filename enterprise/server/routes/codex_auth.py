@@ -21,6 +21,7 @@ from storage.redis import get_redis_client_async, redis_exceptions
 
 from openhands.app_server.config import depends_jwt_service
 from openhands.app_server.constants import MAX_API_SECRET_VALUE_LENGTH
+from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxRecord
 from openhands.app_server.sandbox.session_auth import (
     validate_session_key,
     validate_teardown_session_key,
@@ -84,6 +85,7 @@ async def _authorize(
             status.HTTP_401_UNAUTHORIZED,
             detail='X-OH-Codex header is required',
         )
+    sandbox: SandboxInfo | SandboxRecord
     try:
         sandbox = await validate_session_key(session_api_key)
     except HTTPException as exc:

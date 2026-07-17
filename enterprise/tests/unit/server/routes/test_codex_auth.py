@@ -120,9 +120,7 @@ def broker(monkeypatch):
         'session-b': _sandbox('b'),
     }
     validate_session_key = AsyncMock(side_effect=lambda key, **_kwargs: sandboxes[key])
-    validate_teardown_session_key = AsyncMock(
-        side_effect=lambda key: sandboxes[key]
-    )
+    validate_teardown_session_key = AsyncMock(side_effect=lambda key: sandboxes[key])
     get_store = AsyncMock(return_value=store)
     monkeypatch.setattr(codex_auth, 'validate_session_key', validate_session_key)
     monkeypatch.setattr(
@@ -388,9 +386,7 @@ def test_teardown_routes_use_scoped_teardown_key(app, jwt_service, broker):
             path,
             headers=headers,
             json={
-                'expected_digest': hashlib.sha256(
-                    broker[0].value.encode()
-                ).hexdigest(),
+                'expected_digest': hashlib.sha256(broker[0].value.encode()).hexdigest(),
                 'value': broker[0].value,
             },
         ),
