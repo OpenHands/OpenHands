@@ -1300,7 +1300,15 @@ async def _proxy_git_runtime_call(
 def _is_allowed_runtime_request(conversation_id: UUID, request: RuntimeRequest) -> bool:
     path = request.path.partition('?')[0]
     conversation_path = f'/api/conversations/{conversation_id}'
-    return (request.method, path) in {
+    path_parts = path.split('/')
+    is_commit_changes_request = (
+        request.method == 'GET'
+        and len(path_parts) == 6
+        and path_parts[:4] == ['', 'api', 'git', 'commits']
+        and bool(path_parts[4])
+        and path_parts[5] == 'changes'
+    )
+    return is_commit_changes_request or (request.method, path) in {
         ('POST', f'{conversation_path}/events'),
         ('GET', conversation_path),
         ('POST', f'{conversation_path}/events/respond_to_confirmation'),

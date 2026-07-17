@@ -885,6 +885,43 @@ class TestRuntimeProxyEndpoint:
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
 
+    async def test_forwards_commit_changes_request(self):
+        conversation_id = uuid4()
+        ctx = _make_agent_server_context(conversation_id)
+        client = AsyncMock(spec=httpx.AsyncClient)
+        client.request = AsyncMock(
+            return_value=httpx.Response(
+                status_code=200,
+                content=b'[]',
+                headers={'content-type': 'application/json'},
+            )
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            await proxy_conversation_runtime_request(
+                conversation_id=conversation_id,
+                request=RuntimeRequest(
+                    method='GET',
+                    path='/api/git/commits/abc123/changes?path=%2Fworkspace',
+                ),
+                app_conversation_service=MagicMock(),
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=client,
+            )
+
+        client.request.assert_awaited_once_with(
+            'GET',
+            'http://agent.test/api/git/commits/abc123/changes?path=%2Fworkspace',
+            headers={'X-Session-API-Key': 'sess-key'},
+            json=None,
+            timeout=30.0,
+        )
+
 
 @pytest.mark.asyncio
 class TestGitProxyEndpoints:
