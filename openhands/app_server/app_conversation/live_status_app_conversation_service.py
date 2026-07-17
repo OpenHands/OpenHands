@@ -1234,7 +1234,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             or user.agent_settings.llm.model
             or LLM.model_fields['model'].default
         )
-        model = resolve_llm_model(model, user.agent_settings.llm.base_url)
+        resolved_model = resolve_llm_model(model, user.agent_settings.llm.base_url)
+        if resolved_model is not None:
+            model = resolved_model
 
         base_url = resolve_provider_llm_base_url(
             model,

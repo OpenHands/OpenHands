@@ -110,7 +110,9 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
     if not isinstance(settings.agent_settings, OpenHandsAgentSettings):
         return
     llm = settings.agent_settings.llm
-    llm.model = resolve_llm_model(llm.model, llm.base_url)
+    resolved_model = resolve_llm_model(llm.model, llm.base_url)
+    if resolved_model is not None:
+        llm.model = resolved_model
     llm.base_url = resolve_llm_base_url(
         model=llm.model,
         base_url=llm.base_url,
