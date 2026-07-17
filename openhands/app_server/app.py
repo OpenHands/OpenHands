@@ -14,6 +14,9 @@ from fastapi import (
 from fastapi.responses import JSONResponse
 
 from openhands.app_server import v1_router
+from openhands.app_server.app_conversation.app_conversation_router import (
+    runtime_conversation_router,
+)
 from openhands.app_server.config import get_app_lifespan_service
 from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.mcp.mcp_router import init_tavily_proxy, mcp_server
@@ -69,6 +72,7 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
 
 
 app.include_router(v1_router.router)
+app.include_router(runtime_conversation_router)
 app.include_router(health_router)
 
 # Middleware and static file setup (merged from listen.py)

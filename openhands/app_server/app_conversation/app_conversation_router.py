@@ -10,11 +10,12 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Any, AsyncGenerator, Literal
+from urllib.parse import quote
 from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.agent_server.models import Success
@@ -106,6 +107,11 @@ else:
 # is protected. The actual protection is provided by SetAuthCookieMiddleware
 router = APIRouter(
     prefix='/app-conversations', tags=['Conversations'], dependencies=get_dependencies()
+)
+runtime_conversation_router = APIRouter(
+    prefix='/api/conversations',
+    tags=['Runtime Conversations'],
+    dependencies=get_dependencies(),
 )
 logger = logging.getLogger(__name__)
 app_conversation_service_dependency = depends_app_conversation_service()
@@ -1208,6 +1214,68 @@ async def read_conversation_file(
                 pass
 
     return ''
+
+
+@runtime_conversation_router.get('/{conversation_id}/workspace/{file_path:path}')
+async def get_conversation_workspace_file(
+    conversation_id: UUID,
+    file_path: str,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> Response:
+    """Proxy legacy agent-canvas workspace file preview requests to the runtime.
+
+    The runtime protects workspace file reads with ``X-Session-API-Key``.
+    Browser requests to the app-server compatibility route do not have that
+    sandbox credential, so the app server resolves it and forwards the request
+    server-side.
+    """
+    ctx = await _get_agent_server_context(
+        conversation_id,
+        app_conversation_service,
+        sandbox_service,
+        sandbox_spec_service,
+    )
+    if isinstance(ctx, JSONResponse):
+        raise HTTPException(
+            status_code=ctx.status_code,
+            detail=f'Conversation {conversation_id} is not reachable',
+        )
+    if ctx is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail='Sandbox is paused; resume it before reading workspace files.',
+        )
+
+    headers = {'X-Session-API-Key': ctx.session_api_key} if ctx.session_api_key else {}
+    quoted_file_path = quote(file_path, safe='/')
+    runtime_url = (
+        f'{ctx.agent_server_url}/api/conversations/{conversation_id}'
+        f'/workspace/{quoted_file_path}'
+    )
+
+    try:
+        upstream = await httpx_client.get(
+            runtime_url,
+            headers=headers,
+            timeout=30.0,
+        )
+    except httpx.RequestError as e:
+        logger.error('Failed to reach agent server during workspace file read: %s', e)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Failed to reach agent server.',
+        )
+
+    return Response(
+        content=upstream.content,
+        status_code=upstream.status_code,
+        headers={'content-type': upstream.headers.get('content-type', 'text/plain')},
+    )
 
 
 async def _proxy_git_runtime_call(

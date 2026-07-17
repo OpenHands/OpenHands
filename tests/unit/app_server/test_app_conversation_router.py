@@ -26,6 +26,7 @@ from openhands.app_server.app_conversation.app_conversation_router import (
     count_app_conversations,
     get_conversation_git_changes,
     get_conversation_git_diff,
+    get_conversation_workspace_file,
     search_app_conversations,
     switch_conversation_profile,
 )
@@ -1084,6 +1085,47 @@ class TestGitProxyEndpoints:
 
         assert exc_info.value.status_code == status.HTTP_409_CONFLICT
         assert 'paused' in exc_info.value.detail.lower()
+
+
+@pytest.mark.asyncio
+class TestWorkspaceFileProxyEndpoint:
+    """Test suite for the agent-canvas workspace file preview compatibility route."""
+
+    async def test_forwards_workspace_file_request_with_session_key(self):
+        """Workspace file preview requests must be proxied with the sandbox
+        session key so the runtime does not reject them with 401 Unauthorized."""
+        # Arrange
+        conv_id = uuid4()
+        ctx = _make_agent_server_context(conv_id)
+        upstream_response = MagicMock()
+        upstream_response.status_code = status.HTTP_200_OK
+        upstream_response.content = b"export const token = 'abc';\n"
+        upstream_response.headers = {'content-type': 'text/plain; charset=utf-8'}
+        client = _make_get_httpx_client(get_return=upstream_response)
+
+        # Act
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            response = await get_conversation_workspace_file(
+                conversation_id=conv_id,
+                file_path='frontend/src/stores/auth.ts',
+                app_conversation_service=MagicMock(),
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=client,
+            )
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        assert response.body == b"export const token = 'abc';\n"
+        client.get.assert_awaited_once_with(
+            f'http://agent.test/api/conversations/{conv_id}/workspace/frontend/src/stores/auth.ts',
+            headers={'X-Session-API-Key': 'sess-key'},
+            timeout=30.0,
+        )
 
 
 class TestFinalizeSandboxDelete:
