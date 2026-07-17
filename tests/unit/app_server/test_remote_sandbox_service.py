@@ -706,7 +706,14 @@ class TestSandboxLifecycle:
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        remote_sandbox_service.httpx_client.request.return_value = mock_response
+
+        async def pause_request(*_args, **_kwargs):
+            remote_sandbox_service.db_session.commit.assert_awaited_once()
+            assert stored_sandbox.session_api_key_hash is None
+            assert stored_sandbox.teardown_session_api_key_hash == 'live-hash'
+            return mock_response
+
+        remote_sandbox_service.httpx_client.request.side_effect = pause_request
 
         # Execute
         result = await remote_sandbox_service.pause_sandbox('test-sandbox-123')
@@ -716,6 +723,7 @@ class TestSandboxLifecycle:
         assert stored_sandbox.session_api_key_hash is None
         assert stored_sandbox.teardown_session_api_key_hash == 'live-hash'
         assert stored_sandbox.teardown_session_api_key_expires_at is not None
+        remote_sandbox_service.db_session.commit.assert_awaited_once()
         remote_sandbox_service.httpx_client.request.assert_called_once_with(
             'POST',
             'https://api.example.com/pause',

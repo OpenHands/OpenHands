@@ -602,6 +602,8 @@ class RemoteSandboxService(SandboxService):
                 else None
             )
             stored_sandbox.session_api_key_hash = None
+            # Publish teardown auth before Kubernetes terminates the agent server.
+            await self.db_session.commit()
 
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
