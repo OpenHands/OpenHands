@@ -17,6 +17,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversation,
     AppConversationInfo,
     AppConversationPage,
+    RuntimeRequest,
     SwitchProfileRequest,
 )
 from openhands.app_server.app_conversation.app_conversation_router import (
@@ -26,6 +27,7 @@ from openhands.app_server.app_conversation.app_conversation_router import (
     count_app_conversations,
     get_conversation_git_changes,
     get_conversation_git_diff,
+    proxy_conversation_runtime_request,
     search_app_conversations,
     switch_conversation_profile,
 )
@@ -823,6 +825,65 @@ def _make_get_httpx_client(get_return=None, get_side_effect=None) -> AsyncMock:
         response = get_return or MagicMock()
         client.get = AsyncMock(return_value=response)
     return client
+
+
+@pytest.mark.asyncio
+class TestRuntimeProxyEndpoint:
+    async def test_forwards_allowed_request_to_its_conversation_runtime(self):
+        conversation_id = uuid4()
+        ctx = _make_agent_server_context(conversation_id)
+        upstream = httpx.Response(
+            status_code=200,
+            content=b'{"exit_code":0}',
+            headers={'content-type': 'application/json', 'set-cookie': 'ignored'},
+        )
+        client = AsyncMock(spec=httpx.AsyncClient)
+        client.request = AsyncMock(return_value=upstream)
+
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.'
+            '_get_agent_server_context',
+            new=AsyncMock(return_value=ctx),
+        ):
+            result = await proxy_conversation_runtime_request(
+                conversation_id=conversation_id,
+                request=RuntimeRequest(
+                    method='POST',
+                    path='/api/bash/execute_bash_command',
+                    body={'command': 'pwd'},
+                ),
+                app_conversation_service=MagicMock(),
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=client,
+            )
+
+        client.request.assert_awaited_once_with(
+            'POST',
+            'http://agent.test/api/bash/execute_bash_command',
+            headers={'X-Session-API-Key': 'sess-key'},
+            json={'command': 'pwd'},
+            timeout=30.0,
+        )
+        assert result.status_code == status.HTTP_200_OK
+        assert result.body == b'{"exit_code":0}'
+        assert 'set-cookie' not in result.headers
+
+    async def test_rejects_requests_outside_the_runtime_allowlist(self):
+        with pytest.raises(HTTPException) as exc_info:
+            await proxy_conversation_runtime_request(
+                conversation_id=uuid4(),
+                request=RuntimeRequest(
+                    method='GET',
+                    path=f'/api/conversations/{uuid4()}',
+                ),
+                app_conversation_service=MagicMock(),
+                sandbox_service=MagicMock(),
+                sandbox_spec_service=MagicMock(),
+                httpx_client=AsyncMock(spec=httpx.AsyncClient),
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
 
 
 @pytest.mark.asyncio

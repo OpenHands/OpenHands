@@ -13,7 +13,7 @@ from typing import Annotated, Any, AsyncGenerator, Literal
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +38,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     HookDefinitionResponse,
     HookEventResponse,
     HookMatcherResponse,
+    RuntimeRequest,
     SkillResponse,
     SwitchAcpModelRequest,
     SwitchProfileRequest,
@@ -118,6 +119,19 @@ db_session_dependency = depends_db_session()
 httpx_client_dependency = depends_httpx_client()
 sandbox_service_dependency = depends_sandbox_service()
 sandbox_spec_service_dependency = depends_sandbox_spec_service()
+
+_RUNTIME_RESPONSE_STRIPPED_HEADERS = {
+    'connection',
+    'content-encoding',
+    'content-length',
+    'content-type',
+    'keep-alive',
+    'set-cookie',
+    'te',
+    'trailers',
+    'transfer-encoding',
+    'upgrade',
+}
 
 
 @dataclass
@@ -1281,6 +1295,87 @@ async def _proxy_git_runtime_call(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail='Failed to reach agent server.',
         )
+
+
+def _is_allowed_runtime_request(conversation_id: UUID, request: RuntimeRequest) -> bool:
+    path = request.path.partition('?')[0]
+    conversation_path = f'/api/conversations/{conversation_id}'
+    return (request.method, path) in {
+        ('POST', f'{conversation_path}/events'),
+        ('GET', conversation_path),
+        ('POST', f'{conversation_path}/events/respond_to_confirmation'),
+        ('GET', f'{conversation_path}/events/count'),
+        ('POST', '/api/bash/execute_bash_command'),
+        ('GET', '/api/bash/bash_events/search'),
+        ('GET', '/api/file/download'),
+        ('GET', '/api/git/changes'),
+        ('GET', '/api/git/diff'),
+    }
+
+
+@router.post('/{conversation_id}/runtime')
+async def proxy_conversation_runtime_request(
+    conversation_id: UUID,
+    request: RuntimeRequest,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+) -> Response:
+    if not _is_allowed_runtime_request(conversation_id, request):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Unsupported runtime request.',
+        )
+
+    ctx = await _get_agent_server_context(
+        conversation_id,
+        app_conversation_service,
+        sandbox_service,
+        sandbox_spec_service,
+    )
+    if isinstance(ctx, JSONResponse):
+        raise HTTPException(
+            status_code=ctx.status_code, detail='Conversation is not reachable.'
+        )
+    if ctx is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail='Sandbox is paused; resume it before using the runtime.',
+        )
+
+    try:
+        upstream = await httpx_client.request(
+            request.method,
+            f'{ctx.agent_server_url}{request.path}',
+            headers=(
+                {'X-Session-API-Key': ctx.session_api_key}
+                if ctx.session_api_key
+                else {}
+            ),
+            json=request.body if request.method == 'POST' else None,
+            timeout=30.0,
+        )
+    except httpx.RequestError as e:
+        logger.error('Failed to reach agent server during runtime request: %s', e)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='Failed to reach agent server.',
+        ) from e
+
+    headers = {
+        name: value
+        for name, value in upstream.headers.items()
+        if name.lower() not in _RUNTIME_RESPONSE_STRIPPED_HEADERS
+    }
+    return Response(
+        content=upstream.content,
+        status_code=upstream.status_code,
+        headers=headers,
+        media_type=upstream.headers.get('content-type'),
+    )
 
 
 @router.get('/{conversation_id}/git/changes')

@@ -415,6 +415,12 @@ class SwitchAcpModelRequest(BaseModel):
     )
 
 
+class RuntimeRequest(BaseModel):
+    method: Literal['GET', 'POST']
+    path: str = Field(min_length=1)
+    body: Any = None
+
+
 class AppSendMessageResponse(BaseModel):
     """Response from sending a message to a conversation."""
 
