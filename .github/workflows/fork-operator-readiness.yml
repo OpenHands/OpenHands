@@ -1,0 +1,87 @@
+name: Fork operator readiness
+
+on:
+  pull_request:
+    paths:
+      - "Makefile"
+      - "README.md"
+      - ".devcontainer/devcontainer.json"
+      - ".devcontainer/setup.sh"
+      - "scripts/openhands_operator.py"
+      - "tests/unit/test_openhands_operator.py"
+      - ".github/workflows/fork-operator-readiness.yml"
+      - "docs/fork/OPERATIONS.md"
+      - "docs/superpowers/specs/2026-07-16-operator-readiness-design.md"
+      - "docs/superpowers/plans/2026-07-16-operator-readiness.md"
+  push:
+    branches:
+      - main
+      - "feat/**"
+    paths:
+      - "Makefile"
+      - "README.md"
+      - ".devcontainer/devcontainer.json"
+      - ".devcontainer/setup.sh"
+      - "scripts/openhands_operator.py"
+      - "tests/unit/test_openhands_operator.py"
+      - ".github/workflows/fork-operator-readiness.yml"
+      - "docs/fork/OPERATIONS.md"
+      - "docs/superpowers/specs/2026-07-16-operator-readiness-design.md"
+      - "docs/superpowers/plans/2026-07-16-operator-readiness.md"
+
+permissions:
+  contents: read
+
+jobs:
+  operator-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile operator CLI
+        run: python -m py_compile scripts/openhands_operator.py
+
+      - name: Run operator unit tests
+        run: python -m unittest tests.unit.test_openhands_operator -v
+
+      - name: Verify CLI help
+        run: python scripts/openhands_operator.py --help
+
+      - name: Validate OpenHands Codespace configuration
+        run: |
+          bash -n .devcontainer/setup.sh
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          path = Path('.devcontainer/devcontainer.json')
+          text = re.sub(r'^\s*//.*$', '', path.read_text(encoding='utf-8'), flags=re.MULTILINE)
+          config = json.loads(text)
+
+          assert config['name'] == 'OpenHands'
+          assert config['features']['ghcr.io/devcontainers/features/node:1']['version'] == '22'
+          assert config['forwardPorts'] == [3000, 3001]
+          assert config['portsAttributes']['3001']['onAutoForward'] == 'openBrowser'
+          assert config['postCreateCommand'] == 'bash .devcontainer/setup.sh'
+          PY
+
+      - name: Verify Codespaces README quick start
+        run: |
+          grep -F '# OpenHands Codespace — Start Here' README.md
+          grep -F 'https://codespaces.new/Rok1375/OpenHands?quickstart=1' README.md
+          grep -F 'python scripts/openhands_operator.py start' README.md
+
+      - name: Verify frontend host wiring
+        run: >-
+          grep -F --
+          'VITE_BACKEND_HOST=$(BACKEND_HOST_PORT) VITE_FRONTEND_PORT=$(FRONTEND_PORT) npm run $$SCRIPT -- --port $(FRONTEND_PORT) --host $(FRONTEND_HOST)'
+          Makefile

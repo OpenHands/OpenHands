@@ -1,3 +1,42 @@
+# OpenHands Codespace — Start Here
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/Rok1375/OpenHands?quickstart=1)
+
+This fork includes a GitHub Codespaces configuration named **OpenHands**. It installs Python 3.12, Node.js 22, Poetry, Docker tooling, `uv`, and the system utilities required by the source runner.
+
+## Use the Codespace
+
+1. Click **Open in GitHub Codespaces** above, or open the repository and choose **Code → Codespaces → Create codespace**.
+2. Wait for `.devcontainer/setup.sh` to finish. The first setup installs the repository dependencies and can take several minutes.
+3. In the Codespace terminal, check readiness:
+
+```bash
+python scripts/openhands_operator.py doctor \
+  --runtime docker \
+  --provider auto
+```
+
+4. Start OpenHands:
+
+```bash
+python scripts/openhands_operator.py start \
+  --runtime docker \
+  --provider auto \
+  --bootstrap \
+  --build
+```
+
+5. Open the forwarded **OpenHands frontend** port (`3001`). Codespaces is configured to open it automatically when the frontend becomes available.
+
+A provider is not required before startup; you can configure the model in the OpenHands Settings UI. For environment-based configuration, add Codespaces secrets such as `LLM_API_KEY`, or the fork-specific `OPENCODE_GO_API_KEY`, then rebuild or restart the Codespace. Never commit credentials to the repository.
+
+> [!IMPORTANT]
+> Keep forwarded ports private. If Docker readiness fails inside a custom Codespaces environment, use `--runtime local` only after reviewing the filesystem-access warning printed by the operator.
+
+More setup, provider, WSL, and VPS instructions are in [`docs/fork/OPERATIONS.md`](./docs/fork/OPERATIONS.md).
+
+---
+
 <a name="readme-top"></a>
 <div align="center">
   <img src="https://assets.openhands.dev/logo-whitebackground.png" alt="OpenHands logo" width="340">

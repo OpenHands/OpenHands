@@ -1,14 +1,19 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Mark the current repository as safe for Git to prevent "dubious ownership" errors,
-# which can occur in containerized environments when directory ownership doesn't match the current user.
+set -euo pipefail
+
+# Avoid Git's "dubious ownership" warning in Codespaces/dev containers.
 git config --global --add safe.directory "$(realpath .)"
 
-# Install `nc`
-sudo apt update && sudo apt install netcat -y
+# OpenHands' source runner uses `nc` while waiting for the backend.
+sudo apt-get update
+sudo apt-get install -y netcat-openbsd
 
-# Install `uv` and `uvx`
-wget -qO- https://astral.sh/uv/install.sh | sh
+# Install uv/uvx when the base image does not already provide them.
+if ! command -v uv >/dev/null 2>&1; then
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+fi
+export PATH="$HOME/.local/bin:$PATH"
 
-# Do common setup tasks
-source .openhands/setup.sh
+# Run the repository's standard setup, including pre-commit hooks.
+bash .openhands/setup.sh
