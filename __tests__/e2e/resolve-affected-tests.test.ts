@@ -79,25 +79,32 @@ describe("mock-LLM E2E affected test resolver", () => {
     expect(resolveAffectedTests([file])).toEqual(["__ALL__"]);
   });
 
-  it("keeps resolver failures from becoming selective test paths", () => {
-    const workflow = readFileSync(workflowPath, "utf-8");
-
-    expect(workflow).toContain("if ! RESULT=$(node");
-    expect(workflow).toContain("Affected-test resolver failed");
-    expect(workflow).not.toContain("2>&1) || true");
-  });
-
-  it("keeps E2E workflows from path-skipping required PR checks", () => {
+  it("runs full E2E only after changes reach main or on release PRs", () => {
     const workflow = readFileSync(workflowPath, "utf-8");
     const dockerWorkflow = readFileSync(dockerWorkflowPath, "utf-8");
+    const workflowTriggers = workflow.slice(
+      workflow.indexOf("on:\n"),
+      workflow.indexOf("\nconcurrency:"),
+    );
+    const dockerWorkflowTriggers = dockerWorkflow.slice(
+      dockerWorkflow.indexOf("on:\n"),
+      dockerWorkflow.indexOf("\nconcurrency:"),
+    );
 
-    expect(workflow).not.toContain("\n    paths:\n");
-    expect(workflow).toContain("detect-pr-changes:");
-    expect(workflow).toContain("needs.detect-pr-changes.outputs.should_run");
-    expect(dockerWorkflow).not.toContain("\n    paths:\n");
-    expect(dockerWorkflow).toContain("detect-pr-changes:");
+    // The PR trigger preserves the existing required check context. Ordinary
+    // PRs skip the job; release-please PRs run the full suite before merge.
+    expect(workflowTriggers).toContain("  pull_request:");
+    expect(workflowTriggers).toContain("  push:\n    branches: [main]");
+    expect(workflow).toContain(
+      "startsWith(github.head_ref, 'release-please--branches--')",
+    );
+
+    expect(dockerWorkflowTriggers).toContain("  pull_request:");
+    expect(dockerWorkflowTriggers).toContain("  workflow_run:");
+    expect(dockerWorkflowTriggers).toContain("    branches: [main]");
+    expect(dockerWorkflowTriggers).toContain("  workflow_dispatch:");
     expect(dockerWorkflow).toContain(
-      "needs.detect-pr-changes.outputs.should_run",
+      "startsWith(github.head_ref, 'release-please--branches--')",
     );
   });
 });

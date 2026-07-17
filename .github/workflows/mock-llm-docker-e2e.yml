@@ -6,18 +6,15 @@ name: Mock-LLM Docker E2E Tests
 # Trigger chain:
 #   1. workflow_run — fires automatically after the "Docker" workflow
 #      completes on main. The image is already built/pushed to GHCR.
-#   2. pull_request — fires on every PR commit so required checks are never
-#      left pending by path filters. A lightweight detector skips the heavy
-#      Docker E2E job for docs-only/non-stack PRs. Fork PRs are skipped
-#      (no GHCR push). (workflow_run doesn't fire for new workflow files
-#      until they're on the default branch, so pull_request is needed for
-#      first-run PRs.)
+#   2. pull_request — runs only for release-please PRs, against the image built
+#      by the PR's Docker workflow.
 #   3. workflow_dispatch — manual trigger with a custom image tag.
 
 on:
   workflow_run:
     workflows: ["Docker"]
     types: [completed]
+    branches: [main]
   pull_request:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
@@ -28,7 +25,7 @@ on:
         default: ""
 
 # Concurrency: deduplicate runs for the same logical trigger.
-# - pull_request: keyed by PR number (pushes to the same PR cancel earlier runs)
+# - release pull_request: keyed by PR number (updates cancel earlier runs)
 # - workflow_run: keyed by the triggering workflow's branch (e.g. "wr-main"),
 #   so multiple Docker builds completing on main don't pile up separate E2E runs
 # - workflow_dispatch / fallback: keyed by ref
@@ -44,59 +41,20 @@ concurrency:
 permissions:
   contents: read
   packages: read
-  pull-requests: write
   actions: read
 
 jobs:
-  detect-pr-changes:
-    runs-on: ubuntu-24.04
-    outputs:
-      should_run: ${{ steps.detect.outputs.should_run }}
-    steps:
-      - name: Detect PR changes relevant to Docker E2E
-        id: detect
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          CHANGED_FILES=$(gh api \
-            "/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-            --paginate --jq '.[].filename')
-
-          SHOULD_RUN=false
-          while IFS= read -r file; do
-            case "$file" in
-              src/*|public/*|scripts/*|bin/*|config/*|docker/*|tests/e2e/mock-llm/*|tests/e2e/support/*|package.json|package-lock.json|vite.config.ts|tsconfig.json|react-router.config.ts|playwright.mock-llm.config.ts|playwright.mock-llm-docker.config.ts|tailwind.config.js|hero.ts|.github/workflows/docker.yml|.github/workflows/mock-llm-docker-e2e.yml)
-                SHOULD_RUN=true
-                break
-                ;;
-            esac
-          done <<< "$CHANGED_FILES"
-
-          echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
-
   mock-llm-docker-e2e:
-    needs: detect-pr-changes
-    # workflow_run: only for main/master — validates the published image.
-    #   PR branches are already covered by the pull_request trigger below;
-    #   without this guard, both triggers fire for PRs, producing
-    #   duplicate (and potentially contradictory) comment pairs.
-    # pull_request: skip fork PRs (no GHCR push).
+    # workflow_run validates the image published from main.
+    # pull_request validates only same-repository release-please PRs.
     # workflow_dispatch: always run.
     if: >-
       (github.event_name == 'workflow_dispatch' ||
        (github.event_name == 'workflow_run' &&
-        github.event.workflow_run.conclusion == 'success' &&
-        (github.event.workflow_run.head_branch == 'main' ||
-         github.event.workflow_run.head_branch == 'master')) ||
+        github.event.workflow_run.conclusion == 'success') ||
        (github.event_name == 'pull_request' &&
-        !github.event.pull_request.head.repo.fork)) &&
-      (github.event_name != 'pull_request' ||
-       needs.detect-pr-changes.outputs.should_run == 'true')
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        startsWith(github.head_ref, 'release-please--branches--')))
     runs-on: ubuntu-24.04
     # Give the 20-minute Playwright test budget enough room for setup and reporting.
     timeout-minutes: 25
@@ -113,20 +71,17 @@ jobs:
           GITHUB_REF_VALUE: ${{ github.ref }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            # workflow_run only fires for main (job-level `if` guard), so
+            # workflow_run only fires for main (event branch filter), so
             # this path always tests the main-branch Docker image. Never
             # post PR comments — results go to the step summary only.
             echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
             echo "ref=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
-            echo "pr_number=" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "sha=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
             echo "ref=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
-            echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
           else
             echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
             echo "ref=$GITHUB_REF_VALUE" >> "$GITHUB_OUTPUT"
-            echo "pr_number=" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Check out repository
@@ -139,41 +94,8 @@ jobs:
         run: |
           echo "agent_server_version=$(node -p "require('./config/defaults.json').versions.agentServer")" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve linked SDK PR
-        id: linked_sdk
-        if: github.event_name == 'pull_request'
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          BODY=$(gh api "/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}" --jq '.body // ""')
-          SDK_PR=$(
-            printf '%s\n' "$BODY" \
-              | grep -Eo 'OpenHands/software-agent-sdk(/pull/|#)[0-9]+' \
-              | head -n1 \
-              | grep -Eo '[0-9]+$' \
-              || true
-          )
-          if [ -z "$SDK_PR" ]; then
-            echo "No linked software-agent-sdk PR found in PR description."
-            exit 0
-          fi
-
-          # The matched number may belong to an issue rather than a PR — GitHub's
-          # "#NNNN" shorthand and "/pull/NNNN" URL text look identical for both in
-          # a PR description, but the /pulls/{number} endpoint 404s for an issue
-          # number. Degrade gracefully to "no linked PR" (falls back to the
-          # released SDK version below) instead of failing the job.
-          SDK_PR_JSON=$(gh api "/repos/OpenHands/software-agent-sdk/pulls/${SDK_PR}" 2>/dev/null) || {
-            echo "software-agent-sdk#${SDK_PR} is not an open PR (may be an issue) — using the released SDK version."
-            exit 0
-          }
-          SDK_REF=$(jq -r '.head.ref' <<<"$SDK_PR_JSON")
-          SDK_SHA=$(jq -r '.head.sha' <<<"$SDK_PR_JSON")
-          echo "Using software-agent-sdk PR #${SDK_PR} branch: ${SDK_REF} (${SDK_SHA})"
-          echo "git_ref=${SDK_SHA}" >> "$GITHUB_OUTPUT"
-
-      # ── Wait for Docker workflow (pull_request trigger only) ────────────
-      # When triggered by pull_request, the Docker image may still be
+      # ── Wait for Docker workflow (release PR trigger only) ────────────
+      # When triggered by a release PR, the Docker image may still be
       # building. Poll the Docker workflow until it completes for this SHA.
       - name: Wait for Docker workflow to complete
         if: github.event_name == 'pull_request'
@@ -289,14 +211,9 @@ jobs:
       - name: Install openhands-sdk (for mock LLM server)
         env:
           AGENT_SERVER_VERSION: ${{ steps.defaults.outputs.agent_server_version }}
-          SDK_GIT_REF: ${{ steps.linked_sdk.outputs.git_ref }}
         run: |
           uv venv .mock-llm-venv
-          if [ -n "$SDK_GIT_REF" ]; then
-            uv pip install -p .mock-llm-venv "git+https://github.com/OpenHands/software-agent-sdk@${SDK_GIT_REF}#subdirectory=openhands-sdk"
-          else
-            uv pip install -p .mock-llm-venv "openhands-sdk==$AGENT_SERVER_VERSION"
-          fi
+          uv pip install -p .mock-llm-venv "openhands-sdk==$AGENT_SERVER_VERSION"
 
       - name: Verify mock LLM server starts
         run: |
@@ -330,7 +247,6 @@ jobs:
           MOCK_LLM_PYTHON: .mock-llm-venv/bin/python3
           MOCK_LLM_DOCKER_IMAGE: ${{ steps.image.outputs.tag }}
           MOCK_LLM_DOCKER_GLOBAL_TIMEOUT_MS: 1200000
-          OH_AGENT_SERVER_GIT_REF: ${{ steps.linked_sdk.outputs.git_ref }}
         run: |
           set +e
           MARKER_DIR=".mock-llm-markers"
@@ -408,21 +324,6 @@ jobs:
             playwright-report-mock-llm-docker/
             test-results-mock-llm-docker/
 
-      - name: Detect newly added spec files
-        if: always() && github.event.pull_request.number
-        id: new_specs
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          # Find mock-LLM spec files added (not just modified) in this PR
-          NEW_FILES=$(gh api \
-            "/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-            --paginate \
-            --jq '[.[] | select(.status == "added") | .filename
-                   | select(test("tests/e2e/mock-llm/.*\\.spec\\.ts$"))]
-                   | join(",")')
-          echo "files=$NEW_FILES" >> "$GITHUB_OUTPUT"
-
       - name: Render test report
         if: always()
         run: |
@@ -433,20 +334,8 @@ jobs:
             --commit "${{ steps.ctx.outputs.sha }}" \
             --artifact-url "${{ steps.upload_artifacts.outputs.artifact-url || '' }}" \
             --title "Mock-LLM Docker E2E Test Results" \
-            --exit-code "${{ steps.run_tests.outputs.exit_code }}" \
-            --new-files "${{ steps.new_specs.outputs.files || '' }}"
+            --exit-code "${{ steps.run_tests.outputs.exit_code }}"
           cat "$MOCK_LLM_REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Post PR comment
-        if: always() && steps.ctx.outputs.pr_number
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          node tests/e2e/mock-llm/scripts/upsert-pr-comment.mjs \
-            --issue-number "${{ steps.ctx.outputs.pr_number }}" \
-            --body-file "$MOCK_LLM_REPORT_PATH" \
-            --marker "<!-- agent-canvas-mock-llm-docker-e2e-report -->" \
-            --legacy-title "Mock-LLM Docker E2E Test Results"
 
       - name: Fail job when tests fail
         if: always()
