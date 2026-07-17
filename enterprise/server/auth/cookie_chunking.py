@@ -61,12 +61,18 @@ def set_chunked_cookie(
     secure: bool = True,
     httponly: bool = True,
     samesite: str = 'lax',
+    max_age: int | None = None,
 ) -> None:
     """Set ``key`` to ``value``, splitting across sibling cookies if needed.
 
     Always clears trailing chunk indices that this write does not use, so a
     value that shrank from N chunks to fewer does not leave stale chunks
     that ``read_chunked_cookie`` would wrongly append.
+
+    ``max_age`` (seconds) makes the cookie persistent so the session
+    survives a full browser quit; without it the browser discards the
+    cookie on exit. It is applied to every chunk — a chunk outliving its
+    siblings would reassemble into a torn token.
     """
     chunks = [value[i : i + CHUNK_SIZE] for i in range(0, len(value), CHUNK_SIZE)] or [
         ''
@@ -80,6 +86,8 @@ def set_chunked_cookie(
         }
         if domain:
             kwargs['domain'] = domain
+        if max_age is not None:
+            kwargs['max_age'] = max_age
         response.set_cookie(key=_chunk_key(key, i), value=chunk, **kwargs)
 
     # Expire any chunks left over from a previously larger value.

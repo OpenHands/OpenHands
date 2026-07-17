@@ -98,3 +98,23 @@ def test_boundary_sizes_roundtrip(size):
     value = 'z' * size
     got, _ = _roundtrip(value)
     assert got == value
+
+
+def test_max_age_applied_to_every_chunk():
+    # Without Max-Age the cookie is a session cookie and dies on browser
+    # quit; every chunk must carry it or the reader reassembles a torn token.
+    resp = Response()
+    set_chunked_cookie(
+        resp, 'keycloak_auth', 'y' * 4125, domain='example.com', max_age=604800
+    )
+    written = [h for h in resp.headers.getlist('set-cookie') if 'Max-Age=0' not in h]
+    assert len(written) == 2
+    assert all('Max-Age=604800' in h for h in written)
+
+
+def test_max_age_omitted_writes_session_cookie():
+    resp = Response()
+    set_chunked_cookie(resp, 'keycloak_auth', 'x' * 100, domain='example.com')
+    written = [h for h in resp.headers.getlist('set-cookie') if 'Max-Age=0' not in h]
+    assert len(written) == 1
+    assert 'Max-Age' not in written[0]

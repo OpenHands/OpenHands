@@ -95,6 +95,12 @@ def create_provider_tokens_object(
     return MappingProxyType(provider_information)
 
 
+# The signed JWS inside the cookie and the cookie itself expire together;
+# a persistent Max-Age lets the session survive a full browser quit instead
+# of dying with the browser process as a session cookie.
+AUTH_COOKIE_TTL = timedelta(weeks=1)
+
+
 def set_response_cookie(
     request: Request,
     response: Response,
@@ -112,7 +118,7 @@ def set_response_cookie(
     from storage.encrypt_utils import get_jwt_service
 
     signed_token = get_jwt_service().create_jws_token(
-        cookie_data, expires_in=timedelta(weeks=1)
+        cookie_data, expires_in=AUTH_COOKIE_TTL
     )
 
     # Set secure cookie with signed token. The value can exceed the
@@ -128,6 +134,7 @@ def set_response_cookie(
         secure=secure,
         httponly=True,
         samesite=get_cookie_samesite(),
+        max_age=int(AUTH_COOKIE_TTL.total_seconds()),
     )
 
 
