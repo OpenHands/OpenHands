@@ -26,12 +26,22 @@ import { OpenHandsAction } from "#/types/core/actions";
 import { useEventStore } from "#/stores/use-event-store";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
+import { useConversationStore } from "#/stores/conversation-store";
+
+const { handleBuildPlanClickMock } = vi.hoisted(() => ({
+  handleBuildPlanClickMock: vi.fn(),
+}));
 
 vi.mock("#/context/ws-client-provider");
 vi.mock("#/hooks/query/use-config");
 vi.mock("#/hooks/mutation/use-get-trajectory");
 vi.mock("#/hooks/mutation/use-unified-upload-files");
 vi.mock("#/hooks/use-conversation-id");
+vi.mock("#/hooks/use-handle-build-plan-click", () => ({
+  useHandleBuildPlanClick: () => ({
+    handleBuildPlanClick: handleBuildPlanClickMock,
+  }),
+}));
 
 vi.mock("#/hooks/use-user-providers", () => ({
   useUserProviders: () => ({
@@ -52,7 +62,8 @@ vi.mock("#/hooks/use-conversation-name-context-menu", () => ({
 
 vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: vi.fn(() => ({
-    curAgentState: AgentState.AWAITING_USER_INPUT, isArchived: false,
+    curAgentState: AgentState.AWAITING_USER_INPUT,
+    isArchived: false,
   })),
 }));
 
@@ -93,6 +104,51 @@ beforeEach(() => {
   useParamsMock.mockReturnValue({ conversationId: "test-conversation-id" });
   vi.mocked(useConversationId).mockReturnValue({
     conversationId: "test-conversation-id",
+  });
+});
+
+describe("ChatInterface - Build plan shortcut", () => {
+  beforeEach(() => {
+    handleBuildPlanClickMock.mockClear();
+    vi.mocked(useConfig).mockReturnValue({
+      data: { app_mode: "local" },
+    } as unknown as ReturnType<typeof useConfig>);
+    vi.mocked(useGetTrajectory).mockReturnValue({
+      mutate: vi.fn(),
+      mutateAsync: vi.fn(),
+      isLoading: false,
+    } as unknown as ReturnType<typeof useGetTrajectory>);
+    vi.mocked(useUnifiedUploadFiles).mockReturnValue({
+      mutateAsync: vi.fn(),
+    } as unknown as ReturnType<typeof useUnifiedUploadFiles>);
+  });
+
+  it.each([
+    ["code mode", "code" as const, "A plan"],
+    ["missing plan", "plan" as const, null],
+  ])("ignores Cmd+Enter in %s", (_case, conversationMode, planContent) => {
+    useConversationStore.setState({ conversationMode, planContent });
+    renderChatInterfaceWithRouter();
+
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", metaKey: true }),
+    );
+
+    expect(handleBuildPlanClickMock).not.toHaveBeenCalled();
+  });
+
+  it("handles Cmd+Enter when an idle plan is available", () => {
+    useConversationStore.setState({
+      conversationMode: "plan",
+      planContent: "A plan",
+    });
+    renderChatInterfaceWithRouter();
+
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", metaKey: true }),
+    );
+
+    expect(handleBuildPlanClickMock).toHaveBeenCalledOnce();
   });
 });
 
@@ -272,10 +328,11 @@ describe("ChatInterface - Empty state", () => {
   );
 });
 
-describe('ChatInterface - Status Indicator', () => {
+describe("ChatInterface - Status Indicator", () => {
   it("should render ChatStatusIndicator when agent is not awaiting user input / conversation is NOT ready", () => {
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.LOADING, isArchived: false,
+      curAgentState: AgentState.LOADING,
+      isArchived: false,
     });
 
     renderChatInterfaceWithRouter();
@@ -285,12 +342,15 @@ describe('ChatInterface - Status Indicator', () => {
 
   it("should NOT render ChatStatusIndicator when agent is awaiting user input / conversation is ready", () => {
     vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.AWAITING_USER_INPUT, isArchived: false,
+      curAgentState: AgentState.AWAITING_USER_INPUT,
+      isArchived: false,
     });
 
     renderChatInterfaceWithRouter();
 
-    expect(screen.queryByTestId("chat-status-indicator")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("chat-status-indicator"),
+    ).not.toBeInTheDocument();
   });
 });
 
