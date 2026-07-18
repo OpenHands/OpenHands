@@ -326,7 +326,9 @@ async def update_custom_secret(
 
     custom_secrets[secret_name] = CustomSecret(
         secret=existing_secret.secret,
-        description=secret_description or '',
+        description=secret_description
+        if secret_description is not None
+        else existing_secret.description,
     )
 
     updated_secrets = Secrets(

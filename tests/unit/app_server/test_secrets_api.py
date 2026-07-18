@@ -282,6 +282,54 @@ async def test_update_existing_custom_secret(test_client, file_secrets_store):
 
 
 @pytest.mark.asyncio
+async def test_update_custom_secret_preserves_omitted_description(
+    test_client, file_secrets_store
+):
+    """Test renaming a custom secret without replacing its description."""
+    custom_secrets = {
+        'API_KEY': CustomSecret(
+            secret=SecretStr('old-api-key'), description='Production API key'
+        )
+    }
+    await file_secrets_store.store(Secrets(custom_secrets=custom_secrets))
+
+    response = test_client.put(
+        '/secrets/API_KEY',
+        json={'name': 'RENAMED_API_KEY'},
+    )
+
+    assert response.status_code == 200
+    stored_settings = await file_secrets_store.load()
+    assert 'API_KEY' not in stored_settings.custom_secrets
+    assert (
+        stored_settings.custom_secrets['RENAMED_API_KEY'].description
+        == 'Production API key'
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_custom_secret_clears_explicit_empty_description(
+    test_client, file_secrets_store
+):
+    """Test explicitly clearing a custom secret description."""
+    custom_secrets = {
+        'API_KEY': CustomSecret(
+            secret=SecretStr('old-api-key'), description='Production API key'
+        )
+    }
+    await file_secrets_store.store(Secrets(custom_secrets=custom_secrets))
+
+    response = test_client.put(
+        '/secrets/API_KEY',
+        json={'name': 'API_KEY', 'description': ''},
+    )
+
+    assert response.status_code == 200
+    stored_settings = await file_secrets_store.load()
+    assert stored_settings.custom_secrets['API_KEY'].description == ''
+
+
+@pytest.mark.asyncio
 async def test_add_multiple_custom_secrets(test_client, file_secrets_store):
     """Test adding multiple custom secrets at once."""
     # Create initial settings with one custom secret
