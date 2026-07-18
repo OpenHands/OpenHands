@@ -608,10 +608,10 @@ async def test_load_canonicalizes_legacy_litellm_proxy_llm_profiles(
 
 
 @pytest.mark.asyncio
-async def test_store_updates_org_defaults_and_all_members_for_shared_keys(
+async def test_store_updates_org_defaults_without_broadcasting_member_keys(
     session_maker, async_session_maker, org_with_multiple_members_fixture
 ):
-    """External provider keys should still sync as an org-wide shared snapshot."""
+    """External provider keys stay scoped to the acting member."""
     from sqlalchemy import select
     from storage.org import Org
     from storage.org_member import OrgMember
@@ -658,7 +658,14 @@ async def test_store_updates_org_defaults_and_all_members_for_shared_keys(
                 == 'https://api.anthropic.com/v1'
             )
             assert member.conversation_settings_diff['max_iterations'] == 100
-            assert decrypt_value(member._llm_api_key) == 'shared-external-api-key'
+
+        admin_member = members[str(fixture['admin_user_id'])]
+        assert decrypt_value(admin_member._llm_api_key) == 'shared-external-api-key'
+
+        member1 = members[str(fixture['member1_user_id'])]
+        member2 = members[str(fixture['member2_user_id'])]
+        assert decrypt_value(member1._llm_api_key) == 'member1-initial-key'
+        assert decrypt_value(member2._llm_api_key) == 'member2-initial-key'
 
 
 @pytest.mark.asyncio
@@ -1603,6 +1610,26 @@ class TestGetEffectiveLlmApiKey:
 
         # Must return org key when has_custom_llm_api_key is False
         assert result == SecretStr('org-api-key')
+
+    def test_skips_org_key_when_disallowed(self):
+        """When allow_org_key is False, fall back to the member-managed key."""
+        from pydantic import SecretStr
+        from storage.saas_settings_store import SaasSettingsStore
+
+        org = MagicMock()
+        org.llm_api_key = SecretStr('org-api-key')
+
+        member = MagicMock()
+        member.has_custom_llm_api_key = False
+        member._llm_api_key = 'encrypted-managed-key'
+        type(member).llm_api_key = PropertyMock(return_value=SecretStr('managed-key'))
+
+        result = SaasSettingsStore._get_effective_llm_api_key(
+            org, member, allow_org_key=False
+        )
+
+        assert result == SecretStr('managed-key')
+
 
     def test_falls_back_to_managed_member_key_when_org_key_unset(self):
         """has_custom False + no org key: fall back to the managed key on the member row.

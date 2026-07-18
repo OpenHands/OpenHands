@@ -309,6 +309,7 @@ async def update_org_defaults_settings(
             'conversation_settings_diff',
             'search_api_key',
             'llm_api_key',
+            'reset_member_custom_llm_keys',
         }
         invalid_fields = settings.updated_fields() - allowed_fields
         if invalid_fields:

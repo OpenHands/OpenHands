@@ -1465,7 +1465,8 @@ async def test_update_org_defaults_async_propagates_managed_key_reset():
         agent_settings=OpenHandsAgentSettings(llm={'model': 'openhands/claude-3'}),
     )
     update_data = OrgUpdate(
-        agent_settings_diff={'llm': {'model': 'openhands/claude-3'}}
+        agent_settings_diff={'llm': {'model': 'openhands/claude-3'}},
+        reset_member_custom_llm_keys=True,
     )
 
     mock_session = AsyncMock()

@@ -439,14 +439,16 @@ class OrgStore:
                         user_id,
                     )
                 )
-                should_reset_custom_key_flag = (
-                    update_data.llm_api_key is not None
-                    or effective_managed_key is not None
+                should_reset_custom_key_flag = bool(
+                    update_data.reset_member_custom_llm_keys
                 )
                 if effective_managed_key is not None:
                     if member_updates is None:
                         member_updates = OrgMemberSettingsUpdate()
                     member_updates.llm_api_key = SecretStr(effective_managed_key)
+
+                if should_reset_custom_key_flag and member_updates is None:
+                    member_updates = OrgMemberSettingsUpdate()
 
                 if member_updates is not None:
                     if should_reset_custom_key_flag:

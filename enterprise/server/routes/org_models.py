@@ -287,6 +287,7 @@ class OrgUpdate(BaseModel):
     v1_enabled: bool | None = None
     search_api_key: str | None = None
     llm_api_key: str | None = None
+    reset_member_custom_llm_keys: bool | None = None
     agent_settings_diff: dict[str, Any] | None = None
     conversation_settings_diff: dict[str, Any] | None = None
 
@@ -380,6 +381,7 @@ class OrgUpdate(BaseModel):
                 'conversation_settings_diff',
                 'search_api_key',
                 'llm_api_key',
+                'reset_member_custom_llm_keys',
             }
         )
 
@@ -391,6 +393,7 @@ class OrgUpdate(BaseModel):
             'search_api_key',
             'sandbox_api_key',
             'llm_api_key',
+            'reset_member_custom_llm_keys',
         }
 
     def model_update_dict(self) -> dict[str, Any]:

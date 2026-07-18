@@ -37,7 +37,7 @@ from openhands.app_server.utils.jsonpatch_compat import (
     deep_merge,
     deep_merge_with_wholesale_keys,
 )
-from openhands.app_server.utils.llm import is_openhands_model
+from openhands.app_server.utils.llm import is_openhands_model, resolve_llm_base_url
 from openhands.sdk.llm.utils.openhands_provider import (
     canonicalize_openhands_llm_payload,
 )
@@ -104,10 +104,12 @@ class SaasSettingsStore(SettingsStore):
     def _get_effective_llm_api_key(
         org: Org,
         org_member: OrgMember,
+        *,
+        allow_org_key: bool = True,
     ) -> SecretStr | None:
         if org_member.has_custom_llm_api_key:
             return org_member.llm_api_key
-        if org.llm_api_key:
+        if allow_org_key and org.llm_api_key:
             return org.llm_api_key
         # Managed keys are stored on the member row (has_custom=False); fall back to
         # it, but only decrypt when actually set to avoid the empty-value error (#14898).
@@ -189,6 +191,23 @@ class SaasSettingsStore(SettingsStore):
 
         llm_store = OrgLLMProfileLoader(load_llm_profiles(org))
         try:
+            resolved_base_url = resolve_llm_base_url(
+                model=profile.llm.model,
+                base_url=profile.llm.base_url,
+                managed_proxy_url=LITE_LLM_API_URL,
+            )
+            uses_managed_proxy = bool(
+                resolved_base_url
+                and resolved_base_url.rstrip('/') == LITE_LLM_API_URL.rstrip('/')
+            )
+            fallback_api_key = effective_llm_api_key
+            if uses_managed_proxy:
+                fallback_api_key = self._get_effective_llm_api_key(
+                    org,
+                    org_member,
+                    allow_org_key=False,
+                )
+
             resolved = resolve_agent_profile(
                 profile,
                 llm_store=llm_store,
@@ -207,7 +226,7 @@ class SaasSettingsStore(SettingsStore):
                         'llm': resolve_profile_llm(
                             resolved.llm,
                             managed_proxy_url=LITE_LLM_API_URL,
-                            fallback_api_key=effective_llm_api_key,
+                            fallback_api_key=fallback_api_key,
                         )
                     }
                 )
@@ -649,11 +668,6 @@ class SaasSettingsStore(SettingsStore):
                 OrgMemberSettingsUpdate(
                     agent_settings_diff=shared_agent_settings_diff,
                     conversation_settings_diff=effective_conversation_diff,
-                    llm_api_key=(
-                        current_member_llm_api_key_raw  # type: ignore[arg-type]
-                        if not uses_managed_llm_key
-                        else None
-                    ),
                 ),
             )
 
