@@ -1630,7 +1630,6 @@ class TestGetEffectiveLlmApiKey:
 
         assert result == SecretStr('managed-key')
 
-
     def test_falls_back_to_managed_member_key_when_org_key_unset(self):
         """has_custom False + no org key: fall back to the managed key on the member row.
 

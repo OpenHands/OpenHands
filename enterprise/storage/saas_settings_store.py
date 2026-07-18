@@ -191,23 +191,6 @@ class SaasSettingsStore(SettingsStore):
 
         llm_store = OrgLLMProfileLoader(load_llm_profiles(org))
         try:
-            resolved_base_url = resolve_llm_base_url(
-                model=profile.llm.model,
-                base_url=profile.llm.base_url,
-                managed_proxy_url=LITE_LLM_API_URL,
-            )
-            uses_managed_proxy = bool(
-                resolved_base_url
-                and resolved_base_url.rstrip('/') == LITE_LLM_API_URL.rstrip('/')
-            )
-            fallback_api_key = effective_llm_api_key
-            if uses_managed_proxy:
-                fallback_api_key = self._get_effective_llm_api_key(
-                    org,
-                    org_member,
-                    allow_org_key=False,
-                )
-
             resolved = resolve_agent_profile(
                 profile,
                 llm_store=llm_store,
@@ -221,6 +204,23 @@ class SaasSettingsStore(SettingsStore):
             # base URLs behave exactly as the non-profile path. Reuses the existing
             # resolve_profile_llm helper rather than re-deriving key resolution.
             if resolved.agent_kind == 'openhands':
+                resolved_base_url = resolve_llm_base_url(
+                    model=resolved.llm.model,
+                    base_url=resolved.llm.base_url,
+                    managed_proxy_url=LITE_LLM_API_URL,
+                )
+                uses_managed_proxy = bool(
+                    resolved_base_url
+                    and resolved_base_url.rstrip('/') == LITE_LLM_API_URL.rstrip('/')
+                )
+                fallback_api_key = effective_llm_api_key
+                if uses_managed_proxy:
+                    fallback_api_key = self._get_effective_llm_api_key(
+                        org,
+                        org_member,
+                        allow_org_key=False,
+                    )
+
                 resolved = resolved.model_copy(
                     update={
                         'llm': resolve_profile_llm(
