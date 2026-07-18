@@ -122,13 +122,51 @@ describe("ConversationPanel", () => {
       "searchConversations",
     );
     searchConversationsSpy.mockRejectedValue(
-      new Error("Failed to fetch conversations"),
+      new Error("Request failed with status code 500"),
     );
 
     renderConversationPanel();
 
-    const error = await screen.findByText("Failed to fetch conversations");
-    expect(error).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("conversation-panel-error"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("CONVERSATION$LOAD_ERROR_TITLE"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("CONVERSATION$LOAD_ERROR_DESCRIPTION"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "CONVERSATION$RETRY_LOAD" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Request failed with status code 500"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should retry loading conversations from the error state", async () => {
+    const user = userEvent.setup();
+    const searchConversationsSpy = vi.spyOn(
+      V1ConversationService,
+      "searchConversations",
+    );
+    searchConversationsSpy
+      .mockRejectedValueOnce(new Error("Request failed with status code 500"))
+      .mockResolvedValueOnce({
+        items: [...mockConversations],
+        next_page_id: null,
+      });
+
+    renderConversationPanel();
+
+    const retryButton = await screen.findByRole("button", {
+      name: "CONVERSATION$RETRY_LOAD",
+    });
+    await user.click(retryButton);
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(3);
+    expect(searchConversationsSpy).toHaveBeenCalledTimes(2);
   });
 
   it("should cancel deleting a conversation", async () => {

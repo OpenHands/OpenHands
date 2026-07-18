@@ -59,6 +59,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
+    refetch,
   } = usePaginatedConversations();
 
   // Fetch in-progress start tasks
@@ -66,6 +67,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
 
   // Flatten all pages into a single array of conversations (V1 uses 'items' instead of 'results')
   const conversations = data?.pages.flatMap((page) => page.items) ?? [];
+  const hasInitialLoadError = !!error && conversations.length === 0;
 
   const { mutate: deleteConversation } = useDeleteConversation();
   const { mutate: pauseConversationSandbox } =
@@ -151,18 +153,37 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
         </div>
       )}
 
-      {error && (
-        <div className="flex flex-col items-center justify-center h-full">
-          <p className="text-danger">{error.message}</p>
-        </div>
-      )}
-      {!isFetching && conversations?.length === 0 && !startTasks?.length && (
-        <div className="flex flex-col items-center justify-center h-full">
-          <p className="text-neutral-400">
-            {t(I18nKey.CONVERSATION$NO_CONVERSATIONS)}
+      {hasInitialLoadError && (
+        <div
+          className="flex flex-col items-center justify-center h-full px-8 text-center"
+          data-testid="conversation-panel-error"
+        >
+          <p className="text-base font-semibold text-white">
+            {t(I18nKey.CONVERSATION$LOAD_ERROR_TITLE)}
           </p>
+          <p className="mt-2 text-sm text-neutral-400">
+            {t(I18nKey.CONVERSATION$LOAD_ERROR_DESCRIPTION)}
+          </p>
+          <button
+            type="button"
+            className="mt-4 rounded-sm bg-[#4465DB] px-4 py-2 text-sm font-medium text-white hover:bg-[#3A56BC] disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            {t(I18nKey.CONVERSATION$RETRY_LOAD)}
+          </button>
         </div>
       )}
+      {!isFetching &&
+        !hasInitialLoadError &&
+        conversations?.length === 0 &&
+        !startTasks?.length && (
+          <div className="flex flex-col items-center justify-center h-full">
+            <p className="text-neutral-400">
+              {t(I18nKey.CONVERSATION$NO_CONVERSATIONS)}
+            </p>
+          </div>
+        )}
       {/* Render in-progress start tasks first */}
       {startTasks?.map((task) => (
         <NavLink
