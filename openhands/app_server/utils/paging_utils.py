@@ -47,7 +47,8 @@ def decode_page_id(page_id: str | None) -> int | None:
         return None
     try:
         # Add padding back if needed
-        padded = page_id + '=' * (4 - len(page_id) % 4)
+        padding_len = (4 - len(page_id) % 4) % 4
+        padded = page_id + '=' * padding_len
         decoded = base64.urlsafe_b64decode(padded.encode()).decode()
         return int(decoded)
     except (ValueError, Exception):
