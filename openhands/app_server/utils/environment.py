@@ -10,6 +10,19 @@ _LEMONADE_PROVIDER_NAME = 'lemonade'
 _LEMONADE_MODEL_PREFIX = 'lemonade/'
 
 
+def env_flag_enabled(name: str, default: bool = False) -> bool:
+    """Parse a boolean enable toggle from an environment variable.
+
+    Accepts both 'true' and '1' as truthy values (case-insensitive), per the
+    "Environment Variable Enable Toggles" rule in AGENTS.md: older Helm chart
+    versions default to '1' rather than 'true'.
+    """
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ('true', '1')
+
+
 class StorageProvider(str, Enum):
     """Storage provider types for event and shared event storage."""
 

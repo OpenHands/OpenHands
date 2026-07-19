@@ -1,7 +1,11 @@
 import pytest
 
 from openhands.app_server.utils import environment
-from openhands.app_server.utils.environment import StorageProvider, get_storage_provider
+from openhands.app_server.utils.environment import (
+    StorageProvider,
+    env_flag_enabled,
+    get_storage_provider,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -31,6 +35,31 @@ def test_get_effective_base_url_non_lemonade(monkeypatch):
     base_url = 'https://api.example.com'
     result = environment.get_effective_llm_base_url('openai/gpt-4', base_url)
     assert result == base_url
+
+
+class TestEnvFlagEnabled:
+    """Tests for env_flag_enabled function.
+
+    Per AGENTS.md ("Environment Variable Enable Toggles"), both 'true' and '1'
+    must be accepted as truthy because older Helm chart versions default to '1'.
+    """
+
+    @pytest.mark.parametrize('value', ['true', 'True', 'TRUE', '1', ' true ', ' 1 '])
+    def test_truthy_values(self, monkeypatch, value):
+        monkeypatch.setenv('MY_FLAG', value)
+        assert env_flag_enabled('MY_FLAG') is True
+        assert env_flag_enabled('MY_FLAG', default=True) is True
+
+    @pytest.mark.parametrize('value', ['false', 'False', 'FALSE', '0', '', 'no', 'yes'])
+    def test_falsy_values(self, monkeypatch, value):
+        monkeypatch.setenv('MY_FLAG', value)
+        assert env_flag_enabled('MY_FLAG') is False
+        assert env_flag_enabled('MY_FLAG', default=True) is False
+
+    def test_unset_uses_default(self, monkeypatch):
+        monkeypatch.delenv('MY_FLAG', raising=False)
+        assert env_flag_enabled('MY_FLAG') is False
+        assert env_flag_enabled('MY_FLAG', default=True) is True
 
 
 class TestGetStorageProvider:

@@ -337,3 +337,43 @@ class TestGoogleCloudFileStore(TestCase, _StorageTest):
 class TestS3FileStore(TestCase, _StorageTest):
     def setUp(self):
         self.store = S3FileStore(bucket_name='dear-liza')
+
+
+class TestS3FileStoreSecureFlag(TestCase):
+    """AWS_S3_SECURE must accept both 'true' and '1' as truthy (AGENTS.md rule)."""
+
+    def _get_use_ssl(self, secure_value: str | None) -> bool:
+        captured: dict = {}
+
+        def fake_client(service, **kwargs):
+            captured.update(kwargs)
+            return _MockS3Client()
+
+        env = {'AWS_S3_SECURE': secure_value} if secure_value is not None else {}
+        with (
+            patch('boto3.client', fake_client),
+            patch.dict('os.environ', env, clear=False),
+        ):
+            if secure_value is None:
+                import os
+
+                os.environ.pop('AWS_S3_SECURE', None)
+            store = S3FileStore(bucket_name='dear-liza')
+            store.client
+        return captured['use_ssl']
+
+    def test_secure_true_enables_ssl(self):
+        assert self._get_use_ssl('true') is True
+
+    def test_secure_one_enables_ssl(self):
+        # Regression: '1' was previously treated as false, silently disabling TLS
+        assert self._get_use_ssl('1') is True
+
+    def test_secure_false_disables_ssl(self):
+        assert self._get_use_ssl('false') is False
+
+    def test_secure_zero_disables_ssl(self):
+        assert self._get_use_ssl('0') is False
+
+    def test_unset_defaults_to_ssl(self):
+        assert self._get_use_ssl(None) is True

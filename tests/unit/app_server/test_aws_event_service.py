@@ -289,6 +289,26 @@ class TestGetDefaultAwsEndpointUrl:
         result = aws_event_service._get_default_aws_endpoint_url()
         assert result == 'http://minio.example.com:9000'
 
+    def test_secure_one_is_truthy(self, monkeypatch):
+        """Test AWS_S3_SECURE='1' means secure (regression: was treated as false)."""
+        monkeypatch.setenv('AWS_S3_ENDPOINT', 'http://minio.example.com:9000')
+        monkeypatch.setenv('AWS_S3_SECURE', '1')
+
+        importlib.reload(aws_event_service)
+
+        result = aws_event_service._get_default_aws_endpoint_url()
+        assert result == 'https://minio.example.com:9000'
+
+    def test_secure_zero_is_falsy(self, monkeypatch):
+        """Test AWS_S3_SECURE='0' means insecure."""
+        monkeypatch.setenv('AWS_S3_ENDPOINT', 'https://minio.example.com:9000')
+        monkeypatch.setenv('AWS_S3_SECURE', '0')
+
+        importlib.reload(aws_event_service)
+
+        result = aws_event_service._get_default_aws_endpoint_url()
+        assert result == 'http://minio.example.com:9000'
+
     def test_secure_default_is_true(self, monkeypatch):
         """Test that secure defaults to true when not set."""
         monkeypatch.setenv('AWS_S3_ENDPOINT', 'minio.example.com:9000')

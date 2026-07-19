@@ -6,6 +6,7 @@ import botocore
 from pydantic import Field, PrivateAttr
 
 from openhands.app_server.file_store.files import FileStore
+from openhands.app_server.utils.environment import env_flag_enabled
 
 
 class S3ObjectDict(TypedDict):
@@ -43,7 +44,7 @@ class S3FileStore(FileStore):
         if self._client is None:
             access_key = os.getenv('AWS_ACCESS_KEY_ID')
             secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
-            secure = os.getenv('AWS_S3_SECURE', 'true').lower() == 'true'
+            secure = env_flag_enabled('AWS_S3_SECURE', default=True)
             endpoint = self._ensure_url_scheme(secure, os.getenv('AWS_S3_ENDPOINT'))
             self._client = boto3.client(
                 's3',
