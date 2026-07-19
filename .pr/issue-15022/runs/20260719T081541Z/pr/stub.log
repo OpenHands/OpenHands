@@ -1,0 +1,44 @@
+INFO:     Started server process [3035]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:<port> (Press CTRL+C to quit)
+INFO:     127.0.0.1:<port> - "GET /alive HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "POST /__test/reset HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "POST /__test/delete_key HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "GET /v1/model/info HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:<port> - "GET /v1/model/info HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:<port> - "GET /v1/model/info HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:<port> - "POST /key/delete HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "POST /key/generate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "POST /key/delete HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:<port> - "POST /__test/delete_key HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "GET /v1/model/info HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:<port> - "GET /alive HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "POST /api/profiles/Default HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "GET /api/profiles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "POST /api/bash/start_bash_command HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "GET /api/bash/bash_events/search?command_id__eq=c8ffdb0760c742d196c2db6d6b59a9f1&sort_order=TIMESTAMP&limit=100&kind__eq=BashOutput HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "POST /api/bash/start_bash_command HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "GET /api/bash/bash_events/search?command_id__eq=59f71d8ddf6b4587869cfa289c58973f&sort_order=TIMESTAMP&limit=100&kind__eq=BashOutput HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "POST /api/bash/start_bash_command HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "GET /api/bash/bash_events/search?command_id__eq=dd9f6dc8a4994730a5e17cfa3235ee49&sort_order=TIMESTAMP&limit=100&kind__eq=BashOutput HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "POST /api/bash/start_bash_command HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "GET /api/bash/bash_events/search?command_id__eq=60a136630eba4401be23778f2ded8bc2&sort_order=TIMESTAMP&limit=100&kind__eq=BashOutput HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "GET /api/file/download?path=.git%2Fhooks%2Fpre-commit HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:<port> - "POST /api/file/upload?path=.git%2Fhooks%2Fpre-commit HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:<port> - "POST /api/bash/start_bash_command HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "GET /api/bash/bash_events/search?command_id__eq=bf2a1fafe4964a7fb71d6f95f909ca22&sort_order=TIMESTAMP&limit=100&kind__eq=BashOutput HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "POST /api/skills HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "GET /v1/models HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:<port> - "POST /key/delete HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "POST /key/generate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "GET /v1/model/info HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:<port> - "POST /api/hooks HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "POST /api/skills HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "POST /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:<port> - "GET /v1/model/info HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:<port> - "GET /__test/state HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [3035]

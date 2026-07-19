@@ -1,0 +1,28 @@
+{
+  "artifact_dir": ".pr/issue-15022/runs/20260719T081541Z",
+  "created_at": "2026-07-19T08:16:51.072556+00:00",
+  "main": {
+    "agent_start_accepted": [
+      false
+    ],
+    "conversation_detail": "500: Conversation create failed (HTTP 500) on custom sandbox image sandbox-spec-live-evidence. Verify its openhands-sdk matches this release (1.36.0); rebuild/re-pin the image if not.",
+    "conversation_status": "ERROR",
+    "refresh_endpoint_status": 405,
+    "sha": "11d4ecf21fc144d10a614ddba63b84de5c90bfd4"
+  },
+  "pr": {
+    "agent_start_accepted": [
+      true
+    ],
+    "byok_byor_key_unchanged": true,
+    "byok_llm_key_unchanged": true,
+    "byok_refresh_status": 400,
+    "conversation_status": "READY",
+    "generated_key_metadata": [
+      {},
+      {}
+    ],
+    "managed_refresh_status": 200,
+    "sha": "1488e441234fd234d75a117fbe9f92cd8d491c17"
+  }
+}
