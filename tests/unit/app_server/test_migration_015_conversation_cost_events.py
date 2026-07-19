@@ -13,7 +13,6 @@ foreign key exist after the migration runs.
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
-import pytest
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
@@ -72,7 +71,9 @@ def test_upgrade_creates_table_indexes_and_cascade_fk(monkeypatch):
             'occurred_at',
         }
         assert table.c.cost_delta.server_default is not None
-        assert table.c.conversation_id.foreign_keys, 'expected FK to conversation_metadata'
+        assert table.c.conversation_id.foreign_keys, (
+            'expected FK to conversation_metadata'
+        )
 
         fk = list(table.c.conversation_id.foreign_keys)[0]
         assert fk.column.table.name == 'conversation_metadata'
@@ -82,7 +83,7 @@ def test_upgrade_creates_table_indexes_and_cascade_fk(monkeypatch):
             i.name
             for i in connection.execute(
                 sa.text(
-                    "SELECT name FROM sqlite_master "
+                    'SELECT name FROM sqlite_master '
                     "WHERE type='index' AND tbl_name='conversation_cost_events'"
                 )
             )
@@ -106,7 +107,7 @@ def test_downgrade_drops_table(monkeypatch):
 
         result = connection.execute(
             sa.text(
-                "SELECT name FROM sqlite_master "
+                'SELECT name FROM sqlite_master '
                 "WHERE type='table' AND name='conversation_cost_events'"
             )
         ).fetchall()
