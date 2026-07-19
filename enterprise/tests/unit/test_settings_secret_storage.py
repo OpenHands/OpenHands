@@ -1,5 +1,7 @@
 import importlib
 import json
+import sqlite3
+import uuid
 
 import pytest
 from pydantic import SecretStr
@@ -390,3 +392,198 @@ def test_fernet_looking_plaintext_is_encrypted_and_leniently_readable():
 
     cipher = get_settings_cipher_context()['cipher']
     assert cipher.decrypt(plaintext).get_secret_value() == plaintext
+
+
+@pytest.mark.asyncio
+async def test_saas_settings_store_persists_secret_aware_material_in_database(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv('DB_HOST', raising=False)
+    monkeypatch.setenv('POSTHOG_CLIENT_KEY', 'phc_test_dummy')
+
+    import storage.encrypt_utils as encrypt_utils
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    from storage.org import Org
+    from storage.org_member import OrgMember
+    from storage.role import Role
+    from storage.saas_settings_store import SaasSettingsStore
+    from storage.user import User
+    from storage.user_settings import UserSettings
+
+    from openhands.app_server import config as app_config
+    from openhands.app_server.config import AppServerConfig
+    from openhands.app_server.config_api.config_models import AppMode
+    from openhands.app_server.services.db_session_injector import DbSessionInjector
+    from openhands.app_server.services.jwt_service import JwtServiceInjector
+    from openhands.sdk.llm import LLM
+
+    old_config = app_config._global_config
+    old_jwt_service = encrypt_utils._jwt_service
+    old_settings_cipher = encrypt_utils._settings_cipher
+    old_fernet = encrypt_utils._fernet
+    try:
+        encrypt_utils._jwt_service = None
+        encrypt_utils._settings_cipher = None
+        encrypt_utils._fernet = None
+        db_injector = DbSessionInjector(persistence_dir=tmp_path, host=None)
+        app_config._global_config = AppServerConfig(
+            persistence_dir=tmp_path,
+            db_session=db_injector,
+            jwt=JwtServiceInjector(persistence_dir=tmp_path),
+            app_mode=AppMode.SAAS,
+            lifespan=None,
+        )
+        async_engine = await db_injector.get_async_db_engine()
+        tables = [
+            Role.__table__,
+            Org.__table__,
+            User.__table__,
+            OrgMember.__table__,
+            UserSettings.__table__,
+        ]
+        async with async_engine.begin() as conn:
+            await conn.run_sync(Org.metadata.create_all, tables=tables)
+        session_maker = async_sessionmaker(
+            bind=async_engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+
+        user_id = str(uuid.uuid4())
+        org_id = uuid.uuid4()
+        sentinels = {
+            'llm_api_key': 'test-llm-secret-sentinel',
+            'profile_api_key': 'test-profile-secret-sentinel',
+            'mcp_header': 'test-mcp-header-secret-sentinel',
+            'mcp_password': 'test-mcp-password-secret-sentinel',
+        }
+        async with session_maker() as session:
+            role = Role(name='owner', rank=1)
+            org = Org(
+                id=org_id,
+                name=f'Test Org {org_id.hex[:8]}',
+                org_version=1,
+                agent_settings={},
+                conversation_settings={},
+                enable_proactive_conversation_starters=True,
+            )
+            user = User(
+                id=uuid.UUID(user_id),
+                current_org_id=org_id,
+                user_consents_to_analytics=False,
+                enable_sound_notifications=False,
+                git_full_clone=False,
+            )
+            session.add_all([role, org, user])
+            await session.flush()
+            session.add(
+                OrgMember(
+                    org_id=org_id,
+                    user_id=uuid.UUID(user_id),
+                    role_id=role.id,
+                    status='active',
+                    llm_api_key='bootstrap-nonsecret-key',
+                )
+            )
+            await session.commit()
+
+        store = SaasSettingsStore(user_id=user_id)
+        settings = await store.load()
+        assert settings is not None
+        settings.update(
+            {
+                'agent_settings_diff': {
+                    'llm': {
+                        'model': 'anthropic/claude-sonnet-4-5-20250929',
+                        'api_key': sentinels['llm_api_key'],
+                    },
+                    'mcp_config': {
+                        'header-server': {
+                            'url': 'https://mcp-header.example.invalid/sse',
+                            'transport': 'sse',
+                            'auth': {
+                                'strategy': 'header',
+                                'headers': {'X-API-Key': sentinels['mcp_header']},
+                            },
+                        },
+                        'basic-server': {
+                            'url': 'https://mcp-basic.example.invalid/sse',
+                            'transport': 'sse',
+                            'auth': {
+                                'strategy': 'basic',
+                                'username': 'sentinel-user',
+                                'password': sentinels['mcp_password'],
+                            },
+                        },
+                    },
+                }
+            }
+        )
+        settings.llm_profiles.save(
+            'sentinel-profile',
+            LLM(
+                model='anthropic/claude-sonnet-4-5-20250929',
+                api_key=SecretStr(sentinels['profile_api_key']),
+            ),
+            include_secrets=True,
+        )
+        await store.store(settings)
+
+        db_path = tmp_path / 'openhands.db'
+        conn = sqlite3.connect(db_path)
+        try:
+            row = conn.execute(
+                'select org.llm_profiles, org_member.agent_settings_diff, '
+                'org_member._llm_api_key from org '
+                'join org_member on org.id = org_member.org_id'
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row is not None
+        raw_llm_profiles, raw_member_diff, raw_member_llm_key = row
+        raw_combined = json.dumps(row, default=str)
+        for sentinel in sentinels.values():
+            assert sentinel not in raw_combined
+        assert 'https://mcp-header.example.invalid/sse' in raw_combined
+        assert 'sentinel-profile' in raw_combined
+        assert raw_member_llm_key
+
+        cipher = encrypt_utils.get_settings_cipher()
+        profiles = json.loads(raw_llm_profiles)
+        profile_key = profiles['profiles']['sentinel-profile']['api_key']
+        assert profile_key != sentinels['profile_api_key']
+        assert (
+            cipher.decrypt(profile_key).get_secret_value()
+            == sentinels['profile_api_key']
+        )
+
+        member_diff = json.loads(raw_member_diff)
+        serialized_member_diff = json.dumps(member_diff)
+        assert sentinels['mcp_header'] not in serialized_member_diff
+        assert sentinels['mcp_password'] not in serialized_member_diff
+
+        loaded = await store.load()
+        assert loaded is not None
+        assert (
+            loaded.agent_settings.llm.api_key.get_secret_value()
+            == sentinels['llm_api_key']
+        )
+        servers = mcp_config_server_map(loaded.agent_settings.mcp_config)
+        assert (
+            servers['header-server'].auth.headers['X-API-Key'].get_secret_value()
+            == sentinels['mcp_header']
+        )
+        assert (
+            servers['basic-server'].auth.password.get_secret_value()
+            == sentinels['mcp_password']
+        )
+        assert (
+            loaded.llm_profiles.require('sentinel-profile').api_key.get_secret_value()
+            == sentinels['profile_api_key']
+        )
+    finally:
+        await db_injector.close()
+        app_config._global_config = old_config
+        encrypt_utils._jwt_service = old_jwt_service
+        encrypt_utils._settings_cipher = old_settings_cipher
+        encrypt_utils._fernet = old_fernet
