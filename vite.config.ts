@@ -433,7 +433,34 @@ export default defineConfig(({ mode }) => {
         },
       },
       watch: {
-        ignored: ["**/node_modules/**", "**/.git/**"],
+        // Ignore node_modules and .git as usual, plus agent-canvas runtime
+        // state directories that may live INSIDE the project tree.
+        //
+        // The dev launchers default `OH_CANVAS_SAFE_STATE_DIR` to
+        // `~/.openhands/agent-canvas` (outside the project), but users can
+        // override it via `.env`. A common misconfiguration is
+        // `OH_CANVAS_SAFE_STATE_DIR="$HOME/.openhands/agent-canvas"`: Node's
+        // `--env-file` does NOT expand `$HOME`, so `path.resolve(cwd, ...)`
+        // produces `<project-root>/$HOME/.openhands/agent-canvas` — i.e. a
+        // literal `$HOME` directory *inside* the project tree. The launcher
+        // then writes conversation events, logs, and session state there,
+        // and every write triggers a Vite file-watch event → HMR attempt →
+        // full page reload (the data files aren't HMR-boundaryable), causing
+        // an infinite reload loop while a conversation is active or being
+        // resent.
+        //
+        // Even with the correct `~/.openhands/...` default, some users keep
+        // per-install state inside the project (e.g. via a relative
+        // `OH_CANVAS_SAFE_STATE_DIR=./.openhands`) for portability. Ignoring
+        // these directories defensively protects both cases.
+        ignored: [
+          "**/node_modules/**",
+          "**/.git/**",
+          "**/.openhands/**",
+          "**/$HOME/**",
+          "**/dev_conversations/**",
+          "**/logs/**",
+        ],
       },
     },
     ssr: {
