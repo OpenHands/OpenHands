@@ -9,6 +9,13 @@ export default [
   route("login", "routes/login.tsx"),
   route("onboarding", "routes/onboarding-form.tsx"),
   route("information-request", "routes/information-request.tsx"),
+  route("automations/*", "routes/cross-app-redirect.tsx"),
+  route("canvas/*", "routes/cross-app-redirect.tsx", {
+    id: "routes/canvas-cross-app-redirect",
+  }),
+  route("integrations-hub/*", "routes/cross-app-redirect.tsx", {
+    id: "routes/integrations-hub-cross-app-redirect",
+  }),
   layout("routes/root-layout.tsx", [
     index("routes/home.tsx"),
     route("accept-tos", "routes/accept-tos.tsx"),
@@ -37,6 +44,9 @@ export default [
       route("api-keys", "routes/api-keys.tsx"),
       route("org-members", "routes/manage-organization-members.tsx"),
       route("org", "routes/manage-org.tsx"),
+      route("usage-monitoring", "routes/usage-monitoring.tsx"),
+      route("admin-dashboard", "routes/admin-dashboard.tsx"),
+      route("budgets", "routes/budgets.tsx"),
     ]),
     route("conversations/:conversationId", "routes/conversation.tsx"),
     route("oauth/device/verify", "routes/device-verify.tsx"),

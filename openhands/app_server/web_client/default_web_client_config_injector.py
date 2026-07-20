@@ -13,6 +13,7 @@ from openhands.app_server.web_client.web_client_config_injector import (
     WebClientConfigInjector,
 )
 from openhands.app_server.web_client.web_client_models import (
+    ACPModelOption,
     ACPProviderConfig,
     WebClientConfig,
     WebClientFeatureFlags,
@@ -119,6 +120,25 @@ def _get_slack_enabled() -> bool:
     )
 
 
+def _get_email_enabled() -> bool:
+    """Return whether transactional email delivery is configured."""
+    try:
+        from server.services.smtp_email_service import SMTPEmailService
+    except Exception:
+        smtp_enabled = bool(os.getenv('SMTP_HOST', '').strip())
+    else:
+        smtp_enabled = SMTPEmailService.is_configured()
+
+    try:
+        from server.services.email_service import EmailService
+    except Exception:
+        resend_enabled = bool(os.getenv('RESEND_API_KEY', '').strip())
+    else:
+        resend_enabled = EmailService.is_configured()
+
+    return smtp_enabled or resend_enabled
+
+
 def _get_jira_dc_oauth_host() -> str | None:
     """Hostname of the Jira Data Center server when DC OAuth is configured.
 
@@ -159,8 +179,15 @@ def _get_feature_flags() -> WebClientFeatureFlags:
 
     Reads ENABLE_BILLING, HIDE_LLM_SETTINGS, ENABLE_JIRA, ENABLE_JIRA_DC,
     ENABLE_LINEAR, HIDE_USERS_PAGE, HIDE_BILLING_PAGE, HIDE_INTEGRATIONS_PAGE,
-    ENABLE_ACP, and OH_ENABLE_ONBOARDING from environment. Each flag is True
-    only if the corresponding env var is exactly 'true', otherwise False.
+    HIDE_PERSONAL_WORKSPACES, and OH_ENABLE_ONBOARDING from environment. Each
+    flag is True only if the corresponding env var is exactly 'true', otherwise
+    False.
+
+    OH_ALLOW_USER_LLM_CONFIGURATION and ENABLE_ACP are the exceptions: they
+    default to 'true' when unset. OH_ALLOW_USER_LLM_CONFIGURATION keeps the
+    BYOK editing UI visible; ENABLE_ACP keeps the ACP agent configuration UI
+    (Settings > Agent) visible on SaaS and existing installs, matching Agent
+    Canvas. Set ENABLE_ACP=false to hide it.
     """
     return WebClientFeatureFlags(
         enable_billing=os.getenv('ENABLE_BILLING', 'false') == 'true',
@@ -171,8 +198,15 @@ def _get_feature_flags() -> WebClientFeatureFlags:
         hide_users_page=os.getenv('HIDE_USERS_PAGE', 'false') == 'true',
         hide_billing_page=os.getenv('HIDE_BILLING_PAGE', 'false') == 'true',
         hide_integrations_page=os.getenv('HIDE_INTEGRATIONS_PAGE', 'false') == 'true',
-        enable_acp=os.getenv('ENABLE_ACP', 'false') == 'true',
+        hide_personal_workspaces=os.getenv('HIDE_PERSONAL_WORKSPACES', 'false')
+        == 'true',
+        allow_user_llm_configuration=os.getenv(
+            'OH_ALLOW_USER_LLM_CONFIGURATION', 'true'
+        )
+        == 'true',
+        enable_acp=os.getenv('ENABLE_ACP', 'true') == 'true',
         enable_onboarding=os.getenv('OH_ENABLE_ONBOARDING', 'false') == 'true',
+        enable_automations=os.getenv('ENABLE_AUTOMATIONS', 'true') == 'true',
     )
 
 
@@ -206,6 +240,7 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
         }
     )
     slack_enabled: bool = Field(default_factory=_get_slack_enabled)
+    email_enabled: bool = Field(default_factory=_get_email_enabled)
     jira_dc_oauth_host: str | None = Field(default_factory=_get_jira_dc_oauth_host)
     jira_dc_service_account_managed: bool = Field(
         default_factory=_is_jira_dc_service_account_managed
@@ -221,10 +256,14 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
             ACPProviderConfig(
                 key=provider.key,
                 display_name=provider.display_name,
-                # SDK exposes ``default_command`` as ``tuple[str, ...]`` (frozen
-                # registry record); the API contract uses ``list[str]`` for
-                # JSON-friendliness.
                 default_command=list(provider.default_command),
+                default_model=provider.default_model or None,
+                available_models=[
+                    ACPModelOption(id=m.id, label=m.label)
+                    for m in (provider.available_models or [])
+                ],
+                api_key_env_var=provider.api_key_env_var,
+                base_url_env_var=provider.base_url_env_var,
             )
             for provider in ACP_PROVIDERS.values()
         ]
@@ -249,6 +288,7 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
             gitlab_enabled=self.gitlab_enabled,
             provider_default_hosts=self.provider_default_hosts,
             slack_enabled=self.slack_enabled,
+            email_enabled=self.email_enabled,
             jira_dc_oauth_host=self.jira_dc_oauth_host,
             jira_dc_service_account_managed=self.jira_dc_service_account_managed,
             jira_dc_service_account_email=self.jira_dc_service_account_email,

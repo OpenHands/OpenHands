@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { useNavigate } from "react-router";
 import { FaTrash, FaEye, FaEyeSlash, FaCopy } from "react-icons/fa6";
@@ -17,6 +17,7 @@ import { NewApiKeyModal } from "./new-api-key-modal";
 import { useApiKeys } from "#/hooks/query/use-api-keys";
 import { useLlmApiKey } from "#/hooks/query/use-llm-api-key";
 import { useRefreshLlmApiKey } from "#/hooks/mutation/use-refresh-llm-api-key";
+import { useOrganizations } from "#/hooks/query/use-organizations";
 
 interface LlmApiKeyManagerProps {
   llmApiKey: { key: string | null } | undefined;
@@ -157,17 +158,114 @@ function LlmApiKeyManager({
   );
 }
 
+type ApiKeyStatus = "active" | "pending" | "expired";
+
+const getApiKeyStatus = (key: ApiKey): ApiKeyStatus => {
+  const now = Date.now();
+  if (key.expires_at && new Date(key.expires_at).getTime() < now) {
+    return "expired";
+  }
+  if (key.not_before && new Date(key.not_before).getTime() > now) {
+    return "pending";
+  }
+  return "active";
+};
+
+const STATUS_BADGE_CLASSES: Record<ApiKeyStatus, string> = {
+  active: "bg-green-500/20 text-green-300",
+  pending: "bg-yellow-500/20 text-yellow-300",
+  expired: "bg-red-500/20 text-red-300",
+};
+
+function ApiKeyStatusBadge({ status }: { status: ApiKeyStatus }) {
+  const { t } = useTranslation();
+  const labelKey = {
+    active: I18nKey.SETTINGS$API_KEY_STATUS_ACTIVE,
+    pending: I18nKey.SETTINGS$API_KEY_STATUS_PENDING,
+    expired: I18nKey.SETTINGS$API_KEY_STATUS_EXPIRED,
+  }[status];
+
+  return (
+    <span
+      className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${STATUS_BADGE_CLASSES[status]}`}
+    >
+      {t(labelKey)}
+    </span>
+  );
+}
+
 interface ApiKeysTableProps {
   apiKeys: ApiKey[];
   isLoading: boolean;
   onDeleteKey: (key: ApiKey) => void;
 }
 
+function ApiKeyScopeBadge({
+  orgId,
+  orgLabel,
+}: {
+  orgId: string | null;
+  orgLabel: string;
+}) {
+  const { t } = useTranslation();
+  if (orgId === null) {
+    // Unbound key -- usable against any org via X-Org-Id.
+    return (
+      <span
+        className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-300"
+        title={t(I18nKey.SETTINGS$API_KEY_ORG_ALL_ORGS_DESCRIPTION)}
+      >
+        {t(I18nKey.SETTINGS$API_KEY_SCOPE_ALL_ORGS)}
+      </span>
+    );
+  }
+  // Bound key -- show the org's display name (or the fallback label
+  // when the org is no longer in the user's membership list).
+  return (
+    <span
+      className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-tertiary text-gray-300"
+      title={t(I18nKey.SETTINGS$API_KEY_SCOPE_BOUND_TITLE)}
+    >
+      {orgLabel}
+    </span>
+  );
+}
+
 function ApiKeysTable({ apiKeys, isLoading, onDeleteKey }: ApiKeysTableProps) {
   const { t } = useTranslation();
+  const { data: organizationsData } = useOrganizations();
+
+  // Map org id -> display label. Personal workspaces are rendered using
+  // the same "Personal Workspace" string as the create modal so the
+  // list, modal and header all read the same way.
+  const orgLabelsById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const org of organizationsData?.organizations ?? []) {
+      map.set(
+        org.id,
+        org.is_personal ? t(I18nKey.ORG$PERSONAL_WORKSPACE) : org.name,
+      );
+    }
+    return map;
+  }, [organizationsData, t]);
+
+  const resolveOrgLabel = (orgId: string | null): string => {
+    if (orgId === null) {
+      // Unbound keys are rendered as their own badge; this shouldn't
+      // be reached but keep a sensible fallback.
+      return t(I18nKey.SETTINGS$API_KEY_SCOPE_ALL_ORGS);
+    }
+    return (
+      orgLabelsById.get(orgId) ??
+      // Fallback when the user can no longer see the org (e.g. they
+      // left it). The id is short and unambiguous; the title carries
+      // the full sentence.
+      orgId.slice(0, 8)
+    );
+  };
 
   const formatDate = (dateString: string | null) => {
-    if (!dateString) return "Never";
+    if (!dateString) return "—";
     return new Date(dateString).toLocaleString();
   };
 
@@ -197,34 +295,74 @@ function ApiKeysTable({ apiKeys, isLoading, onDeleteKey }: ApiKeysTableProps) {
             <th className="text-left p-3 text-sm font-medium">
               {t(I18nKey.SETTINGS$LAST_USED)}
             </th>
+            <th className="text-left p-3 text-sm font-medium">
+              {t(I18nKey.SETTINGS$API_KEY_STATUS)}
+            </th>
+            <th className="text-left p-3 text-sm font-medium">
+              {t(I18nKey.SETTINGS$API_KEY_SCOPE)}
+            </th>
             <th className="text-right p-3 text-sm font-medium">
               {t(I18nKey.SETTINGS$ACTIONS)}
             </th>
           </tr>
         </thead>
         <tbody>
-          {apiKeys.map((key) => (
-            <tr key={key.id} className="border-t border-tertiary">
-              <td
-                className="p-3 text-sm truncate max-w-[160px]"
-                title={key.name}
-              >
-                {key.name}
-              </td>
-              <td className="p-3 text-sm">{formatDate(key.created_at)}</td>
-              <td className="p-3 text-sm">{formatDate(key.last_used_at)}</td>
-              <td className="p-3 text-right">
-                <button
-                  type="button"
-                  onClick={() => onDeleteKey(key)}
-                  aria-label={`Delete ${key.name}`}
-                  className="cursor-pointer"
+          {apiKeys.map((key) => {
+            const status = getApiKeyStatus(key);
+            const dimmed =
+              status === "expired" || status === "pending" ? "opacity-60" : "";
+            return (
+              <tr key={key.id} className={`border-t border-tertiary ${dimmed}`}>
+                <td
+                  className="p-3 text-sm truncate max-w-[160px]"
+                  title={key.name}
                 >
-                  <FaTrash size={16} />
-                </button>
-              </td>
-            </tr>
-          ))}
+                  {key.name}
+                </td>
+                <td className="p-3 text-sm">{formatDate(key.created_at)}</td>
+                <td className="p-3 text-sm">{formatDate(key.last_used_at)}</td>
+                <td className="p-3 text-sm">
+                  <div className="flex flex-col gap-1">
+                    <ApiKeyStatusBadge status={status} />
+                    {key.not_before && (
+                      <span
+                        className="text-xs text-gray-400"
+                        title={t(I18nKey.SETTINGS$API_KEY_NOT_BEFORE)}
+                      >
+                        {t(I18nKey.SETTINGS$API_KEY_NOT_BEFORE)}:{" "}
+                        {formatDate(key.not_before)}
+                      </span>
+                    )}
+                    {key.expires_at && (
+                      <span
+                        className="text-xs text-gray-400"
+                        title={t(I18nKey.SETTINGS$API_KEY_EXPIRES_AT)}
+                      >
+                        {t(I18nKey.SETTINGS$API_KEY_EXPIRES_AT)}:{" "}
+                        {formatDate(key.expires_at)}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="p-3 text-sm">
+                  <ApiKeyScopeBadge
+                    orgId={key.org_id}
+                    orgLabel={resolveOrgLabel(key.org_id)}
+                  />
+                </td>
+                <td className="p-3 text-right">
+                  <button
+                    type="button"
+                    onClick={() => onDeleteKey(key)}
+                    aria-label={`Delete ${key.name}`}
+                    className="cursor-pointer"
+                  >
+                    <FaTrash size={16} />
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

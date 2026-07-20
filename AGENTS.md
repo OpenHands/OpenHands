@@ -129,9 +129,13 @@ Backend:
   - All tests are in `tests/unit/test_*.py`
   - To test new code, run `poetry run pytest tests/unit/test_xxx.py` where `xxx` is the appropriate file for the current functionality
   - Write all tests with pytest
+  - Enterprise unit tests live under `enterprise/tests`; run them with `PYTHONPATH=enterprise poetry run pytest enterprise/tests/unit/test_xxx.py`
+
 
 Frontend:
 - Located in the `frontend` directory
+- UI refactors: Budgets UI is split into `budgets.tsx` + `budgets-tabs.tsx`, `budgets-components.tsx`, `budgets-constants.ts`. Usage monitoring dashboard is split into `usage-dashboard.tsx` with `usage-dashboard-tabs.tsx`, `usage-dashboard-widgets.tsx`, and `usage-dashboard-utils.ts`. Shared inline SVGs live in `frontend/src/components/shared/icons/inline-icons.tsx`.
+
 - Prerequisites: A recent version of NodeJS / NPM
 - Setup: Run `npm install` in the frontend directory
 - Testing:
@@ -177,8 +181,14 @@ The `enterprise/` directory contains additional functionality that extends the o
 - Authentication and user management (Keycloak integration)
 - Database migrations (Alembic)
 - Integration services (GitHub, GitLab, Jira, Linear, Slack)
+- Email services: Resend remains in `enterprise/server/services/email_service.py`; SMTPEmailService lives in
+  `enterprise/server/services/smtp_email_service.py` and is used for org invitations/budget alerts plus
+  the SMTP-driven UI email-enabled checks (SMTP_HOST).
 - Billing and subscription management (Stripe)
 - Telemetry and analytics (PostHog, custom metrics framework)
+- Email services: Resend remains in `enterprise/server/services/email_service.py`; SMTPEmailService lives in
+  `enterprise/server/services/smtp_email_service.py` and is used for org invitations/budget alerts plus
+  the SMTP-driven UI email-enabled checks (SMTP_HOST).
 
 ### Enterprise Development Setup
 
@@ -367,7 +377,7 @@ Your specialized knowledge and instructions here...
      - Add i18n translations for the setting name and any tooltips in `frontend/src/i18n/translation.json`
      - Add the translation key to `frontend/src/i18n/declaration.ts`
   2. Add the setting to the backend:
-     - Add the setting to the `Settings` model in `openhands/storage/data_models/settings.py`
+     - Add the setting to the `Settings` model in `openhands/app_server/settings/settings_models.py`
      - Update any relevant backend code to apply the setting (e.g., in session creation)
 
 #### Settings UI Patterns:

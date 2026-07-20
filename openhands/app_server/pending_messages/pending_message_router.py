@@ -80,7 +80,7 @@ async def queue_pending_message(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f'Invalid content format: {e}',
-        )
+        ) from e
 
     # Rate limit: max 10 pending messages per conversation
     pending_count = await pending_service.count_pending_messages(conversation_id)

@@ -153,9 +153,9 @@ class SaaSGitHubService(GitHubService):
                     f'Determined external_auth_id from Keycloak token: {self.external_auth_id}'
                 )
                 return self.external_auth_id
-            except Exception as e:
+            except Exception:
                 logger.warning(
-                    f'Could not determine external_auth_id from token: {e}',
+                    'Could not determine external_auth_id from token',
                     exc_info=True,
                 )
         return None

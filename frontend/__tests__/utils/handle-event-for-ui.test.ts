@@ -7,7 +7,9 @@ import {
   OpenHandsEvent,
 } from "#/types/v1/core";
 import { ACPToolCallEvent } from "#/types/v1/core/events/acp-tool-call-event";
+import { StreamingDeltaEvent } from "#/types/v1/core/events/streaming-delta-event";
 import { handleEventForUI } from "#/utils/handle-event-for-ui";
+import { isStreamingDeltaEvent } from "#/types/v1/type-guards";
 
 describe("handleEventForUI", () => {
   const mockObservationEvent: ObservationEvent = {
@@ -261,5 +263,272 @@ describe("handleEventForUI", () => {
     // ThinkObservation should never be added to uiEvents
     expect(result).toEqual([mockMessageEvent]);
     expect(result).not.toBe(initialUiEvents);
+  });
+});
+
+describe("handleEventForUI - streaming deltas", () => {
+  let nextId = 0;
+  const delta = (
+    content: string | null,
+    reasoning_content: string | null = null,
+  ): StreamingDeltaEvent => {
+    nextId += 1;
+    return {
+      id: `delta-${nextId}`,
+      timestamp: `2026-06-29T00:00:0${nextId}.000Z`,
+      source: "agent",
+      kind: "StreamingDeltaEvent",
+      content,
+      reasoning_content,
+    };
+  };
+
+  const userMessage: MessageEvent = {
+    id: "user-1",
+    timestamp: "2026-06-29T00:00:00.000Z",
+    source: "user",
+    llm_message: { role: "user", content: [{ type: "text", text: "hi" }] },
+    activated_microagents: [],
+    extended_content: [],
+  };
+
+  const assistantMessage = (text: string): MessageEvent => ({
+    id: "assistant-1",
+    timestamp: "2026-06-29T00:00:09.000Z",
+    source: "agent",
+    llm_message: { role: "assistant", content: [{ type: "text", text }] },
+    activated_microagents: [],
+    extended_content: [],
+  });
+
+  const stateUpdate = (id: string): OpenHandsEvent =>
+    ({
+      id,
+      timestamp: "2026-06-29T00:00:05.500Z",
+      source: "environment",
+      kind: "ConversationStateUpdateEvent",
+      key: "stats",
+      value: {},
+    }) as unknown as OpenHandsEvent;
+
+  it("merges consecutive deltas into one growing bubble keeping the first id", () => {
+    let ui: OpenHandsEvent[] = [userMessage];
+    const first = delta("Hello");
+    ui = handleEventForUI(first, ui);
+    ui = handleEventForUI(delta(", "), ui);
+    ui = handleEventForUI(delta("world"), ui);
+
+    expect(ui).toHaveLength(2);
+    const merged = ui[1];
+    expect(isStreamingDeltaEvent(merged)).toBe(true);
+    expect((merged as StreamingDeltaEvent).content).toBe("Hello, world");
+    expect(merged.id).toBe(first.id);
+  });
+
+  it("merges deltas into one bubble even when a state update interleaves", () => {
+    let ui: OpenHandsEvent[] = [userMessage];
+    const first = delta("Hello");
+    ui = handleEventForUI(first, ui);
+    ui = handleEventForUI(stateUpdate("state-1"), ui);
+    ui = handleEventForUI(delta(", world"), ui);
+
+    const deltas = ui.filter(isStreamingDeltaEvent) as StreamingDeltaEvent[];
+    expect(deltas).toHaveLength(1);
+    expect(deltas[0].content).toBe("Hello, world");
+    expect(deltas[0].id).toBe(first.id);
+  });
+
+  it("concatenates reasoning_content across deltas", () => {
+    let ui: OpenHandsEvent[] = [userMessage];
+    ui = handleEventForUI(delta(null, "think "), ui);
+    ui = handleEventForUI(delta(null, "more"), ui);
+
+    expect(ui).toHaveLength(2);
+    expect((ui[1] as StreamingDeltaEvent).reasoning_content).toBe("think more");
+  });
+
+  it("drops empty boundary deltas that carry no text", () => {
+    const ui = handleEventForUI(delta(null, null), [userMessage]);
+    expect(ui).toEqual([userMessage]);
+  });
+
+  it("reconciles the final assistant message into the delta without duplicating the bubble", () => {
+    let ui: OpenHandsEvent[] = [userMessage];
+    const first = delta("Hello");
+    ui = handleEventForUI(first, ui);
+    ui = handleEventForUI(delta(", world"), ui);
+    ui = handleEventForUI(assistantMessage("Hello, world"), ui);
+
+    expect(ui).toHaveLength(2); // user message + the (reconciled) delta bubble
+    const finalBubble = ui[1];
+    expect(isStreamingDeltaEvent(finalBubble)).toBe(true);
+    expect((finalBubble as StreamingDeltaEvent).content).toBe("Hello, world");
+    expect(finalBubble.id).toBe(first.id);
+  });
+
+  it("appends the final message's unstreamed suffix to the last delta", () => {
+    let ui: OpenHandsEvent[] = [userMessage];
+    ui = handleEventForUI(delta("Hel"), ui);
+    // The provider buffered the tail: final text has content never streamed.
+    ui = handleEventForUI(assistantMessage("Hello, world"), ui);
+
+    expect(ui).toHaveLength(2);
+    expect((ui[1] as StreamingDeltaEvent).content).toBe("Hello, world");
+  });
+
+  it("appends the final message normally when nothing was streamed (stream=False)", () => {
+    const final = assistantMessage("Complete answer");
+    const ui = handleEventForUI(final, [userMessage]);
+
+    expect(ui).toHaveLength(2);
+    expect(ui[1]).toBe(final);
+    expect(isStreamingDeltaEvent(ui[1])).toBe(false);
+  });
+});
+
+describe("handleEventForUI - durable events supersede streaming deltas", () => {
+  const userMessage: MessageEvent = {
+    id: "sup-user-1",
+    timestamp: "2026-07-03T00:00:00.000Z",
+    source: "user",
+    llm_message: { role: "user", content: [{ type: "text", text: "go" }] },
+    activated_microagents: [],
+    extended_content: [],
+  };
+
+  const mkDelta = (
+    id: string,
+    timestamp: string,
+    content: string | null,
+    reasoning_content: string | null = null,
+  ): StreamingDeltaEvent => ({
+    id,
+    timestamp,
+    source: "agent",
+    kind: "StreamingDeltaEvent",
+    content,
+    reasoning_content,
+  });
+
+  const mkAssistant = (timestamp: string, text: string): MessageEvent => ({
+    id: "sup-assistant-1",
+    timestamp,
+    source: "agent",
+    llm_message: { role: "assistant", content: [{ type: "text", text }] },
+    activated_microagents: [],
+    extended_content: [],
+  });
+
+  const mkAction = (timestamp: string, thoughtText: string): ActionEvent => ({
+    id: "sup-action-1",
+    timestamp,
+    source: "agent",
+    thought: [{ type: "text", text: thoughtText }],
+    thinking_blocks: [],
+    action: {
+      kind: "ExecuteBashAction",
+      command: "echo hello",
+      is_input: false,
+      timeout: null,
+      reset: false,
+    },
+    tool_name: "execute_bash",
+    tool_call_id: "sup-call-1",
+    tool_call: {
+      id: "sup-call-1",
+      type: "function",
+      function: {
+        name: "execute_bash",
+        arguments: '{"command": "echo hello"}',
+      },
+    },
+    llm_response_id: "sup-response-1",
+    security_risk: SecurityRisk.UNKNOWN,
+  });
+
+  it("drops a stale delta that arrives after a newer durable event (history replay race)", () => {
+    // On a page reload the WebSocket replay delivers durable events WITHOUT
+    // deltas, while the REST history includes them; the REST deltas can
+    // therefore arrive after the turn's final message is already rendered.
+    // Rendering them would fragment and duplicate the finished message.
+    const final = mkAssistant("2026-07-03T00:00:09.000Z", "Hello, world");
+    let ui: OpenHandsEvent[] = [userMessage];
+    ui = handleEventForUI(final, ui);
+    ui = handleEventForUI(
+      mkDelta("sup-late-1", "2026-07-03T00:00:01.000Z", "Hello"),
+      ui,
+    );
+
+    expect(ui).toEqual([userMessage, final]);
+  });
+
+  it("keeps a live delta that arrives after an earlier durable event", () => {
+    // The next step's narration streams after the previous step's action; it
+    // is newer than every durable event and must still render.
+    const action = mkAction("2026-07-03T00:00:02.000Z", "I'll run a command");
+    let ui: OpenHandsEvent[] = [userMessage, action];
+    const live = mkDelta("sup-live-1", "2026-07-03T00:00:03.000Z", "Next, ");
+    ui = handleEventForUI(live, ui);
+
+    expect(ui).toHaveLength(3);
+    expect(ui[2]).toBe(live);
+  });
+
+  it("removes the turn's preview deltas when a tool-call action arrives", () => {
+    // The action card renders its own thought (the same text that just
+    // streamed), so leaving the preview deltas in place displays every
+    // step's reasoning twice.
+    let ui: OpenHandsEvent[] = [userMessage];
+    ui = handleEventForUI(
+      mkDelta("sup-d1", "2026-07-03T00:00:01.000Z", "I'll run a command"),
+      ui,
+    );
+    const action = mkAction("2026-07-03T00:00:02.000Z", "I'll run a command");
+    ui = handleEventForUI(action, ui);
+
+    expect(ui).toEqual([userMessage, action]);
+  });
+
+  it("keeps a reasoning-only bubble when the superseding action lacks reasoning", () => {
+    // For many models the delta is the sole carrier of reasoning_content, so
+    // stripping the streamed text must not lose the reasoning display.
+    let ui: OpenHandsEvent[] = [userMessage];
+    ui = handleEventForUI(
+      mkDelta(
+        "sup-d5",
+        "2026-07-03T00:00:01.000Z",
+        "I'll run a command",
+        "considering the request",
+      ),
+      ui,
+    );
+    const action = mkAction("2026-07-03T00:00:02.000Z", "I'll run a command");
+    ui = handleEventForUI(action, ui);
+
+    expect(ui).toHaveLength(3);
+    const kept = ui[1] as StreamingDeltaEvent;
+    expect(isStreamingDeltaEvent(kept)).toBe(true);
+    expect(kept.content).toBeNull();
+    expect(kept.reasoning_content).toBe("considering the request");
+    expect(ui[2]).toBe(action);
+  });
+
+  it("replaces non-reconciling preview deltas with the final message instead of duplicating", () => {
+    // In a multi-step turn the deltas accumulated since the last user message
+    // include earlier steps' text, so the final summary never reconciles
+    // against them; previously both the stale bubble and the final message
+    // rendered. The durable final message is canonical.
+    let ui: OpenHandsEvent[] = [userMessage];
+    ui = handleEventForUI(
+      mkDelta("sup-d2", "2026-07-03T00:00:01.000Z", "Fin"),
+      ui,
+    );
+    const final = mkAssistant(
+      "2026-07-03T00:00:09.000Z",
+      "All three commands ran fine.",
+    );
+    ui = handleEventForUI(final, ui);
+
+    expect(ui).toEqual([userMessage, final]);
   });
 });

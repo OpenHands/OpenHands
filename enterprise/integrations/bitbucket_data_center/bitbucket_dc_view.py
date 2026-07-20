@@ -51,7 +51,9 @@ def extract_actor_slug(actor: dict) -> str:
     return actor.get('slug') or actor.get('name') or str(actor.get('id') or '') or ''
 
 
-PR_COMMENT_EVENTS = ('pr:comment:added', 'pr:comment:edited')
+# Created-only, like GitHub (action == 'created') and Jira DC (comment_created):
+# editing an existing @openhands comment must not start a second job.
+PR_COMMENT_EVENTS = ('pr:comment:added',)
 
 
 # =============================================================================
@@ -256,11 +258,12 @@ BitbucketDCViewType = BitbucketDCInlinePRComment | BitbucketDCPRComment | Bitbuc
 class BitbucketDCFactory:
     """Inspect a Bitbucket Data Center webhook payload and decide which view to build.
 
-    Bitbucket DC fires ``pr:comment:added`` (and ``pr:comment:edited``)
-    when a PR receives a comment. The resolver activates when the comment
-    body contains a case-insensitive mention of the configured
-    ``@openhands`` handle. Inline comments include an ``anchor`` block
-    with the file path and line number.
+    Bitbucket DC fires ``pr:comment:added`` when a PR receives a comment;
+    we act only on that (not ``pr:comment:edited``, so editing a comment
+    can't re-trigger). The resolver activates when the comment body
+    contains a case-insensitive mention of the configured ``@openhands``
+    handle. Inline comments include an ``anchor`` block with the file path
+    and line number.
     """
 
     @staticmethod

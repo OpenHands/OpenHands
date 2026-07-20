@@ -6,21 +6,29 @@ HOST = os.getenv('WEB_HOST', 'app.all-hands.dev').strip()
 
 # Check if this is a feature environment
 # Feature environments have a host format like {some-text}.staging.all-hands.dev
-# or {some-text}.ohe-staging.platform-team.all-hands.dev (for platform-team sandbox)
-# Just staging.all-hands.dev doesn't count as a feature environment
+# or {some-text}.staging.openhands.dev (the domain the staging/feature stack is
+# migrating to), or {some-text}.ohe-staging.platform-team.all-hands.dev (for the
+# platform-team sandbox). The bare staging host (staging.all-hands.dev /
+# staging.openhands.dev) does not count as a feature environment.
+STAGING_BASE_HOSTS = ('staging.all-hands.dev', 'staging.openhands.dev')
 IS_STAGING_ENV = bool(
-    re.match(r'^.+\.staging\.all-hands\.dev$', HOST)
+    re.match(r'^.+\.staging\.(?:all-hands|openhands)\.dev$', HOST)
     or re.match(r'^.+\.ohe-staging\.platform-team\.all-hands\.dev$', HOST)
-    or HOST == 'staging.all-hands.dev'
+    or HOST in STAGING_BASE_HOSTS
 )  # Includes the staging deployment + feature deployments
 IS_FEATURE_ENV = (
-    IS_STAGING_ENV and HOST != 'staging.all-hands.dev'
+    IS_STAGING_ENV and HOST not in STAGING_BASE_HOSTS
 )  # Does not include the staging deployment
 IS_LOCAL_ENV = bool(HOST == 'localhost')
 
+# Pattern for byor keys. Making this an environment variable allows different patterns so multiple environments can use
+# the same litellm instance in development
+BYOR_KEY_ALIAS_PATTERN = os.getenv(
+    'BYOR_KEY_ALIAS_PATTERN', 'BYOR Key - user {user_id}, org {org_id}'
+)
 
-# _is_all_hands_managed_domain() can be removed/replaced when a self-hosted specific
-# env var is created (e.g is_self_hosted` or `deployment_mode`)
+
+# Explicit OH_DEPLOYMENT_MODE wins; _is_all_hands_managed_domain() is the host fallback.
 def _is_all_hands_managed_domain(host: str) -> bool:
     """Check if the host is an All-Hands managed domain."""
     return (
@@ -28,16 +36,19 @@ def _is_all_hands_managed_domain(host: str) -> bool:
         or host == 'app.openhands.ai'
         or host.endswith('.all-hands.dev')
         or host.endswith('.openhands.ai')
+        or host.endswith('.openhands.dev')
     )
 
 
 def _get_deployment_mode() -> str:
-    """Determine deployment mode based on WEB_HOST.
+    """Determine deployment mode.
 
-    Returns:
-        'cloud' for All-Hands managed infrastructure (app.all-hands.dev, etc.)
-        'self_hosted' for enterprise self-hosted deployments (customer domains)
+    Honors an explicit OH_DEPLOYMENT_MODE ('cloud' | 'self_hosted'); otherwise
+    infers from WEB_HOST (managed domain -> 'cloud', else 'self_hosted').
     """
+    explicit = os.getenv('OH_DEPLOYMENT_MODE', '').strip().lower()
+    if explicit in ('cloud', 'self_hosted'):
+        return explicit
     if _is_all_hands_managed_domain(HOST):
         return 'cloud'
     return 'self_hosted'
@@ -118,6 +129,27 @@ PERMITTED_CORS_ORIGINS = [
 
 # Controls whether new orgs/users default to V1 API (env: DEFAULT_V1_ENABLED)
 DEFAULT_V1_ENABLED = os.getenv('DEFAULT_V1_ENABLED', '1').lower() in ('1', 'true')
+
+# Controls whether the admin POST /api/organizations/provision-user endpoint
+# is registered on the SaaS app (env: USER_PROVISIONING_ENABLED). Defaults to
+# off in staging and production via the Helm chart; deliberately env-gated so
+# the privileged route can be rolled out per-environment via Helm values.
+# Accepts both ``'true'`` and ``'1'`` because older Helm chart versions emit
+# the latter and would otherwise silently keep the feature disabled.
+USER_PROVISIONING_ENABLED = os.getenv('USER_PROVISIONING_ENABLED', 'false').lower() in (
+    'true',
+    '1',
+)
+
+# Controls whether any authenticated user is allowed to create an organization
+# via POST /api/organizations (env: OPEN_ORG_CREATION_ENABLED). When disabled
+# (the default), org creation remains restricted to @openhands.dev admin users.
+# Accepts both ``'true'`` and ``'1'`` because older Helm chart versions emit
+# the latter and would otherwise silently keep the feature disabled.
+OPEN_ORG_CREATION_ENABLED = os.getenv('OPEN_ORG_CREATION_ENABLED', 'false').lower() in (
+    'true',
+    '1',
+)
 
 
 def build_litellm_proxy_model_path(model_name: str) -> str:

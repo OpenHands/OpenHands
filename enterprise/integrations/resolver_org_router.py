@@ -70,9 +70,9 @@ async def resolve_org_for_repo(
             f'for {provider}/{git_org} (user {keycloak_user_id})',
         )
         return claim.org_id
-    except Exception as e:
-        logger.error(
-            f'[OrgResolver] Error resolving org for {provider}/{git_org}: {e}',
-            exc_info=True,
+    except Exception:
+        logger.exception(
+            f'[OrgResolver] Error resolving org for {provider}/{git_org}',
+            stack_info=True,
         )
         return None

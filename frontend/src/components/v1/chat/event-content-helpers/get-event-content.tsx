@@ -12,7 +12,11 @@ import { getActionContent } from "./get-action-content";
 import { getObservationContent } from "./get-observation-content";
 import { getACPToolCallContent } from "./get-acp-tool-call-content";
 import { TaskTrackingObservationContent } from "../task-tracking/task-tracking-observation-content";
-import { TaskTrackerObservation } from "#/types/v1/core/base/observation";
+import { SubagentObservationContent } from "../subagent/subagent-observation-content";
+import {
+  TaskTrackerObservation,
+  TaskObservation,
+} from "#/types/v1/core/base/observation";
 import { SkillReadyEvent, isSkillReadyEvent } from "./create-skill-ready-event";
 import i18n from "#/i18n";
 
@@ -100,6 +104,9 @@ const getActionEventTitle = (event: OpenHandsEvent): React.ReactNode => {
       break;
     case "TaskTrackerAction":
       actionKey = "ACTION_MESSAGE$TASK_TRACKING";
+      break;
+    case "TaskAction":
+      actionKey = "ACTION_MESSAGE$TASK";
       break;
     case "GrepAction":
       actionKey = "ACTION_MESSAGE$GREP";
@@ -204,6 +211,9 @@ const getObservationEventTitle = (
       }
       break;
     }
+    case "TaskObservation":
+      observationKey = "OBSERVATION_MESSAGE$TASK";
+      break;
     case "ThinkObservation":
       observationKey = "OBSERVATION_MESSAGE$THINK";
       break;
@@ -263,6 +273,14 @@ export const getEventContent = (
       details = (
         <TaskTrackingObservationContent
           event={event as ObservationEvent<TaskTrackerObservation>}
+        />
+      );
+    } else if (event.observation.kind === "TaskObservation") {
+      // The Query comes from the paired action's prompt.
+      details = (
+        <SubagentObservationContent
+          event={event as ObservationEvent<TaskObservation>}
+          correspondingAction={correspondingAction}
         />
       );
     } else {

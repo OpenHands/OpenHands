@@ -24,6 +24,7 @@ class TestIsOpenhandsModel:
         assert is_openhands_model('claude-3-opus-20240229') is False
         assert is_openhands_model('anthropic/claude-3-opus-20240229') is False
         assert is_openhands_model('openai/gpt-4') is False
+        assert is_openhands_model('litellm_proxy/gpt-4') is False
 
     def test_none_model_returns_false(self):
         """Test that None model returns False."""

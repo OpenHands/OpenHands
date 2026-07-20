@@ -28,6 +28,7 @@ class ApiKey(Base):
         DateTime, server_default=text('CURRENT_TIMESTAMP'), nullable=False
     )
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    not_before: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Relationships

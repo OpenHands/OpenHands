@@ -3,9 +3,11 @@ from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, SecretStr, field_validator
+from pydantic import BaseModel, SecretStr, field_validator, model_validator
+from server.auth.authorization import get_user_super_role
 from server.auth.org_context import EFFECTIVE_ORG_ID
 from server.auth.saas_user_auth import SaasUserAuth
+from server.constants import BYOR_KEY_ALIAS_PATTERN
 from storage.api_key import ApiKey
 from storage.api_key_store import ApiKeyStore
 from storage.lite_llm_manager import LiteLlmManager
@@ -55,6 +57,11 @@ async def store_byor_key_in_db(user_id: str, org_id: UUID, key: str) -> None:
     await OrgMemberStore.update_org_member(org_member)
 
 
+def _create_byor_key_alias(user_id: str, org_id: str) -> str:
+    alias = BYOR_KEY_ALIAS_PATTERN.format(user_id=user_id, org_id=org_id)
+    return alias
+
+
 async def generate_byor_key(user_id: str, org_id: UUID) -> str | None:
     """Generate a new BYOR key for a user in a specific org."""
     try:
@@ -62,7 +69,7 @@ async def generate_byor_key(user_id: str, org_id: UUID) -> str | None:
         key = await LiteLlmManager.generate_key(
             user_id,
             org_id_str,
-            f'BYOR Key - user {user_id}, org {org_id_str}',
+            _create_byor_key_alias(user_id, org_id_str),
             {'type': 'byor'},
         )
 
@@ -75,10 +82,13 @@ async def generate_byor_key(user_id: str, org_id: UUID) -> str | None:
             },
         )
         return key
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Error generating BYOR key',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={
+                'user_id': user_id,
+            },
+            stack_info=True,
         )
         return None
 
@@ -92,17 +102,20 @@ async def delete_byor_key_from_litellm(
     to clean up orphaned aliases that could block key regeneration.
     """
     try:
-        key_alias = f'BYOR Key - user {user_id}, org {org_id}'
+        key_alias = _create_byor_key_alias(user_id, str(org_id))
         await LiteLlmManager.delete_key(byor_key, key_alias=key_alias)
         logger.info(
             'Successfully deleted BYOR key from LiteLLM',
             extra={'user_id': user_id},
         )
         return True
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Error deleting BYOR key from LiteLLM',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={
+                'user_id': user_id,
+            },
+            stack_info=True,
         )
         return False
 
@@ -114,7 +127,13 @@ api_key_store = ApiKeyStore.get_instance()
 
 class ApiKeyCreate(BaseModel):
     name: str | None = None
+    not_before: datetime | None = None
     expires_at: datetime | None = None
+    # Org the key is bound to. ``None`` (or omitted) creates an *unbound*
+    # key whose effective org is resolved per-request via the ``X-Org-Id``
+    # header or, as a fallback, the caller's ``user.current_org_id``. When
+    # set, the caller must be a member of the requested org.
+    org_id: UUID | None = None
 
     @field_validator('expires_at')
     def validate_expiration(cls, v):
@@ -122,13 +141,26 @@ class ApiKeyCreate(BaseModel):
             raise ValueError('Expiration date cannot be in the past')
         return v
 
+    @model_validator(mode='after')
+    def validate_active_window(self):
+        if (
+            self.not_before is not None
+            and self.expires_at is not None
+            and self.not_before >= self.expires_at
+        ):
+            raise ValueError('not_before must be earlier than expires_at')
+        return self
+
 
 class ApiKeyResponse(BaseModel):
     id: int
     name: str | None = None
     created_at: datetime
     last_used_at: datetime | None = None
+    not_before: datetime | None = None
     expires_at: datetime | None = None
+    # ``None`` denotes an unbound key (scoped per-request via ``X-Org-Id``).
+    org_id: UUID | None = None
 
 
 class ApiKeyCreateResponse(ApiKeyResponse):
@@ -148,11 +180,19 @@ class MessageResponse(BaseModel):
 
 
 class CurrentApiKeyResponse(BaseModel):
-    """Response model for the current API key endpoint."""
+    """Response model for the current API key endpoint.
+
+    ``org_id`` is the *effective* org id of the current request: the
+    key's bound org for org-bound keys, or the resolved org (from the
+    ``X-Org-Id`` header or ``user.current_org_id``) for unbound keys.
+    ``bound_org_id`` distinguishes the two cases -- it is the org
+    persisted on the key, or ``None`` when the key is unbound.
+    """
 
     id: int
     name: str | None
     org_id: str
+    bound_org_id: str | None
     user_id: str
     auth_type: str
 
@@ -164,7 +204,9 @@ def api_key_to_response(key: ApiKey) -> ApiKeyResponse:
         name=key.name,
         created_at=key.created_at,
         last_used_at=key.last_used_at,
+        not_before=key.not_before,
         expires_at=key.expires_at,
+        org_id=key.org_id,
     )
 
 
@@ -180,13 +222,11 @@ async def check_byor_permitted(
         )
         return ByorPermittedResponse(permitted=permitted)
     except Exception as e:
-        logger.exception(
-            'Error checking BYOR export permission', extra={'error': str(e)}
-        )
+        logger.exception('Error checking BYOR export permission', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to check BYOR export permission',
-        )
+        ) from e
 
 
 @api_router.post('', tags=['Keys'])
@@ -195,28 +235,86 @@ async def create_api_key(
     user_id: str = Depends(get_user_id),
     effective_org_id: UUID = EFFECTIVE_ORG_ID,
 ) -> ApiKeyCreateResponse:
-    """Create a new API key bound to the request's effective org."""
+    """Create a new API key for the authenticated user.
+
+    The new key is bound to ``key_data.org_id`` when provided. An *omitted*
+    ``org_id`` falls back to the request's effective org (preserving the
+    pre-existing API). An *explicit* ``org_id: null`` creates an unbound
+    key whose effective org is resolved per-request via the ``X-Org-Id``
+    header or, as a fallback, the caller's ``user.current_org_id``. When a
+    specific ``org_id`` is supplied, the caller must be a member of that
+    org (or hold a super role).
+    """
+    if 'org_id' in key_data.model_fields_set:
+        # Caller expressed an explicit org choice -- ``null`` is meaningful
+        # (unbound key), an UUID requires a membership check.
+        target_org_id = key_data.org_id
+    else:
+        # Backwards-compatible default: bind to the effective org.
+        target_org_id = effective_org_id
+
+    if target_org_id is not None:
+        # Verify the caller is allowed to bind a key to this org.
+        try:
+            user_uuid = UUID(user_id)
+        except (TypeError, ValueError):
+            logger.warning('create_api_key_invalid_user_id', extra={'user_id': user_id})
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='Invalid user id',
+            )
+
+        member = await OrgMemberStore.get_org_member(target_org_id, user_uuid)
+        if member is None:
+            # Super-role bypass mirrors ``_resolve_org_id``: a user with a
+            # cross-org "super" role can bind keys on behalf of orgs they
+            # have not joined. The route still requires the explicit
+            # ``org_id`` in the request body for this to apply.
+            super_role = await get_user_super_role(user_id)
+            if super_role is None:
+                logger.warning(
+                    'create_api_key_not_a_member',
+                    extra={'user_id': user_id, 'org_id': str(target_org_id)},
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail='User is not a member of the requested organization',
+                )
+
     try:
         api_key = await api_key_store.create_api_key(
             user_id,
             key_data.name,
-            key_data.expires_at,
-            org_id=effective_org_id,
+            expires_at=key_data.expires_at,
+            not_before=key_data.not_before,
+            org_id=target_org_id,
+            # We've already decided the binding above (explicit null for
+            # unbound, the supplied UUID, or the effective org when omitted)
+            # so disable the store's current-org fallback.
+            use_current_org_fallback=False,
         )
-        # Get the created key details
-        keys = await api_key_store.list_api_keys(user_id, org_id=effective_org_id)
+        # Look up the row we just inserted so the response reflects the
+        # persisted ``org_id`` (which may be ``None`` for unbound keys).
+        # ``list_api_keys`` returns both bound keys for ``target_org_id`` and
+        # any unbound keys; matching by name+org disambiguates when the
+        # caller reuses a name across different org scopes.
+        keys = await api_key_store.list_api_keys(user_id, org_id=target_org_id)
         for key in keys:
-            if key.name == key_data.name:
+            if key.name == key_data.name and key.org_id == target_org_id:
                 return ApiKeyCreateResponse(
                     id=key.id,
                     name=key.name,
                     key=api_key,
                     created_at=key.created_at,
                     last_used_at=key.last_used_at,
+                    not_before=key.not_before,
                     expires_at=key.expires_at,
+                    org_id=key.org_id,
                 )
+    except HTTPException:
+        raise
     except Exception:
-        logger.exception('Error creating API key')
+        logger.exception('Error creating API key', stack_info=True)
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail='Failed to create API key',
@@ -233,7 +331,7 @@ async def list_api_keys(
         keys = await api_key_store.list_api_keys(user_id, org_id=effective_org_id)
         return [api_key_to_response(key) for key in keys]
     except Exception:
-        logger.exception('Error listing API keys')
+        logger.exception('Error listing API keys', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to list API keys',
@@ -275,7 +373,7 @@ async def delete_api_key(
     except HTTPException:
         raise
     except Exception:
-        logger.exception('Error deleting API key')
+        logger.exception('Error deleting API key', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to delete API key',
@@ -289,9 +387,9 @@ async def get_current_api_key(
 ) -> CurrentApiKeyResponse:
     """Get information about the currently authenticated API key.
 
-    This endpoint returns metadata about the API key used for the current request,
-    including the org_id associated with the key. This is useful for API key
-    callers who need to know which organization context their key operates in.
+    Returns the key's bound org (``bound_org_id``, ``None`` for unbound
+    keys) and the request's effective org (``org_id``, resolved from the
+    ``X-Org-Id`` header or ``user.current_org_id`` for unbound keys).
 
     Returns 400 if not authenticated via API key (e.g., using cookie auth).
     """
@@ -307,20 +405,23 @@ async def get_current_api_key(
     # In SaaS context, bearer auth always produces SaasUserAuth
     saas_user_auth = cast(SaasUserAuth, user_auth)
 
-    if saas_user_auth.api_key_org_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='This API key was created before organization support. Please regenerate your API key to use this endpoint.',
-        )
     if saas_user_auth.api_key_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail='This endpoint requires API key authentication.',
         )
+    # Resolve the effective org so unbound keys report the org they're
+    # actually operating in for this request.
+    effective_org_id = await saas_user_auth.get_effective_org_id()
     return CurrentApiKeyResponse(
         id=saas_user_auth.api_key_id,
         name=saas_user_auth.api_key_name,
-        org_id=str(saas_user_auth.api_key_org_id),
+        org_id=str(effective_org_id) if effective_org_id is not None else '',
+        bound_org_id=(
+            str(saas_user_auth.api_key_org_id)
+            if saas_user_auth.api_key_org_id is not None
+            else None
+        ),
         user_id=user_id,
         auth_type=saas_user_auth.auth_type.value,
     )
@@ -395,11 +496,11 @@ async def get_llm_api_key_for_byor(
         # Re-raise HTTP exceptions as-is
         raise
     except Exception as e:
-        logger.exception('Error retrieving BYOR LLM API key', extra={'error': str(e)})
+        logger.exception('Error retrieving BYOR LLM API key', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve BYOR LLM API key',
-        )
+        ) from e
 
 
 @api_router.post('/llm/byor/refresh', tags=['Keys'])
@@ -463,7 +564,7 @@ async def refresh_llm_api_key_for_byor(
         )
         return LlmApiKeyResponse(key=key)
     except HTTPException as he:
-        logger.error(
+        logger.exception(
             'HTTP exception during BYOR LLM API key refresh',
             extra={
                 'user_id': user_id,
@@ -471,6 +572,7 @@ async def refresh_llm_api_key_for_byor(
                 'detail': he.detail,
                 'exception_type': type(he).__name__,
             },
+            stack_info=True,
         )
         raise
     except Exception as e:
@@ -478,11 +580,11 @@ async def refresh_llm_api_key_for_byor(
             'Unexpected error refreshing BYOR LLM API key',
             extra={
                 'user_id': user_id,
-                'error': str(e),
                 'exception_type': type(e).__name__,
             },
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to refresh BYOR LLM API key',
-        )
+        ) from e

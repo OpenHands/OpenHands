@@ -96,6 +96,11 @@ export interface SettingsSourceConfig {
   sectionKeys: string[];
   /** Field keys to skip (rendered elsewhere by the caller). */
   excludeKeys?: Set<string>;
+  // The agent variant this page targets. SDK agent-settings is a
+  // discriminated union, so a key like "llm" exists under both the
+  // "openhands" and "acp" variants. When set, only sections matching this
+  // variant (plus shared, untagged ones) render — dropping the duplicate.
+  variant?: string;
 }
 
 export interface SdkSectionHeaderProps {
@@ -103,6 +108,12 @@ export interface SdkSectionHeaderProps {
   isDisabled: boolean;
   view: SettingsView;
   onChange: (key: string, value: string | boolean) => void;
+}
+
+interface SaveDisabledContext {
+  values: SettingsFormValues;
+  dirty: SettingsDirtyState;
+  view: SettingsView;
 }
 
 interface ResolvedSource extends SettingsSourceConfig {
@@ -133,7 +144,10 @@ export function SdkSectionPage({
   buildPayload,
   onSaveSuccess,
   getInitialView,
+  initialValueOverrides,
+  isSaveDisabled,
   forceShowAdvancedView = false,
+  allowAdvancedView = true,
   allowAllView = true,
   trailingActions,
   testId = "sdk-section-settings-screen",
@@ -165,11 +179,29 @@ export function SdkSectionPage({
     settings: Settings,
     filteredSchema: SettingsSchema,
   ) => SettingsView;
+  /**
+   * Values merged over the settings-derived initial form state, keyed by
+   * source. Used by create flows that should start from a blank form while
+   * edit flows keep hydrating from the persisted settings. Overridden fields
+   * are not marked dirty — they only change what the form initially shows.
+   */
+  initialValueOverrides?: Partial<
+    Record<SettingsValueSource, Partial<SettingsFormValues>>
+  >;
+  /**
+   * Extra gate on the Save button computed from the unified form state.
+   * Returning true disables Save even when the form is otherwise saveable.
+   */
+  isSaveDisabled?: (context: SaveDisabledContext) => boolean;
   // Extra buttons slotted into the Basic/Advanced/All control strip,
   // after the view toggles. Used by the LLM page to drop a Profiles
   // navigation button into the same row.
   trailingActions?: React.ReactNode;
   forceShowAdvancedView?: boolean;
+  // Master gate for the Advanced tier. When false the Advanced toggle never
+  // shows, even if the schema has advanced fields — e.g. the LLM page when
+  // BYOK is off, where Basic and Advanced would otherwise be identical.
+  allowAdvancedView?: boolean;
   allowAllView?: boolean;
   testId?: string;
 }) {
@@ -200,6 +232,7 @@ export function SdkSectionPage({
           source: s.settingsSource,
           sectionKeys: s.sectionKeys,
           excludeKeys: s.excludeKeys ? Array.from(s.excludeKeys).sort() : null,
+          variant: s.variant ?? null,
         })),
       ),
     [settingsSources],
@@ -212,11 +245,13 @@ export function SdkSectionPage({
       source: SettingsValueSource;
       sectionKeys: string[];
       excludeKeys: string[] | null;
+      variant: string | null;
     }>;
     return parsed.map((p) => ({
       settingsSource: p.source,
       sectionKeys: p.sectionKeys,
       excludeKeys: p.excludeKeys ? new Set(p.excludeKeys) : undefined,
+      variant: p.variant ?? undefined,
     }));
   }, [sourcesSignature]);
 
@@ -246,7 +281,16 @@ export function SdkSectionPage({
         const sectionSet = new Set(src.sectionKeys);
         const filteredSchema: SettingsSchema = {
           ...schema,
-          sections: schema.sections.filter((s) => sectionSet.has(s.key)),
+          // Keep sections matching the requested keys; when the source
+          // targets a variant, drop sections tagged with a different one
+          // (shared/untagged sections always render).
+          sections: schema.sections.filter(
+            (s) =>
+              sectionSet.has(s.key) &&
+              (src.variant == null ||
+                s.variant == null ||
+                s.variant === src.variant),
+          ),
         };
         return { ...src, filteredSchema };
       }),
@@ -254,8 +298,9 @@ export function SdkSectionPage({
   );
 
   const showAdvanced =
-    forceShowAdvancedView ||
-    resolvedSources.some((src) => hasAdvancedSettings(src.filteredSchema));
+    allowAdvancedView &&
+    (forceShowAdvancedView ||
+      resolvedSources.some((src) => hasAdvancedSettings(src.filteredSchema)));
   const showAll =
     allowAllView &&
     resolvedSources.some((src) => hasMinorSettings(src.filteredSchema));
@@ -276,7 +321,7 @@ export function SdkSectionPage({
     const result: Partial<Record<SettingsValueSource, SettingsFormValues>> = {};
     for (const src of resolvedSources) {
       if (!src.filteredSchema) return null;
-      result[src.settingsSource] = {
+      const values: SettingsFormValues = {
         ...(result[src.settingsSource] ?? {}),
         ...buildInitialSettingsFormValues(
           settings,
@@ -284,9 +329,18 @@ export function SdkSectionPage({
           src.settingsSource,
         ),
       };
+      const overrides = initialValueOverrides?.[src.settingsSource];
+      if (overrides) {
+        for (const [key, value] of Object.entries(overrides)) {
+          if (value !== undefined) {
+            values[key] = value;
+          }
+        }
+      }
+      result[src.settingsSource] = values;
     }
     return result;
-  }, [settings, resolvedSources]);
+  }, [settings, resolvedSources, initialValueOverrides]);
 
   const initialView = React.useMemo(() => {
     if (!settings) return null;
@@ -466,6 +520,13 @@ export function SdkSectionPage({
 
   const isDirty = Object.keys(flatDirty).length > 0;
 
+  const saveDisabledByCaller =
+    isSaveDisabled?.({
+      values: flatValues,
+      dirty: flatDirty,
+      view,
+    }) ?? false;
+
   return (
     <div data-testid={testId} className="h-full relative">
       <ViewToggle
@@ -499,7 +560,7 @@ export function SdkSectionPage({
           );
           return visibleSections.map((section) => (
             <section
-              key={`${src.settingsSource}:${section.key}`}
+              key={`${src.settingsSource}:${section.key}:${section.variant ?? ""}`}
               className="flex flex-col gap-4"
             >
               <div className="grid gap-4 xl:grid-cols-2">
@@ -526,7 +587,9 @@ export function SdkSectionPage({
             testId="save-button"
             type="button"
             variant="primary"
-            isDisabled={isPending || (!isDirty && !extraDirty)}
+            isDisabled={
+              isPending || saveDisabledByCaller || (!isDirty && !extraDirty)
+            }
             onClick={handleSave}
           >
             {isPending

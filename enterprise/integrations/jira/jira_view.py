@@ -26,6 +26,7 @@ from integrations.utils import (
     infer_repo_from_message,
 )
 from jinja2 import Environment
+from server.auth.constants import JIRA_HTTP_TIMEOUT
 from storage.jira_conversation import JiraConversation
 from storage.jira_integration_store import JiraIntegrationStore
 from storage.jira_user import JiraUser
@@ -90,7 +91,9 @@ class JiraNewConversationView(JiraViewInterface):
 
         try:
             url = f'{JIRA_CLOUD_API_URL}/{self.jira_workspace.jira_cloud_id}/rest/api/2/issue/{self.payload.issue_key}'
-            async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+            async with httpx.AsyncClient(
+                verify=httpx_verify_option(), timeout=JIRA_HTTP_TIMEOUT
+            ) as client:
                 response = await client.get(
                     url,
                     auth=(
@@ -127,24 +130,26 @@ class JiraNewConversationView(JiraViewInterface):
             return self._issue_title, self._issue_description
 
         except httpx.HTTPStatusError as e:
-            logger.error(
+            logger.exception(
                 '[Jira] Failed to fetch issue details',
                 extra={
                     'issue_key': self.payload.issue_key,
                     'status': e.response.status_code,
                 },
+                stack_info=True,
             )
-            raise StartingConvoException(
-                f'Failed to fetch issue details: HTTP {e.response.status_code}'
-            )
+            raise StartingConvoException('Failed to fetch issue details: HTTP') from e
         except Exception as e:
             if isinstance(e, StartingConvoException):
                 raise
-            logger.error(
+            logger.exception(
                 '[Jira] Failed to fetch issue details',
-                extra={'issue_key': self.payload.issue_key, 'error': str(e)},
+                extra={
+                    'issue_key': self.payload.issue_key,
+                },
+                stack_info=True,
             )
-            raise StartingConvoException(f'Failed to fetch issue details: {str(e)}')
+            raise StartingConvoException('Failed to fetch issue details') from e
 
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         """Get instructions for the conversation.
@@ -509,7 +514,7 @@ class JiraFactory:
         except StartingConvoException:
             raise  # Re-raise with original message
         except Exception as e:
-            raise StartingConvoException(f'Failed to fetch issue details: {str(e)}')
+            raise StartingConvoException('Failed to fetch issue details') from e
 
         # Infer and select repository
         selected_repo = await JiraFactory._infer_repository(

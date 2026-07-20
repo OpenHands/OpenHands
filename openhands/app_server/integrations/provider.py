@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping
 from types import MappingProxyType
 from typing import cast
@@ -165,7 +166,7 @@ class ProviderHandler:
         )
 
     async def get_user(self) -> User:
-        """Get user information from the first available provider"""
+        """Get user information from the first available provider."""
         exceptions: list[tuple[ProviderType, Exception]] = []
         for provider in self.provider_tokens:
             try:
@@ -174,11 +175,21 @@ class ProviderHandler:
             except Exception as e:
                 exceptions.append((provider, e))
                 continue
+
         for provider, exc in exceptions:
             logger.warning(
                 f'Failed to get user from provider {provider}: {exc}',
                 exc_info=(type(exc), exc, exc.__traceback__),
             )
+
+        # Only invalid provider credentials should surface as an authentication
+        # failure. Transient upstream/provider errors (for example GitHub 5xx or
+        # timeouts) must not become 401s, because the web client treats a 401
+        # from /users/git-info as a signal to log out the browser session.
+        for _, exc in exceptions:
+            if not isinstance(exc, AuthenticationError):
+                raise exc
+
         raise AuthenticationError('Need valid provider token')
 
     async def _get_latest_provider_token(
@@ -205,10 +216,10 @@ class ProviderHandler:
             data = TokenResponse.model_validate_json(resp.text)
             return SecretStr(data.token)
 
-        except Exception as e:
-            logger.error(
-                f'Failed to fetch latest token for provider {provider}: {e}',
-                exc_info=True,
+        except Exception:
+            logger.exception(
+                f'Failed to fetch latest token for provider {provider}',
+                stack_info=True,
             )
 
         return None
@@ -448,7 +459,10 @@ class ProviderHandler:
             log_fn(
                 f'Failed to access repository {repository}: Unknown error (no providers tried, no errors recorded)'
             )
-        raise AuthenticationError(f'Unable to access repo {repository}')
+        # Keep the underlying provider error(s) in the message so callers can
+        # log why (e.g. 404 vs 401) instead of an opaque failure.
+        detail = f': {"; ".join(errors)}' if errors else ''
+        raise AuthenticationError(f'Unable to access repo {repository}{detail}')
 
     async def get_branches(
         self,
@@ -543,9 +557,10 @@ class ProviderHandler:
         if domain:
             domain = domain.strip()
             domain = domain.replace('https://', '').replace('http://', '')
-            # Remove any trailing path like /api/v3 or /api/v4
-            if '/' in domain:
-                domain = domain.split('/')[0]
+            # Strip a trailing API path (e.g. /api/v3) but preserve any subpath
+            # that is part of the repo URL (e.g. Forgejo under myserver/forgejo).
+            domain = re.sub(r'/api/(?:v\d+|graphql)/?$', '', domain)
+            domain = domain.rstrip('/')
 
         # Try to use token if available, otherwise use public URL
         if self.provider_tokens and provider in self.provider_tokens:

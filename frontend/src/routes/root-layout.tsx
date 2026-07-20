@@ -31,9 +31,8 @@ import { AlertBanner } from "#/components/features/alerts/alert-banner";
 import { cn } from "#/utils/utils";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useAppTitle } from "#/hooks/use-app-title";
-import { useInvitation } from "#/hooks/use-invitation";
-import { InvitationAcceptModal } from "#/components/features/invitations/invitation-accept-modal";
-import { useSwitchOrganization } from "#/hooks/mutation/use-switch-organization";
+import { useAutoAcceptInvitation } from "#/hooks/use-auto-accept-invitation";
+import { usePostHogIdentify } from "#/hooks/use-posthog-identify";
 
 export function ErrorBoundary() {
   const error = useRouteError();
@@ -88,10 +87,8 @@ export default function MainApp() {
 
   const [consentFormIsOpen, setConsentFormIsOpen] = React.useState(false);
 
-  // Invitation acceptance modal state
-  const { invitationToken, clearInvitation } = useInvitation();
-  const { mutate: switchOrganization } = useSwitchOrganization();
-  const [showInvitationModal, setShowInvitationModal] = React.useState(false);
+  // Accept a pending invitation token once authenticated
+  useAutoAcceptInvitation();
 
   // Auto-login if login method is stored in local storage
   useAutoLogin();
@@ -104,6 +101,9 @@ export default function MainApp() {
 
   // Sync PostHog opt-in/out state with backend setting on mount
   useSyncPostHogConsent();
+
+  // Identify the user to PostHog using the same distinct_id as the server
+  usePostHogIdentify();
 
   // Auto-select the first organization when none is selected
   useAutoSelectOrganization();
@@ -142,28 +142,6 @@ export default function MainApp() {
       displaySuccessToast(t(I18nKey.BILLING$YOURE_IN));
     }
   }, [settings?.is_new_user, config.data?.app_mode]);
-
-  // Show invitation modal when authenticated and has invitation token
-  React.useEffect(() => {
-    if (isAuthed && invitationToken && !isOnIntermediatePage) {
-      setShowInvitationModal(true);
-    }
-  }, [isAuthed, invitationToken, isOnIntermediatePage]);
-
-  const handleInvitationClose = React.useCallback(() => {
-    setShowInvitationModal(false);
-    clearInvitation();
-  }, [clearInvitation]);
-
-  const handleInvitationSuccess = React.useCallback(
-    (payload: { orgId: string; orgName: string; isPersonal: boolean }) => {
-      setShowInvitationModal(false);
-      clearInvitation();
-      // Switch to the newly joined organization
-      switchOrganization(payload);
-    },
-    [clearInvitation, switchOrganization],
-  );
 
   // Function to check if login method exists in local storage
   const checkLoginMethodExists = React.useCallback(() => {
@@ -293,13 +271,6 @@ export default function MainApp() {
           onClose={() => {
             setConsentFormIsOpen(false);
           }}
-        />
-      )}
-      {showInvitationModal && invitationToken && (
-        <InvitationAcceptModal
-          token={invitationToken}
-          onClose={handleInvitationClose}
-          onSuccess={handleInvitationSuccess}
         />
       )}
     </div>

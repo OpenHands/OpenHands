@@ -56,6 +56,7 @@ authorize_url_generator = AuthorizeUrlGenerator(
         'app_mentions:read',
         'chat:write',
         'users:read',
+        'files:read',
         'channels:history',
         'groups:history',
         'mpim:history',
@@ -71,7 +72,7 @@ jwt_service_dependency = depends_jwt_service()
 
 @slack_router.get('/install')
 async def install(state: str = ''):
-    """Forward into slack OAuth. (Most workflows can skip this and jump directly into slack authentication, so we skip OAuth state generation)"""
+    """Forward into Slack OAuth."""
     url = authorize_url_generator.generate(state=state)
     return RedirectResponse(url)
 
@@ -136,7 +137,7 @@ async def install_callback(
 
         return RedirectResponse(auth_url)
     except Exception:  # type: ignore
-        logger.error('unexpected_error', exc_info=True, stack_info=True)
+        logger.exception('unexpected_error', stack_info=True)
         return _html_response(
             title='Error',
             description='Internal server Error',
@@ -441,8 +442,8 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
             extra={
                 'slack_user_id': slack_user_id,
                 'search_value': search_value,
-                'error': str(e),
             },
+            stack_info=True,
         )
         # Notify user about the unexpected error with error code
         background_tasks.add_task(

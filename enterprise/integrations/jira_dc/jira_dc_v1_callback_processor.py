@@ -14,6 +14,7 @@ from integrations.jira_dc.jira_dc_service_account import (
 )
 from integrations.utils import get_summary_instruction, markdown_to_jira_markup
 from pydantic import Field
+from server.auth.constants import JIRA_DC_HTTP_TIMEOUT
 from server.auth.token_manager import TokenManager
 from storage.jira_dc_integration_store import JiraDcIntegrationStore
 
@@ -95,7 +96,7 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
                 detail=summary,
             )
         except Exception as e:
-            _logger.exception(f'[Jira DC] Failed to post summary: {e}', stack_info=True)
+            _logger.exception('[Jira DC] Failed to post summary', stack_info=True)
             return EventCallbackResult(
                 status=EventCallbackResultStatus.ERROR,
                 event_callback_id=callback.id,
@@ -183,7 +184,7 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
                 url,
                 json=payload,
                 headers=headers,
-                timeout=30.0,
+                timeout=JIRA_DC_HTTP_TIMEOUT,
             )
             response.raise_for_status()
 
@@ -208,10 +209,14 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
                 dict(e.response.headers),
                 stack_info=True,
             )
-            raise Exception(f'Failed to send message to agent server: {error_detail}')
+            raise Exception(
+                f'Failed to send message to agent server: {error_detail}'
+            ) from e
 
         except httpx.TimeoutException:
-            error_detail = f'Request timeout after 30 seconds to {url}'
+            error_detail = (
+                f'Request timeout after {JIRA_DC_HTTP_TIMEOUT:g} seconds to {url}'
+            )
             _logger.exception(
                 '[Jira DC] Timeout error: %s. Request payload: %s',
                 error_detail,
@@ -253,7 +258,9 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
 
         headers = {'Authorization': f'Bearer {service_account.api_key}'}
 
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=JIRA_DC_HTTP_TIMEOUT
+        ) as client:
             response = await client.post(
                 comment_url,
                 headers=headers,

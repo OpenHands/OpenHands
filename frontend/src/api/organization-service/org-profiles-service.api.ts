@@ -14,6 +14,9 @@ interface OrgLlmProfileListResponse {
 
 export interface SaveOrgLlmProfileRequest {
   include_secrets?: boolean;
+  // True when the user typed no new key, so the backend keeps the profile's
+  // stored key instead of snapshotting the active settings' key.
+  preserve_existing_api_key?: boolean;
   llm?: {
     model: string;
     base_url?: string | null;
