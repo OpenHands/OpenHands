@@ -1308,7 +1308,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         current member's stored managed key. BYOK/custom keys and OSS/local
         deployments are left untouched.
         """
-        _logger.info(
+        _logger.debug(
             'managed_llm_key_refresh:evaluate',
             extra={
                 'app_mode': self.app_mode,
@@ -1320,14 +1320,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
 
         if self.app_mode != 'saas':
-            _logger.info(
+            _logger.debug(
                 'managed_llm_key_refresh:skip_non_saas',
                 extra={'app_mode': self.app_mode, 'user_id': user.id},
             )
             return llm
 
         if not user.id or not llm.api_key:
-            _logger.info(
+            _logger.debug(
                 'managed_llm_key_refresh:skip_prerequisite',
                 extra={
                     'has_user_id': bool(user.id),
@@ -1365,7 +1365,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             normalized_base_url != managed_base_url
             and not uses_openhands_provider_proxy
         ):
-            _logger.info(
+            _logger.debug(
                 'managed_llm_key_refresh:skip_non_managed_base_url',
                 extra={
                     'user_id': user.id,
@@ -1382,7 +1382,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             else str(llm.api_key)
         )
         if not key or key == '**********':
-            _logger.info(
+            _logger.debug(
                 'managed_llm_key_refresh:skip_empty_or_masked_key',
                 extra={
                     'user_id': user.id,
@@ -1395,7 +1395,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         get_effective_org_id = getattr(self.user_context, 'get_effective_org_id', None)
         if get_effective_org_id is None:
-            _logger.info(
+            _logger.debug(
                 'managed_llm_key_refresh:skip_missing_effective_org_getter',
                 extra={'user_id': user.id, 'model': llm.model},
             )
@@ -1404,13 +1404,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         try:
             org_id = await get_effective_org_id()
             if org_id is None:
-                _logger.info(
+                _logger.debug(
                     'managed_llm_key_refresh:skip_missing_effective_org',
                     extra={'user_id': user.id, 'model': llm.model},
                 )
                 return llm
 
-            _logger.info(
+            _logger.debug(
                 'managed_llm_key_refresh:checking_current_key',
                 extra={
                     'user_id': user.id,
@@ -1425,7 +1425,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
             managed_key = await settings_store.get_current_managed_llm_key()
             if managed_key is None:
-                _logger.info(
+                _logger.debug(
                     'managed_llm_key_refresh:skip_no_current_managed_key',
                     extra={
                         'user_id': user.id,
@@ -1435,7 +1435,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 )
                 return llm
             if managed_key != key:
-                _logger.info(
+                _logger.debug(
                     'managed_llm_key_refresh:skip_key_mismatch',
                     extra={
                         'user_id': user.id,
@@ -1447,7 +1447,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
             key_is_valid = await LiteLlmManager.verify_key(key, user.id)
             if key_is_valid:
-                _logger.info(
+                _logger.debug(
                     'managed_llm_key_refresh:skip_key_still_valid',
                     extra={
                         'user_id': user.id,
@@ -1574,7 +1574,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         """
         # Configure LLM
         llm = self._configure_llm(user, llm_model)
-        _logger.info(
+        _logger.debug(
             'managed_llm_key_refresh:configured_llm',
             extra={
                 'user_id': user.id,
@@ -1939,7 +1939,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
         user = launch_snapshot.user
         llm_settings = getattr(user.agent_settings, 'llm', None)
-        _logger.info(
+        _logger.debug(
             'managed_llm_key_refresh:build_request_context',
             extra={
                 'user_id': user.id,
@@ -1958,7 +1958,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Route ACP agent settings to the ACP-specific builder
         if isinstance(user.agent_settings, ACPAgentSettings):
-            _logger.info(
+            _logger.debug(
                 'managed_llm_key_refresh:skip_acp_agent_settings',
                 extra={
                     'user_id': user.id,
