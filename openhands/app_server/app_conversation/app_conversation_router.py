@@ -250,6 +250,10 @@ async def search_app_conversations(
         str | None,
         Query(title='Optional next_page_id from the previously returned page'),
     ] = None,
+    tag: Annotated[
+        list[str] | None,
+        Query(title='Filter by tags (e.g., tag=key=value)'),
+    ] = None,
     limit: Annotated[
         int,
         Query(
@@ -279,6 +283,7 @@ async def search_app_conversations(
         page_id=page_id,
         limit=limit,
         include_sub_conversations=include_sub_conversations,
+        tag=tag,
     )
 
 
@@ -308,6 +313,10 @@ async def count_app_conversations(
         str | None,
         Query(title='Filter by exact sandbox_id'),
     ] = None,
+    tag: Annotated[
+        list[str] | None,
+        Query(title='Filter by tags (e.g., tag=key=value)'),
+    ] = None,
     app_conversation_service: AppConversationService = (
         app_conversation_service_dependency
     ),
@@ -320,6 +329,7 @@ async def count_app_conversations(
         updated_at__gte=updated_at__gte,
         updated_at__lt=updated_at__lt,
         sandbox_id__eq=sandbox_id__eq,
+        tag=tag,
     )
 
 

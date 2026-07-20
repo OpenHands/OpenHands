@@ -338,6 +338,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        tag: list[str] | None = None,
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 20,
@@ -351,6 +352,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
             sandbox_id__eq=sandbox_id__eq,
+            tag=tag,
             sort_order=sort_order,
             page_id=page_id,
             limit=limit,
@@ -369,7 +371,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        tag: list[str] | None = None,
     ) -> int:
+        """Count sandboxed conversations."""
         return await self.app_conversation_info_service.count_app_conversation_info(
             title__contains=title__contains,
             created_at__gte=created_at__gte,
@@ -377,6 +381,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
             sandbox_id__eq=sandbox_id__eq,
+            tag=tag,
         )
 
     async def get_app_conversation(
@@ -574,7 +579,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             # ``agent`` is the source of truth here): the response echoes
             # the same agent back through the AgentBase discriminator.
             request_agent = start_conversation_request.agent
-            tags: dict[str, str] = {}
+            tags: dict[str, str] = request.tags.copy() if request.tags else {}
             # Pin where the workspace was actually created so the delete-time
             # archive captures the right directory without re-deriving the path
             # from settings (e.g. grouping) that may change before delete.

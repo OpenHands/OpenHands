@@ -182,6 +182,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        tag: list[str] | None = None,
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
@@ -205,6 +206,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
             sandbox_id__eq=sandbox_id__eq,
+            tag=tag,
         )
 
         # Add sort order
@@ -260,6 +262,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        tag: list[str] | None = None,
     ) -> int:
         """Count sandboxed conversations matching the given filters."""
         query = select(func.count(StoredConversationMetadata.conversation_id)).where(
@@ -274,6 +277,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             updated_at__gte=updated_at__gte,
             updated_at__lt=updated_at__lt,
             sandbox_id__eq=sandbox_id__eq,
+            tag=tag,
         )
 
         result = await self.db_session.execute(query)
@@ -289,6 +293,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        tag: list[str] | None = None,
     ) -> Select:
         # Apply the same filters as search_app_conversations
         conditions: list[ColumnElement[bool]] = []
@@ -315,6 +320,16 @@ class SQLAppConversationInfoService(AppConversationInfoService):
 
         if sandbox_id__eq is not None:
             conditions.append(StoredConversationMetadata.sandbox_id == sandbox_id__eq)
+
+        if tag is not None:
+            for t in tag:
+                # tag format: key=value
+                if '=' in t:
+                    key, val = t.split('=', 1)
+                    # For a JSON column in SQLAlchemy, we can access the key and compare it as a string
+                    conditions.append(
+                        StoredConversationMetadata.tags[key].as_string() == val
+                    )
 
         if conditions:
             query = query.where(*conditions)

@@ -25,6 +25,7 @@ class AppConversationInfoService(ABC):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        tag: list[str] | None = None,
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
@@ -41,6 +42,7 @@ class AppConversationInfoService(ABC):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
         sandbox_id__eq: str | None = None,
+        tag: list[str] | None = None,
     ) -> int:
         """Count sandboxed conversations."""
 
