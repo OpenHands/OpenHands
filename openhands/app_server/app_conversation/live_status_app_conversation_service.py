@@ -2559,12 +2559,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         sandbox = await self.sandbox_service.get_sandbox(
             app_conversation_info.sandbox_id
         )
-        assert sandbox is not None, (
-            f'Sandbox {app_conversation_info.sandbox_id} not found for conversation {conversation_id}'
-        )
-        assert sandbox.exposed_urls is not None, (
-            f'Sandbox {app_conversation_info.sandbox_id} has no exposed URLs for conversation {conversation_id}'
-        )
+        assert (
+            sandbox is not None
+        ), f'Sandbox {app_conversation_info.sandbox_id} not found for conversation {conversation_id}'
+        assert (
+            sandbox.exposed_urls is not None
+        ), f'Sandbox {app_conversation_info.sandbox_id} has no exposed URLs for conversation {conversation_id}'
 
         # Use the existing method to get the agent-server URL
         agent_server_url = self._get_agent_server_url(sandbox)
