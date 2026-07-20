@@ -9,11 +9,7 @@ from fastapi import HTTPException, status
 
 from openhands.app_server.config import get_global_config, get_sandbox_service
 from openhands.app_server.config_api.config_models import AppMode
-from openhands.app_server.sandbox.sandbox_models import (
-    SandboxInfo,
-    SandboxRecord,
-    SandboxStatus,
-)
+from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxStatus
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
 
@@ -67,32 +63,7 @@ async def validate_session_key(
     return sandbox_info
 
 
-async def validate_teardown_session_key(
-    session_api_key: str | None,
-) -> SandboxRecord:
-    """Validate a teardown-only sandbox session key."""
-    if not session_api_key:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED,
-            detail='X-Session-API-Key header is required',
-        )
-
-    state = InjectorState()
-    setattr(state, USER_CONTEXT_ATTR, ADMIN)
-    async with get_sandbox_service(state) as sandbox_service:
-        sandbox = await sandbox_service.get_sandbox_record_by_teardown_session_api_key(
-            session_api_key
-        )
-    if sandbox is None:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED,
-            detail='Invalid teardown session API key',
-        )
-    _validate_sandbox_user(sandbox)
-    return sandbox
-
-
-def _validate_sandbox_user(sandbox: SandboxInfo | SandboxRecord) -> None:
+def _validate_sandbox_user(sandbox: SandboxInfo) -> None:
     if not sandbox.created_by_user_id and get_global_config().app_mode == AppMode.SAAS:
         _logger.error(
             'Sandbox had no user specified',

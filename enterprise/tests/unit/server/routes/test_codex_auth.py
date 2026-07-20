@@ -120,14 +120,8 @@ def broker(monkeypatch):
         'session-b': _sandbox('b'),
     }
     validate_session_key = AsyncMock(side_effect=lambda key, **_kwargs: sandboxes[key])
-    validate_teardown_session_key = AsyncMock(side_effect=lambda key: sandboxes[key])
     get_store = AsyncMock(return_value=store)
     monkeypatch.setattr(codex_auth, 'validate_session_key', validate_session_key)
-    monkeypatch.setattr(
-        codex_auth,
-        'validate_teardown_session_key',
-        validate_teardown_session_key,
-    )
     monkeypatch.setattr(codex_auth, '_get_store', get_store)
     return store, get_store
 
@@ -374,7 +368,7 @@ def test_update_uses_database_cas_without_redis_lock(
     assert fake_redis.lock_calls == []
 
 
-def test_teardown_routes_use_scoped_teardown_key(app, jwt_service, broker):
+def test_paused_session_key_is_rejected_on_all_routes(app, jwt_service, broker):
     codex_auth.validate_session_key.side_effect = HTTPException(401)
     client = TestClient(app)
     headers = _headers(jwt_service, _FIRST_ID, 'a')
@@ -393,11 +387,10 @@ def test_teardown_routes_use_scoped_teardown_key(app, jwt_service, broker):
         client.delete(path, headers=headers),
     ]
 
-    assert [response.status_code for response in responses] == [200, 204, 204, 204]
-    assert codex_auth.validate_teardown_session_key.await_count == 4
+    assert [response.status_code for response in responses] == [401, 401, 401, 401]
 
 
-def test_refresh_does_not_accept_teardown_key(app, jwt_service, broker):
+def test_refresh_does_not_accept_paused_session_key(app, jwt_service, broker):
     codex_auth.validate_session_key.side_effect = HTTPException(401)
     response = TestClient(app).post(
         f'/api/internal/conversations/{_FIRST_ID}/codex-auth/refresh',
@@ -410,7 +403,35 @@ def test_refresh_does_not_accept_teardown_key(app, jwt_service, broker):
     )
 
     assert response.status_code == 401
-    codex_auth.validate_teardown_session_key.assert_not_awaited()
+
+
+def test_refresh_rechecks_authorization_after_lock(
+    app, jwt_service, broker, monkeypatch
+):
+    scope = codex_auth._CodexAuthScope(
+        user_id='user-1',
+        org_id=UUID('11111111-1111-1111-1111-111111111111'),
+        sandbox_id='a',
+        conversation_id=_FIRST_ID,
+        token_digest='digest',
+        expires_at=9999999999,
+    )
+    authorize = AsyncMock(side_effect=[scope, HTTPException(401, detail='revoked')])
+    monkeypatch.setattr(codex_auth, '_authorize', authorize)
+
+    response = TestClient(app).post(
+        f'/api/internal/conversations/{_FIRST_ID}/codex-auth/refresh',
+        headers=_refresh_headers(jwt_service, _FIRST_ID, 'a'),
+        json={
+            'client_id': codex_auth._REFRESH_CLIENT_ID,
+            'grant_type': 'refresh_token',
+            'refresh_token': 'r0',
+        },
+    )
+
+    assert response.status_code == 401
+    assert authorize.await_count == 2
+    broker[1].assert_not_awaited()
 
 
 def test_invalid_document_does_not_echo_credentials(app, jwt_service, broker):

@@ -2,13 +2,11 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import re
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -21,15 +19,26 @@ from storage.redis import get_redis_client_async, redis_exceptions
 
 from openhands.app_server.config import depends_jwt_service
 from openhands.app_server.constants import MAX_API_SECRET_VALUE_LENGTH
-from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxRecord
-from openhands.app_server.sandbox.session_auth import (
-    validate_session_key,
-    validate_teardown_session_key,
-)
+from openhands.app_server.sandbox.session_auth import validate_session_key
 from openhands.app_server.secrets.codex_auth import (
     CODEX_AUTH_ROUTE,
     CODEX_AUTH_ROUTE_PREFIX,
     is_chatgpt_codex_auth,
+)
+from openhands.app_server.secrets.codex_auth import (
+    CODEX_REFRESH_CLIENT_ID as _REFRESH_CLIENT_ID,
+)
+from openhands.app_server.secrets.codex_auth import (
+    codex_refresh_error as _refresh_error,
+)
+from openhands.app_server.secrets.codex_auth import (
+    codex_token_payload as _token_payload,
+)
+from openhands.app_server.secrets.codex_auth import (
+    merge_codex_refresh as _merge_refresh,
+)
+from openhands.app_server.secrets.codex_auth import (
+    request_codex_token_refresh as _request_token_refresh,
 )
 from openhands.app_server.services.jwt_service import JwtService
 
@@ -37,10 +46,8 @@ router = APIRouter(prefix=CODEX_AUTH_ROUTE_PREFIX)
 jwt_service_dependency = depends_jwt_service()
 
 _SECRET_NAME = 'CODEX_AUTH_JSON'
-_REFRESH_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
 _REFRESH_LOCK_TTL_SECONDS = 120
 _REFRESH_LOCK_WAIT_SECONDS = 30
-_REFRESH_TOKEN_URL = 'https://auth.openai.com/oauth/token'
 _DIGEST_PATTERN = re.compile(r'^[0-9a-f]{64}$')
 
 
@@ -78,20 +85,13 @@ async def _authorize(
     jwt_service: JwtService,
     *,
     allow_revoked: bool = False,
-    allow_paused_teardown: bool = False,
 ) -> _CodexAuthScope:
     if not codex_auth_token:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             detail='X-OH-Codex header is required',
         )
-    sandbox: SandboxInfo | SandboxRecord
-    try:
-        sandbox = await validate_session_key(session_api_key)
-    except HTTPException as exc:
-        if not allow_paused_teardown or exc.status_code != status.HTTP_401_UNAUTHORIZED:
-            raise
-        sandbox = await validate_teardown_session_key(session_api_key)
+    sandbox = await validate_session_key(session_api_key)
     try:
         claims = jwt_service.verify_jws_token(codex_auth_token)
         org_id = UUID(str(claims['org_id']))
@@ -266,74 +266,6 @@ async def _parse_refresh_request(request: Request) -> str:
     return refresh_token
 
 
-def _token_payload(value: str) -> dict[str, str]:
-    try:
-        tokens = json.loads(value)['tokens']
-    except (KeyError, TypeError, ValueError):
-        tokens = None
-    if not isinstance(tokens, dict):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail='Stored Codex authentication needs to be refreshed',
-        )
-    payload = {
-        key: token
-        for key in ('id_token', 'access_token', 'refresh_token')
-        if isinstance((token := tokens.get(key)), str) and token
-    }
-    if 'refresh_token' not in payload:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail='Stored Codex authentication needs to be refreshed',
-        )
-    return payload
-
-
-def _merge_refresh(value: str, refresh: dict[str, Any]) -> str:
-    if not isinstance(refresh.get('access_token'), str) or not refresh['access_token']:
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY,
-            detail='Codex credential refresh returned an invalid response',
-        )
-    document = json.loads(value)
-    tokens = document['tokens']
-    for key in ('id_token', 'access_token', 'refresh_token'):
-        token = refresh.get(key)
-        if isinstance(token, str) and token:
-            tokens[key] = token
-    document['last_refresh'] = datetime.now(UTC).isoformat().replace('+00:00', 'Z')
-    updated = json.dumps(document, separators=(',', ':'))
-    if not is_chatgpt_codex_auth(updated):
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY,
-            detail='Codex credential refresh returned invalid authentication',
-        )
-    return updated
-
-
-async def _request_token_refresh(refresh_token: str) -> httpx.Response:
-    url = os.getenv('OPENHANDS_CODEX_REFRESH_TOKEN_URL', _REFRESH_TOKEN_URL)
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        return await client.post(
-            url,
-            json={
-                'client_id': _REFRESH_CLIENT_ID,
-                'grant_type': 'refresh_token',
-                'refresh_token': refresh_token,
-            },
-        )
-
-
-def _refresh_error(response: httpx.Response) -> dict[str, Any]:
-    try:
-        payload = response.json()
-        error = payload.get('error')
-        code = error.get('code') if isinstance(error, dict) else None
-    except (AttributeError, TypeError, ValueError):
-        code = None
-    return {'error': {'code': code or 'credential_refresh_failed'}}
-
-
 @router.get(CODEX_AUTH_ROUTE, include_in_schema=False)
 async def get_codex_auth(
     conversation_id: UUID,
@@ -341,13 +273,7 @@ async def get_codex_auth(
     x_oh_codex: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    scope = await _authorize(
-        conversation_id,
-        x_oh_sandbox,
-        x_oh_codex,
-        jwt_service,
-        allow_paused_teardown=True,
-    )
+    scope = await _authorize(conversation_id, x_oh_sandbox, x_oh_codex, jwt_service)
     store = await _get_store(scope)
     value = await store.get_value()
     if value is None:
@@ -373,13 +299,7 @@ async def touch_codex_auth(
     x_oh_codex: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    scope = await _authorize(
-        conversation_id,
-        x_oh_sandbox,
-        x_oh_codex,
-        jwt_service,
-        allow_paused_teardown=True,
-    )
+    scope = await _authorize(conversation_id, x_oh_sandbox, x_oh_codex, jwt_service)
     store = await _get_store(scope)
     value = await store.get_value()
     if value is None:
@@ -401,13 +321,7 @@ async def update_codex_auth(
     x_oh_codex: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    scope = await _authorize(
-        conversation_id,
-        x_oh_sandbox,
-        x_oh_codex,
-        jwt_service,
-        allow_paused_teardown=True,
-    )
+    scope = await _authorize(conversation_id, x_oh_sandbox, x_oh_codex, jwt_service)
     expected_digest, value = await _parse_update(request)
     store = await _get_store(scope)
     try:
@@ -437,6 +351,9 @@ async def refresh_codex_auth(
     )
     submitted_refresh_token = await _parse_refresh_request(request)
     async with _credential_lock(scope):
+        scope = await _authorize(
+            conversation_id, session_api_key, codex_auth_token, jwt_service
+        )
         store = await _get_store(scope)
         current = await store.get_value()
         if current is None:
@@ -515,7 +432,6 @@ async def release_codex_auth(
         x_oh_codex,
         jwt_service,
         allow_revoked=True,
-        allow_paused_teardown=True,
     )
     await _revoke(scope)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

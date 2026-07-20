@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from enum import Enum
+from uuid import UUID
 
 from fastapi import Request
 from pydantic import SecretStr
@@ -136,6 +137,9 @@ class UserAuth(ABC):
 
         user: UserGitInfo = await client.get_user()
         return user
+
+    async def get_effective_org_id(self) -> UUID | None:
+        return None
 
     @classmethod
     @abstractmethod

@@ -91,7 +91,7 @@ class SaasSecretsStore(SecretsStore):
         preserve_codex_auth = not loaded_codex_known and codex_auth_info is None
         stored_codex_auth = None
         async with a_session_maker() as session:
-            if not preserve_codex_auth:
+            if loaded_codex_known and loaded_codex_digest == codex_auth_digest:
                 result = await session.execute(
                     select(StoredCustomSecrets)
                     .filter(
@@ -104,10 +104,7 @@ class SaasSecretsStore(SecretsStore):
                     .with_for_update()
                 )
                 stored_codex_auth = result.scalar_one_or_none()
-                if not loaded_codex_known:
-                    preserve_codex_auth = stored_codex_auth is not None
-                elif loaded_codex_digest == codex_auth_digest:
-                    preserve_codex_auth = stored_codex_auth is not None
+                preserve_codex_auth = stored_codex_auth is not None
 
             if preserve_codex_auth:
                 secrets_json.pop(_CODEX_AUTH_SECRET_NAME, None)

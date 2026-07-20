@@ -167,12 +167,13 @@ class TestSaasSecretsStore:
         'storage.saas_secrets_store.UserStore.get_user_by_id',
         new_callable=AsyncMock,
     )
-    async def test_store_without_load_preserves_rotated_codex_auth(
+    async def test_store_without_load_applies_explicit_codex_auth(
         self, mock_get_user, secrets_store, mock_user
     ):
         mock_get_user.return_value = mock_user
         original = '{"tokens":{"refresh_token":"r0"}}'
         rotated = '{"tokens":{"refresh_token":"r1"}}'
+        submitted = '{"tokens":{"refresh_token":"r2"}}'
         await secrets_store.store(
             Secrets(
                 custom_secrets={
@@ -194,7 +195,7 @@ class TestSaasSecretsStore:
             Secrets(
                 custom_secrets={
                     'CODEX_AUTH_JSON': CustomSecret.from_value(
-                        {'secret': original, 'description': ''}
+                        {'secret': submitted, 'description': ''}
                     ),
                     'OTHER': CustomSecret.from_value(
                         {'secret': 'new', 'description': ''}
@@ -203,7 +204,7 @@ class TestSaasSecretsStore:
             )
         )
 
-        assert await codex_store.get_value() == rotated
+        assert await codex_store.get_value() == submitted
         loaded = await fresh_store.load()
         assert loaded is not None
         assert loaded.custom_secrets['OTHER'].secret.get_secret_value() == 'new'
