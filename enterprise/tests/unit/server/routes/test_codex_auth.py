@@ -359,9 +359,7 @@ def test_digest_conflict_never_overwrites_current_value(app, jwt_service, broker
     assert store.value == current
 
 
-def test_update_uses_credential_lock(
-    app, jwt_service, broker, fake_redis
-):
+def test_update_uses_credential_lock(app, jwt_service, broker, fake_redis):
     store, _ = broker
     original = store.value
     response = TestClient(app).put(

@@ -35,7 +35,5 @@ def downgrade() -> None:
         op.f('ix_v1_remote_sandbox_teardown_session_api_key_hash'),
         table_name='v1_remote_sandbox',
     )
-    op.drop_column(
-        'v1_remote_sandbox', 'teardown_session_api_key_expires_at'
-    )
+    op.drop_column('v1_remote_sandbox', 'teardown_session_api_key_expires_at')
     op.drop_column('v1_remote_sandbox', 'teardown_session_api_key_hash')
