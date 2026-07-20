@@ -1043,7 +1043,7 @@ async def delete_app_conversation(
 async def stream_app_conversation_start(
     request: AppConversationStartRequest,
     user_context: UserContext = user_context_dependency,
-) -> list[AppConversationStartTask]:
+) -> StreamingResponse:
     """Start an app conversation start task and stream updates from it.
     Leaves the connection open until either the conversation starts or there was an error
     """
