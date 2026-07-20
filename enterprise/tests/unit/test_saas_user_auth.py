@@ -8,7 +8,6 @@ from fastapi import Request
 from pydantic import SecretStr
 from server.auth.auth_error import (
     AuthError,
-    BearerTokenError,
     CookieError,
     NoCredentialsError,
 )
@@ -707,15 +706,63 @@ async def test_saas_user_auth_from_bearer_key_outside_active_window():
 
 
 @pytest.mark.asyncio
-async def test_saas_user_auth_from_bearer_exception():
-    """Test that saas_user_auth_from_bearer raises BearerTokenError on exception."""
+async def test_saas_user_auth_from_bearer_sqlalchemy_error_returns_503():
+    """Transient store errors must surface as 503, not 401 (OHE-2792).
+
+    Previously ``saas_user_auth_from_bearer`` wrapped the call in
+    ``except Exception -> BearerTokenError``, which the middleware translated
+    into a 401. A valid key that hit a transient SQLAlchemy error (pool
+    exhaustion, lock-wait timeout, etc.) was therefore reported as a bad
+    credential, breaking client retry logic and bricking the API key in the
+    customer's automation. The fix distinguishes transient store failures
+    from real auth failures and returns a retryable 503.
+    """
+    from fastapi import HTTPException, status
+    from sqlalchemy.exc import OperationalError
+
+    mock_request = MagicMock()
+    mock_request.headers = {'Authorization': 'Bearer test_api_key'}
+
+    fake_op_error = OperationalError('select 1', {}, Exception('pool exhausted'))
+
+    with patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls:
+        mock_api_key_store = MagicMock()
+        mock_api_key_store.validate_api_key = AsyncMock(side_effect=fake_op_error)
+        mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+
+        with pytest.raises(HTTPException) as exc_info:
+            await saas_user_auth_from_bearer(mock_request)
+
+    assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert exc_info.value.headers.get('Retry-After') == '1'
+    assert exc_info.value.detail == 'auth_store_unavailable'
+    # Crucially, NOT a BearerTokenError -- the credential is fine.
+    from server.auth.auth_error import BearerTokenError
+
+    assert not isinstance(exc_info.value, BearerTokenError)
+
+
+@pytest.mark.asyncio
+async def test_saas_user_auth_from_bearer_non_sql_error_propagates():
+    """The blanket ``except Exception -> BearerTokenError`` is gone.
+
+    Only SQLAlchemyError is converted to 503; other unexpected exceptions
+    propagate so they show up as 500 in middleware rather than being
+    misclassified as a credential failure.
+    """
     mock_request = MagicMock()
     mock_request.headers = {'Authorization': 'Bearer test_api_key'}
 
     with patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls:
-        mock_api_key_store_cls.get_instance.side_effect = Exception('Test error')
+        # A non-SQL error (e.g. an AttributeError in some downstream code) must
+        # NOT be silently reclassified as a 401.
+        mock_api_key_store = MagicMock()
+        mock_api_key_store.validate_api_key = AsyncMock(
+            side_effect=AttributeError('boom')
+        )
+        mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
 
-        with pytest.raises(BearerTokenError):
+        with pytest.raises(AttributeError):
             await saas_user_auth_from_bearer(mock_request)
 
 

@@ -9,7 +9,6 @@ from keycloak.exceptions import KeycloakConnectionError
 from pydantic import SecretStr
 from server.auth.auth_error import (
     AuthError,
-    BearerTokenError,
     CookieError,
     ExpiredError,
     NoCredentialsError,
@@ -26,6 +25,7 @@ from server.logger import logger
 from server.rate_limit import RateLimiter, create_redis_rate_limiter
 from server.utils.rate_limit_utils import RATE_LIMIT_AUTH_WINDOWS
 from sqlalchemy import delete, select
+from sqlalchemy.exc import SQLAlchemyError
 from storage.api_key_store import ApiKeyStore
 from storage.auth_tokens import AuthTokens
 from storage.database import a_session_maker
@@ -784,31 +784,50 @@ def get_api_key_from_header(request: Request):
 
 
 async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
-    try:
-        api_key = get_api_key_from_header(request)
-        if not api_key:
-            return None
+    # Local import to match the file's existing convention and avoid a
+    # module-level fastapi.status dependency.
+    from fastapi import status
 
-        api_key_store = ApiKeyStore.get_instance()
+    api_key = get_api_key_from_header(request)
+    if not api_key:
+        return None
+
+    api_key_store = ApiKeyStore.get_instance()
+    try:
         validation_result = await api_key_store.validate_api_key(api_key)
-        if not validation_result:
-            return None
-        # API-key auth is intentionally decoupled from the Keycloak offline
-        # session: we do NOT load an offline token or refresh here. A valid API
-        # key alone authenticates the request. Any provider/access token needed
-        # downstream is resolved independently (see get_provider_tokens /
-        # get_access_token), so a missing or revoked offline session no longer
-        # turns a valid key into a 401 BearerTokenError.
-        return SaasUserAuth(
-            user_id=validation_result.user_id,
-            refresh_token=SecretStr(''),
-            auth_type=AuthType.BEARER,
-            api_key_org_id=validation_result.org_id,
-            api_key_id=validation_result.key_id,
-            api_key_name=validation_result.key_name,
+    except SQLAlchemyError as exc:
+        # Transient store failure (pool exhaustion, lock-wait timeout, dead
+        # lock). The credential itself is fine; surface a retryable status so
+        # the client's retry logic keeps the key alive instead of treating it
+        # as a 401 and rotating it (OHE-2792). The ``BearerTokenError`` blanket
+        # that used to live here misclassified these as bad credentials.
+        logger.warning(
+            'auth_store_transient_error',
+            exc_info=True,
+            extra={'key_prefix': api_key[:8]},
         )
-    except Exception as exc:
-        raise BearerTokenError from exc
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='auth_store_unavailable',
+            headers={'Retry-After': '1'},
+        ) from exc
+
+    if not validation_result:
+        return None
+    # API-key auth is intentionally decoupled from the Keycloak offline
+    # session: we do NOT load an offline token or refresh here. A valid API
+    # key alone authenticates the request. Any provider/access token needed
+    # downstream is resolved independently (see get_provider_tokens /
+    # get_access_token), so a missing or revoked offline session no longer
+    # turns a valid key into a 401 BearerTokenError.
+    return SaasUserAuth(
+        user_id=validation_result.user_id,
+        refresh_token=SecretStr(''),
+        auth_type=AuthType.BEARER,
+        api_key_org_id=validation_result.org_id,
+        api_key_id=validation_result.key_id,
+        api_key_name=validation_result.key_name,
+    )
 
 
 async def saas_user_auth_from_cookie(request: Request) -> SaasUserAuth | None:

@@ -484,7 +484,14 @@ async def test_validate_api_key_not_found(api_key_store, async_session_maker):
 async def test_validate_api_key_stores_timezone_naive_last_used_at(
     api_key_store, async_session_maker
 ):
-    """Test that validate_api_key stores a timezone-naive datetime for last_used_at."""
+    """validate_api_key schedules an async write of last_used_at (OHE-2792).
+
+    The auth hot path must not perform a synchronous ``UPDATE last_used_at``,
+    because that acquires a row lock and serialises concurrent requests for
+    the same key. Instead, the write is fire-and-forget; this test drains
+    the background task and then verifies the value was written with a
+    tzinfo-stripped (naive) datetime, as before.
+    """
     # Arrange
     user_id = str(uuid.uuid4())
     org_id = uuid.uuid4()
@@ -501,9 +508,11 @@ async def test_validate_api_key_stores_timezone_naive_last_used_at(
         session.add(key_record)
         await session.commit()
 
-    # Act
+    # Act + drain: keep the patched session maker in scope for the duration
+    # of the background write so we can assert on the persisted state.
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
         await api_key_store.validate_api_key(api_key_value)
+        await api_key_store.drain_pending_touches()
 
     # Assert
     async with async_session_maker() as session:
@@ -513,6 +522,147 @@ async def test_validate_api_key_stores_timezone_naive_last_used_at(
         api_key = result_db.scalars().first()
         assert api_key.last_used_at is not None
         assert api_key.last_used_at.tzinfo is None
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_concurrent_same_key_no_contention(
+    api_key_store, async_session_maker
+):
+    """100 concurrent validate_api_key() calls with the same key all succeed.
+
+    This is the regression test for OHE-2792: previously the auth path
+    acquired a row lock on the api_keys row on every call, so two
+    concurrent requests would contend and one would fail with a transient
+    SQLAlchemy error that got misclassified as a 401. The new path only
+    reads on the request thread; the write is fire-and-forget.
+    """
+    import asyncio
+
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    api_key_value = 'test-concurrent-key'
+
+    async with async_session_maker() as session:
+        key_record = ApiKey(
+            key=api_key_value,
+            user_id=user_id,
+            org_id=org_id,
+            name='Concurrent Key',
+        )
+        session.add(key_record)
+        await session.commit()
+
+    async def hit():
+        with patch('storage.api_key_store.a_session_maker', async_session_maker):
+            return await api_key_store.validate_api_key(api_key_value)
+
+    # 100 concurrent hits. None should raise; all should agree on user_id.
+    results = await asyncio.gather(*(hit() for _ in range(100)))
+    assert len(results) == 100
+    assert all(r is not None for r in results)
+    assert {r.user_id for r in results} == {user_id}
+    assert {r.key_id for r in results} == {key_record.id}
+
+    # Drain background writes so we don't leak fire-and-forget tasks to the
+    # next test in this event-loop scope.
+    await api_key_store.drain_pending_touches()
+
+
+@pytest.mark.asyncio
+async def test_touch_last_used_at_skips_when_recent(api_key_store, async_session_maker):
+    """A second touch within the throttle window matches zero rows.
+
+    The ``last_used_at < threshold`` predicate is the lock-free trick: when
+    the row was touched recently, the database skips it without acquiring a
+    row lock. This test exercises that predicate directly.
+    """
+    from datetime import UTC, datetime
+
+    from storage.api_key_store import LAST_USED_AT_WRITE_THROTTLE
+
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    api_key_value = 'test-throttle-key'
+
+    async with async_session_maker() as session:
+        key_record = ApiKey(
+            key=api_key_value,
+            user_id=user_id,
+            org_id=org_id,
+            name='Throttle Key',
+            last_used_at=None,
+        )
+        session.add(key_record)
+        await session.commit()
+        key_id = key_record.id
+
+    now = datetime.now(UTC)
+
+    # First touch: NULL last_used_at -> always matches.
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        await api_key_store._touch_last_used_at(key_id, now)
+
+    async with async_session_maker() as session:
+        stored = (
+            (await session.execute(select(ApiKey).filter(ApiKey.id == key_id)))
+            .scalars()
+            .first()
+        )
+        first_touch = stored.last_used_at
+        assert first_touch is not None
+
+    # Second touch one second later: within the throttle window -> rowcount=0,
+    # last_used_at unchanged. Use a ``when`` that's only one second newer.
+    just_after_first = now + timedelta(seconds=1)
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        await api_key_store._touch_last_used_at(key_id, just_after_first)
+
+    async with async_session_maker() as session:
+        stored = (
+            (await session.execute(select(ApiKey).filter(ApiKey.id == key_id)))
+            .scalars()
+            .first()
+        )
+        # The timestamp must NOT have been bumped to ``just_after_first``.
+        assert stored.last_used_at == first_touch
+
+    # Third touch far outside the throttle window: NOW the predicate matches.
+    long_after = now + LAST_USED_AT_WRITE_THROTTLE + timedelta(seconds=10)
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        await api_key_store._touch_last_used_at(key_id, long_after)
+
+    async with async_session_maker() as session:
+        stored = (
+            (await session.execute(select(ApiKey).filter(ApiKey.id == key_id)))
+            .scalars()
+            .first()
+        )
+        # Stripped tzinfo on write; compare with naive equivalent.
+        assert stored.last_used_at == long_after.replace(tzinfo=None)
+
+
+@pytest.mark.asyncio
+async def test_touch_last_used_at_swallows_db_failures(
+    api_key_store, async_session_maker
+):
+    """A failing background write must not propagate (OHE-2792).
+
+    The credential is already validated by the time the touch task runs; if
+    the write fails (pool exhausted, deadlock, etc.) the request must not
+    fail. We assert that the exception is logged-and-swallowed.
+    """
+    from datetime import UTC, datetime
+
+    from sqlalchemy.exc import OperationalError
+
+    broken_session_maker = MagicMock()
+    broken_session_maker.return_value.__aenter__.side_effect = OperationalError(
+        'select 1', {}, Exception('db down')
+    )
+
+    with patch('storage.api_key_store.a_session_maker', broken_session_maker):
+        # Must not raise.
+        await api_key_store._touch_last_used_at(key_id=1, when=datetime.now(UTC))
 
 
 @pytest.mark.asyncio

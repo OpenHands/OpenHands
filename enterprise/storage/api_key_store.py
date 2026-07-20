@@ -1,17 +1,25 @@
 from __future__ import annotations
 
+import asyncio
 import secrets
 import string
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from storage.api_key import ApiKey
 from storage.database import a_session_maker
 from storage.user_store import UserStore
 
 from openhands.app_server.utils.logger import openhands_logger as logger
+
+# Coalesce ``last_used_at`` writes so a burst of concurrent requests for the
+# same API key doesn't acquire a contended row lock on every call. The value
+# is only used as a UI signal in the API-keys listing endpoint
+# (``server/routes/api_keys.py``); it is never read by any auth or policy
+# decision, so staleness up to this duration is acceptable.
+LAST_USED_AT_WRITE_THROTTLE = timedelta(seconds=30)
 
 
 @dataclass
@@ -57,6 +65,12 @@ class ApiKeyStore:
     # Prefix for system keys created by internal services (e.g., automations)
     # Keys with this prefix are hidden from users and cannot be deleted by users
     SYSTEM_KEY_NAME_PREFIX = '__SYSTEM__:'
+
+    def __post_init__(self) -> None:
+        # Background ``last_used_at`` write tasks are tracked here so tests can
+        # drain them deterministically. Production code never needs to look at
+        # this set; tasks are added/removed via ``add_done_callback``.
+        self._pending_touch_tasks: set[asyncio.Task] = set()
 
     def generate_api_key(self, length: int = 32) -> str:
         """Generate a random API key with the sk-oh- prefix."""
@@ -248,7 +262,14 @@ class ApiKeyStore:
         A key is valid only when ``not_before <= now < expires_at``. Both bounds
         are optional and independent: a ``NULL`` bound means the key is
         unconstrained in that direction. Out-of-window keys are rejected and
-        ``last_used_at`` is not updated.
+        ``last_used_at`` is not touched.
+
+        ``last_used_at`` is a UI-only signal (see the API-keys listing endpoint
+        in ``server/routes/api_keys.py``); it is never read by any auth or
+        policy decision. To keep the auth hot path lock-free under burst load
+        (OHE-2792), the write is performed as a fire-and-forget background
+        task in :meth:`_touch_last_used_at`, which only updates the row when
+        the stored timestamp is stale.
 
         Returns:
             ApiKeyValidationResult if the key is valid, None otherwise.
@@ -278,20 +299,85 @@ class ApiKeyStore:
                 logger.info(f'API key has expired: {key_record.id}')
                 return None
 
-            # Update last_used_at timestamp
-            await session.execute(
-                update(ApiKey)
-                .where(ApiKey.id == key_record.id)
-                .values(last_used_at=_as_naive(now))
-            )
-            await session.commit()
-
-            return ApiKeyValidationResult(
+            validation = ApiKeyValidationResult(
                 user_id=key_record.user_id,
                 org_id=key_record.org_id,
                 key_id=key_record.id,
                 key_name=key_record.name,
             )
+
+        # Off the auth hot path: best-effort, throttled, swallow failures.
+        # Fire-and-forget so the auth response is not delayed by the write.
+        # The task is tracked in ``_pending_touch_tasks`` only so tests can
+        # deterministically drain pending writes; production code never
+        # inspects the set.
+        task = asyncio.create_task(self._touch_last_used_at(validation.key_id, now))
+        self._pending_touch_tasks.add(task)
+        task.add_done_callback(self._pending_touch_tasks.discard)
+
+        return validation
+
+    async def _touch_last_used_at(self, key_id: int, when: datetime) -> None:
+        """Update ``last_used_at`` only if it is stale.
+
+        The ``last_used_at < threshold`` predicate is the lock-free trick:
+
+        * If the row was touched recently, the predicate matches no rows; the
+          database does not visit the heap page and no row lock is acquired.
+        * If the row is stale, the first writer wins; any concurrent writers
+          see ``rowcount == 0`` and exit cleanly (no serialization, no error).
+
+        Failures are logged and swallowed: the credential itself is valid and
+        the user is already authenticated by the time this task runs.
+        """
+        threshold = when - LAST_USED_AT_WRITE_THROTTLE
+        try:
+            async with a_session_maker() as session:
+                result = await session.execute(
+                    update(ApiKey)
+                    .where(
+                        ApiKey.id == key_id,
+                        or_(
+                            ApiKey.last_used_at.is_(None),
+                            ApiKey.last_used_at < threshold,
+                        ),
+                    )
+                    .values(last_used_at=_as_naive(when))
+                )
+                await session.commit()
+                if result.rowcount == 0:
+                    logger.debug(
+                        'api_key_last_used_at_skipped_recent_or_raced',
+                        extra={'key_id': key_id},
+                    )
+        except Exception:
+            logger.warning(
+                'api_key_last_used_at_update_failed',
+                exc_info=True,
+                extra={'key_id': key_id},
+            )
+
+    async def drain_pending_touches(self, timeout: float = 5.0) -> None:
+        """Wait for in-flight ``last_used_at`` background writes to settle.
+
+        Production code does not need this: uvicorn's event loop runs the
+        tasks to completion naturally. Tests use it to assert against
+        persisted state without racing against fire-and-forget tasks.
+        """
+        if not self._pending_touch_tasks:
+            return
+        pending = list(self._pending_touch_tasks)
+        done, _ = await asyncio.wait(pending, timeout=timeout)
+        # Surface any exceptions that may have been swallowed by the
+        # try/except inside ``_touch_last_used_at``. They should not appear
+        # here, but if a future refactor regresses that contract we want to
+        # know loudly rather than silently lose the assertion.
+        for task in done:
+            if task.cancelled():
+                continue
+            exc = task.exception()
+            if exc is not None:
+                raise exc
 
     async def delete_api_key(self, api_key: str) -> bool:
         """Delete an API key by the key value."""
