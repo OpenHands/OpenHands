@@ -1097,8 +1097,12 @@ class TestIsJobRequested:
         jira_dc_manager._create_provider_handler = AsyncMock(return_value=MagicMock())
         jira_dc_manager._verify_mentioned_repos = AsyncMock(return_value=[repo])
 
-        message = Message(source=SourceType.JIRA_DC, message={})
-        result = await jira_dc_manager.is_job_requested(message, mock_view)
+        with patch(
+            'integrations.jira_dc.jira_dc_manager.infer_repo_from_message',
+            return_value=['company/repo'],
+        ):
+            message = Message(source=SourceType.JIRA_DC, message={})
+            result = await jira_dc_manager.is_job_requested(message, mock_view)
 
         assert result is True
         assert mock_view.selected_repo == 'company/repo'
