@@ -13,6 +13,10 @@ from pydantic import BaseModel
 
 import openhands
 from openhands.app_server.app_conversation.skill_loader import (
+    _match_url_source_to_provider,
+    _split_git_url_source,
+)
+from openhands.app_server.app_conversation.skill_loader import (
     parse_marketplace_source as _parse_marketplace_source,
 )
 from openhands.app_server.config import depends_user_context
@@ -214,43 +218,50 @@ async def _clone_marketplace_repo(
     if not repo_path or '/' not in repo_path:
         return None, f'Invalid repository path: {repo_path}'
 
-    # Build fallback URLs for public repositories. A repo_path that kept its
-    # scheme is already a full URL (custom host) — use the source as-is.
-    provider_domain_map = {
-        'github': 'github.com',
-        'gitlab': 'gitlab.com',
-        'bitbucket': 'bitbucket.org',
-    }
-    if '://' in repo_path:
-        fallback_url = marketplace.source
-    else:
-        fallback_url = (
-            f'https://{provider_domain_map.get(provider, "github.com")}/{repo_path}.git'
-        )
-
-    # Get authenticated URL from provider handler
+    # Authenticate URL/scp sources against the provider whose host matches
+    # (pinned), so private self-hosted repos (e.g. Bitbucket DC) clone with
+    # credentials. Non-URL owner/repo sources fall through to the public path.
     authenticated_url = None
     try:
-        provider_tokens = await user_context.get_provider_tokens()
-        if not provider_tokens:
-            logger.info(
-                f'No provider tokens available for {provider}, will try unauthenticated clone'
+        matched = await _match_url_source_to_provider(marketplace.source, user_context)
+        if matched is not None:
+            matched_provider, matched_repo = matched
+            handler = await user_context.get_provider_handler()
+            authenticated_url = await handler.get_authenticated_git_url(
+                matched_repo, specified_provider=matched_provider
             )
-        else:
-            # Cast to expected type - user_context may return dict[str, str] in some contexts
-            typed_provider_tokens = cast(PROVIDER_TOKEN_TYPE, provider_tokens)
-            client = ProviderHandler(
-                provider_tokens=MappingProxyType(typed_provider_tokens),
-                external_auth_id=await user_context.get_user_id(),
-            )
-            authenticated_url = await client.get_authenticated_git_url(repo_path)
+        elif '://' not in repo_path:
+            # Bare owner/repo (or recognized public domain): resolve normally.
+            provider_tokens = await user_context.get_provider_tokens()
+            if provider_tokens:
+                typed_provider_tokens = cast(PROVIDER_TOKEN_TYPE, provider_tokens)
+                client = ProviderHandler(
+                    provider_tokens=MappingProxyType(typed_provider_tokens),
+                    external_auth_id=await user_context.get_user_id(),
+                )
+                authenticated_url = await client.get_authenticated_git_url(repo_path)
     except Exception as e:
         logger.warning(
-            f'Failed to get authenticated URL for {repo_path}: {e}, will try unauthenticated clone'
+            f'Failed to get authenticated URL for {repo_path}: {e}, '
+            'will try unauthenticated clone'
         )
 
-    # Use authenticated URL if available, otherwise fallback to public URL
-    clone_url = authenticated_url or fallback_url
+    if authenticated_url:
+        clone_url = authenticated_url
+    elif _split_git_url_source(marketplace.source) is not None:
+        # Full-URL source on a host that matches no configured provider — refuse
+        # rather than git-cloning an arbitrary attacker-controlled host (SSRF).
+        return None, f'Unsupported marketplace host: {marketplace.source}'
+    else:
+        # Public bare owner/repo (or recognized provider prefix): public clone.
+        provider_domain_map = {
+            'github': 'github.com',
+            'gitlab': 'gitlab.com',
+            'bitbucket': 'bitbucket.org',
+        }
+        clone_url = (
+            f'https://{provider_domain_map.get(provider, "github.com")}/{repo_path}.git'
+        )
 
     # Create unique temporary directory for this clone using tempfile.mkdtemp
     try:

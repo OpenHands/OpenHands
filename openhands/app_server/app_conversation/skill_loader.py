@@ -12,6 +12,7 @@ All source-specific skill loading is handled by the agent-server.
 
 import asyncio
 import logging
+import re
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import urlparse
@@ -424,32 +425,87 @@ def parse_marketplace_source(source: str) -> tuple[str, str]:
     return ('github', path)
 
 
-async def _source_host_matches_provider(source: str, user_context: UserContext) -> bool:
-    """True when a URL source's host belongs to a configured provider token."""
-    host = (urlparse(source).hostname or '').lower()
+# Marketplace source prefixes that name a provider explicitly; handled by
+# parse_marketplace_source, never treated as scp-style host:path.
+_PROVIDER_SOURCE_PREFIXES = ('github:', 'gitlab:', 'bitbucket:', 'azure-devops:')
+
+
+def _split_git_url_source(source: str) -> tuple[str, str] | None:
+    """Return ``(host, path)`` for a URL/scp git source, else ``None``.
+
+    Handles ``scheme://[user@]host[:port]/path`` and scp ``[user@]host:path``.
+    The host comes from a real URL parse (userinfo is ignored), so a source
+    like ``https://github.com@evil/o/r`` reports host ``evil`` — it can never
+    masquerade as a provider via substring matching.
+    """
+    s = source.strip()
+    if s.startswith(_PROVIDER_SOURCE_PREFIXES):
+        return None
+    if '://' in s:
+        parsed = urlparse(s)
+        host = (parsed.hostname or '').lower()
+        return (host, parsed.path) if host else None
+    # scp-style: [user@]host:path. Require a dotted host so provider-prefix and
+    # bare name:tag forms don't match.
+    m = re.match(r'^(?:[^@/]+@)?([^/:]+):(.+)$', s)
+    if m and '.' in m.group(1):
+        return (m.group(1).lower(), m.group(2))
+    return None
+
+
+def _repo_path_from_url_path(path: str, provider: ProviderType) -> str:
+    """Extract an ``owner/repo`` path from a git URL path for ``provider``."""
+    p = path.strip('/')
+    if p.endswith('.git'):
+        p = p[:-4]
+    # Bitbucket DC HTTP clone URLs are /scm/<project>/<repo>; the SSH form omits
+    # /scm/. Both reduce to <project>/<repo> (personal repos use ~user).
+    if provider == ProviderType.BITBUCKET_DATA_CENTER and p.startswith('scm/'):
+        p = p[len('scm/') :]
+    return p
+
+
+async def _match_url_source_to_provider(
+    source: str, user_context: UserContext
+) -> tuple[ProviderType, str] | None:
+    """Resolve a URL/scp source to ``(provider, owner/repo)`` by host match.
+
+    Matches strictly on the URL host against configured provider tokens (a
+    token's own ``host``, or the provider default domain only when the token
+    has no host). Returns ``None`` for non-URL sources and for hosts that match
+    no provider, so an unrelated-host URL is never rewritten to a provider repo.
+    """
+    split = _split_git_url_source(source)
+    if split is None:
+        return None
+    host, path = split
     if not host:
-        return False
+        return None
     try:
         provider_tokens = await user_context.get_provider_tokens()
     except Exception:
-        return False
+        return None
     if not isinstance(provider_tokens, Mapping):
-        return False
+        return None
     for provider, token in provider_tokens.items():
-        token_host = getattr(token, 'host', None)
-        if token_host:
-            if '://' not in token_host:
-                token_host = f'https://{token_host}'
-            if (urlparse(token_host).hostname or '').lower() == host:
-                return True
         try:
             provider_type = ProviderType(provider)
         except ValueError:
             continue
-        default_domain = ProviderHandler.PROVIDER_DOMAINS.get(provider_type)
-        if default_domain and default_domain.lower() == host:
-            return True
-    return False
+        token_host = getattr(token, 'host', None)
+        if token_host:
+            if '://' not in token_host:
+                token_host = f'https://{token_host}'
+            matched = (urlparse(token_host).hostname or '').lower() == host
+        else:
+            default_domain = ProviderHandler.PROVIDER_DOMAINS.get(provider_type)
+            matched = bool(default_domain) and default_domain.lower() == host
+        if matched:
+            repo_path = _repo_path_from_url_path(path, provider_type)
+            if not repo_path or '/' not in repo_path:
+                return None
+            return provider_type, repo_path
+    return None
 
 
 async def authenticate_marketplace_sources(
@@ -486,16 +542,33 @@ async def authenticate_marketplace_sources(
         # Only auto_load registrations are cloned during /api/skills.
         if not reg.auto_load:
             return reg
-        _, repo_name = parse_marketplace_source(reg.source)
-        # Skip single-segment local paths. Full URLs that did not map to a
-        # provider repo path (repo_name keeps '://') are resolved only when
-        # the URL host belongs to a configured provider (e.g. Bitbucket DC),
-        # so unrelated-host URLs are never rewritten to a provider repo.
-        if not repo_name or '/' not in repo_name:
+        # URL/scp sources resolve strictly against the provider whose host
+        # matches, pinned so a host-blind resolver can't claim a same-named
+        # repo elsewhere. Unrelated-host URLs match nothing and pass through.
+        matched = await _match_url_source_to_provider(reg.source, user_context)
+        if matched is not None:
+            provider_type, repo_path = matched
+            try:
+                async with sem:
+                    handler = await user_context.get_provider_handler()
+                    url = await handler.get_authenticated_git_url(
+                        repo_path,
+                        is_optional=True,
+                        specified_provider=provider_type,
+                    )
+            except Exception as e:
+                _logger.debug(
+                    f'Could not resolve authenticated URL for marketplace '
+                    f'{reg.name} ({repo_path}); keeping original source: {e}'
+                )
+                return reg
+            return reg.model_copy(update={'source': url})
+        # URL-shaped but no provider host matched: never rewrite to a provider.
+        if _split_git_url_source(reg.source) is not None:
             return reg
-        if '://' in repo_name and not await _source_host_matches_provider(
-            reg.source, user_context
-        ):
+        # Non-URL owner/repo forms (github:owner/repo, bare owner/repo).
+        _, repo_name = parse_marketplace_source(reg.source)
+        if not repo_name or '/' not in repo_name or '://' in repo_name:
             return reg
         try:
             async with sem:

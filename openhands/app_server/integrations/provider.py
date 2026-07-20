@@ -508,23 +508,45 @@ class ProviderHandler:
         )
 
     async def get_authenticated_git_url(
-        self, repo_name: str, is_optional: bool = False
+        self,
+        repo_name: str,
+        is_optional: bool = False,
+        specified_provider: ProviderType | None = None,
     ) -> str:
         """Get an authenticated git URL for a repository.
 
         Args:
             repo_name: Repository name (owner/repo)
             is_optional: If True, logs at debug level instead of error level when repo not found
+            specified_provider: If set, resolve only against this provider instead
+                of trying every token in turn (avoids a host-blind resolver
+                claiming a same-named repo on the wrong provider).
 
         Returns:
             Authenticated git URL if credentials are available, otherwise regular HTTPS URL
         """
-        try:
-            repository = await self.verify_repo_provider(
-                repo_name, is_optional=is_optional
-            )
-        except AuthenticationError:
-            raise Exception('Git provider authentication issue when getting remote URL')
+        if specified_provider is not None:
+            # Resolve against ONLY this provider — verify_repo_provider falls
+            # through to every token on failure, which would let a host-blind
+            # resolver claim a same-named repo on the wrong provider.
+            try:
+                service = self.get_service(specified_provider)
+                repository = await service.get_repository_details_from_repo_name(
+                    repo_name
+                )
+            except Exception:
+                raise Exception(
+                    'Git provider authentication issue when getting remote URL'
+                )
+        else:
+            try:
+                repository = await self.verify_repo_provider(
+                    repo_name, is_optional=is_optional
+                )
+            except AuthenticationError:
+                raise Exception(
+                    'Git provider authentication issue when getting remote URL'
+                )
 
         provider = repository.git_provider
         repo_name = repository.full_name

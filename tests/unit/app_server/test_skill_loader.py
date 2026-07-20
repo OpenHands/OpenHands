@@ -1040,13 +1040,13 @@ class TestAuthenticateMarketplaceSources:
         [
             'github:OpenHands/extensions-private',
             'OpenHands/extensions-private',
-            'https://github.com/OpenHands/extensions-private.git',
         ],
     )
-    async def test_rewrites_auto_load_source_to_authenticated_url(self, source):
-        """Any stored git source form is resolved and rewritten to a token URL."""
+    async def test_rewrites_owner_repo_source_to_authenticated_url(self, source):
+        """Non-URL owner/repo sources resolve via user_context and are rewritten."""
         # Arrange
         mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_provider_tokens.return_value = None
         mock_user_context.get_authenticated_git_url.return_value = AUTHENTICATED_URL
         registrations = [_make_registration(source=source)]
 
@@ -1060,6 +1060,37 @@ class TestAuthenticateMarketplaceSources:
         assert result[0].source == AUTHENTICATED_URL
         mock_user_context.get_authenticated_git_url.assert_awaited_once_with(
             'OpenHands/extensions-private', is_optional=True
+        )
+
+    @pytest.mark.asyncio
+    async def test_rewrites_recognized_domain_url_pinned_to_provider(self):
+        """A github.com URL resolves pinned to the matching github token."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_provider_tokens.return_value = {
+            ProviderType.GITHUB: ProviderToken()  # host=None -> default domain
+        }
+        handler = AsyncMock()
+        handler.get_authenticated_git_url.return_value = AUTHENTICATED_URL
+        mock_user_context.get_provider_handler.return_value = handler
+        registrations = [
+            _make_registration(
+                source='https://github.com/OpenHands/extensions-private.git'
+            )
+        ]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        assert result[0].source == AUTHENTICATED_URL
+        handler.get_authenticated_git_url.assert_awaited_once_with(
+            'OpenHands/extensions-private',
+            is_optional=True,
+            specified_provider=ProviderType.GITHUB,
         )
 
     @pytest.mark.asyncio
@@ -1151,11 +1182,12 @@ class TestAuthenticateMarketplaceSources:
         'source',
         [
             'https://bitbucket.dc.example.com/scm/~jane.doe/skills.git',
+            'https://jane.doe@bitbucket.dc.example.com/scm/~jane.doe/skills.git',
             'ssh://git@bitbucket.dc.example.com:7999/~jane.doe/skills.git',
         ],
     )
-    async def test_rewrites_custom_host_url_matching_provider_host(self, source):
-        """Custom-host URLs resolve when the host matches a provider token host."""
+    async def test_rewrites_bbdc_personal_url_pinned_to_provider(self, source):
+        """BBDC personal-repo URLs resolve to project/repo pinned to the DC token."""
         # Arrange
         mock_user_context = AsyncMock(spec=UserContext)
         mock_user_context.get_provider_tokens.return_value = {
@@ -1164,7 +1196,9 @@ class TestAuthenticateMarketplaceSources:
             )
         }
         dc_url = 'https://user:pat@bitbucket.dc.example.com/scm/~jane.doe/skills.git'
-        mock_user_context.get_authenticated_git_url.return_value = dc_url
+        handler = AsyncMock()
+        handler.get_authenticated_git_url.return_value = dc_url
+        mock_user_context.get_provider_handler.return_value = handler
         registrations = [_make_registration(source=source)]
 
         # Act
@@ -1172,11 +1206,13 @@ class TestAuthenticateMarketplaceSources:
             registrations, mock_user_context
         )
 
-        # Assert
+        # Assert — /scm/ stripped, .git stripped, resolved pinned to the DC token
         assert result is not None
         assert result[0].source == dc_url
-        mock_user_context.get_authenticated_git_url.assert_awaited_once_with(
-            source.removesuffix('.git'), is_optional=True
+        handler.get_authenticated_git_url.assert_awaited_once_with(
+            '~jane.doe/skills',
+            is_optional=True,
+            specified_provider=ProviderType.BITBUCKET_DATA_CENTER,
         )
 
     @pytest.mark.asyncio
@@ -1200,6 +1236,36 @@ class TestAuthenticateMarketplaceSources:
         # Assert
         assert result is not None
         assert result[0].source == source
+        mock_user_context.get_provider_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'source',
+        [
+            'https://github.com@evil.example.com/OpenHands/extensions-private.git',
+            'https://evil.example.com/gitlab.com/OpenHands/extensions-private.git',
+        ],
+    )
+    async def test_provider_substring_in_url_does_not_bypass_host_match(self, source):
+        """A provider name in userinfo/path can't route resolution to that provider."""
+        # Arrange — real host is evil.example.com, matching no configured token.
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_provider_tokens.return_value = {
+            ProviderType.BITBUCKET_DATA_CENTER: ProviderToken(
+                host='bitbucket.dc.example.com'
+            )
+        }
+        registrations = [_make_registration(source=source)]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert — never rewritten, provider handler never consulted.
+        assert result is not None
+        assert result[0].source == source
+        mock_user_context.get_provider_handler.assert_not_awaited()
         mock_user_context.get_authenticated_git_url.assert_not_awaited()
 
     @pytest.mark.asyncio
