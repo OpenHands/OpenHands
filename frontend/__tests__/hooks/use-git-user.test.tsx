@@ -13,11 +13,6 @@ vi.mock("#/hooks/use-should-show-git-features");
 vi.mock("#/hooks/query/use-config");
 vi.mock("#/hooks/mutation/use-logout");
 vi.mock("#/api/user-service/user-service.api");
-vi.mock("posthog-js/react", () => ({
-  usePostHog: vi.fn(() => ({
-    identify: vi.fn(),
-  })),
-}));
 
 describe("useGitUser", () => {
   let mockLogout: ReturnType<typeof useLogout>;

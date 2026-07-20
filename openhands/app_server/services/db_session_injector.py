@@ -34,7 +34,8 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
     user: str | None = None
     password: SecretStr | None = None
     echo: bool = False
-    pool_size: int = 25
+    # Defaults follow SQLAlchemy's own pool_size=5, max_overflow=10)
+    pool_size: int = 5
     max_overflow: int = 10
     pool_recycle: int = 1800
     pool_use_lifo: bool = True
@@ -71,6 +72,12 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
             self.gcp_region = os.getenv('GCP_REGION')
         if self.ssl_mode is None:
             self.ssl_mode = os.getenv('DB_SSL_MODE') or os.getenv('PGSSLMODE')
+        pool_size = os.getenv('DB_POOL_SIZE')
+        if pool_size:
+            self.pool_size = int(pool_size)
+        max_overflow = os.getenv('DB_MAX_OVERFLOW')
+        if max_overflow:
+            self.max_overflow = int(max_overflow)
         return self
 
     def _create_gcp_db_connection(self):

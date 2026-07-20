@@ -32,6 +32,7 @@ import { cn } from "#/utils/utils";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useAppTitle } from "#/hooks/use-app-title";
 import { useAutoAcceptInvitation } from "#/hooks/use-auto-accept-invitation";
+import { usePostHogIdentify } from "#/hooks/use-posthog-identify";
 
 export function ErrorBoundary() {
   const error = useRouteError();
@@ -100,6 +101,9 @@ export default function MainApp() {
 
   // Sync PostHog opt-in/out state with backend setting on mount
   useSyncPostHogConsent();
+
+  // Identify the user to PostHog using the same distinct_id as the server
+  usePostHogIdentify();
 
   // Auto-select the first organization when none is selected
   useAutoSelectOrganization();

@@ -30,6 +30,7 @@ from openhands.app_server.app_conversation.app_conversation_service import (
 )
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     LiveStatusAppConversationService,
+    _merge_launch_context,
     effective_disabled_skills,
 )
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
@@ -51,8 +52,11 @@ from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.redis_lock import RedisLockUnavailable
 from openhands.sdk import Agent, AgentContext, Event
 from openhands.sdk.llm import LLM
+from openhands.sdk.profiles import OpenHandsAgentProfile, resolve_agent_profile
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
+from openhands.sdk.skills import Skill
+from openhands.sdk.tool import Tool
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 
@@ -100,6 +104,12 @@ def _build_test_user_agent_settings(user: SimpleNamespace) -> OpenHandsAgentSett
 
 
 class _TestUserInfo(SimpleNamespace):
+    def __init__(self, **kwargs):
+        kwargs.setdefault('disabled_skills', [])
+        kwargs.setdefault('active_agent_profile_id', None)
+        kwargs.setdefault('active_agent_profile_revision', None)
+        super().__init__(**kwargs)
+
     @property
     def agent_settings(self) -> OpenHandsAgentSettings:
         override = getattr(self, '_agent_settings_override', None)
@@ -153,6 +163,46 @@ class _TestUserInfo(SimpleNamespace):
         return self.agent_settings
 
 
+class _TestLLMProfileLoader:
+    def load(self, name, *, cipher=None):
+        assert name == 'Default'
+        return LLM(model='gpt-4', api_key=SecretStr('test-key'))
+
+
+def _resolved_profile_user(
+    *,
+    tools=None,
+    system_message_suffix='PROFILE_SUFFIX',
+    disabled_skills=None,
+    available_skills=None,
+    enable_switch_llm_tool=True,
+):
+    profile = OpenHandsAgentProfile(
+        name='reviewer',
+        revision=7,
+        llm_profile_ref='Default',
+        tools=tools,
+        system_message_suffix=system_message_suffix,
+        disabled_skills=disabled_skills or [],
+        enable_switch_llm_tool=enable_switch_llm_tool,
+    )
+    settings = resolve_agent_profile(
+        profile,
+        llm_store=_TestLLMProfileLoader(),
+        mcp_config={},
+        available_skills=available_skills or [],
+    )
+    user = _TestUserInfo(
+        id='test_user_123',
+        disabled_skills=[],
+        git_full_clone=True,
+    )
+    user.agent_settings = settings
+    user.active_agent_profile_id = str(profile.id)
+    user.active_agent_profile_revision = profile.revision
+    return user
+
+
 class TestEffectiveDisabledSkills:
     """effective_disabled_skills() unions the member- and profile-level deny-lists.
 
@@ -191,6 +241,43 @@ class TestEffectiveDisabledSkills:
 
     def test_empty_when_nothing_disabled(self):
         assert effective_disabled_skills(self._user([], [])) == []
+
+
+class TestConversationLaunchSnapshot:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'override_id', [None, '11111111-1111-1111-1111-111111111111']
+    )
+    async def test_resolves_ambient_or_requested_profile_once(self, override_id):
+        user = _resolved_profile_user()
+        user_context = Mock(spec=UserContext)
+        user_context.get_user_info = AsyncMock(return_value=user)
+        service = LiveStatusAppConversationService.__new__(
+            LiveStatusAppConversationService
+        )
+        service.user_context = user_context
+
+        snapshot = await service._resolve_conversation_launch_snapshot(override_id)
+
+        assert snapshot.user is user
+        assert snapshot.agent_profile_id == user.active_agent_profile_id
+        assert snapshot.agent_profile_revision == 7
+        user_context.get_user_info.assert_awaited_once_with(
+            resolve_agent_profile=True,
+            override_agent_profile_id=override_id,
+        )
+
+    def test_merge_refreshes_persisted_current_datetime(self):
+        persisted = datetime(2020, 1, 1)
+        context = AgentContext(
+            current_datetime=persisted,
+            user_message_suffix='PERSISTED_SUFFIX',
+        )
+
+        merged = _merge_launch_context(context, None)
+
+        assert merged.current_datetime != persisted
+        assert merged.user_message_suffix == 'PERSISTED_SUFFIX'
 
 
 # Env var used by openhands SDK LLM to skip context-window validation (e.g. for gpt-4 in tests)
@@ -1207,6 +1294,159 @@ class TestLiveStatusAppConversationService:
             self.mock_user, 'gpt-4', test_conversation_id
         )
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ('profile_tools', 'expected_tools', 'uses_cloud_defaults'),
+        [
+            (None, [Tool(name='browser')], True),
+            ([], [], False),
+            (
+                [Tool(name='terminal', params={'path': '/workspace'})],
+                [Tool(name='terminal', params={'path': '/workspace'})],
+                False,
+            ),
+        ],
+    )
+    async def test_resolved_profile_tools_are_tri_state(
+        self, profile_tools, expected_tools, uses_cloud_defaults
+    ):
+        user = _resolved_profile_user(tools=profile_tools)
+        self.mock_user_context.get_user_info = AsyncMock(return_value=user)
+        self.service._setup_conversation_secrets = AsyncMock(return_value=({}, None))
+        self.service._configure_llm_and_mcp = AsyncMock(
+            return_value=(user.agent_settings.llm, {})
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
+            return_value=[Tool(name='browser')],
+        ) as mock_defaults:
+            result = await self.service._build_start_conversation_request_for_user(
+                sandbox=self.mock_sandbox,
+                conversation_id=uuid4(),
+                initial_message=None,
+                system_message_suffix=None,
+                git_provider=None,
+                working_dir='/test/dir',
+            )
+
+        assert result.agent.tools == expected_tools
+        assert mock_defaults.called is uses_cloud_defaults
+
+    @pytest.mark.asyncio
+    async def test_resolved_profile_can_disable_switch_llm_tool(self):
+        user = _resolved_profile_user(
+            tools=[],
+            enable_switch_llm_tool=False,
+        )
+        user.llm_profiles = LLMProfiles(
+            profiles={
+                'first': LLM(model='openai/gpt-4o', usage_id='first'),
+                'second': LLM(model='openai/gpt-4.1', usage_id='second'),
+            }
+        )
+        self.mock_user_context.get_user_info = AsyncMock(return_value=user)
+        self.service._setup_conversation_secrets = AsyncMock(return_value=({}, None))
+        self.service._configure_llm_and_mcp = AsyncMock(
+            return_value=(user.agent_settings.llm, {})
+        )
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix=None,
+            git_provider=None,
+            working_dir='/test/dir',
+        )
+
+        assert 'SwitchLLMTool' not in result.agent.include_default_tools
+
+    @pytest.mark.asyncio
+    async def test_resolved_profile_context_is_launch_base(self):
+        profile_skill = Skill(name='profile-skill', content='Profile skill content')
+        member_disabled_skill = Skill(
+            name='member-disabled-skill', content='Member-disabled skill content'
+        )
+        user = _resolved_profile_user(
+            tools=[],
+            disabled_skills=['disabled-profile-skill'],
+            available_skills=[profile_skill, member_disabled_skill],
+        )
+        user.disabled_skills = ['member-disabled-skill']
+        profile_secret = StaticSecret(value=SecretStr('profile-value'))
+        profile_context = user.agent_settings.agent_context.model_copy(
+            update={
+                'user_message_suffix': 'PROFILE_USER_SUFFIX',
+                'secrets': {'PROFILE_SECRET': profile_secret},
+            }
+        )
+        user.agent_settings = user.agent_settings.model_copy(
+            update={'agent_context': profile_context}
+        )
+        self.mock_user_context.get_user_info = AsyncMock(return_value=user)
+        launch_secret = StaticSecret(value=SecretStr('launch-value'))
+        self.service._setup_conversation_secrets = AsyncMock(
+            return_value=({'LAUNCH_SECRET': launch_secret}, 'REQUEST_SUFFIX')
+        )
+        self.service._configure_llm_and_mcp = AsyncMock(
+            return_value=(user.agent_settings.llm, {})
+        )
+
+        result = await self.service._build_start_conversation_request_for_user(
+            sandbox=self.mock_sandbox,
+            conversation_id=uuid4(),
+            initial_message=None,
+            system_message_suffix='ignored-by-mock',
+            git_provider=None,
+            working_dir='/test/dir',
+        )
+
+        context = result.agent.agent_context
+        suffix = context.system_message_suffix
+        assert suffix.index('PROFILE_SUFFIX') < suffix.index('REQUEST_SUFFIX')
+        assert suffix.index('REQUEST_SUFFIX') < suffix.index('<HOST>')
+        assert context.user_message_suffix == 'PROFILE_USER_SUFFIX'
+        assert [loaded.name for loaded in context.skills] == ['profile-skill']
+        assert context.disabled_skills == [
+            'member-disabled-skill',
+            'disabled-profile-skill',
+        ]
+        assert context.secrets['PROFILE_SECRET'] is profile_secret
+        assert context.secrets['LAUNCH_SECRET'] is launch_secret
+
+    @pytest.mark.asyncio
+    async def test_planning_launch_uses_planning_tools_over_profile_tools(self):
+        user = _resolved_profile_user(tools=[])
+        self.mock_user_context.get_user_info = AsyncMock(return_value=user)
+        self.service._setup_conversation_secrets = AsyncMock(return_value=({}, None))
+        self.service._configure_llm_and_mcp = AsyncMock(
+            return_value=(user.agent_settings.llm, {})
+        )
+
+        with (
+            patch(
+                'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools'
+            ) as mock_defaults,
+            patch(
+                'openhands.app_server.app_conversation.live_status_app_conversation_service.get_planning_tools',
+                return_value=[Tool(name='task_tracker')],
+            ) as mock_planning,
+        ):
+            result = await self.service._build_start_conversation_request_for_user(
+                sandbox=self.mock_sandbox,
+                conversation_id=uuid4(),
+                initial_message=None,
+                system_message_suffix=None,
+                git_provider=None,
+                working_dir='/test/dir',
+                agent_type=AgentType.PLAN,
+            )
+
+        assert [tool.name for tool in result.agent.tools] == ['task_tracker']
+        mock_planning.assert_called_once()
+        mock_defaults.assert_not_called()
+
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
         return_value=[],
@@ -1379,6 +1619,9 @@ class TestLiveStatusAppConversationService:
             acp_server='claude-code',
             llm=LLM(model='claude-sonnet-4-5', api_key=SecretStr('k')),
         )
+        profile_id = str(uuid4())
+        self.mock_user.active_agent_profile_id = profile_id
+        self.mock_user.active_agent_profile_revision = 5
         self.mock_user_context.get_user_info.return_value = self.mock_user
         self.mock_user_context.get_secrets = AsyncMock(return_value={})
         self.mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
@@ -1398,6 +1641,7 @@ class TestLiveStatusAppConversationService:
             remote_workspace=remote_workspace,
             selected_repository='test/repo',
             selected_branch='feature-x',
+            agent_profile_id=profile_id,
         )
 
         assert result.agent.agent_kind == 'acp'
@@ -1412,6 +1656,10 @@ class TestLiveStatusAppConversationService:
             'git_provider': 'github',
             'commit': 'def456sha',
         }
+        self.mock_user_context.get_user_info.assert_awaited_once_with(
+            resolve_agent_profile=True,
+            override_agent_profile_id=profile_id,
+        )
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools',
@@ -2210,6 +2458,9 @@ class TestLiveStatusAppConversationService:
 
         # Mock user context
         self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
+        ambient_profile_id = str(uuid4())
+        self.mock_user.active_agent_profile_id = ambient_profile_id
+        self.mock_user.active_agent_profile_revision = 3
         self.mock_user_context.get_user_info = AsyncMock(return_value=self.mock_user)
 
         # Mock sandbox and sandbox spec
@@ -2296,6 +2547,15 @@ class TestLiveStatusAppConversationService:
             f'but got "{saved_info.title}"'
         )
         assert saved_info.id == conversation_id
+        assert saved_info.tags['agentprofileid'] == ambient_profile_id
+        assert saved_info.tags['agentprofilerevision'] == '3'
+        resolved_calls = [
+            call
+            for call in self.mock_user_context.get_user_info.await_args_list
+            if call.kwargs.get('resolve_agent_profile')
+        ]
+        assert len(resolved_calls) == 1
+        assert resolved_calls[0].kwargs['override_agent_profile_id'] is None
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
@@ -2315,6 +2575,9 @@ class TestLiveStatusAppConversationService:
             acp_server='claude-code',
             llm=LLM(model='claude-sonnet-4-5', api_key=SecretStr('sk-ui-key')),
         )
+        requested_profile_id = str(uuid4())
+        self.mock_user.active_agent_profile_id = requested_profile_id
+        self.mock_user.active_agent_profile_revision = 11
         self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
         self.mock_user_context.get_user_info = AsyncMock(return_value=self.mock_user)
 
@@ -2373,6 +2636,7 @@ class TestLiveStatusAppConversationService:
             selected_repository='OpenHands/OpenHands',
             selected_branch='main',
             git_provider=ProviderType.GITHUB,
+            agent_profile_id=requested_profile_id,
         )
 
         async for _ in self.service._start_app_conversation(request):
@@ -2385,6 +2649,18 @@ class TestLiveStatusAppConversationService:
         assert saved_info.tags['repo_name'] == 'OpenHands/OpenHands'
         assert saved_info.tags['git_provider'] == 'github'
         assert saved_info.tags['selected_branch'] == 'main'
+        assert saved_info.tags['agentprofileid'] == requested_profile_id
+        assert saved_info.tags['agentprofilerevision'] == '11'
+        resolved_calls = [
+            call
+            for call in self.mock_user_context.get_user_info.await_args_list
+            if call.kwargs.get('resolve_agent_profile')
+        ]
+        assert len(resolved_calls) == 1
+        assert (
+            resolved_calls[0].kwargs['override_agent_profile_id']
+            == requested_profile_id
+        )
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
@@ -4070,9 +4346,9 @@ class TestBuildAcpStartConversationRequestSecrets:
         selected_repository=None,
         selected_branch=None,
         remote_workspace=None,
+        system_message_suffix=None,
     ):
         """Wire user_context and call _build_acp_start_conversation_request."""
-        service.user_context.get_user_info = AsyncMock(return_value=user)
         service.user_context.get_user_email = AsyncMock(return_value=None)
         service.user_context.get_secrets = AsyncMock(return_value=secrets or {})
         service.user_context.get_provider_tokens = AsyncMock(return_value=None)
@@ -4082,6 +4358,8 @@ class TestBuildAcpStartConversationRequestSecrets:
             conversation_id=uuid4(),
             initial_message=None,
             working_dir=str(tmp_path),
+            launch_snapshot=service._launch_snapshot_from_user(user),
+            system_message_suffix=system_message_suffix,
             git_provider=git_provider,
             selected_repository=selected_repository,
             selected_branch=selected_branch,
@@ -4198,6 +4476,50 @@ class TestBuildAcpStartConversationRequestSecrets:
         assert agent_ctx_secrets.get('ANTHROPIC_API_KEY') == 'sk-explicit-override'
         # No panel secrets → request.secrets is empty (agent_context.secrets is a separate channel).
         assert 'ANTHROPIC_API_KEY' not in request.secrets
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('system_message_suffix', [None, 'SHALLOW_CLONE_SUFFIX'])
+    async def test_disabled_skills_reach_runtime_context(
+        self, service, tmp_path, system_message_suffix
+    ):
+        user = self._make_acp_user()
+        user.disabled_skills = ['disabled-project-skill']
+        user.agent_settings = user.agent_settings.model_copy(
+            update={
+                'agent_context': AgentContext(
+                    current_datetime=None,
+                    load_project_skills=True,
+                    system_message_suffix='PROFILE_SUFFIX',
+                )
+            }
+        )
+
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            system_message_suffix=system_message_suffix,
+        )
+
+        context = request.agent.agent_context
+        assert context is not None
+        assert isinstance(context.current_datetime, datetime)
+        assert context.load_project_skills is True
+        assert context.disabled_skills == ['disabled-project-skill']
+        assert context.system_message_suffix.startswith('PROFILE_SUFFIX')
+        if system_message_suffix:
+            assert context.system_message_suffix.endswith(system_message_suffix)
+
+    @pytest.mark.asyncio
+    async def test_without_context_gets_launch_datetime(self, service, tmp_path):
+        user = self._make_acp_user()
+
+        request = await self._call_build(service, user, tmp_path)
+
+        context = request.agent.agent_context
+        assert context is not None
+        assert isinstance(context.current_datetime, datetime)
+        assert context.disabled_skills == []
 
     @pytest.mark.asyncio
     async def test_secrets_forwarded_via_request_secrets(self, service, tmp_path):
