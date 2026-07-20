@@ -45,6 +45,65 @@ from openhands.sdk.mcp.config import MCPServer, coerce_mcp_config
 from openhands.sdk.profiles import resolve_agent_profile
 
 
+class ManagedLlmKeyStatus:
+    """Outcomes for ``SaasSettingsStore.rotate_managed_llm_key``.
+
+    Kept as plain string constants (not an Enum) so callers can compare
+    against the literals without importing a type.
+    """
+
+    ROTATED = 'rotated'
+    NOT_MANAGED = 'not_managed'
+    BYOK = 'byok'
+    MISSING_MEMBER = 'missing_member'
+
+
+@dataclass(frozen=True)
+class ManagedLlmKeyConfig:
+    """Whether an effective LLM config uses a managed LiteLLM/OpenHands key."""
+
+    openhands_type: bool
+
+
+@dataclass(frozen=True)
+class ManagedLlmKeyRotation:
+    """Result of a managed-key rotation attempt."""
+
+    status: str
+    old_key: str | None = None
+    new_key: str | None = None
+    openhands_type: bool = False
+
+
+def managed_llm_key_config_from_model(
+    llm_model: str | None, llm_base_url: str | None
+) -> ManagedLlmKeyConfig | None:
+    """Classify an effective LLM config as managed.
+
+    Uses the same model/base_url logic as ``store()`` and
+    ``OrgStore._maybe_get_managed_llm_key_for_user``.
+
+    Returns ``None`` when the config is not a managed LiteLLM/OpenHands-provider
+    configuration (e.g. member/org BYOK pointing at a third-party base_url).
+    """
+    openhands_type = is_openhands_model(llm_model)
+    normalized_llm_base_url = llm_base_url.rstrip('/') if llm_base_url else None
+    normalized_managed_base_url = (
+        LITE_LLM_API_URL.rstrip('/') if LITE_LLM_API_URL else None
+    )
+    uses_openhands_provider_proxy = openhands_type and (
+        normalized_llm_base_url is None
+        or 'all-hands.dev' in normalized_llm_base_url.lower()
+    )
+    uses_managed_llm_key = (
+        normalized_managed_base_url is not None
+        and normalized_llm_base_url == normalized_managed_base_url
+    ) or uses_openhands_provider_proxy
+    if not uses_managed_llm_key:
+        return None
+    return ManagedLlmKeyConfig(openhands_type=openhands_type)
+
+
 @dataclass
 class SaasSettingsStore(SettingsStore):
     user_id: str
@@ -56,21 +115,21 @@ class SaasSettingsStore(SettingsStore):
     effective_org_id: UUID | None = None
 
     def _resolve_org_id(self, user: User) -> UUID:
-        """Return the effective org id for this request, or the user's
-        current org id as a fallback. The caller still needs to verify
-        that the user is a member of the returned org (handled in load/
-        store by the existing org_members lookup).
+        """Return the effective org id for this request.
 
-        `user.current_org_id` is non-nullable on the ORM model, so the
-        result is always a UUID.
+        Falls back to the user's current org id. The caller still needs to verify
+        that the user is a member of the returned org (handled in load/store by
+        the existing org_members lookup).
+
+        `user.current_org_id` is non-nullable on the ORM model, so the result is
+        always a UUID.
         """
         return self.effective_org_id or user.current_org_id
 
     async def _get_user_settings_by_keycloak_id_async(
         self, keycloak_user_id: str, session=None
     ) -> UserSettings | None:
-        """
-        Get UserSettings by keycloak_user_id (async version).
+        """Get UserSettings by keycloak_user_id (async version).
 
         Args:
             keycloak_user_id: The keycloak user ID to search for
@@ -564,6 +623,16 @@ class SaasSettingsStore(SettingsStore):
                 normalized_llm_base_url == normalized_managed_base_url
                 or (normalized_llm_base_url is None and is_openhands_model(llm_model))
             )
+            logger.info(
+                'saas_settings_store:store:managed_llm_config_decision',
+                extra={
+                    'user_id': self.user_id,
+                    'org_id': str(org_id),
+                    'model': llm_model,
+                    'base_url': llm_base_url or '',
+                    'uses_managed_llm_key': uses_managed_llm_key,
+                },
+            )
 
             if uses_managed_llm_key:
                 await self._ensure_api_key(
@@ -766,16 +835,42 @@ class SaasSettingsStore(SettingsStore):
         First checks if an existing key exists for the user and verifies it
         is valid in LiteLLM. If valid, reuses it. Otherwise, generates a new key.
         """
-
         llm_api_key = item.agent_settings.llm.api_key
+        logger.info(
+            'saas_settings_store:ensure_api_key:evaluate',
+            extra={
+                'user_id': self.user_id,
+                'org_id': org_id,
+                'openhands_type': openhands_type,
+                'has_api_key': bool(llm_api_key),
+            },
+        )
 
-        # First, check if our current key is valid
-        if llm_api_key and not await LiteLlmManager.verify_existing_key(
+        if not llm_api_key:
+            logger.info(
+                'saas_settings_store:ensure_api_key:skip_missing_api_key',
+                extra={'user_id': self.user_id, 'org_id': org_id},
+            )
+            return
+
+        existing_key_valid = await LiteLlmManager.verify_existing_key(
             llm_api_key.get_secret_value(),  # type: ignore[union-attr]
             self.user_id,
             org_id,
             openhands_type=openhands_type,
-        ):
+        )
+        logger.info(
+            'saas_settings_store:ensure_api_key:verify_existing_key',
+            extra={
+                'user_id': self.user_id,
+                'org_id': org_id,
+                'openhands_type': openhands_type,
+                'existing_key_valid': existing_key_valid,
+            },
+        )
+
+        # First, check if our current key is valid
+        if not existing_key_valid:
             # Both branches mint one managed key per (user, org) under the same
             # deterministic alias, deleting any prior key first — so switching
             # the default to/from an openhands/* model never orphans a key.
@@ -791,5 +886,140 @@ class SaasSettingsStore(SettingsStore):
             item.agent_settings.llm.api_key = SecretStr(generated_key)
             logger.info(
                 'saas_settings_store:store:generated_openhands_key',
-                extra={'user_id': self.user_id},
+                extra={
+                    'user_id': self.user_id,
+                    'org_id': org_id,
+                    'openhands_type': openhands_type,
+                },
+            )
+
+    async def get_current_managed_llm_key(self) -> str | None:
+        """Return the acting member's current managed key, if effective config uses it.
+
+        This is intentionally stricter than ``load()``'s effective-key resolution:
+        org-level keys and member BYOK/custom keys are treated as non-managed for
+        this helper because rotating the member managed key would not affect the
+        effective key used at runtime.
+        """
+        settings = await self.load()
+        if settings is None:
+            return None
+
+        llm = settings.agent_settings.llm
+        if managed_llm_key_config_from_model(llm.model, llm.base_url) is None:
+            return None
+
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(User)
+                .options(joinedload(User.org_members))
+                .filter(User.id == uuid.UUID(self.user_id))
+            )
+            user = result.scalars().first()
+            if user is None:
+                return None
+
+            org_id = self._resolve_org_id(user)
+            org = await session.get(Org, org_id)
+            if org is None or org._llm_api_key:
+                return None
+
+            org_member = next(
+                (om for om in user.org_members if om.org_id == org_id), None
+            )
+            if (
+                org_member is None
+                or org_member.has_custom_llm_api_key
+                or not org_member._llm_api_key
+            ):
+                return None
+            return org_member.llm_api_key.get_secret_value()
+
+    async def rotate_managed_llm_key(self) -> ManagedLlmKeyRotation:
+        """Force-rotate the managed LiteLLM/OpenHands key for this user/org.
+
+        Centralizes the managed-key lifecycle so callers (e.g. the API-key
+        refresh endpoint) don't re-implement it. The effective LLM config is
+        resolved through ``load()`` (org defaults merged with the member
+        diff, with org-default precedence), so non-managed configs — member
+        BYOK or org-level BYOK pointing at a third-party base_url — are
+        rejected before any key is generated.
+
+        The new key is generated under the same deterministic alias as
+        ``_ensure_api_key`` / ``OrgStore._maybe_get_managed_llm_key_for_user``
+        (deleting any prior alias first to avoid orphaned keys) and carries
+        ``{'type': 'openhands'}`` metadata when the effective model is an
+        ``openhands/*`` model, matching ``verify_existing_key``'s contract.
+
+        The replacement key is persisted on the acting member's row in the
+        same session used to load it, so a member that disappears mid-rotation
+        is reported explicitly (``MISSING_MEMBER``) rather than silently
+        swallowed. The previous key token is returned for best-effort cleanup
+        and is only exposed after a successful persist.
+        """
+        settings = await self.load()
+        if settings is None:
+            return ManagedLlmKeyRotation(status=ManagedLlmKeyStatus.MISSING_MEMBER)
+
+        llm = settings.agent_settings.llm
+        config = managed_llm_key_config_from_model(llm.model, llm.base_url)
+        if config is None:
+            return ManagedLlmKeyRotation(status=ManagedLlmKeyStatus.NOT_MANAGED)
+
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(User)
+                .options(joinedload(User.org_members))
+                .filter(User.id == uuid.UUID(self.user_id))
+            )
+            user = result.scalars().first()
+            if user is None:
+                return ManagedLlmKeyRotation(status=ManagedLlmKeyStatus.MISSING_MEMBER)
+
+            org_id = self._resolve_org_id(user)
+            org = await session.get(Org, org_id)
+            if org is None:
+                return ManagedLlmKeyRotation(status=ManagedLlmKeyStatus.MISSING_MEMBER)
+            if org._llm_api_key:
+                return ManagedLlmKeyRotation(status=ManagedLlmKeyStatus.BYOK)
+
+            org_member = next(
+                (om for om in user.org_members if om.org_id == org_id), None
+            )
+            if org_member is None:
+                return ManagedLlmKeyRotation(status=ManagedLlmKeyStatus.MISSING_MEMBER)
+
+            if org_member.has_custom_llm_api_key:
+                return ManagedLlmKeyRotation(status=ManagedLlmKeyStatus.BYOK)
+
+            existing_key = org_member.llm_api_key if org_member._llm_api_key else None
+            old_key = existing_key.get_secret_value() if existing_key else None
+
+            org_id_str = str(org_id)
+            # One managed key per (user, org) under the deterministic alias;
+            # delete the alias first so rotation never orphans a prior key.
+            key_alias = get_openhands_cloud_key_alias(self.user_id, org_id_str)
+            await LiteLlmManager.delete_key_by_alias(key_alias=key_alias)
+            new_key = await LiteLlmManager.generate_key(
+                self.user_id,
+                org_id_str,
+                key_alias,
+                {'type': 'openhands'} if config.openhands_type else None,
+            )
+
+            # Persist on the same member row we loaded, in the same session,
+            # before exposing the old token for cleanup.
+            org_member.llm_api_key = SecretStr(new_key)
+            org_member.has_custom_llm_api_key = False
+            await session.commit()
+
+            logger.info(
+                'saas_settings_store:rotate_managed_llm_key:rotated',
+                extra={'user_id': self.user_id, 'org_id': org_id_str},
+            )
+            return ManagedLlmKeyRotation(
+                status=ManagedLlmKeyStatus.ROTATED,
+                old_key=old_key,
+                new_key=new_key,
+                openhands_type=config.openhands_type,
             )
