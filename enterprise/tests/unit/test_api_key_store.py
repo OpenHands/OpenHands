@@ -3,9 +3,9 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 from storage.api_key import ApiKey
-from storage.api_key_store import ApiKeyStore, ApiKeyValidationResult
+from storage.api_key_store import ApiKeyStore, ApiKeyValidationResult, _as_naive
 
 
 @pytest.fixture
@@ -558,6 +558,227 @@ async def test_delete_api_key_not_found(api_key_store, async_session_maker):
 
     # Verify
     assert result is False
+
+
+# ---------------------------------------------------------------------------
+# Tests for validate_api_key debounce + optimistic CAS on last_used_at
+# ---------------------------------------------------------------------------
+
+
+async def _fetch_last_used(async_session_maker, api_key_value: str):
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(ApiKey).filter(ApiKey.key == api_key_value)
+        )
+        return result.scalars().first().last_used_at
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_writes_last_used_at_when_null(
+    api_key_store, async_session_maker
+):
+    """First-ever use (last_used_at IS NULL) must populate the timestamp."""
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    api_key_value = 'test-first-use-key'
+
+    async with async_session_maker() as session:
+        session.add(
+            ApiKey(
+                key=api_key_value,
+                user_id=user_id,
+                org_id=org_id,
+                name='First Use',
+                last_used_at=None,
+            )
+        )
+        await session.commit()
+
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.validate_api_key(api_key_value)
+
+    assert isinstance(result, ApiKeyValidationResult)
+    stored = await _fetch_last_used(async_session_maker, api_key_value)
+    assert stored is not None
+    # Column is TIMESTAMP WITHOUT TIME ZONE; the writer must strip tzinfo.
+    assert stored.tzinfo is None
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_skips_update_within_debounce_window(
+    api_key_store, async_session_maker
+):
+    """A key used within the last 5s must NOT have last_used_at rewritten."""
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    api_key_value = 'test-debounce-skip-key'
+    original = (datetime.now(UTC) - timedelta(seconds=2)).replace(tzinfo=None)
+
+    async with async_session_maker() as session:
+        session.add(
+            ApiKey(
+                key=api_key_value,
+                user_id=user_id,
+                org_id=org_id,
+                name='Debounce Skip',
+                last_used_at=original,
+            )
+        )
+        await session.commit()
+
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.validate_api_key(api_key_value)
+
+    assert isinstance(result, ApiKeyValidationResult)
+    stored = await _fetch_last_used(async_session_maker, api_key_value)
+    assert stored == original, 'last_used_at should not move within the debounce window'
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_writes_last_used_at_outside_debounce_window(
+    api_key_store, async_session_maker
+):
+    """A key last used > 5s ago must have last_used_at advanced."""
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    api_key_value = 'test-debounce-write-key'
+    original = (datetime.now(UTC) - timedelta(seconds=30)).replace(tzinfo=None)
+
+    async with async_session_maker() as session:
+        session.add(
+            ApiKey(
+                key=api_key_value,
+                user_id=user_id,
+                org_id=org_id,
+                name='Debounce Write',
+                last_used_at=original,
+            )
+        )
+        await session.commit()
+
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.validate_api_key(api_key_value)
+
+    assert isinstance(result, ApiKeyValidationResult)
+    stored = await _fetch_last_used(async_session_maker, api_key_value)
+    assert stored is not None
+    assert stored != original
+    assert stored > original
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_zero_debounce_writes_every_time(
+    api_key_store, async_session_maker
+):
+    """Disabling the debounce (LAST_USED_DEBOUNCE_SECONDS=0) must write every call."""
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    api_key_value = 'test-debounce-disabled-key'
+    # Even a "very recent" timestamp should be overwritten when debounce is off.
+    original = datetime.now(UTC).replace(tzinfo=None)
+
+    async with async_session_maker() as session:
+        session.add(
+            ApiKey(
+                key=api_key_value,
+                user_id=user_id,
+                org_id=org_id,
+                name='Debounce Off',
+                last_used_at=original,
+            )
+        )
+        await session.commit()
+
+    with (
+        patch.object(ApiKeyStore, 'LAST_USED_DEBOUNCE_SECONDS', 0),
+        patch('storage.api_key_store.a_session_maker', async_session_maker),
+    ):
+        result = await api_key_store.validate_api_key(api_key_value)
+
+    assert isinstance(result, ApiKeyValidationResult)
+    stored = await _fetch_last_used(async_session_maker, api_key_value)
+    assert stored is not None
+    assert stored != original
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_optimistic_cas_does_not_overwrite_concurrent_update(
+    api_key_store, async_session_maker
+):
+    """Optimistic CAS: if another writer already advanced last_used_at between
+    our SELECT and our UPDATE, the conditional UPDATE must affect 0 rows.
+
+    This mirrors the production behaviour under PostgreSQL READ COMMITTED:
+    the WHERE clause is re-evaluated against the latest committed version of
+    the row, and a stale ``last_used_at`` value no longer matches.
+
+    The test is constructed so the *debounce* clause alone would still allow
+    the UPDATE (both ``stale`` and ``fresh`` are well outside the debounce
+    window). The only thing that prevents the write is the optimistic
+    ``last_used_at == stale`` clause.
+    """
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    api_key_value = 'test-optimistic-cas-key'
+    # Both values are well outside the debounce window (5s) so the debounce
+    # clause cannot be what blocks the UPDATE.
+    stale = (datetime.now(UTC) - timedelta(seconds=60)).replace(tzinfo=None)
+
+    async with async_session_maker() as session:
+        session.add(
+            ApiKey(
+                key=api_key_value,
+                user_id=user_id,
+                org_id=org_id,
+                name='Optimistic CAS',
+                last_used_at=stale,
+            )
+        )
+        await session.commit()
+        key_id = (
+            (await session.execute(select(ApiKey).filter(ApiKey.key == api_key_value)))
+            .scalars()
+            .first()
+            .id
+        )
+
+    # Simulate the race: another transaction advanced last_used_at after our
+    # SELECT but before our UPDATE. The new value is still well outside the
+    # debounce window, so only the optimistic CAS clause can stop the write.
+    fresh = (datetime.now(UTC) - timedelta(seconds=45)).replace(tzinfo=None)
+    assert fresh > stale, 'fresh must be later than stale for the CAS to matter'
+    async with async_session_maker() as session:
+        await session.execute(
+            update(ApiKey).where(ApiKey.id == key_id).values(last_used_at=fresh)
+        )
+        await session.commit()
+
+    # Replay the exact conditional UPDATE that validate_api_key would issue,
+    # using the stale value our SELECT would have returned.
+    debounce_cutoff = _as_naive(
+        datetime.now(UTC) - timedelta(seconds=ApiKeyStore.LAST_USED_DEBOUNCE_SECONDS)
+    )
+    async with async_session_maker() as session:
+        result = await session.execute(
+            update(ApiKey)
+            .where(
+                ApiKey.id == key_id,
+                ApiKey.last_used_at == stale,  # the value our SELECT returned
+                or_(
+                    ApiKey.last_used_at.is_(None),
+                    ApiKey.last_used_at <= debounce_cutoff,
+                ),
+            )
+            .values(last_used_at=_as_naive(datetime.now(UTC)))
+        )
+        await session.commit()
+
+    assert result.rowcount == 0, (
+        'Optimistic CAS must not overwrite a row whose last_used_at has '
+        'already advanced; rowcount should be 0'
+    )
+    stored = await _fetch_last_used(async_session_maker, api_key_value)
+    assert stored == fresh, 'concurrent writer value must be preserved'
 
 
 @pytest.mark.asyncio
