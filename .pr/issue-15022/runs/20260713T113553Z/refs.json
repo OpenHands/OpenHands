@@ -1,7 +1,0 @@
-{
-  "main_ref": "origin/main",
-  "original_ref": "managed-llm-key-refresh-15022",
-  "original_sha": "7d5422574cccd23e1a85015f3f3261c41db506e4",
-  "pr_ref": "origin/pr-15023",
-  "restore_ref": "managed-llm-key-refresh-15022"
-}
