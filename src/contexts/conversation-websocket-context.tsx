@@ -38,7 +38,12 @@ import {
   isBrowserNavigateActionEvent,
   isSwitchLLMObservationEvent,
   isCanvasUIActionEvent,
+  isStreamingDeltaEvent,
 } from "#/types/agent-server/type-guards";
+import {
+  createStreamingDeltaBatcher,
+  StreamingDeltaBatcher,
+} from "#/utils/streaming-delta-batcher";
 import { handleCanvasUIAction } from "#/services/canvas-ui";
 import { ConversationStateUpdateEventStats } from "#/types/agent-server/core/events/conversation-state-event";
 import type {
@@ -151,6 +156,26 @@ export function ConversationWebSocketProvider({
   const { setExecutionStatus } = useConversationStateStore();
   const { appendInput, appendOutput } = useCommandStore();
   const resetBrowserStore = useBrowserStore((state) => state.reset);
+
+  // Coalesce streaming deltas to ≤1 store commit/render per frame.
+  // Separate batchers keep the main and planning streams from ever merging.
+  const mainDeltaBatcherRef = useRef<StreamingDeltaBatcher | null>(null);
+  if (mainDeltaBatcherRef.current === null) {
+    mainDeltaBatcherRef.current = createStreamingDeltaBatcher((delta) => {
+      useEventStore.getState().addEvent(delta);
+      // A delta means connectivity recovered — mirror handleNonErrorEvent.
+      useErrorMessageStore.getState().clearConnectionError();
+    });
+  }
+  const planningDeltaBatcherRef = useRef<StreamingDeltaBatcher | null>(null);
+  if (planningDeltaBatcherRef.current === null) {
+    planningDeltaBatcherRef.current = createStreamingDeltaBatcher((delta) => {
+      useEventStore
+        .getState()
+        .addEvent({ ...delta, isFromPlanningAgent: true });
+      useErrorMessageStore.getState().clearConnectionError();
+    });
+  }
 
   // History loading state.
   // - Main conversation history is now loaded via REST (`useConversationHistory`),
@@ -460,6 +485,17 @@ export function ConversationWebSocketProvider({
     latestPlanningFileEventRef.current = null;
   }, [conversationId]);
 
+  // Drop buffered deltas on conversation switch/unmount: the store is cleared on
+  // switch, so flushing them would leak into the next conversation.
+  useEffect(() => {
+    const mainBatcher = mainDeltaBatcherRef.current;
+    const planningBatcher = planningDeltaBatcherRef.current;
+    return () => {
+      mainBatcher?.reset();
+      planningBatcher?.reset();
+    };
+  }, [conversationId]);
+
   // Merged loading history state - true if either connection is still loading
   const isLoadingHistory = useMemo(
     () => isLoadingHistoryMain || isLoadingHistoryPlanning,
@@ -477,6 +513,14 @@ export function ConversationWebSocketProvider({
 
         // Use type guard to validate v1 event structure
         if (isAgentServerEvent(event)) {
+          // Buffer deltas; nothing else in this handler applies to them.
+          if (isStreamingDeltaEvent(event)) {
+            mainDeltaBatcherRef.current?.enqueue(event);
+            return;
+          }
+          // Flush buffered deltas before this event so it can't overtake them.
+          mainDeltaBatcherRef.current?.flush();
+
           // A reconnect replays the backlog from a stale anchor. The store
           // dedups by id, but the side-effects below aren't idempotent, so skip
           // them for replayed events (#1656).
@@ -683,6 +727,14 @@ export function ConversationWebSocketProvider({
 
         // Use type guard to validate v1 event structure
         if (isAgentServerEvent(event)) {
+          // Buffer deltas (the commit re-applies the planning flag).
+          if (isStreamingDeltaEvent(event)) {
+            planningDeltaBatcherRef.current?.enqueue(event);
+            return;
+          }
+          // Flush buffered deltas before this event so it can't overtake them.
+          planningDeltaBatcherRef.current?.flush();
+
           // Skip non-idempotent side-effects for replayed events, as in the
           // main handler (#1656).
           const isDuplicateEvent = useEventStore
