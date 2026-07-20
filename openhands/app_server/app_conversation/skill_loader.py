@@ -12,7 +12,9 @@ All source-specific skill loading is handled by the agent-server.
 
 import asyncio
 import logging
+from collections.abc import Mapping
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel
@@ -422,6 +424,34 @@ def parse_marketplace_source(source: str) -> tuple[str, str]:
     return ('github', path)
 
 
+async def _source_host_matches_provider(source: str, user_context: UserContext) -> bool:
+    """True when a URL source's host belongs to a configured provider token."""
+    host = (urlparse(source).hostname or '').lower()
+    if not host:
+        return False
+    try:
+        provider_tokens = await user_context.get_provider_tokens()
+    except Exception:
+        return False
+    if not isinstance(provider_tokens, Mapping):
+        return False
+    for provider, token in provider_tokens.items():
+        token_host = getattr(token, 'host', None)
+        if token_host:
+            if '://' not in token_host:
+                token_host = f'https://{token_host}'
+            if (urlparse(token_host).hostname or '').lower() == host:
+                return True
+        try:
+            provider_type = ProviderType(provider)
+        except ValueError:
+            continue
+        default_domain = ProviderHandler.PROVIDER_DOMAINS.get(provider_type)
+        if default_domain and default_domain.lower() == host:
+            return True
+    return False
+
+
 async def authenticate_marketplace_sources(
     registered_marketplaces: list[MarketplaceRegistration] | None,
     user_context: UserContext,
@@ -457,9 +487,15 @@ async def authenticate_marketplace_sources(
         if not reg.auto_load:
             return reg
         _, repo_name = parse_marketplace_source(reg.source)
-        # Skip sources that are not owner/repo-shaped: single-segment local
-        # paths and URLs on hosts that did not map to a provider repo path.
-        if not repo_name or '/' not in repo_name or '://' in repo_name:
+        # Skip single-segment local paths. Full URLs that did not map to a
+        # provider repo path (repo_name keeps '://') are resolved only when
+        # the URL host belongs to a configured provider (e.g. Bitbucket DC),
+        # so unrelated-host URLs are never rewritten to a provider repo.
+        if not repo_name or '/' not in repo_name:
+            return reg
+        if '://' in repo_name and not await _source_host_matches_provider(
+            reg.source, user_context
+        ):
             return reg
         try:
             async with sem:

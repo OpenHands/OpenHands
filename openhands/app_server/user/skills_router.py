@@ -214,15 +214,19 @@ async def _clone_marketplace_repo(
     if not repo_path or '/' not in repo_path:
         return None, f'Invalid repository path: {repo_path}'
 
-    # Build fallback URLs for public repositories
+    # Build fallback URLs for public repositories. A repo_path that kept its
+    # scheme is already a full URL (custom host) — use the source as-is.
     provider_domain_map = {
         'github': 'github.com',
         'gitlab': 'gitlab.com',
         'bitbucket': 'bitbucket.org',
     }
-    fallback_url = (
-        f'https://{provider_domain_map.get(provider, "github.com")}/{repo_path}.git'
-    )
+    if '://' in repo_path:
+        fallback_url = marketplace.source
+    else:
+        fallback_url = (
+            f'https://{provider_domain_map.get(provider, "github.com")}/{repo_path}.git'
+        )
 
     # Get authenticated URL from provider handler
     authenticated_url = None

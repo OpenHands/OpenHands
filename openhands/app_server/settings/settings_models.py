@@ -53,9 +53,12 @@ logger = logging.getLogger(__name__)
 # Valid source patterns for MarketplaceRegistration
 # - github:owner/repo format
 _GITHUB_SOURCE_PATTERN = re.compile(r'^github:[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$')
-# - Git URLs (https, git, ssh protocols)
+# - Git URLs (https, git, ssh protocols). '~' in paths covers Bitbucket Data
+#   Center personal repos (/scm/~user/repo); userinfo may only be a bare
+#   username — 'user:password@' forms stay rejected.
 _GIT_URL_PATTERN = re.compile(
-    r'^(https?://|git@|ssh://|git://)[a-zA-Z0-9_.-]+[:/][a-zA-Z0-9_./-]+$'
+    r'^(https?://(?:[a-zA-Z0-9_.-]+@)?|git@|ssh://(?:[a-zA-Z0-9_.-]+@)?|git://)'
+    r'[a-zA-Z0-9_.-]+[:/][a-zA-Z0-9_.~/-]+$'
 )
 # - Relative local paths (no absolute paths, no parent traversal)
 _LOCAL_PATH_PATTERN = re.compile(r'^[a-zA-Z0-9_][a-zA-Z0-9_./-]*$')

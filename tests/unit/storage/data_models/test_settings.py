@@ -1229,6 +1229,46 @@ class TestMarketplaceRegistration:
         reg = MarketplaceRegistration(name='test', source='git@github.com:owner/repo')
         assert reg.source == 'git@github.com:owner/repo'
 
+    def test_source_validation_bitbucket_dc_personal_https_url(self):
+        """Bitbucket DC personal repos live under /scm/~user/ and are valid."""
+        source = 'https://bitbucket.dc.example.com/scm/~jane.doe_example.com/skills.git'
+        reg = MarketplaceRegistration(name='personal', source=source)
+        assert reg.source == source
+
+    def test_source_validation_https_url_with_username(self):
+        """Copy-pasted DC clone URLs carry a bare username before the host."""
+        source = (
+            'https://jane.doe@bitbucket.dc.example.com/scm/~jane.doe_example.com/'
+            'skills.git'
+        )
+        reg = MarketplaceRegistration(name='personal', source=source)
+        assert reg.source == source
+
+    def test_source_validation_ssh_url_with_user_port_and_tilde(self):
+        """DC SSH clone URLs use ssh://git@host:port/~user/repo.git."""
+        source = 'ssh://git@bitbucket.dc.example.com:7999/~jane.doe/skills.git'
+        reg = MarketplaceRegistration(name='personal', source=source)
+        assert reg.source == source
+
+    def test_source_validation_scp_url_with_tilde(self):
+        """SCP-style SSH URLs may target personal (~user) repos."""
+        source = 'git@bitbucket.dc.example.com:~jane.doe/skills.git'
+        reg = MarketplaceRegistration(name='personal', source=source)
+        assert reg.source == source
+
+    def test_source_validation_rejects_embedded_password(self):
+        """URLs with user:password credentials stay rejected."""
+        with pytest.raises(ValidationError, match='source must be'):
+            MarketplaceRegistration(
+                name='test',
+                source='https://user:secret@host.example.com/scm/proj/repo.git',
+            )
+
+    def test_source_validation_rejects_tilde_local_path(self):
+        """'~' stays rejected for local paths (no home-dir expansion)."""
+        with pytest.raises(ValidationError, match='source must be'):
+            MarketplaceRegistration(name='test', source='~/skills')
+
     def test_source_validation_relative_path(self):
         """Test valid relative local path source."""
         reg = MarketplaceRegistration(name='test', source='local/path/to/skills')
