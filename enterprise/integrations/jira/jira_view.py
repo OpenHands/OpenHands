@@ -13,7 +13,7 @@ import httpx
 from integrations.jira.jira_payload import JiraWebhookPayload
 from integrations.jira.jira_types import (
     JiraViewInterface,
-    RepositoryNotFoundError,
+    RepositorySelectionError,
     StartingConvoException,
 )
 from integrations.jira.jira_v1_callback_processor import (
@@ -407,16 +407,16 @@ class JiraFactory:
         """Select exactly one repo from verified repos.
 
         Raises:
-            RepositoryNotFoundError: If zero or multiple repos verified.
+            RepositorySelectionError: If zero or multiple repos verified.
         """
         if len(verified_repos) == 0:
-            raise RepositoryNotFoundError(
+            raise RepositorySelectionError(
                 f'Could not access any of the mentioned repositories: {", ".join(potential_repos)}. '
                 'Please ensure you have access to the repository and it exists.'
             )
 
         if len(verified_repos) > 1:
-            raise RepositoryNotFoundError(
+            raise RepositorySelectionError(
                 f'Multiple repositories found: {", ".join(verified_repos)}. '
                 'Please specify exactly one repository in the issue description or comment.'
             )
@@ -437,7 +437,7 @@ class JiraFactory:
         """Infer and verify the repository from issue content.
 
         Raises:
-            RepositoryNotFoundError: If a mentioned repository cannot be selected.
+            RepositorySelectionError: If a mentioned repository cannot be selected.
         """
         potential_repos = JiraFactory._extract_potential_repos(
             payload.issue_key, issue_title, issue_description, payload.user_msg
@@ -447,7 +447,7 @@ class JiraFactory:
 
         provider_handler = await JiraFactory._create_provider_handler(user_auth)
         if not provider_handler:
-            raise RepositoryNotFoundError(
+            raise RepositorySelectionError(
                 'No Git provider connected. Please connect a Git provider in OpenHands settings.'
             )
 
@@ -489,7 +489,7 @@ class JiraFactory:
 
         Raises:
             StartingConvoException: If view creation fails
-            RepositoryNotFoundError: If a mentioned repository cannot be selected
+            RepositorySelectionError: If a mentioned repository cannot be selected
         """
         logger.info(
             '[Jira] Creating view',

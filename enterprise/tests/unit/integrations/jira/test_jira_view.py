@@ -12,7 +12,10 @@ from integrations.jira.jira_payload import (
     JiraPayloadSkipped,
     JiraPayloadSuccess,
 )
-from integrations.jira.jira_types import RepositoryNotFoundError, StartingConvoException
+from integrations.jira.jira_types import (
+    RepositorySelectionError,
+    StartingConvoException,
+)
 from integrations.jira.jira_view import (
     JiraFactory,
     JiraNewConversationView,
@@ -263,7 +266,7 @@ class TestJiraFactory:
             )
 
             with pytest.raises(
-                RepositoryNotFoundError,
+                RepositorySelectionError,
                 match='Could not access any of the mentioned repositories',
             ):
                 await JiraFactory.create_view(
@@ -310,7 +313,7 @@ class TestJiraFactory:
             )
 
             with pytest.raises(
-                RepositoryNotFoundError, match='Multiple repositories found'
+                RepositorySelectionError, match='Multiple repositories found'
             ):
                 await JiraFactory.create_view(
                     payload=sample_webhook_payload,
@@ -348,7 +351,7 @@ class TestJiraFactory:
             )
 
             with pytest.raises(
-                RepositoryNotFoundError, match='No Git provider connected'
+                RepositorySelectionError, match='No Git provider connected'
             ):
                 await JiraFactory.create_view(
                     payload=sample_webhook_payload,

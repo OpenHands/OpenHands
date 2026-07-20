@@ -59,7 +59,7 @@ class StartingConvoException(Exception):
     pass
 
 
-class RepositoryNotFoundError(Exception):
+class RepositorySelectionError(Exception):
     """Raised when a mentioned repository cannot be selected.
 
     This is a separate error domain from StartingConvoException - it represents

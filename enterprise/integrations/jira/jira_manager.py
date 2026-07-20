@@ -21,7 +21,7 @@ from integrations.jira.jira_payload import (
 )
 from integrations.jira.jira_types import (
     JiraViewInterface,
-    RepositoryNotFoundError,
+    RepositorySelectionError,
     StartingConvoException,
 )
 from integrations.jira.jira_view import JiraFactory
@@ -141,9 +141,9 @@ class JiraManager(Manager[JiraViewInterface]):
                 user_auth=saas_user_auth,
                 decrypted_api_key=decrypted_api_key,
             )
-        except RepositoryNotFoundError as e:
+        except RepositorySelectionError as e:
             logger.warning(
-                '[Jira] Repository not found',
+                '[Jira] Repository selection failed',
                 extra={'issue_key': payload.issue_key, 'error': str(e)},
             )
             await self._send_error_from_payload(payload, workspace, str(e))
