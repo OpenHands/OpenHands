@@ -534,6 +534,14 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             target_str = f'{jira_dc_view.job_context.issue_description}\n{jira_dc_view.job_context.user_msg}'
             mentioned_repos = infer_repo_from_message(target_str)
 
+            if not mentioned_repos:
+                jira_dc_view.selected_repo = None
+                logger.info(
+                    '[Jira DC] repo resolution issue=%s inferred=[] verified=[]',
+                    jira_dc_view.job_context.issue_key,
+                )
+                return True
+
             # Verify each mentioned repo directly rather than enumerating the
             # user's full repo list (which is capped and misses repos on large
             # Bitbucket DC instances).
@@ -562,7 +570,7 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
                 )
                 return True
 
-            # Zero or multiple matches -- ask the user to disambiguate.
+            # Unverified or multiple mentioned repositories still require user action.
             await self._send_repo_selection_comment(
                 jira_dc_view, mentioned_repos, verified_repos
             )

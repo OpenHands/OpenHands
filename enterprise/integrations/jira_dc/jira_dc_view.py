@@ -83,9 +83,6 @@ class JiraDcNewConversationView(JiraDcViewInterface):
         Raises:
             StartingConvoException: If conversation creation fails
         """
-        if not self.selected_repo:
-            raise StartingConvoException('No repository selected for this conversation')
-
         # Generate conversation ID
         self.conversation_id = uuid4().hex
 
@@ -187,23 +184,25 @@ class JiraDcNewConversationView(JiraDcViewInterface):
 
     async def _get_resolved_org_id(self) -> UUID | None:
         """Resolve the org ID for V1 conversations."""
+        selected_repo = self.selected_repo
+        if not selected_repo:
+            return None
+
         provider_tokens = await self.saas_user_auth.get_provider_tokens()
-        if not provider_tokens or not self.selected_repo:
+        if not provider_tokens:
             return None
 
         try:
             provider_handler = ProviderHandler(provider_tokens)
-            repository = await provider_handler.verify_repo_provider(self.selected_repo)
+            repository = await provider_handler.verify_repo_provider(selected_repo)
             resolved_org_id = await resolve_org_for_repo(
                 provider=repository.git_provider.value,
-                full_repo_name=self.selected_repo,
+                full_repo_name=selected_repo,
                 keycloak_user_id=self.jira_dc_user.keycloak_user_id,
             )
             return resolved_org_id
         except Exception as e:
-            logger.warning(
-                f'[Jira DC] Failed to resolve org for {self.selected_repo}: {e}'
-            )
+            logger.warning(f'[Jira DC] Failed to resolve org for {selected_repo}: {e}')
             return None
 
     def get_response_msg(self) -> str:
@@ -215,7 +214,10 @@ class JiraDcNewConversationView(JiraDcViewInterface):
             if self.selected_repo
             else "I'm on it!"
         )
-        return f'{prefix} {self.job_context.display_name} can [track my progress here|{conversation_link}].'
+        message = f'{prefix} {self.job_context.display_name} can [track my progress here|{conversation_link}].'
+        if self.selected_repo is None:
+            message += '\n\nNote: This conversation started without a repository.'
+        return message
 
 
 @dataclass

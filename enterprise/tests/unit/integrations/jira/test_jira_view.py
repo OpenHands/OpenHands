@@ -18,6 +18,10 @@ from integrations.jira.jira_view import (
     JiraNewConversationView,
 )
 
+from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversationStartTaskStatus,
+)
+
 
 class TestJiraNewConversationView:
     """Tests for JiraNewConversationView"""
@@ -86,14 +90,39 @@ class TestJiraNewConversationView:
         assert 'Test Issue' in user_msg
 
     @pytest.mark.asyncio
+    @patch('integrations.jira.jira_view.get_app_conversation_service')
+    @patch('integrations.jira.jira_view.integration_store')
     async def test_create_or_update_conversation_no_repo(
-        self, new_conversation_view, mock_jinja_env
+        self,
+        mock_store,
+        mock_get_service,
+        new_conversation_view,
+        mock_jinja_env,
     ):
-        """Test conversation creation without selected repo"""
+        """Test conversation creation without a selected repository."""
         new_conversation_view.selected_repo = None
+        new_conversation_view._issue_title = 'Test Issue'
+        new_conversation_view._issue_description = 'Test description'
+        mock_store.create_conversation = AsyncMock()
+        captured_requests = []
 
-        with pytest.raises(StartingConvoException, match='No repository selected'):
-            await new_conversation_view.create_or_update_conversation(mock_jinja_env)
+        async def mock_start_generator(request):
+            captured_requests.append(request)
+            yield MagicMock(status=AppConversationStartTaskStatus.READY)
+
+        mock_service = MagicMock()
+        mock_service.start_app_conversation = mock_start_generator
+        mock_get_service.return_value.__aenter__.return_value = mock_service
+
+        result = await new_conversation_view.create_or_update_conversation(
+            mock_jinja_env
+        )
+
+        assert result
+        assert len(captured_requests) == 1
+        assert captured_requests[0].selected_repository is None
+        assert captured_requests[0].git_provider is None
+        mock_store.create_conversation.assert_awaited_once()
 
     def test_get_response_msg(self, new_conversation_view):
         """Test get_response_msg method"""
@@ -103,6 +132,14 @@ class TestJiraNewConversationView:
         assert 'Test User' in response
         assert 'track my progress here' in response
         assert 'conv-123' in response
+        assert 'started without a repository' not in response
+
+    def test_get_response_msg_without_repo(self, new_conversation_view):
+        new_conversation_view.selected_repo = None
+
+        response = new_conversation_view.get_response_msg()
+
+        assert 'Note: This conversation started without a repository.' in response
 
 
 class TestJiraFactory:
@@ -167,11 +204,7 @@ class TestJiraFactory:
         sample_jira_user,
         sample_jira_workspace,
     ):
-        """Test factory raises error when no repo mentioned in text."""
-        mock_handler = MagicMock()
-        mock_create_handler.return_value = mock_handler
-
-        # No repos found in text
+        """Test factory creates a view without a selected repository."""
         mock_infer_repos.return_value = []
 
         mock_response = MagicMock()
@@ -185,16 +218,16 @@ class TestJiraFactory:
                 return_value=mock_response
             )
 
-            with pytest.raises(
-                RepositoryNotFoundError, match='Could not determine which repository'
-            ):
-                await JiraFactory.create_view(
-                    payload=sample_webhook_payload,
-                    workspace=sample_jira_workspace,
-                    user=sample_jira_user,
-                    user_auth=sample_user_auth,
-                    decrypted_api_key='test_api_key',
-                )
+            view = await JiraFactory.create_view(
+                payload=sample_webhook_payload,
+                workspace=sample_jira_workspace,
+                user=sample_jira_user,
+                user_auth=sample_user_auth,
+                decrypted_api_key='test_api_key',
+            )
+
+        assert view.selected_repo is None
+        mock_create_handler.assert_not_awaited()
 
     @pytest.mark.asyncio
     @patch('integrations.jira.jira_view.JiraFactory._create_provider_handler')
@@ -289,15 +322,18 @@ class TestJiraFactory:
 
     @pytest.mark.asyncio
     @patch('integrations.jira.jira_view.JiraFactory._create_provider_handler')
+    @patch('integrations.jira.jira_view.infer_repo_from_message')
     async def test_create_view_no_provider(
         self,
+        mock_infer_repos,
         mock_create_handler,
         sample_webhook_payload,
         sample_user_auth,
         sample_jira_user,
         sample_jira_workspace,
     ):
-        """Test factory raises error when no provider is connected."""
+        """Test factory raises error for a mentioned repo without a provider."""
+        mock_infer_repos.return_value = ['test/repo1']
         mock_create_handler.return_value = None
 
         mock_response = MagicMock()
@@ -480,6 +516,17 @@ class TestJiraV1Conversation:
             await new_conversation_view._initialize_conversation()
 
             assert new_conversation_view.resolved_org_id == test_org_id
+
+    @pytest.mark.asyncio
+    async def test_get_resolved_org_id_without_repo_skips_provider_lookup(
+        self, new_conversation_view
+    ):
+        new_conversation_view.selected_repo = None
+
+        resolved_org_id = await new_conversation_view._get_resolved_org_id()
+
+        assert resolved_org_id is None
+        new_conversation_view.saas_user_auth.get_provider_tokens.assert_not_awaited()
 
     def test_create_jira_v1_callback_processor(
         self, new_conversation_view, sample_jira_workspace

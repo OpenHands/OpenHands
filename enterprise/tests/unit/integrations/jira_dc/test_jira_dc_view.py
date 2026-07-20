@@ -109,7 +109,7 @@ def _make_start_conversation_patches():
         )
 
         with (
-            patch('integrations.jira_dc.jira_dc_view.integration_store'),
+            patch('integrations.jira_dc.jira_dc_view.integration_store') as mock_store,
             patch(
                 'integrations.jira_dc.jira_dc_view.resolve_org_for_repo',
                 new=AsyncMock(return_value=None),
@@ -119,6 +119,7 @@ def _make_start_conversation_patches():
                 'integrations.jira_dc.jira_dc_view.get_app_conversation_service',
             ) as mock_svc_ctx,
         ):
+            mock_store.create_conversation = AsyncMock()
             mock_svc_ctx.return_value.__aenter__ = AsyncMock(
                 return_value=mock_app_conversation_service
             )
@@ -175,3 +176,35 @@ async def test_create_v1_conversation_does_not_fetch_jira_dc_token(
 
     assert len(captured_requests) == 1
     assert captured_requests[0].secrets is None
+
+
+@pytest.mark.asyncio
+async def test_create_conversation_without_repository(
+    new_conversation_view, mock_jinja_env
+):
+    new_conversation_view.selected_repo = None
+    captured_requests = []
+
+    async def _fake_start(request):
+        captured_requests.append(request)
+        return
+        yield
+
+    async with _make_start_conversation_patches()(new_conversation_view) as mock_svc:
+        mock_svc.start_app_conversation = _fake_start
+        conversation_id = await new_conversation_view.create_or_update_conversation(
+            mock_jinja_env
+        )
+
+    assert conversation_id
+    assert len(captured_requests) == 1
+    assert captured_requests[0].selected_repository is None
+    assert captured_requests[0].git_provider is None
+
+
+def test_get_response_msg_without_repository(new_conversation_view):
+    new_conversation_view.selected_repo = None
+
+    response = new_conversation_view.get_response_msg()
+
+    assert 'Note: This conversation started without a repository.' in response
