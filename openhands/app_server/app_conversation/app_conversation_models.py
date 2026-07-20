@@ -250,7 +250,7 @@ class AppConversationStartRequest(OpenHandsModel):
     agent_type: AgentType = Field(default=AgentType.DEFAULT)
 
     public: bool | None = None
-    tags: dict[str, str] | None = Field(default=None, description="Optional tags to associate with the conversation.")
+    tags: dict[str, str] | None = Field(default=None, description='Optional tags to associate with the conversation.')
     # Plugin parameters - for loading remote plugins into the conversation
     plugins: list[PluginSpec] | None = Field(
         default=None,
@@ -284,7 +284,7 @@ class AppConversationUpdateRequest(BaseModel):
     selected_repository: str | None = None
     selected_branch: str | None = None
     git_provider: ProviderType | None = None
-    tags: dict[str, str] | None = Field(default=None, description="Optional tags to associate with the conversation.")
+    tags: dict[str, str] | None = Field(default=None, description='Optional tags to associate with the conversation.')
 
 
 class AppConversationStartTaskStatus(Enum):
