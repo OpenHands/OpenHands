@@ -301,7 +301,21 @@ async def jira_events(
 
         signature = parts[1]
         body = await request.body()
-        payload = await request.json()
+        try:
+            payload = await request.json()
+        except json.JSONDecodeError:
+            logger.error(
+                '[Jira] Webhook body is not valid JSON',
+                extra={
+                    'content_type': request.headers.get('content-type'),
+                    'body_length': len(body),
+                    'body_preview': body[:2000].decode('utf-8', errors='replace'),
+                },
+            )
+            raise HTTPException(
+                status_code=400,
+                detail='Webhook body is not valid JSON',
+            )
 
         await verify_jira_signature(body, signature, payload)
 
