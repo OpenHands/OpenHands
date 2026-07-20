@@ -499,7 +499,7 @@ async def _match_url_source_to_provider(
             matched = (urlparse(token_host).hostname or '').lower() == host
         else:
             default_domain = ProviderHandler.PROVIDER_DOMAINS.get(provider_type)
-            matched = bool(default_domain) and default_domain.lower() == host
+            matched = default_domain is not None and default_domain.lower() == host
         if matched:
             repo_path = _repo_path_from_url_path(path, provider_type)
             if not repo_path or '/' not in repo_path:
