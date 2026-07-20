@@ -120,8 +120,14 @@ def broker(monkeypatch):
         'session-b': _sandbox('b'),
     }
     validate_session_key = AsyncMock(side_effect=lambda key, **_kwargs: sandboxes[key])
+    validate_teardown_session_key = AsyncMock(
+        side_effect=HTTPException(401, detail='invalid teardown key')
+    )
     get_store = AsyncMock(return_value=store)
     monkeypatch.setattr(codex_auth, 'validate_session_key', validate_session_key)
+    monkeypatch.setattr(
+        codex_auth, 'validate_teardown_session_key', validate_teardown_session_key
+    )
     monkeypatch.setattr(codex_auth, '_get_store', get_store)
     return store, get_store
 
@@ -141,8 +147,8 @@ def _token(jwt_service: JwtService, conversation_id: UUID, sandbox_id: str) -> s
 
 def _headers(jwt_service, conversation_id, sandbox_id):
     return {
-        'X-OH-Sandbox': f'session-{sandbox_id}',
-        'X-OH-Codex': _token(jwt_service, conversation_id, sandbox_id),
+        'X-OH-Sandbox-Key': f'session-{sandbox_id}',
+        'X-OH-Codex-Token': _token(jwt_service, conversation_id, sandbox_id),
     }
 
 
@@ -237,7 +243,10 @@ def test_revocation_rejects_equivalent_padded_jwt(app, jwt_service, broker):
         f'/api/internal/conversations/{_FIRST_ID}/codex-auth',
         headers=headers,
     )
-    padded_headers = {**headers, 'X-OH-Codex': f'{headers["X-OH-Codex"]}='}
+    padded_headers = {
+        **headers,
+        'X-OH-Codex-Token': f'{headers["X-OH-Codex-Token"]}=',
+    }
     padded_response = client.get(
         f'/api/internal/conversations/{_FIRST_ID}/codex-auth',
         headers=padded_headers,
@@ -350,7 +359,7 @@ def test_digest_conflict_never_overwrites_current_value(app, jwt_service, broker
     assert store.value == current
 
 
-def test_update_uses_database_cas_without_redis_lock(
+def test_update_uses_credential_lock(
     app, jwt_service, broker, fake_redis
 ):
     store, _ = broker
@@ -365,11 +374,106 @@ def test_update_uses_database_cas_without_redis_lock(
     )
 
     assert response.status_code == 204
-    assert fake_redis.lock_calls == []
+    assert len(fake_redis.lock_calls) == 1
 
 
-def test_paused_session_key_is_rejected_on_all_routes(app, jwt_service, broker):
+def test_update_rechecks_authorization_after_lock(
+    app, jwt_service, broker, monkeypatch
+):
+    scope = codex_auth._CodexAuthScope(
+        user_id='user-1',
+        org_id=UUID('11111111-1111-1111-1111-111111111111'),
+        sandbox_id='a',
+        conversation_id=_FIRST_ID,
+        token_digest='digest',
+        expires_at=9999999999,
+    )
+    authorize = AsyncMock(side_effect=[scope, HTTPException(401, detail='revoked')])
+    monkeypatch.setattr(codex_auth, '_authorize', authorize)
+
+    response = TestClient(app).put(
+        f'/api/internal/conversations/{_FIRST_ID}/codex-auth',
+        headers=_headers(jwt_service, _FIRST_ID, 'a'),
+        json={
+            'expected_digest': hashlib.sha256(broker[0].value.encode()).hexdigest(),
+            'value': broker[0].value,
+        },
+    )
+
+    assert response.status_code == 401
+    assert authorize.await_count == 2
+    broker[1].assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_waits_for_in_flight_refresh(
+    app, jwt_service, broker, monkeypatch
+):
+    original = (
+        '{"auth_mode":"chatgpt","tokens":'
+        '{"id_token":"id-r0","access_token":"access-r0",'
+        '"refresh_token":"refresh-r0"}}'
+    )
+    store, _ = broker
+    store.value = original
+    refresh_started = asyncio.Event()
+    continue_refresh = asyncio.Event()
+
+    async def refresh_upstream(_refresh_token):
+        refresh_started.set()
+        await continue_refresh.wait()
+        return httpx.Response(
+            200,
+            json={
+                'id_token': 'id-r1',
+                'access_token': 'access-r1',
+                'refresh_token': 'refresh-r1',
+            },
+        )
+
+    monkeypatch.setattr(codex_auth, '_request_token_refresh', refresh_upstream)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport, base_url='http://testserver'
+    ) as client:
+        refresh_task = asyncio.create_task(
+            client.post(
+                f'/api/internal/conversations/{_FIRST_ID}/codex-auth/refresh',
+                headers=_refresh_headers(jwt_service, _FIRST_ID, 'a'),
+                json={
+                    'client_id': codex_auth._REFRESH_CLIENT_ID,
+                    'grant_type': 'refresh_token',
+                    'refresh_token': 'refresh-r0',
+                },
+            )
+        )
+        await asyncio.wait_for(refresh_started.wait(), timeout=1)
+        update_task = asyncio.create_task(
+            client.put(
+                f'/api/internal/conversations/{_FIRST_ID}/codex-auth',
+                headers=_headers(jwt_service, _FIRST_ID, 'a'),
+                json={
+                    'expected_digest': hashlib.sha256(original.encode()).hexdigest(),
+                    'value': original,
+                },
+            )
+        )
+        await asyncio.sleep(0.01)
+        assert not update_task.done()
+        continue_refresh.set()
+        refresh_response, update_response = await asyncio.gather(
+            refresh_task, update_task
+        )
+
+    assert refresh_response.status_code == 200
+    assert update_response.status_code == 409
+    assert 'refresh-r1' in store.value
+
+
+def test_paused_teardown_key_can_finish_broker_cleanup(app, jwt_service, broker):
     codex_auth.validate_session_key.side_effect = HTTPException(401)
+    codex_auth.validate_teardown_session_key.side_effect = None
+    codex_auth.validate_teardown_session_key.return_value = _sandbox('a')
     client = TestClient(app)
     headers = _headers(jwt_service, _FIRST_ID, 'a')
     path = f'/api/internal/conversations/{_FIRST_ID}/codex-auth'
@@ -387,7 +491,7 @@ def test_paused_session_key_is_rejected_on_all_routes(app, jwt_service, broker):
         client.delete(path, headers=headers),
     ]
 
-    assert [response.status_code for response in responses] == [401, 401, 401, 401]
+    assert [response.status_code for response in responses] == [200, 204, 204, 204]
 
 
 def test_refresh_does_not_accept_paused_session_key(app, jwt_service, broker):
@@ -403,6 +507,7 @@ def test_refresh_does_not_accept_paused_session_key(app, jwt_service, broker):
     )
 
     assert response.status_code == 401
+    codex_auth.validate_teardown_session_key.assert_not_awaited()
 
 
 def test_refresh_rechecks_authorization_after_lock(

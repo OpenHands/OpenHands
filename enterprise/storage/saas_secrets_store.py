@@ -105,12 +105,9 @@ class SaasSecretsStore(SecretsStore):
                 )
                 stored_codex_auth = result.scalar_one_or_none()
                 preserve_codex_auth = stored_codex_auth is not None
-
-            if preserve_codex_auth:
                 secrets_json.pop(_CODEX_AUTH_SECRET_NAME, None)
                 if (
-                    loaded_codex_known
-                    and stored_codex_auth is not None
+                    stored_codex_auth is not None
                     and isinstance(codex_auth_info, dict)
                 ):
                     description = codex_auth_info.get('description')
@@ -119,6 +116,8 @@ class SaasSecretsStore(SecretsStore):
                         if description is not None
                         else None
                     )
+            elif preserve_codex_auth:
+                secrets_json.pop(_CODEX_AUTH_SECRET_NAME, None)
 
             # Incoming secrets are always the most updated ones
             # Delete existing records for this user AND organization only

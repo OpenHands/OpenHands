@@ -8,7 +8,7 @@ import types
 import zipfile
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -58,6 +58,9 @@ from openhands.sdk import Agent, AgentContext, Event
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
+from openhands.sdk.skills import Skill
+from openhands.sdk.tool import Tool
+from openhands.sdk.utils.cipher import Cipher
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 
@@ -4396,10 +4399,16 @@ class TestBuildAcpStartConversationRequestSecrets:
             f'{request.conversation_id}/codex-auth'
         )
         assert scoped.headers == {
-            'X-OH-Sandbox': 'session-key',
-            'X-OH-Codex': 'scoped-token',
+            'X-OH-Sandbox-Key': 'session-key',
+            'X-OH-Codex-Token': 'scoped-token',
         }
-        restored = LookupSecret.model_validate_json(scoped.model_dump_json())
+        cipher = Cipher('conversation-secret')
+        serialized = scoped.model_dump_json(context={'cipher': cipher})
+        assert 'session-key' not in serialized
+        assert 'scoped-token' not in serialized
+        restored = LookupSecret.model_validate_json(
+            serialized, context={'cipher': cipher}
+        )
         assert restored.headers == scoped.headers
         assert scoped.description == 'Codex login'
         service.jwt_service.create_jws_token.assert_called_once_with(
@@ -4410,8 +4419,44 @@ class TestBuildAcpStartConversationRequestSecrets:
                 'sandbox_id': 'sandbox-1',
                 'conversation_id': str(request.conversation_id),
                 'secret_name': 'CODEX_AUTH_JSON',
+                'jti': ANY,
             },
             expires_in=None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_codex_subscription_auth_reissues_capability_for_resume(
+        self, service
+    ):
+        org_id = UUID('11111111-1111-1111-1111-111111111111')
+        conversation_id = uuid4()
+        source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"r0"}}'))
+        user = self._make_acp_user(acp_server='codex')
+        sandbox = Mock(spec=SandboxInfo)
+        sandbox.id = 'sandbox-1'
+        sandbox.session_api_key = 'resumed-session-key'
+        service.app_mode = 'saas'
+        service.web_url = 'https://cloud.example.com'
+        service.user_context.get_effective_org_id = AsyncMock(return_value=org_id)
+
+        def create_token(*, payload, expires_in):
+            assert expires_in is None
+            return payload['jti']
+
+        service.jwt_service.create_jws_token.side_effect = create_token
+        first = {'CODEX_AUTH_JSON': source}
+        second = {'CODEX_AUTH_JSON': source}
+
+        await service._scope_codex_subscription_auth(
+            first, user.agent_settings, user, sandbox, conversation_id
+        )
+        await service._scope_codex_subscription_auth(
+            second, user.agent_settings, user, sandbox, conversation_id
+        )
+
+        assert (
+            first['CODEX_AUTH_JSON'].headers['X-OH-Codex-Token']
+            != second['CODEX_AUTH_JSON'].headers['X-OH-Codex-Token']
         )
 
     @pytest.mark.asyncio

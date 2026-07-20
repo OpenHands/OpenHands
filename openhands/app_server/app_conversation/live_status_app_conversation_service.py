@@ -2314,14 +2314,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 'sandbox_id': sandbox.id,
                 'conversation_id': str(conversation_id),
                 'secret_name': 'CODEX_AUTH_JSON',
+                'jti': str(uuid4()),
             },
             expires_in=self.access_token_hard_timeout,
         )
         secrets['CODEX_AUTH_JSON'] = LookupSecret(
             url=f'{self.web_url.rstrip("/")}{codex_auth_path(conversation_id)}',
             headers={
-                'X-OH-Sandbox': sandbox.session_api_key,
-                'X-OH-Codex': token,
+                'X-OH-Sandbox-Key': sandbox.session_api_key,
+                'X-OH-Codex-Token': token,
             },
             description=source.description,
         )

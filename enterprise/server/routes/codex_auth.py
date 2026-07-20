@@ -19,7 +19,10 @@ from storage.redis import get_redis_client_async, redis_exceptions
 
 from openhands.app_server.config import depends_jwt_service
 from openhands.app_server.constants import MAX_API_SECRET_VALUE_LENGTH
-from openhands.app_server.sandbox.session_auth import validate_session_key
+from openhands.app_server.sandbox.session_auth import (
+    validate_session_key,
+    validate_teardown_session_key,
+)
 from openhands.app_server.secrets.codex_auth import (
     CODEX_AUTH_ROUTE,
     CODEX_AUTH_ROUTE_PREFIX,
@@ -85,13 +88,19 @@ async def _authorize(
     jwt_service: JwtService,
     *,
     allow_revoked: bool = False,
+    allow_paused_teardown: bool = False,
 ) -> _CodexAuthScope:
     if not codex_auth_token:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
-            detail='X-OH-Codex header is required',
+            detail='X-OH-Codex-Token header is required',
         )
-    sandbox = await validate_session_key(session_api_key)
+    try:
+        sandbox = await validate_session_key(session_api_key)
+    except HTTPException as exc:
+        if not allow_paused_teardown or exc.status_code != status.HTTP_401_UNAUTHORIZED:
+            raise
+        sandbox = await validate_teardown_session_key(session_api_key)
     try:
         claims = jwt_service.verify_jws_token(codex_auth_token)
         org_id = UUID(str(claims['org_id']))
@@ -269,11 +278,17 @@ async def _parse_refresh_request(request: Request) -> str:
 @router.get(CODEX_AUTH_ROUTE, include_in_schema=False)
 async def get_codex_auth(
     conversation_id: UUID,
-    x_oh_sandbox: str | None = Header(None),
-    x_oh_codex: str | None = Header(None),
+    x_oh_sandbox_key: str | None = Header(None),
+    x_oh_codex_token: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    scope = await _authorize(conversation_id, x_oh_sandbox, x_oh_codex, jwt_service)
+    scope = await _authorize(
+        conversation_id,
+        x_oh_sandbox_key,
+        x_oh_codex_token,
+        jwt_service,
+        allow_paused_teardown=True,
+    )
     store = await _get_store(scope)
     value = await store.get_value()
     if value is None:
@@ -295,11 +310,17 @@ async def get_codex_auth(
 @router.head(CODEX_AUTH_ROUTE, include_in_schema=False)
 async def touch_codex_auth(
     conversation_id: UUID,
-    x_oh_sandbox: str | None = Header(None),
-    x_oh_codex: str | None = Header(None),
+    x_oh_sandbox_key: str | None = Header(None),
+    x_oh_codex_token: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    scope = await _authorize(conversation_id, x_oh_sandbox, x_oh_codex, jwt_service)
+    scope = await _authorize(
+        conversation_id,
+        x_oh_sandbox_key,
+        x_oh_codex_token,
+        jwt_service,
+        allow_paused_teardown=True,
+    )
     store = await _get_store(scope)
     value = await store.get_value()
     if value is None:
@@ -317,24 +338,38 @@ async def touch_codex_auth(
 async def update_codex_auth(
     conversation_id: UUID,
     request: Request,
-    x_oh_sandbox: str | None = Header(None),
-    x_oh_codex: str | None = Header(None),
+    x_oh_sandbox_key: str | None = Header(None),
+    x_oh_codex_token: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    scope = await _authorize(conversation_id, x_oh_sandbox, x_oh_codex, jwt_service)
+    scope = await _authorize(
+        conversation_id,
+        x_oh_sandbox_key,
+        x_oh_codex_token,
+        jwt_service,
+        allow_paused_teardown=True,
+    )
     expected_digest, value = await _parse_update(request)
-    store = await _get_store(scope)
-    try:
-        updated = await store.compare_and_swap(expected_digest, value)
-    except KeyError as exc:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, detail='Codex credentials were not found'
-        ) from exc
-    if not updated:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail='Codex credentials changed in another session.',
+    async with _credential_lock(scope):
+        scope = await _authorize(
+            conversation_id,
+            x_oh_sandbox_key,
+            x_oh_codex_token,
+            jwt_service,
+            allow_paused_teardown=True,
         )
+        store = await _get_store(scope)
+        try:
+            updated = await store.compare_and_swap(expected_digest, value)
+        except KeyError as exc:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, detail='Codex credentials were not found'
+            ) from exc
+        if not updated:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail='Codex credentials changed in another session.',
+            )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -422,16 +457,17 @@ async def refresh_codex_auth(
 @router.delete(CODEX_AUTH_ROUTE, include_in_schema=False)
 async def release_codex_auth(
     conversation_id: UUID,
-    x_oh_sandbox: str | None = Header(None),
-    x_oh_codex: str | None = Header(None),
+    x_oh_sandbox_key: str | None = Header(None),
+    x_oh_codex_token: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
     scope = await _authorize(
         conversation_id,
-        x_oh_sandbox,
-        x_oh_codex,
+        x_oh_sandbox_key,
+        x_oh_codex_token,
         jwt_service,
         allow_revoked=True,
+        allow_paused_teardown=True,
     )
     await _revoke(scope)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

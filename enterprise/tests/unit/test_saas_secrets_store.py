@@ -214,7 +214,7 @@ class TestSaasSecretsStore:
         'storage.saas_secrets_store.UserStore.get_user_by_id',
         new_callable=AsyncMock,
     )
-    async def test_stale_save_restores_submitted_codex_auth(
+    async def test_stale_save_preserves_concurrent_codex_auth_deletion(
         self, mock_get_user, secrets_store, mock_user
     ):
         mock_get_user.return_value = mock_user
@@ -249,16 +249,15 @@ class TestSaasSecretsStore:
 
         updated = dict(stale.custom_secrets)
         updated['OTHER'] = CustomSecret.from_value({'secret': 'new', 'description': ''})
-        await stale_store.store(
-            stale.model_copy(update={'custom_secrets': MappingProxyType(updated)})
+        stale_update = stale.model_copy(
+            update={'custom_secrets': MappingProxyType(updated)}
         )
+        await stale_store.store(stale_update)
+        await stale_store.store(stale_update)
 
         loaded = await stale_store.load()
         assert loaded is not None
-        assert (
-            loaded.custom_secrets['CODEX_AUTH_JSON'].secret.get_secret_value()
-            == '{"tokens":{"refresh_token":"r0"}}'
-        )
+        assert 'CODEX_AUTH_JSON' not in loaded.custom_secrets
         assert loaded.custom_secrets['OTHER'].secret.get_secret_value() == 'new'
 
     @pytest.mark.asyncio
