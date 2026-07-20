@@ -9,6 +9,7 @@ from fastapi import HTTPException, status
 
 CODEX_AUTH_ROUTE_PREFIX = '/api/internal/conversations'
 CODEX_AUTH_ROUTE = '/{conversation_id}/codex-auth'
+# OAuth client IDs identify public clients and are not secrets.
 CODEX_REFRESH_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
 _REFRESH_TOKEN_URL = 'https://auth.openai.com/oauth/token'
 
