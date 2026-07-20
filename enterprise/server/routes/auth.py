@@ -178,6 +178,7 @@ async def _get_user_orgs_with_data(user_id: str, org_member_ids: list) -> list:
         logger.exception(
             'auth:_get_user_orgs_with_data:failed',
             extra={'user_id': user_id, 'org_ids': [str(oid) for oid in org_member_ids]},
+            stack_info=True,
         )
         return []
 
@@ -217,6 +218,7 @@ async def _track_login_analytics_background(
                 logger.exception(
                     'auth:identify_user:member_count_failed',
                     extra={'user_id': user_id, 'org_id': str(org.id)},
+                    stack_info=True,
                 )
                 member_count = None
             orgs_data.append(
@@ -248,6 +250,7 @@ async def _track_login_analytics_background(
         logger.exception(
             'auth:_track_login_analytics_background:failed',
             extra={'user_id': user_id},
+            stack_info=True,
         )
 
 
@@ -393,8 +396,10 @@ async def keycloak_callback(
                 error_url = f'{web_url}/login?recaptcha_blocked=true'
                 return RedirectResponse(error_url, status_code=302)
 
-        except Exception as e:
-            logger.exception(f'reCAPTCHA verification error at callback: {e}')
+        except Exception:
+            logger.exception(
+                'reCAPTCHA verification error at callback', stack_info=True
+            )
             # Fail open - continue with login if reCAPTCHA service unavailable
 
     # Check email verification status
@@ -571,10 +576,13 @@ async def keycloak_callback(
             else:
                 redirect_url = f'{redirect_url}?email_mismatch=true'
 
-        except Exception as e:
+        except Exception:
             logger.exception(
                 'Unexpected error processing invitation during auth callback',
-                extra={'user_id': user_id, 'error': str(e)},
+                extra={
+                    'user_id': user_id,
+                },
+                stack_info=True,
             )
             # Don't fail the login if invitation processing fails
             if '?' in redirect_url:
@@ -591,10 +599,13 @@ async def keycloak_callback(
         )
         if accepted_invitations:
             user = await UserStore.get_user_by_id(user_id) or user
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error accepting pending invitations at login',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={
+                'user_id': user_id,
+            },
+            stack_info=True,
         )
 
     try:
@@ -602,10 +613,13 @@ async def keycloak_callback(
             user,
             is_new_user=is_new_user,
         )
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error applying default organization bootstrap',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={
+                'user_id': user_id,
+            },
+            stack_info=True,
         )
 
     # If the user hasn't accepted the TOS, redirect to the TOS page
@@ -1021,7 +1035,7 @@ async def accept_tos(request: Request):
                     properties={'signed_up_at': datetime.now(timezone.utc).isoformat()},
                 )
         except Exception:
-            logger.exception('analytics:user_signed_up:failed')
+            logger.exception('analytics:user_signed_up:failed', stack_info=True)
 
     # Determine final redirect - but don't override if it's the offline token flow
     # (the offline callback will handle post-auth redirect after storing the token)
@@ -1159,7 +1173,7 @@ async def complete_onboarding(
                     },
                 )
     except Exception:
-        logger.exception('analytics:onboarding_completed:failed')
+        logger.exception('analytics:onboarding_completed:failed', stack_info=True)
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,

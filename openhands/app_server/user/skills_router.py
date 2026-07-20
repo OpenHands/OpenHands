@@ -430,13 +430,15 @@ async def get_marketplace_skills(
             marketplace_skills[marketplace.name] = skill_names
 
     except Exception as e:
-        logger.exception(f'Unexpected error in marketplace-skills endpoint: {e}')
+        logger.exception(
+            'Unexpected error in marketplace-skills endpoint', stack_info=True
+        )
         errors.append(f'Internal error: {str(e)}')
         # Clean up before raising
         for clone_dir in cloned_dirs:
             _cleanup_clone_dir(clone_dir)
         # Raise HTTP 500 for critical errors
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         # Clean up cloned directories
         for clone_dir in cloned_dirs:

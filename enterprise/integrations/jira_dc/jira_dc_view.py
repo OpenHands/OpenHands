@@ -334,12 +334,13 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
                     f'[Jira DC] Sent message to existing conversation {self.conversation_id}'
                 )
             except httpx.HTTPStatusError as e:
-                logger.error(
-                    f'[Jira DC] Failed to send message: HTTP {e.response.status_code}'
+                logger.exception(
+                    f'[Jira DC] Failed to send message: HTTP {e.response.status_code}',
+                    stack_info=True,
                 )
                 raise
-            except Exception as e:
-                logger.error(f'[Jira DC] Failed to send message: {e}')
+            except Exception:
+                logger.exception('[Jira DC] Failed to send message', stack_info=True)
                 raise
 
     def get_response_msg(self) -> str:

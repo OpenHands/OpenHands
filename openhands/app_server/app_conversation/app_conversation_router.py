@@ -401,7 +401,7 @@ async def start_app_conversation(
                         has_repository=start_request.selected_repository is not None,
                     )
         except Exception:
-            logger.exception('analytics:conversation_created:failed')
+            logger.exception('analytics:conversation_created:failed', stack_info=True)
 
         asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
         return result
@@ -569,20 +569,21 @@ async def send_message_to_conversation(
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as e:
-        logger.error(
+        logger.exception(
             f'Agent server returned error when sending message: '
-            f'{e.response.status_code} - {e.response.text}'
+            f'{e.response.status_code} - {e.response.text}',
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f'Agent server error: {e.response.status_code}',
-        )
+        ) from e
     except httpx.RequestError as e:
-        logger.error(f'Failed to reach agent server: {e}')
+        logger.exception('Failed to reach agent server', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail='Failed to reach agent server.',
-        )
+        ) from e
 
     return AppSendMessageResponse(
         success=True,
@@ -614,6 +615,7 @@ async def _persist_conversation_model(
             'Failed to persist new llm_model on conversation %s after model '
             'switch — chip may be stale until the next refresh.',
             conversation_id,
+            stack_info=True,
         )
 
 
@@ -747,20 +749,23 @@ async def switch_conversation_profile(
             profile_llm.usage_id,
         )
     except httpx.HTTPStatusError as e:
-        logger.error(
+        logger.exception(
             'Agent server returned error during switch_llm: '
-            f'{e.response.status_code} - {e.response.text}'
+            f'{e.response.status_code} - {e.response.text}',
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f'Agent server error: {e.response.status_code}',
-        )
+        ) from e
     except httpx.RequestError as e:
-        logger.error(f'Failed to reach agent server during switch_llm: {e}')
+        logger.exception(
+            'Failed to reach agent server during switch_llm', stack_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail='Failed to reach agent server.',
-        )
+        ) from e
 
     # Persist the new model so the chat header reflects the swap on next fetch.
     await _persist_conversation_model(
@@ -835,9 +840,10 @@ async def switch_conversation_acp_model(
             request.model,
         )
     except httpx.HTTPStatusError as e:
-        logger.error(
+        logger.exception(
             'Agent server returned error during switch_acp_model: '
-            f'{e.response.status_code} - {e.response.text}'
+            f'{e.response.status_code} - {e.response.text}',
+            stack_info=True,
         )
         # Surface agent-server's 400/504 directly (not-ACP, timeout). The
         # pre-session 409 band-aid is gone as of SDK #3764: a pre-run switch now
@@ -846,17 +852,20 @@ async def switch_conversation_acp_model(
             raise HTTPException(
                 status_code=e.response.status_code,
                 detail=f'Agent server error: {e.response.status_code}',
-            )
+            ) from e
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f'Agent server error: {e.response.status_code}',
-        )
+        ) from e
     except httpx.RequestError as e:
-        logger.error(f'Failed to reach agent server during switch_acp_model: {e}')
+        logger.exception(
+            'Failed to reach agent server during switch_acp_model',
+            stack_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail='Failed to reach agent server.',
-        )
+        ) from e
 
     # Persist so the conversation's model chip reflects the switch on next load.
     await _persist_conversation_model(
@@ -915,7 +924,9 @@ async def _finalize_sandbox_delete(
         # orphaned row is left; the row + running runtime stay for the runtime-api
         # idle reap to capture + reap.
         logger.exception(
-            'Deferred sandbox cleanup failed for %s; kept for retry', sandbox_id
+            'Deferred sandbox cleanup failed for %s; kept for retry',
+            sandbox_id,
+            stack_info=True,
         )
         await db_session.rollback()
     finally:
@@ -990,7 +1001,7 @@ async def delete_app_conversation(
                 conversation_id=conversation_id,
             )
     except Exception:
-        logger.exception('analytics:conversation_deleted:failed')
+        logger.exception('analytics:conversation_deleted:failed', stack_info=True)
 
     # Commit the deletion
     await db_session.commit()
@@ -1259,28 +1270,39 @@ async def _proxy_git_runtime_call(
         upstream.raise_for_status()
         return upstream.json()
     except httpx.HTTPStatusError as e:
-        logger.error(
+        logger.exception(
             'Agent server returned error during %s: %s - %s',
             runtime_path,
             e.response.status_code,
             e.response.text,
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f'Agent server error: {e.response.status_code}',
-        )
+        ) from e
     except (json.JSONDecodeError, httpx.DecodingError) as e:
-        logger.error('Agent server returned non-JSON during %s: %s', runtime_path, e)
+        logger.exception(
+            'Agent server returned non-JSON during %s: %s',
+            runtime_path,
+            e,
+            stack_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail='Agent server returned unexpected response.',
-        )
+        ) from e
     except httpx.RequestError as e:
-        logger.error('Failed to reach agent server during %s: %s', runtime_path, e)
+        logger.exception(
+            'Failed to reach agent server during %s: %s',
+            runtime_path,
+            e,
+            stack_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail='Failed to reach agent server.',
-        )
+        ) from e
 
 
 @router.get('/{conversation_id}/git/changes')
@@ -1436,7 +1458,10 @@ async def get_conversation_skills(
         )
 
     except Exception as e:
-        logger.error(f'Error getting skills for conversation {conversation_id}: {e}')
+        logger.exception(
+            f'Error getting skills for conversation {conversation_id}',
+            stack_info=True,
+        )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={'error': f'Error getting skills: {str(e)}'},
@@ -1580,7 +1605,10 @@ async def get_conversation_hooks(
         )
 
     except Exception as e:
-        logger.error(f'Error getting hooks for conversation {conversation_id}: {e}')
+        logger.exception(
+            f'Error getting hooks for conversation {conversation_id}',
+            stack_info=True,
+        )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={'error': f'Error getting hooks: {str(e)}'},
@@ -1633,7 +1661,7 @@ async def export_conversation(
                     conversation_id=str(conversation_id),
                 )
         except Exception:
-            logger.exception('analytics:trajectory_downloaded:failed')
+            logger.exception('analytics:trajectory_downloaded:failed', stack_info=True)
 
         return StreamingResponse(
             zip_stream,
@@ -1643,17 +1671,17 @@ async def export_conversation(
             },
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except ConversationExportAlreadyRunning as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ConversationExportLockUnavailable as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=503, detail=str(e)) from e
     except ConversationExportTooLarge as e:
-        raise HTTPException(status_code=413, detail=str(e))
+        raise HTTPException(status_code=413, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f'Failed to download trajectory: {str(e)}'
-        )
+        ) from e
 
 
 async def _consume_remaining(

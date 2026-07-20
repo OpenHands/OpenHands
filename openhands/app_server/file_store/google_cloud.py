@@ -61,7 +61,7 @@ class GoogleCloudFileStore(FileStore):
             with blob.open('r') as f:
                 return str(f.read())
         except NotFound as err:
-            raise FileNotFoundError(err)
+            raise FileNotFoundError(err) from err
 
     def list(self, path: str) -> list[str]:
         if not path or path == '/':

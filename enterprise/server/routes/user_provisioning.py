@@ -331,7 +331,7 @@ async def provision_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail='Failed to create Keycloak user (it may already exist)',
-        )
+        ) from e
     except Exception:
         logger.exception(
             'provision_user:keycloak_create_unexpected',
@@ -340,6 +340,7 @@ async def provision_user(
                 'target_org_id': str(target_org_id),
                 'email': email,
             },
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -462,8 +463,8 @@ async def provision_user(
                 'target_org_id': str(target_org_id),
                 'kc_user_id': kc_user_id,
                 'email': email,
-                'error': str(e),
             },
+            stack_info=True,
         )
         await _rollback_partial_provision(
             token_manager=token_manager,
@@ -475,7 +476,7 @@ async def provision_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to finish provisioning user',
-        )
+        ) from e
 
     logger.info(
         'provision_user:success',
@@ -565,6 +566,7 @@ async def _rollback_partial_provision(
                     'target_org_id': str(target_org_id),
                     'openhands_user_id': str(openhands_user_id),
                 },
+                stack_info=True,
             )
 
     # 2. Personal-org cascade. Skip when ``UserStore.create_user`` had
@@ -582,6 +584,7 @@ async def _rollback_partial_provision(
                     'kc_user_id': kc_user_id,
                     'openhands_user_id': str(openhands_user_id),
                 },
+                stack_info=True,
             )
 
     # 3. Keycloak user. Always last; runs even when no OpenHands DB

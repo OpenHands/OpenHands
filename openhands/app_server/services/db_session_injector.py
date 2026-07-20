@@ -364,7 +364,9 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
                 if asyncio.iscoroutine(result):
                     await result
             except Exception:
-                _logger.exception('Error closing GCP Cloud SQL connector')
+                _logger.exception(
+                    'Error closing GCP Cloud SQL connector', stack_info=True
+                )
             self._gcp_connector = None
 
         engine = self._async_engine
@@ -372,7 +374,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
             try:
                 await engine.dispose()
             except Exception:
-                _logger.exception('Error disposing async DB engine')
+                _logger.exception('Error disposing async DB engine', stack_info=True)
 
 
 def set_db_session_keep_open(state: InjectorState, keep_open: bool):

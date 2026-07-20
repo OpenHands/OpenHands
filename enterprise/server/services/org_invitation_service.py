@@ -142,14 +142,14 @@ class OrgInvitationService:
                 invitation_token=invitation.token,
                 invitation_id=invitation.id,
             )
-        except Exception as e:
-            logger.error(
+        except Exception:
+            logger.exception(
                 'Failed to send invitation email',
                 extra={
                     'invitation_id': invitation.id,
                     'email': email,
-                    'error': str(e),
                 },
+                stack_info=True,
             )
             # Don't fail the invitation creation if email fails
             # The user can still access via direct link
@@ -312,6 +312,7 @@ class OrgInvitationService:
                         'user_id': str(user.id),
                         'org_id': str(invitation.org_id),
                     },
+                    stack_info=True,
                 )
                 continue
 
@@ -473,18 +474,18 @@ class OrgInvitationService:
                 invitation.org_id, str(user_id)
             )
         except Exception as e:
-            logger.error(
+            logger.exception(
                 'Failed to create LiteLLM integration for invitation acceptance',
                 extra={
                     'invitation_id': invitation.id,
                     'user_id': str(user_id),
                     'org_id': str(invitation.org_id),
-                    'error': str(e),
                 },
+                stack_info=True,
             )
             raise InvitationInvalidError(
                 'Failed to set up organization access. Please try again.'
-            )
+            ) from e
 
         # Step 4.5: Ensure the organization still exists before adding membership
         org = await OrgStore.get_org_by_id(invitation.org_id)

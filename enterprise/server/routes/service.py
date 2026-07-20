@@ -185,13 +185,13 @@ async def get_or_create_api_key_for_user(
             extra={
                 'user_id': user_id,
                 'org_id': str(org_id),
-                'error': str(e),
             },
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to get or create API key',
-        )
+        ) from e
 
     logger.info(
         'Service created API key for user',

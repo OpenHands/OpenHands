@@ -823,8 +823,8 @@ class SaasSettingsStore(SettingsStore):
                         normalized.append(mp.model_dump())
                 return normalized
             return []
-        except Exception as e:
-            logger.error(f'Error fetching org marketplaces: {e}')
+        except Exception:
+            logger.exception('Error fetching org marketplaces', stack_info=True)
             return []
 
     async def _ensure_api_key(

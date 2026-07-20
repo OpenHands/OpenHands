@@ -41,7 +41,7 @@ class SaasAppLifespanService(AppLifespanService):
             if svc is not None:
                 svc.shutdown()
         except Exception:
-            logger.exception('Error shutting down analytics service')
+            logger.exception('Error shutting down analytics service', stack_info=True)
 
         # Release long-lived database resources: the GCP Cloud SQL connector
         # (background cert-refresh tasks + aiohttp ClientSession) and the
@@ -52,4 +52,4 @@ class SaasAppLifespanService(AppLifespanService):
 
             await get_global_config().db_session.close()
         except Exception:
-            logger.exception('Error closing DB session injector')
+            logger.exception('Error closing DB session injector', stack_info=True)

@@ -13,6 +13,9 @@ export default [
   route("canvas/*", "routes/cross-app-redirect.tsx", {
     id: "routes/canvas-cross-app-redirect",
   }),
+  route("integrations-hub/*", "routes/cross-app-redirect.tsx", {
+    id: "routes/integrations-hub-cross-app-redirect",
+  }),
   layout("routes/root-layout.tsx", [
     index("routes/home.tsx"),
     route("accept-tos", "routes/accept-tos.tsx"),

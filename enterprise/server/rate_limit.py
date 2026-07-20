@@ -65,14 +65,17 @@ class RateLimiter:
             try:
                 allowed = await self.strategy.hit(lim, namespace, key)
             except Exception:
-                logger.exception('Rate limit check could not complete, redis issue?')
+                logger.exception(
+                    'Rate limit check could not complete, redis issue?', stack_info=True
+                )
             if not allowed:
                 logger.info(f'Rate limit hit for {namespace}:{key}')
                 try:
                     result = await self._get_stats_as_result(lim, namespace, key)
                 except Exception:
                     logger.exception(
-                        'Rate limit exceeded but window lookup failed, swallowing'
+                        'Rate limit exceeded but window lookup failed, swallowing',
+                        stack_info=True,
                     )
                 else:
                     raise RateLimitException(result)

@@ -257,10 +257,10 @@ class LiteLLMProxyModelService(DefaultLLMModelService):
                         exc_info=True,
                     )
                     return response
-                _logger.error(
+                _logger.exception(
                     'Failed to fetch models from the LiteLLM proxy and no '
                     'previous result is cached; returning an empty model list',
-                    exc_info=True,
+                    stack_info=True,
                 )
                 # Not cached, so the next request retries immediately. Still
                 # union the catalogue so BYOK users can bring a key while the

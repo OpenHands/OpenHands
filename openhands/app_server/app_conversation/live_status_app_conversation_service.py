@@ -1028,7 +1028,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             fallback_api_key = getattr(settings_llm, 'api_key', None)
         except Exception:
             _logger.exception(
-                'Failed to load profiles for sandbox %s', agent_server_url
+                'Failed to load profiles for sandbox %s',
+                agent_server_url,
+                stack_info=True,
             )
             return
 
@@ -1545,10 +1547,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
             mcp_servers.update(user_mcp)
 
-        except Exception as e:
-            _logger.error(
-                f'Error loading custom MCP config from user settings: {e}',
-                exc_info=True,
+        except Exception:
+            _logger.exception(
+                'Error loading custom MCP config from user settings',
+                stack_info=True,
             )
             # Continue with system config only, don't fail conversation startup
             _logger.warning(
@@ -2722,11 +2724,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             # AppConversation extends AppConversationInfo, so we can use it directly
             return await self._delete_from_database(app_conversation)
 
-        except Exception as e:
-            _logger.error(
-                f'Error deleting V1 conversation {conversation_id}: {e}',
+        except Exception:
+            _logger.exception(
+                f'Error deleting V1 conversation {conversation_id}',
                 extra={'conversation_id': str(conversation_id)},
-                exc_info=True,
+                stack_info=True,
             )
             return False
 

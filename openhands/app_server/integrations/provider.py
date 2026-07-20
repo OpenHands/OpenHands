@@ -216,10 +216,10 @@ class ProviderHandler:
             data = TokenResponse.model_validate_json(resp.text)
             return SecretStr(data.token)
 
-        except Exception as e:
-            logger.error(
-                f'Failed to fetch latest token for provider {provider}: {e}',
-                exc_info=True,
+        except Exception:
+            logger.exception(
+                f'Failed to fetch latest token for provider {provider}',
+                stack_info=True,
             )
 
         return None

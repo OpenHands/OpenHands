@@ -30,7 +30,7 @@ def _register_signal_handler(sig: signal.Signals) -> None:
                 try:
                     callable()
                 except Exception:
-                    logger.exception('Error calling shutdown listener')
+                    logger.exception('Error calling shutdown listener', stack_info=True)
             if original_handler:
                 original_handler(sig_, frame)  # type: ignore[unreachable]
 

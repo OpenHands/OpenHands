@@ -119,9 +119,9 @@ class ForgejoMixinBase(BaseGitService, HTTPClient):
                 return response.text, headers_out
 
         except httpx.HTTPStatusError as err:
-            raise self.handle_http_status_error(err)
+            raise self.handle_http_status_error(err) from err
         except httpx.HTTPError as err:
-            raise self.handle_http_error(err)
+            raise self.handle_http_error(err) from err
 
     def _resolve_base_url(
         self,

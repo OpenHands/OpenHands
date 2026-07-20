@@ -155,11 +155,13 @@ class JiraManager(Manager[JiraViewInterface]):
             )
             await self._send_error_from_payload(payload, workspace, str(e))
             return
-        except Exception as e:
-            logger.error(
+        except Exception:
+            logger.exception(
                 '[Jira] Unexpected error creating view',
-                extra={'issue_key': payload.issue_key, 'error': str(e)},
-                exc_info=True,
+                extra={
+                    'issue_key': payload.issue_key,
+                },
+                stack_info=True,
             )
             await self._send_error_from_payload(
                 payload,
@@ -312,11 +314,13 @@ class JiraManager(Manager[JiraViewInterface]):
             )
             msg_info = str(e)
 
-        except Exception as e:
-            logger.error(
+        except Exception:
+            logger.exception(
                 '[Jira] Unexpected error starting job',
-                extra={'issue_key': view.payload.issue_key, 'error': str(e)},
-                exc_info=True,
+                extra={
+                    'issue_key': view.payload.issue_key,
+                },
+                stack_info=True,
             )
             msg_info = 'Sorry, there was an unexpected error starting the job. Please try again.'
 
@@ -366,10 +370,13 @@ class JiraManager(Manager[JiraViewInterface]):
                 svc_acc_email=view.jira_workspace.svc_acc_email,
                 svc_acc_api_key=api_key,
             )
-        except Exception as e:
-            logger.error(
+        except Exception:
+            logger.exception(
                 '[Jira] Failed to send comment',
-                extra={'issue_key': view.payload.issue_key, 'error': str(e)},
+                extra={
+                    'issue_key': view.payload.issue_key,
+                },
+                stack_info=True,
             )
 
     async def _send_error_from_payload(
@@ -388,10 +395,13 @@ class JiraManager(Manager[JiraViewInterface]):
                 svc_acc_email=workspace.svc_acc_email,
                 svc_acc_api_key=api_key,
             )
-        except Exception as e:
-            logger.error(
+        except Exception:
+            logger.exception(
                 '[Jira] Failed to send error comment',
-                extra={'issue_key': payload.issue_key, 'error': str(e)},
+                extra={
+                    'issue_key': payload.issue_key,
+                },
+                stack_info=True,
             )
 
     def get_workspace_name_from_payload(self, payload: dict) -> str | None:

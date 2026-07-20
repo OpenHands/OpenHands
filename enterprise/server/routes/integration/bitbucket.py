@@ -121,6 +121,6 @@ async def bitbucket_events(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.exception(f'Error processing Bitbucket event: {e}')
+    except Exception:
+        logger.exception('Error processing Bitbucket event', stack_info=True)
         return JSONResponse(status_code=400, content={'error': 'Invalid payload.'})

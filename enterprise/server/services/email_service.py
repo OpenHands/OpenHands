@@ -144,13 +144,13 @@ class EmailService:
                     'response_id': response.get('id') if response else None,
                 },
             )
-        except Exception as e:
-            logger.error(
+        except Exception:
+            logger.exception(
                 'Failed to send invitation email',
                 extra={
                     'invitation_id': invitation_id,
                     'email': to_email,
-                    'error': str(e),
                 },
+                stack_info=True,
             )
             raise

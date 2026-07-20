@@ -143,10 +143,13 @@ class RemoteSandboxService(SandboxService):
                 if attempt + 1 < attempts:
                     _logger.warning(f'Timeout for URL {url}; retrying')
                     continue
-                _logger.error(f'No response received within timeout for URL: {url}')
+                _logger.exception(
+                    f'No response received within timeout for URL: {url}',
+                    stack_info=True,
+                )
                 raise
-            except httpx.HTTPError as e:
-                _logger.error(f'HTTP error for URL {url}: {e}')
+            except httpx.HTTPError:
+                _logger.exception(f'HTTP error for URL {url}', stack_info=True)
                 raise
         raise last_exc  # type: ignore[misc]  # unreachable; keeps mypy happy
 
@@ -510,8 +513,8 @@ class RemoteSandboxService(SandboxService):
             return self._to_sandbox_info(stored_sandbox, runtime_data)
 
         except httpx.HTTPError as e:
-            _logger.error(f'Failed to start sandbox: {e}')
-            raise SandboxError(f'Failed to start sandbox: {e}')
+            _logger.exception('Failed to start sandbox', stack_info=True)
+            raise SandboxError('Failed to start sandbox') from e
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
         """Resume a paused sandbox.
@@ -550,8 +553,8 @@ class RemoteSandboxService(SandboxService):
                 )
 
             return True
-        except httpx.HTTPError as e:
-            _logger.error(f'Error resuming sandbox {sandbox_id}: {e}')
+        except httpx.HTTPError:
+            _logger.exception(f'Error resuming sandbox {sandbox_id}', stack_info=True)
             return False
 
     async def pause_sandbox(self, sandbox_id: str) -> bool:
@@ -580,8 +583,8 @@ class RemoteSandboxService(SandboxService):
             response.raise_for_status()
             return True
 
-        except httpx.HTTPError as e:
-            _logger.error(f'Error pausing sandbox {sandbox_id}: {e}')
+        except httpx.HTTPError:
+            _logger.exception(f'Error pausing sandbox {sandbox_id}', stack_info=True)
             return False
 
     async def delete_sandbox(self, sandbox_id: str) -> bool:
@@ -644,7 +647,7 @@ class RemoteSandboxService(SandboxService):
             # signal retryable (503) — never a 404. Persist the key invalidation
             # now: the caller rolls back on this raise, which would otherwise
             # restore the hash and leave a just-revoked key valid.
-            _logger.error(f'Error deleting sandbox {sandbox_id}: {e}')
+            _logger.exception(f'Error deleting sandbox {sandbox_id}', stack_info=True)
             if had_key:
                 await self.db_session.commit()
             raise SandboxDeleteRetryError(
@@ -718,7 +721,9 @@ class RemoteSandboxService(SandboxService):
             # Could not resolve the workspace layout: never archive to the wrong
             # path. Honor REQUIRED (block + retry) vs best-effort (proceed).
             _logger.exception(
-                'Could not resolve archive path for %s', stored_sandbox.id
+                'Could not resolve archive path for %s',
+                stored_sandbox.id,
+                stack_info=True,
             )
             return not workspace_archive.archive_required()
 
@@ -764,6 +769,7 @@ class RemoteSandboxService(SandboxService):
                 'Workspace archive lookup failed for %s (%s)',
                 sandbox_id,
                 conversation_id,
+                stack_info=True,
             )
             return not workspace_archive.archive_required()
         except Exception:
@@ -771,6 +777,7 @@ class RemoteSandboxService(SandboxService):
                 'Workspace archive lookup failed for %s (%s)',
                 sandbox_id,
                 conversation_id,
+                stack_info=True,
             )
             return not workspace_archive.archive_required()
         archived = await self._archive_workspace(
