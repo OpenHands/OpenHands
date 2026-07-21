@@ -103,7 +103,7 @@ class TestDbSessionInjectorConfiguration:
             service.password.get_secret_value() == 'postgres'
         )  # Default from env var processing
         assert service.echo is False
-        assert service.pool_size == 5
+        assert service.pool_size == 25
         assert service.max_overflow == 10
         assert service.pool_use_lifo is True
         assert service.gcp_db_instance is None
@@ -221,7 +221,7 @@ class TestDbSessionInjectorConnections:
 
             # Verify other parameters
             assert call_args[1]['connect_args'] == {}
-            assert call_args[1]['pool_size'] == 5
+            assert call_args[1]['pool_size'] == 25
             assert call_args[1]['max_overflow'] == 10
             assert call_args[1]['pool_pre_ping']
             assert call_args[1]['pool_use_lifo'] is True
@@ -255,7 +255,7 @@ class TestDbSessionInjectorConnections:
 
             # Verify other parameters
             assert call_args[1]['connect_args'] == {}
-            assert call_args[1]['pool_size'] == 5
+            assert call_args[1]['pool_size'] == 25
             assert call_args[1]['max_overflow'] == 10
             assert call_args[1]['pool_pre_ping']
             assert call_args[1]['pool_use_lifo'] is True

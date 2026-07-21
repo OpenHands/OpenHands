@@ -34,8 +34,8 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
     user: str | None = None
     password: SecretStr | None = None
     echo: bool = False
-    # Defaults follow SQLAlchemy's own pool_size=5, max_overflow=10)
-    pool_size: int = 5
+    # can be overriden with DB_POOL_SIZE / DB_MAX_OVERFLOW (see fill_empty_fields).
+    pool_size: int = 25
     max_overflow: int = 10
     pool_recycle: int = 1800
     pool_use_lifo: bool = True

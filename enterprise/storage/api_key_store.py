@@ -3,10 +3,10 @@ from __future__ import annotations
 import secrets
 import string
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from storage.api_key import ApiKey
 from storage.database import a_session_maker
 from storage.user_store import UserStore
@@ -57,6 +57,11 @@ class ApiKeyStore:
     # Prefix for system keys created by internal services (e.g., automations)
     # Keys with this prefix are hidden from users and cannot be deleted by users
     SYSTEM_KEY_NAME_PREFIX = '__SYSTEM__:'
+    # Minimum gap between last_used_at writes for the same key. Validation
+    # runs on every HTTP request, so an unconditional UPDATE would create a
+    # hot-row / write-contention point under load. Bumping this to 0 disables
+    # the debounce (every validation writes); values are seconds.
+    LAST_USED_DEBOUNCE_SECONDS = 5
 
     def generate_api_key(self, length: int = 32) -> str:
         """Generate a random API key with the sk-oh- prefix."""
@@ -278,12 +283,40 @@ class ApiKeyStore:
                 logger.info(f'API key has expired: {key_record.id}')
                 return None
 
-            # Update last_used_at timestamp
-            await session.execute(
-                update(ApiKey)
-                .where(ApiKey.id == key_record.id)
-                .values(last_used_at=_as_naive(now))
-            )
+            # Conditional update of last_used_at. Two guards fold into one
+            # statement so the row is touched at most once per debounce window
+            # and concurrent validations don't take a row lock on each other:
+            #   * last_used_at IS NULL                      -> first-ever use
+            #   * last_used_at <= now - debounce_window     -> stale, allow update
+            #   * last_used_at == value_we_just_read        -> optimistic CAS
+            #     (if another writer already advanced it, this WHERE no longer
+            #     matches against the latest committed row, the UPDATE affects
+            #     0 rows, and no row lock is taken)
+            if self.LAST_USED_DEBOUNCE_SECONDS > 0:
+                debounce_cutoff = _as_naive(
+                    now - timedelta(seconds=self.LAST_USED_DEBOUNCE_SECONDS)
+                )
+                await session.execute(
+                    update(ApiKey)
+                    .where(
+                        ApiKey.id == key_record.id,
+                        ApiKey.last_used_at == key_record.last_used_at,
+                        or_(
+                            ApiKey.last_used_at.is_(None),
+                            ApiKey.last_used_at <= debounce_cutoff,
+                        ),
+                    )
+                    .values(last_used_at=_as_naive(now))
+                )
+            else:
+                await session.execute(
+                    update(ApiKey)
+                    .where(
+                        ApiKey.id == key_record.id,
+                        ApiKey.last_used_at == key_record.last_used_at,
+                    )
+                    .values(last_used_at=_as_naive(now))
+                )
             await session.commit()
 
             return ApiKeyValidationResult(
