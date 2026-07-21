@@ -183,23 +183,6 @@ def test_persisted_mcp_config_exposes_only_mcp_secrets():
     assert persisted_mcp['local']['env'] == {'API_KEY': 'mcp-env-key'}
 
 
-@pytest.mark.parametrize('tools', [None, []])
-def test_persisted_agent_settings_normalize_default_tools(tools):
-    settings = Settings(agent_settings={'tools': tools})
-
-    persisted = SaasSettingsStore._get_persisted_agent_settings(settings)
-
-    assert persisted['tools'] is None
-
-
-def test_persisted_agent_settings_preserve_explicit_tools():
-    settings = Settings(agent_settings={'tools': [{'name': 'terminal'}]})
-
-    persisted = SaasSettingsStore._get_persisted_agent_settings(settings)
-
-    assert persisted['tools'] == [{'name': 'terminal', 'params': {}}]
-
-
 @pytest.fixture
 def settings_store(async_session_maker):
     store = SaasSettingsStore('5594c7b6-f959-4b81-92e9-b09c206f5081')

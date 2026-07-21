@@ -1348,6 +1348,68 @@ async def test_release_user_creation_lock_released():
     mock_redis.delete.assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_migrate_user_preserves_normalized_default_tools(monkeypatch):
+    from integrations import stripe_service
+    from storage.lite_llm_manager import LiteLlmManager
+    from storage.role_store import RoleStore
+    from storage.user_settings import UserSettings
+
+    user_id = str(uuid.uuid4())
+    user_settings = UserSettings(
+        id=1,
+        keycloak_user_id=user_id,
+        llm_api_key='legacy-secret',
+        user_version=1,
+        agent_settings={
+            'tools': None,
+            'llm': {
+                'model': 'custom/model',
+                'base_url': 'https://llm.example.com',
+            },
+        },
+        conversation_settings={},
+        already_migrated=False,
+    )
+
+    billing_result = MagicMock()
+    billing_result.scalars.return_value.first.return_value = None
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=billing_result)
+    session.merge = AsyncMock()
+    session.flush = AsyncMock()
+    session.commit = AsyncMock()
+    session.refresh = AsyncMock()
+    session_context = MagicMock()
+    session_context.__aenter__ = AsyncMock(return_value=session)
+    session_context.__aexit__ = AsyncMock(return_value=None)
+
+    monkeypatch.setattr('storage.user_store.a_session_maker', lambda: session_context)
+    monkeypatch.setattr(LiteLlmManager, 'migrate_entries', AsyncMock())
+    monkeypatch.setattr(stripe_service, 'migrate_customer', AsyncMock())
+    monkeypatch.setattr(
+        RoleStore,
+        'get_role_by_name',
+        AsyncMock(return_value=Role(id=1, name='owner', rank=0)),
+    )
+    monkeypatch.setattr('storage.org_member.encrypt_value', lambda value: value)
+
+    await UserStore.migrate_user(
+        user_id,
+        user_settings,
+        {
+            'email': 'user@example.com',
+            'preferred_username': 'test-user',
+        },
+    )
+
+    added = [call.args[0] for call in session.add.call_args_list]
+    org = next(item for item in added if isinstance(item, Org))
+    member = next(item for item in added if isinstance(item, OrgMember))
+    assert org.agent_settings.get('tools') is None
+    assert member.agent_settings_diff['tools'] is None
+
+
 # --- Tests for migrate_user SQL parameter type handling ---
 
 
