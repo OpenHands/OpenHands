@@ -147,6 +147,48 @@ class TestWaitForSandboxRunning:
         assert 'failed to start within' in str(ei.value)
         assert 'Insufficient smarter-devices/kvm' in str(ei.value)
 
+    @pytest.mark.asyncio
+    async def test_capacity_detail_gives_friendly_message_at_timeout(
+        self, mock_sandbox_service, monkeypatch
+    ):
+        # Resource exhaustion is transient, so the timeout message becomes a
+        # retryable 'at capacity' one instead of the raw timeout.
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.STARTING,
+            '0/1 nodes are available: 1 Insufficient ephemeral-storage.',
+        )
+        calls = {'n': 0}
+
+        def fake_time():
+            calls['n'] += 1
+            return 1000.0 if calls['n'] <= 3 else 2000.0
+
+        monkeypatch.setattr(
+            'openhands.app_server.sandbox.sandbox_service.time.time', fake_time
+        )
+        monkeypatch.setattr(
+            'openhands.app_server.sandbox.sandbox_service.asyncio.sleep', AsyncMock()
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=1)
+        msg = str(ei.value)
+        assert 'at capacity' in msg and 'try again' in msg
+        assert 'failed to start within' not in msg
+        assert mock_sandbox_service.get_sandbox_mock.call_count > 1
+
+    @pytest.mark.asyncio
+    async def test_error_state_capacity_gives_friendly_message(
+        self, mock_sandbox_service
+    ):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.ERROR, 'Insufficient ephemeral-storage'
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
+        msg = str(ei.value)
+        assert 'at capacity' in msg
+        assert 'entered error state' not in msg
+
 
 class TestCleanupOldSandboxes:
     """Test cases for the pause_old_sandboxes method."""

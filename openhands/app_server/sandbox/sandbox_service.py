@@ -26,6 +26,28 @@ SESSION_API_KEY_VARIABLE = 'OH_SESSION_API_KEYS_0'
 WEBHOOK_CALLBACK_VARIABLE = 'OH_WEBHOOKS_0_BASE_URL'
 ALLOW_CORS_ORIGINS_VARIABLE = 'OH_ALLOW_CORS_ORIGINS_0'
 
+# status_detail substrings meaning "the node is full right now", which frees up
+# as other sandboxes finish -- so 'try again shortly' is accurate. Other
+# unschedulable reasons (device/affinity/taint) keep the raw reason instead.
+_CAPACITY_MARKERS = (
+    'Insufficient ephemeral-storage',
+    'Insufficient cpu',
+    'Insufficient memory',
+    'Insufficient pods',
+)
+
+
+def _is_capacity_detail(detail: str | None) -> bool:
+    return bool(detail) and any(m in detail for m in _CAPACITY_MARKERS)
+
+
+def _capacity_error(detail: str | None) -> SandboxError:
+    suffix = f' ({detail})' if detail else ''
+    return SandboxError(
+        f'The system is at capacity right now{suffix}. '
+        'Please try again in a few minutes.'
+    )
+
 
 class SandboxService(ABC):
     """Service for accessing sandboxes in which conversations may be run."""
@@ -124,6 +146,8 @@ class SandboxService(ABC):
                 raise SandboxError(f'Sandbox not found: {sandbox_id}')
 
             if sandbox.status == SandboxStatus.ERROR:
+                if _is_capacity_detail(sandbox.status_detail):
+                    raise _capacity_error(sandbox.status_detail)
                 detail = f' ({sandbox.status_detail})' if sandbox.status_detail else ''
                 raise SandboxError(f'Sandbox entered error state: {sandbox_id}{detail}')
 
@@ -139,6 +163,8 @@ class SandboxService(ABC):
 
             await asyncio.sleep(poll_interval)
 
+        if sandbox is not None and _is_capacity_detail(sandbox.status_detail):
+            raise _capacity_error(sandbox.status_detail)
         detail = (
             f' ({sandbox.status_detail})'
             if sandbox is not None and sandbox.status_detail
