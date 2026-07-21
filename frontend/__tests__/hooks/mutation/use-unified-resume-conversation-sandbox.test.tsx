@@ -52,6 +52,7 @@ describe("useUnifiedResumeConversationSandbox", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   const wrapper = ({ children }: { children: React.ReactNode }) => (

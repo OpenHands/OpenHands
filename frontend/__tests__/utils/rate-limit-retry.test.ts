@@ -165,12 +165,13 @@ describe("rate limit retry helpers", () => {
     vi.spyOn(Math, "random").mockReturnValue(0.5);
 
     expect(getRateLimitRetryDelayMs(0, createAxiosError(429))).toBe(1500);
+    // jitter scales off the 5s Retry-After: 0.5 * min(5000, MAX_JITTER_MS) = 2500
     expect(
       getRateLimitRetryDelayMs(
         0,
         createAxiosError(429, { "retry-after": "5" }),
       ),
-    ).toBe(5500);
+    ).toBe(7500);
   });
 
   it("caps jitter to avoid unbounded delays", () => {
