@@ -76,6 +76,12 @@ const getSchemaFieldDefaultValue = (
 
 const KNOWN_PROVIDER_DEFAULT_BASE_URLS: Partial<Record<string, Set<string>>> = {
   openai: new Set(["https://api.openai.com", "https://api.openai.com/v1"]),
+  // Nebius Token Factory (OpenAI-compatible). Keeps a nebius/* config on the
+  // basic settings tier instead of forcing the Advanced view.
+  nebius: new Set([
+    "https://api.tokenfactory.nebius.com",
+    "https://api.tokenfactory.nebius.com/v1",
+  ]),
 };
 
 const normalizeBaseUrl = (baseUrl: string) => {

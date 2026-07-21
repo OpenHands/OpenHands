@@ -2,6 +2,8 @@
 
 from openhands.app_server.utils import llm as llm_utils
 from openhands.app_server.utils.llm import (
+    NEBIUS_TOKEN_FACTORY_API_BASE,
+    VERIFIED_PROVIDERS,
     _assign_provider,
     _derive_verified_models,
     get_provider_api_base,
@@ -165,3 +167,27 @@ class TestGetProviderApiBase:
         # May return None or an API base depending on litellm behavior
         # The function should not raise an exception
         assert result is None or isinstance(result, str)
+
+    def test_nebius_model_returns_token_factory_api_base(self):
+        """Nebius models resolve to the Token Factory endpoint, not the
+        legacy AI Studio default that LiteLLM ships with."""
+        assert (
+            get_provider_api_base('nebius/Qwen/Qwen3-235B-A22B-Instruct-2507')
+            == NEBIUS_TOKEN_FACTORY_API_BASE
+        )
+        # Bare provider name is also handled.
+        assert get_provider_api_base('nebius') == NEBIUS_TOKEN_FACTORY_API_BASE
+        # Sanity check: it is the Token Factory host, not the legacy one.
+        assert 'tokenfactory.nebius.com' in NEBIUS_TOKEN_FACTORY_API_BASE
+
+
+class TestVerifiedProviders:
+    """Tests for the VERIFIED_PROVIDERS list."""
+
+    def test_nebius_is_verified_provider(self):
+        """Nebius Token Factory is promoted to the Verified section."""
+        assert 'nebius' in VERIFIED_PROVIDERS
+
+    def test_no_duplicate_providers(self):
+        """The list must not contain duplicates (guards the append logic)."""
+        assert len(VERIFIED_PROVIDERS) == len(set(VERIFIED_PROVIDERS))

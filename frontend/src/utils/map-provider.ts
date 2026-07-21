@@ -26,6 +26,7 @@ export const MAP_PROVIDER = {
   openhands: "OpenHands",
   lemonade: "Lemonade",
   clarifai: "Clarifai",
+  nebius: "Nebius Token Factory",
 };
 
 export const mapProvider = (provider: string) =>

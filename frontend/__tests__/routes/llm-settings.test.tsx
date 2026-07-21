@@ -498,6 +498,31 @@ describe("LlmSettingsScreen", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("opens basic view when a Nebius model uses the Token Factory default base URL", async () => {
+    // Nebius Token Factory is a known OpenAI-compatible provider; its default
+    // base URL must be treated like OpenAI's so a nebius/* config stays on the
+    // basic tier instead of being mistaken for a user customization.
+    vi.spyOn(organizationService, "getOrganizationSettings").mockResolvedValue(
+      buildSettingsWithAdvancedToggle({
+        llm_model: "nebius/Qwen/Qwen3-235B-A22B-Instruct-2507",
+        llm_base_url: "https://api.tokenfactory.nebius.com/v1",
+        agent_settings: {
+          llm: {
+            model: "nebius/Qwen/Qwen3-235B-A22B-Instruct-2507",
+            base_url: "https://api.tokenfactory.nebius.com/v1",
+          },
+        },
+      }),
+    );
+
+    await renderLlmSettingsScreen({ appMode: "saas", scope: "org" });
+
+    await screen.findByTestId("llm-settings-form-basic");
+    expect(
+      screen.queryByTestId("llm-settings-form-advanced"),
+    ).not.toBeInTheDocument();
+  });
+
   it("opens basic view even when an OpenHands model has a non-managed base URL", async () => {
     // Accepted edge case: the server owns base_url for openhands/* models,
     // so editing always starts on basic — even if the stored URL was set

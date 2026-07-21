@@ -1,0 +1,32 @@
+---
+title: Nebius Token Factory
+description: OpenHands uses LiteLLM to make calls to chat models on Nebius Token Factory, an OpenAI-compatible inference service. You can find their documentation [here](https://docs.tokenfactory.nebius.com/).
+---
+
+[Nebius Token Factory](https://tokenfactory.nebius.com/) serves a wide range of open models
+(Qwen, DeepSeek, Llama, GLM, Kimi, MiniMax and more) through an OpenAI-compatible API.
+
+## Configuration
+
+When running OpenHands, you'll need to set the following in the OpenHands UI through the Settings under the `LLM` tab:
+- `LLM Provider` to `Nebius Token Factory`
+- `LLM Model` to the model you will be using. [Visit here to see the list of
+models that Nebius Token Factory hosts](https://docs.tokenfactory.nebius.com/llms.txt). If the model is
+not in the list, enable `Advanced` options, and enter it in `Custom Model` (e.g. `nebius/<model-name>`
+like `nebius/Qwen/Qwen3-235B-A22B-Instruct-2507`).
+- `API Key` to your Nebius Token Factory API key. To find or create your key, [see here](https://tokenfactory.nebius.com/).
+
+OpenHands routes `nebius/*` models to the Token Factory endpoint
+(`https://api.tokenfactory.nebius.com/v1`) automatically, so you do not need to set a Base URL when
+using the `Nebius` provider.
+
+## Using Nebius Token Factory as an OpenAI-Compatible Endpoint
+
+The Nebius Token Factory endpoint for chat completion is OpenAI-compatible. Therefore, you can access
+Nebius models as you would access any OpenAI-compatible endpoint. In the OpenHands UI through the
+Settings under the `LLM` tab:
+1. Enable `Advanced` options
+2. Set the following:
+   - `Custom Model` to the prefix `openai/` + the model you will be using (e.g. `openai/Qwen/Qwen3-235B-A22B-Instruct-2507`)
+   - `Base URL` to `https://api.tokenfactory.nebius.com/v1`
+   - `API Key` to your Nebius Token Factory API key

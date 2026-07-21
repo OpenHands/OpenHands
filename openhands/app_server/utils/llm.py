@@ -61,11 +61,30 @@ CLARIFAI_MODELS = [
 # ---------------------------------------------------------------------------
 VERIFIED_PROVIDERS: list[str] = list(_SDK_VERIFIED_MODELS.keys())
 
+# Nebius Token Factory is an OpenAI-compatible provider we promote to the
+# "Verified" section of the model selector even though its individual models
+# are not part of the SDK's curated verified-model catalogue.  Guard against a
+# future SDK release that adds it, so the list never contains duplicates.
+if 'nebius' not in VERIFIED_PROVIDERS:
+    VERIFIED_PROVIDERS.append('nebius')
+
 _BARE_OPENAI_MODELS: set[str] = set(_SDK_OPENAI)
 _BARE_ANTHROPIC_MODELS: set[str] = set(_SDK_ANTHROPIC)
 _BARE_MISTRAL_MODELS: set[str] = set(_SDK_MISTRAL)
 
 DEFAULT_OPENHANDS_MODEL = 'openhands/minimax-m2.7'
+
+# ---------------------------------------------------------------------------
+# Nebius Token Factory — OpenAI-compatible provider.
+#
+# LiteLLM ships a native ``nebius/`` provider, but its built-in default
+# ``api_base`` still points at the legacy AI Studio endpoint
+# (``https://api.studio.nebius.ai/v1``).  Nebius has since rebranded the
+# inference product to **Token Factory**, served from a new host.  We pin the
+# base URL here so that selecting a ``nebius/*`` model resolves to the current
+# endpoint instead of the legacy one.
+# ---------------------------------------------------------------------------
+NEBIUS_TOKEN_FACTORY_API_BASE = 'https://api.tokenfactory.nebius.com/v1'
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +195,12 @@ def get_provider_api_base(model: str) -> str | None:
     Returns:
         The API base URL if found, None otherwise.
     """
+    # Nebius Token Factory: override LiteLLM's legacy AI Studio default with the
+    # current Token Factory endpoint. Matches ``nebius/<model>`` as well as the
+    # bare ``nebius`` provider name.
+    if model == 'nebius' or model.startswith('nebius/'):
+        return NEBIUS_TOKEN_FACTORY_API_BASE
+
     # First try get_api_base (handles OpenAI, Gemini with specific URL patterns)
     try:
         api_base = litellm.get_api_base(model, {})
