@@ -14,7 +14,6 @@ from pydantic import BaseModel
 import openhands
 from openhands.app_server.app_conversation.skill_loader import (
     _match_url_source_to_provider,
-    _split_git_url_source,
 )
 from openhands.app_server.app_conversation.skill_loader import (
     parse_marketplace_source as _parse_marketplace_source,
@@ -248,12 +247,17 @@ async def _clone_marketplace_repo(
 
     if authenticated_url:
         clone_url = authenticated_url
-    elif _split_git_url_source(marketplace.source) is not None:
-        # Full-URL source on a host that matches no configured provider — refuse
-        # rather than git-cloning an arbitrary attacker-controlled host (SSRF).
+    elif '://' in repo_path:
+        # repo_path still carries a scheme, so the source is a full URL on a host
+        # _parse_marketplace_source did not recognize AND no configured provider
+        # matched it. Refuse rather than git-cloning an arbitrary (possibly
+        # attacker-controlled) host (SSRF). Recognized public domains
+        # (github.com/gitlab.com/bitbucket.org) reduce to owner/repo above and
+        # fall through to the public clone below regardless of login provider.
         return None, f'Unsupported marketplace host: {marketplace.source}'
     else:
-        # Public bare owner/repo (or recognized provider prefix): public clone.
+        # Public bare owner/repo, recognized provider prefix, or a recognized
+        # public-domain URL: clone from the public domain, no auth needed.
         provider_domain_map = {
             'github': 'github.com',
             'gitlab': 'gitlab.com',
