@@ -100,23 +100,32 @@ class UserStore:
             if existing_user:
                 return existing_user
 
-            # First-user → superadmin: if the caller did not specify a
-            # super ``role_id`` and there are no existing users in the
-            # database, designate this user as a ``superadmin`` (the
-            # ``admin`` role attached via ``user.role_id``). Super-role
-            # permissions are explicit in ``server.auth.authorization``
-            # and do not inherit org-scoped admin permissions.
+            # First-user / zero-superadmin → superadmin.
+            # Fresh installs: empty user table → first user becomes superadmin.
+            # Upgraded installs (#15327): users may already exist from before
+            # the role feature, with nobody holding the admin super role.
+            # In that case promote this user so the instance is not stuck
+            # with zero superadmins and no bootstrap path.
             if role_id is None:
-                existing_user_count = await session.scalar(
-                    select(func.count()).select_from(User)
-                )
-                if existing_user_count == 0:
-                    superadmin_role = await RoleStore.get_role_by_name('admin', session)
-                    if superadmin_role is not None:
+                superadmin_role = await RoleStore.get_role_by_name('admin', session)
+                if superadmin_role is not None:
+                    existing_user_count = await session.scalar(
+                        select(func.count()).select_from(User)
+                    )
+                    superadmin_count = await session.scalar(
+                        select(func.count())
+                        .select_from(User)
+                        .where(User.role_id == superadmin_role.id)
+                    )
+                    if existing_user_count == 0 or (superadmin_count or 0) == 0:
                         role_id = superadmin_role.id
                         logger.info(
-                            'user_store:create_user:first_user_designated_superadmin',
-                            extra={'user_id': user_id},
+                            'user_store:create_user:designated_superadmin',
+                            extra={
+                                'user_id': user_id,
+                                'existing_user_count': existing_user_count,
+                                'superadmin_count': superadmin_count or 0,
+                            },
                         )
 
             org = await session.get(Org, user_uuid)

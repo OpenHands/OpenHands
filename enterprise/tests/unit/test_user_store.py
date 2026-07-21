@@ -227,6 +227,30 @@ async def test_create_user_subsequent_users_are_not_superadmins(async_session_ma
 
 
 @pytest.mark.asyncio
+async def test_create_user_promotes_when_existing_users_have_zero_superadmins(
+    async_session_maker,
+):
+    """Upgraded tenants with users but no superadmin still need a bootstrap (#15327)."""
+    admin_role_id = await _seed_admin_role(async_session_maker)
+    org_id = await _seed_org(async_session_maker)
+    # Pre-existing user from before the role feature (role_id is NULL).
+    await _seed_user(async_session_maker, org_id, None, 'legacy@example.com')
+
+    new_user_id = str(uuid.uuid4())
+    with (
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.role_store.a_session_maker', async_session_maker),
+        _mock_create_default_settings_returning_default(),
+    ):
+        user = await UserStore.create_user(
+            new_user_id, {'email': 'bootstrap@example.com'}
+        )
+
+    assert user is not None
+    assert user.role_id == admin_role_id
+
+
+@pytest.mark.asyncio
 async def test_create_user_explicit_role_id_is_respected_for_first_user(
     async_session_maker,
 ):
