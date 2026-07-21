@@ -161,26 +161,19 @@ async def test_middleware_no_auth_at_all(middleware, mock_request):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ('method', 'suffix'),
-    (
-        ('GET', 'codex-auth'),
-        ('HEAD', 'codex-auth'),
-        ('PUT', 'codex-auth'),
-        ('DELETE', 'codex-auth'),
-        ('POST', 'codex-auth/refresh'),
-    ),
-)
-async def test_middleware_defers_codex_auth(
-    middleware, mock_request, mock_response, method, suffix
+@pytest.mark.parametrize('method', ('GET', 'PUT'))
+async def test_middleware_defers_credential_binding_auth(
+    middleware, mock_request, mock_response, method
 ):
     mock_request.cookies = {}
-    mock_request.headers = {'Authorization': 'Basic scoped-credentials'}
+    mock_request.headers = {'Authorization': 'Basic scoped-credential'}
     mock_request.method = method
     mock_request.url = MagicMock()
     mock_request.url.hostname = 'localhost'
     mock_request.url.path = (
-        f'/api/internal/conversations/11111111-1111-1111-1111-111111111111/{suffix}'
+        '/api/internal/conversations/'
+        '11111111-1111-1111-1111-111111111111/'
+        'credential-bindings/CODEX_AUTH_JSON'
     )
     mock_call_next = AsyncMock(return_value=mock_response)
 
@@ -195,14 +188,16 @@ async def test_middleware_defers_codex_auth(
     ('method', 'path'),
     (
         (
-            'GET',
-            '/api/internal/conversations/'
-            '11111111-1111-1111-1111-111111111111/codex-auth/refresh',
-        ),
-        (
             'POST',
             '/api/internal/conversations/'
-            '11111111-1111-1111-1111-111111111111/codex-auth',
+            '11111111-1111-1111-1111-111111111111/'
+            'credential-bindings/CODEX_AUTH_JSON',
+        ),
+        (
+            'GET',
+            '/api/internal/conversations/'
+            '11111111-1111-1111-1111-111111111111/'
+            'credential-bindings/CODEX_AUTH_JSON/extra',
         ),
     ),
 )
@@ -210,7 +205,7 @@ async def test_middleware_does_not_defer_other_internal_auth(
     middleware, mock_request, method, path
 ):
     mock_request.cookies = {}
-    mock_request.headers = {'Authorization': 'Basic scoped-credentials'}
+    mock_request.headers = {'Authorization': 'Basic scoped-credential'}
     mock_request.method = method
     mock_request.url = MagicMock()
     mock_request.url.hostname = 'localhost'

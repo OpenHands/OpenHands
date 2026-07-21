@@ -3,7 +3,7 @@ import hashlib
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, AsyncGenerator
 from urllib.parse import urlparse
 from uuid import UUID
@@ -39,7 +39,6 @@ from openhands.app_server.sandbox.sandbox_models import (
 )
 from openhands.app_server.sandbox.sandbox_service import (
     ALLOW_CORS_ORIGINS_VARIABLE,
-    SESSION_API_KEY_TEARDOWN_GRACE_SECONDS,
     WEBHOOK_CALLBACK_VARIABLE,
     SandboxService,
     SandboxServiceInjector,
@@ -98,12 +97,6 @@ class StoredRemoteSandbox(Base):
     )  # shadows runtime['image']
     session_api_key_hash: Mapped[str | None] = mapped_column(
         String, nullable=True, index=True
-    )
-    teardown_session_api_key_hash: Mapped[str | None] = mapped_column(
-        String, nullable=True, index=True
-    )
-    teardown_session_api_key_expires_at: Mapped[datetime | None] = mapped_column(
-        UtcDateTime, nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now(), index=True
@@ -446,24 +439,6 @@ class RemoteSandboxService(SandboxService):
             created_by_user_id=stored_sandbox.created_by_user_id,
         )
 
-    async def get_sandbox_record_by_teardown_session_api_key(
-        self, session_api_key: str
-    ) -> SandboxRecord | None:
-        session_api_key_hash = _hash_session_api_key(session_api_key)
-        stmt = await self._secure_select()
-        stmt = stmt.where(
-            StoredRemoteSandbox.teardown_session_api_key_hash == session_api_key_hash,
-            StoredRemoteSandbox.teardown_session_api_key_expires_at >= utc_now(),
-        )
-        result = await self.db_session.execute(stmt)
-        stored_sandbox = result.scalar_one_or_none()
-        if stored_sandbox is None:
-            return None
-        return SandboxRecord(
-            id=stored_sandbox.id,
-            created_by_user_id=stored_sandbox.created_by_user_id,
-        )
-
     async def start_sandbox(
         self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
     ) -> SandboxInfo:
@@ -570,8 +545,6 @@ class RemoteSandboxService(SandboxService):
             # by the runtime-api. The old key was invalidated on resume.
             response_data = response.json()
             new_session_api_key = response_data.get('session_api_key')
-            stored_sandbox.teardown_session_api_key_hash = None
-            stored_sandbox.teardown_session_api_key_expires_at = None
             if new_session_api_key:
                 stored_sandbox.session_api_key_hash = _hash_session_api_key(
                     new_session_api_key
@@ -586,22 +559,21 @@ class RemoteSandboxService(SandboxService):
             return False
 
     async def pause_sandbox(self, sandbox_id: str) -> bool:
-        """Pause a running sandbox."""
+        """Pause a running sandbox.
+
+        Security: Clears the session_api_key_hash to invalidate any existing
+        session keys, preventing leaked keys from being used while paused.
+        """
         try:
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
             if not stored_sandbox:
                 return False
-            runtime_data = await self._get_runtime(sandbox_id)
-            if stored_sandbox.session_api_key_hash is not None:
-                stored_sandbox.teardown_session_api_key_hash = (
-                    stored_sandbox.session_api_key_hash
-                )
-            if stored_sandbox.teardown_session_api_key_hash is not None:
-                stored_sandbox.teardown_session_api_key_expires_at = utc_now() + (
-                    timedelta(seconds=SESSION_API_KEY_TEARDOWN_GRACE_SECONDS)
-                )
+
+            # Security: Invalidate the session API key hash to prevent
+            # leaked keys from being used while the sandbox is paused.
             stored_sandbox.session_api_key_hash = None
-            await self.db_session.commit()
+
+            runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
                 'POST',
                 '/pause',
@@ -610,10 +582,6 @@ class RemoteSandboxService(SandboxService):
             if response.status_code == 404:
                 return False
             response.raise_for_status()
-            if stored_sandbox.teardown_session_api_key_hash is not None:
-                stored_sandbox.teardown_session_api_key_expires_at = utc_now() + (
-                    timedelta(seconds=SESSION_API_KEY_TEARDOWN_GRACE_SECONDS)
-                )
             return True
 
         except httpx.HTTPError:
@@ -637,8 +605,13 @@ class RemoteSandboxService(SandboxService):
         (router -> 503) and keeps the row + runtime for a retry — so a live sandbox
         is never reported as 404.
 
-        The session key is invalidated before stopping the runtime and stays
-        invalidated when a transient failure leaves the row for retry.
+        Security: the session_api_key_hash is invalidated UP FRONT (like
+        ``pause_sandbox`` clears it before pausing) so a delete — commonly a
+        revoke of a leaked key — kills it promptly. This goes further than pause:
+        on a transient stop failure the invalidation is committed before raising,
+        so the caller's rollback cannot resurrect the just-revoked key (pause does
+        not commit, so its clear can still be rolled back). The row is kept for
+        retry.
         """
         had_key = False
         try:
@@ -646,13 +619,8 @@ class RemoteSandboxService(SandboxService):
             if not stored_sandbox:
                 return False
             # Security: drop the key now, before the (fallible) runtime stop.
-            had_key = (
-                stored_sandbox.session_api_key_hash is not None
-                or stored_sandbox.teardown_session_api_key_hash is not None
-            )
+            had_key = stored_sandbox.session_api_key_hash is not None
             stored_sandbox.session_api_key_hash = None
-            stored_sandbox.teardown_session_api_key_hash = None
-            stored_sandbox.teardown_session_api_key_expires_at = None
             try:
                 runtime_data = await self._get_runtime(sandbox_id)
             except httpx.HTTPStatusError as e:

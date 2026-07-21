@@ -14,7 +14,7 @@ This module tests the RemoteSandboxService implementation, focusing on:
 import asyncio
 import json
 from contextlib import ExitStack, asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -160,8 +160,6 @@ def create_stored_sandbox(
     spec_id: str = 'test-image:latest',
     created_at: datetime | None = None,
     session_api_key_hash: str | None = None,
-    teardown_session_api_key_hash: str | None = None,
-    teardown_session_api_key_expires_at: datetime | None = None,
 ) -> StoredRemoteSandbox:
     """Helper function to create StoredRemoteSandbox for testing."""
     if created_at is None:
@@ -172,8 +170,6 @@ def create_stored_sandbox(
         created_by_user_id=user_id,
         sandbox_spec_id=spec_id,
         session_api_key_hash=session_api_key_hash,
-        teardown_session_api_key_hash=teardown_session_api_key_hash,
-        teardown_session_api_key_expires_at=teardown_session_api_key_expires_at,
         created_at=created_at,
     )
 
@@ -626,11 +622,7 @@ class TestSandboxLifecycle:
     async def test_resume_sandbox_success(self, remote_sandbox_service):
         """Test successful sandbox resume."""
         # Setup
-        stored_sandbox = create_stored_sandbox(
-            teardown_session_api_key_hash='old-teardown-hash',
-            teardown_session_api_key_expires_at=datetime.now(timezone.utc)
-            + timedelta(seconds=30),
-        )
+        stored_sandbox = create_stored_sandbox()
         runtime_data = create_runtime_data()
 
         remote_sandbox_service._get_stored_sandbox = AsyncMock(
@@ -649,9 +641,6 @@ class TestSandboxLifecycle:
 
         # Verify
         assert result is True
-        assert stored_sandbox.session_api_key_hash is not None
-        assert stored_sandbox.teardown_session_api_key_hash is None
-        assert stored_sandbox.teardown_session_api_key_expires_at is None
         remote_sandbox_service.pause_old_sandboxes.assert_called_once_with(9)
         remote_sandbox_service.httpx_client.request.assert_called_once_with(
             'POST',
@@ -700,7 +689,7 @@ class TestSandboxLifecycle:
     async def test_pause_sandbox_success(self, remote_sandbox_service):
         """Test successful sandbox pause."""
         # Setup
-        stored_sandbox = create_stored_sandbox(session_api_key_hash='live-hash')
+        stored_sandbox = create_stored_sandbox()
         runtime_data = create_runtime_data()
 
         remote_sandbox_service._get_stored_sandbox = AsyncMock(
@@ -710,24 +699,13 @@ class TestSandboxLifecycle:
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-
-        async def pause_request(*_args, **_kwargs):
-            remote_sandbox_service.db_session.commit.assert_awaited_once()
-            assert stored_sandbox.session_api_key_hash is None
-            assert stored_sandbox.teardown_session_api_key_hash == 'live-hash'
-            assert stored_sandbox.teardown_session_api_key_expires_at is not None
-            return mock_response
-
-        remote_sandbox_service.httpx_client.request.side_effect = pause_request
+        remote_sandbox_service.httpx_client.request.return_value = mock_response
 
         # Execute
         result = await remote_sandbox_service.pause_sandbox('test-sandbox-123')
 
         # Verify
         assert result is True
-        assert stored_sandbox.session_api_key_hash is None
-        assert stored_sandbox.teardown_session_api_key_hash == 'live-hash'
-        remote_sandbox_service.db_session.commit.assert_awaited_once()
         remote_sandbox_service.httpx_client.request.assert_called_once_with(
             'POST',
             'https://api.example.com/pause',
@@ -1109,7 +1087,6 @@ class TestSandboxSearch:
         remote_sandbox_service._get_stored_sandbox = AsyncMock(
             return_value=stored_sandbox
         )
-        remote_sandbox_service._get_runtime = AsyncMock(return_value={})
         remote_sandbox_service._to_sandbox_info = MagicMock(
             return_value=SandboxInfo(
                 id='test-sandbox-123',
@@ -1203,7 +1180,7 @@ class TestErrorHandling:
     async def test_pause_sandbox_http_error(self, remote_sandbox_service):
         """Test pause sandbox with HTTP error."""
         # Setup
-        stored_sandbox = create_stored_sandbox(session_api_key_hash='live-hash')
+        stored_sandbox = create_stored_sandbox()
         runtime_data = create_runtime_data()
 
         remote_sandbox_service._get_stored_sandbox = AsyncMock(
@@ -1219,37 +1196,6 @@ class TestErrorHandling:
 
         # Verify
         assert result is False
-        assert stored_sandbox.session_api_key_hash is None
-        assert stored_sandbox.teardown_session_api_key_hash == 'live-hash'
-        remote_sandbox_service.db_session.commit.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_pause_retry_preserves_teardown_session_key(
-        self, remote_sandbox_service
-    ):
-        stored_sandbox = create_stored_sandbox(session_api_key_hash='live-hash')
-        remote_sandbox_service._get_stored_sandbox = AsyncMock(
-            return_value=stored_sandbox
-        )
-        remote_sandbox_service._get_runtime = AsyncMock(
-            return_value=create_runtime_data()
-        )
-        response = MagicMock(status_code=200)
-        remote_sandbox_service.httpx_client.request.side_effect = [
-            httpx.HTTPError('first pause failed'),
-            response,
-        ]
-
-        assert await remote_sandbox_service.pause_sandbox('test-sandbox-123') is False
-        first_expiry = stored_sandbox.teardown_session_api_key_expires_at
-        assert stored_sandbox.teardown_session_api_key_hash == 'live-hash'
-
-        assert await remote_sandbox_service.pause_sandbox('test-sandbox-123') is True
-        assert stored_sandbox.teardown_session_api_key_hash == 'live-hash'
-        assert stored_sandbox.teardown_session_api_key_expires_at is not None
-        assert first_expiry is not None
-        assert stored_sandbox.teardown_session_api_key_expires_at >= first_expiry
-        assert remote_sandbox_service.db_session.commit.await_count == 2
 
     @pytest.mark.asyncio
     async def test_delete_sandbox_http_error(self, remote_sandbox_service):

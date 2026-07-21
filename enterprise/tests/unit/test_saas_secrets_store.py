@@ -1,4 +1,3 @@
-import hashlib
 from types import MappingProxyType
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -6,9 +5,9 @@ from uuid import UUID
 
 import pytest
 from pydantic import SecretStr
-from storage.codex_auth_store import CodexAuthStore
 from storage.saas_secrets_store import SaasSecretsStore
 from storage.stored_custom_secrets import StoredCustomSecrets
+from storage.versioned_credential_store import SaasVersionedCredentialStore
 
 from openhands.app_server.integrations.provider import CustomSecret
 from openhands.app_server.secrets.secrets_models import Secrets
@@ -37,10 +36,10 @@ def mock_user():
 @pytest.fixture
 def secrets_store(async_session_maker, jwt_svc):
     # Inject the test session maker into the store module
-    import storage.codex_auth_store as codex_store_module
     import storage.saas_secrets_store as store_module
+    import storage.versioned_credential_store as credential_store_module
 
-    codex_store_module.a_session_maker = async_session_maker
+    credential_store_module.a_session_maker = async_session_maker
     store_module.a_session_maker = async_session_maker
 
     store = SaasSecretsStore('user-id', jwt_svc)
@@ -143,12 +142,11 @@ class TestSaasSecretsStore:
         stale = await stale_store.load()
         assert stale is not None
 
-        codex_store = CodexAuthStore(
+        codex_store = SaasVersionedCredentialStore(
             'user-id', mock_user.current_org_id, secrets_store._jwt_svc
         )
-        assert await codex_store.compare_and_swap(
-            hashlib.sha256(original.encode()).hexdigest(), rotated
-        )
+        _, version = await codex_store.load('CODEX_AUTH_JSON')
+        successor = await codex_store.replace('CODEX_AUTH_JSON', version, rotated)
         updated = dict(stale.custom_secrets)
         updated['OTHER'] = CustomSecret.from_value({'secret': 'new', 'description': ''})
         stale_update = stale.model_copy(
@@ -157,7 +155,7 @@ class TestSaasSecretsStore:
         await stale_store.store(stale_update)
         await stale_store.store(stale_update)
 
-        assert await codex_store.get_value() == rotated
+        assert await codex_store.load('CODEX_AUTH_JSON') == (rotated, successor)
         loaded = await secrets_store.load()
         assert loaded is not None
         assert loaded.custom_secrets['OTHER'].secret.get_secret_value() == 'new'
@@ -183,12 +181,11 @@ class TestSaasSecretsStore:
                 }
             )
         )
-        codex_store = CodexAuthStore(
+        codex_store = SaasVersionedCredentialStore(
             'user-id', mock_user.current_org_id, secrets_store._jwt_svc
         )
-        assert await codex_store.compare_and_swap(
-            hashlib.sha256(original.encode()).hexdigest(), rotated
-        )
+        _, version = await codex_store.load('CODEX_AUTH_JSON')
+        await codex_store.replace('CODEX_AUTH_JSON', version, rotated)
 
         fresh_store = SaasSecretsStore('user-id', secrets_store._jwt_svc)
         await fresh_store.store(
@@ -204,7 +201,7 @@ class TestSaasSecretsStore:
             )
         )
 
-        assert await codex_store.get_value() == submitted
+        assert (await codex_store.load('CODEX_AUTH_JSON'))[0] == submitted
         loaded = await fresh_store.load()
         assert loaded is not None
         assert loaded.custom_secrets['OTHER'].secret.get_secret_value() == 'new'
@@ -287,12 +284,11 @@ class TestSaasSecretsStore:
         editing = await editing_store.load()
         assert editing is not None
 
-        codex_store = CodexAuthStore(
+        codex_store = SaasVersionedCredentialStore(
             'user-id', mock_user.current_org_id, secrets_store._jwt_svc
         )
-        assert await codex_store.compare_and_swap(
-            hashlib.sha256(original.encode()).hexdigest(), rotated
-        )
+        _, version = await codex_store.load('CODEX_AUTH_JSON')
+        await codex_store.replace('CODEX_AUTH_JSON', version, rotated)
         updated = dict(editing.custom_secrets)
         updated['CODEX_AUTH_JSON'] = CustomSecret.from_value(
             {'secret': changed, 'description': ''}
@@ -301,7 +297,7 @@ class TestSaasSecretsStore:
             editing.model_copy(update={'custom_secrets': MappingProxyType(updated)})
         )
 
-        assert await codex_store.get_value() == changed
+        assert (await codex_store.load('CODEX_AUTH_JSON'))[0] == changed
 
     @pytest.mark.asyncio
     @patch(
@@ -517,10 +513,7 @@ class TestSaasSecretsStore:
     async def test_secrets_isolation_between_organizations(
         self, mock_get_user, secrets_store, mock_user
     ):
-        """Test that secrets from one organization are not deleted when storing
-        secrets in another organization. This reproduces a bug where switching
-        organizations and creating a secret would delete all secrets from the
-        user's personal workspace."""
+        """Keep secrets isolated by organization."""
         org1_id = UUID('a1111111-1111-1111-1111-111111111111')
         org2_id = UUID('b2222222-2222-2222-2222-222222222222')
 

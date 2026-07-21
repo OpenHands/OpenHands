@@ -22,10 +22,7 @@ from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 class SetAuthCookieMiddleware:
-    """
-    Update the auth cookie with the current authentication state if it was refreshed before sending response to user.
-    Deleting invalid cookies is handled by CookieError using FastAPIs standard error handling mechanism
-    """
+    """Refresh the authentication cookie when needed."""
 
     async def __call__(self, request: Request, call_next: Callable):
         keycloak_auth_cookie = read_chunked_cookie(request, 'keycloak_auth')
@@ -196,15 +193,12 @@ class SetAuthCookieMiddleware:
 
         parts = path.split('/')
         if (
-            len(parts) in (6, 7)
+            len(parts) == 7
             and parts[1:4] == ['api', 'internal', 'conversations']
-            and (
-                (
-                    parts[5:] == ['codex-auth']
-                    and request.method in {'GET', 'HEAD', 'PUT', 'DELETE'}
-                )
-                or (parts[5:] == ['codex-auth', 'refresh'] and request.method == 'POST')
-            )
+            and parts[5] == 'credential-bindings'
+            and bool(parts[4])
+            and bool(parts[6])
+            and request.method in {'GET', 'PUT'}
         ):
             return False
 

@@ -23,6 +23,9 @@ from openhands.app_server.middleware import (
     LocalhostCORSMiddleware,
     RateLimitMiddleware,
 )
+from openhands.app_server.secrets.credential_binding import (
+    router as credential_binding_router,
+)
 from openhands.app_server.static import SPAStaticFiles
 from openhands.app_server.status.status_router import router as health_router
 from openhands.app_server.version import get_version
@@ -70,6 +73,7 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
 
 app.include_router(v1_router.router)
 app.include_router(health_router)
+app.include_router(credential_binding_router)
 
 # Middleware and static file setup (merged from listen.py)
 if os.getenv('SERVE_FRONTEND', 'true').lower() == 'true':

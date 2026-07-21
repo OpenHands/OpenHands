@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -8,6 +7,10 @@ from sqlalchemy import delete, select
 from storage.database import a_session_maker
 from storage.stored_custom_secrets import StoredCustomSecrets
 from storage.user_store import UserStore
+from storage.versioned_credential_store import (
+    SaasVersionedCredentialStore,
+    credential_version,
+)
 
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
@@ -27,7 +30,7 @@ class SaasSecretsStore(SecretsStore):
     # (user_id, org_id), so the effective org must flow through here for
     # the right rows to be read/written.
     effective_org_id: UUID | None = None
-    _loaded_codex_auth_digests: dict[UUID | None, str] = field(
+    _loaded_codex_auth: dict[UUID | None, tuple[str, str]] = field(
         default_factory=dict, init=False, repr=False
     )
 
@@ -44,28 +47,32 @@ class SaasSecretsStore(SecretsStore):
             )
             if org_id is not None:
                 query = query.filter(StoredCustomSecrets.org_id == org_id)
-            result = await session.execute(query)
+            result = await session.execute(query.order_by(StoredCustomSecrets.id))
             settings = result.scalars().all()
 
             if not settings:
-                self._loaded_codex_auth_digests.pop(org_id, None)
+                self._loaded_codex_auth.pop(org_id, None)
                 return Secrets()
 
             kwargs = {}
+            codex_row = None
             for secret in settings:
                 kwargs[secret.secret_name] = {
                     'secret': secret.secret_value,
                     'description': secret.description,
                 }
+                if secret.secret_name == _CODEX_AUTH_SECRET_NAME:
+                    codex_row = secret
 
             self._decrypt_kwargs(kwargs)
             codex_auth = kwargs.get(_CODEX_AUTH_SECRET_NAME, {}).get('secret')
-            if isinstance(codex_auth, str):
-                self._loaded_codex_auth_digests[org_id] = hashlib.sha256(
-                    codex_auth.encode()
-                ).hexdigest()
+            if isinstance(codex_auth, str) and codex_row is not None:
+                self._loaded_codex_auth[org_id] = (
+                    codex_auth,
+                    credential_version(codex_row),
+                )
             else:
-                self._loaded_codex_auth_digests.pop(org_id, None)
+                self._loaded_codex_auth.pop(org_id, None)
 
             return Secrets(custom_secrets=kwargs)  # type: ignore[arg-type]
 
@@ -81,17 +88,11 @@ class SaasSecretsStore(SecretsStore):
         codex_auth = (
             codex_auth_info.get('secret') if isinstance(codex_auth_info, dict) else None
         )
-        loaded_codex_known = org_id in self._loaded_codex_auth_digests
-        loaded_codex_digest = self._loaded_codex_auth_digests.get(org_id)
-        codex_auth_digest = (
-            hashlib.sha256(codex_auth.encode()).hexdigest()
-            if isinstance(codex_auth, str)
-            else None
-        )
+        loaded_codex = self._loaded_codex_auth.get(org_id)
+        loaded_codex_known = loaded_codex is not None
         preserve_codex_auth = not loaded_codex_known and codex_auth_info is None
-        stored_codex_auth = None
         async with a_session_maker() as session:
-            if loaded_codex_known and loaded_codex_digest == codex_auth_digest:
+            if loaded_codex is not None and loaded_codex[0] == codex_auth:
                 result = await session.execute(
                     select(StoredCustomSecrets)
                     .filter(
@@ -100,19 +101,20 @@ class SaasSecretsStore(SecretsStore):
                         StoredCustomSecrets.secret_name == _CODEX_AUTH_SECRET_NAME,
                     )
                     .order_by(StoredCustomSecrets.id.desc())
-                    .limit(1)
                     .with_for_update()
                 )
-                stored_codex_auth = result.scalar_one_or_none()
-                preserve_codex_auth = stored_codex_auth is not None
+                stored_codex_rows = result.scalars().all()
+                preserve_codex_auth = True
                 secrets_json.pop(_CODEX_AUTH_SECRET_NAME, None)
-                if stored_codex_auth is not None and isinstance(codex_auth_info, dict):
+                if stored_codex_rows and isinstance(codex_auth_info, dict):
                     description = codex_auth_info.get('description')
-                    stored_codex_auth.description = (
+                    encrypted_description = (
                         self._jwt_svc.encrypt_value(description)
                         if description is not None
                         else None
                     )
+                    for stored_codex_auth in stored_codex_rows:
+                        stored_codex_auth.description = encrypted_description
             elif preserve_codex_auth:
                 secrets_json.pop(_CODEX_AUTH_SECRET_NAME, None)
 
@@ -154,10 +156,45 @@ class SaasSecretsStore(SecretsStore):
             await session.commit()
             if not preserve_codex_auth:
                 if isinstance(codex_auth, str):
-                    assert codex_auth_digest is not None
-                    self._loaded_codex_auth_digests[org_id] = codex_auth_digest
+                    self._loaded_codex_auth[org_id] = (codex_auth, '')
                 else:
-                    self._loaded_codex_auth_digests.pop(org_id, None)
+                    self._loaded_codex_auth.pop(org_id, None)
+
+    async def load_versioned(
+        self,
+        name: str,
+        organization_id: UUID | None = None,
+    ) -> tuple[str, str]:
+        org_id = organization_id or self.effective_org_id
+        if org_id is None:
+            user = await UserStore.get_user_by_id(self.user_id)
+            org_id = user.current_org_id if user else None
+        if org_id is None:
+            raise KeyError(name)
+        return await SaasVersionedCredentialStore(
+            self.user_id,
+            org_id,
+            self._jwt_svc,
+        ).load(name)
+
+    async def replace_versioned(
+        self,
+        name: str,
+        expected_version: str,
+        value: str,
+        organization_id: UUID | None = None,
+    ) -> str:
+        org_id = organization_id or self.effective_org_id
+        if org_id is None:
+            user = await UserStore.get_user_by_id(self.user_id)
+            org_id = user.current_org_id if user else None
+        if org_id is None:
+            raise KeyError(name)
+        return await SaasVersionedCredentialStore(
+            self.user_id,
+            org_id,
+            self._jwt_svc,
+        ).replace(name, expected_version, value)
 
     def _decrypt_kwargs(self, kwargs: dict):
         for key, value in kwargs.items():

@@ -39,7 +39,6 @@ from server.routes.analytics_events import analytics_events_router  # noqa: E402
 from server.routes.api_keys import api_router as api_keys_router  # noqa: E402
 from server.routes.auth import api_router, oauth_router  # noqa: E402
 from server.routes.billing import billing_router  # noqa: E402
-from server.routes.codex_auth import router as codex_auth_router  # noqa: E402
 from server.routes.email import api_router as email_router  # noqa: E402
 from server.routes.github_proxy import add_github_proxy_routes  # noqa: E402
 from server.routes.integration.jira import jira_integration_router  # noqa: E402
@@ -98,7 +97,6 @@ base_app.include_router(
 )  # Add routes for credit management and Stripe payment integration
 base_app.include_router(shared_conversation_router)
 base_app.include_router(shared_event_router)
-base_app.include_router(codex_auth_router)
 
 # Add GitHub integration router only if GITHUB_APP_CLIENT_ID is set
 if GITHUB_APP_CLIENT_ID:

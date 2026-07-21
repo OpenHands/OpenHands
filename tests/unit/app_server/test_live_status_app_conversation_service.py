@@ -8,7 +8,7 @@ import types
 import zipfile
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import ANY, AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -58,9 +58,6 @@ from openhands.sdk import Agent, AgentContext, Event
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
-from openhands.sdk.skills import Skill
-from openhands.sdk.tool import Tool
-from openhands.sdk.utils.cipher import Cipher
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 
@@ -4373,17 +4370,24 @@ class TestBuildAcpStartConversationRequestSecrets:
         assert request.secrets.get('GITHUB_TOKEN') is lookup
 
     @pytest.mark.asyncio
-    async def test_codex_subscription_auth_uses_scoped_lookup(self, service, tmp_path):
+    async def test_codex_binding_activation_strips_plaintext(self, service, tmp_path):
         org_id = UUID('11111111-1111-1111-1111-111111111111')
         source = StaticSecret(
             value=SecretStr('{"auth_mode":"chatgpt","tokens":{"refresh_token":"r0"}}'),
             description='Codex login',
         )
         user = self._make_acp_user(acp_server='codex')
-        service.app_mode = 'saas'
         service.web_url = 'https://cloud.example.com/'
+        service.user_context.get_user_id = AsyncMock(return_value='user1')
         service.user_context.get_effective_org_id = AsyncMock(return_value=org_id)
         service.jwt_service.create_jws_token.return_value = 'scoped-token'
+        server_info = Mock()
+        server_info.raise_for_status = Mock()
+        server_info.json.return_value = {'capabilities': ['credential_binding_v1']}
+        activated = Mock()
+        activated.raise_for_status = Mock()
+        service.httpx_client.get = AsyncMock(return_value=server_info)
+        service.httpx_client.put = AsyncMock(return_value=activated)
 
         request = await self._call_build(
             service,
@@ -4391,112 +4395,107 @@ class TestBuildAcpStartConversationRequestSecrets:
             tmp_path,
             secrets={'CODEX_AUTH_JSON': source},
         )
+        sandbox = Mock(spec=SandboxInfo)
+        sandbox.id = 'sandbox-1'
+        sandbox.session_api_key = 'session-key'
+        prepared = await service._prepare_credential_bindings(
+            request,
+            sandbox,
+            request.conversation_id,
+            'http://agent-server',
+            api_codex_auth=False,
+        )
 
-        scoped = request.secrets['CODEX_AUTH_JSON']
-        assert isinstance(scoped, LookupSecret)
-        assert scoped.url == (
-            'https://cloud.example.com/api/internal/conversations/'
-            f'{request.conversation_id}/codex-auth'
+        assert 'CODEX_AUTH_JSON' not in prepared.secrets
+        service.httpx_client.get.assert_awaited_once_with(
+            'http://agent-server/server_info',
+            headers={'X-Session-API-Key': 'session-key'},
+            timeout=30,
         )
-        assert scoped.headers == {
-            'X-OH-Sandbox-Key': 'session-key',
-            'X-OH-Codex-Token': 'scoped-token',
-        }
-        cipher = Cipher('conversation-secret')
-        serialized = scoped.model_dump_json(context={'cipher': cipher})
-        assert 'session-key' not in serialized
-        assert 'scoped-token' not in serialized
-        restored = LookupSecret.model_validate_json(
-            serialized, context={'cipher': cipher}
+        service.httpx_client.put.assert_awaited_once_with(
+            f'http://agent-server/api/conversations/{request.conversation_id}'
+            '/credential-bindings/CODEX_AUTH_JSON',
+            headers={'X-Session-API-Key': 'session-key'},
+            json={
+                'url': (
+                    'https://cloud.example.com/api/internal/conversations/'
+                    f'{request.conversation_id}/credential-bindings/CODEX_AUTH_JSON'
+                ),
+                'headers': {'Authorization': 'Bearer scoped-token'},
+            },
+            timeout=30,
         )
-        assert restored.headers == scoped.headers
-        assert scoped.description == 'Codex login'
         service.jwt_service.create_jws_token.assert_called_once_with(
             payload={
-                'purpose': 'codex-auth',
+                'purpose': 'credential-binding',
                 'user_id': 'user1',
-                'org_id': str(org_id),
-                'sandbox_id': 'sandbox-1',
+                'organization_id': str(org_id),
                 'conversation_id': str(request.conversation_id),
+                'runtime_id': 'sandbox-1',
                 'secret_name': 'CODEX_AUTH_JSON',
-                'jti': ANY,
+                'actions': ['load', 'replace'],
             },
             expires_in=None,
         )
 
     @pytest.mark.asyncio
-    async def test_codex_subscription_auth_reissues_capability_for_resume(
-        self, service
-    ):
-        org_id = UUID('11111111-1111-1111-1111-111111111111')
-        conversation_id = uuid4()
+    async def test_legacy_agent_server_keeps_plaintext(self, service, tmp_path):
         source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"r0"}}'))
         user = self._make_acp_user(acp_server='codex')
-        sandbox = Mock(spec=SandboxInfo)
-        sandbox.id = 'sandbox-1'
-        sandbox.session_api_key = 'resumed-session-key'
-        service.app_mode = 'saas'
-        service.web_url = 'https://cloud.example.com'
-        service.user_context.get_effective_org_id = AsyncMock(return_value=org_id)
-
-        def create_token(*, payload, expires_in):
-            assert expires_in is None
-            return payload['jti']
-
-        service.jwt_service.create_jws_token.side_effect = create_token
-        first = {'CODEX_AUTH_JSON': source}
-        second = {'CODEX_AUTH_JSON': source}
-
-        await service._scope_codex_subscription_auth(
-            first, user.agent_settings, user, sandbox, conversation_id
-        )
-        await service._scope_codex_subscription_auth(
-            second, user.agent_settings, user, sandbox, conversation_id
-        )
-
-        assert (
-            first['CODEX_AUTH_JSON'].headers['X-OH-Codex-Token']
-            != second['CODEX_AUTH_JSON'].headers['X-OH-Codex-Token']
-        )
-
-    @pytest.mark.asyncio
-    async def test_codex_subscription_auth_falls_back_without_broker_context(
-        self, service, tmp_path
-    ):
-        source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"r0"}}'))
-        user = self._make_acp_user(acp_server='codex')
-        service.app_mode = 'saas'
-
         request = await self._call_build(
             service,
             user,
             tmp_path,
             secrets={'CODEX_AUTH_JSON': source},
         )
+        sandbox = Mock(spec=SandboxInfo)
+        sandbox.id = 'sandbox-1'
+        sandbox.session_api_key = 'session-key'
+        service.web_url = 'https://cloud.example.com'
+        server_info = Mock()
+        server_info.raise_for_status = Mock()
+        server_info.json.return_value = {'capabilities': []}
+        service.httpx_client.get = AsyncMock(return_value=server_info)
+        service.httpx_client.put = AsyncMock()
 
-        assert request.secrets['CODEX_AUTH_JSON'] is source
+        prepared = await service._prepare_credential_bindings(
+            request,
+            sandbox,
+            request.conversation_id,
+            'http://agent-server',
+            api_codex_auth=False,
+        )
+
+        assert prepared.secrets['CODEX_AUTH_JSON'] is source
+        service.httpx_client.put.assert_not_awaited()
         service.jwt_service.create_jws_token.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_codex_subscription_auth_falls_back_when_org_lookup_fails(
-        self, service, tmp_path
-    ):
+    async def test_capability_probe_failure_keeps_plaintext(self, service, tmp_path):
         source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"r0"}}'))
         user = self._make_acp_user(acp_server='codex')
-        service.app_mode = 'saas'
-        service.web_url = 'https://cloud.example.com'
-        service.user_context.get_effective_org_id = AsyncMock(
-            side_effect=RuntimeError('organization unavailable')
-        )
-
         request = await self._call_build(
             service,
             user,
             tmp_path,
             secrets={'CODEX_AUTH_JSON': source},
         )
+        sandbox = Mock(spec=SandboxInfo)
+        sandbox.id = 'sandbox-1'
+        sandbox.session_api_key = 'session-key'
+        service.httpx_client.get = AsyncMock(side_effect=RuntimeError('unavailable'))
+        service.httpx_client.put = AsyncMock()
 
-        assert request.secrets['CODEX_AUTH_JSON'] is source
+        prepared = await service._prepare_credential_bindings(
+            request,
+            sandbox,
+            request.conversation_id,
+            'http://agent-server',
+            api_codex_auth=False,
+        )
+
+        assert prepared.secrets['CODEX_AUTH_JSON'] is source
+        service.httpx_client.put.assert_not_awaited()
         service.jwt_service.create_jws_token.assert_not_called()
 
     @pytest.mark.asyncio
@@ -4522,6 +4521,19 @@ class TestBuildAcpStartConversationRequestSecrets:
         result = request.secrets['CODEX_AUTH_JSON']
         assert isinstance(result, StaticSecret)
         assert result.get_value() == override.get_secret_value()
+        sandbox = Mock(spec=SandboxInfo)
+        sandbox.id = 'sandbox-1'
+        sandbox.session_api_key = 'session-key'
+        service.httpx_client.get = AsyncMock()
+        prepared = await service._prepare_credential_bindings(
+            request,
+            sandbox,
+            request.conversation_id,
+            'http://agent-server',
+            api_codex_auth=True,
+        )
+        assert prepared is request
+        service.httpx_client.get.assert_not_awaited()
         service.jwt_service.create_jws_token.assert_not_called()
 
     @pytest.mark.asyncio

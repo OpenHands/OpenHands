@@ -94,9 +94,11 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
     SandboxSpecService,
     is_custom_sandbox_spec,
 )
-from openhands.app_server.secrets.codex_auth import (
-    codex_auth_path,
-    is_chatgpt_codex_auth,
+from openhands.app_server.secrets.credential_binding_models import (
+    CODEX_AUTH_SECRET_NAME,
+    CREDENTIAL_BINDING_CAPABILITY,
+    credential_binding_path,
+    is_valid_codex_auth,
 )
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
@@ -490,6 +492,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     api_secrets=request.secrets,
                     agent_profile_id=request.agent_profile_id,
                 )
+            )
+            start_conversation_request = await self._prepare_credential_bindings(
+                start_conversation_request,
+                sandbox,
+                conversation_id,
+                agent_server_url,
+                api_codex_auth=bool(
+                    request.secrets and CODEX_AUTH_SECRET_NAME in request.secrets
+                ),
             )
 
             # update status
@@ -2266,66 +2277,92 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             _logger.warning(f'Failed to load skills: {e}', exc_info=True)
             return request
 
-    async def _scope_codex_subscription_auth(
+    async def _prepare_credential_bindings(
         self,
-        secrets: dict[str, Any],
-        settings: ACPAgentSettings,
-        user: UserInfo,
+        request: StartConversationRequest,
         sandbox: SandboxInfo,
         conversation_id: UUID,
-    ) -> None:
-        """Scope stored Codex subscription auth to one conversation."""
-        source = secrets.get('CODEX_AUTH_JSON')
+        agent_server_url: str,
+        *,
+        api_codex_auth: bool,
+    ) -> StartConversationRequest:
+        agent = request.agent
+        request_secrets = getattr(request, 'secrets', None)
+        if not isinstance(request_secrets, Mapping):
+            return request
+        source = request_secrets.get(CODEX_AUTH_SECRET_NAME)
         if (
-            (self.app_mode or '').lower() != 'saas'
-            or settings.acp_server != 'codex'
+            agent.agent_kind != 'acp'
+            or getattr(agent, 'acp_server', None) != 'codex'
+            or api_codex_auth
             or not isinstance(source, StaticSecret)
         ):
-            return
+            return request
         value = source.get_value()
-        if not value or not is_chatgpt_codex_auth(value):
-            return
-        if not self.web_url or not user.id or not sandbox.session_api_key:
-            _logger.warning(
-                'Leaving Codex credentials unscoped because broker context is incomplete',
-                extra={'conversation_id': str(conversation_id)},
-            )
-            return
+        if not value or not is_valid_codex_auth(value):
+            return request
+
+        headers = (
+            {'X-Session-API-Key': sandbox.session_api_key}
+            if sandbox.session_api_key
+            else {}
+        )
         try:
-            org_id = await self.user_context.get_effective_org_id()
+            response = await self.httpx_client.get(
+                f'{agent_server_url}/server_info',
+                headers=headers,
+                timeout=self.sandbox_startup_timeout,
+            )
+            response.raise_for_status()
+            capabilities = response.json().get('capabilities', [])
         except Exception:
             _logger.warning(
-                'Leaving Codex credentials unscoped because the organization lookup failed',
+                'Could not determine agent-server credential binding capabilities',
                 extra={'conversation_id': str(conversation_id)},
                 exc_info=True,
             )
-            return
-        if org_id is None:
-            _logger.warning(
-                'Leaving Codex credentials unscoped because no organization is available',
-                extra={'conversation_id': str(conversation_id)},
-            )
-            return
+            return request
+        if (
+            not isinstance(capabilities, list)
+            or CREDENTIAL_BINDING_CAPABILITY not in capabilities
+        ):
+            return request
+        if not self.web_url or not sandbox.session_api_key:
+            raise SandboxError('Credential binding context is incomplete')
+
+        user_id = await self.user_context.get_user_id() or 'root'
+        organization_id = await self.user_context.get_effective_org_id()
         token = self.jwt_service.create_jws_token(
             payload={
-                'purpose': 'codex-auth',
-                'user_id': user.id,
-                'org_id': str(org_id),
-                'sandbox_id': sandbox.id,
+                'purpose': 'credential-binding',
+                'user_id': user_id,
+                'organization_id': (
+                    str(organization_id) if organization_id is not None else None
+                ),
                 'conversation_id': str(conversation_id),
-                'secret_name': 'CODEX_AUTH_JSON',
-                'jti': str(uuid4()),
+                'runtime_id': sandbox.id,
+                'secret_name': CODEX_AUTH_SECRET_NAME,
+                'actions': ['load', 'replace'],
             },
             expires_in=self.access_token_hard_timeout,
         )
-        secrets['CODEX_AUTH_JSON'] = LookupSecret(
-            url=f'{self.web_url.rstrip("/")}{codex_auth_path(conversation_id)}',
-            headers={
-                'X-OH-Sandbox-Key': sandbox.session_api_key,
-                'X-OH-Codex-Token': token,
+        activation_response = await self.httpx_client.put(
+            f'{agent_server_url}/api/conversations/{conversation_id}'
+            f'/credential-bindings/{CODEX_AUTH_SECRET_NAME}',
+            headers=headers,
+            json={
+                'url': (
+                    f'{self.web_url.rstrip("/")}'
+                    f'{credential_binding_path(conversation_id, CODEX_AUTH_SECRET_NAME)}'
+                ),
+                'headers': {'Authorization': f'Bearer {token}'},
             },
-            description=source.description,
+            timeout=self.sandbox_startup_timeout,
         )
+        activation_response.raise_for_status()
+        secrets = dict(request_secrets)
+        secrets.pop(CODEX_AUTH_SECRET_NAME, None)
+        return request.model_copy(update={'secrets': secrets})
 
     async def _build_acp_start_conversation_request(
         self,
@@ -2345,10 +2382,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     ) -> StartConversationRequest:
         """Build a StartConversationRequest for ACP agent conversations.
 
-        User secrets (Secrets panel + git provider tokens) flow through
-        ``request.secrets`` — the canonical cipher-protected wire channel.
-        Stored ChatGPT Codex auth uses a conversation-scoped ``LookupSecret``.
-        Secrets are passed directly as ``secrets=`` to ``create_request()``.
+        User secrets flow through ``request.secrets``.
 
         Args:
             sandbox: Sandbox information
@@ -2380,10 +2414,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # --- secrets --------------------------------------------------------
         secrets: dict = await self.user_context.get_secrets()
-        if not api_secrets or 'CODEX_AUTH_JSON' not in api_secrets:
-            await self._scope_codex_subscription_auth(
-                secrets, acp_settings, user, sandbox, conversation_id
-            )
         provider_tokens = cast(
             PROVIDER_TOKEN_TYPE | None,
             await self.user_context.get_provider_tokens(),

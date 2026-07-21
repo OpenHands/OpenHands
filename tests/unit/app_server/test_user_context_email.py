@@ -63,11 +63,13 @@ class TestAuthUserContextEffectiveOrg:
         user_auth.get_effective_org_id.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_user_auth_does_not_support_effective_org(self):
+    async def test_returns_none_from_user_auth(self):
         user_auth = MagicMock(spec=UserAuth)
+        user_auth.get_effective_org_id = AsyncMock(return_value=None)
         ctx = AuthUserContext(user_auth=user_auth)
 
         assert await ctx.get_effective_org_id() is None
+        user_auth.get_effective_org_id.assert_awaited_once()
 
 
 class TestSpecifyUserContextEmail:
