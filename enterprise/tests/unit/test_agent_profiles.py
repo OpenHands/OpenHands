@@ -678,7 +678,7 @@ class TestResolveActiveAgentProfile:
     def test_resolves_openhands_profile_and_returns_provenance(self):
         store = self._store()
         org, pid = self._org_with(
-            OpenHandsAgentProfile(name='reviewer', llm_profile_ref='Default')
+            OpenHandsAgentProfile(name='reviewer', llm_profile_ref='Default', tools=[])
         )
         member = MagicMock(spec=OrgMember)
         member.active_agent_profile_id = pid
@@ -689,6 +689,7 @@ class TestResolveActiveAgentProfile:
         assert resolved_id == pid
         assert revision == 0
         assert dump['agent_kind'] == 'openhands'
+        assert dump['tools'] == []
         # The resolved LLM came from the referenced org LLM profile.
         assert dump['llm']['model'] == 'gpt-4o'
 
@@ -919,6 +920,40 @@ class TestPersistedVsResolvedSettingsView:
         member = await _read_member(async_session_maker, org_id, USER_ID)
         stored_mcp = member.mcp_config or {}
         assert set(stored_mcp) == {'a', 'b', 'c'}
+
+    @pytest.mark.asyncio
+    async def test_plain_round_trip_cleans_legacy_empty_tools(
+        self, async_session_maker, patch_agent_routes
+    ):
+        org_id = patch_agent_routes
+        uid = str(USER_ID)
+        await self._setup_active_profile(async_session_maker, org_id, ['a'])
+
+        async with async_session_maker() as session:
+            org = await session.get(Org, org_id)
+            member = await session.get(OrgMember, (org_id, USER_ID))
+            org.agent_settings = {**org.agent_settings, 'tools': []}
+            member.agent_settings_diff = {
+                **member.agent_settings_diff,
+                'tools': [],
+            }
+            await session.commit()
+
+        from storage.saas_settings_store import SaasSettingsStore
+
+        with self._store_patches(async_session_maker):
+            store = SaasSettingsStore(uid, effective_org_id=org_id)
+            settings = await store.load()
+            assert settings is not None
+            assert settings.agent_settings.tools is None
+
+            settings.enable_sound_notifications = False
+            await store.store(settings)
+
+        org = await _read_org_raw(async_session_maker, org_id)
+        member = await _read_member(async_session_maker, org_id, USER_ID)
+        assert org.agent_settings.get('tools') is None
+        assert member.agent_settings_diff.get('tools') is None
 
     @pytest.mark.asyncio
     async def test_plain_round_trip_keeps_member_llm_key(

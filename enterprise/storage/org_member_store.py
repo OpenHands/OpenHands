@@ -12,6 +12,7 @@ from server.routes.org_models import (
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
+from storage.agent_settings_compat import normalize_legacy_empty_tools
 from storage.database import a_session_maker
 from storage.org_member import OrgMember
 from storage.user import User
@@ -51,7 +52,7 @@ class OrgMemberStore:
         conversation_settings_diff: Optional[dict[str, Any]] = None,
     ) -> OrgMember:
         """Add a user to an organization with a specific role."""
-        agent_settings_diff = dict(agent_settings_diff or {})
+        agent_settings_diff = normalize_legacy_empty_tools(agent_settings_diff or {})
         mcp_config = _pop_mcp_config(agent_settings_diff)
         async with a_session_maker() as session:
             org_member = OrgMember(
@@ -185,7 +186,9 @@ class OrgMemberStore:
     @staticmethod
     def get_kwargs_from_user_settings(user_settings: UserSettings) -> dict[str, Any]:
         """Return kwargs for OrgMember construction (keys match column names)."""
-        agent_settings_diff = dict(user_settings.agent_settings or {})
+        agent_settings_diff = normalize_legacy_empty_tools(
+            user_settings.agent_settings or {}
+        )
         nested_mcp_config = _pop_mcp_config(agent_settings_diff)
         mcp_config = (
             nested_mcp_config
@@ -297,7 +300,7 @@ class OrgMemberStore:
         agent_settings_diff = values.pop('agent_settings_diff', None)
         conversation_settings_diff = values.pop('conversation_settings_diff', None)
         if agent_settings_diff is not None:
-            agent_settings_diff = dict(agent_settings_diff)
+            agent_settings_diff = normalize_legacy_empty_tools(agent_settings_diff)
             for key in MEMBER_PRIVATE_AGENT_KEYS:
                 agent_settings_diff.pop(key, None)
 
@@ -307,7 +310,7 @@ class OrgMemberStore:
 
             if agent_settings_diff is not None:
                 org_member.agent_settings_diff = deep_merge(
-                    org_member.agent_settings_diff,
+                    normalize_legacy_empty_tools(org_member.agent_settings_diff),
                     agent_settings_diff,
                 )
 

@@ -20,6 +20,7 @@ from storage.agent_profile_resolution import (
     load_agent_profiles,
     load_llm_profiles,
 )
+from storage.agent_settings_compat import normalize_legacy_empty_tools
 from storage.database import a_session_maker
 from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
 from storage.org import Org
@@ -181,7 +182,7 @@ class SaasSettingsStore(SettingsStore):
             exclude={'llm': {'api_key'}},
         )
         persisted.pop('mcp_config', None)
-        return persisted
+        return normalize_legacy_empty_tools(persisted)
 
     @staticmethod
     def _get_persisted_mcp_config(item: Settings) -> dict[str, Any] | None:
@@ -345,7 +346,9 @@ class SaasSettingsStore(SettingsStore):
             )
             return None
         org_agent_settings = OrgStore.get_agent_settings_from_org(org)
-        member_agent_settings_diff = dict(org_member.agent_settings_diff)
+        member_agent_settings_diff = normalize_legacy_empty_tools(
+            org_member.agent_settings_diff
+        )
         member_agent_settings_diff.pop('mcp_config', None)
         member_mcp_config = org_member.effective_mcp_config
 
@@ -650,9 +653,9 @@ class SaasSettingsStore(SettingsStore):
             # Strip any pre-existing private keys from the org dump before
             # merging, so legacy values written by older code paths are
             # cleaned up on the next save and stop leaking to other members.
-            org_agent_settings_dump = OrgStore.get_agent_settings_from_org(
-                org
-            ).model_dump(mode='json')
+            org_agent_settings_dump = normalize_legacy_empty_tools(
+                OrgStore.get_agent_settings_from_org(org).model_dump(mode='json')
+            )
             for private_key in MEMBER_PRIVATE_AGENT_KEYS:
                 org_agent_settings_dump.pop(private_key, None)
 
@@ -728,7 +731,9 @@ class SaasSettingsStore(SettingsStore):
             )
 
             member_mcp_config = org_member.effective_mcp_config
-            member_agent_settings_diff = dict(org_member.agent_settings_diff)
+            member_agent_settings_diff = normalize_legacy_empty_tools(
+                org_member.agent_settings_diff
+            )
             for private_key in MEMBER_PRIVATE_AGENT_KEYS:
                 member_agent_settings_diff.pop(private_key, None)
             org_member.agent_settings_diff = member_agent_settings_diff

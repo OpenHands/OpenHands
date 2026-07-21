@@ -19,6 +19,7 @@ from server.routes.org_models import (
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
+from storage.agent_settings_compat import normalize_legacy_empty_tools
 from storage.database import a_session_maker
 from storage.lite_llm_manager import (
     LiteLlmManager,
@@ -83,7 +84,9 @@ class OrgStore:
         # rename) and returns the actual variant. ACP settings are returned as
         # ``ACPAgentSettings``, not coerced into the OpenHands shape — that
         # coercion 500s on ACP's nullable ``agent_context``.
-        return _load_persisted_agent_settings(dict(org.agent_settings))
+        return _load_persisted_agent_settings(
+            normalize_legacy_empty_tools(org.agent_settings)
+        )
 
     @staticmethod
     def get_conversation_settings_from_org(org: Org) -> ConversationSettings:
@@ -412,11 +415,13 @@ class OrgStore:
                     setattr(org, key, value)
 
             if agent_settings_diff is not None:
-                org.agent_settings = OrgStore._merge_and_validate_settings(
-                    org.agent_settings,
-                    agent_settings_diff,
-                    OpenHandsAgentSettings,
-                ).model_dump(mode='json', exclude_unset=True)
+                org.agent_settings = normalize_legacy_empty_tools(
+                    OrgStore._merge_and_validate_settings(
+                        normalize_legacy_empty_tools(org.agent_settings),
+                        normalize_legacy_empty_tools(agent_settings_diff),
+                        OpenHandsAgentSettings,
+                    ).model_dump(mode='json', exclude_unset=True)
+                )
 
             if conversation_settings_diff is not None:
                 org.conversation_settings = OrgStore._merge_and_validate_settings(
