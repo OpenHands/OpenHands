@@ -131,7 +131,7 @@ from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.settings import ACPAgentSettings
 from openhands.sdk.subagent import get_registered_agent_definitions
-from openhands.sdk.tool import Tool
+from openhands.sdk.tool.builtins import SwitchLLMTool
 from openhands.sdk.utils.redact import (
     redact_api_key_literals,
     redact_text_secrets,
@@ -218,46 +218,22 @@ def append_system_context(existing: str | None, block: str) -> str:
 
 
 def effective_disabled_skills(user: UserInfo) -> list[str]:
-    """Combine member and profile skill deny-lists."""
+    """Union of the member-level and launched-profile-level skill deny-lists.
+
+    A skill disabled at EITHER level stays off. The member's deny-list rides
+    ``user.disabled_skills``; the launched Agent Profile's rides the resolved
+    ``agent_settings.agent_context.disabled_skills`` (the SDK resolver stamps the
+    profile's ``disabled_skills`` there — #4017). On a non-profile launch the
+    resolved context's deny-list is empty, so this is just the member's list.
+    Order-preserving de-dup. Because it is a deny-list, a name absent from the
+    discovered catalog is a harmless no-op, so no reconciliation is needed
+    between the two sources.
+    """
     member = list(user.disabled_skills or [])
-    agent_context = user.agent_settings.agent_context
-    profile = list(agent_context.disabled_skills) if agent_context else []
+    agent_settings = getattr(user, 'agent_settings', None)
+    agent_context = getattr(agent_settings, 'agent_context', None)
+    profile = list(getattr(agent_context, 'disabled_skills', None) or [])
     return list(dict.fromkeys([*member, *profile]))
-
-
-def _merge_launch_context(
-    context: AgentContext | None,
-    system_message_suffix: str | None,
-    secrets: Mapping[str, Any] | None = None,
-    disabled_skills: Sequence[str] | None = None,
-) -> AgentContext:
-    fresh_context = AgentContext()
-    context = context or fresh_context
-    updates: dict[str, Any] = {
-        'current_datetime': fresh_context.current_datetime,
-    }
-    if system_message_suffix:
-        updates['system_message_suffix'] = append_system_context(
-            context.system_message_suffix, system_message_suffix
-        )
-    if secrets:
-        updates['secrets'] = {**(context.secrets or {}), **secrets}
-    if disabled_skills is not None:
-        effective_disabled = list(dict.fromkeys(disabled_skills))
-        disabled = set(effective_disabled)
-        updates['disabled_skills'] = effective_disabled
-        updates['skills'] = [
-            skill for skill in context.skills if skill.name not in disabled
-        ]
-    return context.model_copy(update=updates)
-
-
-@dataclass(frozen=True)
-class _ConversationLaunchSnapshot:
-    user: UserInfo
-    agent_profile_id: str | None
-    agent_profile_revision: int | None
-    disabled_skills: tuple[str, ...]
 
 
 @dataclass
@@ -288,30 +264,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     export_lock_ttl_seconds: int = 3600
     export_lock_refresh_interval_seconds: int = 30
     export_lock_required: bool | None = None
-
-    @staticmethod
-    def _launch_snapshot_from_user(user: UserInfo) -> _ConversationLaunchSnapshot:
-        profile_id = user.active_agent_profile_id
-        profile_revision = user.active_agent_profile_revision
-        return _ConversationLaunchSnapshot(
-            user=user,
-            agent_profile_id=profile_id
-            if isinstance(profile_id, str) and profile_id
-            else None,
-            agent_profile_revision=profile_revision
-            if isinstance(profile_revision, int)
-            else None,
-            disabled_skills=tuple(effective_disabled_skills(user)),
-        )
-
-    async def _resolve_conversation_launch_snapshot(
-        self, agent_profile_id: str | None
-    ) -> _ConversationLaunchSnapshot:
-        user = await self.user_context.get_user_info(
-            resolve_agent_profile=True,
-            override_agent_profile_id=agent_profile_id,
-        )
-        return self._launch_snapshot_from_user(user)
 
     def _maybe_append_shallow_clone_context(
         self,
@@ -493,9 +445,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     'llm_model_override': request.llm_model,
                 },
             )
-            launch_snapshot = await self._resolve_conversation_launch_snapshot(
-                request.agent_profile_id
-            )
 
             # Build the start request
             start_conversation_request = (
@@ -515,7 +464,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     plugins=request.plugins,
                     api_secrets=request.secrets,
                     agent_profile_id=request.agent_profile_id,
-                    launch_snapshot=launch_snapshot,
                 )
             )
 
@@ -579,12 +527,25 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             # archive captures the right directory without re-deriving the path
             # from settings (e.g. grouping) that may change before delete.
             tags[ARCHIVE_WORKSPACE_PATH_TAG_KEY] = working_dir
-            if launch_snapshot.agent_profile_id:
-                tags[AGENT_PROFILE_ID_TAG_KEY] = launch_snapshot.agent_profile_id
-                if launch_snapshot.agent_profile_revision is not None:
-                    tags[AGENT_PROFILE_REVISION_TAG_KEY] = str(
-                        launch_snapshot.agent_profile_revision
-                    )
+            # Stamp Agent Profile provenance. The launched profile resolved into
+            # the launched ``agent_settings`` (a resolve-requested load carries
+            # its id + revision onto UserInfo); ride the tags dict so it
+            # round-trips and surfaces as the ``launched_agent_profile``
+            # computed field. Resolves with the same override the launch itself
+            # used, so provenance reflects what actually ran even when the
+            # request carried a one-off ``agent_profile_id``.
+            profile_user = await self.user_context.get_user_info(
+                resolve_agent_profile=True,
+                override_agent_profile_id=request.agent_profile_id,
+            )
+            launched_profile_id = getattr(profile_user, 'active_agent_profile_id', None)
+            if isinstance(launched_profile_id, str) and launched_profile_id:
+                tags[AGENT_PROFILE_ID_TAG_KEY] = launched_profile_id
+                launched_revision = getattr(
+                    profile_user, 'active_agent_profile_revision', None
+                )
+                if isinstance(launched_revision, int):
+                    tags[AGENT_PROFILE_REVISION_TAG_KEY] = str(launched_revision)
             if request_agent.agent_kind == 'acp':
                 llm_model = request_agent.acp_model
                 agent_kind = 'acp'
@@ -592,10 +553,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 # can resolve a brand label ("Claude Code", "Codex", …) via
                 # the SDK registry without keeping a per-conversation column.
                 # Surfaced to the UI as the projected ``acp_server`` field.
-                if isinstance(launch_snapshot.user.agent_settings, ACPAgentSettings):
-                    tags[ACP_SERVER_TAG_KEY] = (
-                        launch_snapshot.user.agent_settings.acp_server
-                    )
+                # Reuses ``profile_user`` (resolved above with the same
+                # override) rather than re-fetching — a second fetch would
+                # both double the settings-resolution cost and risk a
+                # different profile resolving if it changed in between.
+                if isinstance(profile_user.agent_settings, ACPAgentSettings):
+                    tags[ACP_SERVER_TAG_KEY] = profile_user.agent_settings.acp_server
             else:
                 llm_model = request_agent.llm.model
                 agent_kind = 'openhands'
@@ -1897,7 +1860,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         plugins: list[PluginSpec] | None = None,
         api_secrets: dict[str, SecretStr] | None = None,
         agent_profile_id: str | None = None,
-        launch_snapshot: _ConversationLaunchSnapshot | None = None,
     ) -> StartConversationRequest:
         """Build a complete StartConversationRequest for a user.
 
@@ -1934,10 +1896,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Conversation start builds the agent, so it consumes the RESOLVED
         # (effective launch) view; plain settings reads/round-trips elsewhere
         # stay on the persisted view.
-        launch_snapshot = launch_snapshot or (
-            await self._resolve_conversation_launch_snapshot(agent_profile_id)
+        user = await self.user_context.get_user_info(
+            resolve_agent_profile=True,
+            override_agent_profile_id=agent_profile_id,
         )
-        user = launch_snapshot.user
         llm_settings = getattr(user.agent_settings, 'llm', None)
         _logger.debug(
             'managed_llm_key_refresh:build_request_context',
@@ -1981,7 +1943,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 remote_workspace=remote_workspace,
                 plugins=plugins,
                 api_secrets=api_secrets,
-                launch_snapshot=launch_snapshot,
+                agent_profile_id=agent_profile_id,
             )
             if remote_workspace:
                 acp_request = await self._load_skills_onto_request(
@@ -1990,7 +1952,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     remote_workspace,
                     selected_repository,
                     get_project_dir(working_dir, selected_repository),
-                    list(launch_snapshot.disabled_skills),
+                    effective_disabled_skills(user),
                     registered_marketplaces,
                 )
             return acp_request
@@ -2055,42 +2017,56 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # --- tools ----------------------------------------------------------
         agent_definitions: list[Any] = []
-        tools: list[Tool]
         if agent_type == AgentType.PLAN:
-            # Planning launches always use the constrained planning toolset.
             plan_path = None
             if project_dir:
                 plan_path = self._compute_plan_path(project_dir, git_provider)
             tools = get_planning_tools(plan_path=plan_path)
         else:
             register_builtins_agents(enable_browser=True)
-            profile_tools = user.agent_settings.tools
-            if profile_tools is None:
-                tools = get_default_tools(
-                    enable_browser=True,
-                    enable_sub_agents=user.agent_settings.enable_sub_agents,
-                )
-            else:
-                tools = profile_tools
+            tools = get_default_tools(
+                enable_browser=True,
+                enable_sub_agents=user.agent_settings.enable_sub_agents,
+            )
             if user.agent_settings.enable_sub_agents:
                 agent_definitions = list(get_registered_agent_definitions())
 
         # --- build AgentSettings and create agent ---------------------------
-        agent_context = _merge_launch_context(
-            user.agent_settings.agent_context,
-            effective_suffix,
-            secrets,
-            disabled_skills=launch_snapshot.disabled_skills,
-        )
         configured_agent_settings = user.agent_settings.model_copy(
             update={
                 'llm': llm,
                 'tools': tools,
                 'mcp_config': mcp_config if mcp_config else {},
-                'agent_context': agent_context,
+                'agent_context': AgentContext(
+                    system_message_suffix=effective_suffix,
+                    secrets=secrets,
+                ),
             }
         )
         agent = configured_agent_settings.create_agent()
+
+        # SaaS profiles live on the user/org record, not the sandbox
+        # filesystem, so we attach the agent's built-in switch_llm tool
+        # ourselves rather than relying on create_agent()'s gating. Enabled
+        # whenever there are at least two valid saved profiles (a switch needs
+        # a target).
+        valid_profile_names = [
+            name
+            for name in user.llm_profiles.profiles
+            if PROFILE_NAME_REGEX.match(name)
+        ]
+        if (
+            len(valid_profile_names) >= 2
+            and SwitchLLMTool.__name__ not in agent.include_default_tools
+        ):
+            agent = agent.model_copy(
+                update={
+                    'include_default_tools': [
+                        *agent.include_default_tools,
+                        SwitchLLMTool.__name__,
+                    ]
+                }
+            )
 
         agent = self._apply_server_agent_overrides(
             agent,
@@ -2196,7 +2172,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 remote_workspace,
                 selected_repository,
                 project_dir,
-                list(launch_snapshot.disabled_skills),
+                effective_disabled_skills(user),
                 registered_marketplaces,
             )
 
@@ -2266,7 +2242,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         conversation_id: UUID,
         initial_message: SendMessageRequest | None,
         working_dir: str,
-        launch_snapshot: _ConversationLaunchSnapshot,
         system_message_suffix: str | None = None,
         trigger: ConversationTrigger | None = None,
         git_provider: ProviderType | None = None,
@@ -2275,6 +2250,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         remote_workspace: AsyncRemoteWorkspace | None = None,
         plugins: list[PluginSpec] | None = None,
         api_secrets: dict[str, SecretStr] | None = None,
+        agent_profile_id: str | None = None,
     ) -> StartConversationRequest:
         """Build a StartConversationRequest for ACP agent conversations.
 
@@ -2302,9 +2278,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 resolve the HEAD commit for the Laminar trace metadata.
             plugins: Optional list of plugins to load
             api_secrets: Optional secrets passed directly via the API.
-            launch_snapshot: Resolved user and Agent Profile provenance.
+            agent_profile_id: One-off Agent Profile override for this
+                conversation only (cloud-only; does not change the member's
+                active pointer). ``None`` uses the ambient active profile.
         """
-        user = launch_snapshot.user
+        user = await self.user_context.get_user_info(
+            resolve_agent_profile=True,
+            override_agent_profile_id=agent_profile_id,
+        )
 
         project_dir = get_project_dir(working_dir, selected_repository)
         workspace = LocalWorkspace(working_dir=project_dir)
@@ -2392,11 +2373,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         self._merge_custom_mcp_config(acp_mcp_servers, user)
         if acp_mcp_servers:
             settings_update['mcp_config'] = acp_mcp_servers
-        settings_update['agent_context'] = _merge_launch_context(
-            acp_settings.agent_context,
-            system_message_suffix,
-            disabled_skills=launch_snapshot.disabled_skills,
-        )
+        if system_message_suffix:
+            settings_update['agent_context'] = AgentContext(
+                system_message_suffix=system_message_suffix
+            )
         acp_settings_for_agent = acp_settings.model_copy(update=settings_update)
         acp_agent = acp_settings_for_agent.create_agent()
 
