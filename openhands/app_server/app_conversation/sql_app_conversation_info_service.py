@@ -584,7 +584,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
     async def _record_bucket_cost_deltas(
         self,
         stored: StoredConversationMetadata,
-        usage_to_metrics: dict[str, MetricsSnapshot],
+        usage_to_metrics: Mapping[str, MetricsSnapshot],
         event_timestamp: datetime,
     ) -> None:
         """Write per-bucket cost deltas so spend stays attributable per model.
@@ -613,7 +613,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             bucket_delta = float(snapshot.accumulated_cost or 0.0) - prior_cost
             if bucket_delta <= 0:
                 continue
-            model = snapshot.model_name
+            model: str | None = snapshot.model_name
             if not model or model == 'default':
                 model = stored.llm_model if usage_id == 'agent' else None
             usage = snapshot.accumulated_token_usage
