@@ -590,15 +590,18 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         usage_to_metrics: Mapping[str, MetricsSnapshot],
         event_timestamp: datetime,
     ) -> None:
-        """Write per-bucket cost deltas so spend stays attributable per model.
+        """Write per-bucket cost/token deltas so spend stays attributable per model.
 
-        Prior per-bucket totals come from the ledger itself; rows written
-        before attribution existed have NULL usage_id and count as 'agent'.
+        Prior totals come from the ledger itself. Rows with NULL usage_id
+        predate attribution: agent-only deltas from the original schema, or
+        COMBINED deltas from an interim combined-metrics build. Their sum is
+        drained against the largest apparent deltas first so pre-attribution
+        history is never re-recorded, whichever build wrote it. Token history
+        has no NULL-row record, so the pre-update column totals drain it.
         """
-        bucket_key = func.coalesce(StoredConversationCostEvent.usage_id, 'agent')
         result = await self.db_session.execute(
             select(
-                bucket_key,
+                StoredConversationCostEvent.usage_id,
                 func.sum(StoredConversationCostEvent.cost_delta),
                 func.sum(StoredConversationCostEvent.prompt_tokens),
                 func.sum(StoredConversationCostEvent.completion_tokens),
@@ -606,37 +609,68 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             .where(
                 StoredConversationCostEvent.conversation_id == stored.conversation_id
             )
-            .group_by(bucket_key)
+            .group_by(StoredConversationCostEvent.usage_id)
         )
         prior = {row[0]: row for row in result.all()}
+        unattributed = prior.pop(None, None)
+        cost_drain = float(unattributed[1] or 0.0) if unattributed is not None else 0.0
+        attributed_prompt = sum(int(r[2] or 0) for r in prior.values())
+        attributed_completion = sum(int(r[3] or 0) for r in prior.values())
+        prompt_drain = max((stored.prompt_tokens or 0) - attributed_prompt, 0)
+        completion_drain = max(
+            (stored.completion_tokens or 0) - attributed_completion, 0
+        )
 
+        pending: list[dict] = []
         for usage_id, snapshot in usage_to_metrics.items():
             prior_row = prior.get(usage_id)
             prior_cost = float(prior_row[1] or 0.0) if prior_row is not None else 0.0
-            bucket_delta = float(snapshot.accumulated_cost or 0.0) - prior_cost
-            if bucket_delta <= 0:
+            prior_prompt = int(prior_row[2] or 0) if prior_row is not None else 0
+            prior_completion = int(prior_row[3] or 0) if prior_row is not None else 0
+            usage = snapshot.accumulated_token_usage
+            pending.append(
+                {
+                    'usage_id': usage_id,
+                    'snapshot': snapshot,
+                    'cost': max(
+                        float(snapshot.accumulated_cost or 0.0) - prior_cost, 0.0
+                    ),
+                    'prompt': max(usage.prompt_tokens - prior_prompt, 0)
+                    if usage
+                    else 0,
+                    'completion': max(usage.completion_tokens - prior_completion, 0)
+                    if usage
+                    else 0,
+                    'has_usage': usage is not None,
+                }
+            )
+
+        for key, drain in (
+            ('cost', cost_drain),
+            ('prompt', prompt_drain),
+            ('completion', completion_drain),
+        ):
+            for item in sorted(pending, key=lambda i: i[key], reverse=True):
+                covered = min(item[key], drain)
+                item[key] -= covered
+                drain -= covered
+
+        for item in pending:
+            if item['cost'] <= 0 and item['prompt'] <= 0 and item['completion'] <= 0:
                 continue
+            snapshot = item['snapshot']
             model: str | None = snapshot.model_name
             if not model or model == 'default':
-                model = stored.llm_model if usage_id == 'agent' else None
-            usage = snapshot.accumulated_token_usage
-            prompt_delta = completion_delta = None
-            if usage is not None:
-                prior_prompt = int(prior_row[2] or 0) if prior_row is not None else 0
-                prior_completion = (
-                    int(prior_row[3] or 0) if prior_row is not None else 0
-                )
-                prompt_delta = max(usage.prompt_tokens - prior_prompt, 0)
-                completion_delta = max(usage.completion_tokens - prior_completion, 0)
+                model = stored.llm_model if item['usage_id'] == 'agent' else None
             self.db_session.add(
                 StoredConversationCostEvent(
                     conversation_id=stored.conversation_id,
-                    cost_delta=bucket_delta,
+                    cost_delta=item['cost'],
                     occurred_at=event_timestamp,
-                    usage_id=usage_id,
+                    usage_id=item['usage_id'],
                     llm_model=model,
-                    prompt_tokens=prompt_delta,
-                    completion_tokens=completion_delta,
+                    prompt_tokens=item['prompt'] if item['has_usage'] else None,
+                    completion_tokens=item['completion'] if item['has_usage'] else None,
                 )
             )
 

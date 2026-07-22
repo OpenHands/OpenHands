@@ -380,6 +380,85 @@ class TestUpdateConversationStatistics:
         assert events[1].cost_delta == pytest.approx(0.17)
 
     @pytest.mark.asyncio
+    async def test_update_statistics_transition_from_combined_null_events(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """Pre-attribution NULL rows (incl. interim combined deltas) drain, not double-count."""
+        conversation_id, stored = v1_conversation_metadata
+
+        stored.accumulated_cost = 0.30
+        async_session.add(
+            StoredConversationCostEvent(
+                conversation_id=str(conversation_id),
+                cost_delta=0.30,
+                occurred_at=datetime(2025, 1, 10, tzinfo=timezone.utc),
+            )
+        )
+        await async_session.commit()
+
+        stats = ConversationStats(
+            usage_to_metrics={
+                'agent': Metrics(model_name='gpt-5.5', accumulated_cost=0.12),
+                'profile:opus:x1': Metrics(
+                    model_name='claude-opus-4-8', accumulated_cost=0.25
+                ),
+            }
+        )
+        await service.update_conversation_statistics(conversation_id, stats)
+
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == pytest.approx(0.37)
+
+        result = await async_session.execute(
+            select(StoredConversationCostEvent).where(
+                StoredConversationCostEvent.conversation_id == str(conversation_id)
+            )
+        )
+        events = result.scalars().all()
+        # Ledger total tracks the combined column: 0.30 legacy + 0.07 new.
+        assert sum(e.cost_delta for e in events) == pytest.approx(0.37)
+        new_events = [e for e in events if e.usage_id is not None]
+        assert sum(e.cost_delta for e in new_events) == pytest.approx(0.07)
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_token_only_growth_recorded(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """Zero-cost models still get token deltas in the ledger."""
+        conversation_id, stored = v1_conversation_metadata
+
+        def stats(prompt, completion):
+            return ConversationStats(
+                usage_to_metrics={
+                    'agent': Metrics(
+                        model_name='custom-llm',
+                        accumulated_cost=0.0,
+                        accumulated_token_usage=TokenUsage(
+                            model='custom-llm',
+                            prompt_tokens=prompt,
+                            completion_tokens=completion,
+                        ),
+                    )
+                }
+            )
+
+        await service.update_conversation_statistics(conversation_id, stats(100, 10))
+        await service.update_conversation_statistics(conversation_id, stats(300, 30))
+
+        result = await async_session.execute(
+            select(StoredConversationCostEvent)
+            .where(StoredConversationCostEvent.conversation_id == str(conversation_id))
+            .order_by(StoredConversationCostEvent.id)
+        )
+        events = result.scalars().all()
+        assert [(e.prompt_tokens, e.completion_tokens) for e in events] == [
+            (100, 10),
+            (200, 20),
+        ]
+        assert all(e.cost_delta == 0 for e in events)
+        assert all(e.llm_model == 'custom-llm' for e in events)
+
+    @pytest.mark.asyncio
     async def test_update_statistics_stale_snapshot_ignored(
         self, service, async_session, v1_conversation_metadata
     ):

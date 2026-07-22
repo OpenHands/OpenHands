@@ -798,15 +798,69 @@ class OrgConversationService:
             )
         )
         result = await self.db_session.execute(model_query)
-        model_rows = result.all()
-        model_usage = []
+        model_rows = list(result.all())
+
+        # Conversations with no ledger rows at all (spend predates the cost
+        # events table) would otherwise vanish; keep them via the legacy
+        # created_at/llm_model aggregation.
+        legacy_model_query = (
+            select(
+                StoredConversationMetadata.llm_model,
+                func.count(StoredConversationMetadata.conversation_id).label(
+                    'conv_count'
+                ),
+                func.coalesce(
+                    func.sum(
+                        StoredConversationMetadata.prompt_tokens
+                        + StoredConversationMetadata.completion_tokens
+                    ),
+                    0,
+                ).label('token_count'),
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.accumulated_cost), 0
+                ).label('total_cost'),
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationMetadata.created_at >= cutoff)
+            .where(
+                ~select(StoredConversationCostEvent.id)
+                .where(
+                    StoredConversationCostEvent.conversation_id
+                    == StoredConversationMetadata.conversation_id
+                )
+                .exists()
+            )
+            .group_by(StoredConversationMetadata.llm_model)
+        )
+        result = await self.db_session.execute(legacy_model_query)
+        model_rows.extend(result.all())
+
+        merged: dict[str, dict[str, float]] = {}
         for row in model_rows:
+            entry = merged.setdefault(
+                row.llm_model or 'Unknown',
+                {'conv_count': 0, 'token_count': 0, 'total_cost': 0.0},
+            )
+            entry['conv_count'] += int(row.conv_count or 0)
+            entry['token_count'] += int(row.token_count or 0)
+            entry['total_cost'] += float(row.total_cost or 0.0)
+
+        model_usage = []
+        for model_name, entry in sorted(
+            merged.items(), key=lambda kv: kv[1]['total_cost'], reverse=True
+        ):
             model_usage.append(
                 ModelUsageData(
-                    model_name=row.llm_model or 'Unknown',
-                    conversation_count=int(row.conv_count or 0),
-                    total_tokens=int(row.token_count or 0),
-                    total_cost=float(row.total_cost or 0.0),
+                    model_name=model_name,
+                    conversation_count=int(entry['conv_count']),
+                    total_tokens=int(entry['token_count']),
+                    total_cost=float(entry['total_cost']),
                 )
             )
 
