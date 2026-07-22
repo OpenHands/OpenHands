@@ -104,8 +104,7 @@ def _combine_usage_metrics(
                 model=combined.model,
                 prompt_tokens=combined.prompt_tokens + usage.prompt_tokens,
                 completion_tokens=combined.completion_tokens + usage.completion_tokens,
-                cache_read_tokens=combined.cache_read_tokens
-                + usage.cache_read_tokens,
+                cache_read_tokens=combined.cache_read_tokens + usage.cache_read_tokens,
                 cache_write_tokens=combined.cache_write_tokens
                 + usage.cache_write_tokens,
                 reasoning_tokens=combined.reasoning_tokens + usage.reasoning_tokens,
