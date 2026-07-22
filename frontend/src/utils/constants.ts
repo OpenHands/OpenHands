@@ -34,9 +34,9 @@ export const JSON_VIEW_THEME = {
 export const DOCUMENTATION_URL = {
   MICROAGENTS: {
     MICROAGENTS_OVERVIEW:
-      "https://docs.all-hands.dev/usage/prompting/microagents-overview",
+      "https://docs.openhands.dev/usage/prompting/microagents-overview",
     ORGANIZATION_AND_USER_MICROAGENTS:
-      "https://docs.all-hands.dev/usage/prompting/microagents-org",
+      "https://docs.openhands.dev/usage/prompting/microagents-org",
   },
 };
 

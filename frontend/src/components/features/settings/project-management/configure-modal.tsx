@@ -528,7 +528,7 @@ export function ConfigureModal({
                 b: <b />,
                 a: (
                   <a
-                    href="https://docs.all-hands.dev/usage/cloud/openhands-cloud"
+                    href="https://docs.openhands.dev/usage/cloud/openhands-cloud"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-500 hover:underline"
@@ -547,7 +547,7 @@ export function ConfigureModal({
                 b: <b />,
                 a: (
                   <a
-                    href="https://docs.all-hands.dev/usage/cloud/openhands-cloud"
+                    href="https://docs.openhands.dev/usage/cloud/openhands-cloud"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-500 underline"

@@ -445,7 +445,7 @@ export function ApiKeysManager() {
             components={{
               a: (
                 <a
-                  href="https://docs.all-hands.dev/usage/cloud/cloud-api"
+                  href="https://docs.openhands.dev/usage/cloud/cloud-api"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-400 hover:underline"
