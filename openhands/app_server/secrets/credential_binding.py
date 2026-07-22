@@ -18,7 +18,7 @@ from openhands.app_server.secrets.credential_binding_models import (
 )
 from openhands.app_server.secrets.secrets_store import (
     CredentialVersionConflict,
-    ManagedCredentialStore,
+    SecretsStore,
 )
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.user_auth.user_auth import get_for_user
@@ -103,16 +103,15 @@ def _authorize(
     )
 
 
-async def _store(scope: CredentialBindingScope) -> ManagedCredentialStore:
+async def _store(scope: CredentialBindingScope) -> SecretsStore:
     user_auth = await get_for_user(scope.user_id)
     secrets_store = await user_auth.get_secrets_store()
-    managed_store = secrets_store.managed_credentials
-    if managed_store is None:
+    if not secrets_store.supports_versioned_credentials:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             detail='Managed credential storage is unavailable',
         )
-    return managed_store
+    return secrets_store
 
 
 def _validate_value(secret_name: str, value: str) -> None:
@@ -147,7 +146,7 @@ async def load_credential(
     )
     store = await _store(scope)
     try:
-        value, version = await store.load_managed(
+        value, version = await store.load_versioned(
             secret_name,
             scope.organization_id,
         )
@@ -188,7 +187,7 @@ async def replace_credential(
     _validate_value(secret_name, replacement.value)
     store = await _store(scope)
     try:
-        version = await store.replace_managed(
+        version = await store.replace_versioned(
             secret_name,
             replacement.expected_version,
             replacement.value,

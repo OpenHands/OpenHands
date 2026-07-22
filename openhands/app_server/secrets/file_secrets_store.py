@@ -20,7 +20,6 @@ from openhands.app_server.secrets.credential_binding_models import (
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import (
     CredentialVersionConflict,
-    ManagedCredentialStore,
     SecretsStore,
 )
 from openhands.app_server.utils.async_utils import call_sync_from_async
@@ -71,7 +70,7 @@ def _file_lock(file_store: FileStore, path: str) -> Iterator[None]:
 
 
 @dataclass
-class FileSecretsStore(SecretsStore, ManagedCredentialStore):
+class FileSecretsStore(SecretsStore):
     file_store: FileStore
     path: str = 'secrets.json'
     is_managed_credential: Callable[[str], bool] = field(
@@ -85,8 +84,8 @@ class FileSecretsStore(SecretsStore, ManagedCredentialStore):
     )
 
     @property
-    def managed_credentials(self) -> ManagedCredentialStore | None:
-        return self if _supports_atomic_versioned_writes(self.file_store) else None
+    def supports_versioned_credentials(self) -> bool:
+        return _supports_atomic_versioned_writes(self.file_store)
 
     def _read_data(self) -> dict[str, Any]:
         try:
@@ -239,7 +238,7 @@ class FileSecretsStore(SecretsStore, ManagedCredentialStore):
 
         await call_sync_from_async(store_locked)
 
-    async def load_managed(
+    async def load_versioned(
         self,
         name: str,
         organization_id: UUID | None = None,
@@ -259,7 +258,7 @@ class FileSecretsStore(SecretsStore, ManagedCredentialStore):
 
         return await call_sync_from_async(load_current)
 
-    async def ensure_managed(
+    async def ensure_versioned(
         self,
         name: str,
         organization_id: UUID | None = None,
@@ -284,7 +283,7 @@ class FileSecretsStore(SecretsStore, ManagedCredentialStore):
 
         await call_sync_from_async(ensure_locked)
 
-    async def replace_managed(
+    async def replace_versioned(
         self,
         name: str,
         expected_version: str,

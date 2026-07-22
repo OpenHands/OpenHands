@@ -2318,8 +2318,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 exc_info=True,
             )
             return request
-        managed_store = secrets_store.managed_credentials
-        if managed_store is None:
+        if not secrets_store.supports_versioned_credentials:
             _logger.warning(
                 'Managed credential storage is unavailable',
                 extra={'conversation_id': str(conversation_id)},
@@ -2329,7 +2328,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         try:
             user_id = await self.user_context.get_user_id() or 'root'
             organization_id = await self.user_context.get_effective_org_id()
-            await managed_store.ensure_managed(
+            await secrets_store.ensure_versioned(
                 CODEX_AUTH_SECRET_NAME,
                 organization_id,
             )

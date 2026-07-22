@@ -17,16 +17,13 @@ from openhands.app_server.secrets.credential_binding_models import (
     is_runtime_managed_credential,
 )
 from openhands.app_server.secrets.secrets_models import Secrets
-from openhands.app_server.secrets.secrets_store import (
-    ManagedCredentialStore,
-    SecretsStore,
-)
+from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 @dataclass
-class SaasSecretsStore(SecretsStore, ManagedCredentialStore):
+class SaasSecretsStore(SecretsStore):
     user_id: str
     _jwt_svc: JwtService = field(repr=False)
     # When set, overrides the user's `current_org_id` for both load and
@@ -44,8 +41,8 @@ class SaasSecretsStore(SecretsStore, ManagedCredentialStore):
     )
 
     @property
-    def managed_credentials(self) -> ManagedCredentialStore:
-        return self
+    def supports_versioned_credentials(self) -> bool:
+        return True
 
     async def load(self) -> Secrets | None:
         if not self.user_id:
@@ -71,8 +68,8 @@ class SaasSecretsStore(SecretsStore, ManagedCredentialStore):
             managed_rows = {}
             for secret in settings:
                 kwargs[secret.secret_name] = {
-                    'secret': secret.secret_value,
-                    'description': secret.description,
+                    "secret": secret.secret_value,
+                    "description": secret.description,
                 }
                 if self.is_managed_credential(secret.secret_name):
                     managed_rows[secret.secret_name] = secret
@@ -81,7 +78,7 @@ class SaasSecretsStore(SecretsStore, ManagedCredentialStore):
             loaded_managed = {
                 name: (value, credential_version(row))
                 for name, row in managed_rows.items()
-                if isinstance(value := kwargs.get(name, {}).get('secret'), str)
+                if isinstance(value := kwargs.get(name, {}).get("secret"), str)
             }
             if loaded_managed:
                 self._loaded_managed_credentials[org_id] = loaded_managed
@@ -93,17 +90,17 @@ class SaasSecretsStore(SecretsStore, ManagedCredentialStore):
     async def store(self, item: Secrets):
         user = await UserStore.get_user_by_id(self.user_id)
         if user is None:
-            raise ValueError(f'User not found: {self.user_id}')
+            raise ValueError(f"User not found: {self.user_id}")
         org_id = self.effective_org_id or user.current_org_id
-        kwargs = item.model_dump(context={'expose_secrets': True})
-        del kwargs['provider_tokens']
-        secrets_json = kwargs.get('custom_secrets', {})
+        kwargs = item.model_dump(context={"expose_secrets": True})
+        del kwargs["provider_tokens"]
+        secrets_json = kwargs.get("custom_secrets", {})
         submitted_managed = {
             name: value
             for name, info in secrets_json.items()
             if self.is_managed_credential(name)
             and isinstance(info, dict)
-            and isinstance(value := info.get('secret'), str)
+            and isinstance(value := info.get("secret"), str)
         }
         loaded_managed = dict(self._loaded_managed_credentials.get(org_id, {}))
         async with a_session_maker() as session:
@@ -134,7 +131,7 @@ class SaasSecretsStore(SecretsStore, ManagedCredentialStore):
                 preserved_names.add(name)
                 secrets_json.pop(name, None)
                 if managed_rows.get(name) and isinstance(info, dict):
-                    description = info.get('description')
+                    description = info.get("description")
                     encrypted_description = (
                         self._jwt_svc.encrypt_value(description)
                         if description is not None
@@ -162,8 +159,8 @@ class SaasSecretsStore(SecretsStore, ManagedCredentialStore):
             # Extract the secrets into tuples for insertion or updating
             secret_tuples = []
             for secret_name, secret_info in secrets_json.items():
-                secret_value = secret_info.get('secret')
-                description = secret_info.get('description')
+                secret_value = secret_info.get("secret")
+                description = secret_info.get("description")
 
                 secret_tuples.append((secret_name, secret_value, description))
 
@@ -187,7 +184,7 @@ class SaasSecretsStore(SecretsStore, ManagedCredentialStore):
                     continue
                 submitted = submitted_managed.get(name)
                 if submitted is not None:
-                    cached[name] = (submitted, '')
+                    cached[name] = (submitted, "")
                 else:
                     cached.pop(name, None)
             if cached:
@@ -195,7 +192,7 @@ class SaasSecretsStore(SecretsStore, ManagedCredentialStore):
             else:
                 self._loaded_managed_credentials.pop(org_id, None)
 
-    async def load_managed(
+    async def load_versioned(
         self,
         name: str,
         organization_id: UUID | None = None,
@@ -212,7 +209,7 @@ class SaasSecretsStore(SecretsStore, ManagedCredentialStore):
             self._jwt_svc,
         ).load(name)
 
-    async def replace_managed(
+    async def replace_versioned(
         self,
         name: str,
         expected_version: str,
@@ -271,7 +268,7 @@ class SaasSecretsStore(SecretsStore, ManagedCredentialStore):
 
         TODO: This method should be replaced with dependency injection.
         """
-        logger.debug(f'saas_secrets_store.get_instance::{user_id}')
+        logger.debug(f"saas_secrets_store.get_instance::{user_id}")
         from storage.encrypt_utils import get_jwt_service
 
         return SaasSecretsStore(
