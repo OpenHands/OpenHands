@@ -20,7 +20,10 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxRecord,
     SandboxStatus,
 )
-from openhands.app_server.sandbox.sandbox_service import SandboxService
+from openhands.app_server.sandbox.sandbox_service import (
+    SandboxService,
+    _classify_start_failure,
+)
 
 
 class MockSandboxService(SandboxService):
@@ -94,7 +97,12 @@ def mock_sandbox_service():
 
 
 class TestWaitForSandboxRunning:
-    """wait_for_sandbox_running surfaces the runtime status_detail in its errors."""
+    """wait_for_sandbox_running maps runtime status_detail to user-safe errors.
+
+    Raw status_detail is logged, not surfaced: only classified/generic text
+    reaches the user, so internal infra details (registry hosts, secret names,
+    node taints/labels, cluster size, ...) can't leak.
+    """
 
     def _sandbox(self, status, detail):
         return SandboxInfo(
@@ -107,56 +115,7 @@ class TestWaitForSandboxRunning:
             status_detail=detail,
         )
 
-    @pytest.mark.asyncio
-    async def test_error_state_includes_detail(self, mock_sandbox_service):
-        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
-            SandboxStatus.ERROR, 'Insufficient smarter-devices/kvm'
-        )
-        with pytest.raises(SandboxError) as ei:
-            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
-        assert 'Insufficient smarter-devices/kvm' in str(ei.value)
-
-    @pytest.mark.asyncio
-    async def test_error_state_without_detail_has_no_suffix(self, mock_sandbox_service):
-        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
-            SandboxStatus.ERROR, None
-        )
-        with pytest.raises(SandboxError) as ei:
-            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
-        assert '(' not in str(ei.value)
-
-    @pytest.mark.asyncio
-    async def test_timeout_includes_detail(self, mock_sandbox_service, monkeypatch):
-        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
-            SandboxStatus.STARTING, 'Insufficient smarter-devices/kvm'
-        )
-        calls = {'n': 0}
-
-        def fake_time():
-            calls['n'] += 1
-            return 1000.0 if calls['n'] <= 2 else 2000.0
-
-        monkeypatch.setattr(
-            'openhands.app_server.sandbox.sandbox_service.time.time', fake_time
-        )
-        monkeypatch.setattr(
-            'openhands.app_server.sandbox.sandbox_service.asyncio.sleep', AsyncMock()
-        )
-        with pytest.raises(SandboxError) as ei:
-            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=1)
-        assert 'failed to start within' in str(ei.value)
-        assert 'Insufficient smarter-devices/kvm' in str(ei.value)
-
-    @pytest.mark.asyncio
-    async def test_capacity_detail_gives_friendly_message_at_timeout(
-        self, mock_sandbox_service, monkeypatch
-    ):
-        # Resource exhaustion is transient, so the timeout message becomes a
-        # retryable 'at capacity' one instead of the raw timeout.
-        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
-            SandboxStatus.STARTING,
-            '0/1 nodes are available: 1 Insufficient ephemeral-storage.',
-        )
+    def _patch_timeout(self, monkeypatch):
         calls = {'n': 0}
 
         def fake_time():
@@ -169,25 +128,104 @@ class TestWaitForSandboxRunning:
         monkeypatch.setattr(
             'openhands.app_server.sandbox.sandbox_service.asyncio.sleep', AsyncMock()
         )
-        with pytest.raises(SandboxError) as ei:
-            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=1)
-        msg = str(ei.value)
-        assert 'at capacity' in msg and 'try again' in msg
-        assert 'failed to start within' not in msg
-        assert mock_sandbox_service.get_sandbox_mock.call_count > 1
 
     @pytest.mark.asyncio
-    async def test_error_state_capacity_gives_friendly_message(
+    async def test_capacity_error_state_is_friendly_and_trimmed(
         self, mock_sandbox_service
     ):
         mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
-            SandboxStatus.ERROR, 'Insufficient ephemeral-storage'
+            SandboxStatus.ERROR,
+            '0/1 nodes are available: 1 Insufficient ephemeral-storage. '
+            'preemption: 0/1 nodes are available.',
         )
         with pytest.raises(SandboxError) as ei:
             await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
         msg = str(ei.value)
         assert 'at capacity' in msg
+        assert 'insufficient ephemeral-storage' in msg
+        # node counts / preemption noise are not leaked
+        assert '0/1 nodes' not in msg
+        assert 'preemption' not in msg
         assert 'entered error state' not in msg
+
+    @pytest.mark.asyncio
+    async def test_capacity_at_timeout_is_retryable(
+        self, mock_sandbox_service, monkeypatch
+    ):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.STARTING, '0/1 nodes are available: 1 Insufficient cpu.'
+        )
+        self._patch_timeout(monkeypatch)
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=1)
+        msg = str(ei.value)
+        assert 'at capacity' in msg and 'try again' in msg
+        assert 'insufficient cpu' in msg
+        assert 'failed to start within' not in msg
+        assert mock_sandbox_service.get_sandbox_mock.call_count > 1
+
+    @pytest.mark.asyncio
+    async def test_image_pull_detail_is_redacted(self, mock_sandbox_service):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.ERROR,
+            'ImagePullBackOff: Back-off pulling image '
+            '"registry.internal.corp/team/secret-project:tag"',
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
+        msg = str(ei.value)
+        assert 'could not be pulled' in msg
+        assert 'registry.internal.corp' not in msg
+        assert 'secret-project' not in msg
+
+    @pytest.mark.asyncio
+    async def test_config_error_detail_is_redacted(self, mock_sandbox_service):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.ERROR,
+            "CreateContainerConfigError: couldn't find key db-password "
+            'in secret "prod-db-creds"',
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
+        msg = str(ei.value)
+        assert 'configuration issue' in msg
+        assert 'prod-db-creds' not in msg
+        assert 'db-password' not in msg
+
+    @pytest.mark.asyncio
+    async def test_unknown_detail_is_generic_and_redacted(self, mock_sandbox_service):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.ERROR,
+            'node(s) had untolerated taint {dedicated: internal-gpu-pool}',
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
+        msg = str(ei.value)
+        assert 'failed to start' in msg
+        assert 'internal-gpu-pool' not in msg
+        assert 'taint' not in msg
+
+    @pytest.mark.asyncio
+    async def test_no_detail_is_generic(self, mock_sandbox_service):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.ERROR, None
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
+        assert 'failed to start' in str(ei.value)
+
+
+def test_classify_start_failure_maps_safely():
+    assert 'at capacity' in _classify_start_failure('x Insufficient memory y')
+    assert 'insufficient memory' in _classify_start_failure('x Insufficient memory y')
+    assert 'could not be pulled' in _classify_start_failure('ImagePullBackOff: x')
+    assert 'configuration issue' in _classify_start_failure(
+        'CreateContainerConfigError: x'
+    )
+    # unknown / empty -> None so the caller uses a generic message
+    assert _classify_start_failure('some novel unschedulable reason') is None
+    assert _classify_start_failure(None) is None
+    assert _classify_start_failure('') is None
 
 
 class TestCleanupOldSandboxes:

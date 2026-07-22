@@ -26,27 +26,50 @@ SESSION_API_KEY_VARIABLE = 'OH_SESSION_API_KEYS_0'
 WEBHOOK_CALLBACK_VARIABLE = 'OH_WEBHOOKS_0_BASE_URL'
 ALLOW_CORS_ORIGINS_VARIABLE = 'OH_ALLOW_CORS_ORIGINS_0'
 
-# status_detail substrings meaning "the node is full right now", which frees up
-# as other sandboxes finish -- so 'try again shortly' is accurate. Other
-# unschedulable reasons (device/affinity/taint) keep the raw reason instead.
+# Known start-failure classes we translate into short, user-safe messages. Raw
+# runtime status_detail (k8s pod/scheduling text) can leak internal registry
+# hosts, secret/configmap names, node taints/labels, cluster size, etc., so it
+# is logged for debugging but never surfaced to end users.
+# "Insufficient <resource>" frees up as other sandboxes finish -> retryable.
 _CAPACITY_MARKERS = (
-    'Insufficient ephemeral-storage',
     'Insufficient cpu',
     'Insufficient memory',
+    'Insufficient ephemeral-storage',
     'Insufficient pods',
+)
+_IMAGE_PULL_MARKERS = ('ImagePullBackOff', 'ErrImagePull')
+_CONFIG_MARKERS = ('CreateContainerConfigError', 'CreateContainerError')
+
+_GENERIC_START_FAILURE = (
+    'The sandbox failed to start. Please try again, or contact your '
+    'administrator if the problem persists.'
 )
 
 
-def _is_capacity_detail(detail: str | None) -> bool:
-    return detail is not None and any(m in detail for m in _CAPACITY_MARKERS)
+def _classify_start_failure(detail: str | None) -> str | None:
+    """Translate a raw runtime status_detail into a user-safe message.
 
-
-def _capacity_error(detail: str | None) -> SandboxError:
-    suffix = f' ({detail})' if detail else ''
-    return SandboxError(
-        f'The system is at capacity right now{suffix}. '
-        'Please try again in a few minutes.'
-    )
+    Never returns the raw detail. Returns None when nothing safe can be said,
+    so the caller falls back to a generic message; the raw detail is for logs.
+    """
+    if not detail:
+        return None
+    resource = next((m for m in _CAPACITY_MARKERS if m in detail), None)
+    if resource:
+        return (
+            f'The system is at capacity right now ({resource.lower()}). '
+            'Please try again in a few minutes.'
+        )
+    if any(m in detail for m in _IMAGE_PULL_MARKERS):
+        return (
+            'The sandbox image could not be pulled. Please contact your administrator.'
+        )
+    if any(m in detail for m in _CONFIG_MARKERS):
+        return (
+            'The sandbox failed to start due to a configuration issue. '
+            'Please contact your administrator.'
+        )
+    return None
 
 
 class SandboxService(ABC):
@@ -146,10 +169,15 @@ class SandboxService(ABC):
                 raise SandboxError(f'Sandbox not found: {sandbox_id}')
 
             if sandbox.status == SandboxStatus.ERROR:
-                if _is_capacity_detail(sandbox.status_detail):
-                    raise _capacity_error(sandbox.status_detail)
-                detail = f' ({sandbox.status_detail})' if sandbox.status_detail else ''
-                raise SandboxError(f'Sandbox entered error state: {sandbox_id}{detail}')
+                _logger.warning(
+                    'Sandbox %s entered error state; status_detail=%r',
+                    sandbox_id,
+                    sandbox.status_detail,
+                )
+                raise SandboxError(
+                    _classify_start_failure(sandbox.status_detail)
+                    or _GENERIC_START_FAILURE
+                )
 
             if sandbox.status == SandboxStatus.RUNNING:
                 # Optionally verify agent server is alive to avoid race conditions
@@ -163,15 +191,15 @@ class SandboxService(ABC):
 
             await asyncio.sleep(poll_interval)
 
-        if sandbox is not None and _is_capacity_detail(sandbox.status_detail):
-            raise _capacity_error(sandbox.status_detail)
-        detail = (
-            f' ({sandbox.status_detail})'
-            if sandbox is not None and sandbox.status_detail
-            else ''
+        status_detail = sandbox.status_detail if sandbox is not None else None
+        _logger.warning(
+            'Sandbox %s did not start within %ss; status_detail=%r',
+            sandbox_id,
+            timeout,
+            status_detail,
         )
         raise SandboxError(
-            f'Sandbox failed to start within {timeout}s: {sandbox_id}{detail}'
+            _classify_start_failure(status_detail) or _GENERIC_START_FAILURE
         )
 
     async def _check_agent_server_alive(
