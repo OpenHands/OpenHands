@@ -890,11 +890,11 @@ class TestSendToAutomationService:
                 ProviderType.GITHUB, org_id, payload
             )
 
-            mock_logger.error.assert_called()
-            assert 'Timeout' in str(mock_logger.error.call_args)
+            mock_logger.exception.assert_called()
+            assert 'Timeout' in str(mock_logger.exception.call_args)
             assert (
-                'never delivered' in str(mock_logger.error.call_args).lower()
-                or 'timeout' in str(mock_logger.error.call_args).lower()
+                'never delivered' in str(mock_logger.exception.call_args).lower()
+                or 'timeout' in str(mock_logger.exception.call_args).lower()
             )
 
     @pytest.mark.asyncio
@@ -986,8 +986,8 @@ class TestSendToAutomationService:
                 ProviderType.GITHUB, org_id, payload
             )
 
-            mock_logger.error.assert_called()
-            assert 'HTTP error' in str(mock_logger.error.call_args)
+            mock_logger.exception.assert_called()
+            assert 'HTTP error' in str(mock_logger.exception.call_args)
 
     @pytest.mark.asyncio
     async def test_send_503_logs_error(self, mock_token_manager):

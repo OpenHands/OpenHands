@@ -139,9 +139,9 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
                     data = response.text
                 return data, dict(response.headers)
         except httpx.HTTPStatusError as e:
-            raise self.handle_http_status_error(e)
+            raise self.handle_http_status_error(e) from e
         except httpx.HTTPError as e:
-            raise self.handle_http_error(e)
+            raise self.handle_http_error(e) from e
 
     async def verify_access(self) -> None:
         """Verify that the token and host are valid by making a lightweight API call.

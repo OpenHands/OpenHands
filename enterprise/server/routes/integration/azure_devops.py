@@ -235,11 +235,11 @@ async def get_azure_devops_resources(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error retrieving Azure DevOps resources: {e}')
+        logger.exception('Error retrieving Azure DevOps resources', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve Azure DevOps resources',
-        )
+        ) from e
 
 
 @azure_devops_integration_router.post('/azure-devops/reinstall-webhook')
@@ -299,11 +299,13 @@ async def reinstall_azure_devops_webhook(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error installing Azure DevOps resolver hooks: {e}')
+        logger.exception(
+            'Error installing Azure DevOps resolver hooks', stack_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to install Azure DevOps resolver hooks',
-        )
+        ) from e
 
 
 @azure_devops_integration_router.post('/azure-devops/uninstall-webhook')
@@ -355,11 +357,13 @@ async def uninstall_azure_devops_webhook(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error uninstalling Azure DevOps resolver hooks: {e}')
+        logger.exception(
+            'Error uninstalling Azure DevOps resolver hooks', stack_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to uninstall Azure DevOps resolver hooks',
-        )
+        ) from e
 
 
 @azure_devops_integration_router.post('/azure-devops/events')
@@ -413,6 +417,6 @@ async def azure_devops_events(
         )
     except HTTPException:
         raise
-    except Exception as e:
-        logger.exception(f'Error processing Azure DevOps event: {e}')
+    except Exception:
+        logger.exception('Error processing Azure DevOps event', stack_info=True)
         return JSONResponse(status_code=400, content={'error': 'Invalid payload.'})

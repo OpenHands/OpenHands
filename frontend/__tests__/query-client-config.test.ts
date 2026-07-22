@@ -13,22 +13,33 @@ const make429 = () =>
 
 describe("queryClient mutation defaults", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     queryClient.clear();
   });
 
-  it("should retry a mutation rejected with 429 (request was never processed)", async () => {
+  it("backs off before retrying a rate-limited mutation", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+
     const mutationFn = vi
       .fn()
       .mockRejectedValueOnce(make429())
       .mockResolvedValueOnce("ok");
 
-    const result = await queryClient
+    const result = queryClient
       .getMutationCache()
       .build(queryClient, { mutationFn, meta: { disableToast: true } })
       .execute(undefined);
 
-    expect(result).toBe("ok");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mutationFn).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(mutationFn).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(result).resolves.toBe("ok");
     expect(mutationFn).toHaveBeenCalledTimes(2);
   });
 

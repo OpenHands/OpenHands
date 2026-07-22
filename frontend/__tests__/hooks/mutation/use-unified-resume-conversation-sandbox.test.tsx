@@ -1,6 +1,7 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { AxiosError } from "axios";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import { SandboxService } from "#/api/sandbox-service/sandbox-service.api";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
@@ -49,6 +50,11 @@ describe("useUnifiedResumeConversationSandbox", () => {
     vi.restoreAllMocks();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
@@ -83,6 +89,55 @@ describe("useUnifiedResumeConversationSandbox", () => {
         execution_status: null,
       });
     });
+  });
+
+  it("backs off exponentially when the resume preflight is rate limited", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+
+    const rateLimitError = {
+      response: {
+        status: 429,
+        headers: { "retry-after": "0" },
+      },
+    } as unknown as AxiosError;
+    const batchGetAppConversations = vi
+      .spyOn(V1ConversationService, "batchGetAppConversations")
+      .mockRejectedValueOnce(rateLimitError)
+      .mockRejectedValueOnce(rateLimitError)
+      .mockResolvedValueOnce([createConversation()]);
+    vi.spyOn(SandboxService, "resumeSandbox").mockResolvedValue({
+      success: true,
+    });
+
+    const { result } = renderHook(() => useUnifiedResumeConversationSandbox(), {
+      wrapper,
+    });
+
+    const resume = result.current.mutateAsync({
+      conversationId: "test-conv-id",
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(batchGetAppConversations).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(batchGetAppConversations).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1999);
+    });
+    expect(batchGetAppConversations).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    await expect(resume).resolves.toEqual({ success: true });
+    expect(batchGetAppConversations).toHaveBeenCalledTimes(3);
   });
 
   it("invalidates sandbox and vscode_url queries on settled", async () => {

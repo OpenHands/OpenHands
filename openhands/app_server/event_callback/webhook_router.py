@@ -529,7 +529,9 @@ async def on_event(
                         conversation_id, app_conversation_info, events, exec_status
                     )
             except Exception:
-                _logger.exception('analytics:conversation_terminal:failed')
+                _logger.exception(
+                    'analytics:conversation_terminal:failed', stack_info=True
+                )
 
         background_tasks.add_task(
             _run_callbacks_in_bg_and_close,
@@ -633,8 +635,11 @@ def _import_all_tools():
         if is_pkg:  # Check if it's a subpackage
             try:
                 importlib.import_module(name)
-            except ImportError as e:
-                _logger.error(f"Warning: Could not import subpackage '{name}': {e}")
+            except ImportError:
+                _logger.exception(
+                    f"Warning: Could not import subpackage '{name}'",
+                    stack_info=True,
+                )
 
 
 _import_all_tools()

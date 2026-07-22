@@ -6,15 +6,18 @@ HOST = os.getenv('WEB_HOST', 'app.all-hands.dev').strip()
 
 # Check if this is a feature environment
 # Feature environments have a host format like {some-text}.staging.all-hands.dev
-# or {some-text}.ohe-staging.platform-team.all-hands.dev (for platform-team sandbox)
-# Just staging.all-hands.dev doesn't count as a feature environment
+# or {some-text}.staging.openhands.dev (the domain the staging/feature stack is
+# migrating to), or {some-text}.ohe-staging.platform-team.all-hands.dev (for the
+# platform-team sandbox). The bare staging host (staging.all-hands.dev /
+# staging.openhands.dev) does not count as a feature environment.
+STAGING_BASE_HOSTS = ('staging.all-hands.dev', 'staging.openhands.dev')
 IS_STAGING_ENV = bool(
-    re.match(r'^.+\.staging\.all-hands\.dev$', HOST)
+    re.match(r'^.+\.staging\.(?:all-hands|openhands)\.dev$', HOST)
     or re.match(r'^.+\.ohe-staging\.platform-team\.all-hands\.dev$', HOST)
-    or HOST == 'staging.all-hands.dev'
+    or HOST in STAGING_BASE_HOSTS
 )  # Includes the staging deployment + feature deployments
 IS_FEATURE_ENV = (
-    IS_STAGING_ENV and HOST != 'staging.all-hands.dev'
+    IS_STAGING_ENV and HOST not in STAGING_BASE_HOSTS
 )  # Does not include the staging deployment
 IS_LOCAL_ENV = bool(HOST == 'localhost')
 
@@ -33,6 +36,7 @@ def _is_all_hands_managed_domain(host: str) -> bool:
         or host == 'app.openhands.ai'
         or host.endswith('.all-hands.dev')
         or host.endswith('.openhands.ai')
+        or host.endswith('.openhands.dev')
     )
 
 

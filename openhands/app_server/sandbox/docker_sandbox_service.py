@@ -513,7 +513,7 @@ class DockerSandboxService(SandboxService):
             return sandbox_info
 
         except APIError as e:
-            raise SandboxError(f'Failed to start container: {e}')
+            raise SandboxError('Failed to start container') from e
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
         """Resume a paused sandbox."""

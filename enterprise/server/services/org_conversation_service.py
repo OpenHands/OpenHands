@@ -1246,14 +1246,14 @@ class OrgConversationService:
                     'conversation_id': conversation_id,
                     'sandbox_id': metadata.sandbox_id,
                 }
-            except Exception as e:
+            except Exception:
                 logger.exception(
                     'Failed to stop sandbox',
                     extra={
                         'conversation_id': conversation_id,
                         'sandbox_id': metadata.sandbox_id,
-                        'error': str(e),
                     },
+                    stack_info=True,
                 )
                 return {
                     'success': False,

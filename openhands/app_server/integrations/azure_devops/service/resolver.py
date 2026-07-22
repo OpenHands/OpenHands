@@ -51,7 +51,7 @@ class AzureDevOpsResolverMixin(AzureDevOpsMixinBase):
             body = fields.get('System.Description') or ''
             return title, body
         except Exception as wi_error:
-            logger.error(f'Failed to get as work item: {wi_error}')
+            logger.exception(f'Failed to get as work item: {wi_error}', stack_info=True)
             return '', ''
 
     async def get_issue_or_pr_comments(
@@ -86,7 +86,9 @@ class AzureDevOpsResolverMixin(AzureDevOpsMixinBase):
                 repository, issue_number, max_comments
             )
         except Exception as wi_error:
-            logger.error(f'Failed to get work item comments: {wi_error}')
+            logger.exception(
+                f'Failed to get work item comments: {wi_error}', stack_info=True
+            )
             return []
 
     async def get_review_thread_comments(
@@ -164,5 +166,7 @@ class AzureDevOpsResolverMixin(AzureDevOpsMixinBase):
             return all_comments[:max_comments]
 
         except Exception as error:
-            logger.error(f'Failed to get thread {thread_id} comments: {error}')
+            logger.exception(
+                f'Failed to get thread {thread_id} comments: {error}', stack_info=True
+            )
             return []

@@ -137,19 +137,19 @@ class SlackManager(Manager[SlackViewInterface]):
                 },
             )
         except Exception as e:
-            logger.error(
+            logger.exception(
                 'slack_store_user_msg_failed',
                 extra={
                     'message_ts': message_ts,
                     'thread_ts': thread_ts,
                     'key': key,
-                    'error': str(e),
                 },
+                stack_info=True,
             )
             raise SlackError(
                 SlackErrorCode.REDIS_STORE_FAILED,
                 log_context={'message_ts': message_ts, 'thread_ts': thread_ts},
-            )
+            ) from e
 
     async def _retrieve_user_msg_for_form(
         self, message_ts: str, thread_ts: str | None
@@ -200,19 +200,19 @@ class SlackManager(Manager[SlackViewInterface]):
         except SlackError:
             raise
         except Exception as e:
-            logger.error(
+            logger.exception(
                 'slack_retrieve_user_msg_failed',
                 extra={
                     'message_ts': message_ts,
                     'thread_ts': thread_ts,
                     'key': key,
-                    'error': str(e),
                 },
+                stack_info=True,
             )
             raise SlackError(
                 SlackErrorCode.REDIS_RETRIEVE_FAILED,
                 log_context={'message_ts': message_ts, 'thread_ts': thread_ts},
-            )
+            ) from e
 
     async def _claim_form_interaction(
         self, team_id: str, channel_id: str, message_ts: str, thread_ts: str | None
@@ -256,19 +256,19 @@ class SlackManager(Manager[SlackViewInterface]):
             )
             return False
         except Exception as e:
-            logger.error(
+            logger.exception(
                 'slack_claim_form_interaction_failed',
                 extra={
                     'message_ts': message_ts,
                     'thread_ts': thread_ts,
                     'key': key,
-                    'error': str(e),
                 },
+                stack_info=True,
             )
             raise SlackError(
                 SlackErrorCode.REDIS_STORE_FAILED,
                 log_context={'message_ts': message_ts, 'thread_ts': thread_ts},
-            )
+            ) from e
 
     async def _replace_repo_selection_form(
         self, response_url: str | None, selected_repository: str | None
@@ -464,10 +464,9 @@ class SlackManager(Manager[SlackViewInterface]):
         except SlackError as e:
             await self.handle_slack_error(message.message, e)
 
-        except Exception as e:
+        except Exception:
             logger.exception(
-                'slack_unexpected_error',
-                extra={'error': str(e), **message.message},
+                'slack_unexpected_error', extra={**message.message}, stack_info=True
             )
             await self.handle_slack_error(
                 message.message,
@@ -566,10 +565,9 @@ class SlackManager(Manager[SlackViewInterface]):
         except SlackError as e:
             await self.handle_slack_error(payload, e)
             return
-        except Exception as e:
+        except Exception:
             logger.exception(
-                'slack_unexpected_error',
-                extra={'error': str(e), **payload},
+                'slack_unexpected_error', extra={**payload}, stack_info=True
             )
             await self.handle_slack_error(
                 payload, SlackError(SlackErrorCode.UNEXPECTED_ERROR)
@@ -861,7 +859,7 @@ class SlackManager(Manager[SlackViewInterface]):
             await self.send_message(msg_info, slack_view)
 
         except Exception:
-            logger.exception('[Slack]: Error starting job')
+            logger.exception('[Slack]: Error starting job', stack_info=True)
             await self.send_message(
                 'Uh oh! There was an unexpected error starting the job :(', slack_view
             )

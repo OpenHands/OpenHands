@@ -105,6 +105,7 @@ async def track_frontend_event(
         logger.exception(
             'analytics:frontend_event:failed',
             extra={'event_type': body.event_type},
+            stack_info=True,
         )
 
     return AnalyticsEventResponse(status='ok')

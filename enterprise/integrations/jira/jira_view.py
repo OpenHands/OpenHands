@@ -13,7 +13,7 @@ import httpx
 from integrations.jira.jira_payload import JiraWebhookPayload
 from integrations.jira.jira_types import (
     JiraViewInterface,
-    RepositoryNotFoundError,
+    RepositorySelectionError,
     StartingConvoException,
 )
 from integrations.jira.jira_v1_callback_processor import (
@@ -64,7 +64,7 @@ class JiraNewConversationView(JiraViewInterface):
     saas_user_auth: UserAuth
     jira_user: JiraUser
     jira_workspace: JiraWorkspace
-    selected_repo: str = ''
+    selected_repo: str | None = None
     conversation_id: str = ''
 
     # Lazy-loaded issue details (cached after first fetch)
@@ -130,24 +130,26 @@ class JiraNewConversationView(JiraViewInterface):
             return self._issue_title, self._issue_description
 
         except httpx.HTTPStatusError as e:
-            logger.error(
+            logger.exception(
                 '[Jira] Failed to fetch issue details',
                 extra={
                     'issue_key': self.payload.issue_key,
                     'status': e.response.status_code,
                 },
+                stack_info=True,
             )
-            raise StartingConvoException(
-                f'Failed to fetch issue details: HTTP {e.response.status_code}'
-            )
+            raise StartingConvoException('Failed to fetch issue details: HTTP') from e
         except Exception as e:
             if isinstance(e, StartingConvoException):
                 raise
-            logger.error(
+            logger.exception(
                 '[Jira] Failed to fetch issue details',
-                extra={'issue_key': self.payload.issue_key, 'error': str(e)},
+                extra={
+                    'issue_key': self.payload.issue_key,
+                },
+                stack_info=True,
             )
-            raise StartingConvoException(f'Failed to fetch issue details: {str(e)}')
+            raise StartingConvoException('Failed to fetch issue details') from e
 
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         """Get instructions for the conversation.
@@ -181,9 +183,6 @@ class JiraNewConversationView(JiraViewInterface):
         Raises:
             StartingConvoException: If conversation creation fails
         """
-        if not self.selected_repo:
-            raise StartingConvoException('No repository selected for this conversation')
-
         jira_conversation = JiraConversation(
             conversation_id=self.conversation_id,
             issue_id=self.payload.issue_id,
@@ -239,7 +238,7 @@ class JiraNewConversationView(JiraViewInterface):
             initial_message=initial_message,
             selected_repository=self.selected_repo,
             selected_branch=None,
-            git_provider=ProviderType.GITHUB,
+            git_provider=ProviderType.GITHUB if self.selected_repo else None,
             title=f'Jira Issue {self.payload.issue_key}: {self._issue_title or "Unknown"}',
             trigger=ConversationTrigger.JIRA,
             processors=[jira_callback_processor],
@@ -289,29 +288,34 @@ class JiraNewConversationView(JiraViewInterface):
 
     async def _get_resolved_org_id(self) -> UUID | None:
         """Resolve the org ID for V1 conversations."""
+        selected_repo = self.selected_repo
+        if not selected_repo:
+            return None
+
         provider_tokens = await self.saas_user_auth.get_provider_tokens()
         if not provider_tokens:
             return None
 
         try:
             provider_handler = ProviderHandler(provider_tokens)
-            repository = await provider_handler.verify_repo_provider(self.selected_repo)
+            repository = await provider_handler.verify_repo_provider(selected_repo)
             resolved_org_id = await resolve_org_for_repo(
                 provider=repository.git_provider.value,
-                full_repo_name=self.selected_repo,
+                full_repo_name=selected_repo,
                 keycloak_user_id=self.jira_user.keycloak_user_id,
             )
             return resolved_org_id
         except Exception as e:
-            logger.warning(
-                f'[Jira] Failed to resolve org for {self.selected_repo}: {e}'
-            )
+            logger.warning(f'[Jira] Failed to resolve org for {selected_repo}: {e}')
             return None
 
     def get_response_msg(self) -> str:
         """Get the response message to send back to Jira."""
         conversation_link = CONVERSATION_URL.format(self.conversation_id)
-        return f"I'm on it! {self.payload.display_name} can [track my progress here|{conversation_link}]."
+        message = f"I'm on it! {self.payload.display_name} can [track my progress here|{conversation_link}]."
+        if self.selected_repo is None:
+            message += '\n\nNote: This conversation started without a repository.'
+        return message
 
 
 class JiraFactory:
@@ -322,8 +326,8 @@ class JiraFactory:
     - Inferring and selecting the repository
     - Validating all required data is available
 
-    Repository selection happens here so that view creation either
-    succeeds with a valid repo or fails with a clear error.
+    Repository selection happens here so view creation succeeds either with a
+    verified repository or with no repository when none was mentioned.
     """
 
     @staticmethod
@@ -349,24 +353,20 @@ class JiraFactory:
         issue_description: str,
         user_msg: str,
     ) -> list[str]:
-        """Extract potential repository names from issue content.
-
-        Raises:
-            RepositoryNotFoundError: If no potential repos found in text.
-        """
+        """Extract potential repository names from issue content."""
         search_text = f'{issue_title}\n{issue_description}\n{user_msg}'
         potential_repos = infer_repo_from_message(search_text)
 
-        if not potential_repos:
-            raise RepositoryNotFoundError(
-                'Could not determine which repository to use. '
-                'Please mention the repository (e.g., owner/repo) in the issue description or comment.'
+        if potential_repos:
+            logger.info(
+                '[Jira] Found potential repositories in issue content',
+                extra={'issue_key': issue_key, 'potential_repos': potential_repos},
             )
-
-        logger.info(
-            '[Jira] Found potential repositories in issue content',
-            extra={'issue_key': issue_key, 'potential_repos': potential_repos},
-        )
+        else:
+            logger.info(
+                '[Jira] No repositories mentioned in issue content',
+                extra={'issue_key': issue_key},
+            )
         return potential_repos
 
     @staticmethod
@@ -407,16 +407,16 @@ class JiraFactory:
         """Select exactly one repo from verified repos.
 
         Raises:
-            RepositoryNotFoundError: If zero or multiple repos verified.
+            RepositorySelectionError: If zero or multiple repos verified.
         """
         if len(verified_repos) == 0:
-            raise RepositoryNotFoundError(
+            raise RepositorySelectionError(
                 f'Could not access any of the mentioned repositories: {", ".join(potential_repos)}. '
                 'Please ensure you have access to the repository and it exists.'
             )
 
         if len(verified_repos) > 1:
-            raise RepositoryNotFoundError(
+            raise RepositorySelectionError(
                 f'Multiple repositories found: {", ".join(verified_repos)}. '
                 'Please specify exactly one repository in the issue description or comment.'
             )
@@ -433,21 +433,23 @@ class JiraFactory:
         user_auth: UserAuth,
         issue_title: str,
         issue_description: str,
-    ) -> str:
+    ) -> str | None:
         """Infer and verify the repository from issue content.
 
         Raises:
-            RepositoryNotFoundError: If no valid repository can be determined.
+            RepositorySelectionError: If a mentioned repository cannot be selected.
         """
-        provider_handler = await JiraFactory._create_provider_handler(user_auth)
-        if not provider_handler:
-            raise RepositoryNotFoundError(
-                'No Git provider connected. Please connect a Git provider in OpenHands settings.'
-            )
-
         potential_repos = JiraFactory._extract_potential_repos(
             payload.issue_key, issue_title, issue_description, payload.user_msg
         )
+        if not potential_repos:
+            return None
+
+        provider_handler = await JiraFactory._create_provider_handler(user_auth)
+        if not provider_handler:
+            raise RepositorySelectionError(
+                'No Git provider connected. Please connect a Git provider in OpenHands settings.'
+            )
 
         verified_repos = await JiraFactory._verify_repos(
             payload.issue_key, potential_repos, provider_handler
@@ -465,12 +467,12 @@ class JiraFactory:
         user_auth: UserAuth,
         decrypted_api_key: str,
     ) -> JiraViewInterface:
-        """Create a Jira view with repository already selected.
+        """Create a Jira view with an optional selected repository.
 
         This factory method:
         1. Creates the view with payload and auth context
         2. Fetches issue details (needed for repo inference)
-        3. Infers and selects the repository
+        3. Infers and selects a repository when one is mentioned
 
         If any step fails, an appropriate exception is raised with
         a user-friendly message.
@@ -483,11 +485,11 @@ class JiraFactory:
             decrypted_api_key: Decrypted service account API key
 
         Returns:
-            A JiraViewInterface with selected_repo populated
+            A JiraViewInterface with selected_repo set when one was verified
 
         Raises:
             StartingConvoException: If view creation fails
-            RepositoryNotFoundError: If repository cannot be determined
+            RepositorySelectionError: If a mentioned repository cannot be selected
         """
         logger.info(
             '[Jira] Creating view',
@@ -512,7 +514,7 @@ class JiraFactory:
         except StartingConvoException:
             raise  # Re-raise with original message
         except Exception as e:
-            raise StartingConvoException(f'Failed to fetch issue details: {str(e)}')
+            raise StartingConvoException('Failed to fetch issue details') from e
 
         # Infer and select repository
         selected_repo = await JiraFactory._infer_repository(

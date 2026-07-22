@@ -331,7 +331,7 @@ async def success_callback(session_id: str, request: Request):
                     credit_balance_after=new_max_budget,
                 )
         except Exception:
-            logger.exception('analytics:credit_purchased:failed')
+            logger.exception('analytics:credit_purchased:failed', stack_info=True)
 
     return RedirectResponse(
         f'{get_web_url(request)}/settings/billing?checkout=success', status_code=302

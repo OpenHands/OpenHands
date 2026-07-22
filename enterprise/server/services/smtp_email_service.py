@@ -96,10 +96,9 @@ class SMTPEmailService:
             finally:
                 client.quit()
             return True
-        except Exception as exc:
-            logger.error(
-                'Failed to send SMTP email',
-                extra={'error': str(exc), **extra_payload},
+        except Exception:
+            logger.exception(
+                'Failed to send SMTP email', extra={**extra_payload}, stack_info=True
             )
             return False
 

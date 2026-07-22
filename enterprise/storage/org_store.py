@@ -788,11 +788,14 @@ class OrgStore:
 
                 return org
 
-            except Exception as e:
+            except Exception:
                 await session.rollback()
-                logger.error(
+                logger.exception(
                     'Failed to delete organization - transaction rolled back',
-                    extra={'org_id': str(org_id), 'error': str(e)},
+                    extra={
+                        'org_id': str(org_id),
+                    },
+                    stack_info=True,
                 )
                 raise
 

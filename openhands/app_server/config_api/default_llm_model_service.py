@@ -171,8 +171,8 @@ class DefaultLLMModelService(LLMModelService):
                     resp = await client.get(ollama_url, timeout=3)
                     ollama_models_list = resp.json()['models']
                 extra_models.extend('ollama/' + m['name'] for m in ollama_models_list)
-            except httpx.HTTPError as e:
-                _logger.error(f'Error getting OLLAMA models: {e}')
+            except httpx.HTTPError:
+                _logger.exception('Error getting OLLAMA models', stack_info=True)
 
         self._cached_response = get_supported_llm_models(
             verified_models=verified_models,

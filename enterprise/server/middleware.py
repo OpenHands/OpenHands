@@ -139,7 +139,7 @@ class SetAuthCookieMiddleware:
                 raise AuthError('Invalid authentication token')
             except Exception as e:
                 logger.warning(f'JWT decode error: {str(e)}')
-                raise AuthError('Invalid authentication token')
+                raise AuthError('Invalid authentication token') from e
         else:
             # Don't fail an API call if the TOS has not been accepted.
             # The user will accept the TOS the next time they login.

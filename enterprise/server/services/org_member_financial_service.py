@@ -74,13 +74,13 @@ class OrgMemberFinancialService:
         except httpx.HTTPStatusError as e:
             # Re-raise auth errors - these indicate configuration issues that need fixing
             if e.response.status_code in (401, 403):
-                logger.error(
+                logger.exception(
                     'LiteLLM authentication/authorization failed',
                     extra={
                         'org_id': str(org_id),
                         'status_code': e.response.status_code,
-                        'error': str(e),
                     },
+                    stack_info=True,
                 )
                 raise
             # For other HTTP errors (404, 500, etc.), use graceful degradation

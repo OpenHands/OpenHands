@@ -1,13 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import React from "react";
-import { usePostHog } from "posthog-js/react";
 import { useConfig } from "./use-config";
 import UserService from "#/api/user-service/user-service.api";
 import { useShouldShowGitFeatures } from "#/hooks/use-should-show-git-features";
 import { useLogout } from "../mutation/use-logout";
 
 export const useGitUser = () => {
-  const posthog = usePostHog();
   const { data: config } = useConfig();
   const logout = useLogout();
 
@@ -23,18 +21,6 @@ export const useGitUser = () => {
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes
   });
-
-  React.useEffect(() => {
-    if (user.data) {
-      posthog.identify(user.data.login, {
-        company: user.data.company,
-        name: user.data.name,
-        email: user.data.email,
-        user: user.data.login,
-        mode: config?.app_mode || "oss",
-      });
-    }
-  }, [user.data]);
 
   // In saas mode, a 401 means that the integration tokens need to be
   // refreshed. Since this happens at login, we log out.

@@ -160,7 +160,7 @@ class ProcessSandboxService(SandboxService):
             return process
 
         except Exception as e:
-            raise SandboxError(f'Failed to start agent process: {e}')
+            raise SandboxError('Failed to start agent process') from e
 
     async def _wait_for_server_ready(self, port: int, timeout: int = 30) -> bool:
         """Wait for the agent server to be ready."""

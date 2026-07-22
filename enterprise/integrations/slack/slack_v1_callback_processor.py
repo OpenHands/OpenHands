@@ -138,8 +138,10 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
                 channel_id,
             )
 
-        except Exception as e:
-            _logger.error('[Slack V1] Failed to post message to Slack: %s', e)
+        except Exception:
+            _logger.exception(
+                '[Slack V1] Failed to post message to Slack', stack_info=True
+            )
             raise
 
     # -------------------------------------------------------------------------
@@ -186,27 +188,27 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
             except Exception:  # noqa: BLE001
                 pass
 
-            _logger.error(
+            _logger.exception(
                 '[Slack V1] HTTP error fetching final response from %s: %s. '
                 'Response headers: %s',
                 url,
                 error_detail,
                 dict(e.response.headers),
-                exc_info=True,
+                stack_info=True,
             )
             raise Exception(
                 f'Failed to fetch final response from agent server: {error_detail}'
-            )
+            ) from e
 
         except httpx.TimeoutException:
             error_detail = f'Request timeout after 30 seconds to {url}'
-            _logger.error('[Slack V1] %s', error_detail, exc_info=True)
+            _logger.exception('[Slack V1] %s', error_detail, stack_info=True)
             raise Exception(error_detail)
 
         except httpx.RequestError as e:
             error_detail = f'Request error to {url}: {str(e)}'
-            _logger.error('[Slack V1] %s', error_detail, exc_info=True)
-            raise Exception(error_detail)
+            _logger.exception('[Slack V1] %s', error_detail, stack_info=True)
+            raise Exception(error_detail) from e
 
     # -------------------------------------------------------------------------
     # Final response orchestration

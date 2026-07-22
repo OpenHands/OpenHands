@@ -126,7 +126,7 @@ async def _get_org(org_id: UUID, user_id: str) -> Org:
     try:
         return await OrgService.get_org_by_id(org_id=org_id, user_id=user_id)
     except OrgNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 async def _get_member(
@@ -277,7 +277,7 @@ async def save_agent_profile(
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=safe_validation_error_detail(e),
-            )
+            ) from e
         except Exception:
             # SkillValidationError / schema errors are client errors, never a
             # 500; stay generic — these messages can embed the input.

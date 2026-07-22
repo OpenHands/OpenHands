@@ -15,21 +15,21 @@ async def is_ready():
         async with a_session_maker() as session:
             await session.execute(text('SELECT 1'))
     except Exception as e:
-        logger.error(f'Database check failed: {str(e)}')
+        logger.exception('Database check failed', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f'Database is not accessible: {str(e)}',
-        )
+        ) from e
 
     # Check Redis connection
     try:
         redis_client = get_redis_client()
         redis_client.ping()
     except Exception as e:
-        logger.error(f'Redis check failed: {str(e)}')
+        logger.exception('Redis check failed', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f'Redis cache is not accessible: {str(e)}',
-        )
+        ) from e
 
     return 'OK'

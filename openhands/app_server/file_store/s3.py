@@ -66,14 +66,14 @@ class S3FileStore(FileStore):
             if e.response['Error']['Code'] == 'AccessDenied':
                 raise FileNotFoundError(
                     f"Error: Access denied to bucket '{self._get_bucket_name()}'."
-                )
+                ) from e
             elif e.response['Error']['Code'] == 'NoSuchBucket':
                 raise FileNotFoundError(
                     f"Error: The bucket '{self._get_bucket_name()}' does not exist."
-                )
+                ) from e
             raise FileNotFoundError(
-                f"Error: Failed to write to bucket '{self._get_bucket_name()}' at path {path}: {e}"
-            )
+                f"Error: Failed to write to bucket '{self._get_bucket_name()}' at path {path}"
+            ) from e
 
     def write_from_path(self, path: str, source_path: str) -> None:
         # upload_file streams the file from disk in parts; never buffers the whole
@@ -84,14 +84,14 @@ class S3FileStore(FileStore):
             if e.response['Error']['Code'] == 'AccessDenied':
                 raise FileNotFoundError(
                     f"Error: Access denied to bucket '{self._get_bucket_name()}'."
-                )
+                ) from e
             elif e.response['Error']['Code'] == 'NoSuchBucket':
                 raise FileNotFoundError(
                     f"Error: The bucket '{self._get_bucket_name()}' does not exist."
-                )
+                ) from e
             raise FileNotFoundError(
-                f"Error: Failed to write to bucket '{self._get_bucket_name()}' at path {path}: {e}"
-            )
+                f"Error: Failed to write to bucket '{self._get_bucket_name()}' at path {path}"
+            ) from e
 
     def read(self, path: str) -> str:
         try:
@@ -105,19 +105,19 @@ class S3FileStore(FileStore):
             if e.response['Error']['Code'] == 'NoSuchBucket':
                 raise FileNotFoundError(
                     f"Error: The bucket '{self._get_bucket_name()}' does not exist."
-                )
+                ) from e
             elif e.response['Error']['Code'] == 'NoSuchKey':
                 raise FileNotFoundError(
                     f"Error: The object key '{path}' does not exist in bucket '{self._get_bucket_name()}'."
-                )
+                ) from e
             else:
                 raise FileNotFoundError(
-                    f"Error: Failed to read from bucket '{self._get_bucket_name()}' at path {path}: {e}"
-                )
+                    f"Error: Failed to read from bucket '{self._get_bucket_name()}' at path {path}"
+                ) from e
         except Exception as e:
             raise FileNotFoundError(
-                f"Error: Failed to read from bucket '{self._get_bucket_name()}' at path {path}: {e}"
-            )
+                f"Error: Failed to read from bucket '{self._get_bucket_name()}' at path {path}"
+            ) from e
 
     def list(self, path: str) -> list[str]:
         if not path or path == '/':
@@ -175,23 +175,23 @@ class S3FileStore(FileStore):
             if e.response['Error']['Code'] == 'NoSuchBucket':
                 raise FileNotFoundError(
                     f"Error: The bucket '{self._get_bucket_name()}' does not exist."
-                )
+                ) from e
             elif e.response['Error']['Code'] == 'AccessDenied':
                 raise FileNotFoundError(
                     f"Error: Access denied to bucket '{self._get_bucket_name()}'."
-                )
+                ) from e
             elif e.response['Error']['Code'] == 'NoSuchKey':
                 raise FileNotFoundError(
                     f"Error: The object key '{path}' does not exist in bucket '{self._get_bucket_name()}'."
-                )
+                ) from e
             else:
                 raise FileNotFoundError(
-                    f"Error: Failed to delete key '{path}' from bucket '{self._get_bucket_name()}': {e}"
-                )
+                    f"Error: Failed to delete key '{path}' from bucket '{self._get_bucket_name()}'"
+                ) from e
         except Exception as e:
             raise FileNotFoundError(
-                f"Error: Failed to delete key '{path}' from bucket '{self._get_bucket_name()}: {e}"
-            )
+                f"Error: Failed to delete key '{path}' from bucket '{self._get_bucket_name()}"
+            ) from e
 
     def _ensure_url_scheme(self, secure: bool, url: str | None) -> str | None:
         if not url:

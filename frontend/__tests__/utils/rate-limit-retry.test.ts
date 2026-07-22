@@ -16,6 +16,7 @@ const createAxiosError = (status: number, headers?: unknown): AxiosError =>
 describe("rate limit retry helpers", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("recognizes response status 429 as a rate-limit error", () => {
@@ -30,7 +31,44 @@ describe("rate limit retry helpers", () => {
         headerName.toLowerCase() === "retry-after" ? "2" : undefined,
     };
 
-    expect(getRateLimitRetryDelayMs(createAxiosError(429, headers))).toBe(2000);
+    vi.spyOn(Math, "random").mockReturnValue(0);
+
+    expect(getRateLimitRetryDelayMs(0, createAxiosError(429, headers))).toBe(
+      2000,
+    );
+  });
+
+  it("accepts numeric Retry-After values from plain headers", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+
+    expect(
+      getRateLimitRetryDelayMs(
+        0,
+        createAxiosError(429, { "Retry-After": 2 }),
+      ),
+    ).toBe(2000);
+  });
+
+  it("falls back to backoff when AxiosHeaders returns a non-string value", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+
+    expect(
+      getRateLimitRetryDelayMs(
+        0,
+        createAxiosError(429, { get: () => 2 }),
+      ),
+    ).toBe(1000);
+  });
+
+  it("falls back to backoff for unsupported plain header values", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+
+    expect(
+      getRateLimitRetryDelayMs(
+        0,
+        createAxiosError(429, { "retry-after": { seconds: 2 } }),
+      ),
+    ).toBe(1000);
   });
 
   it("parses Retry-After HTTP dates", () => {
@@ -38,9 +76,11 @@ describe("rate limit retry helpers", () => {
     vi.setSystemTime(new Date("2026-06-04T20:00:00.000Z"));
 
     const retryAt = new Date("2026-06-04T20:00:03.000Z").toUTCString();
+    vi.spyOn(Math, "random").mockReturnValue(0);
 
     expect(
       getRateLimitRetryDelayMs(
+        0,
         createAxiosError(429, {
           "retry-after": retryAt,
         }),
@@ -49,34 +89,52 @@ describe("rate limit retry helpers", () => {
   });
 
   it("falls back to one second when Retry-After is missing", () => {
-    expect(getRateLimitRetryDelayMs(createAxiosError(429))).toBe(1000);
+    vi.spyOn(Math, "random").mockReturnValue(0);
+
+    expect(getRateLimitRetryDelayMs(0, createAxiosError(429))).toBe(1000);
   });
 
   it("falls back to one second for non-numeric Retry-After", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+
     expect(
       getRateLimitRetryDelayMs(
+        0,
         createAxiosError(429, { "retry-after": "invalid" }),
       ),
     ).toBe(1000);
   });
 
-  it("treats negative Retry-After seconds as immediate retry (already expired)", () => {
-    // Date.parse("-5") returns a valid timestamp (epoch - 5000ms), and since
-    // that time has passed, Math.max(negative - now, 0) returns 0
+  it("uses the initial backoff when Retry-After is already expired", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+
     expect(
-      getRateLimitRetryDelayMs(createAxiosError(429, { "retry-after": "-5" })),
-    ).toBe(0);
+      getRateLimitRetryDelayMs(
+        0,
+        createAxiosError(429, { "retry-after": "-5" }),
+      ),
+    ).toBe(1000);
   });
 
-  it("treats zero Retry-After seconds as immediate (0ms delay)", () => {
+  it("uses the initial backoff when Retry-After is zero", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+
     expect(
-      getRateLimitRetryDelayMs(createAxiosError(429, { "retry-after": "0" })),
-    ).toBe(0);
+      getRateLimitRetryDelayMs(
+        0,
+        createAxiosError(429, { "retry-after": "0" }),
+      ),
+    ).toBe(1000);
   });
 
   it("clamps large Retry-After seconds to max 60 seconds", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+
     expect(
-      getRateLimitRetryDelayMs(createAxiosError(429, { "retry-after": "120" })),
+      getRateLimitRetryDelayMs(
+        0,
+        createAxiosError(429, { "retry-after": "120" }),
+      ),
     ).toBe(60_000);
   });
 
@@ -85,9 +143,40 @@ describe("rate limit retry helpers", () => {
     vi.setSystemTime(new Date("2026-06-04T20:00:00.000Z"));
 
     const farFuture = new Date("2026-06-04T21:00:00.000Z").toUTCString();
+    vi.spyOn(Math, "random").mockReturnValue(0);
 
     expect(
-      getRateLimitRetryDelayMs(createAxiosError(429, { "retry-after": farFuture })),
+      getRateLimitRetryDelayMs(
+        0,
+        createAxiosError(429, { "retry-after": farFuture }),
+      ),
     ).toBe(60_000);
+  });
+
+  it("grows the fallback delay exponentially for repeated failures", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+
+    expect(getRateLimitRetryDelayMs(0, createAxiosError(429))).toBe(1000);
+    expect(getRateLimitRetryDelayMs(1, createAxiosError(429))).toBe(2000);
+    expect(getRateLimitRetryDelayMs(2, createAxiosError(429))).toBe(4000);
+  });
+
+  it("adds jitter while never retrying before Retry-After", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    expect(getRateLimitRetryDelayMs(0, createAxiosError(429))).toBe(1500);
+    // jitter scales off the 5s Retry-After: 0.5 * min(5000, MAX_JITTER_MS) = 2500
+    expect(
+      getRateLimitRetryDelayMs(
+        0,
+        createAxiosError(429, { "retry-after": "5" }),
+      ),
+    ).toBe(7500);
+  });
+
+  it("caps jitter to avoid unbounded delays", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.999);
+
+    expect(getRateLimitRetryDelayMs(10, createAxiosError(429))).toBe(64_995);
   });
 });

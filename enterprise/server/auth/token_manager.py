@@ -130,7 +130,7 @@ class TokenManager:
 
             return token_response['access_token'], token_response['refresh_token']
         except Exception:
-            logger.exception('Exception when getting Keycloak tokens')
+            logger.exception('Exception when getting Keycloak tokens', stack_info=True)
             return None, None
 
     async def verify_keycloak_token(
@@ -313,10 +313,11 @@ class TokenManager:
             return access_token
         except httpx.HTTPStatusError as e:
             # Log the full response details including the body
-            logger.error(
+            logger.exception(
                 f'Failed to get tokens for user {user_id}, identity provider {idp} from URL {e.response.url}. '
                 f'Status code: {e.response.status_code}, '
-                f'Response body: {e.response.text}'
+                f'Response body: {e.response.text}',
+                stack_info=True,
             )
             raise ValueError(
                 f'Failed to get token for user: {user_id}, identity provider: {idp}. '
@@ -571,7 +572,9 @@ class TokenManager:
             )
             return await self.get_idp_token(tokens['access_token'], idp)
         except KeycloakConnectionError:
-            logger.exception('KeycloakConnectionError when refreshing token')
+            logger.exception(
+                'KeycloakConnectionError when refreshing token', stack_info=True
+            )
             raise
         except KeycloakPostError as e:
             error_message = str(e)
@@ -603,9 +606,10 @@ class TokenManager:
             return await self.get_idp_token_from_offline_token(
                 offline_token=offline_token, idp=idp
             )
-        except KeycloakConnectionError as e:
+        except KeycloakConnectionError:
             logger.exception(
-                f'KeycloakConnectionError when getting IDP token for IDP user_id {idp_user_id}: {str(e)}'
+                f'KeycloakConnectionError when getting IDP token for IDP user_id {idp_user_id}',
+                stack_info=True,
             )
             raise
 
@@ -776,10 +780,14 @@ class TokenManager:
             return self._find_duplicate_in_users(users, base_email, current_user_id)
 
         except KeycloakConnectionError:
-            logger.exception('KeycloakConnectionError when checking duplicate email')
+            logger.exception(
+                'KeycloakConnectionError when checking duplicate email', stack_info=True
+            )
             raise
-        except Exception as e:
-            logger.exception(f'Unexpected error checking duplicate email: {e}')
+        except Exception:
+            logger.exception(
+                'Unexpected error checking duplicate email', stack_info=True
+            )
             # On any error, allow signup to proceed (fail open)
             return False
 
@@ -808,7 +816,9 @@ class TokenManager:
             logger.info(f'Successfully deleted Keycloak user {user_id}')
             return True
         except KeycloakConnectionError:
-            logger.exception(f'KeycloakConnectionError when deleting user {user_id}')
+            logger.exception(
+                f'KeycloakConnectionError when deleting user {user_id}', stack_info=True
+            )
             raise
         except KeycloakError as e:
             # User might not exist or already deleted
@@ -817,8 +827,11 @@ class TokenManager:
                 extra={'user_id': user_id, 'error': str(e)},
             )
             return False
-        except Exception as e:
-            logger.exception(f'Unexpected error deleting Keycloak user {user_id}: {e}')
+        except Exception:
+            logger.exception(
+                f'Unexpected error deleting Keycloak user {user_id}',
+                stack_info=True,
+            )
             return False
 
     @retry(
@@ -966,12 +979,12 @@ class TokenManager:
                 logger.warning(
                     f'User not found in Keycloak when attempting to disable: {user_id}'
                 )
-        except Exception as e:
+        except Exception:
             # Log error but don't raise - the caller should handle the blocking regardless
             email_str = f', email: {email}' if email else ''
-            logger.error(
-                f'Failed to disable Keycloak account for user_id: {user_id}{email_str}: {str(e)}',
-                exc_info=True,
+            logger.exception(
+                f'Failed to disable Keycloak account for user_id: {user_id}{email_str}',
+                stack_info=True,
             )
 
     async def store_org_token(self, installation_id: int, installation_token: str):
@@ -1112,5 +1125,5 @@ class TokenManager:
                 refresh_token=refresh_token
             )
         except Exception:
-            logger.exception('Exception when logging out of keycloak')
+            logger.exception('Exception when logging out of keycloak', stack_info=True)
             raise

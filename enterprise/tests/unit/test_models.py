@@ -25,21 +25,46 @@ def session_maker(engine):
     return sessionmaker(bind=engine)
 
 
-def test_user_model(session_maker):
-    """Test that the User model works correctly."""
+def test_user_model_persist_and_query(session_maker):
+    """Test that a User can be persisted and queried."""
     with session_maker() as session:
-        # Create a test org
         org = Org(name='test_org')
         session.add(org)
         session.flush()
 
-        # Create a test user
-        test_user_id = uuid4()
-        user = User(id=test_user_id, current_org_id=org.id, language='en')
+        user_id = uuid4()
+        user = User(id=user_id, current_org_id=org.id, language='en')
+        session.add(user)
+        session.commit()
+
+        queried_user = session.query(User).filter(User.id == user_id).first()
+        assert queried_user is not None
+        assert queried_user.language == 'en'
+
+
+def test_org_model_persist_and_query(session_maker):
+    """Test that an Org can be persisted and queried."""
+    with session_maker() as session:
+        org = Org(name='test_org')
+        session.add(org)
+        session.commit()
+
+        queried_org = session.query(Org).filter(Org.id == org.id).first()
+        assert queried_org is not None
+        assert queried_org.name == 'test_org'
+
+
+def test_org_member_model_persist_and_query(session_maker):
+    """Test that an OrgMember can be persisted and queried."""
+    with session_maker() as session:
+        org = Org(name='test_org')
+        session.add(org)
+        session.flush()
+
+        user = User(id=uuid4(), current_org_id=org.id)
         session.add(user)
         session.flush()
 
-        # Create org_member relationship
         org_member = OrgMember(
             org_id=org.id,
             user_id=user.id,
@@ -50,17 +75,6 @@ def test_user_model(session_maker):
         session.add(org_member)
         session.commit()
 
-        # Query the user
-        queried_user = session.query(User).filter(User.id == test_user_id).first()
-        assert queried_user is not None
-        assert queried_user.language == 'en'
-
-        # Query the org
-        queried_org = session.query(Org).filter(Org.id == org.id).first()
-        assert queried_org is not None
-        assert queried_org.name == 'test_org'
-
-        # Query the org_member relationship
         queried_org_member = (
             session.query(OrgMember)
             .filter(OrgMember.org_id == org.id, OrgMember.user_id == user.id)

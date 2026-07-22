@@ -347,11 +347,11 @@ async def get_bitbucket_dc_resources(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error retrieving Bitbucket DC resources: {e}')
+        logger.exception('Error retrieving Bitbucket DC resources', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve Bitbucket DC resources',
-        )
+        ) from e
 
 
 @bitbucket_dc_integration_router.post('/bitbucket-dc/enroll-webhook')
@@ -392,11 +392,11 @@ async def enroll_bitbucket_dc_webhook(
         )
 
     except Exception as e:
-        logger.exception(f'Error enrolling Bitbucket DC webhook: {e}')
+        logger.exception('Error enrolling Bitbucket DC webhook', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to enroll Bitbucket DC webhook',
-        )
+        ) from e
 
 
 @bitbucket_dc_integration_router.patch('/bitbucket-dc/webhook-id')
@@ -445,11 +445,11 @@ async def update_bitbucket_dc_webhook_id(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error updating Bitbucket DC webhook id: {e}')
+        logger.exception('Error updating Bitbucket DC webhook id', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to update Bitbucket DC webhook id',
-        )
+        ) from e
 
 
 @bitbucket_dc_integration_router.post('/bitbucket-dc/reinstall-webhook')
@@ -526,11 +526,11 @@ async def reinstall_bitbucket_dc_webhook(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error installing Bitbucket DC webhook: {e}')
+        logger.exception('Error installing Bitbucket DC webhook', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to install Bitbucket DC webhook',
-        )
+        ) from e
 
 
 @bitbucket_dc_integration_router.post('/bitbucket-dc/uninstall-webhook')
@@ -603,11 +603,11 @@ async def uninstall_bitbucket_dc_webhook(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error uninstalling Bitbucket DC webhook: {e}')
+        logger.exception('Error uninstalling Bitbucket DC webhook', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to uninstall Bitbucket DC webhook',
-        )
+        ) from e
 
 
 async def _handle_bitbucket_dc_event(
@@ -711,7 +711,7 @@ async def _handle_bitbucket_dc_event(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error processing Bitbucket DC event: {e}')
+        logger.exception('Error processing Bitbucket DC event', stack_info=True)
         # Surface the exception class name so admins reading DC's webhook
         # delivery UI can correlate with server logs without leaking a full
         # message (which may contain sensitive payload fragments).

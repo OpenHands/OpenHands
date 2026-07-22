@@ -698,17 +698,16 @@ class TestReceiveMessagePayloadProcessingError:
 
         expected_message = '[Github]: Error processing payload for gh interaction'
 
-        # The failure is logged at error level with exc_info so the stack trace is preserved.
-        error_calls = [
+        # The failure is logged at exception level so the stack trace is preserved automatically.
+        exception_calls = [
             call
-            for call in mock_logger.error.call_args_list
+            for call in mock_logger.exception.call_args_list
             if call.args and call.args[0] == expected_message
         ]
-        assert error_calls, (
-            f'Expected error log about payload processing. '
-            f'Got: {mock_logger.error.call_args_list}'
+        assert exception_calls, (
+            f'Expected exception log about payload processing. '
+            f'Got: {mock_logger.exception.call_args_list}'
         )
-        assert all(call.kwargs.get('exc_info') is True for call in error_calls)
 
         # It must not be logged at warning level (the bug this fix addresses).
         warning_calls = [

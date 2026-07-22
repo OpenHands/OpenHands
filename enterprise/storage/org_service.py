@@ -95,9 +95,13 @@ class OrgService:
         except Exception as e:
             logger.exception(
                 'Error creating LiteLLM integration',
-                extra={'org_id': str(org_id), 'user_id': user_id, 'error': str(e)},
+                extra={
+                    'org_id': str(org_id),
+                    'user_id': user_id,
+                },
+                stack_info=True,
             )
-            raise LiteLLMIntegrationError(f'LiteLLM integration failed: {str(e)}')
+            raise LiteLLMIntegrationError('LiteLLM integration failed') from e
 
     @staticmethod
     def create_org_entity(
@@ -289,13 +293,13 @@ class OrgService:
             raise
         except Exception as e:
             # Unexpected error in steps 4-6, need to clean up LiteLLM
-            logger.error(
+            logger.exception(
                 'Unexpected error during organization creation, initiating cleanup',
                 extra={
                     'org_id': str(org_id),
                     'user_id': user_id,
-                    'error': str(e),
                 },
+                stack_info=True,
             )
             await OrgService._handle_failure_with_cleanup(
                 org_id, user_id, e, 'Failed to create organization'
@@ -330,13 +334,13 @@ class OrgService:
             return persisted_org
 
         except Exception as e:
-            logger.error(
+            logger.exception(
                 'Database persistence failed, initiating LiteLLM cleanup',
                 extra={
                     'org_id': str(org_id),
                     'user_id': user_id,
-                    'error': str(e),
                 },
+                stack_info=True,
             )
             await OrgService._handle_failure_with_cleanup(
                 org_id, user_id, e, 'Failed to create organization'
@@ -378,9 +382,11 @@ class OrgService:
             raise OrgDatabaseError(
                 f'{error_message}: {str(original_error)}. '
                 f'Cleanup also failed: {str(cleanup_error)}'
-            )
+            ) from original_error
 
-        raise OrgDatabaseError(f'{error_message}: {str(original_error)}')
+        raise OrgDatabaseError(
+            f'{error_message}: {str(original_error)}'
+        ) from original_error
 
     @staticmethod
     async def _cleanup_litellm_resources(
@@ -409,13 +415,13 @@ class OrgService:
             return None
 
         except Exception as e:
-            logger.error(
+            logger.exception(
                 'Failed to cleanup LiteLLM team (resources may be orphaned)',
                 extra={
                     'org_id': str(org_id),
                     'user_id': user_id,
-                    'error': str(e),
                 },
+                stack_info=True,
             )
             return e
 
@@ -596,15 +602,7 @@ class OrgService:
             return updated_org
 
         except Exception as e:
-            logger.error(
-                'Failed to update organization',
-                extra={
-                    'org_id': str(org_id),
-                    'user_id': user_id,
-                    'error': str(e),
-                },
-            )
-            raise OrgDatabaseError(f'Failed to update organization: {str(e)}')
+            raise OrgDatabaseError('Failed to update organization') from e
 
     @staticmethod
     async def get_org_credits(user_id: str, org_id: UUID) -> float | None:
@@ -835,11 +833,15 @@ class OrgService:
             # specific failure mode and force a 500.
             raise
         except Exception as e:
-            logger.error(
+            logger.exception(
                 'Organization deletion failed',
-                extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+                extra={
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                },
+                stack_info=True,
             )
-            raise OrgDatabaseError(f'Failed to delete organization: {str(e)}')
+            raise OrgDatabaseError('Failed to delete organization') from e
 
     @staticmethod
     async def check_byor_export_enabled(
@@ -938,8 +940,12 @@ class OrgService:
         except OrgDatabaseError:
             raise
         except Exception as e:
-            logger.error(
+            logger.exception(
                 'Failed to switch user organization',
-                extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+                extra={
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                },
+                stack_info=True,
             )
-            raise OrgDatabaseError(f'Failed to switch organization: {str(e)}')
+            raise OrgDatabaseError('Failed to switch organization') from e

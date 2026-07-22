@@ -321,7 +321,7 @@ async def store_settings(
                     settings_changed=settings_changed,
                 )
         except Exception:
-            logger.exception('analytics:settings_saved:failed')
+            logger.exception('analytics:settings_saved:failed', stack_info=True)
 
         return JSONResponse(
             status_code=status.HTTP_200_OK,

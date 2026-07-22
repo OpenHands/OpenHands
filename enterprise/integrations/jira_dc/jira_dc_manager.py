@@ -436,9 +436,10 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             service_account = resolve_jira_dc_service_account(
                 workspace, self.token_manager
             )
-        except Exception as e:
-            logger.error(
-                f'[Jira DC] Service account configuration is invalid: {str(e)}'
+        except Exception:
+            logger.exception(
+                '[Jira DC] Service account configuration is invalid',
+                stack_info=True,
             )
             return
 
@@ -487,8 +488,8 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
                 service_account.api_key,
                 bot_email=service_account.email,
             )
-        except Exception as e:
-            logger.error(f'[Jira DC] Failed to get issue context: {str(e)}')
+        except Exception:
+            logger.exception('[Jira DC] Failed to get issue context', stack_info=True)
             await self._send_error_comment(
                 job_context,
                 'Failed to retrieve issue details. Please check the issue key and try again.',
@@ -504,9 +505,10 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
                 jira_dc_user,
                 workspace,
             )
-        except Exception as e:
-            logger.error(
-                f'[Jira DC] Failed to create jira dc view: {str(e)}', exc_info=True
+        except Exception:
+            logger.exception(
+                '[Jira DC] Failed to create jira dc view',
+                stack_info=True,
             )
             await self._send_error_comment(
                 job_context,
@@ -531,6 +533,14 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         try:
             target_str = f'{jira_dc_view.job_context.issue_description}\n{jira_dc_view.job_context.user_msg}'
             mentioned_repos = infer_repo_from_message(target_str)
+
+            if not mentioned_repos:
+                jira_dc_view.selected_repo = None
+                logger.info(
+                    '[Jira DC] repo resolution issue=%s inferred=[] verified=[]',
+                    jira_dc_view.job_context.issue_key,
+                )
+                return True
 
             # Verify each mentioned repo directly rather than enumerating the
             # user's full repo list (which is capped and misses repos on large
@@ -560,14 +570,14 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
                 )
                 return True
 
-            # Zero or multiple matches -- ask the user to disambiguate.
+            # Unverified or multiple mentioned repositories still require user action.
             await self._send_repo_selection_comment(
                 jira_dc_view, mentioned_repos, verified_repos
             )
             return False
 
-        except Exception as e:
-            logger.error(f'[Jira DC] Error in is_job_requested: {str(e)}')
+        except Exception:
+            logger.exception('[Jira DC] Error in is_job_requested', stack_info=True)
             return False
 
     async def start_job(self, jira_dc_view: JiraDcViewInterface) -> None:
@@ -608,9 +618,10 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             logger.warning(f'[Jira DC] User token unavailable: {str(e)}')
             msg_info = get_jira_dc_relink_message(jira_dc_view.job_context.display_name)
 
-        except Exception as e:
-            logger.error(
-                f'[Jira DC] Unexpected error starting job: {str(e)}', exc_info=True
+        except Exception:
+            logger.exception(
+                '[Jira DC] Unexpected error starting job',
+                stack_info=True,
             )
             msg_info = 'Sorry, there was an unexpected error starting the job. Please try again.'
 
@@ -625,8 +636,8 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
                 base_api_url=jira_dc_view.job_context.base_api_url,
                 svc_acc_api_key=service_account.api_key,
             )
-        except Exception as e:
-            logger.error(f'[Jira] Failed to send response message: {str(e)}')
+        except Exception:
+            logger.exception('[Jira] Failed to send response message', stack_info=True)
 
     async def _resolve_service_account_mentions(self, payload: Dict) -> set[str] | None:
         """Best-effort bot identifiers (username + Jira key) for a picker mention.
@@ -1007,8 +1018,8 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
                 base_api_url=job_context.base_api_url,
                 svc_acc_api_key=service_account.api_key,
             )
-        except Exception as e:
-            logger.error(f'[Jira DC] Failed to send error comment: {str(e)}')
+        except Exception:
+            logger.exception('[Jira DC] Failed to send error comment', stack_info=True)
 
     async def _send_repo_selection_comment(
         self,
@@ -1055,7 +1066,8 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
                 f'[Jira] Sent repository selection comment for issue {jira_dc_view.job_context.issue_key}'
             )
 
-        except Exception as e:
-            logger.error(
-                f'[Jira] Failed to send repository selection comment: {str(e)}'
+        except Exception:
+            logger.exception(
+                '[Jira] Failed to send repository selection comment',
+                stack_info=True,
             )

@@ -14,6 +14,10 @@ from storage.lite_llm_manager import LiteLlmManager
 from storage.org_member import OrgMember
 from storage.org_member_store import OrgMemberStore
 from storage.org_service import OrgService
+from storage.saas_settings_store import (
+    ManagedLlmKeyStatus,
+    SaasSettingsStore,
+)
 from storage.user_store import UserStore
 
 from openhands.app_server.user_auth import get_user_auth, get_user_id
@@ -82,10 +86,13 @@ async def generate_byor_key(user_id: str, org_id: UUID) -> str | None:
             },
         )
         return key
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Error generating BYOR key',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={
+                'user_id': user_id,
+            },
+            stack_info=True,
         )
         return None
 
@@ -106,10 +113,13 @@ async def delete_byor_key_from_litellm(
             extra={'user_id': user_id},
         )
         return True
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Error deleting BYOR key from LiteLLM',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={
+                'user_id': user_id,
+            },
+            stack_info=True,
         )
         return False
 
@@ -165,6 +175,10 @@ class LlmApiKeyResponse(BaseModel):
     key: str | None
 
 
+class ManagedLlmApiKeyRefreshResponse(BaseModel):
+    refreshed: bool
+
+
 class ByorPermittedResponse(BaseModel):
     permitted: bool
 
@@ -216,13 +230,11 @@ async def check_byor_permitted(
         )
         return ByorPermittedResponse(permitted=permitted)
     except Exception as e:
-        logger.exception(
-            'Error checking BYOR export permission', extra={'error': str(e)}
-        )
+        logger.exception('Error checking BYOR export permission', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to check BYOR export permission',
-        )
+        ) from e
 
 
 @api_router.post('', tags=['Keys'])
@@ -310,7 +322,7 @@ async def create_api_key(
     except HTTPException:
         raise
     except Exception:
-        logger.exception('Error creating API key')
+        logger.exception('Error creating API key', stack_info=True)
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail='Failed to create API key',
@@ -327,7 +339,7 @@ async def list_api_keys(
         keys = await api_key_store.list_api_keys(user_id, org_id=effective_org_id)
         return [api_key_to_response(key) for key in keys]
     except Exception:
-        logger.exception('Error listing API keys')
+        logger.exception('Error listing API keys', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to list API keys',
@@ -369,7 +381,7 @@ async def delete_api_key(
     except HTTPException:
         raise
     except Exception:
-        logger.exception('Error deleting API key')
+        logger.exception('Error deleting API key', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to delete API key',
@@ -421,6 +433,91 @@ async def get_current_api_key(
         user_id=user_id,
         auth_type=saas_user_auth.auth_type.value,
     )
+
+
+@api_router.post(
+    '/llm/managed/refresh',
+    tags=['Keys'],
+    response_model=ManagedLlmApiKeyRefreshResponse,
+)
+async def refresh_managed_llm_api_key(
+    user_id: str = Depends(get_user_id),
+    effective_org_id: UUID = EFFECTIVE_ORG_ID,
+) -> ManagedLlmApiKeyRefreshResponse:
+    """Refresh the managed OpenHands LiteLLM key for the current user/org.
+
+    Delegates the full managed-key lifecycle (effective-config classification,
+    alias cleanup, key generation with OpenHands metadata, and persistence) to
+    ``SaasSettingsStore.rotate_managed_llm_key`` so the route does not
+    duplicate the storage-layer machinery. Only managed LiteLLM/OpenHands-
+    provider effective configs are rotated; BYOK/custom and non-managed configs
+    are rejected before any key is generated. The previous key token is deleted
+    best-effort only after the replacement is persisted.
+    """
+    logger.info(
+        'Starting managed LLM API key refresh',
+        extra={'user_id': user_id, 'org_id': str(effective_org_id)},
+    )
+
+    try:
+        settings_store = await SaasSettingsStore.get_instance(
+            user_id, effective_org_id=effective_org_id
+        )
+        rotation = await settings_store.rotate_managed_llm_key()
+
+        if rotation.status == ManagedLlmKeyStatus.NOT_MANAGED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='Cannot refresh a non-managed LLM API key as a managed key.',
+            )
+        if rotation.status == ManagedLlmKeyStatus.BYOK:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='Cannot refresh a custom BYOK LLM API key as a managed key.',
+            )
+        if rotation.status == ManagedLlmKeyStatus.MISSING_MEMBER:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(f'User {user_id} is not a member of org {effective_org_id}'),
+            )
+
+        # The replacement is already persisted; clean up the previous token
+        # best-effort. The deterministic alias was already deleted by the
+        # rotation, so failure here only leaves a stale token, not an orphan.
+        if rotation.old_key and rotation.old_key != rotation.new_key:
+            try:
+                await LiteLlmManager.delete_key(rotation.old_key)
+            except Exception as exc:
+                logger.warning(
+                    'Failed to delete previous managed LLM key after refresh',
+                    extra={
+                        'user_id': user_id,
+                        'org_id': str(effective_org_id),
+                        'error': str(exc),
+                    },
+                )
+
+        logger.info(
+            'Managed LLM API key refresh completed successfully',
+            extra={'user_id': user_id, 'org_id': str(effective_org_id)},
+        )
+        return ManagedLlmApiKeyRefreshResponse(refreshed=True)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(
+            'Unexpected error refreshing managed LLM API key',
+            extra={
+                'user_id': user_id,
+                'org_id': str(effective_org_id),
+                'error': str(e),
+                'exception_type': type(e).__name__,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to refresh managed LLM API key',
+        )
 
 
 @api_router.get('/llm/byor', tags=['Keys'])
@@ -492,11 +589,11 @@ async def get_llm_api_key_for_byor(
         # Re-raise HTTP exceptions as-is
         raise
     except Exception as e:
-        logger.exception('Error retrieving BYOR LLM API key', extra={'error': str(e)})
+        logger.exception('Error retrieving BYOR LLM API key', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve BYOR LLM API key',
-        )
+        ) from e
 
 
 @api_router.post('/llm/byor/refresh', tags=['Keys'])
@@ -560,7 +657,7 @@ async def refresh_llm_api_key_for_byor(
         )
         return LlmApiKeyResponse(key=key)
     except HTTPException as he:
-        logger.error(
+        logger.exception(
             'HTTP exception during BYOR LLM API key refresh',
             extra={
                 'user_id': user_id,
@@ -568,6 +665,7 @@ async def refresh_llm_api_key_for_byor(
                 'detail': he.detail,
                 'exception_type': type(he).__name__,
             },
+            stack_info=True,
         )
         raise
     except Exception as e:
@@ -575,11 +673,11 @@ async def refresh_llm_api_key_for_byor(
             'Unexpected error refreshing BYOR LLM API key',
             extra={
                 'user_id': user_id,
-                'error': str(e),
                 'exception_type': type(e).__name__,
             },
+            stack_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to refresh BYOR LLM API key',
-        )
+        ) from e

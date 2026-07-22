@@ -280,8 +280,8 @@ class TestInitTavilyProxy:
             init_tavily_proxy()
 
             # Verify error was logged
-            mock_logger.error.assert_called_once_with(
-                'Failed to initialize Tavily MCP proxy: Connection failed'
+            mock_logger.exception.assert_called_once_with(
+                'Failed to initialize Tavily MCP proxy', stack_info=True
             )
 
             # Verify mount was not called

@@ -25,7 +25,8 @@ export const queryClient = new QueryClient({
       // would otherwise surface as a spurious error toast.
       retry: (failureCount, error) =>
         failureCount < 2 && isRateLimitError(error),
-      retryDelay: (_, error) => getRateLimitRetryDelayMs(error),
+      retryDelay: (failureCount, error) =>
+        getRateLimitRetryDelayMs(failureCount, error),
     },
   },
   queryCache: new QueryCache({

@@ -34,6 +34,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
     user: str | None = None
     password: SecretStr | None = None
     echo: bool = False
+    # can be overriden with DB_POOL_SIZE / DB_MAX_OVERFLOW (see fill_empty_fields).
     pool_size: int = 25
     max_overflow: int = 10
     pool_recycle: int = 1800
@@ -71,6 +72,12 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
             self.gcp_region = os.getenv('GCP_REGION')
         if self.ssl_mode is None:
             self.ssl_mode = os.getenv('DB_SSL_MODE') or os.getenv('PGSSLMODE')
+        pool_size = os.getenv('DB_POOL_SIZE')
+        if pool_size:
+            self.pool_size = int(pool_size)
+        max_overflow = os.getenv('DB_MAX_OVERFLOW')
+        if max_overflow:
+            self.max_overflow = int(max_overflow)
         return self
 
     def _create_gcp_db_connection(self):
@@ -357,7 +364,9 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
                 if asyncio.iscoroutine(result):
                     await result
             except Exception:
-                _logger.exception('Error closing GCP Cloud SQL connector')
+                _logger.exception(
+                    'Error closing GCP Cloud SQL connector', stack_info=True
+                )
             self._gcp_connector = None
 
         engine = self._async_engine
@@ -365,7 +374,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
             try:
                 await engine.dispose()
             except Exception:
-                _logger.exception('Error disposing async DB engine')
+                _logger.exception('Error disposing async DB engine', stack_info=True)
 
 
 def set_db_session_keep_open(state: InjectorState, keep_open: bool):

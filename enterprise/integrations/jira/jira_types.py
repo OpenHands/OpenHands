@@ -59,11 +59,11 @@ class StartingConvoException(Exception):
     pass
 
 
-class RepositoryNotFoundError(Exception):
-    """Raised when a repository cannot be determined from the issue.
+class RepositorySelectionError(Exception):
+    """Raised when a mentioned repository cannot be selected.
 
     This is a separate error domain from StartingConvoException - it represents
-    a precondition failure (no repo configured/found) rather than a conversation
+    a repository verification or disambiguation failure rather than a conversation
     creation failure. The manager catches this and converts it to a user-friendly
     message.
     """

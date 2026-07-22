@@ -3,11 +3,15 @@
 This module tests the status router endpoints (/alive, /health, /server_info, /ready).
 """
 
+import importlib.metadata
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from openhands.app_server.status import system_stats
 from openhands.app_server.status.status_router import router
+from openhands.app_server.version import get_version
 
 
 @pytest.fixture
@@ -50,12 +54,30 @@ class TestServerInfoEndpoint:
     """Test suite for the /server_info endpoint."""
 
     def test_server_info_returns_system_info(self, test_client):
-        """Test that /server_info returns system information."""
+        """Test that /server_info returns system and version information."""
         response = test_client.get('/server_info')
 
         assert response.status_code == 200
-        # Should return a dict with system info
-        assert isinstance(response.json(), dict)
+        payload = response.json()
+        assert isinstance(payload['uptime'], float)
+        assert isinstance(payload['idle_time'], float)
+        assert payload['app_version'] == get_version()
+        assert payload['sdk_version'] == system_stats.get_sdk_version()
+        assert isinstance(payload['resources'], dict)
+
+    def test_get_sdk_version_returns_unknown_when_package_missing(self, monkeypatch):
+        """Test missing SDK metadata returns a stable fallback."""
+
+        def raise_package_not_found(package_name: str) -> str:
+            raise importlib.metadata.PackageNotFoundError(package_name)
+
+        monkeypatch.setattr(
+            system_stats.importlib.metadata,
+            'version',
+            raise_package_not_found,
+        )
+
+        assert system_stats.get_sdk_version() == 'unknown'
 
 
 class TestReadyEndpoint:

@@ -5,7 +5,7 @@ import warnings
 from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
 from typing import Annotated, Optional, cast
-from urllib.parse import parse_qs, quote, urlencode, urlparse
+from urllib.parse import parse_qs, parse_qsl, quote, urlencode, urlparse, urlunparse
 from uuid import UUID as parse_uuid
 
 from fastapi import (
@@ -178,6 +178,7 @@ async def _get_user_orgs_with_data(user_id: str, org_member_ids: list) -> list:
         logger.exception(
             'auth:_get_user_orgs_with_data:failed',
             extra={'user_id': user_id, 'org_ids': [str(oid) for oid in org_member_ids]},
+            stack_info=True,
         )
         return []
 
@@ -217,6 +218,7 @@ async def _track_login_analytics_background(
                 logger.exception(
                     'auth:identify_user:member_count_failed',
                     extra={'user_id': user_id, 'org_id': str(org.id)},
+                    stack_info=True,
                 )
                 member_count = None
             orgs_data.append(
@@ -248,6 +250,7 @@ async def _track_login_analytics_background(
         logger.exception(
             'auth:_track_login_analytics_background:failed',
             extra={'user_id': user_id},
+            stack_info=True,
         )
 
 
@@ -393,8 +396,10 @@ async def keycloak_callback(
                 error_url = f'{web_url}/login?recaptcha_blocked=true'
                 return RedirectResponse(error_url, status_code=302)
 
-        except Exception as e:
-            logger.exception(f'reCAPTCHA verification error at callback: {e}')
+        except Exception:
+            logger.exception(
+                'reCAPTCHA verification error at callback', stack_info=True
+            )
             # Fail open - continue with login if reCAPTCHA service unavailable
 
     # Check email verification status
@@ -571,10 +576,13 @@ async def keycloak_callback(
             else:
                 redirect_url = f'{redirect_url}?email_mismatch=true'
 
-        except Exception as e:
+        except Exception:
             logger.exception(
                 'Unexpected error processing invitation during auth callback',
-                extra={'user_id': user_id, 'error': str(e)},
+                extra={
+                    'user_id': user_id,
+                },
+                stack_info=True,
             )
             # Don't fail the login if invitation processing fails
             if '?' in redirect_url:
@@ -591,10 +599,13 @@ async def keycloak_callback(
         )
         if accepted_invitations:
             user = await UserStore.get_user_by_id(user_id) or user
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error accepting pending invitations at login',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={
+                'user_id': user_id,
+            },
+            stack_info=True,
         )
 
     try:
@@ -602,10 +613,13 @@ async def keycloak_callback(
             user,
             is_new_user=is_new_user,
         )
-    except Exception as e:
+    except Exception:
         logger.exception(
             'Unexpected error applying default organization bootstrap',
-            extra={'user_id': user_id, 'error': str(e)},
+            extra={
+                'user_id': user_id,
+            },
+            stack_info=True,
         )
 
     # If the user hasn't accepted the TOS, redirect to the TOS page
@@ -633,6 +647,7 @@ async def keycloak_callback(
                 redirect_url = f'{redirect_url}&invitation_success=true'
             else:
                 redirect_url = f'{redirect_url}?invitation_success=true'
+        redirect_url = _build_cross_app_redirect_url(redirect_url, web_url)
         response = RedirectResponse(redirect_url, status_code=302)
 
     set_response_cookie(
@@ -736,7 +751,8 @@ def _extract_login_inner_return_to(relative_url: str) -> str | None:
     The OAuth flow's ``state`` is set to the full URL of the page that
     triggered the login (see ``generateAuthUrl`` in the frontend).
     For an unauthenticated deep-link visit, that page is itself
-    ``/login?returnTo=<actual destination>``, so the OAuth callback's
+    ``/login?returnTo=<actual destination>`` (or legacy
+    ``/login?redirect=<actual destination>``), so the OAuth callback's
     ``redirect_url`` ends up *wrapping* the user's true destination
     inside a login URL. Sending the user back through ``/login`` after
     onboarding works in principle (``LoginPage`` re-redirects authed
@@ -751,13 +767,74 @@ def _extract_login_inner_return_to(relative_url: str) -> str | None:
     parsed = urlparse(relative_url)
     if parsed.path != '/login':
         return None
-    inner = parse_qs(parsed.query).get('returnTo')
+    query = parse_qs(parsed.query)
+    inner = query.get('returnTo') or query.get('redirect')
     if not inner:
         return None
     value = inner[0]
     if not value.startswith('/'):
         return None
     return value
+
+
+def _is_cross_app_relative_path(value: str) -> bool:
+    """Return whether ``value`` is a safe same-origin cross-app route."""
+    if not value.startswith('/') or value.startswith('//'):
+        return False
+    parsed = urlparse(value)
+    return parsed.path in ('/automations', '/canvas') or parsed.path.startswith(
+        ('/automations/', '/canvas/')
+    )
+
+
+def _merge_login_wrapper_query(inner_destination: str, outer_query: str) -> str:
+    """Move non-routing login-wrapper query params onto an unwrapped destination."""
+    extra_params = [
+        (key, value)
+        for key, value in parse_qsl(outer_query, keep_blank_values=True)
+        if key not in ('returnTo', 'redirect')
+    ]
+    if not extra_params:
+        return inner_destination
+
+    parsed_inner = urlparse(inner_destination)
+    query = parse_qsl(parsed_inner.query, keep_blank_values=True) + extra_params
+    return urlunparse(parsed_inner._replace(query=urlencode(query)))
+
+
+def _build_cross_app_redirect_url(redirect_url: str, web_url: str) -> str:
+    """Build a direct server-side redirect for same-origin microservice routes.
+
+    OAuth state often points back at the main app's ``/login`` page with the
+    real destination nested inside ``returnTo`` or the legacy ``redirect`` query
+    parameter. For paths owned by another frontend, such as ``/automations`` or
+    ``/canvas``, sending the browser through the main app SPA first is brittle:
+    any old or already-loaded bundle can client-navigate and show the main app
+    404 before ingress sees the route.
+
+    Returning a direct ``Location: <web_url>/<cross-app>...`` from the backend
+    makes the browser issue a real document request, so ingress routes it to the
+    owning service.
+    """
+    if not redirect_url:
+        return redirect_url
+
+    relative = redirect_url
+    if web_url and redirect_url.startswith(web_url):
+        relative = redirect_url[len(web_url) :] or '/'
+
+    parsed = urlparse(relative)
+    if parsed.path == '/login':
+        query = parse_qs(parsed.query)
+        inner = query.get('returnTo') or query.get('redirect')
+        if inner and _is_cross_app_relative_path(inner[0]):
+            destination = _merge_login_wrapper_query(inner[0], parsed.query)
+            return f'{web_url}{destination}'
+
+    if _is_cross_app_relative_path(relative):
+        return f'{web_url}{relative}'
+
+    return redirect_url
 
 
 def _build_onboarding_redirect(original_url: str, web_url: str) -> str:
@@ -784,7 +861,8 @@ def _build_onboarding_redirect(original_url: str, web_url: str) -> str:
     and lets the frontend use ``navigate(returnTo)`` directly.
 
     When ``original_url`` is itself a ``/login?returnTo=...`` URL —
-    which is the common case for unauthenticated deep-link visits,
+    or a legacy ``/login?redirect=...`` URL — which is the common case for
+    unauthenticated deep-link visits,
     because the OAuth flow's ``state`` carries the full login page
     URL — the *inner* ``returnTo`` is extracted so the user lands at
     their real destination in a single navigation rather than
@@ -881,7 +959,7 @@ async def _get_post_auth_redirect(
         # ``?returnTo=...`` so the frontend ``OnboardingForm`` can
         # restore it after the user finishes the form.
         return _build_onboarding_redirect(default_url, web_url)
-    return default_url
+    return _build_cross_app_redirect_url(default_url, web_url)
 
 
 @api_router.post('/accept_tos')
@@ -957,7 +1035,7 @@ async def accept_tos(request: Request):
                     properties={'signed_up_at': datetime.now(timezone.utc).isoformat()},
                 )
         except Exception:
-            logger.exception('analytics:user_signed_up:failed')
+            logger.exception('analytics:user_signed_up:failed', stack_info=True)
 
     # Determine final redirect - but don't override if it's the offline token flow
     # (the offline callback will handle post-auth redirect after storing the token)
@@ -1095,7 +1173,7 @@ async def complete_onboarding(
                     },
                 )
     except Exception:
-        logger.exception('analytics:onboarding_completed:failed')
+        logger.exception('analytics:onboarding_completed:failed', stack_info=True)
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,

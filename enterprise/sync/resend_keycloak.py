@@ -186,7 +186,7 @@ def get_resend_contacts(audience_id: str) -> Dict[str, Dict[str, Any]]:
         # efficient lookup
         return {contact['email'].lower(): contact for contact in contacts}
     except Exception:
-        logger.exception('Failed to get contacts from Resend')
+        logger.exception('Failed to get contacts from Resend', stack_info=True)
         raise
 
 
@@ -230,7 +230,7 @@ def add_contact_to_resend(
 
         return resend.Contacts.create(params)
     except Exception:
-        logger.exception(f'Failed to add contact {email} to Resend')
+        logger.exception(f'Failed to add contact {email} to Resend', stack_info=True)
         raise
 
 
@@ -309,7 +309,7 @@ def send_welcome_email(
         logger.info(f'Welcome email sent to {email}')
         return response
     except Exception:
-        logger.exception(f'Failed to send welcome email to {email}')
+        logger.exception(f'Failed to send welcome email to {email}', stack_info=True)
         raise
 
 
@@ -367,7 +367,9 @@ def _backfill_existing_resend_contacts(
         return backfilled_count
 
     except Exception:
-        logger.exception('Error during backfill of existing Resend contacts')
+        logger.exception(
+            'Error during backfill of existing Resend contacts', stack_info=True
+        )
         # Don't fail the entire sync if backfill fails - just log and continue
         return 0
 
@@ -456,7 +458,9 @@ def sync_users_to_resend():
                         user_id=user.id,
                     )
                 except Exception:
-                    logger.exception(f'Failed to mark user {email} as synced')
+                    logger.exception(
+                        f'Failed to mark user {email} as synced', stack_info=True
+                    )
                     stats['errors'] += 1
                     continue
 
@@ -466,7 +470,9 @@ def sync_users_to_resend():
                     )
                     logger.info(f'Added user {email} to Resend')
                 except Exception:
-                    logger.exception(f'Error adding user {email} to Resend')
+                    logger.exception(
+                        f'Error adding user {email} to Resend', stack_info=True
+                    )
                     synced_user_store.remove_synced_user(email, RESEND_AUDIENCE_ID)
                     stats['errors'] += 1
                     continue
@@ -482,7 +488,8 @@ def sync_users_to_resend():
                 except Exception:
                     logger.exception(
                         f'Failed to send welcome email to {email}, '
-                        'but contact was added to audience'
+                        'but contact was added to audience',
+                        stack_info=True,
                     )
 
                 time.sleep(1 / RATE_LIMIT)
@@ -491,10 +498,10 @@ def sync_users_to_resend():
 
         logger.info(f'Sync completed: {stats}')
     except ResendAPIError:
-        logger.exception('Resend API error')
+        logger.exception('Resend API error', stack_info=True)
         sys.exit(1)
     except Exception:
-        logger.exception('Sync failed with unexpected error')
+        logger.exception('Sync failed with unexpected error', stack_info=True)
         sys.exit(1)
 
 
