@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
 from uuid import UUID
 
 import jwt
@@ -11,13 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from openhands.app_server.config import depends_jwt_service
 from openhands.app_server.constants import MAX_API_SECRET_VALUE_LENGTH
-from openhands.app_server.sandbox.session_auth import validate_session_key
 from openhands.app_server.secrets.credential_binding_models import (
     CODEX_AUTH_SECRET_NAME,
-    CREDENTIAL_BINDING_RENEWAL_ROUTE,
     CREDENTIAL_BINDING_ROUTE,
     CREDENTIAL_BINDING_ROUTE_PREFIX,
-    MAX_CREDENTIAL_BINDING_TOKEN_TIMEOUT_SECONDS,
     is_valid_codex_auth,
 )
 from openhands.app_server.secrets.secrets_store import CredentialVersionConflict
@@ -42,7 +38,6 @@ class CredentialBindingScope:
     conversation_id: UUID
     runtime_id: str
     secret_name: str
-    renewal_ttl_seconds: int | None
 
 
 def _authorize(
@@ -51,8 +46,6 @@ def _authorize(
     conversation_id: UUID,
     secret_name: str,
     action: str,
-    *,
-    allow_expired: bool = False,
 ) -> CredentialBindingScope:
     scheme, _, token = (authorization or '').partition(' ')
     if scheme.lower() != 'bearer' or not token:
@@ -61,10 +54,7 @@ def _authorize(
             detail='Credential binding token is required',
         )
     try:
-        claims = jwt_service.verify_jws_token(
-            token,
-            verify_expiration=not allow_expired,
-        )
+        claims = jwt_service.verify_jws_token(token)
         user_id = claims['user_id']
         organization_claim = claims['organization_id']
         if organization_claim is not None and not isinstance(organization_claim, str):
@@ -77,7 +67,6 @@ def _authorize(
         runtime_id = claims['runtime_id']
         scoped_secret_name = claims['secret_name']
         actions = claims['actions']
-        renewal_ttl_seconds = claims.get('renewal_ttl_seconds')
     except (KeyError, TypeError, ValueError, jwt.InvalidTokenError) as exc:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
@@ -97,15 +86,6 @@ def _authorize(
         or not all(isinstance(candidate, str) for candidate in actions)
         or set(actions) != {'load', 'replace'}
         or action not in actions
-        or (
-            renewal_ttl_seconds is not None
-            and (
-                isinstance(renewal_ttl_seconds, bool)
-                or not isinstance(renewal_ttl_seconds, int)
-                or renewal_ttl_seconds <= 0
-                or renewal_ttl_seconds > MAX_CREDENTIAL_BINDING_TOKEN_TIMEOUT_SECONDS
-            )
-        )
     ):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
@@ -117,24 +97,7 @@ def _authorize(
         conversation_id=conversation_id,
         runtime_id=runtime_id,
         secret_name=secret_name,
-        renewal_ttl_seconds=renewal_ttl_seconds,
     )
-
-
-def _token_payload(scope: CredentialBindingScope) -> dict[str, object]:
-    assert scope.renewal_ttl_seconds is not None
-    return {
-        'purpose': 'credential-binding',
-        'user_id': scope.user_id,
-        'organization_id': (
-            str(scope.organization_id) if scope.organization_id is not None else None
-        ),
-        'conversation_id': str(scope.conversation_id),
-        'runtime_id': scope.runtime_id,
-        'secret_name': scope.secret_name,
-        'actions': ['load', 'replace'],
-        'renewal_ttl_seconds': scope.renewal_ttl_seconds,
-    }
 
 
 async def _store(scope: CredentialBindingScope):
@@ -238,50 +201,5 @@ async def replace_credential(
         ) from exc
     return JSONResponse(
         {'version': version},
-        headers={'Cache-Control': 'no-store'},
-    )
-
-
-@router.post(CREDENTIAL_BINDING_RENEWAL_ROUTE, include_in_schema=False)
-async def renew_credential_binding(
-    conversation_id: UUID,
-    secret_name: str,
-    authorization: str | None = Header(None),
-    x_session_api_key: str | None = Header(None),
-    jwt_service: JwtService = jwt_service_dependency,
-):
-    if secret_name != CODEX_AUTH_SECRET_NAME:
-        raise HTTPException(status.HTTP_404_NOT_FOUND)
-    scope = _authorize(
-        authorization,
-        jwt_service,
-        conversation_id,
-        secret_name,
-        'load',
-        allow_expired=True,
-    )
-    if scope.renewal_ttl_seconds is None:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            detail='Credential binding token cannot be renewed',
-        )
-    sandbox = await validate_session_key(x_session_api_key)
-    if sandbox.id != scope.runtime_id or (
-        sandbox.created_by_user_id is not None
-        and sandbox.created_by_user_id != scope.user_id
-    ):
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            detail='Credential binding runtime scope mismatch',
-        )
-    token = jwt_service.create_jws_token(
-        _token_payload(scope),
-        expires_in=timedelta(seconds=scope.renewal_ttl_seconds),
-    )
-    return JSONResponse(
-        {
-            'authorization': f'Bearer {token}',
-            'authorization_expires_in_seconds': scope.renewal_ttl_seconds,
-        },
         headers={'Cache-Control': 'no-store'},
     )

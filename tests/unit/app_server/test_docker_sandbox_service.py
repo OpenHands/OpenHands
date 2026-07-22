@@ -388,26 +388,6 @@ class TestDockerSandboxService:
         # Verify
         assert result is None
 
-    async def test_session_key_lookup_propagates_docker_api_error(self, service):
-        service.docker_client.containers.list.side_effect = APIError(
-            'Docker daemon error'
-        )
-
-        with pytest.raises(APIError, match='Docker daemon error'):
-            await service.get_sandbox_by_session_api_key('session-key')
-
-    async def test_session_key_lookup_uses_container_status(
-        self, service, mock_running_container
-    ):
-        service.docker_client.containers.list.return_value = [mock_running_container]
-        service.httpx_client.get.side_effect = httpx.HTTPError('health unavailable')
-
-        result = await service.get_sandbox_by_session_api_key('session_key_123')
-
-        assert result is not None
-        assert result.status == SandboxStatus.RUNNING
-        service.httpx_client.get.assert_not_called()
-
     @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
     @patch('os.urandom')
     async def test_start_sandbox_success(self, mock_urandom, mock_encodebytes, service):

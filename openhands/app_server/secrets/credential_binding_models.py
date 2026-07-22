@@ -3,26 +3,12 @@ from uuid import UUID
 
 CREDENTIAL_BINDING_ROUTE_PREFIX = '/api/internal/conversations'
 CREDENTIAL_BINDING_ROUTE = '/{conversation_id}/credential-bindings/{secret_name}'
-CREDENTIAL_BINDING_RENEWAL_ROUTE = f'{CREDENTIAL_BINDING_ROUTE}/renew'
 CREDENTIAL_BINDING_CAPABILITY = 'credential_binding_v1'
-DEFAULT_CREDENTIAL_BINDING_TOKEN_TIMEOUT_SECONDS = 3600
-MAX_CREDENTIAL_BINDING_TOKEN_TIMEOUT_SECONDS = 30 * 86400
 CODEX_AUTH_SECRET_NAME = 'CODEX_AUTH_JSON'
 
 
 def credential_binding_path(conversation_id: UUID, secret_name: str) -> str:
     route = CREDENTIAL_BINDING_ROUTE.format(
-        conversation_id=conversation_id,
-        secret_name=secret_name,
-    )
-    return f'{CREDENTIAL_BINDING_ROUTE_PREFIX}{route}'
-
-
-def credential_binding_renewal_path(
-    conversation_id: UUID,
-    secret_name: str,
-) -> str:
-    route = CREDENTIAL_BINDING_RENEWAL_ROUTE.format(
         conversation_id=conversation_id,
         secret_name=secret_name,
     )

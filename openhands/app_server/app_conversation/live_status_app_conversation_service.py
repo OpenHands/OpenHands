@@ -13,7 +13,7 @@ from uuid import UUID, uuid4
 
 import httpx
 from fastapi import Request
-from pydantic import Field, SecretStr, TypeAdapter, field_validator, model_validator
+from pydantic import Field, SecretStr, TypeAdapter
 
 from openhands.agent_server.models import (
     ConversationInfo,
@@ -97,10 +97,7 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
 from openhands.app_server.secrets.credential_binding_models import (
     CODEX_AUTH_SECRET_NAME,
     CREDENTIAL_BINDING_CAPABILITY,
-    DEFAULT_CREDENTIAL_BINDING_TOKEN_TIMEOUT_SECONDS,
-    MAX_CREDENTIAL_BINDING_TOKEN_TIMEOUT_SECONDS,
     credential_binding_path,
-    credential_binding_renewal_path,
     is_valid_codex_auth,
 )
 from openhands.app_server.services.injector import InjectorState
@@ -286,9 +283,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     web_url: str | None
     openhands_provider_base_url: str | None
     access_token_hard_timeout: timedelta | None
-    credential_binding_token_timeout: timedelta = timedelta(
-        seconds=DEFAULT_CREDENTIAL_BINDING_TOKEN_TIMEOUT_SECONDS
-    )
     conversation_secret_enricher: ConversationSecretEnricher = field(
         default_factory=ConversationSecretEnricher
     )
@@ -2363,13 +2357,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 CODEX_AUTH_SECRET_NAME,
                 organization_id,
             )
-            renewal_ttl_seconds = int(
-                self.credential_binding_token_timeout.total_seconds()
-            )
-            if not (
-                0 < renewal_ttl_seconds <= MAX_CREDENTIAL_BINDING_TOKEN_TIMEOUT_SECONDS
-            ):
-                raise ValueError('Credential binding token timeout is invalid')
             token = self.jwt_service.create_jws_token(
                 payload={
                     'purpose': 'credential-binding',
@@ -2381,9 +2368,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     'runtime_id': sandbox.id,
                     'secret_name': CODEX_AUTH_SECRET_NAME,
                     'actions': ['load', 'replace'],
-                    'renewal_ttl_seconds': renewal_ttl_seconds,
                 },
-                expires_in=timedelta(seconds=renewal_ttl_seconds),
+                expires_in=self.access_token_hard_timeout or timedelta(days=14),
             )
             activation_response = await self.httpx_client.put(
                 f'{agent_server_url}/api/conversations/{conversation_id}'
@@ -2394,16 +2380,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                         f'{self.web_url.rstrip("/")}'
                         f'{credential_binding_path(conversation_id, CODEX_AUTH_SECRET_NAME)}'
                     ),
-                    'headers': {
-                        'Authorization': f'Bearer {token}',
-                        'X-Session-API-Key': sandbox.session_api_key,
-                    },
-                    'renewal_url': (
-                        f'{self.web_url.rstrip("/")}'
-                        f'{credential_binding_renewal_path(conversation_id, CODEX_AUTH_SECRET_NAME)}'
-                    ),
-                    'renewal_interval_seconds': renewal_ttl_seconds / 2,
-                    'authorization_expires_in_seconds': renewal_ttl_seconds,
+                    'headers': {'Authorization': f'Bearer {token}'},
                 },
                 timeout=self.sandbox_startup_timeout,
             )
@@ -3151,30 +3128,6 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
             'be retrieved by a sandboxed conversation.'
         ),
     )
-    credential_binding_token_timeout: int = Field(
-        default=DEFAULT_CREDENTIAL_BINDING_TOKEN_TIMEOUT_SECONDS,
-        gt=0,
-        le=MAX_CREDENTIAL_BINDING_TOKEN_TIMEOUT_SECONDS,
-        description='Lifetime of a credential-binding authorization token.',
-    )
-
-    @field_validator('credential_binding_token_timeout', mode='before')
-    @classmethod
-    def reject_boolean_credential_binding_timeout(cls, value: Any) -> Any:
-        if isinstance(value, bool):
-            raise ValueError('Credential binding token timeout must be an integer')
-        return value
-
-    @model_validator(mode='after')
-    def validate_credential_binding_timeout(
-        self,
-    ) -> 'LiveStatusAppConversationServiceInjector':
-        if self.credential_binding_token_timeout <= (
-            2 * self.sandbox_startup_timeout + 60
-        ):
-            raise ValueError('Credential binding token timeout is too short')
-        return self
-
     export_max_events: int = Field(
         default=10000,
         description='The maximum number of events allowed in a conversation export',
@@ -3276,9 +3229,6 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 web_url=web_url,
                 openhands_provider_base_url=config.openhands_provider_base_url,
                 access_token_hard_timeout=access_token_hard_timeout,
-                credential_binding_token_timeout=timedelta(
-                    seconds=self.credential_binding_token_timeout
-                ),
                 conversation_secret_enricher=conversation_secret_enricher,
                 app_mode=app_mode,
                 export_max_events=self.export_max_events,

@@ -388,20 +388,12 @@ class RemoteSandboxService(SandboxService):
         try:
             runtime = await self._get_runtime(stored_sandbox.id)
             return self._to_sandbox_info(stored_sandbox, runtime)
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == 404:
-                return self._to_sandbox_info(stored_sandbox, None)
-            _logger.exception(
-                f'Error getting runtime for sandbox {stored_sandbox.id}',
-                stack_info=True,
-            )
-            raise
         except Exception:
             _logger.exception(
                 f'Error getting runtime for sandbox {stored_sandbox.id}',
                 stack_info=True,
             )
-            raise
+            return self._to_sandbox_info(stored_sandbox, None)
 
     async def _get_user_running_sandboxes(self) -> list[StoredRemoteSandbox]:
         """Return the DB records for sandboxes that are actually running right now.

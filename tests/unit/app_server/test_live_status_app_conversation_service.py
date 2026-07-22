@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID, uuid4
 
 import pytest
-from pydantic import SecretStr, ValidationError
+from pydantic import SecretStr
 
 from openhands.agent_server.models import (
     SendMessageRequest,
@@ -32,7 +32,6 @@ from openhands.app_server.app_conversation.app_conversation_service import (
 )
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     LiveStatusAppConversationService,
-    LiveStatusAppConversationServiceInjector,
     _exception_detail,
     _resolve_title_llm_profile,
     effective_disabled_skills,
@@ -4426,17 +4425,7 @@ class TestBuildAcpStartConversationRequestSecrets:
                     'https://cloud.example.com/api/internal/conversations/'
                     f'{request.conversation_id}/credential-bindings/CODEX_AUTH_JSON'
                 ),
-                'headers': {
-                    'Authorization': 'Bearer scoped-token',
-                    'X-Session-API-Key': 'session-key',
-                },
-                'renewal_url': (
-                    'https://cloud.example.com/api/internal/conversations/'
-                    f'{request.conversation_id}/credential-bindings/'
-                    'CODEX_AUTH_JSON/renew'
-                ),
-                'renewal_interval_seconds': 1800,
-                'authorization_expires_in_seconds': 3600,
+                'headers': {'Authorization': 'Bearer scoped-token'},
             },
             timeout=30,
         )
@@ -4449,12 +4438,8 @@ class TestBuildAcpStartConversationRequestSecrets:
                 'runtime_id': 'sandbox-1',
                 'secret_name': 'CODEX_AUTH_JSON',
                 'actions': ['load', 'replace'],
-                'renewal_ttl_seconds': 3600,
             },
-            expires_in=timedelta(hours=1),
-        )
-        service.user_context.get_secrets_store.return_value.ensure_versioned.assert_awaited_once_with(
-            'CODEX_AUTH_JSON', org_id
+            expires_in=timedelta(days=14),
         )
 
     @pytest.mark.asyncio
@@ -4684,46 +4669,6 @@ class TestBuildAcpStartConversationRequestSecrets:
 
         assert prepared.secrets['CODEX_AUTH_JSON'] is source
         service.httpx_client.put.assert_not_awaited()
-
-    @pytest.mark.parametrize('access_token_timeout', [None, 0, 3600, 30 * 86400])
-    def test_binding_timeout_is_independent_of_git_token_timeout(
-        self, access_token_timeout
-    ):
-        injector = LiveStatusAppConversationServiceInjector(
-            access_token_hard_timeout=access_token_timeout
-        )
-
-        assert injector.credential_binding_token_timeout == 3600
-
-    def test_binding_timeout_can_be_configured(self):
-        injector = LiveStatusAppConversationServiceInjector(
-            credential_binding_token_timeout=3 * 86400
-        )
-
-        assert injector.credential_binding_token_timeout == 3 * 86400
-
-    def test_binding_timeout_must_be_positive(self):
-        with pytest.raises(ValidationError):
-            LiveStatusAppConversationServiceInjector(credential_binding_token_timeout=0)
-
-    def test_binding_timeout_rejects_boolean(self):
-        with pytest.raises(ValidationError):
-            LiveStatusAppConversationServiceInjector(
-                credential_binding_token_timeout=True
-            )
-
-    def test_binding_timeout_covers_startup_budget(self):
-        with pytest.raises(ValidationError):
-            LiveStatusAppConversationServiceInjector(
-                credential_binding_token_timeout=300,
-                sandbox_startup_timeout=120,
-            )
-
-    def test_binding_timeout_is_bounded(self):
-        with pytest.raises(ValidationError):
-            LiveStatusAppConversationServiceInjector(
-                credential_binding_token_timeout=31 * 86400
-            )
 
     @pytest.mark.asyncio
     async def test_api_codex_auth_does_not_get_write_access(self, service, tmp_path):
