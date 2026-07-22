@@ -600,10 +600,11 @@ class SQLAppConversationInfoService(AppConversationInfoService):
 
         Prior totals come from the ledger itself. Rows with NULL usage_id
         predate attribution: agent-only deltas from the original schema, or
-        COMBINED deltas from an interim combined-metrics build. Their sum is
-        drained against the largest apparent deltas first so pre-attribution
-        history is never re-recorded, whichever build wrote it. Token history
-        has no NULL-row record, so the pre-update column totals drain it.
+        COMBINED deltas from an interim combined-metrics build. Their COST sum
+        is drained against the largest apparent deltas first so pre-attribution
+        cost history is never re-recorded, whichever build wrote it. Tokens
+        need no drain: NULL rows carry no token data, so bucket-vs-prior
+        deltas keep ledger token totals equal to the persisted columns.
         """
         result = await self.db_session.execute(
             select(
@@ -620,12 +621,6 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         prior = {row[0]: row for row in result.all()}
         unattributed = prior.pop(None, None)
         cost_drain = float(unattributed[1] or 0.0) if unattributed is not None else 0.0
-        attributed_prompt = sum(int(r[2] or 0) for r in prior.values())
-        attributed_completion = sum(int(r[3] or 0) for r in prior.values())
-        prompt_drain = max((stored.prompt_tokens or 0) - attributed_prompt, 0)
-        completion_drain = max(
-            (stored.completion_tokens or 0) - attributed_completion, 0
-        )
 
         pending: list[dict] = []
         for usage_id, snapshot in usage_to_metrics.items():
@@ -651,15 +646,10 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                 }
             )
 
-        for key, drain in (
-            ('cost', cost_drain),
-            ('prompt', prompt_drain),
-            ('completion', completion_drain),
-        ):
-            for item in sorted(pending, key=lambda i: i[key], reverse=True):
-                covered = min(item[key], drain)
-                item[key] -= covered
-                drain -= covered
+        for item in sorted(pending, key=lambda i: i['cost'], reverse=True):
+            covered = min(item['cost'], cost_drain)
+            item['cost'] -= covered
+            cost_drain -= covered
 
         for item in pending:
             if item['cost'] <= 0 and item['prompt'] <= 0 and item['completion'] <= 0:

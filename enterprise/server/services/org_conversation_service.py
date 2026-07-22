@@ -573,6 +573,128 @@ class OrgConversationService:
             total_tokens=int((total_prompt or 0) + (total_completion or 0)),
         )
 
+    async def _get_model_usage(
+        self,
+        base_filter: list,
+        cutoff: datetime,
+    ) -> list[ModelUsageData]:
+        """Model-usage rows: cost-event ledger + legacy no-ledger fallback."""
+        # 6. Model usage (by model) — aggregated from the cost-event ledger so
+        # spend is attributed to the model that incurred it (a conversation can
+        # span several LLMs and its llm_model column only holds the latest).
+        # Pre-attribution rows (NULL llm_model) fall back to the conversation's
+        # current model; windowing is on spend time, not conversation creation.
+        model_label = func.coalesce(
+            StoredConversationCostEvent.llm_model,
+            StoredConversationMetadata.llm_model,
+        )
+        model_query = (
+            select(
+                model_label.label('llm_model'),
+                func.count(
+                    func.distinct(StoredConversationCostEvent.conversation_id)
+                ).label('conv_count'),
+                func.coalesce(
+                    func.sum(
+                        func.coalesce(StoredConversationCostEvent.prompt_tokens, 0)
+                        + func.coalesce(
+                            StoredConversationCostEvent.completion_tokens, 0
+                        )
+                    ),
+                    0,
+                ).label('token_count'),
+                func.coalesce(
+                    func.sum(StoredConversationCostEvent.cost_delta), 0
+                ).label('total_cost'),
+            )
+            .select_from(StoredConversationCostEvent)
+            .join(
+                StoredConversationMetadata,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationCostEvent.conversation_id,
+            )
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationCostEvent.occurred_at >= cutoff)
+            .group_by(model_label)
+            .order_by(
+                func.coalesce(
+                    func.sum(StoredConversationCostEvent.cost_delta), 0
+                ).desc()
+            )
+        )
+        result = await self.db_session.execute(model_query)
+        model_rows = list(result.all())
+
+        # Conversations with no ledger rows at all (spend predates the cost
+        # events table) would otherwise vanish; keep them via the legacy
+        # created_at/llm_model aggregation.
+        legacy_model_query = (
+            select(
+                StoredConversationMetadata.llm_model,
+                func.count(StoredConversationMetadata.conversation_id).label(
+                    'conv_count'
+                ),
+                func.coalesce(
+                    func.sum(
+                        StoredConversationMetadata.prompt_tokens
+                        + StoredConversationMetadata.completion_tokens
+                    ),
+                    0,
+                ).label('token_count'),
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.accumulated_cost), 0
+                ).label('total_cost'),
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationMetadata.created_at >= cutoff)
+            .where(
+                ~select(StoredConversationCostEvent.id)
+                .where(
+                    StoredConversationCostEvent.conversation_id
+                    == StoredConversationMetadata.conversation_id
+                )
+                .exists()
+            )
+            .group_by(StoredConversationMetadata.llm_model)
+        )
+        result = await self.db_session.execute(legacy_model_query)
+        model_rows.extend(result.all())
+
+        merged: dict[str, dict[str, float]] = {}
+        for row in model_rows:
+            entry = merged.setdefault(
+                row.llm_model or 'Unknown',
+                {'conv_count': 0, 'token_count': 0, 'total_cost': 0.0},
+            )
+            entry['conv_count'] += int(row.conv_count or 0)
+            entry['token_count'] += int(row.token_count or 0)
+            entry['total_cost'] += float(row.total_cost or 0.0)
+
+        model_usage = []
+        for model_name, entry in sorted(
+            merged.items(), key=lambda kv: kv[1]['total_cost'], reverse=True
+        ):
+            model_usage.append(
+                ModelUsageData(
+                    model_name=model_name,
+                    conversation_count=int(entry['conv_count']),
+                    total_tokens=int(entry['token_count']),
+                    total_cost=float(entry['total_cost']),
+                )
+            )
+        return model_usage
+
     async def get_usage_stats(
         self,
         org_id: UUID,
@@ -749,120 +871,7 @@ class OrgConversationService:
                 )
             )
 
-        # 6. Model usage (by model) — aggregated from the cost-event ledger so
-        # spend is attributed to the model that incurred it (a conversation can
-        # span several LLMs and its llm_model column only holds the latest).
-        # Pre-attribution rows (NULL llm_model) fall back to the conversation's
-        # current model; windowing is on spend time, not conversation creation.
-        model_label = func.coalesce(
-            StoredConversationCostEvent.llm_model,
-            StoredConversationMetadata.llm_model,
-        )
-        model_query = (
-            select(
-                model_label.label('llm_model'),
-                func.count(
-                    func.distinct(StoredConversationCostEvent.conversation_id)
-                ).label('conv_count'),
-                func.coalesce(
-                    func.sum(
-                        func.coalesce(StoredConversationCostEvent.prompt_tokens, 0)
-                        + func.coalesce(
-                            StoredConversationCostEvent.completion_tokens, 0
-                        )
-                    ),
-                    0,
-                ).label('token_count'),
-                func.coalesce(
-                    func.sum(StoredConversationCostEvent.cost_delta), 0
-                ).label('total_cost'),
-            )
-            .select_from(StoredConversationCostEvent)
-            .join(
-                StoredConversationMetadata,
-                StoredConversationMetadata.conversation_id
-                == StoredConversationCostEvent.conversation_id,
-            )
-            .join(
-                StoredConversationMetadataSaas,
-                StoredConversationMetadata.conversation_id
-                == StoredConversationMetadataSaas.conversation_id,
-            )
-            .where(*base_filter)
-            .where(StoredConversationCostEvent.occurred_at >= cutoff)
-            .group_by(model_label)
-            .order_by(
-                func.coalesce(
-                    func.sum(StoredConversationCostEvent.cost_delta), 0
-                ).desc()
-            )
-        )
-        result = await self.db_session.execute(model_query)
-        model_rows = list(result.all())
-
-        # Conversations with no ledger rows at all (spend predates the cost
-        # events table) would otherwise vanish; keep them via the legacy
-        # created_at/llm_model aggregation.
-        legacy_model_query = (
-            select(
-                StoredConversationMetadata.llm_model,
-                func.count(StoredConversationMetadata.conversation_id).label(
-                    'conv_count'
-                ),
-                func.coalesce(
-                    func.sum(
-                        StoredConversationMetadata.prompt_tokens
-                        + StoredConversationMetadata.completion_tokens
-                    ),
-                    0,
-                ).label('token_count'),
-                func.coalesce(
-                    func.sum(StoredConversationMetadata.accumulated_cost), 0
-                ).label('total_cost'),
-            )
-            .select_from(StoredConversationMetadata)
-            .join(
-                StoredConversationMetadataSaas,
-                StoredConversationMetadata.conversation_id
-                == StoredConversationMetadataSaas.conversation_id,
-            )
-            .where(*base_filter)
-            .where(StoredConversationMetadata.created_at >= cutoff)
-            .where(
-                ~select(StoredConversationCostEvent.id)
-                .where(
-                    StoredConversationCostEvent.conversation_id
-                    == StoredConversationMetadata.conversation_id
-                )
-                .exists()
-            )
-            .group_by(StoredConversationMetadata.llm_model)
-        )
-        result = await self.db_session.execute(legacy_model_query)
-        model_rows.extend(result.all())
-
-        merged: dict[str, dict[str, float]] = {}
-        for row in model_rows:
-            entry = merged.setdefault(
-                row.llm_model or 'Unknown',
-                {'conv_count': 0, 'token_count': 0, 'total_cost': 0.0},
-            )
-            entry['conv_count'] += int(row.conv_count or 0)
-            entry['token_count'] += int(row.token_count or 0)
-            entry['total_cost'] += float(row.total_cost or 0.0)
-
-        model_usage = []
-        for model_name, entry in sorted(
-            merged.items(), key=lambda kv: kv[1]['total_cost'], reverse=True
-        ):
-            model_usage.append(
-                ModelUsageData(
-                    model_name=model_name,
-                    conversation_count=int(entry['conv_count']),
-                    total_tokens=int(entry['token_count']),
-                    total_cost=float(entry['total_cost']),
-                )
-            )
+        model_usage = await self._get_model_usage(base_filter, cutoff)
 
         agent_query = (
             select(

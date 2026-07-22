@@ -386,7 +386,11 @@ class TestUpdateConversationStatistics:
         """Pre-attribution NULL rows (incl. interim combined deltas) drain, not double-count."""
         conversation_id, stored = v1_conversation_metadata
 
+        # Pre-migration state: cost history in a NULL row (no token data),
+        # token history only in the columns.
         stored.accumulated_cost = 0.30
+        stored.prompt_tokens = 100
+        stored.completion_tokens = 10
         async_session.add(
             StoredConversationCostEvent(
                 conversation_id=str(conversation_id),
@@ -398,7 +402,13 @@ class TestUpdateConversationStatistics:
 
         stats = ConversationStats(
             usage_to_metrics={
-                'agent': Metrics(model_name='gpt-5.5', accumulated_cost=0.12),
+                'agent': Metrics(
+                    model_name='gpt-5.5',
+                    accumulated_cost=0.12,
+                    accumulated_token_usage=TokenUsage(
+                        model='gpt-5.5', prompt_tokens=150, completion_tokens=15
+                    ),
+                ),
                 'profile:opus:x1': Metrics(
                     model_name='claude-opus-4-8', accumulated_cost=0.25
                 ),
@@ -408,6 +418,7 @@ class TestUpdateConversationStatistics:
 
         await async_session.refresh(stored)
         assert stored.accumulated_cost == pytest.approx(0.37)
+        assert stored.prompt_tokens == 150
 
         result = await async_session.execute(
             select(StoredConversationCostEvent).where(
@@ -415,10 +426,14 @@ class TestUpdateConversationStatistics:
             )
         )
         events = result.scalars().all()
-        # Ledger total tracks the combined column: 0.30 legacy + 0.07 new.
+        # Ledger cost tracks the combined column: 0.30 legacy + 0.07 new.
         assert sum(e.cost_delta for e in events) == pytest.approx(0.37)
         new_events = [e for e in events if e.usage_id is not None]
         assert sum(e.cost_delta for e in new_events) == pytest.approx(0.07)
+        # Token history was never ledgered, so the ledger absorbs the full
+        # cumulative totals rather than discarding the unledgered baseline.
+        assert sum(e.prompt_tokens or 0 for e in events) == 150
+        assert sum(e.completion_tokens or 0 for e in events) == 15
 
     @pytest.mark.asyncio
     async def test_update_statistics_token_only_growth_recorded(
@@ -487,6 +502,42 @@ class TestUpdateConversationStatistics:
         await async_session.refresh(stored)
         assert stored.prompt_tokens == 200
         assert stored.completion_tokens == 20
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_acp_managed_bucket_persisted(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """ACP agents accrue under 'acp-managed'; cost must persist and ledger."""
+        conversation_id, stored = v1_conversation_metadata
+
+        stats = ConversationStats(
+            usage_to_metrics={
+                'acp-managed': Metrics(
+                    model_name='claude-opus-4-8',
+                    accumulated_cost=0.42,
+                    accumulated_token_usage=TokenUsage(
+                        model='claude-opus-4-8',
+                        prompt_tokens=500,
+                        completion_tokens=50,
+                    ),
+                )
+            }
+        )
+        await service.update_conversation_statistics(conversation_id, stats)
+
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == pytest.approx(0.42)
+        assert stored.prompt_tokens == 500
+
+        result = await async_session.execute(
+            select(StoredConversationCostEvent).where(
+                StoredConversationCostEvent.conversation_id == str(conversation_id)
+            )
+        )
+        event = result.scalar_one()
+        assert event.usage_id == 'acp-managed'
+        assert event.llm_model == 'claude-opus-4-8'
+        assert event.cost_delta == pytest.approx(0.42)
 
     @pytest.mark.asyncio
     async def test_update_statistics_stale_snapshot_ignored(
