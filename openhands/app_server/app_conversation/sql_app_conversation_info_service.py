@@ -570,9 +570,8 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         stored.accumulated_cost = accumulated_cost
         if agent_metrics is not None and agent_metrics.max_budget_per_task is not None:
             stored.max_budget_per_task = agent_metrics.max_budget_per_task
-        # Cumulative token counters are monotonic per field: for zero-cost
-        # models the cost guard never trips, and a partially stale snapshot
-        # must not regress any individual counter.
+        # Preserve each cumulative counter independently when snapshots arrive
+        # partially out of order.
         if accumulated_token_usage is not None:
             stored.prompt_tokens = max(
                 accumulated_token_usage.prompt_tokens, stored.prompt_tokens or 0
