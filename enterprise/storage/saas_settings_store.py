@@ -86,7 +86,7 @@ def managed_llm_key_config_from_model(
     Returns ``None`` when the config is not a managed LiteLLM/OpenHands-provider
     configuration (e.g. member/org BYOK pointing at a third-party base_url).
     """
-    openhands_type = None
+    openhands_type = is_openhands_model(llm_model)
     normalized_llm_base_url = llm_base_url.rstrip('/') if llm_base_url else None
     normalized_managed_base_url = (
         LITE_LLM_API_URL.rstrip('/') if LITE_LLM_API_URL else None
