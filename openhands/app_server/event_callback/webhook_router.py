@@ -70,6 +70,9 @@ from openhands.app_server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.app_server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
 )
+from openhands.app_server.utils.docker_utils import (
+    replace_localhost_hostname_for_docker,
+)
 from openhands.sdk import ConversationExecutionStatus, Event
 from openhands.sdk.event import ConversationStateUpdateEvent, ObservationEvent
 from openhands.sdk.settings import ACPAgentSettings
@@ -498,11 +501,16 @@ async def _sync_live_conversation_stats(
         )
     if conversation is None or not conversation.conversation_url:
         return
+    # Local-docker sandboxes advertise localhost URLs; normalize like the
+    # title processor so the pull reaches the host, not this container.
+    conversation_url = replace_localhost_hostname_for_docker(
+        conversation.conversation_url
+    )
     headers = {}
     if conversation.session_api_key:
         headers['X-Session-API-Key'] = conversation.session_api_key
     async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(conversation.conversation_url, headers=headers)
+        response = await client.get(conversation_url, headers=headers)
         response.raise_for_status()
         info = ConversationInfo.model_validate(response.json())
     if info.stats and info.stats.usage_to_metrics:

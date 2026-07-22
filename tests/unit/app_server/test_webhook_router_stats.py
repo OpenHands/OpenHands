@@ -687,3 +687,125 @@ class TestOnEventStatsProcessing:
 
         # Verify stats update was NOT called
         mock_app_conversation_info_service.update_conversation_statistics.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Tests for the run-end live-stats pull
+# ---------------------------------------------------------------------------
+
+
+class TestRunEndLiveStatsPull:
+    """Run-end statuses trigger a pull of combined stats from the agent-server."""
+
+    @pytest.mark.asyncio
+    async def test_on_event_pulls_live_stats_at_run_end(self):
+        from types import SimpleNamespace
+
+        from openhands.app_server.event_callback import webhook_router
+        from openhands.app_server.event_callback.webhook_router import on_event
+
+        conversation_id = uuid4()
+        events = [
+            ConversationStateUpdateEvent(key='execution_status', value='finished')
+        ]
+        mock_info = AppConversationInfo(
+            id=conversation_id, sandbox_id='sb1', created_by_user_id='user_123'
+        )
+        mock_info_service = AsyncMock()
+        mock_event_service = AsyncMock()
+
+        conversation = SimpleNamespace(
+            conversation_url='http://localhost:12345/api/conversations/abc',
+            session_api_key='key123',
+        )
+        app_conv_service = AsyncMock()
+        app_conv_service.get_app_conversation.return_value = conversation
+        service_ctx = MagicMock()
+        service_ctx.__aenter__ = AsyncMock(return_value=app_conv_service)
+        service_ctx.__aexit__ = AsyncMock(return_value=False)
+
+        pulled_stats = ConversationStats.model_validate(
+            {
+                'usage_to_metrics': {
+                    'agent': {'accumulated_cost': 0.1},
+                    'profile:opus:x1': {'accumulated_cost': 0.2},
+                }
+            }
+        )
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = {'stats': 'raw'}
+        http_client = AsyncMock()
+        http_client.get.return_value = response
+        client_ctx = MagicMock()
+        client_ctx.__aenter__ = AsyncMock(return_value=http_client)
+        client_ctx.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch.object(
+                webhook_router, 'get_app_conversation_service', return_value=service_ctx
+            ),
+            patch.object(
+                webhook_router,
+                'replace_localhost_hostname_for_docker',
+                side_effect=lambda url: url.replace('localhost', 'docker-host'),
+            ) as mock_normalize,
+            patch.object(webhook_router.httpx, 'AsyncClient', return_value=client_ctx),
+            patch.object(webhook_router, 'ConversationInfo') as mock_ci,
+            patch(
+                'openhands.app_server.event_callback.webhook_router._run_callbacks_in_bg_and_close'
+            ),
+        ):
+            mock_ci.model_validate.return_value = SimpleNamespace(stats=pulled_stats)
+            await on_event(
+                background_tasks=BackgroundTasks(),
+                events=events,
+                conversation_id=conversation_id,
+                app_conversation_info=mock_info,
+                app_conversation_info_service=mock_info_service,
+                event_service=mock_event_service,
+            )
+
+        # URL was normalized for docker-local sandboxes and used for the GET
+        mock_normalize.assert_called_once_with(
+            'http://localhost:12345/api/conversations/abc'
+        )
+        http_client.get.assert_awaited_once()
+        assert http_client.get.await_args.args[0] == (
+            'http://docker-host:12345/api/conversations/abc'
+        )
+        assert http_client.get.await_args.kwargs['headers'] == {
+            'X-Session-API-Key': 'key123'
+        }
+        # Pulled combined stats were persisted
+        mock_info_service.update_conversation_statistics.assert_awaited_once_with(
+            conversation_id, pulled_stats
+        )
+
+    @pytest.mark.asyncio
+    async def test_on_event_no_pull_while_running(self):
+        from openhands.app_server.event_callback import webhook_router
+        from openhands.app_server.event_callback.webhook_router import on_event
+
+        conversation_id = uuid4()
+        events = [ConversationStateUpdateEvent(key='execution_status', value='running')]
+        mock_info = AppConversationInfo(
+            id=conversation_id, sandbox_id='sb1', created_by_user_id='user_123'
+        )
+        mock_info_service = AsyncMock()
+
+        with (
+            patch.object(webhook_router, 'get_app_conversation_service') as mock_svc,
+            patch(
+                'openhands.app_server.event_callback.webhook_router._run_callbacks_in_bg_and_close'
+            ),
+        ):
+            await on_event(
+                background_tasks=BackgroundTasks(),
+                events=events,
+                conversation_id=conversation_id,
+                app_conversation_info=mock_info,
+                app_conversation_info_service=mock_info_service,
+                event_service=AsyncMock(),
+            )
+        mock_svc.assert_not_called()
