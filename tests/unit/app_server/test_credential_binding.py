@@ -1,5 +1,5 @@
 from datetime import timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from uuid import UUID
 
 import pytest
@@ -11,7 +11,11 @@ from openhands.app_server.secrets import credential_binding
 from openhands.app_server.secrets.credential_binding_models import (
     credential_binding_path,
 )
-from openhands.app_server.secrets.secrets_store import CredentialVersionConflict
+from openhands.app_server.secrets.secrets_store import (
+    CredentialVersionConflict,
+    ManagedCredentialStore,
+    SecretsStore,
+)
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.utils.encryption_key import EncryptionKey
 
@@ -28,19 +32,21 @@ def jwt_service():
 
 @pytest.fixture
 def store():
-    result = AsyncMock()
-    result.load_versioned.return_value = (
+    result = AsyncMock(spec=ManagedCredentialStore)
+    result.load_managed.return_value = (
         '{"tokens":{"refresh_token":"r0"}}',
         'v0',
     )
-    result.replace_versioned.return_value = 'v1'
+    result.replace_managed.return_value = 'v1'
     return result
 
 
 @pytest.fixture
 def client(monkeypatch, jwt_service, store):
     user_auth = AsyncMock()
-    user_auth.get_secrets_store.return_value = store
+    secrets_store = Mock(spec=SecretsStore)
+    secrets_store.managed_credentials = store
+    user_auth.get_secrets_store.return_value = secrets_store
     get_for_user = AsyncMock(return_value=user_auth)
     monkeypatch.setattr(credential_binding, 'get_for_user', get_for_user)
     app = FastAPI()
@@ -84,7 +90,7 @@ def test_load_uses_token_scope(client, jwt_service, store):
     }
     assert response.headers['Cache-Control'] == 'no-store'
     get_for_user.assert_awaited_once_with('user-id')
-    store.load_versioned.assert_awaited_once_with('CODEX_AUTH_JSON', _ORG_ID)
+    store.load_managed.assert_awaited_once_with('CODEX_AUTH_JSON', _ORG_ID)
 
 
 def test_replace_uses_compare_and_swap(client, jwt_service, store):
@@ -100,7 +106,7 @@ def test_replace_uses_compare_and_swap(client, jwt_service, store):
     assert response.status_code == 200
     assert response.json() == {'version': 'v1'}
     assert response.headers['Cache-Control'] == 'no-store'
-    store.replace_versioned.assert_awaited_once_with(
+    store.replace_managed.assert_awaited_once_with(
         'CODEX_AUTH_JSON', 'v0', replacement, _ORG_ID
     )
 
@@ -115,7 +121,7 @@ def test_scope_mismatch_is_rejected_before_store(client, jwt_service, store):
 
     assert response.status_code == 403
     get_for_user.assert_not_awaited()
-    store.load_versioned.assert_not_awaited()
+    store.load_managed.assert_not_awaited()
 
 
 def test_unknown_credential_is_not_exposed(client, jwt_service, store):
@@ -130,7 +136,7 @@ def test_unknown_credential_is_not_exposed(client, jwt_service, store):
 
     assert response.status_code == 404
     get_for_user.assert_not_awaited()
-    store.load_versioned.assert_not_awaited()
+    store.load_managed.assert_not_awaited()
 
 
 def test_missing_exact_actions_is_rejected(client, jwt_service):
@@ -154,12 +160,12 @@ def test_invalid_replacement_is_rejected(client, jwt_service, store):
     )
 
     assert response.status_code == 422
-    store.replace_versioned.assert_not_awaited()
+    store.replace_managed.assert_not_awaited()
 
 
 def test_conflict_is_reported(client, jwt_service, store):
     test_client, _ = client
-    store.replace_versioned.side_effect = CredentialVersionConflict
+    store.replace_managed.side_effect = CredentialVersionConflict
 
     response = test_client.put(
         _path(),

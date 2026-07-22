@@ -6,7 +6,7 @@ import os
 import secrets as secrets_module
 import sys
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
@@ -14,9 +14,13 @@ from uuid import UUID
 
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.file_store.memory import InMemoryFileStore
+from openhands.app_server.secrets.credential_binding_models import (
+    is_runtime_managed_credential,
+)
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import (
     CredentialVersionConflict,
+    ManagedCredentialStore,
     SecretsStore,
 )
 from openhands.app_server.utils.async_utils import call_sync_from_async
@@ -30,7 +34,6 @@ else:
 
 
 _CREDENTIAL_VERSIONS_KEY = '_credential_versions'
-_CODEX_AUTH_SECRET_NAME = 'CODEX_AUTH_JSON'
 _process_lock = threading.RLock()
 
 
@@ -68,9 +71,13 @@ def _file_lock(file_store: FileStore, path: str) -> Iterator[None]:
 
 
 @dataclass
-class FileSecretsStore(SecretsStore):
+class FileSecretsStore(SecretsStore, ManagedCredentialStore):
     file_store: FileStore
     path: str = 'secrets.json'
+    is_managed_credential: Callable[[str], bool] = field(
+        default=is_runtime_managed_credential,
+        repr=False,
+    )
     _loaded_credentials: dict[str, tuple[str | None, str | None]] = field(
         default_factory=dict,
         init=False,
@@ -78,8 +85,8 @@ class FileSecretsStore(SecretsStore):
     )
 
     @property
-    def supports_versioned_credentials(self) -> bool:
-        return _supports_atomic_versioned_writes(self.file_store)
+    def managed_credentials(self) -> ManagedCredentialStore | None:
+        return self if _supports_atomic_versioned_writes(self.file_store) else None
 
     def _read_data(self) -> dict[str, Any]:
         try:
@@ -152,9 +159,11 @@ class FileSecretsStore(SecretsStore):
                     return None
                 secrets = self._secrets(data)
                 versions = self._versions(data)
-                managed_names = set(versions)
-                if _CODEX_AUTH_SECRET_NAME in secrets.custom_secrets:
-                    managed_names.add(_CODEX_AUTH_SECRET_NAME)
+                managed_names = set(versions) | {
+                    name
+                    for name in secrets.custom_secrets
+                    if self.is_managed_credential(name)
+                }
                 for name in managed_names:
                     current = secrets.custom_secrets.get(name)
                     value = (
@@ -174,9 +183,15 @@ class FileSecretsStore(SecretsStore):
                 current = self._secrets(data) if data else Secrets()
                 versions = self._versions(data)
                 incoming = dict(secrets.custom_secrets)
-                managed_names = set(versions) | set(self._loaded_credentials)
-                if _CODEX_AUTH_SECRET_NAME in current.custom_secrets:
-                    managed_names.add(_CODEX_AUTH_SECRET_NAME)
+                managed_names = (
+                    set(versions)
+                    | set(self._loaded_credentials)
+                    | {
+                        name
+                        for name in current.custom_secrets
+                        if self.is_managed_credential(name)
+                    }
+                )
 
                 for name in managed_names:
                     submitted = incoming.get(name)
@@ -211,11 +226,9 @@ class FileSecretsStore(SecretsStore):
                             versions[name] = secrets_module.token_urlsafe(24)
 
                 updated = secrets.model_copy(update={'custom_secrets': incoming})
-                if (
-                    _CODEX_AUTH_SECRET_NAME in updated.custom_secrets
-                    and _CODEX_AUTH_SECRET_NAME not in versions
-                ):
-                    versions[_CODEX_AUTH_SECRET_NAME] = secrets_module.token_urlsafe(24)
+                for name in updated.custom_secrets:
+                    if self.is_managed_credential(name) and name not in versions:
+                        versions[name] = secrets_module.token_urlsafe(24)
                 self._write(updated, versions)
                 for name in managed_names | set(versions):
                     stored = updated.custom_secrets.get(name)
@@ -226,7 +239,7 @@ class FileSecretsStore(SecretsStore):
 
         await call_sync_from_async(store_locked)
 
-    async def load_versioned(
+    async def load_managed(
         self,
         name: str,
         organization_id: UUID | None = None,
@@ -246,7 +259,7 @@ class FileSecretsStore(SecretsStore):
 
         return await call_sync_from_async(load_current)
 
-    async def ensure_versioned(
+    async def ensure_managed(
         self,
         name: str,
         organization_id: UUID | None = None,
@@ -271,7 +284,7 @@ class FileSecretsStore(SecretsStore):
 
         await call_sync_from_async(ensure_locked)
 
-    async def replace_versioned(
+    async def replace_managed(
         self,
         name: str,
         expected_version: str,

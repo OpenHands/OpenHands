@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -12,16 +13,20 @@ from storage.versioned_credential_store import (
     credential_version,
 )
 
+from openhands.app_server.secrets.credential_binding_models import (
+    is_runtime_managed_credential,
+)
 from openhands.app_server.secrets.secrets_models import Secrets
-from openhands.app_server.secrets.secrets_store import SecretsStore
+from openhands.app_server.secrets.secrets_store import (
+    ManagedCredentialStore,
+    SecretsStore,
+)
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.utils.logger import openhands_logger as logger
 
-_CODEX_AUTH_SECRET_NAME = 'CODEX_AUTH_JSON'
-
 
 @dataclass
-class SaasSecretsStore(SecretsStore):
+class SaasSecretsStore(SecretsStore, ManagedCredentialStore):
     user_id: str
     _jwt_svc: JwtService = field(repr=False)
     # When set, overrides the user's `current_org_id` for both load and
@@ -30,13 +35,17 @@ class SaasSecretsStore(SecretsStore):
     # (user_id, org_id), so the effective org must flow through here for
     # the right rows to be read/written.
     effective_org_id: UUID | None = None
-    _loaded_codex_auth: dict[UUID | None, tuple[str, str]] = field(
+    is_managed_credential: Callable[[str], bool] = field(
+        default=is_runtime_managed_credential,
+        repr=False,
+    )
+    _loaded_managed_credentials: dict[UUID | None, dict[str, tuple[str, str]]] = field(
         default_factory=dict, init=False, repr=False
     )
 
     @property
-    def supports_versioned_credentials(self) -> bool:
-        return True
+    def managed_credentials(self) -> ManagedCredentialStore:
+        return self
 
     async def load(self) -> Secrets | None:
         if not self.user_id:
@@ -55,28 +64,29 @@ class SaasSecretsStore(SecretsStore):
             settings = result.scalars().all()
 
             if not settings:
-                self._loaded_codex_auth.pop(org_id, None)
+                self._loaded_managed_credentials.pop(org_id, None)
                 return Secrets()
 
             kwargs = {}
-            codex_row = None
+            managed_rows = {}
             for secret in settings:
                 kwargs[secret.secret_name] = {
                     'secret': secret.secret_value,
                     'description': secret.description,
                 }
-                if secret.secret_name == _CODEX_AUTH_SECRET_NAME:
-                    codex_row = secret
+                if self.is_managed_credential(secret.secret_name):
+                    managed_rows[secret.secret_name] = secret
 
             self._decrypt_kwargs(kwargs)
-            codex_auth = kwargs.get(_CODEX_AUTH_SECRET_NAME, {}).get('secret')
-            if isinstance(codex_auth, str) and codex_row is not None:
-                self._loaded_codex_auth[org_id] = (
-                    codex_auth,
-                    credential_version(codex_row),
-                )
+            loaded_managed = {
+                name: (value, credential_version(row))
+                for name, row in managed_rows.items()
+                if isinstance(value := kwargs.get(name, {}).get('secret'), str)
+            }
+            if loaded_managed:
+                self._loaded_managed_credentials[org_id] = loaded_managed
             else:
-                self._loaded_codex_auth.pop(org_id, None)
+                self._loaded_managed_credentials.pop(org_id, None)
 
             return Secrets(custom_secrets=kwargs)  # type: ignore[arg-type]
 
@@ -88,39 +98,50 @@ class SaasSecretsStore(SecretsStore):
         kwargs = item.model_dump(context={'expose_secrets': True})
         del kwargs['provider_tokens']
         secrets_json = kwargs.get('custom_secrets', {})
-        codex_auth_info = secrets_json.get(_CODEX_AUTH_SECRET_NAME)
-        codex_auth = (
-            codex_auth_info.get('secret') if isinstance(codex_auth_info, dict) else None
-        )
-        loaded_codex = self._loaded_codex_auth.get(org_id)
-        loaded_codex_known = loaded_codex is not None
-        preserve_codex_auth = not loaded_codex_known and codex_auth_info is None
+        submitted_managed = {
+            name: value
+            for name, info in secrets_json.items()
+            if self.is_managed_credential(name)
+            and isinstance(info, dict)
+            and isinstance(value := info.get('secret'), str)
+        }
+        loaded_managed = dict(self._loaded_managed_credentials.get(org_id, {}))
         async with a_session_maker() as session:
-            if loaded_codex is not None and loaded_codex[0] == codex_auth:
-                result = await session.execute(
-                    select(StoredCustomSecrets)
-                    .filter(
-                        StoredCustomSecrets.keycloak_user_id == self.user_id,
-                        StoredCustomSecrets.org_id == org_id,
-                        StoredCustomSecrets.secret_name == _CODEX_AUTH_SECRET_NAME,
-                    )
-                    .order_by(StoredCustomSecrets.id.desc())
-                    .with_for_update()
+            result = await session.execute(
+                select(StoredCustomSecrets)
+                .filter(
+                    StoredCustomSecrets.keycloak_user_id == self.user_id,
+                    StoredCustomSecrets.org_id == org_id,
                 )
-                stored_codex_rows = result.scalars().all()
-                preserve_codex_auth = True
-                secrets_json.pop(_CODEX_AUTH_SECRET_NAME, None)
-                if stored_codex_rows and isinstance(codex_auth_info, dict):
-                    description = codex_auth_info.get('description')
+                .order_by(StoredCustomSecrets.id)
+                .with_for_update()
+            )
+            managed_rows: dict[str, list[StoredCustomSecrets]] = {}
+            for row in result.scalars().all():
+                if self.is_managed_credential(row.secret_name):
+                    managed_rows.setdefault(row.secret_name, []).append(row)
+
+            preserved_names = set()
+            for name in set(managed_rows) | set(loaded_managed):
+                info = secrets_json.get(name)
+                submitted = submitted_managed.get(name)
+                loaded = loaded_managed.get(name)
+                preserve = loaded is None and info is None
+                if loaded is not None and submitted == loaded[0]:
+                    preserve = True
+                if not preserve:
+                    continue
+                preserved_names.add(name)
+                secrets_json.pop(name, None)
+                if managed_rows.get(name) and isinstance(info, dict):
+                    description = info.get('description')
                     encrypted_description = (
                         self._jwt_svc.encrypt_value(description)
                         if description is not None
                         else None
                     )
-                    for stored_codex_auth in stored_codex_rows:
-                        stored_codex_auth.description = encrypted_description
-            elif preserve_codex_auth:
-                secrets_json.pop(_CODEX_AUTH_SECRET_NAME, None)
+                    for row in managed_rows[name]:
+                        row.description = encrypted_description
 
             # Incoming secrets are always the most updated ones
             # Delete existing records for this user AND organization only
@@ -130,9 +151,9 @@ class SaasSecretsStore(SecretsStore):
                 StoredCustomSecrets.keycloak_user_id == self.user_id,
                 StoredCustomSecrets.org_id == org_id,
             )
-            if preserve_codex_auth:
+            if preserved_names:
                 delete_query = delete_query.filter(
-                    StoredCustomSecrets.secret_name != _CODEX_AUTH_SECRET_NAME
+                    StoredCustomSecrets.secret_name.not_in(preserved_names)
                 )
             await session.execute(delete_query)
 
@@ -158,13 +179,23 @@ class SaasSecretsStore(SecretsStore):
                 session.add(new_secret)
 
             await session.commit()
-            if not preserve_codex_auth:
-                if isinstance(codex_auth, str):
-                    self._loaded_codex_auth[org_id] = (codex_auth, '')
+            cached = loaded_managed
+            for name in (
+                set(managed_rows) | set(loaded_managed) | set(submitted_managed)
+            ):
+                if name in preserved_names:
+                    continue
+                submitted = submitted_managed.get(name)
+                if submitted is not None:
+                    cached[name] = (submitted, '')
                 else:
-                    self._loaded_codex_auth.pop(org_id, None)
+                    cached.pop(name, None)
+            if cached:
+                self._loaded_managed_credentials[org_id] = cached
+            else:
+                self._loaded_managed_credentials.pop(org_id, None)
 
-    async def load_versioned(
+    async def load_managed(
         self,
         name: str,
         organization_id: UUID | None = None,
@@ -181,7 +212,7 @@ class SaasSecretsStore(SecretsStore):
             self._jwt_svc,
         ).load(name)
 
-    async def replace_versioned(
+    async def replace_managed(
         self,
         name: str,
         expected_version: str,

@@ -47,7 +47,10 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
-from openhands.app_server.secrets.secrets_store import SecretsStore
+from openhands.app_server.secrets.secrets_store import (
+    ManagedCredentialStore,
+    SecretsStore,
+)
 from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.settings.settings_models import (
     SandboxGroupingStrategy,
@@ -4235,7 +4238,7 @@ class TestBuildAcpStartConversationRequestSecrets:
     def service(self):
         mock_user_context = Mock(spec=UserContext)
         secrets_store = Mock(spec=SecretsStore)
-        secrets_store.supports_versioned_credentials = True
+        secrets_store.managed_credentials = AsyncMock(spec=ManagedCredentialStore)
         mock_user_context.get_secrets_store = AsyncMock(return_value=secrets_store)
         return LiveStatusAppConversationService(
             init_git_in_empty_workspace=True,
@@ -4525,8 +4528,8 @@ class TestBuildAcpStartConversationRequestSecrets:
         service.web_url = 'https://cloud.example.com'
         service.user_context.get_user_id = AsyncMock(return_value='user1')
         service.user_context.get_effective_org_id = AsyncMock(return_value=None)
-        store = service.user_context.get_secrets_store.return_value
-        store.ensure_versioned.side_effect = PermissionError('read-only')
+        store = service.user_context.get_secrets_store.return_value.managed_credentials
+        store.ensure_managed.side_effect = PermissionError('read-only')
         request = await self._call_build(
             service,
             user,
@@ -4557,8 +4560,8 @@ class TestBuildAcpStartConversationRequestSecrets:
         source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"r0"}}'))
         user = self._make_acp_user(acp_server='codex')
         service.web_url = 'https://cloud.example.com'
-        store = service.user_context.get_secrets_store.return_value
-        store.ensure_versioned.side_effect = KeyError('CODEX_AUTH_JSON')
+        store = service.user_context.get_secrets_store.return_value.managed_credentials
+        store.ensure_managed.side_effect = KeyError('CODEX_AUTH_JSON')
         request = await self._call_build(
             service,
             user,
@@ -4587,7 +4590,7 @@ class TestBuildAcpStartConversationRequestSecrets:
         source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"r0"}}'))
         user = self._make_acp_user(acp_server='codex')
         service.web_url = 'https://cloud.example.com'
-        service.user_context.get_secrets_store.return_value.supports_versioned_credentials = False
+        service.user_context.get_secrets_store.return_value.managed_credentials = None
         request = await self._call_build(
             service,
             user,

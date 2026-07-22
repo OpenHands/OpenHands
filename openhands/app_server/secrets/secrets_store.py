@@ -10,6 +10,31 @@ class CredentialVersionConflict(Exception):
     pass
 
 
+class ManagedCredentialStore(ABC):
+    @abstractmethod
+    async def load_managed(
+        self,
+        name: str,
+        organization_id: UUID | None = None,
+    ) -> tuple[str, str]: ...
+
+    @abstractmethod
+    async def replace_managed(
+        self,
+        name: str,
+        expected_version: str,
+        value: str,
+        organization_id: UUID | None = None,
+    ) -> str: ...
+
+    async def ensure_managed(
+        self,
+        name: str,
+        organization_id: UUID | None = None,
+    ) -> None:
+        await self.load_managed(name, organization_id)
+
+
 class SecretsStore(ABC):
     """Abstract base class for storing user secrets.
 
@@ -32,32 +57,9 @@ class SecretsStore(ABC):
     async def store(self, secrets: Secrets) -> None:
         """Store secrets."""
 
-    async def load_versioned(
-        self,
-        name: str,
-        organization_id: UUID | None = None,
-    ) -> tuple[str, str]:
-        raise NotImplementedError
-
-    async def replace_versioned(
-        self,
-        name: str,
-        expected_version: str,
-        value: str,
-        organization_id: UUID | None = None,
-    ) -> str:
-        raise NotImplementedError
-
-    async def ensure_versioned(
-        self,
-        name: str,
-        organization_id: UUID | None = None,
-    ) -> None:
-        await self.load_versioned(name, organization_id)
-
     @property
-    def supports_versioned_credentials(self) -> bool:
-        return False
+    def managed_credentials(self) -> ManagedCredentialStore | None:
+        return None
 
     @classmethod
     @abstractmethod

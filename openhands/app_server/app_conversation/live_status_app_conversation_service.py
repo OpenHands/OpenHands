@@ -2318,9 +2318,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 exc_info=True,
             )
             return request
-        if not secrets_store.supports_versioned_credentials:
+        managed_store = secrets_store.managed_credentials
+        if managed_store is None:
             _logger.warning(
-                'Credential binding store does not support atomic versioned writes',
+                'Managed credential storage is unavailable',
                 extra={'conversation_id': str(conversation_id)},
             )
             return request
@@ -2328,7 +2329,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         try:
             user_id = await self.user_context.get_user_id() or 'root'
             organization_id = await self.user_context.get_effective_org_id()
-            await secrets_store.ensure_versioned(
+            await managed_store.ensure_managed(
                 CODEX_AUTH_SECRET_NAME,
                 organization_id,
             )

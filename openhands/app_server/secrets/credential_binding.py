@@ -11,12 +11,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from openhands.app_server.config import depends_jwt_service
 from openhands.app_server.constants import MAX_API_SECRET_VALUE_LENGTH
 from openhands.app_server.secrets.credential_binding_models import (
-    CODEX_AUTH_SECRET_NAME,
     CREDENTIAL_BINDING_ROUTE,
     CREDENTIAL_BINDING_ROUTE_PREFIX,
-    is_valid_codex_auth,
+    is_runtime_managed_credential,
+    is_valid_runtime_managed_credential,
 )
-from openhands.app_server.secrets.secrets_store import CredentialVersionConflict
+from openhands.app_server.secrets.secrets_store import (
+    CredentialVersionConflict,
+    ManagedCredentialStore,
+)
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.user_auth.user_auth import get_for_user
 
@@ -100,9 +103,16 @@ def _authorize(
     )
 
 
-async def _store(scope: CredentialBindingScope):
+async def _store(scope: CredentialBindingScope) -> ManagedCredentialStore:
     user_auth = await get_for_user(scope.user_id)
-    return await user_auth.get_secrets_store()
+    secrets_store = await user_auth.get_secrets_store()
+    managed_store = secrets_store.managed_credentials
+    if managed_store is None:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='Managed credential storage is unavailable',
+        )
+    return managed_store
 
 
 def _validate_value(secret_name: str, value: str) -> None:
@@ -111,7 +121,7 @@ def _validate_value(secret_name: str, value: str) -> None:
     except UnicodeError:
         size = MAX_API_SECRET_VALUE_LENGTH + 1
     if size > MAX_API_SECRET_VALUE_LENGTH or (
-        secret_name == CODEX_AUTH_SECRET_NAME and not is_valid_codex_auth(value)
+        not is_valid_runtime_managed_credential(secret_name, value)
     ):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -126,7 +136,7 @@ async def load_credential(
     authorization: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    if secret_name != CODEX_AUTH_SECRET_NAME:
+    if not is_runtime_managed_credential(secret_name):
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     scope = _authorize(
         authorization,
@@ -137,7 +147,7 @@ async def load_credential(
     )
     store = await _store(scope)
     try:
-        value, version = await store.load_versioned(
+        value, version = await store.load_managed(
             secret_name,
             scope.organization_id,
         )
@@ -166,7 +176,7 @@ async def replace_credential(
     authorization: str | None = Header(None),
     jwt_service: JwtService = jwt_service_dependency,
 ):
-    if secret_name != CODEX_AUTH_SECRET_NAME:
+    if not is_runtime_managed_credential(secret_name):
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     scope = _authorize(
         authorization,
@@ -178,7 +188,7 @@ async def replace_credential(
     _validate_value(secret_name, replacement.value)
     store = await _store(scope)
     try:
-        version = await store.replace_versioned(
+        version = await store.replace_managed(
             secret_name,
             replacement.expected_version,
             replacement.value,
