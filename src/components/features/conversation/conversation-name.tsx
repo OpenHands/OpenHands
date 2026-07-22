@@ -176,7 +176,10 @@ export function ConversationName() {
             ref={ellipsisAnchorRef}
             className="relative flex items-center shrink-0"
           >
-            <EllipsisButton onClick={handleEllipsisClick} />
+            <EllipsisButton
+              onClick={handleEllipsisClick}
+              ariaLabel={t(I18nKey.COMMON$MORE_OPTIONS)}
+            />
             {contextMenuOpen && (
               <ConversationNameContextMenu
                 onClose={() => setContextMenuOpen(false)}

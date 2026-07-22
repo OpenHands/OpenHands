@@ -11,6 +11,12 @@ import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { RepositorySelection } from "#/api/open-hands.types";
 import { formatTimeDelta } from "#/utils/format-time-delta";
+import {
+  hoverRevealActionClassName,
+  hoverRevealPinnedTimestampClassName,
+  hoverRevealReserveClassName,
+  hoverRevealYieldClassName,
+} from "#/utils/hover-reveal-classes";
 import { ConversationCardHeader } from "./conversation-card-header";
 import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
@@ -218,21 +224,19 @@ export function ConversationCard({
             // The hover action overlay (pin + ellipsis) is absolutely
             // positioned, so reserve its width so the flex-1 title truncates
             // instead of colliding with the buttons. Pinned cards keep the pin
-            // visible at rest, so reserve the width always for those.
+            // visible at rest, so reserve the width always for those. Touch /
+            // coarse-pointer devices also keep the reserve so the ellipsis stays
+            // clickable without a hover pass.
             showPersistentPinIcon
               ? "min-w-[3.75rem]"
-              : hasHoverActions &&
-                  "group-hover:min-w-[3.75rem] group-focus-within:min-w-[3.75rem]",
-            contextMenuOpen && "min-w-[3.75rem]",
+              : hasHoverActions && hoverRevealReserveClassName(contextMenuOpen),
           )}
         >
           {!showPersistentPinIcon && (createdAt ?? lastUpdatedAt) && (
             <p
               className={cn(
                 "text-xs text-[var(--oh-muted)] text-right whitespace-nowrap transition-opacity -translate-x-1.5",
-                hasHoverActions &&
-                  "group-hover:opacity-0 group-focus-within:opacity-0",
-                contextMenuOpen && "opacity-0",
+                hasHoverActions && hoverRevealYieldClassName(contextMenuOpen),
               )}
             >
               <time>{formatTimeDelta(lastUpdatedAt ?? createdAt)}</time>
@@ -245,12 +249,7 @@ export function ConversationCard({
                 "absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-0.5 transition-opacity",
                 showPersistentPinIcon
                   ? "pointer-events-auto visible opacity-100"
-                  : cn(
-                      "pointer-events-none opacity-0 invisible",
-                      "group-hover:pointer-events-auto group-hover:opacity-100 group-hover:visible",
-                      "group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-focus-within:visible",
-                    ),
-                contextMenuOpen && "pointer-events-auto visible opacity-100",
+                  : hoverRevealActionClassName(contextMenuOpen),
               )}
             >
               {onTogglePin ? renderPinButton() : null}
@@ -258,12 +257,7 @@ export function ConversationCard({
               (createdAt ?? lastUpdatedAt) &&
               hasContextMenu ? (
                 <div className="relative shrink-0">
-                  <div
-                    className={cn(
-                      !contextMenuOpen &&
-                        "invisible pointer-events-none group-hover:visible group-hover:pointer-events-auto group-focus-within:visible group-focus-within:pointer-events-auto",
-                    )}
-                  >
+                  <div className={hoverRevealActionClassName(contextMenuOpen)}>
                     <ConversationCardActions
                       contextMenuOpen={contextMenuOpen}
                       onContextMenuToggle={onContextMenuToggle || (() => {})}
@@ -279,10 +273,9 @@ export function ConversationCard({
                   </div>
                   <p
                     className={cn(
-                      "pointer-events-none absolute inset-0 flex items-center justify-end",
+                      "pointer-events-none absolute inset-0 items-center justify-end",
                       "text-xs text-[var(--oh-muted)] whitespace-nowrap -translate-x-1.5",
-                      "group-hover:hidden group-focus-within:hidden",
-                      contextMenuOpen && "hidden",
+                      hoverRevealPinnedTimestampClassName(contextMenuOpen),
                     )}
                   >
                     <time>{formatTimeDelta(lastUpdatedAt ?? createdAt)}</time>

@@ -111,7 +111,7 @@ export function ConversationNameContextMenu({
   const { backend } = useActiveBackend();
   const { data: conversation } = useActiveConversation();
   const isArchivedConversation = useIsArchivedConversation();
-  const ref = useClickOutsideElement<HTMLUListElement>(onClose);
+  const ref = useClickOutsideElement<HTMLUListElement>(onClose, anchorRef);
 
   const anchorElement = anchorRef?.current ?? null;
   const [portalStyle, setPortalStyle] = React.useState<React.CSSProperties>();

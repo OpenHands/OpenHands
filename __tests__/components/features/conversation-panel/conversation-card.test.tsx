@@ -227,6 +227,54 @@ describe("ConversationCard", () => {
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
   });
 
+  it("keeps the ellipsis clickable without hover via touch-first reveal classes", () => {
+    renderWithProviders(
+      <ConversationCard
+        onDelete={onDelete}
+        onChangeTitle={onChangeTitle}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        contextMenuOpen={false}
+        onContextMenuToggle={vi.fn()}
+      />,
+    );
+
+    const ellipsisButton = screen.getByTestId("ellipsis-button");
+    const actionOverlay = ellipsisButton.parentElement;
+
+    expect(actionOverlay).toHaveClass("pointer-events-auto");
+    expect(actionOverlay?.className).toContain(
+      "[@media(hover:hover)_and_(pointer:fine)]:pointer-events-none",
+    );
+  });
+
+  it("closes the context menu when clicking outside", async () => {
+    const user = userEvent.setup();
+    const onContextMenuToggle = vi.fn();
+
+    renderWithProviders(
+      <div>
+        <div data-testid="outside">Outside</div>
+        <ConversationCard
+          onDelete={onDelete}
+          onChangeTitle={onChangeTitle}
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          contextMenuOpen
+          onContextMenuToggle={onContextMenuToggle}
+        />
+      </div>,
+    );
+
+    expect(screen.getByTestId("context-menu")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("outside"));
+
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+  });
+
   it("should call onDelete when the delete button is clicked", async () => {
     const user = userEvent.setup();
     const onContextMenuToggle = vi.fn();

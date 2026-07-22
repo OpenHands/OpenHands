@@ -1,6 +1,8 @@
 import React, { useLayoutEffect, useReducer, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
+import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { isExecutionActive, isExecutionPaused } from "#/utils/status";
 import { ConversationCardContextMenu } from "./conversation-card-context-menu";
@@ -31,6 +33,7 @@ export function ConversationCardActions({
   conversationId,
   showOptions,
 }: ConversationCardActionsProps) {
+  const { t } = useTranslation("openhands");
   const isPaused = isExecutionPaused(executionStatus);
   const isActive = isExecutionActive(executionStatus);
   const anchorRef = useRef<HTMLButtonElement>(null);
@@ -97,6 +100,7 @@ export function ConversationCardActions({
           event.stopPropagation();
           onContextMenuToggle(!contextMenuOpen);
         }}
+        ariaLabel={t(I18nKey.COMMON$MORE_OPTIONS)}
         className={cn(isPaused && "opacity-60")}
       />
       {contextMenuOpen && floatingStyle && portalTarget
